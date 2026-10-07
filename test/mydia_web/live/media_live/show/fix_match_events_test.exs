@@ -66,6 +66,50 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEventsTest do
     assert %{step: :confirm, picked: %{provider_id: "45"}} = s.assigns.fix_match
   end
 
+  describe "after the modal closed" do
+    setup do
+      %{socket: socket(media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: 50}))}
+    end
+
+    test "a late search result is ignored", %{socket: s} do
+      {:noreply, s} =
+        FixMatchEvents.handle_search_async({:ok, {:ok, [result(51, "Velvet Comet")]}}, s)
+
+      assert s.assigns.fix_match == nil
+    end
+
+    test "a late search error is ignored", %{socket: s} do
+      {:noreply, s} = FixMatchEvents.handle_search_async({:ok, {:error, :boom}}, s)
+      assert s.assigns.fix_match == nil
+    end
+
+    test "a late search crash is ignored", %{socket: s} do
+      {:noreply, s} = FixMatchEvents.handle_search_async({:exit, :boom}, s)
+      assert s.assigns.fix_match == nil
+    end
+
+    test "pick, back and search are no-ops", %{socket: s} do
+      {:noreply, s} = FixMatchEvents.pick(%{"provider_id" => "51"}, s)
+      {:noreply, s} = FixMatchEvents.back(%{}, s)
+
+      {:noreply, s} =
+        FixMatchEvents.search(%{"fix_match" => %{"query" => "Velvet", "year" => ""}}, s)
+
+      assert s.assigns.fix_match == nil
+    end
+  end
+
+  test "an empty query does not start a search", _ do
+    item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: 52})
+    {:noreply, s} = FixMatchEvents.open(%{}, socket(item))
+
+    {:noreply, s} = FixMatchEvents.search(%{"fix_match" => %{"query" => "  ", "year" => ""}}, s)
+    assert s.assigns.fix_match.searching? == false
+
+    {:noreply, s} = FixMatchEvents.search(%{"unexpected" => "payload"}, s)
+    assert s.assigns.fix_match.searching? == false
+  end
+
   test "a collision closes the modal and says where the title already is", _ do
     item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: 46})
     other = media_item_fixture(%{type: "movie", title: "Velvet Comet", tmdb_id: 47})

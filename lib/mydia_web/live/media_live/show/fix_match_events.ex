@@ -34,19 +34,28 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
 
   def close(_params, socket), do: {:noreply, assign(socket, :fix_match, nil)}
 
-  def search(%{"fix_match" => %{"query" => query} = params}, socket) do
+  def search(_params, %{assigns: %{fix_match: nil}} = socket), do: {:noreply, socket}
+
+  def search(%{"fix_match" => %{"query" => query} = params}, socket) when is_binary(query) do
     item = socket.assigns.media_item
     scope = socket.assigns.current_scope
     config = socket.assigns[:metadata_config]
     year = parse_year(params["year"])
+    trimmed = String.trim(query)
 
-    {:noreply,
-     socket
-     |> update_fix_match(form: form(query, year), searching?: true, error: nil)
-     |> start_async(:fix_match_search, fn ->
-       FixMatch.search(item, String.trim(query), year, scope, config)
-     end)}
+    if trimmed == "" do
+      {:noreply, update_fix_match(socket, form: form(query, year))}
+    else
+      {:noreply,
+       socket
+       |> update_fix_match(form: form(query, year), searching?: true, error: nil)
+       |> start_async(:fix_match_search, fn ->
+         FixMatch.search(item, trimmed, year, scope, config)
+       end)}
+    end
   end
+
+  def search(_params, socket), do: {:noreply, socket}
 
   def handle_search_async({:ok, {:ok, results}}, socket),
     do: {:noreply, update_fix_match(socket, results: results, searching?: false)}
@@ -60,6 +69,8 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
     Logger.error("Fix match search crashed: #{inspect(reason)}")
     {:noreply, update_fix_match(socket, searching?: false, error: "Search failed unexpectedly")}
   end
+
+  def pick(_params, %{assigns: %{fix_match: nil}} = socket), do: {:noreply, socket}
 
   def pick(%{"provider_id" => provider_id}, socket) do
     current = FixMatch.current_provider_id(socket.assigns.media_item)
@@ -133,6 +144,9 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
 
   defp form(query, year),
     do: to_form(%{"query" => query || "", "year" => year && to_string(year)}, as: :fix_match)
+
+  # The modal may close while a search is in flight or a stale event arrives.
+  defp update_fix_match(%{assigns: %{fix_match: nil}} = socket, _changes), do: socket
 
   defp update_fix_match(socket, changes),
     do: assign(socket, :fix_match, Map.merge(socket.assigns.fix_match, Map.new(changes)))
