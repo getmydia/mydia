@@ -31,7 +31,7 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
         options: %{
           indexer_ids: [],  # Empty = all enabled indexers. Must be integers (e.g., [1, 2, 3])
           categories: [],    # Empty = all categories
-          timeout: 30_000
+          timeout: 100_000
         }
       }
 
@@ -96,7 +96,7 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
   def search(config, query, opts \\ []) do
     url = build_search_url(config, query, opts)
     headers = build_headers(config)
-    timeout = get_in(config, [:options, :timeout]) || 30_000
+    timeout = get_in(config, [:options, :timeout]) || Mydia.Indexers.default_search_timeout_ms()
 
     Logger.debug("Prowlarr search: #{url}")
 

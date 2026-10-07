@@ -109,6 +109,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_manual_search_modal, false)
      |> assign(:manual_search_query, "")
      |> assign(:manual_search_context, nil)
+     |> assign(:manual_search_existing, nil)
      |> assign(:searching, false)
      |> assign(
        :close_after_grab,
@@ -117,6 +118,8 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:download_error, nil)
      |> assign(:min_seeders, 0)
      |> assign(:quality_filter, nil)
+     |> assign(:source_filter, nil)
+     |> assign(:codec_filter, nil)
      |> assign(:sort_by, :quality)
      |> assign(:results_empty?, false)
      |> assign(:indexer_errors, [])

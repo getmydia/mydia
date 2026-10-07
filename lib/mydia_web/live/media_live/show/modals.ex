@@ -165,6 +165,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     if rest == [], do: blocker_name(first), else: "#{blocker_name(first)} and others"
   end
 
+  defp season_quality_suffix(existing) do
+    case Enum.reject([existing.resolution, existing.source, existing.codec], &is_nil/1) do
+      [] -> ""
+      parts -> " · mostly " <> Enum.join(parts, " ")
+    end
+  end
+
   defp blocker_name({:unreadable, rel}), do: "#{Path.basename(rel)} (unreadable)"
   defp blocker_name({_kind, rel}), do: Path.basename(rel)
 
@@ -893,6 +900,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   Uses DaisyUI list components for a cleaner, more scannable UI.
   """
   attr :manual_search_context, :map, default: nil
+  attr :existing, :any, default: nil
   attr :media_item, Mydia.Media.MediaItem, required: true
   attr :manual_search_query, :string, required: true
   attr :searching, :boolean, required: true
@@ -907,6 +915,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :indexer_progress, :map, default: %{}
   attr :streams, :map, required: true
   attr :quality_filter, :string, default: nil
+  attr :source_filter, :string, default: nil
+  attr :codec_filter, :string, default: nil
+  attr :filter_options, :map, default: %{sources: [], codecs: []}
   attr :min_seeders, :integer, default: 0
   attr :sort_by, :atom, required: true
 
@@ -968,6 +979,42 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             <span class="text-base-content/70">Searching for:</span>
             <span class="font-semibold truncate">{@manual_search_query}</span>
           </div>
+          <%= if @existing do %>
+            <div
+              id="manual-search-existing"
+              class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm mt-1 min-w-0"
+            >
+              <.icon name="hero-archive-box" class="w-4 h-4 text-base-content/60 shrink-0" />
+              <span class="text-base-content/70 shrink-0">On disk:</span>
+              <%= case @existing.kind do %>
+                <% :file -> %>
+                  <span
+                    class="font-mono text-xs truncate min-w-0 basis-full sm:basis-auto"
+                    title={@existing.filename}
+                  >
+                    {@existing.filename}
+                  </span>
+                  <span :if={@existing.resolution} class="badge badge-sm badge-ghost shrink-0">
+                    {@existing.resolution}
+                  </span>
+                  <span :if={@existing.codec} class="badge badge-sm badge-ghost shrink-0">
+                    {@existing.codec}
+                  </span>
+                  <span :if={@existing.size} class="text-xs text-base-content/60 shrink-0">
+                    {format_file_size(@existing.size)}
+                  </span>
+                  <span :if={@existing.extra_count > 0} class="text-xs text-base-content/60 shrink-0">
+                    +{@existing.extra_count} more
+                  </span>
+                <% :season -> %>
+                  <span class="truncate">
+                    {@existing.on_disk}/{@existing.total} episodes on disk{season_quality_suffix(
+                      @existing
+                    )}
+                  </span>
+              <% end %>
+            </div>
+          <% end %>
         </div>
         <%!-- Filters Bar (compact) --%>
         <%!-- Additive to the old `!@searching` gate. Results now stream in
@@ -986,11 +1033,39 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <div class="bg-base-200/50 border-b border-base-300 px-4 py-3">
             <div class="flex flex-wrap items-center gap-3">
               <form phx-change="filter_search" class="flex flex-wrap items-center gap-3">
-                <select name="quality" class="select select-bordered select-sm">
+                <select name="quality" class="select select-bordered select-sm w-auto">
                   <option value="" selected={is_nil(@quality_filter)}>All Quality</option>
                   <option value="720p" selected={@quality_filter == "720p"}>720p</option>
                   <option value="1080p" selected={@quality_filter == "1080p"}>1080p</option>
                   <option value="2160p" selected={@quality_filter in ["2160p", "4k"]}>4K</option>
+                </select>
+                <select
+                  id="manual-search-source-filter"
+                  name="source"
+                  class="select select-bordered select-sm w-auto"
+                >
+                  <option value="" selected={is_nil(@source_filter)}>All Sources</option>
+                  <option
+                    :for={source <- @filter_options.sources}
+                    value={source}
+                    selected={@source_filter == source}
+                  >
+                    {source}
+                  </option>
+                </select>
+                <select
+                  id="manual-search-codec-filter"
+                  name="codec"
+                  class="select select-bordered select-sm w-auto"
+                >
+                  <option value="" selected={is_nil(@codec_filter)}>All Codecs</option>
+                  <option
+                    :for={codec <- @filter_options.codecs}
+                    value={codec}
+                    selected={@codec_filter == codec}
+                  >
+                    {codec}
+                  </option>
                 </select>
                 <div class="join">
                   <span class="join-item btn btn-sm btn-ghost no-animation pointer-events-none">

@@ -445,6 +445,7 @@
   <%= if @show_manual_search_modal do %>
     <Modals.manual_search_modal
       manual_search_context={@manual_search_context}
+      existing={@manual_search_existing}
       media_item={@media_item}
       manual_search_query={@manual_search_query}
       searching={@searching}
@@ -456,6 +457,15 @@
       indexer_progress={@indexer_progress}
       streams={@streams}
       quality_filter={@quality_filter}
+      source_filter={@source_filter}
+      codec_filter={@codec_filter}
+      filter_options={
+        MydiaWeb.MediaLive.Show.SearchHelpers.filter_options(
+          @raw_search_results,
+          @source_filter,
+          @codec_filter
+        )
+      }
       min_seeders={@min_seeders}
       sort_by={@sort_by}
     />

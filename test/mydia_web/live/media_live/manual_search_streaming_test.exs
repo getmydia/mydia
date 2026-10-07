@@ -271,6 +271,26 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     refute has_element?(view, "#manual-search-results")
   end
 
+  test "the dialog shows the movie's file on disk", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Glass Harbor", type: "movie"})
+
+    media_file_fixture(%{
+      media_item_id: media_item.id,
+      relative_path: "Glass Harbor (2019)/Glass.Harbor.2019.1080p.WEB-DL.x265.mkv"
+    })
+
+    pending_indexer_fixture("slow-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+
+    assert has_element?(
+             view,
+             "#manual-search-existing",
+             "Glass.Harbor.2019.1080p.WEB-DL.x265.mkv"
+           )
+  end
+
   # Positive control for the refutation above: once an indexer reports
   # results, the list appears and the spinner goes away. Without this, a
   # passing refute could just mean "#manual-search-results" never renders
@@ -970,6 +990,81 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     |> render_change(%{"quality" => "", "min_seeders" => "0"})
 
     assert has_element?(view, "##{positioned_result_dom_id(dune)}")
+  end
+
+  test "source and codec dropdowns narrow results and offer only what arrived", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Glass Harbor", type: "movie"})
+    indexer = pending_indexer_fixture("slow-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    remux = %{
+      search_result("Glass.Harbor.2019.1080p.REMUX.HEVC")
+      | quality: %Mydia.Library.Structs.Quality{
+          resolution: "1080p",
+          source: "REMUX",
+          codec: "H.265"
+        }
+    }
+
+    web = %{
+      search_result("Glass.Harbor.2019.1080p.WEB-DL.x264")
+      | quality: %Mydia.Library.Structs.Quality{
+          resolution: "1080p",
+          source: "WEB-DL",
+          codec: "x264"
+        }
+    }
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %IndexerProgress{
+         indexer: "slow-indexer",
+         indexer_id: indexer.id,
+         status: :ok,
+         results: [remux, web],
+         result_count: 2,
+         duration_ms: 700,
+         completed: 1,
+         total: 2
+       }}
+    )
+
+    render(view)
+
+    assert has_element?(view, ~s(#manual-search-source-filter option[value="REMUX"]))
+    assert has_element?(view, ~s(#manual-search-source-filter option[value="WEB-DL"]))
+    refute has_element?(view, ~s(#manual-search-source-filter option[value="HDTV"]))
+    assert has_element?(view, ~s(#manual-search-codec-filter option[value="HEVC"]))
+
+    view
+    |> element(~s(#manual-search-modal form[phx-change="filter_search"]))
+    |> render_change(%{
+      "quality" => "",
+      "min_seeders" => "0",
+      "source" => "REMUX",
+      "codec" => "HEVC"
+    })
+
+    rows = :sys.get_state(view.pid).socket.assigns.raw_search_results
+    assert length(rows) == 2, "filtering must not shrink the pre-filter pool"
+
+    assert has_element?(view, "#manual-search-modal [id^='search-result-']", "REMUX")
+    refute has_element?(view, "#manual-search-modal [id^='search-result-']", "WEB-DL.x264")
+
+    view
+    |> element(~s(#manual-search-modal form[phx-change="filter_search"]))
+    |> render_change(%{
+      "quality" => "",
+      "min_seeders" => "0",
+      "source" => "BOGUS",
+      "codec" => ""
+    })
+
+    assert :sys.get_state(view.pid).socket.assigns.source_filter == nil
   end
 
   # Every test above injects %IndexerProgress{} directly and never runs the
