@@ -84,8 +84,14 @@ defmodule Mydia.Jobs.MediaImportS3Test do
   } do
     download = download_for(movie, %{library_path_id: s3_library.id})
 
-    assert {:error, :library_read_only} = run(download, download_dir)
+    # Terminal: a read-only library never becomes writable by retrying, and a
+    # pending retry would keep the download occupying its target.
+    assert {:cancel, :library_read_only} = run(download, download_dir)
     refute File.exists?("s3:")
-    assert Repo.reload!(download).import_last_error =~ "read-only"
+
+    reloaded = Repo.reload!(download)
+    assert reloaded.import_last_error =~ "read-only"
+    assert reloaded.import_next_retry_at == nil
+    assert reloaded.import_failure_reason == "library_read_only"
   end
 end

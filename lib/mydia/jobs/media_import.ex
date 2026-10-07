@@ -239,6 +239,10 @@ defmodule Mydia.Jobs.MediaImport do
   # the same exhausted suffixes; the parse or the download contents need
   # looking at.
   defp terminal_failure?({:too_many_conflicts, _path}, _attempt), do: true
+  # The target library is read-only (an S3 library). Only an operator choosing
+  # another library fixes it, and a pending retry would keep the download
+  # occupying its target for the whole max_attempts budget.
+  defp terminal_failure?(:library_read_only, _attempt), do: true
   # {:destination_not_accessible, _} is intentionally NOT terminal: it's almost
   # always a fixable library-volume permission/disk issue. Retrying indefinitely
   # lets the import self-heal once the path becomes writable (the exact recovery
