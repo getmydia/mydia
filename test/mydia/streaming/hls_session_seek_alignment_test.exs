@@ -42,6 +42,7 @@ defmodule Mydia.Streaming.HlsSessionSeekAlignmentTest do
   defp existing_library_dir do
     dir = Path.join(System.tmp_dir!(), "mydia-seek-alignment-fixture")
     File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf(dir) end)
     File.touch!(Path.join(dir, "resume.mkv"))
     dir
   end

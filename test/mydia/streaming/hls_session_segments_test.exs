@@ -166,6 +166,7 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
   defp existing_library_dir do
     dir = Path.join(System.tmp_dir!(), "mydia-hls-segments-fixture")
     File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf(dir) end)
     File.touch!(Path.join(dir, "movie.mkv"))
     dir
   end

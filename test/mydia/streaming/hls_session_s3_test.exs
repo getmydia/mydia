@@ -9,6 +9,8 @@ defmodule Mydia.Streaming.HlsSessionS3Test do
   @moduletag :ffmpeg
   @moduletag :tmp_dir
 
+  import Ecto.Query, only: [from: 2]
+
   alias Mydia.Streaming.{Candidates, Compatibility, HlsSession, HlsSessionSupervisor}
 
   setup %{tmp_dir: tmp_dir} do
@@ -34,6 +36,20 @@ defmodule Mydia.Streaming.HlsSessionS3Test do
     on_exit(fn -> HlsSessionSupervisor.stop_session(mf.id, user.id) end)
 
     assert :ok = HlsSession.await_ready(pid, 30_000)
+  end
+
+  test "a missing S3 object fails the start and leaves no job row", %{media_file: mf} do
+    missing =
+      mf |> Ecto.Changeset.change(relative_path: "nope/missing.mp4") |> Mydia.Repo.update!()
+
+    user = Mydia.AccountsFixtures.user_fixture()
+
+    assert {:error, {:backend_start_failed, :input_unavailable}} =
+             HlsSessionSupervisor.start_session(missing.id, user.id)
+
+    refute Mydia.Repo.exists?(
+             from j in Mydia.Downloads.TranscodeJob, where: j.media_file_id == ^missing.id
+           )
   end
 
   test "ensure_codec_info analyzes an S3 file", %{media_file: mf} do

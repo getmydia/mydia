@@ -503,6 +503,7 @@ defmodule Mydia.Streaming.HlsSession do
             )
 
             if hwaccel_lease, do: HardwareAccel.release(hwaccel_lease)
+            delete_job(job.id)
             File.rm_rf!(temp_dir)
             {:stop, {:backend_start_failed, reason}}
         end
@@ -1068,17 +1069,7 @@ defmodule Mydia.Streaming.HlsSession do
 
     Phoenix.PubSub.broadcast(Mydia.PubSub, "hls_sessions", :session_ended)
 
-    # Remove the job from the database
-    if state.db_job_id do
-      case Repo.get(TranscodeJob, state.db_job_id) do
-        nil ->
-          :ok
-
-        job ->
-          Repo.delete(job)
-          Mydia.Downloads.broadcast_job_update(job.id)
-      end
-    end
+    delete_job(state.db_job_id)
 
     # Stop the backend if it's still running
     if state.backend_pid && Process.alive?(state.backend_pid) do
@@ -1098,6 +1089,21 @@ defmodule Mydia.Streaming.HlsSession do
   end
 
   ## Private Functions
+
+  # Removes the session's queue row. Shared by terminate/2 and the failed
+  # backend start in init/1, which stops before terminate/2 can run.
+  defp delete_job(nil), do: :ok
+
+  defp delete_job(job_id) do
+    case Repo.get(TranscodeJob, job_id) do
+      nil ->
+        :ok
+
+      job ->
+        Repo.delete(job)
+        Mydia.Downloads.broadcast_job_update(job.id)
+    end
+  end
 
   defp segment_path(state, index) do
     Path.join(state.temp_dir, SegmentPlan.segment_name(index))
