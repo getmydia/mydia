@@ -477,47 +477,7 @@ defmodule MydiaWeb.Api.StreamController do
         :ok
     end
 
-    file_stat = File.stat!(file_path)
-    file_size = file_stat.size
-
-    # Get MIME type from file extension
-    mime_type = RangeHelper.get_mime_type(file_path)
-
-    # Parse Range header if present
-    range_header = get_req_header(conn, "range") |> List.first()
-
-    case RangeHelper.parse_range_header(range_header, file_size) do
-      {:ok, start, end_pos} ->
-        # Partial content response (206)
-        {offset, length} = RangeHelper.calculate_range(start, end_pos)
-        content_range = RangeHelper.format_content_range(start, end_pos, file_size)
-
-        conn
-        |> put_status(:partial_content)
-        |> put_resp_header("accept-ranges", "bytes")
-        |> put_resp_header("content-type", mime_type)
-        |> put_resp_header("content-range", content_range)
-        |> put_resp_header("content-length", to_string(length))
-        |> put_resp_header("x-streaming-mode", "direct")
-        |> send_file(:partial_content, file_path, offset, length)
-
-      :error when is_nil(range_header) ->
-        # No range header - send full file (200)
-        conn
-        |> put_status(:ok)
-        |> put_resp_header("accept-ranges", "bytes")
-        |> put_resp_header("content-type", mime_type)
-        |> put_resp_header("content-length", to_string(file_size))
-        |> put_resp_header("x-streaming-mode", "direct")
-        |> send_file(:ok, file_path)
-
-      :error ->
-        # Invalid range header - return 416 Range Not Satisfiable
-        conn
-        |> put_status(:requested_range_not_satisfiable)
-        |> put_resp_header("content-range", "bytes */#{file_size}")
-        |> json(%{error: "Invalid range request"})
-    end
+    RangeHelper.send_file_ranged(conn, file_path)
   end
 
   # Stream file via fMP4 remuxing (for files with compatible codecs but incompatible container)

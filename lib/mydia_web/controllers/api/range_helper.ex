@@ -6,11 +6,21 @@ defmodule MydiaWeb.Api.RangeHelper do
   for HTTP 206 Partial Content responses.
   """
 
-  @doc """
-  Parses an HTTP Range header value.
+  import Plug.Conn,
+    only: [get_req_header: 2, put_resp_header: 3, put_status: 2, send_file: 3, send_file: 5]
 
-  Returns {:ok, start, end_pos} for valid ranges or :error for invalid ones.
-  Only supports single byte ranges in the format "bytes=START-END" or "bytes=START-".
+  @doc """
+  Parses an HTTP Range header value (RFC 9110 section 14.1.2).
+
+  Returns `{:ok, start, end_pos}` for a satisfiable range or `:error`
+  otherwise. Only a single byte range is supported:
+
+    * `bytes=START-END` (END is clamped to the last byte of the file)
+    * `bytes=START-` (to the end of the file)
+    * `bytes=-N` (the last N bytes; the whole file when N exceeds its size)
+
+  Unsatisfiable or malformed ranges, multi-range headers, and any range on an
+  empty file return `:error`.
 
   ## Examples
 
@@ -20,11 +30,21 @@ defmodule MydiaWeb.Api.RangeHelper do
       iex> parse_range_header("bytes=500-", 1000)
       {:ok, 500, 999}
 
+      iex> parse_range_header("bytes=0-65535", 1000)
+      {:ok, 0, 999}
+
+      iex> parse_range_header("bytes=-500", 1000)
+      {:ok, 500, 999}
+
+      iex> parse_range_header("bytes=-0", 1000)
+      :error
+
       iex> parse_range_header("bytes=invalid", 1000)
       :error
   """
   def parse_range_header(nil, _file_size), do: :error
   def parse_range_header("", _file_size), do: :error
+  def parse_range_header(_range_header, file_size) when file_size <= 0, do: :error
 
   def parse_range_header(range_header, file_size) do
     # Only support single byte range requests
@@ -39,6 +59,15 @@ defmodule MydiaWeb.Api.RangeHelper do
 
   defp parse_range_spec(spec, file_size) do
     case String.split(spec, "-") do
+      ["", length_str] ->
+        # Suffix range like "bytes=-500" (the last N bytes)
+        with {length, ""} <- Integer.parse(length_str),
+             true <- length > 0 do
+          {:ok, max(file_size - length, 0), file_size - 1}
+        else
+          _ -> :error
+        end
+
       [start_str, ""] ->
         # Range like "bytes=500-" (from position to end)
         with {start, ""} <- Integer.parse(start_str),
@@ -49,11 +78,11 @@ defmodule MydiaWeb.Api.RangeHelper do
         end
 
       [start_str, end_str] ->
-        # Range like "bytes=0-499"
+        # Range like "bytes=0-499"; an end past EOF is clamped
         with {start, ""} <- Integer.parse(start_str),
              {end_pos, ""} <- Integer.parse(end_str),
-             true <- start >= 0 and start <= end_pos and end_pos < file_size do
-          {:ok, start, end_pos}
+             true <- start >= 0 and start <= end_pos and start < file_size do
+          {:ok, start, min(end_pos, file_size - 1)}
         else
           _ -> :error
         end
@@ -125,6 +154,49 @@ defmodule MydiaWeb.Api.RangeHelper do
       ".flv" -> "video/x-flv"
       ".ts" -> "video/mp2t"
       _ -> "video/mp4"
+    end
+  end
+
+  @doc """
+  Sends `file_path` honouring a single-range `Range` header.
+
+  Answers 206 for a valid range, 200 with the whole file when there is no
+  Range header, and 416 when the header is present but unusable. The caller
+  must have checked that the file exists.
+  """
+  @spec send_file_ranged(Plug.Conn.t(), Path.t()) :: Plug.Conn.t()
+  def send_file_ranged(conn, file_path) do
+    file_size = File.stat!(file_path).size
+    mime_type = get_mime_type(file_path)
+    range_header = conn |> get_req_header("range") |> List.first()
+
+    case parse_range_header(range_header, file_size) do
+      {:ok, start, end_pos} ->
+        {offset, length} = calculate_range(start, end_pos)
+
+        conn
+        |> put_status(:partial_content)
+        |> put_resp_header("accept-ranges", "bytes")
+        |> put_resp_header("content-type", mime_type)
+        |> put_resp_header("content-range", format_content_range(start, end_pos, file_size))
+        |> put_resp_header("content-length", to_string(length))
+        |> put_resp_header("x-streaming-mode", "direct")
+        |> send_file(:partial_content, file_path, offset, length)
+
+      :error when is_nil(range_header) ->
+        conn
+        |> put_status(:ok)
+        |> put_resp_header("accept-ranges", "bytes")
+        |> put_resp_header("content-type", mime_type)
+        |> put_resp_header("content-length", to_string(file_size))
+        |> put_resp_header("x-streaming-mode", "direct")
+        |> send_file(:ok, file_path)
+
+      :error ->
+        conn
+        |> put_status(:requested_range_not_satisfiable)
+        |> put_resp_header("content-range", "bytes */#{file_size}")
+        |> Phoenix.Controller.json(%{error: "Invalid range request"})
     end
   end
 end

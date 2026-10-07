@@ -27,6 +27,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   attr :fetching_season_subtitles, :any, default: nil
   attr :auto_searching_episode, :any, default: nil
   attr :player_enabled, :boolean, required: true
+  attr :current_user_id, :string, default: nil
   attr :transcode_jobs, :map, default: %{}
   attr :media_file_subtitle_tracks, :map, default: %{}
   attr :segment_statuses, :map, default: %{}
@@ -63,6 +64,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   expanded_episodes={@expanded_episodes}
                   auto_searching_episode={@auto_searching_episode}
                   player_enabled={@player_enabled}
+                  current_user_id={@current_user_id}
                   transcode_jobs={@transcode_jobs}
                   media_file_subtitle_tracks={@media_file_subtitle_tracks}
                 />
@@ -97,6 +99,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   expanded_episodes={@expanded_episodes}
                   auto_searching_episode={@auto_searching_episode}
                   player_enabled={@player_enabled}
+                  current_user_id={@current_user_id}
                   transcode_jobs={@transcode_jobs}
                   media_file_subtitle_tracks={@media_file_subtitle_tracks}
                 />
@@ -130,6 +133,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   attr :expanded_episodes, :any, required: true
   attr :auto_searching_episode, :any, default: nil
   attr :player_enabled, :boolean, required: true
+  attr :current_user_id, :string, default: nil
   attr :transcode_jobs, :map, default: %{}
   attr :media_file_subtitle_tracks, :map, default: %{}
 
@@ -375,6 +379,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   file={file}
                   episode={episode}
                   player_enabled={@player_enabled}
+                  current_user_id={@current_user_id}
                   transcode_jobs={Map.get(@transcode_jobs, file.id, [])}
                   subtitle_tracks={Map.get(@media_file_subtitle_tracks, file.id, [])}
                 />

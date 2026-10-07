@@ -502,6 +502,21 @@ window.addEventListener("phx:download_export", (e) => {
   URL.revokeObjectURL(url);
 });
 
+// Copy a link's absolute URL. Stream links are relative hrefs, so a.href is
+// the browser-resolved URL including the host the user is on. The Clipboard
+// API needs a secure context; on plain-HTTP LAN installs fall back to a
+// prompt the user can copy from.
+window.addEventListener("mydia:copy-href", (e) => {
+  const href = e.target.href;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard
+      .writeText(href)
+      .catch(() => window.prompt("Copy this link", href));
+  } else {
+    window.prompt("Copy this link", href);
+  }
+});
+
 // Shift+click range selection for batch edit checkboxes
 const BatchSelect = {
   mounted() {
