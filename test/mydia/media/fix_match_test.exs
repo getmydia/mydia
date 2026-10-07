@@ -171,6 +171,21 @@ defmodule Mydia.Media.FixMatchTest do
         media_type: type
       }
 
+    test "refuses a result issued by a different provider than the item's", c do
+      item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: 61})
+
+      tvdb_result = %Mydia.Metadata.Structs.SearchResult{
+        provider_id: "62",
+        provider: :tvdb,
+        media_type: :movie
+      }
+
+      assert {:error, {:provider_mismatch, :tvdb, :tmdb}} =
+               FixMatch.adopt(Scope.unrestricted(), item, tvdb_result, c.config)
+
+      assert Mydia.Repo.reload!(item).tmdb_id == 61
+    end
+
     test "a movie takes the new identity and keeps its files and settings", c do
       new_id = System.unique_integer([:positive])
 

@@ -127,7 +127,9 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
      )}
   end
 
-  def handle_adopt_async({:ok, {:error, :restricted}}, socket) do
+  # A show's refusal arrives wrapped by ProviderSwitch's rollback.
+  def handle_adopt_async({:ok, {:error, reason}}, socket)
+      when reason in [:restricted, {:provider_switch_update_failed, :restricted}] do
     {:noreply,
      socket
      |> assign(:fix_match, nil)

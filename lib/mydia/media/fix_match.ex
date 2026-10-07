@@ -100,11 +100,24 @@ defmodule Mydia.Media.FixMatch do
     provider = provider_for(item)
     new_id = String.to_integer(to_string(candidate.provider_id))
 
-    case holder_of(item, provider, new_id) do
-      %MediaItem{} = other -> {:error, {:already_in_library, other}}
-      nil -> do_adopt(scope, item, candidate, provider, new_id, config)
+    cond do
+      not candidate_from?(candidate, provider) ->
+        {:error, {:provider_mismatch, candidate.provider, provider}}
+
+      other = holder_of(item, provider, new_id) ->
+        {:error, {:already_in_library, other}}
+
+      true ->
+        do_adopt(scope, item, candidate, provider, new_id, config)
     end
   end
+
+  # An id is only meaningful on the provider that issued it. A candidate from a
+  # search made before the item's library changed provider would otherwise be
+  # written into the wrong id column. Results that do not name a concrete
+  # provider are trusted, since they came from `search/5` for this item.
+  defp candidate_from?(%{provider: p}, provider) when p in [:tmdb, :tvdb], do: p == provider
+  defp candidate_from?(_candidate, _provider), do: true
 
   defp do_adopt(scope, %MediaItem{type: "tv_show"} = item, candidate, provider, _id, config),
     do: ProviderSwitch.adopt_provider_switch(scope, item, candidate, provider, config)

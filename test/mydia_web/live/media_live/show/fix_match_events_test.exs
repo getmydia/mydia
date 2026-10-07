@@ -120,6 +120,19 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEventsTest do
     assert s.assigns.flash["error"] == Mydia.Media.restricted_message()
   end
 
+  test "a show's wrapped restricted refusal shows the same message", _ do
+    item = media_item_fixture(%{type: "tv_show", title: "Wrong Harbor", tmdb_id: 49})
+    {:noreply, s} = FixMatchEvents.open(%{}, socket(item))
+
+    {:noreply, s} =
+      FixMatchEvents.handle_adopt_async(
+        {:ok, {:error, {:provider_switch_update_failed, :restricted}}},
+        s
+      )
+
+    assert s.assigns.flash["error"] == Mydia.Media.restricted_message()
+  end
+
   test "confirm while an adopt is running does nothing", _ do
     item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: 53})
     {:noreply, s} = FixMatchEvents.open(%{}, socket(item))
