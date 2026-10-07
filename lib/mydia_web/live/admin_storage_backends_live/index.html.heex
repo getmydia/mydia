@@ -1,0 +1,20 @@
+<Layouts.app {assigns}>
+  <.admin_page page={:storage_backends} count={length(@backends)}>
+    <:actions>
+      <button id="new-storage-backend" class="btn btn-sm btn-primary" phx-click="new">
+        <.icon name="hero-plus" class="w-4 h-4" /> Add storage backend
+      </button>
+    </:actions>
+
+    <MydiaWeb.AdminStorageBackendsLive.Components.backends_list
+      backends={@backends}
+      testing={@testing}
+    />
+
+    <MydiaWeb.AdminStorageBackendsLive.Components.backend_modal
+      :if={@form}
+      form={@form}
+      mode={@mode}
+    />
+  </.admin_page>
+</Layouts.app>

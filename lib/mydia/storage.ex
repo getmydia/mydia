@@ -18,6 +18,10 @@ defmodule Mydia.Storage do
   @spec validate(Location.t()) :: :ok | {:error, Error.t()}
   def validate(%Location{} = loc), do: impl(loc).validate(loc)
 
+  @doc "Checks the backend's credentials and bucket by validating the bucket root."
+  @spec test_connection(Mydia.Settings.StorageBackend.t()) :: :ok | {:error, Error.t()}
+  def test_connection(backend), do: validate(Location.s3(backend, "", "s3://#{backend.name}"))
+
   @spec source(Location.t(), String.t()) :: {:ok, Source.t()}
   def source(%Location{} = loc, relative_path) when is_binary(relative_path),
     do: {:ok, Source.new(loc, relative_path)}
