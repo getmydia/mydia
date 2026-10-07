@@ -697,6 +697,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       assign(assigns,
         square: file_action_square_class(assigns.container),
         primary: file_action_primary_class(assigns.container),
+        label: file_action_label_class(assigns.container),
         icon: file_action_icon_class(assigns.container),
         resolutions: resolutions
       )
@@ -723,8 +724,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       >
         <.icon name="hero-link" class={"#{@icon} group-data-[copied]:hidden"} />
         <.icon name="hero-check" class={"#{@icon} hidden group-data-[copied]:inline-block"} />
-        <span class="group-data-[copied]:hidden">Copy stream link</span>
-        <span class="hidden group-data-[copied]:inline">Copied</span>
+        <span class={@label} aria-live="polite">
+          <span class="group-data-[copied]:hidden">Copy stream link</span>
+          <span class="hidden group-data-[copied]:inline">Copied</span>
+        </span>
       </button>
       <button
         id={@subtitle_button_id}
@@ -755,7 +758,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         <ul
           id={"file-actions-menu-#{@file.id}"}
           tabindex="0"
-          class="dropdown-content menu bg-base-100 rounded-box z-[1] w-56 p-2 shadow-lg border border-base-300"
+          class="dropdown-content menu bg-base-100 rounded-box z-[1] w-56 p-2 shadow-lg border border-base-300 ms-0 whitespace-normal before:hidden"
         >
           <li>
             <button
@@ -783,7 +786,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               </button>
             </li>
           <% end %>
-          <div class="divider my-1"></div>
+          <li class="divider my-1"></li>
           <%!-- Not a tray/arrow icon: `hero-arrow-down-tray` is the download
                 icon everywhere else in the app. --%>
           <li :if={@demotable?}>
@@ -812,7 +815,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Not this {@item_label}
             </button>
           </li>
-          <div class="divider my-1"></div>
+          <li class="divider my-1"></li>
           <li>
             <button
               id={"file-delete-#{@file.id}"}
@@ -835,6 +838,12 @@ defmodule MydiaWeb.MediaLive.Show.Components do
 
   defp file_action_primary_class("mfrow"), do: "btn btn-primary gap-1.5 @md/mfrow:btn-sm"
   defp file_action_primary_class("eprow"), do: "btn btn-primary gap-1.5 @md/eprow:btn-xs"
+
+  # Side-by-side episode rows are narrow, so the stream button shows only its
+  # icon there (label stays for screen readers) and spells out the label once
+  # the row is wide enough or stacked below @md.
+  defp file_action_label_class("mfrow"), do: ""
+  defp file_action_label_class("eprow"), do: "@md/eprow:sr-only @xl/eprow:not-sr-only"
 
   defp file_action_icon_class("mfrow"), do: "w-5 h-5"
   defp file_action_icon_class("eprow"), do: "w-4 h-4"

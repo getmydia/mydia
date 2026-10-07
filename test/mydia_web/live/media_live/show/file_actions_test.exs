@@ -99,6 +99,29 @@ defmodule MydiaWeb.MediaLive.Show.FileActionsTest do
     end
   end
 
+  describe "markup" do
+    @label "#stream-link-file-1 [aria-live]"
+
+    test "stream label is announced and only hidden on narrow side-by-side episode rows" do
+      eprow = render_actions(container: "eprow", subtitle_button_id: "subtitle-open-file-1")
+
+      assert attr(eprow, @label, "aria-live") == "polite"
+      assert attr(eprow, @label, "class") =~ "@md/eprow:sr-only"
+
+      mfrow = render_actions([])
+      assert attr(mfrow, @label, "aria-live") == "polite"
+      refute attr(mfrow, @label, "class") =~ "sr-only"
+    end
+
+    test "dropdown menu drops daisyUI nested-menu styles and holds only li children" do
+      html = render_actions([])
+
+      assert attr(html, "#file-actions-menu-file-1", "class") =~ "before:hidden"
+      refute present?(html, "#file-actions-menu-file-1 > div")
+      assert present?(html, "#file-actions-menu-file-1 > li.divider")
+    end
+  end
+
   describe "container sizing" do
     test "movie squares use the mfrow variant, episode squares the eprow one" do
       mfrow = attr(render_actions([]), "#subtitle-open-file-file-1", "class")
