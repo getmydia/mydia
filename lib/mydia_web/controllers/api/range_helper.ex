@@ -7,7 +7,16 @@ defmodule MydiaWeb.Api.RangeHelper do
   """
 
   import Plug.Conn,
-    only: [get_req_header: 2, put_resp_header: 3, put_status: 2, send_file: 3, send_file: 5]
+    only: [
+      get_req_header: 2,
+      put_resp_header: 3,
+      put_status: 2,
+      send_file: 3,
+      send_file: 5,
+      send_chunked: 2,
+      send_resp: 3,
+      chunk: 2
+    ]
 
   @doc """
   Parses an HTTP Range header value (RFC 9110 section 14.1.2).
@@ -197,6 +206,78 @@ defmodule MydiaWeb.Api.RangeHelper do
         |> put_status(:requested_range_not_satisfiable)
         |> put_resp_header("content-range", "bytes */#{file_size}")
         |> Phoenix.Controller.json(%{error: "Invalid range request"})
+    end
+  end
+
+  @doc """
+  Like `send_file_ranged/2` but for a `Mydia.Storage.Source`. Local sources use
+  `send_file`; S3 sources are proxied with a ranged GET, streamed chunk by
+  chunk. Clients are never redirected to the bucket.
+  """
+  @spec send_source_ranged(Plug.Conn.t(), Mydia.Storage.Source.t()) :: Plug.Conn.t()
+  def send_source_ranged(conn, %Mydia.Storage.Source{location: %{kind: :local}} = source),
+    do: send_file_ranged(conn, source.path)
+
+  def send_source_ranged(conn, %Mydia.Storage.Source{} = source) do
+    case Mydia.Storage.stat(source) do
+      {:ok, %{size: file_size}} ->
+        mime_type = get_mime_type(source.path)
+        range_header = conn |> get_req_header("range") |> List.first()
+
+        case parse_range_header(range_header, file_size) do
+          {:ok, start, end_pos} ->
+            {offset, length} = calculate_range(start, end_pos)
+
+            conn
+            |> put_resp_header("content-range", format_content_range(start, end_pos, file_size))
+            |> proxy(source, :partial_content, mime_type, offset, length)
+
+          :error when is_nil(range_header) ->
+            proxy(conn, source, :ok, mime_type, 0, file_size)
+
+          :error ->
+            conn
+            |> put_status(:requested_range_not_satisfiable)
+            |> put_resp_header("content-range", "bytes */#{file_size}")
+            |> Phoenix.Controller.json(%{error: "Invalid range request"})
+        end
+
+      {:error, %Mydia.Storage.Error{kind: :not_found}} ->
+        conn |> put_status(:not_found) |> Phoenix.Controller.json(%{error: "File not found"})
+
+      {:error, %Mydia.Storage.Error{}} ->
+        conn
+        |> put_status(:bad_gateway)
+        |> Phoenix.Controller.json(%{error: "Storage unavailable"})
+    end
+  end
+
+  defp proxy(conn, _source, status, mime_type, _offset, 0) do
+    conn
+    |> put_resp_header("accept-ranges", "bytes")
+    |> put_resp_header("content-type", mime_type)
+    |> send_resp(status, "")
+  end
+
+  defp proxy(conn, source, status, mime_type, offset, length) do
+    conn =
+      conn
+      |> put_resp_header("accept-ranges", "bytes")
+      |> put_resp_header("content-type", mime_type)
+      |> put_resp_header("content-length", to_string(length))
+      |> put_resp_header("x-streaming-mode", "direct")
+      |> send_chunked(status)
+
+    # An error after the headers are out cannot change the status; ending the
+    # response early gives the client a short body, and players retry the range.
+    case Mydia.Storage.stream_range(source, offset, length, conn, fn data, conn ->
+           case chunk(conn, data) do
+             {:ok, conn} -> {:ok, conn}
+             {:error, reason} -> {:error, reason}
+           end
+         end) do
+      {:ok, conn} -> conn
+      {:error, _reason} -> conn
     end
   end
 end
