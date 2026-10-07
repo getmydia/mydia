@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/sources/media_source.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/navigation/all_servers_locations.dart';
@@ -24,8 +23,7 @@ String allServersItemLocation(ItemRef ref) => sourceItemLocation(ref);
 
 /// Where `/all*` goes before it builds: home when fewer than two servers are
 /// included, since one server is just that server.
-String? allServersRedirect(List<MediaSource> included) =>
-    included.length < 2 ? '/' : null;
+String? allServersRedirect(int includedCount) => includedCount < 2 ? '/' : null;
 
 /// The server a card opens, with how many other copies it stands in for.
 String? allServersServerLabel(String? server, int extraCopies) =>

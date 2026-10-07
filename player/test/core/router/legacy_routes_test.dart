@@ -98,7 +98,7 @@ void main() {
 
   test('/all with fewer than two servers does not loop back to /all', () {
     // The /all route sends it to '/', which resolves with allServers false.
-    expect(allServersRedirect(const []), '/');
+    expect(allServersRedirect(0), '/');
     expect(
         legacyLocation(Uri.parse('/'),
             legacy: null, mydia: const [], active: _a, allServers: false),

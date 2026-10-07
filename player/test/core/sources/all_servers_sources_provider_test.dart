@@ -80,6 +80,8 @@ void main() {
     expect(now.first, same(home));
     expect(now, hasLength(2));
     expect(now.last, same(fakes[idOf('d')]));
+    // The router lands from the count, so it must match the list.
+    expect(container.read(allServersIncludedCountProvider), now.length);
   });
 
   test('setActive does not rebuild the reader or refetch rows', () async {
