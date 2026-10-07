@@ -17,10 +17,10 @@ defmodule Mydia.P2p.Server do
   alias Mydia.Streaming.DeviceProfile
   alias Mydia.Streaming.HlsSession
   alias Mydia.Streaming.SessionFiles
+  alias MydiaWeb.Schema.Middleware.Logging, as: GraphQLLogging
 
   # The chunk NIFs used to feed S3 files from Elixir. Tests swap in a recorder.
   @p2p_nif Application.compile_env(:mydia, :p2p_nif, Mydia.P2p)
-  alias MydiaWeb.Schema.Middleware.Logging, as: GraphQLLogging
 
   # What a peer is told when handling its request failed unexpectedly.
   #
@@ -811,15 +811,26 @@ defmodule Mydia.P2p.Server do
   end
 
   defp push_storage_range(resource, stream_id, source, req, file_size) do
-    {status, offset, length, content_range} =
-      case parse_range(req.range_start, req.range_end, file_size) do
-        {:full, _} ->
-          {200, 0, file_size, nil}
+    case parse_range(req.range_start, req.range_end, file_size) do
+      {:full, _} ->
+        send_storage_body(resource, stream_id, source, {200, 0, file_size, nil})
 
-        {:partial, range_start, range_end, content_length} ->
-          {206, range_start, content_length, "bytes #{range_start}-#{range_end}/#{file_size}"}
-      end
+      {:partial, range_start, _range_end, _length} when range_start >= file_size ->
+        send_hls_error(resource, stream_id, 416, "Range not satisfiable")
 
+      {:partial, range_start, range_end, content_length} ->
+        content_range = "bytes #{range_start}-#{range_end}/#{file_size}"
+
+        send_storage_body(
+          resource,
+          stream_id,
+          source,
+          {206, range_start, content_length, content_range}
+        )
+    end
+  end
+
+  defp send_storage_body(resource, stream_id, source, {status, offset, length, content_range}) do
     header = %P2p.HlsResponseHeader{
       status: status,
       content_type: SessionFiles.content_type(source.path),
@@ -829,18 +840,27 @@ defmodule Mydia.P2p.Server do
     }
 
     with "ok" <- @p2p_nif.send_hls_header(resource, stream_id, header),
-         {:ok, _} <-
-           Mydia.Storage.stream_range(source, offset, length, nil, fn data, acc ->
-             case @p2p_nif.send_hls_chunk(resource, stream_id, data) do
-               "ok" -> {:ok, acc}
-               other -> {:error, other}
-             end
-           end) do
+         {:ok, _} <- stream_storage_body(resource, stream_id, source, offset, length) do
       @p2p_nif.finish_hls_stream(resource, stream_id)
     else
       {:error, reason} -> log_stream_failure(reason, "storage")
       other -> log_stream_failure(other, "storage")
     end
+  end
+
+  # An empty object has nothing to read, and a ranged read of zero bytes is not
+  # a request the storage layer should see.
+  defp stream_storage_body(_resource, _stream_id, _source, _offset, 0), do: {:ok, nil}
+
+  defp stream_storage_body(resource, stream_id, source, offset, length) do
+    Mydia.Storage.stream_range(source, offset, length, nil, fn data, acc ->
+      case @p2p_nif.send_hls_chunk(resource, stream_id, data) do
+        "ok" -> {:ok, acc}
+        # Unwrapped so `log_stream_failure/2` sees the bare `peer_stopped` reason.
+        {:error, reason} -> {:error, reason}
+        other -> {:error, other}
+      end
+    end)
   end
 
   defp handle_download_stream(resource, stream_id, job_id, scope, req) do
