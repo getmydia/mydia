@@ -17,6 +17,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.CollectionEvents
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
   alias MydiaWeb.MediaLive.Show.FileEvents
+  alias MydiaWeb.MediaLive.Show.FixMatchEvents
   alias MydiaWeb.MediaLive.Show.FindFileComponents
   alias MydiaWeb.MediaLive.Show.FindFileEvents
   alias MydiaWeb.MediaLive.Show.RenameEvents
@@ -102,6 +103,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:reidentify_candidates, [])
      |> assign(:reidentify_provider, nil)
      |> assign(:reidentifying, false)
+     |> assign(:fix_match, nil)
      # Manual search modal state
      |> FindFileEvents.assign_defaults()
      |> assign(:show_manual_search_modal, false)
@@ -276,6 +278,15 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("cancel_reidentify", params, socket),
     do: FileEvents.cancel_reidentify(params, socket)
+
+  def handle_event("open_fix_match", params, socket), do: FixMatchEvents.open(params, socket)
+  def handle_event("close_fix_match", params, socket), do: FixMatchEvents.close(params, socket)
+  def handle_event("fix_match_search", params, socket), do: FixMatchEvents.search(params, socket)
+  def handle_event("fix_match_pick", params, socket), do: FixMatchEvents.pick(params, socket)
+  def handle_event("fix_match_back", params, socket), do: FixMatchEvents.back(params, socket)
+
+  def handle_event("fix_match_confirm", params, socket),
+    do: FixMatchEvents.confirm(params, socket)
 
   def handle_event("refresh_all_file_metadata", params, socket),
     do: FileEvents.refresh_all_file_metadata(params, socket)
@@ -912,6 +923,12 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_async(:reidentify_adopt, result, socket),
     do: FileEvents.handle_reidentify_adopt_async(result, socket)
+
+  def handle_async(:fix_match_search, result, socket),
+    do: FixMatchEvents.handle_search_async(result, socket)
+
+  def handle_async(:fix_match_adopt, result, socket),
+    do: FixMatchEvents.handle_adopt_async(result, socket)
 
   def handle_async(:rescan_season_files, result, socket),
     do: FileEvents.handle_rescan_season_files_async(result, socket)

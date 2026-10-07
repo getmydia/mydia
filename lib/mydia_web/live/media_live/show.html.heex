@@ -95,6 +95,17 @@
                     <.icon name="hero-arrow-path" class="w-4 h-4" />
                   </button>
                 </div>
+                <div class="tooltip tooltip-bottom" data-tip="Fix match">
+                  <button
+                    id="fix-match-button"
+                    type="button"
+                    phx-click="open_fix_match"
+                    class="btn btn-ghost btn-sm btn-square"
+                    aria-label="Fix match: this is the wrong title"
+                  >
+                    <.icon name="hero-pencil-square" class="w-4 h-4" />
+                  </button>
+                </div>
                 <%= if @media_item.type == "tv_show" && has_media_files?(@media_item) do %>
                   <div class="tooltip tooltip-bottom" data-tip="Re-scan files">
                     <button
@@ -413,6 +424,9 @@
   <% end %>
   <%= if @show_reidentify_modal do %>
     <Modals.reidentify_modal provider={@reidentify_provider} candidates={@reidentify_candidates} />
+  <% end %>
+  <%= if @fix_match do %>
+    <Modals.fix_match_modal fix_match={@fix_match} media_item={@media_item} />
   <% end %>
   <%= if @find_file_target do %>
     <FindFileComponents.find_file_modal
