@@ -40,11 +40,12 @@ defmodule MydiaWeb.DashboardLive.Components do
           id={"#{@id}-item-#{entry.media_item.id}"}
           class="snap-start flex-shrink-0 w-36"
         >
-          <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden group">
+          <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 group">
             <.link navigate={~p"/media/#{entry.media_item.id}"}>
               <.poster_figure
                 src={MediaImages.poster_url(entry.media_item, "w342")}
                 alt={entry.media_item.title}
+                class="rounded-t-box"
                 loading={if(index < 6, do: nil, else: "lazy")}
               >
                 <:overlay>

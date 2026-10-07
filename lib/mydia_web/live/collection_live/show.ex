@@ -260,8 +260,8 @@ defmodule MydiaWeb.CollectionLive.Show do
             <% end %>
 
             <.link navigate={item_href(item)} class="block h-full">
-              <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
-                <.poster_figure src={item.poster_url} alt={item.title} />
+              <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200">
+                <.poster_figure src={item.poster_url} alt={item.title} class="rounded-t-box" />
                 <.poster_card_body title={item.title}>
                   <:meta>
                     <span class="text-xs text-base-content/70">{item.year}</span>

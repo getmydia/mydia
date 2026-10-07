@@ -469,7 +469,7 @@
               />
             </button>
 
-            <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
+            <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200">
               <%!-- Poster. The bottom-left corner holds the selection controls:
                    the top-left belongs to the bookmark and the top-right to the
                    badges, and on narrow cards those fill the top edge. A button
@@ -477,7 +477,11 @@
               <div class="relative">
                 <.link navigate={~p"/media/#{item.id}"}>
                   <% progress = get_progress(row) %>
-                  <.poster_figure src={get_poster_url(item)} alt={item.title}>
+                  <.poster_figure
+                    src={get_poster_url(item)}
+                    alt={item.title}
+                    class="rounded-t-box"
+                  >
                     <:overlay>
                       <.progress_bar :if={progress} progress={progress} class="hide-on-select" />
                       <%!-- Playback status and quality, stacked in one top-right container --%>
