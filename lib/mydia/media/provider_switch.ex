@@ -425,22 +425,24 @@ defmodule Mydia.Media.ProviderSwitch do
   # means "never asked" again, rather than leaving a stale ordering that a
   # later refresh would try (and partially fail) to reconcile toward.
   defp provider_switch_attrs(:tvdb, new_id, metadata) do
-    %{
+    metadata
+    |> Mydia.Media.Refresh.identity_attrs()
+    |> Map.merge(%{
       tvdb_id: String.to_integer(new_id),
       tmdb_id: nil,
       metadata_source: :tvdb,
-      metadata: metadata,
       season_order: nil
-    }
+    })
   end
 
   defp provider_switch_attrs(:tmdb, new_id, metadata) do
-    %{
+    metadata
+    |> Mydia.Media.Refresh.identity_attrs()
+    |> Map.merge(%{
       tmdb_id: String.to_integer(new_id),
       tvdb_id: nil,
       metadata_source: :tmdb,
-      metadata: metadata,
       season_order: nil
-    }
+    })
   end
 end
