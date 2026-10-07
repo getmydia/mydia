@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/router/legacy_routes.dart';
 import 'package:player/core/sources/source.dart';
+import 'package:player/presentation/screens/all_servers/all_servers_cards.dart'
+    show allServersRedirect;
 
 const _a = SourceId('ma:owner:aa');
 const _b = SourceId('mb:owner:bb');
@@ -76,5 +78,34 @@ void main() {
     expect(go('/shows', legacy: _a), '/s/ma:owner:aa/library/shows');
     expect(go('/filter/f1', legacy: _a), '/s/ma:owner:aa/filter/f1');
     expect(go('/settings/devices', legacy: _a), '/sources/manage/ma:owner:aa');
+  });
+
+  test('/ and /search open All servers when it is on', () {
+    String? all(String l, {required bool on}) => legacyLocation(Uri.parse(l),
+        legacy: null, mydia: const [], active: _a, allServers: on);
+    expect(all('/', on: true), '/all');
+    expect(all('/search?q=x', on: true), '/all/search?q=x');
+    expect(all('/', on: false), '/s/ma:owner:aa');
+    expect(all('/search?q=x', on: false), '/s/ma:owner:aa/search?q=x');
+  });
+
+  test('All servers on does not touch other legacy locations', () {
+    expect(
+        legacyLocation(Uri.parse('/movie/1'),
+            legacy: _a, mydia: const [_a], active: _a, allServers: true),
+        '/s/ma:owner:aa/movie/1');
+  });
+
+  test('/all with fewer than two servers does not loop back to /all', () {
+    // The /all route sends it to '/', which resolves with allServers false.
+    expect(allServersRedirect(const []), '/');
+    expect(
+        legacyLocation(Uri.parse('/'),
+            legacy: null, mydia: const [], active: _a, allServers: false),
+        '/s/ma:owner:aa');
+    expect(
+        legacyLocation(Uri.parse('/'),
+            legacy: null, mydia: const [], active: null, allServers: false),
+        isNull);
   });
 }

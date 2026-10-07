@@ -225,8 +225,8 @@ String? appRedirect({
       location.startsWith('/sources/add/') ||
       location == '/sources/manage';
 
-  // With any one source the app is usable; `/` has already moved to the
-  // active one. With none, the only place to go is add-a-server.
+  // With any one source the app is usable; `/` has already moved to All
+  // servers or the active source. With none, the only place to go is add-a-server.
   if (sources.isEmpty &&
       !isLoginRoute &&
       !isUnlockRoute &&
@@ -250,6 +250,8 @@ GoRouter appRouter(Ref ref) {
   // Where an old unprefixed location lands depends on which instances exist.
   ref.listen(legacyMydiaSourceIdProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(mydiaSourceIdsProvider, (_, __) => refreshNotifier.refresh());
+  // Whether `/` opens All servers depends on how many servers it includes.
+  ref.listen(allServersSourcesProvider, (_, __) => refreshNotifier.refresh());
   // A relock while a gated screen is open sends it to /unlock.
   ref.listen(gatedSourceIdsProvider, (_, __) => refreshNotifier.refresh());
 
@@ -281,6 +283,7 @@ GoRouter appRouter(Ref ref) {
           legacy: ref.read(legacyMydiaSourceIdProvider),
           mydia: ref.read(mydiaSourceIdsProvider),
           active: ref.read(activeSourceIdProvider),
+          allServers: ref.read(allServersSourcesProvider).length >= 2,
         ),
       );
       if (target != null) {
