@@ -13,6 +13,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   alias Mydia.Indexers.Structs.IndexerProgress
   alias Mydia.Media
   alias Mydia.Media.AudioLanguagePolicy
+  alias Mydia.Quality.Sources
   alias Mydia.Settings.CustomFormats
 
   def generate_result_id(%SearchResult{} = result) do
@@ -188,6 +189,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     results
     |> filter_by_seeders(assigns.min_seeders)
     |> filter_by_quality(assigns.quality_filter)
+    |> filter_by_source(Map.get(assigns, :source_filter))
+    |> filter_by_codec(Map.get(assigns, :codec_filter))
   end
 
   defp filter_by_seeders(results, min_seeders) when min_seeders > 0 do
@@ -219,6 +222,85 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   defp normalize_resolution("2160p"), do: "4k"
   defp normalize_resolution("4k"), do: "4k"
   defp normalize_resolution(res), do: String.downcase(res)
+
+  # A release whose name carries no source or codec token is hidden while that
+  # filter is active, the same way filter_by_quality/2 treats a nil resolution.
+  defp filter_by_source(results, nil), do: results
+
+  defp filter_by_source(results, source),
+    do: Enum.filter(results, &(result_source(&1) == source))
+
+  defp filter_by_codec(results, nil), do: results
+
+  defp filter_by_codec(results, family),
+    do: Enum.filter(results, &(codec_family(result_codec(&1)) == family))
+
+  defp result_source(%{quality: %{source: source}}), do: source
+  defp result_source(_), do: nil
+
+  defp result_codec(%{quality: %{codec: codec}}), do: codec
+  defp result_codec(_), do: nil
+
+  @codec_families ["AV1", "HEVC", "AVC", "VP9", "XviD", "DivX"]
+
+  @doc """
+  The codec families the Codec filter offers, in display order.
+  """
+  def codec_families, do: @codec_families
+
+  @doc """
+  Groups a codec label into the family a user filters by.
+
+  Release names spell the same format several ways (`x265`, `H.265`, `HEVC`),
+  and QualityParser keeps the encoder/format split, so the filter would
+  otherwise offer near-duplicates. ffprobe names on media files (`h264`,
+  `hevc`) fold into the same families. Returns nil for anything else.
+  """
+  def codec_family(nil), do: nil
+
+  def codec_family(codec) when is_binary(codec) do
+    codec = String.downcase(codec)
+
+    cond do
+      codec =~ ~r/265|hevc/ -> "HEVC"
+      codec =~ ~r/264|avc/ -> "AVC"
+      codec =~ "av1" -> "AV1"
+      codec =~ "vp9" -> "VP9"
+      codec =~ "xvid" -> "XviD"
+      codec =~ "divx" -> "DivX"
+      true -> nil
+    end
+  end
+
+  @doc """
+  The Source and Codec options for the current pre-filter result pool.
+
+  Only values present in `results` are offered, so a choice never matches
+  nothing. The active selections are always kept so a filter whose value has
+  dropped out of the pool can still be cleared.
+  """
+  def filter_options(results, source_filter, codec_filter) do
+    sources =
+      results
+      |> Enum.map(&result_source/1)
+      |> Kernel.++([source_filter])
+      |> order_by(Sources.all())
+
+    codecs =
+      results
+      |> Enum.map(&(&1 |> result_codec() |> codec_family()))
+      |> Kernel.++([codec_filter])
+      |> order_by(@codec_families)
+
+    %{sources: sources, codecs: codecs}
+  end
+
+  # Drops nil and anything outside the known vocabulary, which also keeps a
+  # forged param out of the option list.
+  defp order_by(values, known) do
+    present = MapSet.new(values)
+    Enum.filter(known, &MapSet.member?(present, &1))
+  end
 
   @doc """
   Sort search results by the specified criteria.
