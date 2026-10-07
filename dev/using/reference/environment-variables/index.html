@@ -683,6 +683,8 @@
       
         
       
+        
+      
     
     
     
@@ -867,6 +869,34 @@
     
   
     Managing Libraries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/s3-storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keep a library in S3 storage
   
 
     
@@ -1654,6 +1684,17 @@
     <span class="md-ellipsis">
       
         Additional Library Paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s3-storage-backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        S3 Storage Backends
       
     </span>
   </a>
@@ -3685,6 +3726,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#s3-storage-backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        S3 Storage Backends
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -4126,6 +4178,56 @@ regardless of what you set here. If you serve Mydia over plain http, set
 </tbody>
 </table>
 <p><strong>Library Types:</strong> <code>movies</code>, <code>series</code>, or <code>mixed</code></p>
+<h3 id="s3-storage-backends">S3 Storage Backends</h3>
+<p>Declare S3-compatible storage (AWS S3, MinIO, Cloudflare R2, and similar) with
+numbered variables (<code>&lt;N&gt;</code> = 1, 2, 3, etc.). A library path refers to a backend by
+name as <code>s3://&lt;name&gt;/&lt;prefix&gt;</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Variable Pattern</th>
+<th>Description</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>STORAGE_BACKEND_&lt;N&gt;_NAME</code></td>
+<td>Name used in <code>s3://&lt;name&gt;/</code> paths. Required.</td>
+<td><code>media</code></td>
+</tr>
+<tr>
+<td><code>STORAGE_BACKEND_&lt;N&gt;_ENDPOINT</code></td>
+<td>Endpoint URL. Leave empty for AWS S3.</td>
+<td><code>http://minio:9000</code></td>
+</tr>
+<tr>
+<td><code>STORAGE_BACKEND_&lt;N&gt;_REGION</code></td>
+<td>Region. Defaults to <code>us-east-1</code>.</td>
+<td><code>eu-west-1</code></td>
+</tr>
+<tr>
+<td><code>STORAGE_BACKEND_&lt;N&gt;_BUCKET</code></td>
+<td>Bucket name. Required.</td>
+<td><code>library</code></td>
+</tr>
+<tr>
+<td><code>STORAGE_BACKEND_&lt;N&gt;_ACCESS_KEY_ID</code></td>
+<td>Access key ID. Required.</td>
+<td><code>AKIDEXAMPLE</code></td>
+</tr>
+<tr>
+<td><code>STORAGE_BACKEND_&lt;N&gt;_SECRET_ACCESS_KEY</code></td>
+<td>Secret access key. Required.</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>STORAGE_BACKEND_&lt;N&gt;_PATH_STYLE</code></td>
+<td>Use path-style addressing. Defaults to <code>true</code>.</td>
+<td><code>true</code></td>
+</tr>
+</tbody>
+</table>
 <h2 id="authentication">Authentication</h2>
 <table>
 <thead>
