@@ -81,6 +81,34 @@ defmodule Mydia.Storage.S3.Request do
   def error_body?(body) when is_binary(body), do: String.contains?(body, "<Error>")
   def error_body?(_), do: false
 
+  @spec parse_upload_id(binary()) :: String.t() | nil
+  def parse_upload_id(body), do: xml_text(body, ~x"//UploadId/text()"s)
+
+  @doc "The ETag from a CopyObjectResult or CopyPartResult body."
+  @spec parse_etag(binary()) :: String.t() | nil
+  def parse_etag(body), do: xml_text(body, ~x"//ETag/text()"s)
+
+  @spec complete_body([{pos_integer(), String.t()}]) :: String.t()
+  def complete_body(parts) do
+    inner =
+      Enum.map_join(parts, fn {n, etag} ->
+        "<Part><PartNumber>#{n}</PartNumber><ETag>#{xml_escape(etag)}</ETag></Part>"
+      end)
+
+    "<CompleteMultipartUpload>#{inner}</CompleteMultipartUpload>"
+  end
+
+  defp xml_text(body, path) when is_binary(body) and body != "" do
+    case xpath(SweetXml.parse(body, quiet: true), path) do
+      "" -> nil
+      text -> text
+    end
+  catch
+    _, _ -> nil
+  end
+
+  defp xml_text(_, _), do: nil
+
   @spec content_md5(iodata()) :: String.t()
   def content_md5(body), do: :md5 |> :crypto.hash(body) |> Base.encode64()
 

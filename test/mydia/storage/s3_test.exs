@@ -27,4 +27,22 @@ defmodule Mydia.Storage.S3Test do
     assert {:ok, url} = Mydia.Storage.input(src)
     assert {:ok, %{status: 200, body: "z"}} = Req.get(url)
   end
+
+  @mib 1024 * 1024
+
+  test "a file above the part size is uploaded in parts and copied in parts",
+       %{location: loc} = ctx do
+    path = Path.join(ctx.tmp_dir, "big.mkv")
+    body = :crypto.strong_rand_bytes(11 * @mib)
+    File.write!(path, body)
+
+    {:ok, dest} = Mydia.Storage.source(loc, "Invented Film (2031)/big.mkv")
+    assert :ok = Mydia.Storage.put_file(dest, path, part_size: 5 * @mib)
+    assert {:ok, ^body} = Mydia.Storage.read(dest)
+
+    # config/test.exs sets copy_threshold below 11 MiB, so this is UploadPartCopy.
+    {:ok, copy} = Mydia.Storage.source(loc, "Invented Film (2031)/copy.mkv")
+    assert :ok = Mydia.Storage.copy(dest, copy)
+    assert {:ok, ^body} = Mydia.Storage.read(copy)
+  end
 end

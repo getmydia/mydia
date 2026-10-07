@@ -3,7 +3,14 @@ defmodule Mydia.Storage.S3 do
   @behaviour Mydia.Storage.Backend
 
   alias Mydia.Storage.{Entry, Error, Location}
-  alias Mydia.Storage.S3.Request
+  alias Mydia.Storage.S3.{Multipart, Request}
+
+  @part_size 64 * 1024 * 1024
+  @copy_threshold 5 * 1024 * 1024 * 1024
+  @copy_part_size 512 * 1024 * 1024
+
+  defp setting(key, default),
+    do: :mydia |> Application.get_env(__MODULE__, []) |> Keyword.get(key, default)
 
   # Req raises on a URL it cannot parse (no scheme or host), so every entry
   # point checks the endpoint first and never reaches Req with a bad one.
@@ -109,10 +116,18 @@ defmodule Mydia.Storage.S3 do
   end
 
   @impl true
-  def put_file(%Location{backend: b} = loc, rel, local_path, _opts) do
+  def put_file(%Location{backend: b} = loc, rel, local_path, opts) do
+    part_size = Keyword.get_lazy(opts, :part_size, fn -> setting(:part_size, @part_size) end)
+    key = Location.key(loc, rel)
+    what = display(loc, rel)
+
     with :ok <- Request.check(b),
-         {:ok, body} <- read_local(local_path) do
-      put_object(b, Location.key(loc, rel), body, [], display(loc, rel))
+         {:ok, %File.Stat{size: size}} <- local_stat(local_path) do
+      if size <= part_size do
+        with {:ok, body} <- read_local(local_path), do: put_object(b, key, body, [], what)
+      else
+        Multipart.upload(b, key, local_path, size, part_size, what)
+      end
     end
   end
 
@@ -129,14 +144,31 @@ defmodule Mydia.Storage.S3 do
 
   @impl true
   def copy(%Location{backend: b} = from, from_rel, %Location{} = to, to_rel) do
+    from_key = Location.key(from, from_rel)
+    to_key = Location.key(to, to_rel)
+    what = display(from, from_rel)
+
     with :ok <- Request.check(b),
-         {:ok, %Entry{}} <- stat(from, from_rel) do
-      copy_object(
-        b,
-        Location.key(from, from_rel),
-        Location.key(to, to_rel),
-        display(from, from_rel)
-      )
+         {:ok, %Entry{size: size}} <- stat(from, from_rel) do
+      # CopyObject stops at 5 GB.
+      if size > setting(:copy_threshold, @copy_threshold),
+        do:
+          Multipart.copy(
+            b,
+            from_key,
+            to_key,
+            size,
+            setting(:copy_part_size, @copy_part_size),
+            what
+          ),
+        else: copy_object(b, from_key, to_key, what)
+    end
+  end
+
+  defp local_stat(path) do
+    case File.stat(path) do
+      {:ok, stat} -> {:ok, stat}
+      {:error, reason} -> {:error, Error.from_posix(reason, path)}
     end
   end
 

@@ -19,6 +19,13 @@ config :mydia, :database_adapter, database_adapter
 # Records the HLS chunk NIF calls the p2p server makes for S3 files.
 config :mydia, :p2p_nif, Mydia.Test.RecordingP2pNif
 
+# Small enough that tests exercise multipart upload and UploadPartCopy with
+# 11 MiB fixtures. 5 MiB is the S3 minimum for every part but the last.
+config :mydia, Mydia.Storage.S3,
+  part_size: 5 * 1024 * 1024,
+  copy_threshold: 10 * 1024 * 1024,
+  copy_part_size: 5 * 1024 * 1024
+
 case database_adapter do
   Ecto.Adapters.Postgres ->
     config :mydia, Mydia.Repo,
