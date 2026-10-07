@@ -76,9 +76,10 @@ defmodule Mydia.Media.LibraryListing do
   or year match come first and overview-only matches follow, each group in
   `:sort_by` order; `description_match_start_id` marks where that group
   starts. `visible_ids` and `total_size` cover every match. `ids` is every
-  match in final order; `rows` holds the first `:limit` of them with `user_id`'s playback
-  progress. Build later rows with `rows/3` from a slice of `ids`. `limit: 0`
-  skips the progress query when only the figures are needed.
+  match in final order; `rows` holds the first `:limit` of them with
+  `user_id`'s playback progress. Build later rows with `rows/3` from a slice
+  of `ids`. `limit: 0` skips the progress query when only the figures are
+  needed.
   """
   @spec snapshot(Scope.t(), keyword()) :: Snapshot.t()
   def snapshot(%Scope{} = scope, opts) do
@@ -113,7 +114,9 @@ defmodule Mydia.Media.LibraryListing do
 
   @doc """
   The rows for `ids`, in that order, with `user_id`'s playback progress. Ids
-  that no longer exist, or that `scope` cannot see, are dropped.
+  that no longer exist, or that `scope` cannot see, are dropped. Callers pass
+  bounded slices (a batch, or at most the URL's `shown` cap), because the ids
+  become one `IN` list.
   """
   @spec rows(Scope.t(), [binary()], binary()) :: [LibraryRow.t()]
   def rows(_scope, [], _user_id), do: []

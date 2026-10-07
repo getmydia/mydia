@@ -95,6 +95,15 @@ defmodule MydiaWeb.MediaLive.UrlStateTest do
     assert_patch(view, "/movies?shown=70")
   end
 
+  test "load_more past the cap keeps shown at what Back can restore", %{conn: conn} do
+    movies(1010)
+
+    {:ok, view, _html} = live(conn, ~p"/movies?shown=1000")
+    render_hook(view, "load_more", %{})
+
+    assert_patch(view, "/movies?shown=1000")
+  end
+
   test "load_more skips an item deleted after the snapshot", %{conn: conn} do
     items = movies(55)
     gone = Enum.at(items, 51)

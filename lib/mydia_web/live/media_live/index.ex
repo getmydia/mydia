@@ -939,6 +939,8 @@ defmodule MydiaWeb.MediaLive.Index do
 
   # The next batch, from the snapshot's order. Advances by ids, not by rows
   # returned, so an item deleted since the snapshot is skipped, not retried.
+  # `loaded_count` counts ids consumed, not cards rendered, so `shown` can
+  # slightly overstate the cards on screen after a deletion; that is harmless.
   defp load_next_batch(socket) do
     %{listing_ids: ids, loaded_count: loaded} = socket.assigns
     batch = Enum.slice(ids, loaded, @items_per_scroll)
@@ -1000,7 +1002,7 @@ defmodule MydiaWeb.MediaLive.Index do
       monitored: assigns.filter_monitored,
       quality: assigns.filter_quality,
       sort: assigns.sort_by,
-      shown: max(assigns.loaded_count, ListingParams.first_page())
+      shown: min(max(assigns.loaded_count, ListingParams.first_page()), ListingParams.max_shown())
     }
   end
 

@@ -5,7 +5,8 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
 
   Keeping it in the URL is what lets Back from a title restore the list as it
   was. Default values are left out of the URL, so an untouched page keeps a
-  bare path. Anything unrecognised parses to its default.
+  bare path. Anything unrecognised parses to its default. Back restores at
+  most `max_shown/0` rows.
   """
 
   alias Mydia.Media.LibraryListing
@@ -36,6 +37,9 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
 
   @spec first_page() :: pos_integer()
   def first_page, do: @first_page
+
+  @spec max_shown() :: pos_integer()
+  def max_shown, do: @max_shown
 
   @doc "Parses URL params. `library_ids` are the libraries the page offers."
   @spec parse(map(), [binary()]) :: t()

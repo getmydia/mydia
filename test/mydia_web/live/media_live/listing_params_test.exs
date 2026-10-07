@@ -71,6 +71,10 @@ defmodule MydiaWeb.MediaLive.Index.ListingParamsTest do
     refute ListingParams.same_listing?(%ListingParams{}, %ListingParams{search: "x"})
   end
 
+  test "max_shown is the cap parse applies" do
+    assert ListingParams.max_shown() == 1000
+  end
+
   test "path encodes the query" do
     assert ListingParams.path("/tv", %ListingParams{search: "a b", progress: :partial}) ==
              "/tv?q=a+b&progress=partial"
