@@ -907,6 +907,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :indexer_progress, :map, default: %{}
   attr :streams, :map, required: true
   attr :quality_filter, :string, default: nil
+  attr :source_filter, :string, default: nil
+  attr :codec_filter, :string, default: nil
+  attr :filter_options, :map, default: %{sources: [], codecs: []}
   attr :min_seeders, :integer, default: 0
   attr :sort_by, :atom, required: true
 
@@ -991,6 +994,34 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                   <option value="720p" selected={@quality_filter == "720p"}>720p</option>
                   <option value="1080p" selected={@quality_filter == "1080p"}>1080p</option>
                   <option value="2160p" selected={@quality_filter in ["2160p", "4k"]}>4K</option>
+                </select>
+                <select
+                  id="manual-search-source-filter"
+                  name="source"
+                  class="select select-bordered select-sm"
+                >
+                  <option value="" selected={is_nil(@source_filter)}>All Sources</option>
+                  <option
+                    :for={source <- @filter_options.sources}
+                    value={source}
+                    selected={@source_filter == source}
+                  >
+                    {source}
+                  </option>
+                </select>
+                <select
+                  id="manual-search-codec-filter"
+                  name="codec"
+                  class="select select-bordered select-sm"
+                >
+                  <option value="" selected={is_nil(@codec_filter)}>All Codecs</option>
+                  <option
+                    :for={codec <- @filter_options.codecs}
+                    value={codec}
+                    selected={@codec_filter == codec}
+                  >
+                    {codec}
+                  </option>
                 </select>
                 <div class="join">
                   <span class="join-item btn btn-sm btn-ghost no-animation pointer-events-none">

@@ -455,6 +455,15 @@
       indexer_progress={@indexer_progress}
       streams={@streams}
       quality_filter={@quality_filter}
+      source_filter={@source_filter}
+      codec_filter={@codec_filter}
+      filter_options={
+        MydiaWeb.MediaLive.Show.SearchHelpers.filter_options(
+          @raw_search_results,
+          @source_filter,
+          @codec_filter
+        )
+      }
       min_seeders={@min_seeders}
       sort_by={@sort_by}
     />

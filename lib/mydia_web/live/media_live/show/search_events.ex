@@ -8,6 +8,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   alias Mydia.Downloads
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.SearchResultMetadata
+  alias Mydia.Quality.Sources
   alias MydiaWeb.Live.Authorization
 
   import MydiaWeb.MediaLive.Show.SearchHelpers
@@ -337,6 +338,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> assign(:indexer_raw_results, %{})
     |> assign(:result_states, %{})
     |> assign(:download_error, nil)
+    |> assign(:source_filter, nil)
+    |> assign(:codec_filter, nil)
     |> stream(:search_results, [], reset: true)
   end
 
@@ -355,12 +358,24 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
         _ -> nil
       end
 
+    source_filter = known_or_nil(params["source"], Sources.all())
+    codec_filter = known_or_nil(params["codec"], codec_families())
+
     {:noreply,
      socket
      |> assign(:min_seeders, min_seeders)
      |> assign(:quality_filter, quality_filter)
+     |> assign(:source_filter, source_filter)
+     |> assign(:codec_filter, codec_filter)
      |> apply_search_filters()}
   end
+
+  # Filter values come straight from the form, so anything outside the known
+  # vocabulary (including "" for "All") clears the filter.
+  defp known_or_nil(value, known) when is_binary(value),
+    do: if(value in known, do: value, else: nil)
+
+  defp known_or_nil(_value, _known), do: nil
 
   def toggle_close_after_grab(_params, socket) do
     new_value = not socket.assigns.close_after_grab
