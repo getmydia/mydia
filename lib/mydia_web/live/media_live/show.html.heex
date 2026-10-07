@@ -296,6 +296,7 @@
             fetching_season_subtitles={@fetching_season_subtitles}
             auto_searching_episode={@auto_searching_episode}
             player_enabled={@player_enabled}
+            current_user_id={@current_user.id}
             transcode_jobs={@transcode_jobs}
             media_file_subtitle_tracks={@media_file_subtitle_tracks}
             segment_statuses={@segment_statuses}
@@ -310,6 +311,7 @@
             refreshing_file_metadata={@refreshing_file_metadata}
             transcode_jobs={@transcode_jobs}
             media_file_subtitle_tracks={@media_file_subtitle_tracks}
+            current_user_id={@current_user.id}
           />
           <%!-- Everything below here is about other titles, not this one.
                 Franchise Section (Movies in the same TMDB collection) --%>
@@ -400,7 +402,11 @@
     />
   <% end %>
   <%= if @show_file_details_modal && @file_details do %>
-    <Modals.file_details_modal file_details={@file_details} file_origin={@file_origin} />
+    <Modals.file_details_modal
+      file_details={@file_details}
+      file_origin={@file_origin}
+      current_user_id={@current_user.id}
+    />
   <% end %>
   <%= if @show_download_cancel_confirm && @download_to_cancel do %>
     <Modals.download_cancel_confirm_modal download_to_cancel={@download_to_cancel} />

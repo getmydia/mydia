@@ -435,6 +435,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :fetching_season_subtitles, :any, default: nil
   attr :auto_searching_episode, :any, default: nil
   attr :player_enabled, :boolean, required: true
+  attr :current_user_id, :string, default: nil
   attr :transcode_jobs, :map, default: %{}
   attr :media_file_subtitle_tracks, :map, default: %{}
   attr :segment_statuses, :map, default: %{}
@@ -549,6 +550,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               fetching_season_subtitles={@fetching_season_subtitles}
               auto_searching_episode={@auto_searching_episode}
               player_enabled={@player_enabled}
+              current_user_id={@current_user_id}
               transcode_jobs={@transcode_jobs}
               media_file_subtitle_tracks={@media_file_subtitle_tracks}
               segment_statuses={@segment_statuses}
@@ -567,6 +569,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :file, :map, required: true
   attr :episode, :map, required: true
   attr :player_enabled, :boolean, required: true
+  attr :current_user_id, :string, default: nil
   attr :transcode_jobs, :list, default: []
   attr :subtitle_tracks, :list, default: []
 
@@ -582,7 +585,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           of a 92-character name and wrapped the badge line underneath onto
           four lines.
 
-          With every action present the strip is six 40px squares, 260px, which is
+          With every action present the strip is seven 40px squares, 300px, which is
           wider than that same 245px row, so it wraps rather than overflowing to the
           left; justify-end keeps the wrapped button on the right. --%>
     <div
@@ -681,6 +684,18 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             <.icon name="hero-play-solid" class="w-4 h-4" />
           </a>
         <% end %>
+        <a
+          :if={@current_user_id}
+          id={"stream-link-#{@file.id}"}
+          href={MydiaWeb.StreamLink.path(@current_user_id, @file)}
+          target="_blank"
+          rel="noopener"
+          class="btn btn-ghost btn-square @md/eprow:btn-xs"
+          aria-label="Stream link (open in external player)"
+          title="Stream link (open in external player)"
+        >
+          <.icon name="hero-link" class="w-4 h-4" />
+        </a>
         <button
           type="button"
           phx-click="mark_file_preferred"
@@ -779,6 +794,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :refreshing_file_metadata, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
   attr :media_file_subtitle_tracks, :map, default: %{}
+  attr :current_user_id, :string, default: nil
 
   def media_files_section(assigns) do
     files = Enum.filter(all_media_files(assigns.media_item), &is_nil(&1.episode_id))
@@ -957,6 +973,18 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     >
                       <.icon name="hero-information-circle" class="w-5 h-5" />
                     </button>
+                    <a
+                      :if={@current_user_id}
+                      id={"stream-link-#{file.id}"}
+                      href={MydiaWeb.StreamLink.path(@current_user_id, file)}
+                      target="_blank"
+                      rel="noopener"
+                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
+                      aria-label="Stream link (open in external player)"
+                      title="Stream link (open in external player)"
+                    >
+                      <.icon name="hero-link" class="w-5 h-5" />
+                    </a>
                     <button
                       type="button"
                       phx-click="mark_file_preferred"

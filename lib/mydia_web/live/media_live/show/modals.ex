@@ -362,6 +362,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   """
   attr :file_details, :map, required: true
   attr :file_origin, :map, default: nil
+  attr :current_user_id, :string, default: nil
 
   def file_details_modal(assigns) do
     ~H"""
@@ -379,6 +380,36 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             <p class="text-sm font-mono bg-base-200 p-3 rounded-box break-all">
               {Mydia.Library.MediaFile.display_path(@file_details) ||
                 Mydia.Library.MediaFile.display_name(@file_details)}
+            </p>
+          </div>
+          <%!-- Stash-style stream link: opens in the OS video app or pastes
+                into VLC, mpv or Infuse. Relative href, so the browser
+                resolves the host and Copy yields an absolute URL. --%>
+          <div :if={@current_user_id}>
+            <h4 class="text-sm font-semibold text-base-content/70 mb-2">Stream Link</h4>
+            <div class="flex items-center gap-2 bg-base-200 p-3 rounded-box">
+              <a
+                id="file-details-stream-link"
+                href={MydiaWeb.StreamLink.path(@current_user_id, @file_details)}
+                target="_blank"
+                rel="noopener"
+                class="link link-primary text-sm font-mono truncate flex-1 min-w-0"
+              >
+                {Mydia.Library.MediaFile.display_name(@file_details)}
+              </a>
+              <button
+                id="file-details-copy-stream-link"
+                type="button"
+                class="btn btn-sm btn-ghost"
+                phx-click={
+                  Phoenix.LiveView.JS.dispatch("mydia:copy-href", to: "#file-details-stream-link")
+                }
+              >
+                <.icon name="hero-clipboard-document" class="w-4 h-4" /> Copy
+              </button>
+            </div>
+            <p class="text-xs text-base-content/60 mt-1">
+              Opens in your default video app, or paste it into VLC, mpv or Infuse.
             </p>
           </div>
           <%!-- Quality Information --%>
