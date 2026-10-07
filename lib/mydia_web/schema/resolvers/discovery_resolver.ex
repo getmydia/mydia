@@ -276,7 +276,10 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
       show_id: nil,
       show_title: nil,
       season_number: nil,
-      episode_number: nil
+      episode_number: nil,
+      tmdb_id: entry.media_item.tmdb_id,
+      tvdb_id: entry.media_item.tvdb_id,
+      imdb_id: entry.media_item.imdb_id
     }
   end
 
@@ -292,7 +295,10 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
       show_id: entry.show.id,
       show_title: entry.show.title,
       season_number: entry.episode.season_number,
-      episode_number: entry.episode.episode_number
+      episode_number: entry.episode.episode_number,
+      tmdb_id: nil,
+      tvdb_id: nil,
+      imdb_id: nil
     }
   end
 

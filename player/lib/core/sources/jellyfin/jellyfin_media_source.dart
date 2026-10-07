@@ -162,7 +162,7 @@ class JellyfinMediaSource extends MediaSource
       'SortBy': sort.id == 'SortName' ? 'SortName' : '${sort.id},SortName',
       'SortOrder': descending ? 'Descending' : 'Ascending',
       if (filters.isNotEmpty) 'Filters': filters,
-      'Fields': 'ChildCount,$jellyfinSortFields',
+      'Fields': 'ChildCount,$jellyfinSortFields,$jellyfinIdFields',
       'EnableImageTypes': 'Primary,Backdrop,Thumb',
     });
     return _page(body, start);
@@ -199,12 +199,12 @@ class JellyfinMediaSource extends MediaSource
     final pageQuery = {'StartIndex': '$start', 'Limit': '$_childPage'};
     final body = switch (parent.kind) {
       ItemKind.show => await client.get('/Shows/${parent.externalId}/Seasons',
-          {..._user, 'Fields': 'ChildCount'}),
+          {..._user, 'Fields': 'ChildCount,$jellyfinIdFields'}),
       ItemKind.season => await client.get('/Items', {
           ..._user,
           'ParentId': parent.externalId,
           'IncludeItemTypes': 'Episode',
-          'Fields': 'Overview',
+          'Fields': 'Overview,$jellyfinIdFields',
           'SortBy': 'IndexNumber',
           ...pageQuery,
         }),
@@ -212,7 +212,7 @@ class JellyfinMediaSource extends MediaSource
           ..._user,
           'ParentId': parent.externalId,
           'SortBy': 'SortName',
-          'Fields': 'ChildCount',
+          'Fields': 'ChildCount,$jellyfinIdFields',
           ...pageQuery,
         }),
       ItemKind.movie || ItemKind.episode || ItemKind.video => null,
@@ -234,6 +234,7 @@ class JellyfinMediaSource extends MediaSource
       'Recursive': 'true',
       'IncludeItemTypes': 'Movie,Series,Episode,Video',
       'Limit': '50',
+      'Fields': jellyfinIdFields,
     });
     return _page(body, 0).items;
   }
@@ -243,6 +244,7 @@ class JellyfinMediaSource extends MediaSource
     final body = await client.get('/Items/${ref.externalId}/Similar', {
       ..._user,
       'Limit': '$_rowLimit',
+      'Fields': jellyfinIdFields,
       ..._rowImages,
     });
     return _page(body, 0).items;
@@ -254,6 +256,7 @@ class JellyfinMediaSource extends MediaSource
       ..._user,
       'seriesId': show.externalId,
       'Limit': '1',
+      'Fields': jellyfinIdFields,
       ..._rowImages,
     });
     return _page(body, 0).items.firstOrNull;
@@ -287,6 +290,7 @@ class JellyfinMediaSource extends MediaSource
         ..._user,
         'MediaTypes': 'Video',
         'Limit': '$_rowLimit',
+        'Fields': jellyfinIdFields,
         ..._rowImages,
       }),
       client.get('/Shows/NextUp', {
@@ -294,6 +298,7 @@ class JellyfinMediaSource extends MediaSource
         'Limit': '$_rowLimit',
         'enableResumable': 'false',
         'enableRewatching': 'false',
+        'Fields': jellyfinIdFields,
         ..._rowImages,
       }),
     ]);
@@ -319,7 +324,7 @@ class JellyfinMediaSource extends MediaSource
     final items = await client.getList('/Items/Latest', {
       ..._user,
       'Limit': '$_rowLimit',
-      'Fields': 'DateCreated,DateLastMediaAdded',
+      'Fields': 'DateCreated,DateLastMediaAdded,$jellyfinIdFields',
       ..._rowImages,
     });
     return items

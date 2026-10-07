@@ -61,6 +61,10 @@ Delete the pair once `Compatibility.minServerVersion` reaches that version.
 `compareCore` ignores prerelease suffixes, so the floor has to be the first core
 version whose every build carries the field, not the release whose betas
 introduced it. No `*Legacy` documents remain at the 0.15.0 floor.
+The `<Op>NoIds` documents are the one fallback for the rail, listing and search
+operations: servers before 0.17.0 lack the catalogue ids (`tmdbId`, `tvdbId`,
+`imdbId`) on those items, and the floor is 0.15.0, so `<Op>NoIds` is that same
+operation without them.
 
 ## Guards
 

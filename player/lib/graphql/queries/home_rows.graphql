@@ -4,6 +4,46 @@ query HomeRows($recentlyAddedLimit: Int, $favoritesLimit: Int) {
     type
     title
     year
+    tmdbId
+    tvdbId
+    imdbId
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    addedAt
+    newEpisodeCount
+    latestSeasonNumber
+    latestEpisodeNumber
+    watchStatus { watched percentage unwatchedEpisodeCount }
+  }
+
+  favorites(first: $favoritesLimit) {
+    id
+    type
+    title
+    year
+    tmdbId
+    tvdbId
+    imdbId
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    addedAt
+    watchStatus { watched percentage unwatchedEpisodeCount }
+  }
+}
+
+# Servers before 0.17.0 lack tmdbId/tvdbId/imdbId on RecentlyAddedItem.
+query HomeRowsNoIds($recentlyAddedLimit: Int, $favoritesLimit: Int) {
+  recentlyAdded(first: $recentlyAddedLimit) {
+    id
+    type
+    title
+    year
     artwork {
       posterUrl
       backdropUrl

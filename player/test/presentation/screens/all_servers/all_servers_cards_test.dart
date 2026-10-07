@@ -4,7 +4,6 @@ import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_cards.dart';
 
-import '../../../domain/merged/fake_merged_source.dart';
 import '../../../test_utils/mydia_test_source.dart';
 
 void main() {
@@ -40,9 +39,21 @@ void main() {
   });
 
   test('fewer than two included sources redirect home', () {
-    FakeMergedSource fake(String id) => FakeMergedSource(fakeServer(id));
-    expect(allServersRedirect([]), '/');
-    expect(allServersRedirect([fake('a')]), '/');
-    expect(allServersRedirect([fake('a'), fake('b')]), isNull);
+    expect(allServersRedirect(0), '/');
+    expect(allServersRedirect(1), '/');
+    expect(allServersRedirect(2), isNull);
+  });
+
+  test('a merged card names its server with +N', () {
+    expect(allServersServerLabel('Server a', 0), 'Server a');
+    expect(allServersServerLabel('Server a', 2), 'Server a +2');
+    expect(allServersServerLabel(null, 2), isNull);
+  });
+
+  test('the new merged locations', () {
+    expect(allServersFavoritesLocation, '/all/favorites');
+    expect(isAllServersLocation('/all'), isTrue);
+    expect(isAllServersLocation('/all/collections'), isTrue);
+    expect(isAllServersLocation('/allx'), isFalse);
   });
 }

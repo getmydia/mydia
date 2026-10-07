@@ -4,11 +4,14 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../../core/sources/source.dart';
+import '../sources/item.dart';
 
 @immutable
 class MergedResult<T> {
   const MergedResult(this.value,
-      {this.unavailable = const [], this.skipped = const []});
+      {this.unavailable = const [],
+      this.skipped = const [],
+      this.extraCopies = const {}});
 
   final T value;
 
@@ -17,4 +20,7 @@ class MergedResult<T> {
 
   /// Lack the capability or the chosen sort.
   final List<SourceId> skipped;
+
+  /// Kept items that stand in for copies on other servers, and how many.
+  final Map<ItemRef, int> extraCopies;
 }

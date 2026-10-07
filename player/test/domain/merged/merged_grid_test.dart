@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/merged/merged_grid.dart';
 import 'package:player/domain/merged/merged_library_reader.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/sources/source_error.dart';
 
@@ -170,5 +171,24 @@ void main() {
     final grid =
         await reader([slow]).grid(LibraryKind.movies, SharedSort.title);
     expect(grid.unavailable, [slow.id]);
+  });
+
+  test('a title on two servers appears once, across pages', () async {
+    final a = fakeServer('a'), b = fakeServer('b');
+    final grid = await LiveMergedReader([
+      FakeMergedSource(a, movies: [
+        item(a, 'a1', title: 'Alpha', ids: const ExternalIds(tmdb: '1')),
+        item(a, 'a2', title: 'Beta'),
+      ]),
+      FakeMergedSource(b, movies: [
+        item(b, 'b1', title: 'Alpha', ids: const ExternalIds(tmdb: '1')),
+      ]),
+    ], pageSize: 1)
+        .grid(LibraryKind.movies, SharedSort.title);
+    await grid.loadMore(count: 1);
+    await grid.loadMore(count: 5);
+    expect(grid.items.map((i) => i.title), ['Alpha', 'Beta']);
+    expect(grid.extraCopies.values.single, 1);
+    expect(grid.hasMore, isFalse);
   });
 }

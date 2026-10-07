@@ -335,6 +335,12 @@ pub struct RecentlyAddedItem {
     pub new_episode_count: Option<i32>,
     pub latest_season_number: Option<i32>,
     pub latest_episode_number: Option<i32>,
+    /// TMDB id of the movie or show. Null for episodes and collections.
+    pub tmdb_id: Option<i32>,
+    /// TVDB id of the movie or show. Null for episodes and collections.
+    pub tvdb_id: Option<i32>,
+    /// IMDb id of the movie or show. Null for episodes and collections.
+    pub imdb_id: Option<String>,
     pub watch_status: Option<WatchStatus>,
 }
 

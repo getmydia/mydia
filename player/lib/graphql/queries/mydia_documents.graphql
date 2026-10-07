@@ -14,6 +14,31 @@ query MydiaContinueWatching($first: Int) {
     id
     type
     title
+    tmdbId
+    tvdbId
+    imdbId
+    showId
+    showTitle
+    seasonNumber
+    episodeNumber
+    artwork {
+      ...ArtworkFragment
+    }
+    progress {
+      ...ProgressFragment
+    }
+    files {
+      id
+    }
+  }
+}
+
+# Servers before 0.17.0 lack tmdbId/tvdbId/imdbId on ContinueWatchingItem.
+query MydiaContinueWatchingNoIds($first: Int) {
+  continueWatching(first: $first) {
+    id
+    type
+    title
     showId
     showTitle
     seasonNumber

@@ -103,7 +103,7 @@ class SourceListingScreen extends ConsumerWidget {
         ),
         data: (list) {
           if (list.isEmpty) {
-            return _EmptyState(
+            return SourceEmptyState(
               icon: emptyIcon,
               title: emptyTitle,
               subtitle: emptySubtitle,
@@ -201,8 +201,10 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.title, this.icon, this.subtitle});
+/// The centred empty message shared by the per-server and All servers listings.
+class SourceEmptyState extends StatelessWidget {
+  const SourceEmptyState(
+      {super.key, required this.title, this.icon, this.subtitle});
 
   final String title;
   final IconData? icon;

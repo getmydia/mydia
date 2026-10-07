@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/plex/plex_mapping.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/media_segment.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 
 void main() {
@@ -73,5 +74,32 @@ void main() {
     test('no Marker field is no segments', () {
       expect(plexSegments({}), isEmpty);
     });
+  });
+
+  test('summaries carry tmdb, tvdb and imdb from Guid', () {
+    final s = plexSummary(const SourceId('p'), {
+      'type': 'movie',
+      'ratingKey': '5',
+      'title': 'The Invented Voyage',
+      'Guid': [
+        {'id': 'imdb://tt0000042'},
+        {'id': 'tmdb://42'},
+        {'id': 'tvdb://9001'},
+        {'id': 'plex://movie/abc'},
+      ],
+    })!;
+    expect(s.externalIds,
+        const ExternalIds(tmdb: '42', tvdb: '9001', imdb: 'tt0000042'));
+  });
+
+  test('missing or malformed Guid reads as none', () {
+    expect(plexExternalIds(null), ExternalIds.none);
+    expect(
+        plexExternalIds([
+          {'id': 'tmdb://'},
+          {'id': 7},
+          'x'
+        ]),
+        ExternalIds.none);
   });
 }

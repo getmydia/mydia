@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
+import 'package:player/domain/sources/collection.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/sources/source_error.dart';
@@ -32,7 +33,9 @@ ItemSummary item(Source s, String id,
         String? sortTitle,
         DateTime? addedAt,
         DateTime? lastPlayedAt,
-        String? airDate}) =>
+        String? airDate,
+        ExternalIds ids = ExternalIds.none,
+        int? progress}) =>
     ItemSummary(
       ref: ItemRef(sourceId: s.id, kind: kind, externalId: id),
       title: title ?? 'Invented $id',
@@ -40,12 +43,19 @@ ItemSummary item(Source s, String id,
       addedAt: addedAt,
       lastPlayedAt: lastPlayedAt,
       airDate: airDate,
+      externalIds: ids,
+      userState: UserState(progressSeconds: progress),
     );
 
 /// One movie library (and optionally a show library) served from a sorted
 /// list, plus the optional row capabilities.
 class FakeMergedSource extends MediaSource
-    implements ContinueWatching, RecentlyAdded, Searchable {
+    implements
+        ContinueWatching,
+        RecentlyAdded,
+        Searchable,
+        FavoritesListing,
+        Collections {
   FakeMergedSource(
     this.source, {
     this.movies = const [],
@@ -61,10 +71,15 @@ class FakeMergedSource extends MediaSource
     this.resuming = const [],
     this.recent = const [],
     this.found = const [],
+    this.favs = const [],
+    this.cols = const [],
+    this.favPageSize = 50,
     this.caps = const {
       SourceCapability.continueWatching,
       SourceCapability.recentlyAdded,
       SourceCapability.searchable,
+      SourceCapability.favoritesListing,
+      SourceCapability.collections,
     },
   });
 
@@ -78,6 +93,9 @@ class FakeMergedSource extends MediaSource
   final List<ItemSummary> resuming;
   final List<ItemSummary> recent;
   final List<ItemSummary> found;
+  final List<ItemSummary> favs;
+  final List<SourceCollection> cols;
+  final int favPageSize;
   final Set<SourceCapability> caps;
 
   /// Fails every call when set; `failAfterPages` fails browse from that page.
@@ -127,6 +145,9 @@ class FakeMergedSource extends MediaSource
         caps.contains(SourceCapability.continueWatching),
       const (RecentlyAdded) => caps.contains(SourceCapability.recentlyAdded),
       const (Searchable) => caps.contains(SourceCapability.searchable),
+      const (FavoritesListing) =>
+        caps.contains(SourceCapability.favoritesListing),
+      const (Collections) => caps.contains(SourceCapability.collections),
       _ => true,
     };
     return ok && this is T ? this as T : null;
@@ -212,6 +233,27 @@ class FakeMergedSource extends MediaSource
     await _wait();
     return found;
   }
+
+  @override
+  Future<Page<ItemSummary>> favorites({Cursor? cursor}) async {
+    await _wait();
+    final start = int.tryParse(cursor?.value ?? '') ?? 0;
+    final page = favs.skip(start).take(favPageSize).toList();
+    final next = start + page.length;
+    return Page(
+        items: page, nextCursor: next < favs.length ? Cursor('$next') : null);
+  }
+
+  @override
+  Future<List<SourceCollection>> collections() async {
+    await _wait();
+    return cols;
+  }
+
+  @override
+  Future<Page<ItemSummary>> collectionItems(String collectionId,
+          {Cursor? cursor}) async =>
+      const Page(items: []);
 
   @override
   Future<ItemDetail> item(ItemRef ref) => throw UnimplementedError();

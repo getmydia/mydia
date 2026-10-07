@@ -21,6 +21,22 @@ defmodule MydiaWeb.Schema.Resolvers.ItemBuilderTest do
       assert built.latest_episode_number == nil
     end
 
+    test "carries the catalogue ids of the media item" do
+      item =
+        media_item_fixture(%{
+          type: "movie",
+          tmdb_id: 424_242,
+          tvdb_id: 515_151,
+          imdb_id: "tt0424242"
+        })
+
+      built = ItemBuilder.recently_added_item(item)
+
+      assert built.tmdb_id == 424_242
+      assert built.tvdb_id == 515_151
+      assert built.imdb_id == "tt0424242"
+    end
+
     test "overrides added_at when given" do
       item = media_item_fixture(%{type: "movie"})
       stamp = ~U[2026-01-02 03:04:05Z]

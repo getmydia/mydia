@@ -4,6 +4,25 @@ query UnwatchedListing($first: Int, $after: String, $types: [MediaType], $catego
     title
     year
     type
+    tmdbId
+    tvdbId
+    imdbId
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    watchStatus { watched percentage unwatchedEpisodeCount }
+  }
+}
+
+# Servers before 0.17.0 lack tmdbId/tvdbId/imdbId on RecentlyAddedItem.
+query UnwatchedListingNoIds($first: Int, $after: String, $types: [MediaType], $category: MediaCategory, $sort: SortInput) {
+  unwatched(first: $first, after: $after, types: $types, category: $category, sort: $sort) {
+    id
+    title
+    year
+    type
     artwork {
       posterUrl
       backdropUrl
@@ -14,6 +33,25 @@ query UnwatchedListing($first: Int, $after: String, $types: [MediaType], $catego
 }
 
 query FavoritesListing($first: Int, $after: String, $types: [MediaType], $category: MediaCategory, $sort: SortInput) {
+  favorites(first: $first, after: $after, types: $types, category: $category, sort: $sort) {
+    id
+    title
+    year
+    type
+    tmdbId
+    tvdbId
+    imdbId
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    watchStatus { watched percentage unwatchedEpisodeCount }
+  }
+}
+
+# Servers before 0.17.0 lack tmdbId/tvdbId/imdbId on RecentlyAddedItem.
+query FavoritesListingNoIds($first: Int, $after: String, $types: [MediaType], $category: MediaCategory, $sort: SortInput) {
   favorites(first: $first, after: $after, types: $types, category: $category, sort: $sort) {
     id
     title

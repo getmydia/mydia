@@ -21,6 +21,9 @@ defmodule MydiaWeb.Schema.SearchTest do
           seasonNumber
           episodeNumber
           parentId
+          tmdbId
+          tvdbId
+          imdbId
           score
           artwork {
             posterUrl
@@ -84,6 +87,27 @@ defmodule MydiaWeb.Schema.SearchTest do
     assert result["seasonNumber"] == 1
     assert result["episodeNumber"] == 3
     assert result["parentId"] == show.id
+    assert result["tmdbId"] == nil
+    assert result["tvdbId"] == nil
+    assert result["imdbId"] == nil
+  end
+
+  test "movie and show results carry catalogue ids", %{user: user} do
+    MediaFixtures.media_item_fixture(%{
+      type: "movie",
+      title: "Quillfeather",
+      tmdb_id: 424_242,
+      tvdb_id: 515_151,
+      imdb_id: "tt0424242"
+    })
+
+    assert {:ok, %{data: %{"search" => search}}} =
+             run_query(@search_query, %{"query" => "quillfeather"}, user)
+
+    assert [result] = section(search["sections"], "MOVIE")["results"]
+    assert result["tmdbId"] == 424_242
+    assert result["tvdbId"] == 515_151
+    assert result["imdbId"] == "tt0424242"
   end
 
   test "populates score as a float", %{user: user} do

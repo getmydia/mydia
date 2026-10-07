@@ -92,8 +92,10 @@ class AllServersGridScreen extends ConsumerWidget {
                     // The Column above already reserved the bar's height.
                     scrollTopPadding: 0,
                     itemCount: items.length,
-                    itemBuilder: (context, index) =>
-                        AllServersPoster(item: items[index]),
+                    itemBuilder: (context, index) => AllServersPoster(
+                      item: items[index],
+                      extraCopies: state.extraCopies[items[index].ref] ?? 0,
+                    ),
                   ),
                 ),
             },

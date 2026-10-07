@@ -16,7 +16,8 @@ import '../../../core/theme/colors.dart';
 import '../../screens/detail/detail_links.dart';
 import '../../screens/sources/plex_home_sheet.dart';
 import '../focus_highlight.dart';
-import 'all_servers_nav_list.dart' show allServersRoot, isAllServersLocation;
+import '../../../domain/navigation/all_servers_locations.dart'
+    show allServersRoot, isAllServersLocation;
 import '../../../domain/navigation/source_nav.dart' show sourceIdFromLocation;
 import 'source_picker.dart';
 

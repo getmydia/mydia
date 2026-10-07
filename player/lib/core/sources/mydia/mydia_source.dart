@@ -231,8 +231,8 @@ class MydiaSource extends MediaSource
     };
     final plan =
         mydiaBrowsePlan(movies: isMovies, query: query, cursor: cursor);
-    if (plan.field == 'unwatched' || plan.field == 'favorites') {
-      return _flatPage(plan.doc, plan.field, plan.vars, cursor,
+    if (plan.noIds case final noIds?) {
+      return _flatPage(plan.doc, noIds, plan.field, plan.vars, cursor,
           pageSize: query.pageSize);
     }
     final data = await _q(plan.doc, plan.vars);
@@ -261,16 +261,17 @@ class MydiaSource extends MediaSource
   /// more, and the server's offset cursor names the last item already seen.
   Future<Page<ItemSummary>> _flatPage(
     DocumentNode doc,
+    DocumentNode noIds,
     String field,
     Map<String, dynamic> vars,
     Cursor? cursor, {
     int pageSize = _rowLimit,
   }) async {
-    final data = await _q(doc, {
-      ...vars,
-      'first': pageSize,
-      'after': cursor?.value,
-    });
+    final data = await client.query(
+      doc,
+      fallback: noIds,
+      variables: {...vars, 'first': pageSize, 'after': cursor?.value},
+    );
     final raw = _maps(data[field]);
     return Page(
       items: [
@@ -380,8 +381,11 @@ class MydiaSource extends MediaSource
 
   @override
   Future<List<ItemSummary>> search(String query) async {
-    final data = await _q(
-        documentNodeQuerySearch, {'query': query, 'first': _searchLimit});
+    final data = await client.query(
+      documentNodeQuerySearch,
+      fallback: documentNodeQuerySearchNoIds,
+      variables: {'query': query, 'first': _searchLimit},
+    );
     final search = data['search'];
     final sections = search is Map<String, dynamic>
         ? _maps(search['sections'])
@@ -394,8 +398,11 @@ class MydiaSource extends MediaSource
 
   @override
   Future<List<ItemSummary>> continueWatching() async {
-    final data =
-        await _q(documentNodeQueryMydiaContinueWatching, {'first': _rowLimit});
+    final data = await client.query(
+      documentNodeQueryMydiaContinueWatching,
+      fallback: documentNodeQueryMydiaContinueWatchingNoIds,
+      variables: const {'first': _rowLimit},
+    );
     return [
       for (final c in _maps(data['continueWatching']))
         continueWatchingSummary(id, c),
@@ -474,8 +481,11 @@ class MydiaSource extends MediaSource
 
   @override
   Future<List<ItemSummary>> recentlyAdded() async {
-    final data = await _q(
-        documentNodeQueryRecentlyAddedFull, const {'first': _rowLimit});
+    final data = await client.query(
+      documentNodeQueryRecentlyAddedFull,
+      fallback: documentNodeQueryRecentlyAddedFullNoIds,
+      variables: const {'first': _rowLimit},
+    );
     return [
       for (final r in _maps(data['recentlyAdded'])) listingSummary(id, r),
     ].whereType<ItemSummary>().take(_rowLimit).toList();
@@ -495,8 +505,11 @@ class MydiaSource extends MediaSource
   Future<Page<ItemSummary>> collectionItems(String collectionId,
       {Cursor? cursor}) async {
     if (cursor != null) return const Page(items: []);
-    final data = await _q(documentNodeQueryCollectionItems,
-        {'collectionId': collectionId, 'first': _collectionLimit});
+    final data = await client.query(
+      documentNodeQueryCollectionItems,
+      fallback: documentNodeQueryCollectionItemsNoIds,
+      variables: {'collectionId': collectionId, 'first': _collectionLimit},
+    );
     return Page(items: [
       for (final m in _maps(data['collectionItems']))
         if (listingSummary(id, m) case final s?) s,
@@ -517,11 +530,19 @@ class MydiaSource extends MediaSource
 
   @override
   Future<Page<ItemSummary>> unwatched({Cursor? cursor}) => _flatPage(
-      documentNodeQueryUnwatchedListing, 'unwatched', const {}, cursor);
+      documentNodeQueryUnwatchedListing,
+      documentNodeQueryUnwatchedListingNoIds,
+      'unwatched',
+      const {},
+      cursor);
 
   @override
   Future<Page<ItemSummary>> favorites({Cursor? cursor}) => _flatPage(
-      documentNodeQueryFavoritesListing, 'favorites', const {}, cursor);
+      documentNodeQueryFavoritesListing,
+      documentNodeQueryFavoritesListingNoIds,
+      'favorites',
+      const {},
+      cursor);
 
   @override
   Future<List<MediaFileInfo>> mediaInfo(ItemRef ref) async {
@@ -539,10 +560,12 @@ class MydiaSource extends MediaSource
 
   @override
   Future<List<Hub>> hubs() async {
-    final data = await _q(documentNodeQueryHomeRows, const {
-      'recentlyAddedLimit': _rowLimit,
-      'favoritesLimit': 10,
-    });
+    final data = await client.query(documentNodeQueryHomeRows,
+        fallback: documentNodeQueryHomeRowsNoIds,
+        variables: const {
+          'recentlyAddedLimit': _rowLimit,
+          'favoritesLimit': 10,
+        });
     Hub row(String hubId, String title, Object? list) => Hub(
           id: hubId,
           title: title,

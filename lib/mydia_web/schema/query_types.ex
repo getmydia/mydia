@@ -233,6 +233,13 @@ defmodule MydiaWeb.Schema.QueryTypes do
     field :show_title, :string
     field :season_number, :integer
     field :episode_number, :integer
+
+    @desc "TMDB id of the movie or show. Null for episodes and collections."
+    field :tmdb_id, :integer
+    @desc "TVDB id of the movie or show. Null for episodes and collections."
+    field :tvdb_id, :integer
+    @desc "IMDb id of the movie or show. Null for episodes and collections."
+    field :imdb_id, :string
   end
 
   @desc "An item in the recently added rail"
@@ -252,6 +259,13 @@ defmodule MydiaWeb.Schema.QueryTypes do
 
     @desc "Number of the newest arrived episode. Null for movies and for unmatched files."
     field :latest_episode_number, :integer
+
+    @desc "TMDB id of the movie or show. Null for episodes and collections."
+    field :tmdb_id, :integer
+    @desc "TVDB id of the movie or show. Null for episodes and collections."
+    field :tvdb_id, :integer
+    @desc "IMDb id of the movie or show. Null for episodes and collections."
+    field :imdb_id, :string
 
     @desc "Rolled-up watch state"
     field :watch_status, :watch_status do

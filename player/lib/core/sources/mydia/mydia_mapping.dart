@@ -90,6 +90,12 @@ MediaVersion mediaVersion(Map<String, dynamic> file, {int? durationSeconds}) {
   );
 }
 
+ExternalIds _ids(Map<String, dynamic> m) => ExternalIds(
+      tmdb: m['tmdbId']?.toString(),
+      tvdb: m['tvdbId']?.toString(),
+      imdb: m['imdbId'] as String?,
+    );
+
 ItemSummary movieSummary(SourceId sid, Map<String, dynamic> m) {
   final artwork = _map(m['artwork']);
   return ItemSummary(
@@ -104,6 +110,7 @@ ItemSummary movieSummary(SourceId sid, Map<String, dynamic> m) {
     defaultVersionId: _firstFileId(m['files']),
     addedAt: _instant(m['addedAt']),
     lastPlayedAt: _instant(_map(m['progress'])['lastWatchedAt']),
+    externalIds: _ids(m),
   );
 }
 
@@ -119,6 +126,7 @@ ItemSummary showSummary(SourceId sid, Map<String, dynamic> s) {
     childCount: s['seasonCount'] as int?,
     overview: s['overview'] as String?,
     addedAt: _instant(s['addedAt']),
+    externalIds: _ids(s),
   );
 }
 
@@ -179,6 +187,7 @@ ItemSummary? continueWatchingSummary(SourceId sid, Map<String, dynamic> c) {
     parentIndex: c['seasonNumber'] as int?,
     defaultVersionId: _firstFileId(c['files']),
     lastPlayedAt: _instant(_map(c['progress'])['lastWatchedAt']),
+    externalIds: kind == ItemKind.movie ? _ids(c) : ExternalIds.none,
     showRef: kind == ItemKind.episode && c['showId'] != null
         ? _ref(sid, ItemKind.show, c['showId'].toString())
         : null,
@@ -199,6 +208,7 @@ ItemSummary? searchResultSummary(SourceId sid, Map<String, dynamic> r) {
     year: r['year'] as int?,
     poster: _art(artwork['posterUrl']),
     backdrop: _art(artwork['backdropUrl']),
+    externalIds: _ids(r),
   );
 }
 
@@ -234,6 +244,7 @@ ItemSummary? listingSummary(SourceId sid, Map<String, dynamic> m) {
     backdrop: _art(artwork['backdropUrl']),
     userState: _watchState(m['watchStatus']),
     addedAt: _instant(m['addedAt']),
+    externalIds: _ids(m),
   );
 }
 

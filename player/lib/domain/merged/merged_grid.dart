@@ -7,6 +7,7 @@ import '../../core/sources/media_source.dart';
 import '../../core/sources/source.dart';
 import '../sources/item.dart';
 import '../sources/library.dart';
+import 'merge_key.dart';
 import 'shared_sort_keys.dart';
 
 class GridStream {
@@ -43,6 +44,12 @@ class MergedGrid {
   final List<SourceId> skipped;
   final List<ItemSummary> items = [];
 
+  /// Kept items that stand in for copies on other servers, and how many.
+  final Map<ItemRef, int> extraCopies = {};
+
+  /// Which emitted item each match key belongs to. Earlier in sort order wins.
+  final Map<String, ItemRef> _keptBy = {};
+
   bool get hasMore => _streams.any((s) => s.buffer.isNotEmpty || !s.exhausted);
 
   /// Emits up to [count] more items. An item is emitted only once every
@@ -73,7 +80,22 @@ class MergedGrid {
         }
       }
       if (best == null) return;
-      items.add(best.buffer.removeAt(0));
+      final next = best.buffer.removeAt(0);
+      final keys = mergeKeys(next);
+      final kept = keys.map((k) => _keptBy[k]).nonNulls.firstOrNull;
+      if (kept != null) {
+        extraCopies[kept] = (extraCopies[kept] ?? 0) + 1;
+        for (final k in keys) {
+          _keptBy.putIfAbsent(k, () => kept);
+        }
+        // A hidden copy does not count toward [count].
+        emitted--;
+        continue;
+      }
+      for (final k in keys) {
+        _keptBy[k] = next.ref;
+      }
+      items.add(next);
     }
   }
 

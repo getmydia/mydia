@@ -12,6 +12,7 @@ import '../../../domain/merged/merged_grid.dart';
 import '../../../domain/merged/merged_library_reader.dart';
 import '../../../domain/merged/merged_result.dart';
 import '../../../domain/merged/merged_search.dart';
+import '../../../domain/sources/collection.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 
@@ -43,6 +44,21 @@ final allServersRecentlyAddedProvider =
     FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>(
         (ref) => ref.watch(allServersReaderProvider).recentlyAdded());
 
+final allServersFavoritesRowProvider =
+    FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>((ref) =>
+        ref.watch(allServersReaderProvider).favorites(perSourceCap: 20));
+
+final allServersFavoritesProvider =
+    FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>(
+        (ref) => ref.watch(allServersReaderProvider).favorites());
+
+final allServersCollectionsProvider =
+    FutureProvider.autoDispose<MergedResult<List<SourceCollection>>>(
+        (ref) => ref.watch(allServersReaderProvider).collections());
+
+/// Recently Added splits on this: movies in one rail, TV in the other.
+bool isMovieRow(ItemSummary i) => i.ref.kind == ItemKind.movie;
+
 @immutable
 class AllServersGridState {
   const AllServersGridState({
@@ -52,6 +68,7 @@ class AllServersGridState {
     this.skipped = const [],
     this.hasMore = false,
     this.loadingMore = false,
+    this.extraCopies = const {},
   });
 
   final List<ItemSummary> items;
@@ -60,6 +77,7 @@ class AllServersGridState {
   final List<SourceId> skipped;
   final bool hasMore;
   final bool loadingMore;
+  final Map<ItemRef, int> extraCopies;
 }
 
 class AllServersGridNotifier extends AsyncNotifier<AllServersGridState> {
@@ -78,6 +96,7 @@ class AllServersGridNotifier extends AsyncNotifier<AllServersGridState> {
         skipped: g.skipped,
         hasMore: g.hasMore,
         loadingMore: loadingMore,
+        extraCopies: Map.unmodifiable(g.extraCopies),
       );
 
   @override

@@ -263,6 +263,13 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :season_number, :integer, description: "Season number, episodes only"
     field :episode_number, :integer, description: "Episode number, episodes only"
     field :parent_id, :id, description: "Owning show ID, episodes only"
+
+    @desc "TMDB id of the movie or show. Null for episodes and collections."
+    field :tmdb_id, :integer
+    @desc "TVDB id of the movie or show. Null for episodes and collections."
+    field :tvdb_id, :integer
+    @desc "IMDb id of the movie or show. Null for episodes and collections."
+    field :imdb_id, :string
   end
 
   @desc "One grouped section of search results"

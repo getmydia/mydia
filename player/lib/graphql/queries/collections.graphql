@@ -16,6 +16,26 @@ query CollectionItems($collectionId: ID!, $first: Int) {
     type
     title
     year
+    tmdbId
+    tvdbId
+    imdbId
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    addedAt
+    watchStatus { watched percentage unwatchedEpisodeCount }
+  }
+}
+
+# Servers before 0.17.0 lack tmdbId/tvdbId/imdbId on RecentlyAddedItem.
+query CollectionItemsNoIds($collectionId: ID!, $first: Int) {
+  collectionItems(collectionId: $collectionId, first: $first) {
+    id
+    type
+    title
+    year
     artwork {
       posterUrl
       backdropUrl

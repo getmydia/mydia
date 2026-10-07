@@ -490,16 +490,22 @@ final allServersChoicesProvider = Provider<Map<SourceId, bool>>(
 /// switch, an unchanged rediscovery) does not notify, and the merged reader
 /// and grids built on it are not restarted.
 final allServersSourcesProvider = Provider<List<MediaSource>>((ref) {
-  final choices = ref.watch(allServersChoicesProvider);
-  final gated = ref.watch(gatedSourceIdsProvider);
   return _IdentityList([
-    for (final s in ref.watch(sourcesProvider))
-      if (!s.account.needsReauth &&
-          !gated.contains(s.id) &&
-          includedInAllServers(s, choices))
-        if (ref.watch(mediaSourceProvider(s.id)) case final media?) media,
+    for (final s in ref.watch(_allServersIncludedRecordsProvider))
+      if (ref.watch(mediaSourceProvider(s.id)) case final media?) media,
   ]);
 });
+
+/// The saved sources that count as included. A `mediaSourceProvider` is null
+/// only for an id that is no longer saved, which this list cannot hold, so
+/// the router, which counts [allServersIncluded] directly, agrees with
+/// [allServersSourcesProvider].
+final _allServersIncludedRecordsProvider =
+    Provider<List<Source>>((ref) => allServersIncluded(
+          ref.watch(sourcesProvider),
+          ref.watch(allServersChoicesProvider),
+          ref.watch(gatedSourceIdsProvider),
+        ));
 
 /// An unmodifiable list whose equality is element-wise identity.
 class _IdentityList extends UnmodifiableListView<MediaSource> {

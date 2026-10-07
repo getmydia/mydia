@@ -288,4 +288,14 @@ void main() {
       expect(jellyfinSegments({}), isEmpty);
     });
   });
+
+  test('summaries carry ProviderIds', () {
+    final s = jellyfinSummary(const SourceId('j'), {
+      'Id': 'x1',
+      'Type': 'Movie',
+      'Name': 'The Invented Voyage',
+      'ProviderIds': {'Tmdb': '42', 'Imdb': 'tt0000042', 'Tvdb': ''},
+    })!;
+    expect(s.externalIds, const ExternalIds(tmdb: '42', imdb: 'tt0000042'));
+  });
 }

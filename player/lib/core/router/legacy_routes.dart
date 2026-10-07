@@ -4,6 +4,7 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/navigation/all_servers_locations.dart';
 import '../sources/source.dart';
 import '../sources/sources_providers.dart';
 import '../sources/store/source_records.dart';
@@ -22,11 +23,14 @@ const _details = {'movie', 'show', 'episode'};
 /// Where an unprefixed pre-instance location now lives, or null when
 /// [uri] is not one. [legacy] is the migrated instance's source, [mydia] every
 /// Mydia instance's source, [active] the source `/` and `/search` open.
+/// [allServers] is on when two or more servers are included, so `/` and
+/// `/search` open the merged views instead.
 String? legacyLocation(
   Uri uri, {
   required SourceId? legacy,
   required List<SourceId> mydia,
   required SourceId? active,
+  bool allServers = false,
 }) {
   final seg = uri.pathSegments.where((s) => s.isNotEmpty).toList();
   final query = uri.hasQuery ? uri.queryParametersAll : null;
@@ -49,10 +53,12 @@ String? legacyLocation(
           : build(['s', target.value, ...rest], q);
 
   if (seg.isEmpty) {
+    if (allServers) return allServersRoot;
     return active == null ? null : build(['s', active.value], const {});
   }
   switch (seg) {
     case ['search']:
+      if (allServers) return build(['all', 'search']);
       return active == null ? null : build(['s', active.value, 'search']);
     case ['movies'] || ['shows']:
       return move(['library', seg.first]);

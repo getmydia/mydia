@@ -60,7 +60,8 @@ class PlexServerClient {
     String path, [
     Map<String, String>? query,
   ]) async {
-    final response = await _send('GET', path, query);
+    // Guids are what All servers matches copies of a title on.
+    final response = await _send('GET', path, {'includeGuids': '1', ...?query});
     final Object? json;
     try {
       json = jsonDecode(utf8.decode(response.bodyBytes));

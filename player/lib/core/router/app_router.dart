@@ -5,7 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'web_url_stub.dart' if (dart.library.js_interop) 'web_url.dart'
     as web_url;
 import 'source_detail_routes.dart';
-import '../sources/media_source.dart' show MediaSource;
+import '../sources/all_servers_inclusion.dart';
 import '../sources/source.dart';
 import '../sources/lock/source_lock_controller.dart';
 import '../sources/sources_providers.dart';
@@ -15,7 +15,9 @@ import '../../presentation/screens/sources/source_player_route.dart';
 import '../../presentation/screens/sources/source_search_screen.dart';
 import '../../presentation/screens/sources/source_home_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_cards.dart';
+import '../../presentation/screens/all_servers/all_servers_collections_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_grid_screen.dart';
+import '../../presentation/screens/all_servers/all_servers_listing_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_home_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_search_screen.dart';
 import '../../presentation/screens/filter/filter_screen.dart';
@@ -177,7 +179,7 @@ final List<(String, String, Widget Function(SourceId))> _sourceListings = [
 /// refreshes when loading ends.
 String? allServersRouteRedirect({
   required bool sourcesLoading,
-  required List<MediaSource> included,
+  required int included,
 }) =>
     sourcesLoading ? null : allServersRedirect(included);
 
@@ -223,8 +225,8 @@ String? appRedirect({
       location.startsWith('/sources/add/') ||
       location == '/sources/manage';
 
-  // With any one source the app is usable; `/` has already moved to the
-  // active one. With none, the only place to go is add-a-server.
+  // With any one source the app is usable; `/` has already moved to All
+  // servers or the active source. With none, the only place to go is add-a-server.
   if (sources.isEmpty &&
       !isLoginRoute &&
       !isUnlockRoute &&
@@ -248,6 +250,18 @@ GoRouter appRouter(Ref ref) {
   // Where an old unprefixed location lands depends on which instances exist.
   ref.listen(legacyMydiaSourceIdProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(mydiaSourceIdsProvider, (_, __) => refreshNotifier.refresh());
+  // Whether `/` and `/all*` open All servers depends on how many servers it
+  // includes, counted from providers this router already reads. Listening
+  // to a provider that joins the source list with the All servers choices
+  // (both derived from the stored records) broke Riverpod: a refresh in
+  // mid-flush rebuilt it twice in one frame, and holding it from this
+  // keepAlive router tripped an assertion when the container was disposed.
+  // A choice made in Manage servers is picked up by the next redirect.
+  int includedCount() => allServersIncluded(
+        ref.read(thirdPartySourcesProvider),
+        ref.read(allServersChoicesProvider),
+        ref.read(gatedSourceIdsProvider),
+      ).length;
   // A relock while a gated screen is open sends it to /unlock.
   ref.listen(gatedSourceIdsProvider, (_, __) => refreshNotifier.refresh());
 
@@ -279,6 +293,7 @@ GoRouter appRouter(Ref ref) {
           legacy: ref.read(legacyMydiaSourceIdProvider),
           mydia: ref.read(mydiaSourceIdsProvider),
           active: ref.read(activeSourceIdProvider),
+          allServers: includedCount() >= 2,
         ),
       );
       if (target != null) {
@@ -440,7 +455,7 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersSourcesProvider),
+              included: includedCount(),
             ),
             builder: (context, state) => const AllServersHomeScreen(),
           ),
@@ -449,7 +464,7 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers_movies',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersSourcesProvider),
+              included: includedCount(),
             ),
             builder: (context, state) =>
                 const AllServersGridScreen(kind: LibraryKind.movies),
@@ -459,7 +474,7 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers_shows',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersSourcesProvider),
+              included: includedCount(),
             ),
             builder: (context, state) =>
                 const AllServersGridScreen(kind: LibraryKind.shows),
@@ -469,9 +484,54 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers_search',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersSourcesProvider),
+              included: includedCount(),
             ),
             builder: (context, state) => const AllServersSearchScreen(),
+          ),
+          GoRoute(
+            path: allServersContinueWatchingLocation,
+            name: 'all_servers_continue_watching',
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: includedCount(),
+            ),
+            builder: (context, state) => const AllServersListingScreen(
+                listing: AllServersListing.continueWatching),
+          ),
+          GoRoute(
+            path: allServersRecentlyAddedLocation,
+            name: 'all_servers_recently_added',
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: includedCount(),
+            ),
+            builder: (context, state) => AllServersListingScreen(
+              listing: AllServersListing.recentlyAdded,
+              kind: switch (state.uri.queryParameters['kind']) {
+                'movies' => LibraryKind.movies,
+                'shows' => LibraryKind.shows,
+                _ => null,
+              },
+            ),
+          ),
+          GoRoute(
+            path: allServersFavoritesLocation,
+            name: 'all_servers_favorites',
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: includedCount(),
+            ),
+            builder: (context, state) => const AllServersListingScreen(
+                listing: AllServersListing.favorites),
+          ),
+          GoRoute(
+            path: allServersCollectionsLocation,
+            name: 'all_servers_collections',
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: includedCount(),
+            ),
+            builder: (context, state) => const AllServersCollectionsScreen(),
           ),
           GoRoute(
             path: '/s/:sourceId',
