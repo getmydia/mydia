@@ -596,14 +596,14 @@ defmodule Mydia.Library.SegmentDetection do
       set: [
         segment_analysis_state: state,
         segment_analysis_attempts: attempts,
-        last_segment_analysis_error: inspect(reason)
+        last_segment_analysis_error: Mydia.Storage.redact_text(reason)
       ]
     )
 
     Logger.warning("Segment detection failed",
       file_id: file.id,
       attempts: attempts,
-      reason: inspect(reason)
+      reason: Mydia.Storage.redact_text(reason)
     )
 
     :ok

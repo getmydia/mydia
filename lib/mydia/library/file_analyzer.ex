@@ -195,7 +195,7 @@ defmodule Mydia.Library.FileAnalyzer do
               file: file_path,
               elapsed_ms: elapsed_ms(start_ms),
               reason: :ffprobe_not_found,
-              error: inspect(e)
+              error: Mydia.Storage.redact_text(e)
             )
 
             {:error, :ffprobe_not_found}
@@ -205,7 +205,7 @@ defmodule Mydia.Library.FileAnalyzer do
               file: file_path,
               elapsed_ms: elapsed_ms(start_ms),
               reason: :unexpected_error,
-              error: inspect(e)
+              error: Mydia.Storage.redact_text(e)
             )
 
             {:error, :unexpected_error}
@@ -253,7 +253,7 @@ defmodule Mydia.Library.FileAnalyzer do
           elapsed_ms: elapsed_ms(start_ms),
           exit_code: exit_code,
           reason: :ffprobe_failed,
-          output: IO.iodata_to_binary(Enum.reverse(acc))
+          output: acc |> Enum.reverse() |> IO.iodata_to_binary() |> Mydia.Storage.redact_text()
         )
 
         {:error, :ffprobe_failed}

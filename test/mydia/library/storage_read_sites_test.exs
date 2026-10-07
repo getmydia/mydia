@@ -39,6 +39,53 @@ defmodule Mydia.Library.StorageReadSitesTest do
     assert is_binary(hash)
   end
 
+  describe "a failing read of a presigned URL" do
+    # The object is deleted after the URL is minted, so ffmpeg and ffprobe get
+    # a 404 whose message echoes the URL.
+    setup %{media_file: mf} do
+      {:ok, url} = Mydia.Storage.media_input(mf)
+      assert url =~ "X-Amz-"
+      {:ok, source} = Mydia.Storage.source(mf)
+      {:ok, loc} = {:ok, source.location}
+      Mydia.S3Helpers.delete_prefix!(loc)
+      %{url: url}
+    end
+
+    test "Ffmpeg errors carry no X-Amz- text", %{url: url} do
+      assert {:error, {:ffprobe_error, _, probe_output}} = Mydia.Library.Ffmpeg.probe([url])
+      assert {:error, {:ffmpeg_error, _, run_output}} = Mydia.Library.Ffmpeg.run(["-i", url])
+      refute probe_output =~ "X-Amz-"
+      refute run_output =~ "X-Amz-"
+    end
+
+    test "generator results and logs carry no X-Amz- text", %{url: url} do
+      log =
+        ExUnit.CaptureLog.capture_log([level: :debug], fn ->
+          assert {:error, reason} = ThumbnailGenerator.get_duration(url)
+          refute inspect(reason) =~ "X-Amz-"
+          assert {:error, reason} = ThumbnailGenerator.generate_cover_from_path(url)
+          refute inspect(reason) =~ "X-Amz-"
+        end)
+
+      refute log =~ "X-Amz-"
+    end
+  end
+
+  test "a missing local file is :file_not_found for MediaFile based generators", %{
+    tmp_dir: tmp_dir
+  } do
+    mf = %Mydia.Library.MediaFile{
+      id: Ecto.UUID.generate(),
+      relative_path: "nope.mp4",
+      library_path: %Mydia.Settings.LibraryPath{path: tmp_dir}
+    }
+
+    assert {:error, :file_not_found} = ThumbnailGenerator.generate_cover(mf)
+    assert {:error, :file_not_found} = SpriteGenerator.generate(mf)
+    assert {:error, :file_not_found} = Mydia.Library.PreviewGenerator.generate(mf)
+    assert {:error, :file_not_found} = PhashGenerator.generate(mf)
+  end
+
   test "generators keep :library_path_not_preloaded for an unloaded media file", %{media_file: mf} do
     unloaded = %{mf | library_path: %Ecto.Association.NotLoaded{}}
     assert {:error, :library_path_not_preloaded} = ThumbnailGenerator.generate_cover(unloaded)

@@ -467,9 +467,8 @@ defmodule Mydia.Library.ThumbnailGenerator do
           {:ok, output}
 
         {output, exit_code} ->
-          Logger.debug(
-            "FFprobe failed with exit code #{exit_code}: #{Mydia.Storage.redact_text(output)}"
-          )
+          output = Mydia.Storage.redact_text(output)
+          Logger.debug("FFprobe failed with exit code #{exit_code}: #{output}")
 
           {:error, {:ffprobe_error, exit_code, output}}
       end

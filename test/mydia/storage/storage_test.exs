@@ -8,6 +8,37 @@ defmodule Mydia.StorageTest do
 
   @moduletag :tmp_dir
 
+  describe "redact_text/1" do
+    test "strips the query from every URL in a string" do
+      text = "a http://h/x?X-Amz-Signature=abc and https://h2/y/z?k=v&X-Amz-Credential=q done"
+
+      assert Storage.redact_text(text) == "a http://h/x and https://h2/y/z done"
+    end
+
+    test "handles a URL at the end of the string" do
+      assert Storage.redact_text("Opening http://h/x?X-Amz-Signature=abc") ==
+               "Opening http://h/x"
+    end
+
+    test "handles single and double quoted URLs" do
+      assert Storage.redact_text("from 'http://h/x?X-Amz-Signature=abc': bad") ==
+               "from 'http://h/x': bad"
+
+      assert Storage.redact_text(~s(url="https://h/x?X-Amz-Signature=abc" next)) ==
+               ~s(url="https://h/x" next)
+    end
+
+    test "leaves text without URL queries unchanged" do
+      assert Storage.redact_text("plain /tmp/a?b and http://h/x") ==
+               "plain /tmp/a?b and http://h/x"
+    end
+
+    test "inspects non-binary terms first" do
+      assert Storage.redact_text({:error, "http://h/x?X-Amz-Signature=abc"}) ==
+               ~s({:error, "http://h/x"})
+    end
+  end
+
   test "source/1 and media_input/1 for a local file", %{tmp_dir: dir} do
     File.write!(Path.join(dir, "a.mkv"), "x")
     mf = %MediaFile{relative_path: "a.mkv", library_path: %LibraryPath{path: dir}}
