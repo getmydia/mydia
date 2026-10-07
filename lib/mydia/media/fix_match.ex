@@ -12,10 +12,13 @@ defmodule Mydia.Media.FixMatch do
   and `Mydia.Media.ProviderSwitch` own that.
   """
 
+  import Ecto.Query, only: [from: 2]
+
   alias Mydia.Accounts.Scope
   alias Mydia.Media.{MediaItem, ProviderSwitch, Refresh, RemoteFilter}
   alias Mydia.Metadata
   alias Mydia.Metadata.Structs.SearchResult
+  alias Mydia.Repo
 
   @doc "The provider a fix-match searches and adopts from."
   @spec provider_for(MediaItem.t()) :: :tmdb | :tvdb
@@ -69,6 +72,62 @@ defmodule Mydia.Media.FixMatch do
       other -> other
     end
   end
+
+  @doc """
+  Re-points `item` at `candidate` on the item's own provider.
+
+  A movie is rewritten in place and keeps its files. A show goes through
+  `ProviderSwitch.adopt_provider_switch/5`, which rebuilds its episodes from
+  the new id and sends their files back through import. Refuses with
+  `{:already_in_library, other}` when another item already holds that id,
+  because merging two items is not something this does.
+  """
+  @spec adopt(Scope.t(), MediaItem.t(), struct(), map() | nil) ::
+          {:ok, MediaItem.t()} | {:error, {:already_in_library, MediaItem.t()} | term()}
+  def adopt(%Scope{} = scope, %MediaItem{} = item, candidate, config \\ nil) do
+    config = config || Metadata.default_relay_config()
+    provider = provider_for(item)
+    new_id = String.to_integer(to_string(candidate.provider_id))
+
+    case holder_of(item, provider, new_id) do
+      %MediaItem{} = other -> {:error, {:already_in_library, other}}
+      nil -> do_adopt(scope, item, candidate, provider, new_id, config)
+    end
+  end
+
+  defp do_adopt(scope, %MediaItem{type: "tv_show"} = item, candidate, provider, _id, config),
+    do: ProviderSwitch.adopt_provider_switch(scope, item, candidate, provider, config)
+
+  defp do_adopt(scope, %MediaItem{} = item, _candidate, provider, new_id, config) do
+    with {:ok, metadata} <-
+           Metadata.fetch_by_ref(config, {provider, new_id},
+             media_type: :movie,
+             append_to_response: Metadata.default_append_to_response(:movie)
+           ),
+         {:ok, updated} <-
+           Refresh.write_metadata(scope, item, metadata, provider, reason(item, metadata)) do
+      Mydia.Metadata.NfoWriter.maybe_write_nfos(updated)
+      {:ok, updated}
+    end
+  end
+
+  defp reason(item, metadata), do: "Match changed from #{item.title} to #{metadata.title}"
+
+  defp holder_of(%MediaItem{id: id, type: type}, :tmdb, new_id),
+    do:
+      Repo.one(
+        from m in MediaItem,
+          where: m.type == ^type and m.tmdb_id == ^new_id and m.id != ^id,
+          limit: 1
+      )
+
+  defp holder_of(%MediaItem{id: id, type: type}, :tvdb, new_id),
+    do:
+      Repo.one(
+        from m in MediaItem,
+          where: m.type == ^type and m.tvdb_id == ^new_id and m.id != ^id,
+          limit: 1
+      )
 
   defp media_type(%MediaItem{type: "tv_show"}), do: :tv_show
   defp media_type(%MediaItem{}), do: :movie

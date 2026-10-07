@@ -3,6 +3,7 @@ defmodule Mydia.Media.FixMatchTest do
 
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
+  import Mydia.SettingsFixtures
   import Mydia.MetadataCacheHelpers, only: [unique_provider_id: 0, warm_remote_signals: 3]
 
   alias Mydia.Accounts.Scope
@@ -113,6 +114,140 @@ defmodule Mydia.Media.FixMatchTest do
 
       assert {:ok, results} = FixMatch.search(item, "Lantern", nil, scope, c.config)
       assert Enum.map(results, & &1.provider_id) == [to_string(ok)]
+    end
+  end
+
+  describe "adopt/4" do
+    defp movie_body(id, title, date) do
+      %{
+        "id" => id,
+        "title" => title,
+        "original_title" => title,
+        "release_date" => date,
+        "imdb_id" => "tt#{id}",
+        "credits" => %{"cast" => [], "crew" => []},
+        "genres" => []
+      }
+    end
+
+    defp candidate(id, type),
+      do: %Mydia.Metadata.Structs.SearchResult{
+        provider_id: to_string(id),
+        provider: :metadata_relay,
+        media_type: type
+      }
+
+    test "a movie takes the new identity and keeps its files and settings", c do
+      new_id = System.unique_integer([:positive])
+
+      item =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Wrong Pick",
+          year: 2001,
+          tmdb_id: System.unique_integer([:positive]),
+          monitored: false
+        })
+
+      file = media_file_fixture(%{media_item_id: item.id})
+
+      Bypass.expect_once(c.bypass, "GET", "/tmdb/movies/#{new_id}", fn conn ->
+        json(conn, movie_body(new_id, "Velvet Comet", "2003-06-01"))
+      end)
+
+      assert {:ok, updated} =
+               FixMatch.adopt(Scope.unrestricted(), item, candidate(new_id, :movie), c.config)
+
+      assert updated.tmdb_id == new_id
+      assert updated.title == "Velvet Comet"
+      assert updated.year == 2003
+      assert updated.monitored == false
+      assert Mydia.Repo.get!(Mydia.Library.MediaFile, file.id).media_item_id == item.id
+    end
+
+    test "refuses a title that is already another item in the library", c do
+      taken = System.unique_integer([:positive])
+      other = media_item_fixture(%{type: "movie", title: "Velvet Comet", tmdb_id: taken})
+      item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: taken + 1})
+
+      assert {:error, {:already_in_library, found}} =
+               FixMatch.adopt(Scope.unrestricted(), item, candidate(taken, :movie), c.config)
+
+      assert found.id == other.id
+      assert Mydia.Repo.reload!(item).title == "Wrong Pick"
+    end
+
+    test "a failed fetch leaves the item untouched", c do
+      new_id = System.unique_integer([:positive])
+      item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: new_id + 1})
+
+      Bypass.expect_once(c.bypass, "GET", "/tmdb/movies/#{new_id}", fn conn ->
+        Plug.Conn.resp(conn, 404, "{}")
+      end)
+
+      assert {:error, _} =
+               FixMatch.adopt(Scope.unrestricted(), item, candidate(new_id, :movie), c.config)
+
+      assert Mydia.Repo.reload!(item).tmdb_id == new_id + 1
+    end
+
+    test "a show is rebuilt from the new id on the same provider", c do
+      new_id = System.unique_integer([:positive])
+
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Wrong Harbor",
+          tmdb_id: new_id + 1,
+          metadata_source: :tmdb
+        })
+
+      lib = library_path_fixture(%{type: "series", tv_metadata_source: :tmdb})
+      ep = episode_fixture(%{media_item_id: item.id, season_number: 1, episode_number: 1})
+
+      file =
+        media_file_fixture(%{
+          episode_id: ep.id,
+          library_path_id: lib.id,
+          relative_path: "Velvet Harbor/Season 01/Velvet.Harbor.S01E01.mkv"
+        })
+
+      Bypass.expect(c.bypass, "GET", "/tmdb/tv/shows/#{new_id}", fn conn ->
+        json(conn, %{
+          "id" => new_id,
+          "name" => "Velvet Harbor",
+          "first_air_date" => "2012-01-01",
+          "credits" => %{"cast" => [], "crew" => []},
+          "genres" => [],
+          "seasons" => [%{"season_number" => 1, "name" => "Season 1"}]
+        })
+      end)
+
+      Bypass.expect(c.bypass, "GET", "/tmdb/tv/shows/#{new_id}/1", fn conn ->
+        json(conn, %{
+          "season_number" => 1,
+          "episodes" => [
+            %{
+              "season_number" => 1,
+              "episode_number" => 1,
+              "name" => "Pilot",
+              "air_date" => "2012-01-01"
+            }
+          ]
+        })
+      end)
+
+      assert {:ok, updated} =
+               FixMatch.adopt(Scope.unrestricted(), item, candidate(new_id, :tv_show), c.config)
+
+      assert updated.tmdb_id == new_id
+      assert updated.title == "Velvet Harbor"
+      assert is_nil(Mydia.Repo.get(Mydia.Library.MediaFile, file.id))
+
+      assert Mydia.Repo.get_by(Mydia.Library.ImportCandidate,
+               library_path_id: lib.id,
+               relative_path: file.relative_path
+             )
     end
   end
 end
