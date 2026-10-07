@@ -76,7 +76,10 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       ready_notified: false,
       seen_segments: MapSet.new(),
       accel_tier: :software,
-      output_buffer: ""
+      output_buffer: "",
+      # Trailing partial line of ffmpeg output, raw. Everything else in the
+      # state (buffer, output_buffer) holds only redacted complete lines.
+      pending_line: ""
     ]
 
     @type t :: %__MODULE__{
@@ -98,7 +101,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
             started_at: DateTime.t(),
             ready_notified: boolean(),
             accel_tier: AccelArgs.tier(),
-            output_buffer: String.t()
+            output_buffer: String.t(),
+            pending_line: String.t()
           }
   end
 
@@ -288,62 +292,18 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
   @impl true
   def handle_info({port, {:data, data}}, %{ffmpeg_port: port} = state) when is_port(port) do
-    # FFmpeg echoes the input URL in its errors. Redacting once at the door
-    # keeps the presigned query out of every log line, the on_error and
-    # on_hwaccel_failed callbacks, and the buffers below.
-    data = Mydia.Storage.redact_text(data)
+    # FFmpeg echoes the input URL in its errors, and a port message can end
+    # anywhere inside a presigned query string, so a chunk redacted on its own
+    # can leak the continuation. Only complete lines are redacted and used;
+    # the trailing partial line waits for the next message (or the exit flush).
+    {complete, pending} = split_complete_lines(state.pending_line <> data)
+    state = %{state | pending_line: bound_pending(pending)}
 
-    # Log raw FFmpeg output for debugging (helpful when diagnosing issues)
-    if String.trim(data) != "" do
-      Logger.debug("FFmpeg: #{String.trim(data)}")
-    end
-
-    # Accumulate output in buffer
-    buffer = state.buffer <> data
-
-    # Separate, bounded accumulation of raw stderr so the hwaccel classifier
-    # sees the whole message rather than one chunk — `buffer` above gets
-    # cleared as soon as parse_ffmpeg_output/1 recognizes a line, which would
-    # otherwise chop a multi-line VAAPI failure apart before it could match.
-    state = %{state | output_buffer: append_output(state.output_buffer, data)}
-
-    # Parse FFmpeg output for progress and duration
-    state =
-      buffer
-      |> parse_ffmpeg_output()
-      |> case do
-        {:duration, duration} ->
-          Logger.debug("Detected video duration: #{duration}s")
-          %{state | duration: duration, buffer: ""}
-
-        {:progress, progress_data} ->
-          if state.on_progress && state.duration do
-            percentage = progress_data.time / state.duration * 100
-            progress = Map.put(progress_data, :percentage, percentage)
-            state.on_progress.(progress)
-          end
-
-          %{state | buffer: ""}
-
-        {:error, error_msg} ->
-          Logger.error("FFmpeg error: #{error_msg}")
-
-          if state.on_error do
-            state.on_error.(error_msg)
-          end
-
-          %{state | buffer: ""}
-
-        :no_match ->
-          # Keep buffer for next iteration (but limit size)
-          buffer = if byte_size(buffer) > 10_000, do: "", else: buffer
-          %{state | buffer: buffer}
-      end
-
-    {:noreply, state}
+    {:noreply, ingest_output(state, Mydia.Storage.redact_text(complete))}
   end
 
   def handle_info({port, {:exit_status, 0}}, %{ffmpeg_port: port} = state) do
+    state = flush_pending_line(state)
     Logger.info("FFmpeg transcoding completed successfully")
 
     # The poll loop runs on a fixed cadence that has nothing to do with when
@@ -368,6 +328,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   end
 
   def handle_info({port, {:exit_status, status}}, %{ffmpeg_port: port} = state) do
+    state = flush_pending_line(state)
+
     # Same tail-segment gap as the zero-exit clause above: an encoder that
     # dies mid-window can still have finished segments sitting in the
     # playlist that no poll ever reported.
@@ -429,6 +391,89 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   def handle_info(msg, state) do
     Logger.debug("Unhandled message in FfmpegHlsTranscoder: #{inspect(msg)}")
     {:noreply, state}
+  end
+
+  # Splits text at the last line terminator: everything up to and including it
+  # is complete, the rest is a partial line still being written.
+  defp split_complete_lines(text) do
+    case :binary.matches(text, ["\n", "\r"]) do
+      [] ->
+        {"", text}
+
+      matches ->
+        {pos, _len} = List.last(matches)
+        split_at = pos + 1
+        {binary_part(text, 0, split_at), binary_part(text, split_at, byte_size(text) - split_at)}
+    end
+  end
+
+  # A partial line this long is not ffmpeg talking; drop it rather than hold
+  # unbounded raw text (the cut could also land inside a URL).
+  defp bound_pending(pending) when byte_size(pending) > 10_000, do: ""
+  defp bound_pending(pending), do: pending
+
+  # Redacts and consumes whatever partial line is left when ffmpeg exits.
+  defp flush_pending_line(%State{pending_line: ""} = state), do: state
+
+  defp flush_pending_line(%State{pending_line: pending} = state) do
+    ingest_output(%{state | pending_line: ""}, Mydia.Storage.redact_text(pending))
+  end
+
+  # `text` is complete, already-redacted ffmpeg output. Logs it line by line,
+  # feeds the bounded buffers and runs the duration/progress/error parser.
+  defp ingest_output(state, ""), do: state
+
+  defp ingest_output(state, text) do
+    # Log raw FFmpeg output for debugging (helpful when diagnosing issues)
+    text
+    |> String.split(["\r\n", "\n", "\r"])
+    |> Enum.each(fn line ->
+      if String.trim(line) != "", do: Logger.debug("FFmpeg: #{String.trim(line)}")
+    end)
+
+    # Accumulate output in buffer
+    buffer = state.buffer <> text
+
+    # Separate, bounded accumulation of stderr so the hwaccel classifier
+    # sees the whole message rather than one chunk — `buffer` above gets
+    # cleared as soon as parse_ffmpeg_output/1 recognizes a line, which would
+    # otherwise chop a multi-line VAAPI failure apart before it could match.
+    state = %{state | output_buffer: append_output(state.output_buffer, text)}
+
+    # Parse FFmpeg output for progress and duration
+    state =
+      buffer
+      |> parse_ffmpeg_output()
+      |> case do
+        {:duration, duration} ->
+          Logger.debug("Detected video duration: #{duration}s")
+          %{state | duration: duration, buffer: ""}
+
+        {:progress, progress_data} ->
+          if state.on_progress && state.duration do
+            percentage = progress_data.time / state.duration * 100
+            progress = Map.put(progress_data, :percentage, percentage)
+            state.on_progress.(progress)
+          end
+
+          %{state | buffer: ""}
+
+        {:error, error_msg} ->
+          Logger.error("FFmpeg error: #{error_msg}")
+
+          if state.on_error do
+            state.on_error.(error_msg)
+          end
+
+          %{state | buffer: ""}
+
+        :no_match ->
+          # Keep buffer for next iteration (but limit size)
+          buffer = if byte_size(buffer) > 10_000, do: "", else: buffer
+          %{state | buffer: buffer}
+      end
+
+    state
   end
 
   # One last playlist read before the GenServer stops. The regular poll
