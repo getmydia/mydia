@@ -40,5 +40,14 @@ void main() {
       ];
       expect(await pickBestVersionId(versions, 1600), 'hd');
     });
+
+    test('a version the server says is not direct-playable loses a tie',
+        () async {
+      const versions = [
+        MediaVersion(id: 'no', height: 1080, directPlaySupported: false),
+        MediaVersion(id: 'yes', height: 1080),
+      ];
+      expect(await pickBestVersionId(versions, 1600), 'yes');
+    });
   });
 }

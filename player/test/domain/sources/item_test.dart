@@ -64,4 +64,12 @@ void main() {
     expect(old.sizeBytes, isNull);
     expect(old.hdrFormat, isNull);
   });
+
+  test('MediaVersion round-trips the direct-play flag, old entries read null',
+      () {
+    const v = MediaVersion(id: 'f1', directPlaySupported: false);
+    expect(MediaVersion.fromJson(v.toJson()).directPlaySupported, false);
+    expect(
+        MediaVersion.fromJson(const {'id': 'f1'}).directPlaySupported, isNull);
+  });
 }

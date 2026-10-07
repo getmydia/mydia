@@ -60,6 +60,6 @@ List<MediaFile> filesFromVersions(List<MediaVersion> versions) => [
           bitrate: v.bitrateKbps == null ? null : v.bitrateKbps! * 1000,
           size: v.sizeBytes,
           hdrFormat: v.hdrFormat,
-          directPlaySupported: true,
+          directPlaySupported: v.directPlaySupported ?? true,
         ),
     ];

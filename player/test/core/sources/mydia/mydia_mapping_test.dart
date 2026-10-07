@@ -256,4 +256,14 @@ void main() {
     expect(v.sizeBytes, 4200000000);
     expect(v.hdrFormat, 'Dolby Vision');
   });
+
+  test('a Mydia file carries its direct-play flag', () {
+    final v = mediaVersion({
+      'id': 'f1',
+      'resolution': '1080p',
+      'directPlaySupported': false,
+    });
+    expect(v.directPlaySupported, false);
+    expect(mediaVersion({'id': 'f2'}).directPlaySupported, isNull);
+  });
 }

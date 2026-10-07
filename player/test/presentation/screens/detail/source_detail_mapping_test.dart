@@ -128,4 +128,13 @@ void main() {
     expect(f.size, 9);
     expect(f.hdrFormat, 'HDR10');
   });
+
+  test('files keep a false direct-play flag and default null to true', () {
+    final files = filesFromVersions(const [
+      MediaVersion(id: 'a', directPlaySupported: false),
+      MediaVersion(id: 'b'),
+    ]);
+    expect(files[0].directPlaySupported, false);
+    expect(files[1].directPlaySupported, true);
+  });
 }

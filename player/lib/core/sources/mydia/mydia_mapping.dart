@@ -72,6 +72,7 @@ MediaVersion mediaVersion(Map<String, dynamic> file, {int? durationSeconds}) {
     durationSeconds: durationSeconds,
     sizeBytes: file['size'] is int ? file['size'] as int : null,
     hdrFormat: file['hdrFormat'] as String?,
+    directPlaySupported: file['directPlaySupported'] as bool?,
     streams: [
       for (final sub in _list(file['subtitles']))
         if (sub['embedded'] != true &&
