@@ -6,6 +6,8 @@ defmodule MydiaWeb.Api.RangeHelper do
   for HTTP 206 Partial Content responses.
   """
 
+  require Logger
+
   import Plug.Conn,
     only: [
       get_req_header: 2,
@@ -266,18 +268,37 @@ defmodule MydiaWeb.Api.RangeHelper do
       |> put_resp_header("content-type", mime_type)
       |> put_resp_header("content-length", to_string(length))
       |> put_resp_header("x-streaming-mode", "direct")
-      |> send_chunked(status)
 
-    # An error after the headers are out cannot change the status; ending the
-    # response early gives the client a short body, and players retry the range.
+    if MydiaWeb.Plugs.RecordHeadRequest.head_request?(conn) do
+      # Same headers as the GET, no bytes pulled from the bucket.
+      send_resp(conn, status, "")
+    else
+      stream_body(send_chunked(conn, status), source, offset, length)
+    end
+  end
+
+  # An error after the headers are out cannot change the status; ending the
+  # response early gives the client a short body, and players retry the range.
+  defp stream_body(conn, source, offset, length) do
     case Mydia.Storage.stream_range(source, offset, length, conn, fn data, conn ->
            case chunk(conn, data) do
              {:ok, conn} -> {:ok, conn}
              {:error, reason} -> {:error, reason}
            end
          end) do
-      {:ok, conn} -> conn
-      {:error, _reason} -> conn
+      {:ok, conn} ->
+        conn
+
+      {:error, reason} ->
+        Logger.warning(
+          "Ranged proxy of #{Mydia.Storage.redact(source.path)} ended early: #{error_kind(reason)}"
+        )
+
+        conn
     end
   end
+
+  defp error_kind(%Mydia.Storage.Error{kind: kind}), do: inspect(kind)
+  defp error_kind(reason) when is_atom(reason), do: inspect(reason)
+  defp error_kind(_reason), do: "error"
 end
