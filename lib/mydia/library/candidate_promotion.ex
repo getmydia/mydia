@@ -8,6 +8,7 @@ defmodule Mydia.Library.CandidatePromotion do
   alias Mydia.Library.{EpisodeMinter, ImportCandidate, MediaFile, MetadataEnricher}
   alias Mydia.Media
   alias Mydia.Settings.LibraryPath
+  alias Mydia.Storage
   alias Mydia.Subtitles.Sidecars
 
   @spec promote_group([ImportCandidate.t()], map(), keyword()) ::
@@ -76,10 +77,27 @@ defmodule Mydia.Library.CandidatePromotion do
   defp on_disk(%ImportCandidate{library_path: nil} = candidate),
     do: {:error, {:library_path_missing, candidate.library_path_id}}
 
-  defp on_disk(candidate) do
-    if File.exists?(ImportCandidate.absolute_path(candidate)),
-      do: :ok,
-      else: {:error, :file_missing}
+  defp on_disk(%ImportCandidate{library_path: library_path} = candidate) do
+    if Storage.s3?(library_path) do
+      object_present(library_path, candidate.relative_path)
+    else
+      if File.exists?(ImportCandidate.absolute_path(candidate)),
+        do: :ok,
+        else: {:error, :file_missing}
+    end
+  end
+
+  # Only a definite "not found" is a missing file. An unreachable or refusing
+  # backend says nothing about the object, so it must not drop the candidate.
+  defp object_present(library_path, relative_path) do
+    with {:ok, location} <- Storage.location(library_path),
+         {:ok, source} <- Storage.source(location, relative_path),
+         {:ok, _entry} <- Storage.stat(source) do
+      :ok
+    else
+      {:error, %Storage.Error{kind: :not_found}} -> {:error, :file_missing}
+      {:error, %Storage.Error{} = error} -> {:error, {:storage, error}}
+    end
   end
 
   defp attach_parent(%Media.MediaItem{type: "movie"} = movie),

@@ -1760,13 +1760,17 @@ defmodule Mydia.ImportCandidates do
   # Every outcome takes the row out of the queue (deleted, or its marker
   # cleared), which is what keeps `drain_delete_pages/4` from fetching it again.
   defp delete_queued_candidate(%ImportCandidate{} = candidate, opts, acc) do
-    case ImportCandidate.absolute_path(candidate) do
+    with :ok <- Mydia.Storage.ensure_writable(candidate.library_path),
+         path when is_binary(path) <- ImportCandidate.absolute_path(candidate) do
+      claim_and_delete(candidate, Path.expand(path), opts, acc)
+    else
+      {:error, %Mydia.Storage.Error{} = error} ->
+        record_delete_failure(candidate, {:storage, error})
+        %{acc | failed: acc.failed + 1}
+
       nil ->
         record_delete_failure(candidate, :path_not_resolved)
         %{acc | failed: acc.failed + 1}
-
-      path ->
-        claim_and_delete(candidate, Path.expand(path), opts, acc)
     end
   end
 
@@ -1909,6 +1913,9 @@ defmodule Mydia.ImportCandidates do
 
   defp delete_error_message(:path_not_resolved),
     do: "Could not delete from disk: the library path could not be resolved."
+
+  defp delete_error_message({:storage, %Mydia.Storage.Error{message: message}}),
+    do: "Could not delete: #{message}."
 
   defp delete_error_message(reason) when is_atom(reason),
     do: "Could not delete from disk: #{:file.format_error(reason)}."
