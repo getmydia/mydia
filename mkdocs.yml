@@ -97,6 +97,7 @@ nav:
           - using/how-to/connect-indexer.md
           - using/how-to/cardigann-indexers.md
           - using/how-to/manage-libraries.md
+          - using/how-to/s3-storage.md
           - using/how-to/add-media.md
           - using/how-to/import-existing-collection.md
           - using/how-to/quality-profiles.md
