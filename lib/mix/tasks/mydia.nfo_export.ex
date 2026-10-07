@@ -145,7 +145,7 @@ defmodule Mix.Tasks.Mydia.NfoExport do
       else
         case NfoWriter.write_for_media_item(media_item, library_path) do
           :ok -> %{acc | written: acc.written + count}
-          {:error, _read_only} -> %{acc | skipped: acc.skipped + 1}
+          {:error, _reason} -> %{acc | skipped: acc.skipped + 1}
         end
       end
     end

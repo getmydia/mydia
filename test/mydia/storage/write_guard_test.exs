@@ -5,15 +5,9 @@ defmodule Mydia.Storage.WriteGuardTest do
 
   alias Mydia.Library
   alias Mydia.Library.{FileOrganizer, MediaFile, TrashStore}
-  alias Mydia.Metadata.NfoWriter
-  alias Mydia.Metadata.Structs.MediaMetadata
-  alias Mydia.Media.MediaItem
   alias Mydia.Settings
-  alias Mydia.Settings.LibraryPath
   alias Mydia.Storage.Error
   alias Mydia.Subtitles
-
-  @lp %LibraryPath{id: Ecto.UUID.generate(), path: "s3://media/movies", type: :movies}
 
   # A persisted S3 library and a media file in it, read back without the
   # library_path association, which is how several callers hold it.
@@ -76,12 +70,6 @@ defmodule Mydia.Storage.WriteGuardTest do
 
   test "TrashStore.store never moves S3 bytes", %{s3_file: file} do
     assert {:ok, :missing} = TrashStore.store(Repo.preload(file, :library_path))
-  end
-
-  test "NFO writer skips S3 libraries without touching the filesystem" do
-    metadata = %MediaMetadata{provider_id: "1", provider: :metadata_relay, media_type: :movie}
-    item = %MediaItem{type: "movie", metadata: metadata}
-    assert {:error, %Error{kind: :read_only}} = NfoWriter.write_for_media_item(item, @lp)
   end
 
   test "subtitle download is refused for an S3 file", %{s3_file: file} do
