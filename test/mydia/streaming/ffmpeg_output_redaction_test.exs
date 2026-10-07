@@ -101,6 +101,17 @@ defmodule Mydia.Streaming.FfmpegOutputRedactionTest do
     end
   end
 
+  test "the process status printed by crash reports holds no presigned query", %{dir: dir} do
+    pid = start_blocked_transcoder(dir)
+    port = port_of(pid)
+
+    # Unterminated, so it stays in the raw carry-over field.
+    send(pid, {port, {:data, @head}})
+    assert :sys.get_state(pid).pending_line =~ "X-Amz-"
+
+    refute inspect(:sys.get_status(pid), limit: :infinity) =~ "X-Amz-"
+  end
+
   test "on_hwaccel_failed receives redacted output", %{dir: dir} do
     pid = start_blocked_transcoder(dir)
     port = port_of(pid)

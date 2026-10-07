@@ -277,6 +277,25 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     end
   end
 
+  # Crash reports and :sys.get_status/1 print the state. The only raw field is
+  # the carried-over partial ffmpeg line, which can hold the start of a
+  # presigned URL; input_path and the buffers are redacted when stored, and
+  # redacting them again is a no-op.
+  @impl true
+  def format_status(%{state: %State{} = state} = status) do
+    redacted = %{
+      state
+      | pending_line: Mydia.Storage.redact_text(state.pending_line),
+        input_path: Mydia.Storage.redact_text(state.input_path),
+        buffer: Mydia.Storage.redact_text(state.buffer),
+        output_buffer: Mydia.Storage.redact_text(state.output_buffer)
+    }
+
+    %{status | state: redacted}
+  end
+
+  def format_status(status), do: status
+
   @impl true
   def handle_call(:get_status, _from, state) do
     status = %{
