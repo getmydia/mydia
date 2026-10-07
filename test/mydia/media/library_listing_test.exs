@@ -280,13 +280,11 @@ defmodule Mydia.Media.LibraryListingTest do
 
       media_item_fixture(%{title: "Beta Drift", metadata: %{"overview" => "Comet dust"}})
 
-      first = page(user, search: "comet", sort_by: "title_asc", offset: 0, limit: 3)
-      assert titles(first) == ["Comet 1", "Comet 2", "Comet 3"]
-      assert first.description_match_start_id == first_overview.id
+      result = page(user, search: "comet", sort_by: "title_asc", limit: 3)
+      assert titles(result) == ["Comet 1", "Comet 2", "Comet 3"]
+      assert result.description_match_start_id == first_overview.id
 
-      second = page(user, search: "comet", sort_by: "title_asc", offset: 3, limit: 3)
-      assert titles(second) == ["Alpha Drift", "Beta Drift"]
-      assert second.description_match_start_id == first_overview.id
+      assert Enum.drop(result.ids, 3) |> titles_for() == ["Alpha Drift", "Beta Drift"]
     end
 
     test "description_match_start_id is nil without a search or description matches", %{
@@ -507,22 +505,55 @@ defmodule Mydia.Media.LibraryListingTest do
       assert titles(page(user, sort_by: "added_asc")) == ["Early Almanac", "Late Almanac"]
     end
 
-    test "offset, limit, has_more?, visible_ids and empty?", %{user: user} do
+    test "limit, ids, visible_ids and empty?", %{user: user} do
       items = for n <- 1..5, do: media_item_fixture(%{title: "Almanac #{n}"})
 
-      first = page(user, sort_by: "title_asc", offset: 0, limit: 3)
+      first = page(user, sort_by: "title_asc", limit: 3)
       assert titles(first) == ["Almanac 1", "Almanac 2", "Almanac 3"]
-      assert first.has_more?
+      assert titles_for(first.ids) == Enum.map(1..5, &"Almanac #{&1}")
       assert first.visible_ids == MapSet.new(items, & &1.id)
       refute first.empty?
 
-      rest = page(user, sort_by: "title_asc", offset: 3, limit: 3)
-      assert titles(rest) == ["Almanac 4", "Almanac 5"]
-      refute rest.has_more?
+      none = page(user, sort_by: "title_asc", limit: 0)
+      assert none.rows == []
+      assert MapSet.size(none.visible_ids) == 5
 
       nothing = page(user, search: "matches no title at all")
       assert nothing.empty?
+      assert nothing.ids == []
       assert nothing.visible_ids == MapSet.new()
+    end
+
+    test "rows/3 keeps the given order and drops ids that are gone", %{user: user} do
+      a = media_item_fixture(%{title: "Quillback"})
+      b = media_item_fixture(%{title: "Ashen Ferry"})
+      c = media_item_fixture(%{title: "Morrow Vale"})
+      Repo.delete!(Repo.get!(MediaItem, b.id))
+
+      rows = LibraryListing.rows(Scope.unrestricted(), [c.id, b.id, a.id], user.id)
+
+      assert Enum.map(rows, & &1.item.title) == ["Morrow Vale", "Quillback"]
+      assert LibraryListing.rows(Scope.unrestricted(), [], user.id) == []
+    end
+
+    test "rows/3 attaches the user's progress", %{user: user} do
+      movie = media_item_fixture(%{type: "movie", title: "Copper Lantern"})
+
+      {:ok, progress} =
+        Mydia.Playback.save_progress(user.id, [media_item_id: movie.id], %{
+          position_seconds: 600,
+          duration_seconds: 6000
+        })
+
+      [row] = LibraryListing.rows(Scope.unrestricted(), [movie.id], user.id)
+
+      assert row.progress.id == progress.id
+    end
+
+    test "sort_keys/0 lists every sort the listing understands" do
+      assert "title_asc" in LibraryListing.sort_keys()
+      assert "episode_count_desc" in LibraryListing.sort_keys()
+      assert length(LibraryListing.sort_keys()) == 16
     end
 
     test "exclude_categories drops claimed items and keeps unclassified ones", %{user: user} do
@@ -645,11 +676,17 @@ defmodule Mydia.Media.LibraryListingTest do
       }
     end
 
-    test "page/2 lists only what the scope can see", ctx do
-      page = LibraryListing.page(ctx.scope, user_id: ctx.restricted.id, type: "movie", limit: 50)
+    test "snapshot/2 and rows/3 list only what the scope can see", ctx do
+      snapshot =
+        LibraryListing.snapshot(ctx.scope, user_id: ctx.restricted.id, type: "movie", limit: 50)
 
-      assert MapSet.equal?(page.visible_ids, MapSet.new([ctx.allowed.id]))
-      assert titles(page) == ["Paper Kite Parade"]
+      assert MapSet.equal?(snapshot.visible_ids, MapSet.new([ctx.allowed.id]))
+      assert titles(snapshot) == ["Paper Kite Parade"]
+
+      assert [%LibraryRow{id: id}] =
+               LibraryListing.rows(ctx.scope, [ctx.hidden.id, ctx.allowed.id], ctx.restricted.id)
+
+      assert id == ctx.allowed.id
     end
 
     test "row/3 is nil for an item the scope cannot see", ctx do
@@ -659,10 +696,18 @@ defmodule Mydia.Media.LibraryListingTest do
   end
 
   defp page(user, opts) do
-    LibraryListing.page(Scope.unrestricted(), Keyword.merge([user_id: user.id, limit: 50], opts))
+    LibraryListing.snapshot(
+      Scope.unrestricted(),
+      Keyword.merge([user_id: user.id, limit: 50], opts)
+    )
   end
 
   defp titles(%{rows: rows}), do: Enum.map(rows, & &1.item.title)
+
+  defp titles_for(ids) do
+    by_id = MediaItem |> where([m], m.id in ^ids) |> Repo.all() |> Map.new(&{&1.id, &1.title})
+    Enum.map(ids, &Map.fetch!(by_id, &1))
+  end
 
   defp actual(%LibraryRow{} = row) do
     %{
