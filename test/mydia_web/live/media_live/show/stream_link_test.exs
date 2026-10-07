@@ -104,6 +104,16 @@ defmodule MydiaWeb.MediaLive.Show.StreamLinkTest do
         current_user_id: user_id
       )
 
-    assert verified(href_of(html, "#stream-link-#{file_id}")) == {:ok, {user_id, file_id}}
+    [href] =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#stream-link-#{file_id}")
+      |> LazyHTML.attribute("data-href")
+
+    assert verified(href) == {:ok, {user_id, file_id}}
+
+    doc = LazyHTML.from_fragment(html)
+    assert Enum.any?(LazyHTML.query(doc, "#file-details-open-#{file_id}"))
+    refute Enum.any?(LazyHTML.query(doc, "#demote-#{file_id}"))
   end
 end

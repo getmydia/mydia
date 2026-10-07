@@ -585,9 +585,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           of a 92-character name and wrapped the badge line underneath onto
           four lines.
 
-          With every action present the strip is seven 40px squares, 300px, which is
-          wider than that same 245px row, so it wraps rather than overflowing to the
-          left; justify-end keeps the wrapped button on the right. --%>
+          The strip is file_actions/1: Play, a labeled stream link button and
+          two squares plus the ⋯ menu. It wraps rather than overflowing when the
+          stacked row is narrower than it; justify-end keeps the wrapped
+          buttons on the right. --%>
     <div
       id={"episode-file-row-#{@file.id}"}
       class="flex flex-col gap-3 py-1 @md/eprow:flex-row @md/eprow:items-start @md/eprow:justify-between @md/eprow:gap-4"
@@ -628,108 +629,20 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           id={@file.id}
         />
       </div>
-      <%!-- File actions --%>
-      <div class="flex flex-wrap items-center justify-end gap-1 flex-shrink-0">
-        <button
-          id={"subtitle-open-#{@file.id}"}
-          type="button"
-          phx-click="open_subtitle_manage"
-          phx-value-media-file-id={@file.id}
-          class="btn btn-ghost btn-square @md/eprow:btn-xs"
-          aria-label="Manage subtitles"
-          title="Subtitles"
-        >
-          <.icon name="hero-language" class="w-4 h-4" />
-        </button>
-        <% available_resolutions =
-          available_transcode_resolutions(
-            @file,
-            Map.new(@transcode_jobs, fn j -> {j.resolution, j} end)
-          ) %>
-        <%= if available_resolutions != [] do %>
-          <div class="dropdown dropdown-end">
-            <div
-              tabindex="0"
-              role="button"
-              class="btn btn-ghost btn-square @md/eprow:btn-xs"
-              title="Pre-transcode"
-            >
-              <.icon name="hero-wrench" class="w-4 h-4" />
-            </div>
-            <ul
-              tabindex="0"
-              class="dropdown-content menu bg-base-100 rounded-box z-[1] w-44 p-2 shadow"
-            >
-              <li :for={res <- available_resolutions}>
-                <button
-                  type="button"
-                  phx-click="pre_transcode"
-                  phx-value-media-file-id={@file.id}
-                  phx-value-resolution={res}
-                >
-                  {res}
-                </button>
-              </li>
-            </ul>
-          </div>
-        <% end %>
-        <%= if @player_enabled do %>
-          <a
-            href={
-              flutter_player_url("episode", @episode.id, file_id: @file.id, title: @episode.title)
-            }
-            class="btn btn-ghost btn-square @md/eprow:btn-xs"
-            title="Play this file"
-          >
-            <.icon name="hero-play-solid" class="w-4 h-4" />
-          </a>
-        <% end %>
-        <a
-          :if={@current_user_id}
-          id={"stream-link-#{@file.id}"}
-          href={MydiaWeb.StreamLink.path(@current_user_id, @file)}
-          target="_blank"
-          rel="noopener"
-          class="btn btn-ghost btn-square @md/eprow:btn-xs"
-          aria-label="Stream link (open in external player)"
-          title="Stream link (open in external player)"
-        >
-          <.icon name="hero-link" class="w-4 h-4" />
-        </a>
-        <button
-          type="button"
-          phx-click="mark_file_preferred"
-          phx-value-file-id={@file.id}
-          class="btn btn-ghost btn-square @md/eprow:btn-xs"
-          title="Mark as preferred"
-        >
-          <.icon name="hero-star" class="w-4 h-4" />
-        </button>
-        <%!-- Recovery for a file the matcher attached to the wrong episode,
-              whether it belongs to another show or to another episode of this
-              one. Same handler as the movie row's "Not this movie". --%>
-        <button
-          id={"not-this-item-#{@file.id}"}
-          type="button"
-          phx-click="not_this_item"
-          phx-value-file-id={@file.id}
-          class="btn btn-ghost btn-square @md/eprow:btn-xs"
-          aria-label="This file is not this episode"
-          title="Not this episode"
-        >
-          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
-        </button>
-        <button
-          id={"file-delete-#{@file.id}"}
-          type="button"
-          phx-click="show_file_delete_confirm"
-          phx-value-file-id={@file.id}
-          class="btn btn-ghost btn-square text-error hover:bg-error hover:text-error-content @md/eprow:btn-xs"
-          title="Delete file"
-        >
-          <.icon name="hero-trash" class="w-4 h-4" />
-        </button>
-      </div>
+      <%!-- File actions. See file_actions/1. --%>
+      <.file_actions
+        file={@file}
+        container="eprow"
+        item_label="episode"
+        subtitle_button_id={"subtitle-open-#{@file.id}"}
+        current_user_id={@current_user_id}
+        transcode_jobs={@transcode_jobs}
+        play_url={
+          if(@player_enabled,
+            do: flutter_player_url("episode", @episode.id, file_id: @file.id, title: @episode.title)
+          )
+        }
+      />
     </div>
     <%!-- Transcode job badges --%>
     <%= if @transcode_jobs != [] do %>
