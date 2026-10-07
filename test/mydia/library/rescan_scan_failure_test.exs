@@ -87,4 +87,37 @@ defmodule Mydia.Library.RescanScanFailureTest do
     assert [%{type: :symlink_resolution_error}] = result.scan_errors
     assert active_count(movie) == 1
   end
+
+  test "a re-scan leaves the S3 rows of a movie that also has local files", %{
+    tmp: tmp,
+    library_path: lib
+  } do
+    {:ok, _} =
+      Mydia.Settings.create_storage_backend(%{
+        name: "media",
+        endpoint: "http://localhost:1",
+        bucket: "b",
+        access_key_id: "k",
+        secret_access_key: "s"
+      })
+
+    {:ok, s3_lib} =
+      Mydia.Settings.create_library_path(%{path: "s3://media/movies", type: :movies})
+
+    movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+    add_file(tmp, lib, movie, "Quiet Mill (2020)/Quiet.Mill.2020.1080p.mkv")
+
+    {:ok, s3_file} =
+      Library.create_media_file(%{
+        relative_path: "Quiet Mill (2020)/Quiet.Mill.2020.2160p.mkv",
+        library_path_id: s3_lib.id,
+        media_item_id: movie.id,
+        size: 10
+      })
+
+    assert {:ok, %{deleted_files: 0}} = Library.rescan_movie(movie.id)
+
+    assert Repo.get!(MediaFile, s3_file.id).trashed_at == nil
+    assert active_count(movie) == 2
+  end
 end
