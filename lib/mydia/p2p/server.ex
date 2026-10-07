@@ -839,12 +839,20 @@ defmodule Mydia.P2p.Server do
       cache_control: hls_cache_control(source.path)
     }
 
-    with "ok" <- @p2p_nif.send_hls_header(resource, stream_id, header),
-         {:ok, _} <- stream_storage_body(resource, stream_id, source, offset, length) do
-      @p2p_nif.finish_hls_stream(resource, stream_id)
-    else
-      {:error, reason} -> log_stream_failure(reason, "storage")
-      other -> log_stream_failure(other, "storage")
+    # The NIFs raise ArgumentError once the peer has gone and the stream is
+    # closed, the same as on the local path.
+    try do
+      with "ok" <- @p2p_nif.send_hls_header(resource, stream_id, header),
+           {:ok, _} <- stream_storage_body(resource, stream_id, source, offset, length) do
+        @p2p_nif.finish_hls_stream(resource, stream_id)
+      else
+        {:error, reason} -> log_stream_failure(reason, "storage")
+        other -> log_stream_failure(other, "storage")
+      end
+    rescue
+      e in ArgumentError ->
+        Logger.debug("Storage stream closed by peer: #{Exception.message(e)}")
+        :ok
     end
   end
 

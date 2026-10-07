@@ -61,6 +61,22 @@ defmodule Mydia.P2p.ServerStorageStreamTest do
     refute_received {:p2p, :finish, _}
   end
 
+  for call <- [:header, :chunk, :finish] do
+    test "a closed stream raising from the #{call} NIF call is swallowed and not an error", %{
+      source: source
+    } do
+      Process.put(:recording_p2p_raise, unquote(call))
+
+      log =
+        ExUnit.CaptureLog.capture_log([level: :error], fn ->
+          assert Server.stream_storage_file(:res, "s7", source, %HlsRequest{}) == :ok
+        end)
+
+      refute log =~ "Failed to stream"
+      refute log =~ "ArgumentError"
+    end
+  end
+
   test "a zero-byte object sends the header and finishes without a body", %{loc: loc} do
     S3Helpers.put_object!(loc, "empty.mp4", "")
     Server.stream_storage_file(:res, "s5", Source.new(loc, "empty.mp4"), %HlsRequest{})
