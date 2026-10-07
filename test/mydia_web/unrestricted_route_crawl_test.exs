@@ -113,6 +113,7 @@ defmodule MydiaWeb.UnrestrictedRouteCrawlTest do
       "/api/v1/stream/episode/:id" => "/api/v1/stream/episode/#{s.episode.id}",
       "/api/v1/stream/file/:id" => "/api/v1/stream/file/#{s.movie_file.id}",
       "/api/v1/stream/:id" => "/api/v1/stream/#{s.movie_file.id}",
+      "/stream/:token/:filename" => MydiaWeb.StreamLink.path(s.user.id, s.movie_file),
       "/api/v1/stream/:content_type/:id/candidates" =>
         "/api/v1/stream/episode/#{s.episode.id}/candidates",
       "/api/player/v1/subtitles/:type/:id" => "/api/player/v1/subtitles/episode/#{s.episode.id}",
