@@ -250,7 +250,7 @@ defmodule MydiaWeb.MediaLive.NotThisItemTest do
 
       refute html
              |> LazyHTML.from_fragment()
-             |> LazyHTML.query("#not-this-item-mf-1[title='Not this episode']")
+             |> LazyHTML.query("#not-this-item-mf-1[aria-label='This file is not this episode']")
              |> Enum.empty?()
     end
 
