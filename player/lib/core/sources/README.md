@@ -410,7 +410,8 @@ The pre-instance unprefixed locations (`/movie/:id`, `/show/:id`,
 only, from the table in `core/router/legacy_routes.dart` (`legacyLocation`).
 The target is the migrated instance (`legacy_instance_id`) while its account
 exists, else the only Mydia instance, else `/sources/manage`. `/` and
-`/search` go to the active source's home and search.
+`/search` go to `/all` and `/all/search` when two or more servers are
+included in All servers, else to the active source's home and search.
 
 Sidebar and bottom bar entries come from `resolveSourceNav`
 (`domain/navigation/source_nav.dart`): the viewer's layout resolved against

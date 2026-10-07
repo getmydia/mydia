@@ -371,7 +371,12 @@ class SidebarContent extends ConsumerWidget {
                   row(entry),
                   const SizedBox(height: 2),
                 ],
-                if (allServers) AllServersServerRows(onNavigate: onNavigate),
+                // Like the header picker: the mobile drawer stays open so
+                // the viewer sees the server's nav replace All servers'.
+                if (allServers)
+                  AllServersServerRows(
+                    onNavigate: onSwitchSource ?? onNavigate,
+                  ),
               ],
             ),
           ),
