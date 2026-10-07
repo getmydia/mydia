@@ -145,7 +145,13 @@ defmodule Mydia.Settings.LibraryPath do
       changeset
       |> validate_s3_backend(path)
       |> force_off_default(:auto_rename)
-      |> reject_write_flags([:auto_organize, :auto_rename, :write_nfo])
+      |> reject_write_flags([
+        :auto_organize,
+        :auto_rename,
+        :write_nfo,
+        :default_for_movies,
+        :default_for_series
+      ])
     else
       changeset
     end

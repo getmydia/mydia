@@ -203,4 +203,52 @@ defmodule Mydia.Library.TargetResolverTest do
       assert s.id == mixed.id
     end
   end
+
+  describe "resolve/2 with S3 libraries" do
+    setup do
+      {:ok, _} =
+        Settings.create_storage_backend(%{
+          name: "media",
+          endpoint: "http://localhost:1",
+          bucket: "b",
+          access_key_id: "k",
+          secret_access_key: "s"
+        })
+
+      {:ok, s3} =
+        Settings.create_library_path(%{
+          path: "s3://media/movies",
+          type: "movies",
+          monitored: true
+        })
+
+      %{s3: s3}
+    end
+
+    test "inferred steps skip S3, including a stale default flag and existing files", %{s3: s3} do
+      {:ok, s3} =
+        s3 |> Ecto.Changeset.change(default_for_movies: true) |> Mydia.Repo.update()
+
+      local = library_path_fixture(%{type: "movies"})
+      item = movie()
+      file_in(item, s3, "Invented Film (2031)/film.mkv")
+
+      assert {:ok, resolved, :first_compatible} = TargetResolver.resolve(item)
+      assert resolved.id == local.id
+    end
+
+    test "with only an S3 library there is no compatible library", %{s3: _s3} do
+      assert {:error, :no_compatible_library} = TargetResolver.resolve(movie())
+    end
+
+    test "a download override to S3 is kept so the import can refuse it", %{s3: s3} do
+      _local = library_path_fixture(%{type: "movies"})
+      download = %Mydia.Downloads.Download{library_path_id: s3.id, library_path: s3}
+
+      assert {:ok, resolved, :download_override} =
+               TargetResolver.resolve(movie(), download: download)
+
+      assert resolved.id == s3.id
+    end
+  end
 end

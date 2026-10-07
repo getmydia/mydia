@@ -47,6 +47,7 @@ defmodule Mydia.Jobs.MediaImport do
   alias Mydia.MediaServer.Notifier, as: MediaServerNotifier
   alias Mydia.Metadata.NfoWriter
   alias Mydia.Settings.LibraryPath
+  alias Mydia.Storage
   alias Mydia.Upgrades
 
   defmodule Args do
@@ -415,16 +416,24 @@ defmodule Mydia.Jobs.MediaImport do
     library_path = determine_library_path(download)
 
     result =
-      if library_path do
-        # The resolved library path's auto_rename policy is authoritative at
-        # execution time: it drives renaming in both directions, overriding
-        # whatever rename_files the job was enqueued with.
-        args = %{args | rename_files: library_path.auto_rename}
+      case writable_library(download, library_path) do
+        {:ok, library_path} ->
+          # The resolved library path's auto_rename policy is authoritative at
+          # execution time: it drives renaming in both directions, overriding
+          # whatever rename_files the job was enqueued with.
+          args = %{args | rename_files: library_path.auto_rename}
 
-        do_process_import(download, files, library_path, args)
-      else
-        Logger.error("Could not determine library path for download", download_id: download.id)
-        {:error, :no_library_path}
+          do_process_import(download, files, library_path, args)
+
+        {:error, :no_library_path} = error ->
+          Logger.error("Could not determine library path for download",
+            download_id: download.id
+          )
+
+          error
+
+        {:error, _} = error ->
+          error
       end
 
     snapshot_candidates_on_failure(result, download, files, library_path)
@@ -618,78 +627,104 @@ defmodule Mydia.Jobs.MediaImport do
 
   defp process_targeted_import(download, target_files, args) do
     # Import specific files with pre-assigned episode IDs (from resolved file mappings)
-    library_path = determine_library_path(download)
+    case writable_library(download, determine_library_path(download)) do
+      {:ok, library_path} ->
+        do_process_targeted_import(download, target_files, library_path, args)
 
-    if is_nil(library_path) do
-      Logger.error("Could not determine library path for targeted import",
-        download_id: download.id
-      )
-
-      {:error, :no_library_path}
-    else
-      results =
-        Enum.map(target_files, fn target ->
-          path = target["path"]
-          episode_id = target["episode_id"]
-
-          if File.exists?(path) do
-            episode = if episode_id, do: Media.get_episode!(Scope.system(), episode_id), else: nil
-            file = %{path: path, name: Path.basename(path), size: File.stat!(path).size}
-
-            # Build destination path for this episode
-            dest_dir =
-              if episode && download.media_item do
-                base_dir = build_series_base_path(download.media_item, library_path)
-
-                Path.join(
-                  base_dir,
-                  "Season #{String.pad_leading("#{episode.season_number}", 2, "0")}"
-                )
-              else
-                build_destination_path(download, library_path)
-              end
-
-            import_file_to_destination(file, episode, dest_dir, download, library_path, args)
-          else
-            Logger.warning("Target file no longer exists", path: path, download_id: download.id)
-            {:error, :file_not_found}
-          end
-        end)
-
-      errors = Enum.filter(results, &match?({:error, _}, &1))
-
-      if errors == [] do
-        # All targeted files imported — clear match_status and the stale
-        # candidate/unresolved-file listings. Without dropping
-        # "import_candidates" and "import_candidates_at" too, a hand-matched
-        # download would keep carrying the listing (and probe verdicts) from
-        # the failure this import just resolved, forever.
-        current_metadata = download.metadata || %{}
-
-        cleaned_metadata =
-          current_metadata
-          |> Map.delete("unresolved_files")
-          |> Map.delete("import_candidates")
-          |> Map.delete("import_candidates_at")
-
-        Downloads.update_download(download, %{
-          imported_at: DateTime.utc_now(),
-          match_status: nil,
-          metadata: cleaned_metadata
-        })
-
-        MediaServerNotifier.notify_all()
-        {:ok, :imported}
-      else
-        Logger.warning("Partial targeted import failure",
-          download_id: download.id,
-          error_count: length(errors)
+      {:error, :no_library_path} = error ->
+        Logger.error("Could not determine library path for targeted import",
+          download_id: download.id
         )
 
-        # Same treatment as the bulk path: carry the representative reason so a
-        # user who just hand-resolved these files is told why it failed.
-        {:error, {:partial_import, representative_error(errors)}}
-      end
+        error
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  # Imports write into the library, so the check runs before any file
+  # operation (directory creation included).
+  defp writable_library(_download, nil), do: {:error, :no_library_path}
+
+  defp writable_library(download, library_path) do
+    case Storage.ensure_writable(library_path) do
+      :ok ->
+        {:ok, library_path}
+
+      {:error, _} ->
+        Logger.warning("Refusing to import into a read-only library",
+          download_id: download.id,
+          library_path_id: library_path.id
+        )
+
+        {:error, :library_read_only}
+    end
+  end
+
+  defp do_process_targeted_import(download, target_files, library_path, args) do
+    results =
+      Enum.map(target_files, fn target ->
+        path = target["path"]
+        episode_id = target["episode_id"]
+
+        if File.exists?(path) do
+          episode = if episode_id, do: Media.get_episode!(Scope.system(), episode_id), else: nil
+          file = %{path: path, name: Path.basename(path), size: File.stat!(path).size}
+
+          # Build destination path for this episode
+          dest_dir =
+            if episode && download.media_item do
+              base_dir = build_series_base_path(download.media_item, library_path)
+
+              Path.join(
+                base_dir,
+                "Season #{String.pad_leading("#{episode.season_number}", 2, "0")}"
+              )
+            else
+              build_destination_path(download, library_path)
+            end
+
+          import_file_to_destination(file, episode, dest_dir, download, library_path, args)
+        else
+          Logger.warning("Target file no longer exists", path: path, download_id: download.id)
+          {:error, :file_not_found}
+        end
+      end)
+
+    errors = Enum.filter(results, &match?({:error, _}, &1))
+
+    if errors == [] do
+      # All targeted files imported — clear match_status and the stale
+      # candidate/unresolved-file listings. Without dropping
+      # "import_candidates" and "import_candidates_at" too, a hand-matched
+      # download would keep carrying the listing (and probe verdicts) from
+      # the failure this import just resolved, forever.
+      current_metadata = download.metadata || %{}
+
+      cleaned_metadata =
+        current_metadata
+        |> Map.delete("unresolved_files")
+        |> Map.delete("import_candidates")
+        |> Map.delete("import_candidates_at")
+
+      Downloads.update_download(download, %{
+        imported_at: DateTime.utc_now(),
+        match_status: nil,
+        metadata: cleaned_metadata
+      })
+
+      MediaServerNotifier.notify_all()
+      {:ok, :imported}
+    else
+      Logger.warning("Partial targeted import failure",
+        download_id: download.id,
+        error_count: length(errors)
+      )
+
+      # Same treatment as the bulk path: carry the representative reason so a
+      # user who just hand-resolved these files is told why it failed.
+      {:error, {:partial_import, representative_error(errors)}}
     end
   end
 
@@ -894,7 +929,9 @@ defmodule Mydia.Jobs.MediaImport do
 
   defp resolve_unattributed(download) do
     library_paths = Settings.list_library_paths()
-    library_path = Enum.find(library_paths, &(&1.type == :mixed and &1.monitored))
+
+    library_path =
+      Enum.find(library_paths, &(&1.type == :mixed and &1.monitored and not Storage.s3?(&1)))
 
     if is_nil(library_path), do: warn_no_library(download, "unknown")
 
@@ -2162,6 +2199,11 @@ defmodule Mydia.Jobs.MediaImport do
 
     "No library configured for #{media_type}. " <>
       "Add a compatible library in Settings → Libraries."
+  end
+
+  defp format_import_error(:library_read_only, _download) do
+    "The target library is an S3 library, which is read-only in this version of Mydia. " <>
+      "Choose a local library for this download in Settings → Libraries."
   end
 
   defp format_import_error(:no_importable_files, download) do

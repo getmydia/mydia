@@ -41,6 +41,19 @@ defmodule Mydia.Settings.LibraryPathS3Test do
     end
   end
 
+  test "rejects default_for_movies and default_for_series on S3 libraries" do
+    for {flag, type} <- [default_for_movies: :movies, default_for_series: :series] do
+      cs =
+        LibraryPath.changeset(%LibraryPath{}, %{
+          :path => "s3://media/m",
+          :type => type,
+          flag => true
+        })
+
+      assert errors_on(cs)[flag], "#{flag} should be rejected"
+    end
+  end
+
   test "auto_rename defaults to true, so an S3 path without it set must still be valid" do
     cs = LibraryPath.changeset(%LibraryPath{}, %{path: "s3://media/m", type: :movies})
     assert cs.valid?
