@@ -2,7 +2,7 @@ defmodule Mydia.Storage.S3 do
   @moduledoc "S3-compatible object storage over Req with SigV4."
   @behaviour Mydia.Storage.Backend
 
-  alias Mydia.Storage.{Entry, Location}
+  alias Mydia.Storage.{Entry, Error, Location}
   alias Mydia.Storage.S3.Request
 
   @impl true
@@ -89,14 +89,19 @@ defmodule Mydia.Storage.S3 do
   def stream_range(%Location{backend: b} = loc, rel, offset, length, acc, fun) do
     range = "bytes=#{offset}-#{offset + length - 1}"
 
+    # A provider that ignores Range answers 200 with the whole object. That is
+    # only usable from offset 0, and then only up to `length` bytes: the caller
+    # has already promised the client exactly that many.
     into = fn {:data, data}, {req, resp} ->
-      if resp.status in [200, 206] do
-        case fun.(data, Req.Response.get_private(resp, :acc, acc)) do
-          {:ok, next} -> {:cont, {req, Req.Response.put_private(resp, :acc, next)}}
-          {:error, reason} -> {:halt, {req, Req.Response.put_private(resp, :halted, reason)}}
-        end
-      else
-        {:cont, {req, resp}}
+      cond do
+        resp.status == 206 or (resp.status == 200 and offset == 0) ->
+          feed_range(data, {req, resp}, length, acc, fun)
+
+        resp.status == 200 ->
+          {:halt, {req, resp}}
+
+        true ->
+          {:cont, {req, resp}}
       end
     end
 
@@ -109,6 +114,10 @@ defmodule Mydia.Storage.S3 do
       )
 
     case result do
+      {:ok, %Req.Response{status: 200}} when offset > 0 ->
+        {:error,
+         Error.new(:provider, "provider ignored the Range header for #{display(loc, rel)}")}
+
       {:ok, %Req.Response{status: s} = resp} when s in [200, 206] ->
         case Req.Response.get_private(resp, :halted) do
           nil -> {:ok, Req.Response.get_private(resp, :acc, acc)}
@@ -117,6 +126,24 @@ defmodule Mydia.Storage.S3 do
 
       other ->
         {:error, Request.map_error(other, display(loc, rel))}
+    end
+  end
+
+  # Hands at most `length` bytes in total to the fold, then stops the download.
+  defp feed_range(data, {req, resp}, length, acc, fun) do
+    seen = Req.Response.get_private(resp, :seen, 0)
+    remaining = length - seen
+    done? = byte_size(data) >= remaining
+    chunk = if done?, do: binary_part(data, 0, remaining), else: data
+    resp = Req.Response.put_private(resp, :seen, seen + byte_size(chunk))
+
+    case fun.(chunk, Req.Response.get_private(resp, :acc, acc)) do
+      {:ok, next} ->
+        resp = Req.Response.put_private(resp, :acc, next)
+        if done?, do: {:halt, {req, resp}}, else: {:cont, {req, resp}}
+
+      {:error, reason} ->
+        {:halt, {req, Req.Response.put_private(resp, :halted, reason)}}
     end
   end
 

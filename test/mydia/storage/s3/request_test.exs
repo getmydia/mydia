@@ -85,6 +85,58 @@ defmodule Mydia.Storage.S3.RequestTest do
     refute msg =~ "SECRET"
   end
 
+  describe "stream_range/5 against providers that mishandle Range" do
+    defp collect(location, offset, length) do
+      source = Mydia.Storage.Source.new(location, "a.mkv")
+
+      Storage.stream_range(source, offset, length, [], fn chunk, acc -> {:ok, [chunk | acc]} end)
+      |> case do
+        {:ok, chunks} -> {:ok, chunks |> Enum.reverse() |> IO.iodata_to_binary()}
+        error -> error
+      end
+    end
+
+    test "a 206 is streamed as is", %{bypass: bypass, location: loc} do
+      Bypass.expect_once(bypass, "GET", "/lib/movies/a.mkv", fn conn ->
+        assert Plug.Conn.get_req_header(conn, "range") == ["bytes=2-5"]
+        Plug.Conn.resp(conn, 206, "2345")
+      end)
+
+      assert {:ok, "2345"} = collect(loc, 2, 4)
+    end
+
+    test "a 200 at offset 0 is truncated to the requested length", %{
+      bypass: bypass,
+      location: loc
+    } do
+      Bypass.expect_once(bypass, "GET", "/lib/movies/a.mkv", fn conn ->
+        Plug.Conn.resp(conn, 200, "0123456789")
+      end)
+
+      assert {:ok, "0123"} = collect(loc, 0, 4)
+    end
+
+    test "a 200 at a positive offset is an error and never reaches the fold", %{
+      bypass: bypass,
+      location: loc
+    } do
+      Bypass.expect_once(bypass, "GET", "/lib/movies/a.mkv", fn conn ->
+        Plug.Conn.resp(conn, 200, "0123456789")
+      end)
+
+      source = Mydia.Storage.Source.new(loc, "a.mkv")
+      test_pid = self()
+
+      assert {:error, %Error{kind: :provider}} =
+               Storage.stream_range(source, 3, 4, :ok, fn chunk, acc ->
+                 send(test_pid, {:chunk, chunk})
+                 {:ok, acc}
+               end)
+
+      refute_received {:chunk, _}
+    end
+  end
+
   test "input/1 is a presigned URL that redacts cleanly", %{bypass: bypass, location: loc} do
     Bypass.expect_once(bypass, "HEAD", "/lib/movies/a.mkv", fn conn ->
       conn
