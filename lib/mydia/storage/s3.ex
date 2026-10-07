@@ -5,8 +5,14 @@ defmodule Mydia.Storage.S3 do
   alias Mydia.Storage.{Entry, Error, Location}
   alias Mydia.Storage.S3.Request
 
+  # Req raises on a URL it cannot parse (no scheme or host), so every entry
+  # point checks the endpoint first and never reaches Req with a bad one.
   @impl true
-  def validate(%Location{backend: b, prefix: prefix}) do
+  def validate(%Location{backend: b} = loc) do
+    with :ok <- Request.check(b), do: do_validate(loc)
+  end
+
+  defp do_validate(%Location{backend: b, prefix: prefix}) do
     req = Request.new(b)
 
     case Req.request(req,
@@ -20,7 +26,9 @@ defmodule Mydia.Storage.S3 do
   end
 
   @impl true
-  def list(%Location{} = loc), do: list_page(loc, nil, [])
+  def list(%Location{backend: b} = loc) do
+    with :ok <- Request.check(b), do: list_page(loc, nil, [])
+  end
 
   defp list_page(%Location{backend: b, prefix: prefix} = loc, token, acc) do
     params =
@@ -51,6 +59,10 @@ defmodule Mydia.Storage.S3 do
 
   @impl true
   def stat(%Location{backend: b} = loc, rel) do
+    with :ok <- Request.check(b), do: do_stat(loc, rel)
+  end
+
+  defp do_stat(%Location{backend: b} = loc, rel) do
     key = Location.key(loc, rel)
 
     case Req.request(Request.new(b), method: :head, url: Request.object_url(b, key)) do
@@ -87,6 +99,10 @@ defmodule Mydia.Storage.S3 do
   # Retries are off: a retried request would replay bytes the fold already consumed.
   @impl true
   def stream_range(%Location{backend: b} = loc, rel, offset, length, acc, fun) do
+    with :ok <- Request.check(b), do: do_stream_range(loc, rel, offset, length, acc, fun)
+  end
+
+  defp do_stream_range(%Location{backend: b} = loc, rel, offset, length, acc, fun) do
     range = "bytes=#{offset}-#{offset + length - 1}"
 
     # A provider that ignores Range answers 200 with the whole object. That is

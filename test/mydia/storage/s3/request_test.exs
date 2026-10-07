@@ -85,6 +85,21 @@ defmodule Mydia.Storage.S3.RequestTest do
     refute msg =~ "SECRET"
   end
 
+  describe "a backend with an unusable endpoint" do
+    for endpoint <- ["not a url", "ftp://host", "http://", "localhost:9000", "http://u:p@host"] do
+      test "never raises for #{inspect(endpoint)}", %{backend: backend} do
+        loc = Location.s3(%{backend | endpoint: unquote(endpoint)}, "movies/", "s3://m/movies")
+        source = Mydia.Storage.Source.new(loc, "a.mkv")
+
+        assert {:error, %Error{kind: :misconfigured}} = Storage.validate(loc)
+        assert {:error, %Error{kind: :misconfigured}} = Storage.list(loc)
+        assert {:error, %Error{kind: :misconfigured}} = Storage.stat(source)
+        assert {:error, %Error{kind: :misconfigured}} = Storage.input(source)
+        assert {:error, %Error{kind: :misconfigured}} = Storage.read_range(source, 0, 4)
+      end
+    end
+  end
+
   describe "stream_range/5 against providers that mishandle Range" do
     defp collect(location, offset, length) do
       source = Mydia.Storage.Source.new(location, "a.mkv")

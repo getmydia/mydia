@@ -962,6 +962,8 @@ defmodule Mydia.Config.Schema do
       :path_style
     ])
     |> validate_required([:name, :bucket, :access_key_id, :secret_access_key])
+    |> Mydia.Settings.StorageBackend.validate_name()
+    |> Mydia.Settings.StorageBackend.validate_endpoint()
   end
 
   defp library_path_changeset(schema, attrs) do

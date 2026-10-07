@@ -27,6 +27,19 @@ defmodule Mydia.Storage.S3.Request do
     |> Req.new()
   end
 
+  @doc """
+  `:ok` when the backend's endpoint is a plain http(s)://host[:port] URL, else a
+  `:misconfigured` error. Req raises on a URL without a scheme or host.
+  """
+  @spec check(StorageBackend.t()) :: :ok | {:error, Error.t()}
+  def check(%StorageBackend{} = b) do
+    uri = URI.parse(StorageBackend.endpoint_url(b))
+
+    if uri.scheme in ["http", "https"] and uri.host not in [nil, ""] and is_nil(uri.userinfo),
+      do: :ok,
+      else: {:error, Error.new(:misconfigured, "invalid endpoint for storage backend #{b.name}")}
+  end
+
   @spec bucket_url(StorageBackend.t()) :: String.t()
   def bucket_url(%StorageBackend{path_style: true} = b),
     do: StorageBackend.endpoint_url(b) <> "/" <> b.bucket
