@@ -6,6 +6,9 @@ defmodule MydiaWeb.Api.RangeHelper do
   for HTTP 206 Partial Content responses.
   """
 
+  import Plug.Conn,
+    only: [get_req_header: 2, put_resp_header: 3, put_status: 2, send_file: 3, send_file: 5]
+
   @doc """
   Parses an HTTP Range header value.
 
@@ -125,6 +128,49 @@ defmodule MydiaWeb.Api.RangeHelper do
       ".flv" -> "video/x-flv"
       ".ts" -> "video/mp2t"
       _ -> "video/mp4"
+    end
+  end
+
+  @doc """
+  Sends `file_path` honouring a single-range `Range` header.
+
+  Answers 206 for a valid range, 200 with the whole file when there is no
+  Range header, and 416 when the header is present but unusable. The caller
+  must have checked that the file exists.
+  """
+  @spec send_file_ranged(Plug.Conn.t(), Path.t()) :: Plug.Conn.t()
+  def send_file_ranged(conn, file_path) do
+    file_size = File.stat!(file_path).size
+    mime_type = get_mime_type(file_path)
+    range_header = conn |> get_req_header("range") |> List.first()
+
+    case parse_range_header(range_header, file_size) do
+      {:ok, start, end_pos} ->
+        {offset, length} = calculate_range(start, end_pos)
+
+        conn
+        |> put_status(:partial_content)
+        |> put_resp_header("accept-ranges", "bytes")
+        |> put_resp_header("content-type", mime_type)
+        |> put_resp_header("content-range", format_content_range(start, end_pos, file_size))
+        |> put_resp_header("content-length", to_string(length))
+        |> put_resp_header("x-streaming-mode", "direct")
+        |> send_file(:partial_content, file_path, offset, length)
+
+      :error when is_nil(range_header) ->
+        conn
+        |> put_status(:ok)
+        |> put_resp_header("accept-ranges", "bytes")
+        |> put_resp_header("content-type", mime_type)
+        |> put_resp_header("content-length", to_string(file_size))
+        |> put_resp_header("x-streaming-mode", "direct")
+        |> send_file(:ok, file_path)
+
+      :error ->
+        conn
+        |> put_status(:requested_range_not_satisfiable)
+        |> put_resp_header("content-range", "bytes */#{file_size}")
+        |> Phoenix.Controller.json(%{error: "Invalid range request"})
     end
   end
 end
