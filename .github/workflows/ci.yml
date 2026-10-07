@@ -248,7 +248,24 @@ jobs:
           grep -q 'processes\.phoenix\.after = \[ "mydia:ecto@succeeded" \]' devenv.nix || {
             echo "::error::phoenix must wait for mydia:ecto@succeeded, or it boots against an unmigrated database"; exit 1; }
 
+      # RustFS is the S3 server for the :s3 storage tests. It runs the same
+      # `mydia-s3` script as local dev, so port and credentials come from
+      # devenv.nix. The test step sets MYDIA_TEST_S3_REQUIRED so a server that
+      # failed to start fails the job instead of silently skipping those tests.
+      - name: Start RustFS
+        run: |
+          nohup devenv shell -- mydia-s3 < /dev/null > rustfs.log 2>&1 &
+          # devenv shell prints its banner on stdout, so capturing `printenv`
+          # through it yields the banner too. Poll from inside one shell instead.
+          if devenv shell -- bash -c 'for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
+            exit 0
+          fi
+          cat rustfs.log
+          exit 1
+
       - name: Test (SQLite) under devenv
+        env:
+          MYDIA_TEST_S3_REQUIRED: "1"
         run: |
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
@@ -427,12 +444,29 @@ jobs:
           echo "::error::devenv environment failed to materialize after 3 attempts"
           exit 1
 
+      # RustFS is the S3 server for the :s3 storage tests. It runs the same
+      # `mydia-s3` script as local dev, so port and credentials come from
+      # devenv.nix. The test step sets MYDIA_TEST_S3_REQUIRED so a server that
+      # failed to start fails the job instead of silently skipping those tests.
+      - name: Start RustFS
+        run: |
+          nohup devenv shell -- mydia-s3 < /dev/null > rustfs.log 2>&1 &
+          # devenv shell prints its banner on stdout, so capturing `printenv`
+          # through it yields the banner too. Poll from inside one shell instead.
+          if devenv shell -- bash -c 'for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
+            exit 0
+          fi
+          cat rustfs.log
+          exit 1
+
       # DATABASE_* is exported INSIDE the shell so it overrides devenv.nix's
       # per-worktree defaults (DATABASE_HOST/PORT/USER) and points at the GitHub
       # `services: postgres` container. DATABASE_TYPE is set here (not at job/eval
       # level) so the compile-time adapter is Postgres without devenv defining an
       # unused devenv-managed Postgres service at eval time (KTD4).
       - name: Test (PostgreSQL) under devenv
+        env:
+          MYDIA_TEST_S3_REQUIRED: "1"
         run: |
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail

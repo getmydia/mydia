@@ -98,11 +98,11 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
     args = build_ffmpeg_args(input_path, opts)
 
     Logger.info(
-      "Starting fMP4 remux: #{input_path}" <>
+      "Starting fMP4 remux: #{Mydia.Storage.redact(input_path)}" <>
         if(seek_seconds, do: " (seek: #{seek_seconds}s)", else: "")
     )
 
-    Logger.debug("FFmpeg args: #{inspect(args)}")
+    Logger.debug("FFmpeg args: #{Mydia.Storage.redact_text(args)}")
 
     start_ffmpeg_process(args)
   end

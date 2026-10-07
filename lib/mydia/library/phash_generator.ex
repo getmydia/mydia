@@ -67,12 +67,9 @@ defmodule Mydia.Library.PhashGenerator do
   """
   @spec generate(MediaFile.t(), generate_opts()) :: {:ok, String.t()} | {:error, term()}
   def generate(%MediaFile{} = media_file, opts \\ []) do
-    input_path = MediaFile.absolute_path(media_file)
-
-    if is_nil(input_path) do
-      {:error, :library_path_not_preloaded}
-    else
-      do_generate(input_path, opts)
+    case Mydia.Storage.media_input(media_file) do
+      {:ok, input} -> do_generate(input, opts)
+      {:error, error} -> {:error, Mydia.Storage.input_error_reason(error)}
     end
   end
 
@@ -159,11 +156,14 @@ defmodule Mydia.Library.PhashGenerator do
       {:ok, hash}
     else
       {:error, :no_video_stream} = error ->
-        Logger.warning("Cannot generate phash for #{input_path}: file has no valid video stream")
+        Logger.warning(
+          "Cannot generate phash for #{Mydia.Storage.redact(input_path)}: file has no valid video stream"
+        )
+
         error
 
       {:error, reason} = error ->
-        Logger.error("Failed to generate phash: #{inspect(reason)}")
+        Logger.error("Failed to generate phash: #{Mydia.Storage.redact_text(reason)}")
         error
     end
   end
@@ -180,7 +180,10 @@ defmodule Mydia.Library.PhashGenerator do
         {:ok, seek_time}
 
       {:error, reason} ->
-        Logger.warning("Could not get video duration: #{inspect(reason)}, using 10s seek time")
+        Logger.warning(
+          "Could not get video duration: #{Mydia.Storage.redact_text(reason)}, using 10s seek time"
+        )
+
         {:ok, 10.0}
     end
   end

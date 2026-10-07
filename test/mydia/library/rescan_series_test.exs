@@ -86,6 +86,30 @@ defmodule Mydia.Library.RescanSeriesTest do
     assert {candidate.provider_type, candidate.provider_id} == {"tvdb", "900001"}
   end
 
+  test "rescan_series/1 leaves S3 rows of an episode that also has a local file", ctx do
+    {:ok, _} =
+      Mydia.Settings.create_storage_backend(%{
+        name: "media",
+        endpoint: "http://localhost:1",
+        bucket: "b",
+        access_key_id: "k",
+        secret_access_key: "s"
+      })
+
+    {:ok, s3_lib} = Mydia.Settings.create_library_path(%{path: "s3://media/tv", type: :series})
+
+    {:ok, s3_file} =
+      Library.create_media_file(%{
+        relative_path: "Lantern Coast/Season 01/Lantern.Coast.S01E01.2160p.mkv",
+        library_path_id: s3_lib.id,
+        episode_id: ctx.episodes[1].id,
+        size: 10
+      })
+
+    assert {:ok, _} = Library.rescan_series(ctx.show.id)
+    assert Repo.get!(MediaFile, s3_file.id).trashed_at == nil
+  end
+
   test "rescan_season/2 attaches a new file for that season", ctx do
     relative = write_file(ctx.tmp, "Lantern Coast/Season 01/Lantern.Coast.S01E02.1080p.mkv")
 

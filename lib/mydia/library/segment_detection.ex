@@ -381,7 +381,7 @@ defmodule Mydia.Library.SegmentDetection do
   # missing, or the container may carry no chapters at all, and fingerprinting
   # can still answer, so the failure degrades to "no chapters".
   defp chapter_segments(file) do
-    with path when is_binary(path) <- MediaFile.absolute_path(file),
+    with {:ok, path} <- Mydia.Storage.media_input(file),
          {:ok, duration} <- duration_seconds(file),
          {:ok, found} <- Chapters.detect(path, round(duration * 1000)) do
       found
@@ -463,11 +463,11 @@ defmodule Mydia.Library.SegmentDetection do
   defp min_seconds("credits"), do: @min_credits_s
 
   defp maybe_refine(file, "credits", start_ms, end_ms) do
-    case MediaFile.absolute_path(file) do
-      nil ->
+    case Mydia.Storage.media_input(file) do
+      {:error, _} ->
         end_ms
 
-      path ->
+      {:ok, path} ->
         refined = Boundary.refine_end(path, end_ms)
 
         # refine_end/2 snaps to the last black transition inside a window that
@@ -487,11 +487,11 @@ defmodule Mydia.Library.SegmentDetection do
 
   defp fingerprint_for(file, type) do
     with {:ok, duration} <- duration_seconds(file),
-         path when is_binary(path) <- MediaFile.absolute_path(file) do
+         {:ok, path} <- Mydia.Storage.media_input(file) do
       {start_s, length_s} = window(type, duration)
       load_or_compute(file, type, path, start_s, length_s)
     else
-      nil -> {:error, :path_not_resolved}
+      {:error, %Mydia.Storage.Error{}} -> {:error, :path_not_resolved}
       :error -> {:error, :duration_unknown}
     end
   end
@@ -596,14 +596,14 @@ defmodule Mydia.Library.SegmentDetection do
       set: [
         segment_analysis_state: state,
         segment_analysis_attempts: attempts,
-        last_segment_analysis_error: inspect(reason)
+        last_segment_analysis_error: Mydia.Storage.redact_text(reason)
       ]
     )
 
     Logger.warning("Segment detection failed",
       file_id: file.id,
       attempts: attempts,
-      reason: inspect(reason)
+      reason: Mydia.Storage.redact_text(reason)
     )
 
     :ok

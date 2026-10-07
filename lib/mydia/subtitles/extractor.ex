@@ -11,6 +11,7 @@ defmodule Mydia.Subtitles.Extractor do
   require Logger
 
   alias Mydia.Library.Structs.FileMetadata
+  alias Mydia.Storage
   alias Mydia.Subtitles.Format
 
   @doc """
@@ -62,15 +63,11 @@ defmodule Mydia.Subtitles.Extractor do
   defp embedded_tracks(media_file), do: embedded_tracks_via_ffprobe(media_file)
 
   defp embedded_tracks_via_ffprobe(media_file) do
-    absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
-
-    if absolute_path && File.exists?(absolute_path) do
-      case get_embedded_subtitles(absolute_path) do
-        {:ok, tracks} -> tracks
-        {:error, _reason} -> []
-      end
+    with {:ok, input} <- Storage.media_input(media_file),
+         {:ok, tracks} <- get_embedded_subtitles(input) do
+      tracks
     else
-      []
+      {:error, _reason} -> []
     end
   end
 
@@ -143,13 +140,13 @@ defmodule Mydia.Subtitles.Extractor do
 
   # Embedded subtitle - extract to temporary file
   def extract_subtitle_track(media_file, track_id, opts) when is_integer(track_id) do
-    absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
+    case Storage.media_input(media_file) do
+      {:ok, input} ->
+        output_format = Keyword.get(opts, :format, "srt")
+        extract_embedded_subtitle(input, track_id, output_format)
 
-    if absolute_path && File.exists?(absolute_path) do
-      output_format = Keyword.get(opts, :format, "srt")
-      extract_embedded_subtitle(absolute_path, track_id, output_format)
-    else
-      {:error, :media_file_not_found}
+      {:error, _} ->
+        {:error, :media_file_not_found}
     end
   end
 
@@ -317,7 +314,7 @@ defmodule Mydia.Subtitles.Extractor do
       temp_file
     ]
 
-    Logger.debug("Extracting subtitle track #{track_id} from #{file_path}")
+    Logger.debug("Extracting subtitle track #{track_id} from #{Storage.redact(file_path)}")
 
     case System.cmd("ffmpeg", args, stderr_to_stdout: true) do
       {_output, 0} ->
@@ -330,7 +327,7 @@ defmodule Mydia.Subtitles.Extractor do
       {error_output, exit_code} ->
         Logger.error("FFmpeg subtitle extraction failed",
           exit_code: exit_code,
-          output: error_output,
+          output: Storage.redact_text(error_output),
           track_id: track_id
         )
 

@@ -585,3 +585,7 @@ and `describe "list_media_items/1 :ids filter"` blocks would not have compiled.
 
 Add an `import Mydia.MediaFixtures` line as the first line of each new block,
 matching the file's existing per-block convention.
+
+## S3 storage tests
+
+Tests tagged `:s3` run against RustFS when it is reachable at `MYDIA_TEST_S3_ENDPOINT`. devenv sets the variable, and `./dev up` starts the `rustfs` process (`mydia-s3` runs the same server by hand). When nothing answers, the tag is excluded. CI sets `MYDIA_TEST_S3_REQUIRED=1`, so an unreachable server aborts the run there instead of silently skipping. Each test isolates itself under a unique key prefix. MinIO is not used because it is archived.

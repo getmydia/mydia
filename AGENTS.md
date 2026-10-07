@@ -363,6 +363,7 @@ Read the relevant one before working in that area:
 | `lib/mydia_web/components/README.md` | daisyUI, core components, CSS |
 | `lib/mydia/metadata/README.md` | what TVDB and TMDB actually send |
 | `lib/mydia/streaming/README.md` | where codec data lives, streaming candidates |
+| `lib/mydia/storage/README.md` | the storage seam, S3 libraries, presigned-URL redaction, the read-only guard |
 | `lib/mydia/config/README.md` | layered config lifecycle |
 | `lib/mydia/downloads/README.md`, `lib/mydia/indexers/README.md` | trackerless releases, Torznab categories, release ranking |
 | `native/README.md`, `plugins/README.md` | NIF crates, p2p, wasip2 guests, the host-vs-plugin ownership rule |

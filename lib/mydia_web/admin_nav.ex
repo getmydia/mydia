@@ -33,6 +33,7 @@ defmodule MydiaWeb.AdminNav do
     :path_mappings,
     :subtitle_providers,
     :media_servers,
+    :storage_backends,
     :requests,
     :jobs,
     :release_blacklist,
@@ -133,6 +134,14 @@ defmodule MydiaWeb.AdminNav do
         description: "Plex and Jellyfin refresh and watched-status sync",
         icon: "hero-server-stack",
         path: ~p"/admin/media-servers"
+      },
+      %Page{
+        key: :storage_backends,
+        hub: :configuration,
+        label: "Storage",
+        description: "S3-compatible buckets that libraries can live in",
+        icon: "hero-circle-stack",
+        path: ~p"/admin/storage-backends"
       },
       %Page{
         key: :requests,

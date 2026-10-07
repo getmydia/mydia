@@ -16,6 +16,9 @@ database_adapter =
 # Set database_adapter for runtime helpers (used by Mydia.DB and migrations)
 config :mydia, :database_adapter, database_adapter
 
+# Records the HLS chunk NIF calls the p2p server makes for S3 files.
+config :mydia, :p2p_nif, Mydia.Test.RecordingP2pNif
+
 case database_adapter do
   Ecto.Adapters.Postgres ->
     config :mydia, Mydia.Repo,

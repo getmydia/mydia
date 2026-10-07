@@ -135,6 +135,50 @@ defmodule Mydia.Library.PruneTest do
       refute Mydia.Repo.get!(Mydia.Library.MediaFile, keeper.id).trashed_at
     end
 
+    test "an S3 loser is reported as failed (read-only), not crashed on or trashed" do
+      {:ok, _} =
+        Mydia.Settings.create_storage_backend(%{
+          name: "media",
+          endpoint: "http://localhost:1",
+          bucket: "b",
+          access_key_id: "k",
+          secret_access_key: "s"
+        })
+
+      {:ok, s3} =
+        Mydia.Settings.create_library_path(%{path: "s3://media/tv", type: :series})
+
+      show = media_item_fixture(%{type: "tv_show", title: "Harbor Lights", year: 2013})
+
+      episode =
+        episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 3})
+
+      [keeper, loser] =
+        for {name, attrs} <- [
+              {"Harbor Lights/Season 02/Harbor.Lights.S02E03.1080p.BluRay.x265.mp4",
+               %{resolution: "1080p", codec: "hevc", bitrate: 2_002_656}},
+              {"Harbor Lights/Season 02/Harbor.Lights.S02E03.360p.WEBRip.x264.mp4",
+               %{resolution: "360p", codec: "h264", bitrate: 1_000_000}}
+            ] do
+          attrs
+          |> Map.merge(%{
+            episode_id: episode.id,
+            library_path_id: s3.id,
+            relative_path: name,
+            metadata: %{"container" => "mp4", "duration" => 1320.0}
+          })
+          |> media_file_fixture()
+        end
+
+      result = Prune.execute([loser.id], "admin")
+
+      assert result.trashed == []
+      assert [{id, %Mydia.Storage.Error{kind: :read_only}}] = result.failed
+      assert id == loser.id
+      refute trashed_at(loser.id)
+      refute trashed_at(keeper.id)
+    end
+
     test "refuses to trash a file from a refused group even when handed its id" do
       movie = media_item_fixture(%{type: "movie", title: "Tidepool Academy", year: 2013})
       lp = library_path_fixture(%{type: "movies"})

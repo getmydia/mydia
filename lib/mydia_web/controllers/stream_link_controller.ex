@@ -25,11 +25,11 @@ defmodule MydiaWeb.StreamLinkController do
          %Accounts.User{} = user <- Accounts.get_user_by_id(user_id),
          %MediaFile{} = file <- get_active_file(file_id),
          :ok <- MediaAccess.authorize_media_file_for_scope(Scope.for_user(user), file),
-         {:ok, path} <- on_disk_path(file) do
+         {:ok, source} <- on_disk_source(file) do
       # The URL is a per-user bearer credential; keep shared caches away from it.
       conn
       |> put_resp_header("cache-control", "private, no-store")
-      |> RangeHelper.send_file_ranged(path)
+      |> RangeHelper.send_source_ranged(source)
     else
       _ -> send_resp(conn, 404, "Not found")
     end
@@ -48,18 +48,14 @@ defmodule MydiaWeb.StreamLinkController do
     end
   end
 
-  defp on_disk_path(file) do
-    case MediaFile.absolute_path(file) do
-      nil ->
+  defp on_disk_source(file) do
+    with {:ok, source} <- Mydia.Storage.source(file),
+         true <- Mydia.Storage.exists?(source) do
+      {:ok, source}
+    else
+      _ ->
+        Logger.warning("Stream link for media_file #{file.id}: file not found")
         :error
-
-      path ->
-        if File.exists?(path) do
-          {:ok, path}
-        else
-          Logger.warning("Stream link for media_file #{file.id}: not on disk at #{path}")
-          :error
-        end
     end
   end
 end

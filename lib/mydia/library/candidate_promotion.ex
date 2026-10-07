@@ -8,6 +8,7 @@ defmodule Mydia.Library.CandidatePromotion do
   alias Mydia.Library.{EpisodeMinter, ImportCandidate, MediaFile, MetadataEnricher}
   alias Mydia.Media
   alias Mydia.Settings.LibraryPath
+  alias Mydia.Storage
   alias Mydia.Subtitles.Sidecars
 
   @spec promote_group([ImportCandidate.t()], map(), keyword()) ::
@@ -76,10 +77,44 @@ defmodule Mydia.Library.CandidatePromotion do
   defp on_disk(%ImportCandidate{library_path: nil} = candidate),
     do: {:error, {:library_path_missing, candidate.library_path_id}}
 
-  defp on_disk(candidate) do
-    if File.exists?(ImportCandidate.absolute_path(candidate)),
-      do: :ok,
-      else: {:error, :file_missing}
+  defp on_disk(%ImportCandidate{library_path: library_path} = candidate) do
+    cond do
+      # Checked before the transaction by `preflight_object/1`: a slow or dead
+      # backend must not hold SQLite's write lock.
+      Storage.s3?(library_path) ->
+        :ok
+
+      File.exists?(ImportCandidate.absolute_path(candidate)) ->
+        :ok
+
+      true ->
+        {:error, :file_missing}
+    end
+  end
+
+  defp preflight_object(%ImportCandidate{} = candidate) do
+    case Repo.preload(candidate, :library_path) do
+      %ImportCandidate{library_path: %LibraryPath{} = library_path} = loaded ->
+        if Storage.s3?(library_path),
+          do: object_present(library_path, loaded.relative_path),
+          else: :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  # Only a definite "not found" is a missing file. An unreachable or refusing
+  # backend says nothing about the object, so it must not drop the candidate.
+  defp object_present(library_path, relative_path) do
+    with {:ok, location} <- Storage.location(library_path),
+         {:ok, source} <- Storage.source(location, relative_path),
+         {:ok, _entry} <- Storage.stat(source) do
+      :ok
+    else
+      {:error, %Storage.Error{kind: :not_found}} -> {:error, :file_missing}
+      {:error, %Storage.Error{} = error} -> {:error, {:storage, error}}
+    end
   end
 
   defp attach_parent(%Media.MediaItem{type: "movie"} = movie),
@@ -119,6 +154,12 @@ defmodule Mydia.Library.CandidatePromotion do
 
     ownership_attempt(opts)
 
+    with :ok <- preflight_object(candidate) do
+      attach_transaction(candidate, target, parent, opts, transaction_opts)
+    end
+  end
+
+  defp attach_transaction(candidate, target, parent, opts, transaction_opts) do
     Repo.transaction(
       fn ->
         ownership_boundary(opts)

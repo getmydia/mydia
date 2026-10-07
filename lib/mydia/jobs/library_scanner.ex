@@ -250,8 +250,9 @@ defmodule Mydia.Jobs.LibraryScanner do
     extensions = Library.Scanner.extensions_for_library_type(library_path.type)
 
     # Perform scan and handle errors gracefully
-    with {:ok, scan_result} <-
-           Library.Scanner.scan(library_path.path,
+    with {:ok, location} <- Mydia.Storage.location(library_path),
+         {:ok, scan_result} <-
+           Library.Scanner.scan_location(location,
              progress_callback: progress_callback,
              video_extensions: extensions
            ) do
@@ -274,6 +275,9 @@ defmodule Mydia.Jobs.LibraryScanner do
           library_path,
           "Permission denied when accessing path: #{library_path.path}"
         )
+
+      {:error, %Mydia.Storage.Error{message: message}} ->
+        handle_scan_error(library_path, message)
 
       {:error, reason} ->
         handle_scan_error(library_path, "Scan failed: #{inspect(reason)}")

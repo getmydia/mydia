@@ -85,12 +85,12 @@ defmodule Mydia.Streaming.Candidates do
   Ensures codec info is present on a media file, extracting on-the-fly if needed.
   """
   def ensure_codec_info(media_file) do
-    absolute_path = MediaFile.absolute_path(media_file)
-
-    if absolute_path && File.exists?(absolute_path) do
-      maybe_extract_codec_info(media_file, absolute_path)
-    else
-      media_file
+    # No existence check here: for S3 that is a HEAD per call, and the
+    # already-analyzed path needs no storage access at all. The branches that
+    # do read the file stat it themselves (or check first, below).
+    case Mydia.Storage.source(media_file) do
+      {:ok, source} -> maybe_extract_codec_info(media_file, source)
+      _ -> media_file
     end
   end
 
@@ -228,11 +228,14 @@ defmodule Mydia.Streaming.Candidates do
     }
   end
 
-  defp maybe_extract_codec_info(%MediaFile{analyzed_at: nil} = media_file, absolute_path) do
+  defp maybe_extract_codec_info(%MediaFile{analyzed_at: nil} = media_file, source) do
     max_attempts = Application.get_env(:mydia, :file_analysis_max_attempts, @default_max_attempts)
 
-    if media_file.analysis_attempts < max_attempts do
-      result = FileAnalyzer.analyze(absolute_path)
+    # The existence check stays on this branch: a failed analysis is charged as
+    # an attempt, and a missing file or an unreachable backend must not use
+    # the attempts up.
+    if media_file.analysis_attempts < max_attempts and Mydia.Storage.exists?(source) do
+      result = FileAnalyzer.analyze(source)
 
       case Library.apply_analysis(media_file, result) do
         outcome when outcome in [:ok, :already_analyzed] ->
@@ -247,28 +250,28 @@ defmodule Mydia.Streaming.Candidates do
           media_file
       end
     else
-      # Attempt ceiling already hit; do not retry forever on every play.
+      # Attempt ceiling already hit (do not retry forever on every play), or
+      # the file cannot be read right now.
       media_file
     end
   end
 
-  defp maybe_extract_codec_info(media_file, absolute_path) do
+  defp maybe_extract_codec_info(media_file, source) do
     metadata = media_file.metadata || FileMetadata.empty()
 
     case metadata.duration do
       nil ->
-        case Mydia.Library.ThumbnailGenerator.get_duration(absolute_path) do
-          {:ok, duration} ->
-            updated_metadata = %{metadata | duration: duration}
+        with {:ok, input} <- Mydia.Storage.input(source),
+             {:ok, duration} <- Mydia.Library.ThumbnailGenerator.get_duration(input) do
+          updated_metadata = %{metadata | duration: duration}
 
-            spawn(fn ->
-              Mydia.Library.update_media_file_scan(media_file, %{metadata: updated_metadata})
-            end)
+          spawn(fn ->
+            Mydia.Library.update_media_file_scan(media_file, %{metadata: updated_metadata})
+          end)
 
-            %{media_file | metadata: updated_metadata}
-
-          {:error, _reason} ->
-            media_file
+          %{media_file | metadata: updated_metadata}
+        else
+          _ -> media_file
         end
 
       _duration ->

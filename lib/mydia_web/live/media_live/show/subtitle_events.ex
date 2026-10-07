@@ -518,6 +518,8 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   # Every clause here matches a class of failure `Mydia.Subtitles.download_subtitle/3`
   # (or the provider it delegates to) can return. Anything unmatched still logs the
   # raw reason above but never puts it in front of an operator.
+  defp download_error_message(%Mydia.Storage.Error{message: message}), do: message
+
   defp download_error_message(:media_file_not_found),
     do: "that file is no longer in the library."
 

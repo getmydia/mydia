@@ -289,6 +289,50 @@ defmodule Mydia.Config.LoaderTest do
       assert path.name == "Kids Movies"
     end
 
+    @storage_env [
+      {"NAME", "media"},
+      {"ENDPOINT", "http://127.0.0.1:9000"},
+      {"REGION", "eu-west-1"},
+      {"BUCKET", "library"},
+      {"ACCESS_KEY_ID", "AKID"},
+      {"SECRET_ACCESS_KEY", "s3cr3t"},
+      {"PATH_STYLE", "false"}
+    ]
+
+    defp put_storage_env(overrides \\ %{}) do
+      for {suffix, default} <- @storage_env do
+        key = "STORAGE_BACKEND_1_#{suffix}"
+        System.put_env(key, Map.get(overrides, suffix, default))
+        on_exit(fn -> System.delete_env(key) end)
+      end
+    end
+
+    test "loads STORAGE_BACKEND_<N>_* variables" do
+      put_storage_env()
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert [backend] = config.storage_backends
+      assert backend.name == "media"
+      assert backend.endpoint == "http://127.0.0.1:9000"
+      assert backend.region == "eu-west-1"
+      assert backend.bucket == "library"
+      assert backend.access_key_id == "AKID"
+      assert backend.secret_access_key == "s3cr3t"
+      assert backend.path_style == false
+    end
+
+    test "rejects a storage backend with a bad name, schemeless endpoint or userinfo" do
+      for overrides <- [
+            %{"NAME" => "bad name/with slash"},
+            %{"ENDPOINT" => "localhost:9000"},
+            %{"ENDPOINT" => "http://user:pass@host:9000"}
+          ] do
+        put_storage_env(overrides)
+        assert {:error, %Ecto.Changeset{}} = Loader.load(config_file: "nonexistent.yml")
+      end
+    end
+
     test "truncates a LIBRARY_PATH_<N>_NAME longer than 60 characters" do
       System.put_env("LIBRARY_PATH_1_PATH", "/media/second_library")
       System.put_env("LIBRARY_PATH_1_TYPE", "movies")

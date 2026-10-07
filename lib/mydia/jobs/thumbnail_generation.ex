@@ -357,7 +357,10 @@ defmodule Mydia.Jobs.ThumbnailGeneration do
             {completed + 1, failed}
 
           {:error, reason} ->
-            Logger.warning("Failed to generate thumbnail for #{id}: #{inspect(reason)}")
+            Logger.warning(
+              "Failed to generate thumbnail for #{id}: #{Mydia.Storage.redact_text(reason)}"
+            )
+
             {completed, failed + 1}
         end
       end)
@@ -441,7 +444,10 @@ defmodule Mydia.Jobs.ThumbnailGeneration do
                 {c + 1, f}
 
               {:error, reason} ->
-                Logger.warning("Failed to generate thumbnail for #{id}: #{inspect(reason)}")
+                Logger.warning(
+                  "Failed to generate thumbnail for #{id}: #{Mydia.Storage.redact_text(reason)}"
+                )
+
                 {c, f + 1}
             end
           end)
@@ -477,7 +483,7 @@ defmodule Mydia.Jobs.ThumbnailGeneration do
 
               {:error, reason} ->
                 Logger.warning(
-                  "Failed to generate sprites for #{media_file.id}: #{inspect(reason)}"
+                  "Failed to generate sprites for #{media_file.id}: #{Mydia.Storage.redact_text(reason)}"
                 )
 
                 attrs
@@ -495,7 +501,7 @@ defmodule Mydia.Jobs.ThumbnailGeneration do
 
               {:error, reason} ->
                 Logger.warning(
-                  "Failed to generate preview for #{media_file.id}: #{inspect(reason)}"
+                  "Failed to generate preview for #{media_file.id}: #{Mydia.Storage.redact_text(reason)}"
                 )
 
                 attrs

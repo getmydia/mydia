@@ -64,8 +64,8 @@ defmodule Mydia.Library.SegmentDetection.Boundary do
 
       {:error, reason} ->
         Logger.debug("Skipping credits boundary refinement",
-          path: path,
-          reason: inspect(reason)
+          path: Mydia.Storage.redact(path),
+          reason: Mydia.Storage.redact_text(reason)
         )
 
         end_ms

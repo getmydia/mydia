@@ -157,6 +157,16 @@ defmodule Mydia.Streaming.HlsSessionHwaccelFallbackTest do
   # failure, for each playlist_mode. segment_plan/window exist only in :full
   # mode, matching start_registered_session/7 exactly (a :window session
   # never gets a SegmentPlan or a TranscodeWindow).
+  # start_backend/6 resolves the input through Storage.media_input/1, which
+  # checks that the file exists, so the hand-built file needs a real one.
+  defp existing_library_dir do
+    dir = Path.join(System.tmp_dir!(), "mydia-hls-hwaccel-fallback-fixture")
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf(dir) end)
+    File.touch!(Path.join(dir, "movie.mkv"))
+    dir
+  end
+
   defp build_state(:full) do
     {:ok, plan} = SegmentPlan.build(600.0, 4)
 
@@ -165,7 +175,7 @@ defmodule Mydia.Streaming.HlsSessionHwaccelFallbackTest do
       media_file: %MediaFile{
         codec: "h264",
         relative_path: "movie.mkv",
-        library_path: %LibraryPath{path: "/tmp"}
+        library_path: %LibraryPath{path: existing_library_dir()}
       },
       media_file_id: 1,
       user_id: 1,
@@ -195,7 +205,7 @@ defmodule Mydia.Streaming.HlsSessionHwaccelFallbackTest do
       media_file: %MediaFile{
         codec: "h264",
         relative_path: "movie.mkv",
-        library_path: %LibraryPath{path: "/tmp"}
+        library_path: %LibraryPath{path: existing_library_dir()}
       },
       media_file_id: 1,
       user_id: 1,

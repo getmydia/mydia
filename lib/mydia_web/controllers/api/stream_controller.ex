@@ -240,25 +240,23 @@ defmodule MydiaWeb.Api.StreamController do
         "audio_codec=#{inspect(media_file.audio_codec)}, container=#{inspect(media_file.metadata && media_file.metadata.container)}"
     )
 
-    # Resolve absolute path from relative path and library_path
-    case MediaFile.absolute_path(media_file) do
-      nil ->
+    # Resolve the storage source from relative path and library_path
+    case Mydia.Storage.source(media_file) do
+      {:error, _} ->
         Logger.error("Cannot resolve path for media_file #{media_file.id}: missing library_path")
 
         conn
         |> put_status(:internal_server_error)
         |> json(%{error: "Media file path cannot be resolved"})
 
-      absolute_path ->
-        # Verify file exists on disk
-        if File.exists?(absolute_path) do
+      {:ok, source} ->
+        # Verify the file exists in storage
+        if Mydia.Storage.exists?(source) do
           # If codec info is missing, try to extract it on-the-fly
           media_file = Candidates.ensure_codec_info(media_file)
-          route_stream(conn, media_file, absolute_path)
+          route_stream(conn, media_file, source)
         else
-          Logger.warning(
-            "Media file #{media_file.id} not found at resolved path: #{absolute_path}"
-          )
+          Logger.warning("Media file #{media_file.id} not found at resolved path: #{source.path}")
 
           conn
           |> put_status(:not_found)
@@ -269,31 +267,31 @@ defmodule MydiaWeb.Api.StreamController do
 
   # Routes to appropriate streaming method based on client-selected strategy
   # or falls back to auto-detection for backward compatibility
-  defp route_stream(conn, media_file, absolute_path) do
+  defp route_stream(conn, media_file, source) do
     # Check if client specified a strategy (new candidates-based approach)
     strategy = conn.query_params["strategy"]
 
     if strategy do
       # Client has explicitly selected a strategy via candidates API
-      route_with_strategy(conn, media_file, absolute_path, strategy)
+      route_with_strategy(conn, media_file, source, strategy)
     else
       # Fallback to legacy auto-detection (for backward compatibility)
-      route_with_auto_detection(conn, media_file, absolute_path)
+      route_with_auto_detection(conn, media_file, source)
     end
   end
 
   # Route based on client-selected strategy from candidates API
-  defp route_with_strategy(conn, media_file, absolute_path, strategy) do
+  defp route_with_strategy(conn, media_file, source, strategy) do
     Logger.info(
-      "Streaming #{absolute_path} with client-selected strategy: #{strategy} (codec: #{media_file.codec}/#{media_file.audio_codec})"
+      "Streaming #{source.path} with client-selected strategy: #{strategy} (codec: #{media_file.codec}/#{media_file.audio_codec})"
     )
 
     case strategy do
       "DIRECT_PLAY" ->
-        stream_file_direct(conn, media_file, absolute_path)
+        stream_file_direct(conn, media_file, source)
 
       "REMUX" ->
-        stream_file_remux(conn, media_file, absolute_path)
+        stream_file_remux(conn, media_file, source)
 
       "HLS_COPY" ->
         reason = "Client selected HLS with stream copy"
@@ -305,7 +303,7 @@ defmodule MydiaWeb.Api.StreamController do
 
       _ ->
         Logger.warning("Unknown strategy: #{strategy}, falling back to auto-detection")
-        route_with_auto_detection(conn, media_file, absolute_path)
+        route_with_auto_detection(conn, media_file, source)
     end
   end
 
@@ -317,36 +315,36 @@ defmodule MydiaWeb.Api.StreamController do
   # as it did before profiles existed (the DeviceProfile.browser_default/0
   # fallback), matching how the candidates path in this same controller
   # already resolves the profile.
-  defp route_with_auto_detection(conn, media_file, absolute_path) do
+  defp route_with_auto_detection(conn, media_file, source) do
     profile = conn.assigns[:device_profile] || DeviceProfile.browser_default()
     compatibility = Compatibility.check_compatibility(media_file, profile)
 
-    Logger.info("Auto-detecting stream method for #{absolute_path}: #{compatibility}")
+    Logger.info("Auto-detecting stream method for #{source.path}: #{compatibility}")
 
     case compatibility do
       :direct_play ->
         Logger.info(
-          "Streaming #{absolute_path} via direct play (compatible: #{media_file.codec}/#{media_file.audio_codec})"
+          "Streaming #{source.path} via direct play (compatible: #{media_file.codec}/#{media_file.audio_codec})"
         )
 
-        stream_file_direct(conn, media_file, absolute_path)
+        stream_file_direct(conn, media_file, source)
 
       :needs_remux ->
         # Default to remux - modern browsers support fMP4
         reason = Compatibility.remux_reason(media_file)
 
         Logger.info(
-          "Streaming #{absolute_path} via fMP4 remux: #{reason} (codec: #{media_file.codec}/#{media_file.audio_codec})"
+          "Streaming #{source.path} via fMP4 remux: #{reason} (codec: #{media_file.codec}/#{media_file.audio_codec})"
         )
 
-        stream_file_remux(conn, media_file, absolute_path)
+        stream_file_remux(conn, media_file, source)
 
       :needs_transcoding ->
         # Default to transcoding for incompatible codecs
         reason = Compatibility.transcoding_reason(media_file, profile)
 
         Logger.info(
-          "File #{absolute_path} needs transcoding: #{reason} (codec: #{media_file.codec}, audio: #{media_file.audio_codec})"
+          "File #{source.path} needs transcoding: #{reason} (codec: #{media_file.codec}, audio: #{media_file.audio_codec})"
         )
 
         start_hls_session(conn, media_file, reason, :transcode)
@@ -461,7 +459,7 @@ defmodule MydiaWeb.Api.StreamController do
     end
   end
 
-  defp stream_file_direct(conn, media_file, file_path) when conn.method != "HEAD" do
+  defp stream_file_direct(conn, media_file, source) when conn.method != "HEAD" do
     # Start tracking direct play session if user is authenticated
     case get_user_id(conn) do
       {:ok, user_id} ->
@@ -477,11 +475,11 @@ defmodule MydiaWeb.Api.StreamController do
         :ok
     end
 
-    RangeHelper.send_file_ranged(conn, file_path)
+    RangeHelper.send_source_ranged(conn, source)
   end
 
   # Stream file via fMP4 remuxing (for files with compatible codecs but incompatible container)
-  defp stream_file_remux(conn, _media_file, _file_path) when conn.method == "HEAD" do
+  defp stream_file_remux(conn, _media_file, _source) when conn.method == "HEAD" do
     # For HEAD requests, just return headers without starting the remux process
     # This allows clients to detect the streaming mode without triggering FFmpeg
     conn
@@ -490,11 +488,27 @@ defmodule MydiaWeb.Api.StreamController do
     |> send_resp(200, "")
   end
 
-  defp stream_file_remux(conn, media_file, file_path) do
-    # Get duration - first try metadata, then probe fresh from file
-    duration = get_duration_for_remux(media_file, file_path)
+  defp stream_file_remux(conn, media_file, source) do
+    case Mydia.Storage.input(source) do
+      {:ok, input} ->
+        remux_input(conn, media_file, source, input)
 
-    Logger.info("Starting remux for #{file_path} with duration: #{inspect(duration)}")
+      {:error, error} ->
+        Logger.error("Cannot open #{source.path} for remux: #{Mydia.Storage.redact_text(error)}")
+
+        conn
+        |> put_status(:bad_gateway)
+        |> json(%{error: "Failed to start streaming"})
+    end
+  end
+
+  # `source.path` is the display path for logs; `input` is what ffmpeg opens and
+  # may be a presigned URL, so it never reaches a log line unredacted.
+  defp remux_input(conn, media_file, source, input) do
+    # Get duration - first try metadata, then probe fresh from file
+    duration = get_duration_for_remux(media_file, input)
+
+    Logger.info("Starting remux for #{source.path} with duration: #{inspect(duration)}")
 
     # Same per-show language the HLS path applies. Without it a viewer who
     # picked English on one episode gets the operator default on the next
@@ -535,7 +549,7 @@ defmodule MydiaWeb.Api.StreamController do
           {nil, nil}
       end
 
-    case FfmpegRemuxer.start_remux(file_path, remux_opts) do
+    case FfmpegRemuxer.start_remux(input, remux_opts) do
       {:ok, port, os_pid} ->
         # Stream the remuxed content to the client
         FfmpegRemuxer.stream_to_conn(conn, port, os_pid,
@@ -547,7 +561,7 @@ defmodule MydiaWeb.Api.StreamController do
 
       {:error, :ffmpeg_not_found} ->
         discard_unused_remux_session(remux_session, remux_status)
-        Logger.error("FFmpeg not found on system, cannot remux #{file_path}")
+        Logger.error("FFmpeg not found on system, cannot remux #{source.path}")
 
         conn
         |> put_status(:internal_server_error)
@@ -555,7 +569,10 @@ defmodule MydiaWeb.Api.StreamController do
 
       {:error, reason} ->
         discard_unused_remux_session(remux_session, remux_status)
-        Logger.error("Failed to start remux for #{file_path}: #{inspect(reason)}")
+
+        Logger.error(
+          "Failed to start remux for #{source.path}: #{Mydia.Storage.redact_text(reason)}"
+        )
 
         conn
         |> put_status(:internal_server_error)
@@ -607,14 +624,14 @@ defmodule MydiaWeb.Api.StreamController do
   defp discard_unused_remux_session(_pid, _status), do: :ok
 
   # Get duration for remuxing - try metadata first, then probe fresh
-  defp get_duration_for_remux(media_file, file_path) do
+  defp get_duration_for_remux(media_file, input) do
     case (media_file.metadata || FileMetadata.empty()).duration do
       duration when is_number(duration) and duration > 0 ->
         duration
 
       _ ->
         # Probe fresh from file
-        case Mydia.Library.ThumbnailGenerator.get_duration(file_path) do
+        case Mydia.Library.ThumbnailGenerator.get_duration(input) do
           {:ok, duration} when duration > 0 ->
             Logger.info("Probed fresh duration: #{duration}s")
             duration

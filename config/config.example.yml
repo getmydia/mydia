@@ -158,6 +158,26 @@ library_paths:
   #   scan_interval: 3600
   #   quality_profile_id: 2  # Assign specific quality profile
 
+# S3 Storage Backends
+# -------------------
+# S3-compatible buckets that a library path can point at as
+# s3://<name>/<prefix>. S3 libraries are read-only for now: Mydia scans and
+# streams them but does not import downloads into them.
+# Environment variables: STORAGE_BACKEND_<N>_NAME, _ENDPOINT, _REGION, _BUCKET,
+# _ACCESS_KEY_ID, _SECRET_ACCESS_KEY, _PATH_STYLE
+# storage_backends:
+#   - name: media
+#     endpoint: "http://minio:9000" # Leave out for AWS S3
+#     region: us-east-1
+#     bucket: library
+#     access_key_id: AKIDEXAMPLE
+#     secret_access_key: change-me
+#     path_style: true
+#
+# library_paths:
+#   - path: "s3://media/movies"
+#     type: "movies"
+
 # Download Configuration
 # ----------------------
 downloads:

@@ -41,6 +41,7 @@ defmodule Mydia.Library.FileOrganizer do
   alias Mydia.Media.MediaItem
   alias Mydia.Settings.LibraryPath
   alias Mydia.Repo
+  alias Mydia.Storage
 
   @type organize_opts :: [
           dry_run: boolean(),
@@ -130,7 +131,9 @@ defmodule Mydia.Library.FileOrganizer do
     # Preload required associations
     media_file = preload_associations(media_file)
 
-    with {:ok, media_item} <- get_media_item(media_file),
+    # library_path is preloaded above; an unloaded one would read as writable.
+    with :ok <- Storage.ensure_writable(media_file),
+         {:ok, media_item} <- get_media_item(media_file),
          {:ok, library_path} <- get_library_path(media_file),
          {:ok, source_path} <- get_source_path(media_file),
          {:ok, dest_path} <- calculate_destination(media_file, media_item, library_path) do
@@ -184,6 +187,12 @@ defmodule Mydia.Library.FileOrganizer do
   @spec reorganize_library(LibraryPath.t(), organize_opts()) ::
           {:ok, reorganize_result()} | {:error, any()}
   def reorganize_library(%LibraryPath{} = library_path, opts \\ []) do
+    with :ok <- Storage.ensure_writable(library_path) do
+      do_reorganize_library(library_path, opts)
+    end
+  end
+
+  defp do_reorganize_library(%LibraryPath{} = library_path, opts) do
     dry_run = Keyword.get(opts, :dry_run, false)
 
     action = if dry_run, do: "previewing", else: "starting"
@@ -278,7 +287,8 @@ defmodule Mydia.Library.FileOrganizer do
   @spec place_file(String.t(), String.t(), keyword()) ::
           {:ok, :hardlink | :move | :copy | :skip | :exists} | {:error, any()}
   def place_file(source, dest, opts \\ []) do
-    with :ok <- confine(dest, Keyword.get(opts, :confine_to)) do
+    with :ok <- Storage.ensure_writable(dest),
+         :ok <- confine(dest, Keyword.get(opts, :confine_to)) do
       cond do
         source == dest ->
           {:ok, :skip}

@@ -20,6 +20,7 @@ defmodule Mydia.Metadata.NfoWriter do
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Settings.LibraryPath
   alias Mydia.Library.PathParser
+  alias Mydia.Storage
 
   @doc """
   Writes NFO files for a media item across all library paths with `write_nfo` enabled.
@@ -100,20 +101,24 @@ defmodule Mydia.Metadata.NfoWriter do
   and `<filename>.nfo` for each episode file.
 
   Returns `:ok` regardless of individual file write failures (failures are logged).
+  An S3 library is read-only, so it returns `{:error, %Mydia.Storage.Error{}}`
+  without touching the filesystem.
   """
-  @spec write_for_media_item(MediaItem.t(), LibraryPath.t()) :: :ok
+  @spec write_for_media_item(MediaItem.t(), LibraryPath.t()) :: :ok | {:error, Storage.Error.t()}
   def write_for_media_item(%MediaItem{metadata: nil}, _library_path), do: :ok
 
   def write_for_media_item(%MediaItem{} = media_item, %LibraryPath{} = library_path) do
-    media_files = get_active_media_files(media_item, library_path)
+    with :ok <- Storage.ensure_writable(library_path) do
+      media_files = get_active_media_files(media_item, library_path)
 
-    if media_files == [] do
-      :ok
-    else
-      case media_item.type do
-        "movie" -> write_movie_nfos(media_item, media_files, library_path)
-        "tv_show" -> write_tv_show_nfos(media_item, media_files, library_path)
-        _other -> :ok
+      if media_files == [] do
+        :ok
+      else
+        case media_item.type do
+          "movie" -> write_movie_nfos(media_item, media_files, library_path)
+          "tv_show" -> write_tv_show_nfos(media_item, media_files, library_path)
+          _other -> :ok
+        end
       end
     end
   end

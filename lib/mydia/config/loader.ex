@@ -265,6 +265,7 @@ defmodule Mydia.Config.Loader do
       download_clients: load_download_clients_env(),
       indexers: load_indexers_env(),
       media_servers: load_media_servers_env(),
+      storage_backends: load_storage_backends_env(),
       library_paths: load_library_paths_env(),
       plugin_settings: load_plugin_settings_env(),
       plugin_instances: load_plugin_instances_env(),
@@ -776,6 +777,33 @@ defmodule Mydia.Config.Loader do
     |> Enum.reject(&(&1 == %{}))
   end
 
+  defp load_storage_backends_env do
+    # STORAGE_BACKEND_<N>_NAME, STORAGE_BACKEND_<N>_ENDPOINT, etc.
+    indices =
+      System.get_env()
+      |> Enum.filter(fn {key, _} ->
+        String.starts_with?(key, "STORAGE_BACKEND_") and String.ends_with?(key, "_NAME")
+      end)
+      |> Enum.map(fn {key, _} ->
+        key |> String.replace_prefix("STORAGE_BACKEND_", "") |> String.replace_suffix("_NAME", "")
+      end)
+      |> Enum.uniq()
+
+    Enum.map(indices, fn index ->
+      prefix = "STORAGE_BACKEND_#{index}_"
+
+      %{}
+      |> put_if_present(:name, System.get_env("#{prefix}NAME"))
+      |> put_if_present(:endpoint, System.get_env("#{prefix}ENDPOINT"))
+      |> put_if_present(:region, System.get_env("#{prefix}REGION"))
+      |> put_if_present(:bucket, System.get_env("#{prefix}BUCKET"))
+      |> put_if_present(:access_key_id, System.get_env("#{prefix}ACCESS_KEY_ID"))
+      |> put_if_present(:secret_access_key, System.get_env("#{prefix}SECRET_ACCESS_KEY"))
+      |> put_if_present(:path_style, System.get_env("#{prefix}PATH_STYLE"), &parse_boolean/1)
+    end)
+    |> Enum.reject(&(&1 == %{}))
+  end
+
   defp load_library_paths_env do
     # Support environment variables for library paths in the format:
     # LIBRARY_PATH_<N>_PATH, LIBRARY_PATH_<N>_TYPE, etc.
@@ -1022,6 +1050,7 @@ defmodule Mydia.Config.Loader do
           :download_clients,
           :indexers,
           :media_servers,
+          :storage_backends,
           :library_paths,
           :plugin_settings,
           :plugin_instances,

@@ -248,12 +248,11 @@ defmodule Mydia.Jobs.ThumbnailGenerationTest do
       # An operator asking for one specific file gets it, extra or not.
       #
       # `generate_for_file(nil, _)` returns `{:error, :file_not_found}` when
-      # the row itself can't be found; a row that IS found but whose file is
-      # missing from disk instead fails inside ThumbnailGenerator with an
-      # `{:error, {:ffmpeg_error, _, _}}` tuple (verified against this exact
-      # setup below). Asserting that specific shape proves the extra's row
-      # was found and generation was attempted, rather than the row being
-      # silently filtered out.
+      # the row itself can't be found, and so does a row whose file is missing
+      # from storage. The extra's file therefore exists here (empty), so the
+      # failure comes from ffmpeg rather than input resolution. Asserting that
+      # shape proves the extra's row was found and generation was attempted,
+      # rather than the row being silently filtered out.
       library_path = library_path_fixture(%{type: "movies"})
       item = media_item_fixture(%{type: "movie"})
 
@@ -267,6 +266,11 @@ defmodule Mydia.Jobs.ThumbnailGenerationTest do
           extra_source: :folder
         })
         |> Mydia.Repo.insert!()
+
+      path = Mydia.Library.MediaFile.absolute_path(Mydia.Repo.preload(extra, :library_path))
+      File.mkdir_p!(Path.dirname(path))
+      File.write!(path, "")
+      on_exit(fn -> File.rm_rf(Path.dirname(path)) end)
 
       assert {:error, {:ffmpeg_error, _code, _output}} =
                Mydia.Jobs.ThumbnailGeneration.perform(%Oban.Job{

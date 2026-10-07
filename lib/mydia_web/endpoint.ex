@@ -139,6 +139,9 @@ defmodule MydiaWeb.Endpoint do
     ]
 
   plug Plug.MethodOverride
+  # Before Plug.Head, which erases the method: direct play of object storage
+  # must not proxy a body for a HEAD.
+  plug MydiaWeb.Plugs.RecordHeadRequest
   plug Plug.Head
   plug Plug.Session, @session_options
 

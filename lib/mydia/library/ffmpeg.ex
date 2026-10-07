@@ -69,7 +69,8 @@ defmodule Mydia.Library.Ffmpeg do
 
     case System.cmd(executable, args, stderr_to_stdout: stderr_to_stdout) do
       {output, 0} -> {:ok, output}
-      {output, exit_code} -> {:error, {error_tag, exit_code, output}}
+      # The input may be a presigned URL, which ffmpeg echoes in its errors.
+      {output, exit_code} -> {:error, {error_tag, exit_code, Mydia.Storage.redact_text(output)}}
     end
   end
 end

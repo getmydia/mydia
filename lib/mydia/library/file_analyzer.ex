@@ -36,7 +36,27 @@ defmodule Mydia.Library.FileAnalyzer do
         size: 2147483648
       }}
   """
-  @spec analyze(String.t()) :: {:ok, analysis_result()} | {:error, term()}
+  @spec analyze(String.t() | Mydia.Storage.Source.t()) ::
+          {:ok, analysis_result()} | {:error, term()}
+  def analyze(%Mydia.Storage.Source{} = source) do
+    with {:ok, input} <- Mydia.Storage.input(source),
+         {:ok, ffprobe_data} <- run_ffprobe(input),
+         {:ok, metadata} <- parse_probe(ffprobe_data) do
+      metadata = maybe_probe_hdr10_plus(metadata, input)
+
+      size =
+        case Mydia.Storage.stat(source) do
+          {:ok, %{size: s}} -> s
+          {:error, _} -> nil
+        end
+
+      {:ok, %{metadata | size: size}}
+    else
+      {:error, %Mydia.Storage.Error{kind: :not_found}} -> {:error, :file_not_found}
+      other -> other
+    end
+  end
+
   def analyze(file_path) do
     if File.exists?(file_path) do
       with {:ok, ffprobe_data} <- run_ffprobe(file_path),
@@ -137,7 +157,8 @@ defmodule Mydia.Library.FileAnalyzer do
   # target file path is always the last argument, which is all the log
   # messages below need it for.
   defp run_ffprobe_args(args) do
-    file_path = List.last(args)
+    # Only used for logging; a presigned URL must not leak its query string.
+    file_path = args |> List.last() |> Mydia.Storage.redact()
     start_ms = System.monotonic_time(:millisecond)
     timeout_ms = Application.get_env(:mydia, :ffprobe_timeout_ms, @default_timeout_ms)
 
@@ -174,7 +195,7 @@ defmodule Mydia.Library.FileAnalyzer do
               file: file_path,
               elapsed_ms: elapsed_ms(start_ms),
               reason: :ffprobe_not_found,
-              error: inspect(e)
+              error: Mydia.Storage.redact_text(e)
             )
 
             {:error, :ffprobe_not_found}
@@ -184,7 +205,7 @@ defmodule Mydia.Library.FileAnalyzer do
               file: file_path,
               elapsed_ms: elapsed_ms(start_ms),
               reason: :unexpected_error,
-              error: inspect(e)
+              error: Mydia.Storage.redact_text(e)
             )
 
             {:error, :unexpected_error}
@@ -232,7 +253,7 @@ defmodule Mydia.Library.FileAnalyzer do
           elapsed_ms: elapsed_ms(start_ms),
           exit_code: exit_code,
           reason: :ffprobe_failed,
-          output: IO.iodata_to_binary(Enum.reverse(acc))
+          output: acc |> Enum.reverse() |> IO.iodata_to_binary() |> Mydia.Storage.redact_text()
         )
 
         {:error, :ffprobe_failed}

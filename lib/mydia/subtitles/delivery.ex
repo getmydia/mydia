@@ -18,6 +18,7 @@ defmodule Mydia.Subtitles.Delivery do
 
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
+  alias Mydia.Storage
   alias Mydia.Subtitles.Format
   alias Mydia.Subtitles.Offset
   alias Mydia.Subtitles.Subtitle
@@ -68,8 +69,7 @@ defmodule Mydia.Subtitles.Delivery do
   def content(media_file, track_id, format) when is_integer(track_id) do
     offset_ms = TrackSettings.offset_ms(media_file.id, to_string(track_id))
 
-    with {:ok, path} <- absolute_path(media_file),
-         {:ok, stat} <- File.stat(path) do
+    with {:ok, path, stat} <- media_input(media_file) do
       # The offset joins the cache key. Without it, changing an offset serves
       # the body cached from before the change and the feature looks inert.
       cached = cache_path(media_file.id, track_id, stat, format, offset_ms)
@@ -141,10 +141,19 @@ defmodule Mydia.Subtitles.Delivery do
     end
   end
 
-  defp absolute_path(media_file) do
-    case MediaFile.absolute_path(media_file) do
-      nil -> {:error, :media_file_not_found}
-      path -> if File.exists?(path), do: {:ok, path}, else: {:error, :media_file_not_found}
+  @doc false
+  # The ffmpeg input for a media file (a local path or a presigned URL) with a
+  # `File.Stat` carrying the size and mtime the cache keys are stamped with.
+  # Shared with `Mydia.Subtitles.ImageTrack`.
+  @spec media_input(MediaFile.t()) ::
+          {:ok, String.t(), File.Stat.t()} | {:error, :media_file_not_found}
+  def media_input(media_file) do
+    with {:ok, source} <- Storage.source(media_file),
+         {:ok, input} <- Storage.input(source),
+         {:ok, %{size: size, mtime: mtime}} <- Storage.stat(source) do
+      {:ok, input, %File.Stat{size: size, mtime: mtime}}
+    else
+      {:error, _} -> {:error, :media_file_not_found}
     end
   end
 
@@ -168,8 +177,11 @@ defmodule Mydia.Subtitles.Delivery do
 
     try do
       case System.cmd("ffmpeg", args, stderr_to_stdout: true) do
-        {_output, 0} -> read_file(out)
-        {output, _code} -> {:error, {:extraction_failed, String.slice(output, 0, 500)}}
+        {_output, 0} ->
+          read_file(out)
+
+        {output, _code} ->
+          {:error, {:extraction_failed, output |> Storage.redact_text() |> String.slice(0, 500)}}
       end
     rescue
       _e in ErlangError -> {:error, :ffmpeg_not_found}

@@ -63,6 +63,7 @@ defmodule Mydia.Config.Schema do
           download_clients: [__MODULE__.DownloadClient.t()],
           indexers: [__MODULE__.Indexer.t()],
           media_servers: [__MODULE__.MediaServer.t()],
+          storage_backends: [__MODULE__.StorageBackend.t()],
           library_paths: [__MODULE__.LibraryPath.t()],
           plugin_settings: [__MODULE__.PluginSettingsDecl.t()],
           plugin_instances: [__MODULE__.PluginInstanceDecl.t()],
@@ -387,6 +388,18 @@ defmodule Mydia.Config.Schema do
       field :token, :string
     end
 
+    # S3-compatible storage backends (STORAGE_BACKEND_<N>_*, `storage_backends:`).
+    # Library paths reference one as s3://<name>/<prefix>.
+    embeds_many :storage_backends, StorageBackend, on_replace: :delete, primary_key: false do
+      field :name, :string
+      field :endpoint, :string
+      field :region, :string, default: "us-east-1"
+      field :bucket, :string
+      field :access_key_id, :string
+      field :secret_access_key, :string, redact: true
+      field :path_style, :boolean, default: true
+    end
+
     embeds_many :library_paths, LibraryPath, on_replace: :delete, primary_key: false do
       field :path, :string
       field :name, :string
@@ -458,6 +471,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:indexers, with: &indexer_changeset/2)
     |> cast_embed(:subtitle_providers, with: &subtitle_provider_changeset/2)
     |> cast_embed(:media_servers, with: &media_server_changeset/2)
+    |> cast_embed(:storage_backends, with: &storage_backend_changeset/2)
     |> cast_embed(:library_paths, with: &library_path_changeset/2)
     |> cast_embed(:plugin_settings, with: &plugin_settings_changeset/2)
     |> cast_embed(:plugin_instances, with: &plugin_instance_changeset/2)
@@ -936,6 +950,22 @@ defmodule Mydia.Config.Schema do
     |> validate_inclusion(:type, [:jellyfin])
   end
 
+  defp storage_backend_changeset(schema, attrs) do
+    schema
+    |> cast(attrs, [
+      :name,
+      :endpoint,
+      :region,
+      :bucket,
+      :access_key_id,
+      :secret_access_key,
+      :path_style
+    ])
+    |> validate_required([:name, :bucket, :access_key_id, :secret_access_key])
+    |> Mydia.Settings.StorageBackend.validate_name()
+    |> Mydia.Settings.StorageBackend.validate_endpoint()
+  end
+
   defp library_path_changeset(schema, attrs) do
     schema
     |> cast(attrs, [
@@ -1180,6 +1210,7 @@ defmodule Mydia.Config.Schema do
       download_clients: [],
       indexers: [],
       media_servers: [],
+      storage_backends: [],
       library_paths: [],
       plugin_settings: [],
       plugin_instances: [],

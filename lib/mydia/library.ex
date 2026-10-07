@@ -637,6 +637,7 @@ defmodule Mydia.Library do
           {:ok, MediaFile.t()}
           | {:ok, MediaFile.t(), :file_delete_failed}
           | {:error, Ecto.Changeset.t()}
+          | {:error, Mydia.Storage.Error.t()}
   def delete_media_file(%MediaFile{} = media_file, opts \\ []) do
     delete_files = Keyword.get(opts, :delete_files, false)
 
@@ -645,18 +646,22 @@ defmodule Mydia.Library do
     media_file =
       if delete_files, do: Repo.preload(media_file, :library_path), else: media_file
 
-    case Repo.delete(media_file) do
-      {:ok, deleted} when delete_files ->
-        case delete_media_file_from_disk(media_file) do
-          :ok -> {:ok, deleted}
-          {:error, _reason} -> {:ok, deleted, :file_delete_failed}
-        end
+    # Refuse before the row goes: deleting the record of an S3 object we cannot
+    # delete would only report a misleading disk failure.
+    with :ok <- if(delete_files, do: Mydia.Storage.ensure_writable(media_file), else: :ok) do
+      case Repo.delete(media_file) do
+        {:ok, deleted} when delete_files ->
+          case delete_media_file_from_disk(media_file) do
+            :ok -> {:ok, deleted}
+            {:error, _reason} -> {:ok, deleted, :file_delete_failed}
+          end
 
-      {:ok, deleted} ->
-        {:ok, deleted}
+        {:ok, deleted} ->
+          {:ok, deleted}
 
-      {:error, changeset} ->
-        {:error, changeset}
+        {:error, changeset} ->
+          {:error, changeset}
+      end
     end
   end
 
@@ -702,9 +707,27 @@ defmodule Mydia.Library do
   """
   @spec trash_media_file(MediaFile.t(), keyword()) ::
           {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
+  # Besides the errors above, `{:error, %Mydia.Storage.Error{kind: :read_only}}`
+  # for an S3 file unless `reason: :missing`.
   def trash_media_file(%MediaFile{} = media_file, opts \\ []) do
     media_file = Repo.preload(media_file, :library_path)
 
+    with :ok <- ensure_trashable(media_file, opts) do
+      do_trash_media_file(media_file, opts)
+    end
+  end
+
+  # An S3 object is never moved, so trashing one only stamps the row, and the
+  # next scan would find the object still listed and restore it. The one
+  # honest use is `reason: :missing`: a successful listing no longer shows the
+  # object, so there is nothing to refuse to touch.
+  defp ensure_trashable(media_file, opts) do
+    if Keyword.get(opts, :reason) == :missing,
+      do: :ok,
+      else: Mydia.Storage.ensure_writable(media_file)
+  end
+
+  defp do_trash_media_file(media_file, opts) do
     case TrashStore.store(media_file, opts) do
       {:ok, outcome} ->
         media_file
@@ -1104,16 +1127,20 @@ defmodule Mydia.Library do
   """
   @spec delete_media_file_from_disk(MediaFile.t()) :: :ok | {:error, term()}
   def delete_media_file_from_disk(%MediaFile{} = media_file) do
-    case MediaFile.absolute_path(media_file) do
-      nil ->
-        Logger.error("Cannot delete media file from disk - path could not be resolved",
-          media_file_id: media_file.id
-        )
+    media_file = Repo.preload(media_file, :library_path)
 
-        {:error, :path_not_resolved}
+    with :ok <- Mydia.Storage.ensure_writable(media_file) do
+      case MediaFile.absolute_path(media_file) do
+        nil ->
+          Logger.error("Cannot delete media file from disk - path could not be resolved",
+            media_file_id: media_file.id
+          )
 
-      absolute_path ->
-        delete_path_from_disk(absolute_path)
+          {:error, :path_not_resolved}
+
+        absolute_path ->
+          delete_path_from_disk(absolute_path)
+      end
     end
   end
 

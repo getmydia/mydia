@@ -128,18 +128,18 @@ defmodule Mydia.Jobs.FileAnalysis do
   defp process_row({:repair, media_file}), do: repair_one(media_file)
 
   defp analyze_one(%MediaFile{} = media_file) do
-    case MediaFile.absolute_path(media_file) do
-      nil ->
+    case Mydia.Storage.source(media_file) do
+      {:error, _} ->
         Library.apply_analysis(media_file, {:error, :path_not_resolved})
 
         Logger.warning("Skipping analysis: media file path could not be resolved",
           file_id: media_file.id
         )
 
-      absolute_path ->
-        result = FileAnalyzer.analyze(absolute_path)
+      {:ok, source} ->
+        result = FileAnalyzer.analyze(source)
         outcome = Library.apply_analysis(media_file, result)
-        log_outcome(media_file, absolute_path, result, outcome)
+        log_outcome(media_file, source.path, result, outcome)
     end
 
     :ok

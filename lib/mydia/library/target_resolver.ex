@@ -38,6 +38,7 @@ defmodule Mydia.Library.TargetResolver do
   alias Mydia.Repo
   alias Mydia.Settings
   alias Mydia.Settings.LibraryPath
+  alias Mydia.Storage
 
   @type reason ::
           :download_override | :explicit | :existing_files | :type_default | :first_compatible
@@ -132,7 +133,7 @@ defmodule Mydia.Library.TargetResolver do
   defp default_target(kind), do: Settings.default_library_for(kind)
 
   defp first_compatible(paths, allowed) do
-    Enum.find(paths, &(&1.type in allowed and &1.monitored))
+    Enum.find(paths, &(&1.type in allowed and &1.monitored and not Storage.s3?(&1)))
   end
 
   ## Candidate validation
@@ -150,9 +151,12 @@ defmodule Mydia.Library.TargetResolver do
   # disabled paths would be a behaviour change, not a cleanup.
   defp acceptable?(%LibraryPath{}, _allowed, :no_validation), do: true
 
+  # S3 libraries are read-only, so no inferred step may pick one: the import
+  # would have nowhere to write. An explicit choice is kept and fails loudly
+  # in the import instead of silently landing on another disk.
   defp acceptable?(%LibraryPath{} = candidate, allowed, rules) do
     candidate.type in allowed and not disabled?(candidate) and
-      (rules == :explicit_rules or candidate.monitored)
+      (rules == :explicit_rules or (candidate.monitored and not Storage.s3?(candidate)))
   end
 
   defp acceptable?(_, _, _), do: false

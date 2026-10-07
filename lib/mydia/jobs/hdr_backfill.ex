@@ -128,50 +128,76 @@ defmodule Mydia.Jobs.HdrBackfill do
         :ok
 
       ids ->
-        Enum.each(ids, &backfill_one/1)
+        results = Enum.map(ids, &backfill_one/1)
 
         # Reschedule until the set drains. Singular insert/1, not insert_all/1,
         # which bypasses the worker's unique constraint. The `unique:`
         # override excludes :executing (see @reschedule_unique_states) so
         # this genuinely inserts a follow-up job instead of matching this
         # job's own still-executing row.
-        %{} |> new(schedule_in: 5, unique: [states: @reschedule_unique_states]) |> Oban.insert()
+        #
+        # A batch where every row was skipped (storage down) stamps nothing,
+        # so rescheduling would re-probe the same rows forever. Those rows
+        # stay pending and are retried by the next boot's job.
+        if :stamped in results do
+          %{} |> new(schedule_in: 5, unique: [states: @reschedule_unique_states]) |> Oban.insert()
+        else
+          Logger.warning("HDR backfill: storage unavailable, leaving rows pending")
+        end
+
         :ok
     end
   end
 
   defp backfill_one(id) do
     media_file = Repo.get(MediaFile, id) |> Repo.preload(:library_path)
-    path = media_file && MediaFile.absolute_path(media_file)
 
-    cond do
-      is_nil(media_file) ->
-        :ok
+    with %MediaFile{} <- media_file,
+         {:ok, source} <- Mydia.Storage.source(media_file),
+         {:ok, _entry} <- Mydia.Storage.stat(source) do
+      analyze_and_stamp(id, source)
+    else
+      nil ->
+        :skipped
 
-      is_nil(path) or not File.exists?(path) ->
+      {:error, %Mydia.Storage.Error{kind: :not_found}} ->
         Logger.info("HDR backfill stamping missing file", file_id: id)
         stamp(id, [])
 
-      true ->
-        case FileAnalyzer.analyze(path) do
-          {:ok, %{hdr: %Hdr{} = hdr}} ->
-            stamp(id,
-              hdr_format: hdr.base,
-              dolby_vision_profile: hdr.dv_profile,
-              dolby_vision_bl_compat_id: hdr.bl_compat_id
-            )
+      {:error, %Mydia.Storage.Error{kind: kind}} ->
+        # Unreachable or forbidden storage says nothing about the file, so the
+        # row stays pending instead of being stamped as missing for good.
+        Logger.warning("HDR backfill skipping file, storage unavailable",
+          file_id: id,
+          kind: kind
+        )
 
-          {:ok, _result} ->
-            stamp(id, [])
+        :skipped
+    end
+  end
 
-          {:error, reason} ->
-            Logger.warning("HDR backfill ffprobe failed",
-              file_id: id,
-              reason: inspect(reason)
-            )
+  defp analyze_and_stamp(id, source) do
+    case FileAnalyzer.analyze(source) do
+      {:ok, %{hdr: %Hdr{} = hdr}} ->
+        stamp(id,
+          hdr_format: hdr.base,
+          dolby_vision_profile: hdr.dv_profile,
+          dolby_vision_bl_compat_id: hdr.bl_compat_id
+        )
 
-            stamp(id, [])
-        end
+      {:ok, _result} ->
+        stamp(id, [])
+
+      {:error, %Mydia.Storage.Error{kind: kind}} when kind != :not_found ->
+        :skipped
+
+      {:error, reason} ->
+        Logger.warning("HDR backfill ffprobe failed",
+          file_id: id,
+          reason: Mydia.Storage.redact_text(reason)
+        )
+
+        stamp(id, [])
     end
   end
 
@@ -186,6 +212,6 @@ defmodule Mydia.Jobs.HdrBackfill do
     from(f in MediaFile, where: f.id == ^id)
     |> Repo.update_all(set: set)
 
-    :ok
+    :stamped
   end
 end

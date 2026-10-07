@@ -232,6 +232,39 @@ defmodule Mydia.Settings.LibraryPaths do
       |> limit(10)
       |> Repo.all()
 
+    with :ok <- validate_storage_access(new_path) do
+      validate_sample_files(library_path, new_path, sample_files)
+    end
+  end
+
+  # An s3:// target must name a reachable backend, whether or not files exist yet.
+  defp validate_storage_access(new_path) do
+    if Mydia.Storage.s3?(new_path) do
+      with {:ok, loc} <- Mydia.Storage.location(%LibraryPath{path: new_path}),
+           :ok <- Mydia.Storage.validate(loc) do
+        :ok
+      else
+        {:error, %Mydia.Storage.Error{message: message}} -> {:error, message}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp new_location_has_file?(new_path, relative_path) do
+    if Mydia.Storage.s3?(new_path) do
+      with {:ok, loc} <- Mydia.Storage.location(%LibraryPath{path: new_path}),
+           {:ok, source} <- Mydia.Storage.source(loc, relative_path) do
+        Mydia.Storage.exists?(source)
+      else
+        _ -> false
+      end
+    else
+      File.exists?(Path.join(new_path, relative_path))
+    end
+  end
+
+  defp validate_sample_files(library_path, new_path, sample_files) do
     # If no files exist, allow the change
     if Enum.empty?(sample_files) do
       Logger.debug("No files to validate for library path change",
@@ -244,10 +277,7 @@ defmodule Mydia.Settings.LibraryPaths do
     else
       # Check how many files are accessible at new location
       accessible_count =
-        Enum.count(sample_files, fn file ->
-          new_absolute_path = Path.join(new_path, file.relative_path)
-          File.exists?(new_absolute_path)
-        end)
+        Enum.count(sample_files, &new_location_has_file?(new_path, &1.relative_path))
 
       total_checked = length(sample_files)
 

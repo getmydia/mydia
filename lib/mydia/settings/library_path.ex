@@ -116,6 +116,7 @@ defmodule Mydia.Settings.LibraryPath do
       :default_for_series
     ])
     |> validate_required([:path, :type])
+    |> validate_storage_path()
     |> normalize_name()
     |> validate_length(:name, max: 60)
     |> validate_inclusion(:type, @path_types)
@@ -132,6 +133,56 @@ defmodule Mydia.Settings.LibraryPath do
       message: "another library is already the default for series"
     )
     |> unique_constraint(:path)
+  end
+
+  # s3://<backend>/<prefix> must name a configured storage backend. S3
+  # libraries are read-only for now, so the write features are refused, and
+  # auto_rename (default true) is switched off rather than rejected.
+  defp validate_storage_path(changeset) do
+    path = get_field(changeset, :path)
+
+    if Mydia.Storage.Location.s3_path?(path) do
+      changeset
+      |> validate_s3_backend(path)
+      |> force_off_default(:auto_rename)
+      |> reject_write_flags([
+        :auto_organize,
+        :auto_rename,
+        :write_nfo,
+        :default_for_movies,
+        :default_for_series
+      ])
+    else
+      changeset
+    end
+  end
+
+  defp validate_s3_backend(changeset, path) do
+    case Mydia.Storage.Location.parse_s3(path) do
+      {:ok, name, _prefix} ->
+        if Mydia.Settings.get_storage_backend_by_name(name),
+          do: changeset,
+          else: add_error(changeset, :path, "unknown storage backend %{name}", name: name)
+
+      :error ->
+        add_error(changeset, :path, "must look like s3://<backend>/<prefix>")
+    end
+  end
+
+  defp force_off_default(changeset, field) do
+    # An explicit value is kept, even one equal to the schema default (which
+    # cast drops from `changes`), so reject_write_flags/2 can refuse it.
+    if Map.has_key?(changeset.params || %{}, Atom.to_string(field)),
+      do: changeset,
+      else: put_change(changeset, field, false)
+  end
+
+  defp reject_write_flags(changeset, fields) do
+    Enum.reduce(fields, changeset, fn field, cs ->
+      if get_field(cs, field),
+        do: add_error(cs, field, "is not supported on S3 libraries yet"),
+        else: cs
+    end)
   end
 
   @doc """

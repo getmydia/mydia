@@ -14,9 +14,26 @@ max_cases =
     1
   end
 
+# Exclude :s3 tests unless a RustFS/S3 server answers at MYDIA_TEST_S3_ENDPOINT.
+# devenv always sets the endpoint but only `./dev up` starts the server. CI sets
+# MYDIA_TEST_S3_REQUIRED=1 so an unreachable server fails the run, never skips.
+s3_exclude =
+  cond do
+    Mydia.S3Helpers.available?() ->
+      Mydia.S3Helpers.ensure_bucket!()
+      []
+
+    System.get_env("MYDIA_TEST_S3_REQUIRED") == "1" ->
+      raise "MYDIA_TEST_S3_REQUIRED=1 but no S3 server answers at " <>
+              inspect(System.get_env("MYDIA_TEST_S3_ENDPOINT"))
+
+    true ->
+      [:s3]
+  end
+
 ExUnit.start(
   max_cases: max_cases,
-  exclude: [:external, :feature, :requires_relay, :ffmpeg, :hwaccel]
+  exclude: [:external, :feature, :requires_relay, :ffmpeg, :hwaccel] ++ s3_exclude
 )
 
 Ecto.Adapters.SQL.Sandbox.mode(Mydia.Repo, :manual)

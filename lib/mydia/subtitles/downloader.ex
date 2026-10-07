@@ -27,6 +27,7 @@ defmodule Mydia.Subtitles.Downloader do
 
   require Logger
   alias Mydia.Repo
+  alias Mydia.Storage
   alias Mydia.Subtitles.Format
   alias Mydia.Subtitles.ResyncEnqueue
   alias Mydia.Subtitles.Sidecars
@@ -82,6 +83,7 @@ defmodule Mydia.Subtitles.Downloader do
     # because only the adapter knows how many requests its download takes.
 
     with {:ok, media_file} <- fetch_media_file(media_file_id),
+         :ok <- Storage.ensure_writable(media_file),
          :ok <- validate_subtitle_info(subtitle_info),
          {:ok, _existing} <- check_duplicate(media_file_id, subtitle_info.subtitle_hash),
          {:ok, content} <- fetch_subtitle_content(subtitle_info, provider_config),

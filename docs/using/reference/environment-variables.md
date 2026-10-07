@@ -78,6 +78,22 @@ Configure additional libraries using numbered variables (`<N>` = 1, 2, 3, etc.):
 
 **Library Types:** `movies`, `series`, or `mixed`
 
+### S3 Storage Backends
+
+Declare S3-compatible storage (AWS S3, MinIO, Cloudflare R2, and similar) with
+numbered variables (`<N>` = 1, 2, 3, etc.). A library path refers to a backend by
+name as `s3://<name>/<prefix>`.
+
+| Variable Pattern | Description | Example |
+|------------------|-------------|---------|
+| `STORAGE_BACKEND_<N>_NAME` | Name used in `s3://<name>/` paths. Required. | `media` |
+| `STORAGE_BACKEND_<N>_ENDPOINT` | Endpoint URL. Leave empty for AWS S3. | `http://minio:9000` |
+| `STORAGE_BACKEND_<N>_REGION` | Region. Defaults to `us-east-1`. | `eu-west-1` |
+| `STORAGE_BACKEND_<N>_BUCKET` | Bucket name. Required. | `library` |
+| `STORAGE_BACKEND_<N>_ACCESS_KEY_ID` | Access key ID. Required. | `AKIDEXAMPLE` |
+| `STORAGE_BACKEND_<N>_SECRET_ACCESS_KEY` | Secret access key. Required. | - |
+| `STORAGE_BACKEND_<N>_PATH_STYLE` | Use path-style addressing. Defaults to `true`. | `true` |
+
 ## Authentication
 
 | Variable | Description | Default |

@@ -66,6 +66,33 @@ defmodule Mydia.Jobs.HdrBackfillTest do
       assert HdrBackfill.pending_ids(10) == []
     end
 
+    test "leaves an S3 row pending while the backend is unreachable" do
+      {file, bypass} = s3_media_file_fixture_with_bypass()
+      Bypass.down(bypass)
+
+      assert :ok = perform_job(HdrBackfill, %{})
+      assert Repo.get(MediaFile, file.id).hdr_backfilled_at == nil
+      assert HdrBackfill.pending_ids(10) == [file.id]
+      refute_enqueued(worker: HdrBackfill)
+    end
+
+    test "leaves an S3 row pending when its storage backend is gone" do
+      {file, _bypass} = s3_media_file_fixture_with_bypass()
+      Repo.delete_all(Mydia.Settings.StorageBackend)
+
+      assert :ok = perform_job(HdrBackfill, %{})
+      assert Repo.get(MediaFile, file.id).hdr_backfilled_at == nil
+      assert HdrBackfill.pending_ids(10) == [file.id]
+    end
+
+    test "stamps an S3 row whose object is gone" do
+      {file, bypass} = s3_media_file_fixture_with_bypass()
+      Bypass.expect(bypass, fn conn -> Plug.Conn.resp(conn, 404, "") end)
+
+      assert :ok = perform_job(HdrBackfill, %{})
+      assert Repo.get(MediaFile, file.id).hdr_backfilled_at != nil
+    end
+
     test "writes HDR columns on an already-analyzed row" do
       # REGRESSION: routing this through Library.apply_analysis/2 was a
       # silent no-op, because that function refuses to write once
@@ -357,6 +384,37 @@ defmodule Mydia.Jobs.HdrBackfillTest do
   # `:ffprobe_path` pointing at a shell script that prints fixed JSON, not a
   # binary media fixture (none exists for Dolby Vision, and a real sample is
   # far too large to commit).
+  defp s3_media_file_fixture_with_bypass do
+    bypass = Bypass.open()
+
+    {:ok, _} =
+      Mydia.Settings.create_storage_backend(%{
+        name: "m",
+        endpoint: "http://localhost:#{bypass.port}",
+        region: "us-east-1",
+        bucket: "lib",
+        access_key_id: "k",
+        secret_access_key: "s"
+      })
+
+    {:ok, lp} =
+      Mydia.Settings.create_library_path(%{
+        path: "s3://m/movies",
+        type: "movies",
+        monitored: true
+      })
+
+    file =
+      media_file_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Invented Film (2031)/film.mkv",
+        hdr_format: :hdr10,
+        analyzed_at: DateTime.utc_now()
+      })
+
+    {file, bypass}
+  end
+
   defp seed_probe_target(json, attrs) do
     dir = Path.join(System.tmp_dir!(), "hdr_backfill_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)

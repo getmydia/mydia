@@ -78,6 +78,59 @@ defmodule Mydia.Library.Scanner do
   end
 
   @doc """
+  Scans a `Mydia.Storage.Location`. Local locations delegate to `scan/2`, so
+  local behaviour (symlinks, errors list) is unchanged. S3 locations list the
+  prefix once; `path` in each file map is the `s3://` storage path.
+  """
+  @spec scan_location(Mydia.Storage.Location.t(), keyword()) ::
+          {:ok, map()} | {:error, Mydia.Storage.Error.t() | atom()}
+  def scan_location(location, opts \\ [])
+
+  def scan_location(%Mydia.Storage.Location{kind: :local, root: root}, opts),
+    do: scan(root, opts)
+
+  def scan_location(%Mydia.Storage.Location{kind: :s3} = loc, opts) do
+    extensions = Keyword.get(opts, :video_extensions, @video_extensions)
+    path_callback = Keyword.get(opts, :path_callback)
+    progress_callback = Keyword.get(opts, :progress_callback)
+    trash = TrashStore.dir_name()
+
+    with {:ok, entries} <- Mydia.Storage.list(loc) do
+      files =
+        for %Mydia.Storage.Entry{} = e <- entries,
+            trash not in Path.split(e.relative_path),
+            path = Path.join(loc.uri, e.relative_path),
+            video_file?(path, extensions) do
+          %{
+            path: path,
+            size: e.size,
+            modified_at: e.mtime,
+            filename: Path.basename(path),
+            directory: Path.dirname(path),
+            extension: Path.extname(path) |> String.downcase()
+          }
+        end
+
+      # Same reporting as the local walk: every path, and the running count
+      # every 100 files.
+      files
+      |> Enum.with_index(1)
+      |> Enum.each(fn {file, count} ->
+        if path_callback, do: path_callback.(file.path)
+        if progress_callback && rem(count, 100) == 0, do: progress_callback.(count)
+      end)
+
+      {:ok,
+       %{
+         files: files,
+         total_count: length(files),
+         total_size: files |> Enum.map(& &1.size) |> Enum.sum(),
+         errors: []
+       }}
+    end
+  end
+
+  @doc """
   Scans multiple directories and returns combined results.
   """
   def scan_multiple(directories, opts \\ []) do

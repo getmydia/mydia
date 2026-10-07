@@ -403,6 +403,9 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
                "Check the file permissions and remove it manually if needed."
            )}
 
+        {:error, %Mydia.Storage.Error{message: message}} ->
+          {:noreply, put_flash(socket, :error, message)}
+
         {:error, _reason} ->
           {:noreply, put_flash(socket, :error, "Failed to delete media file")}
       end
