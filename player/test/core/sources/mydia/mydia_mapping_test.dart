@@ -105,6 +105,14 @@ void main() {
     expect(season.userState.watched, isTrue);
   });
 
+  test('a season carries its unwatched episode count', () {
+    final season = seasonSummary(s, 'sh1', {
+      'seasonNumber': 2,
+      'watchStatus': {'watched': false, 'unwatchedEpisodeCount': 3},
+    });
+    expect(season.userState.unwatchedCount, 3);
+  });
+
   test('season detail links back to its show', () {
     final d = seasonDetail(s, fx.show('s-1'), 2);
     expect(d.summary.ref.externalId, 's-1.s2');
@@ -236,5 +244,26 @@ void main() {
         'thumbnailUrl': null
       };
     expect(movieSummary(s, m).poster, isNull);
+  });
+
+  test('a Mydia file carries its size and HDR format', () {
+    final v = mediaVersion({
+      'id': 'f1',
+      'resolution': '2160p',
+      'size': 4200000000,
+      'hdrFormat': 'Dolby Vision',
+    });
+    expect(v.sizeBytes, 4200000000);
+    expect(v.hdrFormat, 'Dolby Vision');
+  });
+
+  test('a Mydia file carries its direct-play flag', () {
+    final v = mediaVersion({
+      'id': 'f1',
+      'resolution': '1080p',
+      'directPlaySupported': false,
+    });
+    expect(v.directPlaySupported, false);
+    expect(mediaVersion({'id': 'f2'}).directPlaySupported, isNull);
   });
 }

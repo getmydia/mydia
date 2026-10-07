@@ -314,6 +314,9 @@ class MediaVersion {
     this.durationSeconds,
     this.streamPath,
     this.streams = const [],
+    this.sizeBytes,
+    this.hdrFormat,
+    this.directPlaySupported,
   });
 
   /// What the player passes as its file id: a Plex part id, a Stash file id.
@@ -329,6 +332,15 @@ class MediaVersion {
   final String? streamPath;
   final List<MediaStreamInfo> streams;
 
+  /// File size in bytes, when the server says.
+  final int? sizeBytes;
+
+  /// HDR format name ("HDR10", "Dolby Vision"), null for SDR or unknown.
+  final String? hdrFormat;
+
+  /// Whether the server says the file plays as-is; null when it does not say.
+  final bool? directPlaySupported;
+
   factory MediaVersion.fromJson(Map<String, Object?> json) => MediaVersion(
         id: json['id']! as String,
         container: json['container'] as String?,
@@ -339,6 +351,9 @@ class MediaVersion {
         durationSeconds: json['durationSeconds'] as int?,
         streamPath: json['streamPath'] as String?,
         streams: _list(json['streams'], MediaStreamInfo.fromJson),
+        sizeBytes: json['sizeBytes'] as int?,
+        hdrFormat: json['hdrFormat'] as String?,
+        directPlaySupported: json['directPlaySupported'] as bool?,
       );
 
   Map<String, Object?> toJson() => {
@@ -351,6 +366,9 @@ class MediaVersion {
         'durationSeconds': durationSeconds,
         'streamPath': streamPath,
         'streams': [for (final s in streams) s.toJson()],
+        'sizeBytes': sizeBytes,
+        'hdrFormat': hdrFormat,
+        'directPlaySupported': directPlaySupported,
       };
 }
 

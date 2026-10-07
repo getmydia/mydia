@@ -432,9 +432,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   ) async {
     try {
       final router = GoRouter.of(context);
+      final screenWidth = MediaQuery.sizeOf(context).width;
 
       await pushLoadContentDestination(
         intent,
+        screenWidth: screenWidth,
         fetch: (itemRef) => fetchLoadContentItem(ref, itemRef),
         push: (path) {
           if (!mounted) return;

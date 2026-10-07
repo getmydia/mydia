@@ -27,7 +27,11 @@ Set<DetailFeature> sourceFeatures(MediaSource source) => {
 DetailArt? _art(SourceId sourceId, ArtworkRef? ref) =>
     ref == null ? null : SourceArt(sourceId, ref);
 
-Progress? progressFromUserState(UserState state, int? durationSeconds) {
+Progress? progressFromUserState(
+  UserState state,
+  int? durationSeconds, {
+  DateTime? lastPlayedAt,
+}) {
   final position = state.progressSeconds ?? 0;
   if (!state.watched && position <= 0) return null;
   final percentage = durationSeconds == null || durationSeconds <= 0
@@ -38,21 +42,9 @@ Progress? progressFromUserState(UserState state, int? durationSeconds) {
     durationSeconds: durationSeconds,
     percentage: state.watched ? 100 : percentage,
     watched: state.watched,
+    lastWatchedAt: lastPlayedAt?.toUtc().toIso8601String(),
   );
 }
-
-List<MediaFile> filesFromVersions(List<MediaVersion> versions) => [
-      for (final v in versions)
-        MediaFile(
-          id: v.id,
-          resolution: v.height == null ? null : '${v.height}p',
-          codec: v.videoCodec,
-          audioCodec: v.audioCodec,
-          // MediaFile.bitrate is bits per second; versions carry kilobits.
-          bitrate: v.bitrateKbps == null ? null : v.bitrateKbps! * 1000,
-          directPlaySupported: true,
-        ),
-    ];
 
 List<CastView> _cast(SourceId sourceId, List<Person> people) => [
       for (final p in people)
@@ -79,7 +71,11 @@ MovieView movieViewFromSource(
     rating: d.rating,
     backdrop: _art(id, s.backdrop),
     poster: _art(id, s.poster),
-    progress: progressFromUserState(s.userState, s.durationSeconds),
+    progress: progressFromUserState(
+      s.userState,
+      s.durationSeconds,
+      lastPlayedAt: s.lastPlayedAt,
+    ),
     files: filesFromVersions(d.versions),
     isFavorite: d.isFavorite,
     trailerUrl: d.trailerUrl,
@@ -87,6 +83,15 @@ MovieView movieViewFromSource(
     features: features,
   );
 }
+
+/// Null when the server says nothing, so the chip shows no indicator.
+WatchStatus? _seasonWatchStatus(UserState state) =>
+    state.watched || state.unwatchedCount != null
+        ? WatchStatus(
+            watched: state.watched,
+            unwatchedEpisodeCount: state.unwatchedCount,
+          )
+        : null;
 
 ShowView showViewFromSource(
   ItemDetail d,
@@ -112,9 +117,7 @@ ShowView showViewFromSource(
           SeasonView(
             number: number,
             target: SourceTarget(season.ref),
-            watchStatus: season.userState.watched
-                ? const WatchStatus(watched: true)
-                : null,
+            watchStatus: _seasonWatchStatus(season.userState),
           ),
     ],
     nextUpEpisodeId: nextUp?.ref.externalId,
@@ -146,7 +149,11 @@ EpisodeView episodeViewFromSource(
       runtime: _minutes(e.durationSeconds),
       still: _art(e.ref.sourceId, e.backdrop),
       showPoster: _art(e.ref.sourceId, showPoster),
-      progress: progressFromUserState(e.userState, e.durationSeconds),
+      progress: progressFromUserState(
+        e.userState,
+        e.durationSeconds,
+        lastPlayedAt: e.lastPlayedAt,
+      ),
       files: [
         if (e.defaultVersionId case final v?)
           MediaFile(id: v, directPlaySupported: true),
@@ -172,7 +179,11 @@ EpisodeView episodeViewFromSourceDetail(
     airDate: s.airDate,
     runtime: _minutes(s.durationSeconds),
     still: _art(s.ref.sourceId, s.backdrop),
-    progress: progressFromUserState(s.userState, s.durationSeconds),
+    progress: progressFromUserState(
+      s.userState,
+      s.durationSeconds,
+      lastPlayedAt: s.lastPlayedAt,
+    ),
     files: filesFromVersions(d.versions),
     hasFile: d.versions.isNotEmpty,
     features: features,

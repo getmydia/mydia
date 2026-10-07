@@ -9,6 +9,7 @@ import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
+import 'package:player/presentation/widgets/hero_play_control.dart';
 import 'package:player/presentation/widgets/play_button.dart';
 
 import '../detail/detail_harness.dart';
@@ -46,18 +47,32 @@ ItemSummary _episode(
 class _SeriesSource extends ScriptedDetailSource implements NextUp {
   _SeriesSource({required this.episodes, this.nextUpEpisode})
       : super(
-          detailOf: (ref) => ItemDetail(
-            summary: ItemSummary(
-              ref: ref,
-              title: 'Harbor Lights',
-              year: 2022,
-            ),
-            overview: 'A coastal mystery series.',
-            genres: const ['Mystery', 'Drama'],
-            contentRating: 'TV-14',
-            rating: 7.9,
-            cast: const [Person(name: 'Del Osei', role: 'Det. Osei')],
-          ),
+          detailOf: (ref) => ref.kind == ItemKind.episode
+              ? ItemDetail(
+                  summary: ItemSummary(
+                    ref: ref,
+                    title: 'Episode',
+                    index: 2,
+                    parentIndex: 1,
+                    defaultVersionId: '${ref.externalId}-sd',
+                  ),
+                  versions: [
+                    MediaVersion(id: '${ref.externalId}-sd', height: 480),
+                    MediaVersion(id: '${ref.externalId}-hd', height: 1080),
+                  ],
+                )
+              : ItemDetail(
+                  summary: ItemSummary(
+                    ref: ref,
+                    title: 'Harbor Lights',
+                    year: 2022,
+                  ),
+                  overview: 'A coastal mystery series.',
+                  genres: const ['Mystery', 'Drama'],
+                  contentRating: 'TV-14',
+                  rating: 7.9,
+                  cast: const [Person(name: 'Del Osei', role: 'Det. Osei')],
+                ),
         ) {
     childrenOf = (parent) => switch (parent.kind) {
           ItemKind.show => [
@@ -117,6 +132,32 @@ Future<void> _pumpScreen(
 }
 
 void main() {
+  testWidgets('the hero offers every version of its episode', (tester) async {
+    await _pumpScreen(tester, size: const Size(1280, 900));
+    await tester.pumpAndSettle();
+    final hero = find.byType(HeroPlayControl);
+    expect(tester.widget<HeroPlayControl>(hero).files, hasLength(2));
+    // The best version is picked after real device detection, which the
+    // fake clock cannot advance: poll in real time, then pump the result.
+    // The loop exits on first success; the bound only matters on a loaded runner.
+    for (var i = 0; i < 250; i++) {
+      if (find
+          .descendant(of: hero, matching: find.text('1080p'))
+          .evaluate()
+          .isNotEmpty) {
+        break;
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(
+      find.descendant(of: hero, matching: find.text('1080p')),
+      findsWidgets,
+    );
+  });
+
   testWidgets('hero defaults to the next-unwatched episode', (tester) async {
     await _pumpScreen(tester);
 
@@ -291,9 +332,12 @@ void main() {
     await tester.pumpAndSettle();
 
     // The content overlay is inset 20 from the right of the 1000px surface.
-    // The fixture supplies a single file, so SmartPlayButton renders no
-    // quality dropdown and PlayButton is the control's last child.
-    expect(tester.getRect(find.byType(PlayButton)).right, closeTo(980, 0.5));
+    // The control itself, not its last child: the fixture's episodes carry
+    // several versions, so a quality dropdown follows the PlayButton.
+    expect(
+      tester.getRect(find.byType(HeroPlayControl)).right,
+      closeTo(980, 0.5),
+    );
   });
 
   testWidgets('hero play control lives in the hero, not the body',
