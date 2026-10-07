@@ -131,9 +131,7 @@ defmodule Mydia.Library.FileOrganizer do
     # Preload required associations
     media_file = preload_associations(media_file)
 
-    # library_path is preloaded above; an unloaded one would read as writable.
-    with :ok <- Storage.ensure_writable(media_file),
-         {:ok, media_item} <- get_media_item(media_file),
+    with {:ok, media_item} <- get_media_item(media_file),
          {:ok, library_path} <- get_library_path(media_file),
          {:ok, source_path} <- get_source_path(media_file),
          {:ok, dest_path} <- calculate_destination(media_file, media_item, library_path) do
@@ -187,9 +185,7 @@ defmodule Mydia.Library.FileOrganizer do
   @spec reorganize_library(LibraryPath.t(), organize_opts()) ::
           {:ok, reorganize_result()} | {:error, any()}
   def reorganize_library(%LibraryPath{} = library_path, opts \\ []) do
-    with :ok <- Storage.ensure_writable(library_path) do
-      do_reorganize_library(library_path, opts)
-    end
+    do_reorganize_library(library_path, opts)
   end
 
   defp do_reorganize_library(%LibraryPath{} = library_path, opts) do
@@ -446,7 +442,7 @@ defmodule Mydia.Library.FileOrganizer do
   defp get_library_path(_), do: {:error, :no_library_path}
 
   defp get_source_path(%MediaFile{} = media_file) do
-    case MediaFile.absolute_path(media_file) do
+    case MediaFile.storage_path(media_file) do
       nil -> {:error, :no_source_path}
       path -> {:ok, path}
     end
@@ -470,7 +466,7 @@ defmodule Mydia.Library.FileOrganizer do
     # Ensure destination directory exists
     dest_dir = Path.dirname(dest_path)
 
-    case File.mkdir_p(dest_dir) do
+    case ensure_dir(dest_dir) do
       :ok ->
         # Perform the file operation
         case move_or_copy_file(source_path, dest_path, use_hardlinks, force_move) do
@@ -493,7 +489,7 @@ defmodule Mydia.Library.FileOrganizer do
 
               {:error, reason} ->
                 # Rollback: move file back
-                File.rename(dest_path, source_path)
+                rollback_move(dest_path, source_path)
 
                 {:ok,
                  %{
@@ -524,6 +520,20 @@ defmodule Mydia.Library.FileOrganizer do
          }}
     end
   end
+
+  # Object stores have no directories to create.
+  defp ensure_dir("s3://" <> _), do: :ok
+  defp ensure_dir(dir), do: File.mkdir_p(dir)
+
+  # Puts the file back after the row could not be updated. The result is
+  # logged by the caller's error path; nothing more can be done here.
+  defp rollback_move("s3://" <> _ = dest_path, source_path) do
+    with {:ok, from} <- Storage.at(dest_path),
+         {:ok, to} <- Storage.at(source_path),
+         do: Storage.move(from, to)
+  end
+
+  defp rollback_move(dest_path, source_path), do: File.rename(dest_path, source_path)
 
   defp move_or_copy_file(source, dest, use_hardlinks, force_move) do
     # Reorganize removes the source after a successful hardlink (single path),

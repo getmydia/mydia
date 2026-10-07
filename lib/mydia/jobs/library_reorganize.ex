@@ -43,31 +43,20 @@ defmodule Mydia.Jobs.LibraryReorganize do
 
     library_path = Settings.get_library_path!(library_path_id)
 
-    case FileOrganizer.reorganize_library(library_path) do
-      {:ok, summary} ->
-        duration = System.monotonic_time(:millisecond) - start_time
+    {:ok, summary} = FileOrganizer.reorganize_library(library_path)
+    duration = System.monotonic_time(:millisecond) - start_time
 
-        Logger.info("Library reorganization completed",
-          library_path_id: library_path_id,
-          total: summary.total,
-          moved: summary.moved,
-          skipped: summary.skipped,
-          errors: summary.errors,
-          duration_ms: duration
-        )
+    Logger.info("Library reorganization completed",
+      library_path_id: library_path_id,
+      total: summary.total,
+      moved: summary.moved,
+      skipped: summary.skipped,
+      errors: summary.errors,
+      duration_ms: duration
+    )
 
-        broadcast_completed(library_path_id, summary)
-        :ok
-
-      {:error, %Mydia.Storage.Error{message: message}} ->
-        # Retrying cannot make an S3 library writable.
-        Logger.warning("Library reorganization refused",
-          library_path_id: library_path_id,
-          reason: message
-        )
-
-        {:cancel, message}
-    end
+    broadcast_completed(library_path_id, summary)
+    :ok
   end
 
   @doc """

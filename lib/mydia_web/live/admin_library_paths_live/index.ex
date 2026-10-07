@@ -237,37 +237,28 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
 
     library_path = Settings.get_library_path!(id)
 
-    case FileOrganizer.reorganize_library(library_path, dry_run: true) do
-      {:ok, summary} ->
-        message =
-          if summary.total == 0 do
-            "No files need reorganization"
-          else
-            "Preview: #{summary.moved} of #{summary.total} files would be moved to category folders"
-          end
+    {:ok, summary} = FileOrganizer.reorganize_library(library_path, dry_run: true)
 
-        {:noreply, put_flash(socket, :info, message)}
+    message =
+      if summary.total == 0 do
+        "No files need reorganization"
+      else
+        "Preview: #{summary.moved} of #{summary.total} files would be moved to category folders"
+      end
 
-      {:error, %Mydia.Storage.Error{message: message}} ->
-        {:noreply, put_flash(socket, :error, message)}
-    end
+    {:noreply, put_flash(socket, :info, message)}
   end
 
   @impl true
   def handle_event("reorganize_library", %{"id" => id}, socket) do
     alias Mydia.Jobs.LibraryReorganize
 
-    # Refuse here as well as in the job, so the row never shows a spinner for
-    # a run that is cancelled immediately.
-    with :ok <- Mydia.Storage.ensure_writable(Settings.get_library_path!(id)),
-         {:ok, _job} <- LibraryReorganize.enqueue(id) do
-      {:noreply,
-       socket
-       |> update(:reorganizing_library_ids, &MapSet.put(&1, id))
-       |> put_flash(:info, "Library reorganization started...")}
-    else
-      {:error, %Mydia.Storage.Error{message: message}} ->
-        {:noreply, put_flash(socket, :error, message)}
+    case LibraryReorganize.enqueue(id) do
+      {:ok, _job} ->
+        {:noreply,
+         socket
+         |> update(:reorganizing_library_ids, &MapSet.put(&1, id))
+         |> put_flash(:info, "Library reorganization started...")}
 
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Failed to start reorganization")}

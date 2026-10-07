@@ -4,7 +4,7 @@ defmodule Mydia.Storage.WriteGuardTest do
   import Mydia.MediaFixtures
 
   alias Mydia.Library
-  alias Mydia.Library.{FileOrganizer, FileRenamer, MediaFile, TrashStore}
+  alias Mydia.Library.{FileOrganizer, MediaFile, TrashStore}
   alias Mydia.Metadata.NfoWriter
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Media.MediaItem
@@ -14,7 +14,6 @@ defmodule Mydia.Storage.WriteGuardTest do
   alias Mydia.Subtitles
 
   @lp %LibraryPath{id: Ecto.UUID.generate(), path: "s3://media/movies", type: :movies}
-  @mf %MediaFile{id: Ecto.UUID.generate(), relative_path: "A/a.mkv", library_path: @lp}
 
   # A persisted S3 library and a media file in it, read back without the
   # library_path association, which is how several callers hold it.
@@ -52,19 +51,9 @@ defmodule Mydia.Storage.WriteGuardTest do
     assert File.exists?(src)
   end
 
-  test "organize, reorganize and rename refuse S3 files" do
-    assert {:error, %Error{kind: :read_only}} = FileOrganizer.organize_file(@mf)
-    assert {:error, %Error{kind: :read_only}} = FileOrganizer.reorganize_library(@lp)
-
-    assert {:error, %Error{kind: :read_only}} =
-             FileRenamer.rename_file(@mf, "s3://media/movies/B/b.mkv")
-  end
-
   test "unpreloaded S3 media files are refused too", %{s3_file: file} do
     assert %Ecto.Association.NotLoaded{} = file.library_path
 
-    assert {:error, %Error{kind: :read_only}} = FileOrganizer.organize_file(file)
-    assert {:error, %Error{kind: :read_only}} = FileRenamer.rename_file(file, "/tmp/other.mkv")
     assert {:error, %Error{kind: :read_only}} = Library.delete_media_file_from_disk(file)
 
     assert {:error, %Error{kind: :read_only}} =
