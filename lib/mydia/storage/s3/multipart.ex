@@ -8,6 +8,10 @@ defmodule Mydia.Storage.S3.Multipart do
   alias Mydia.Storage.Error
   alias Mydia.Storage.S3.Request
 
+  # A 512 MiB part, a part copy or a Complete on a huge object keeps the
+  # connection open well past the default 30s while the provider works.
+  @part_timeout 10 * 60_000
+
   @spec upload(struct(), String.t(), Path.t(), non_neg_integer(), pos_integer(), String.t()) ::
           :ok | {:error, Error.t()}
   def upload(b, key, local_path, size, part_size, what) do
@@ -92,7 +96,7 @@ defmodule Mydia.Storage.S3.Multipart do
   end
 
   defp upload_part(b, key, upload_id, n, data, what) do
-    case Req.request(Request.new(b),
+    case Req.request(Request.new(b, receive_timeout: @part_timeout),
            method: :put,
            url: Request.object_url(b, key),
            params: [{"partNumber", Integer.to_string(n)}, {"uploadId", upload_id}],
@@ -110,7 +114,7 @@ defmodule Mydia.Storage.S3.Multipart do
   end
 
   defp copy_part(b, from_key, to_key, upload_id, n, offset, len, what) do
-    case Req.request(Request.new(b),
+    case Req.request(Request.new(b, receive_timeout: @part_timeout),
            method: :put,
            url: Request.object_url(b, to_key),
            params: [{"partNumber", Integer.to_string(n)}, {"uploadId", upload_id}],
@@ -131,7 +135,7 @@ defmodule Mydia.Storage.S3.Multipart do
   end
 
   defp complete(b, key, upload_id, parts, what) do
-    case Req.request(Request.new(b),
+    case Req.request(Request.new(b, receive_timeout: @part_timeout),
            method: :post,
            url: Request.object_url(b, key),
            params: [{"uploadId", upload_id}],

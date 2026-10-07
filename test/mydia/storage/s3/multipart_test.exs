@@ -91,7 +91,7 @@ defmodule Mydia.Storage.S3.MultipartTest do
         )
       else
         {:ok, body, conn} = Plug.Conn.read_body(conn)
-        assert body =~ "<PartNumber>3</PartNumber>"
+        send(test_pid, {:complete_body, body})
         Plug.Conn.resp(conn, 200, "<Error><Code>InternalError</Code></Error>")
       end
     end)
@@ -111,5 +111,7 @@ defmodule Mydia.Storage.S3.MultipartTest do
     {:ok, dest} = Storage.source(loc, "big.mkv")
     assert {:error, %Error{kind: :provider}} = Storage.put_file(dest, big, part_size: 5 * @mib)
     assert_received :aborted
+    assert_received {:complete_body, body}
+    assert body =~ "<PartNumber>3</PartNumber>"
   end
 end
