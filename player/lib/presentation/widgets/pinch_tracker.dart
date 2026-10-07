@@ -19,6 +19,11 @@ class PinchTracker {
   int? _second;
   double? _startDistance;
 
+  /// True from the moment the second tracked finger lands until the pinch
+  /// ends, by a lift or a cancel. `GestureControls` stands its vertical-drag
+  /// volume and brightness handling down while this holds.
+  bool get pinching => _startDistance != null;
+
   void down(int pointer, Offset position) {
     _positions[pointer] = position;
     if (_first == null) {

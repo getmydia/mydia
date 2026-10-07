@@ -58,4 +58,27 @@ void main() {
     expect(t.up(2), VideoScaling.fill);
     expect(t.up(1), isNull);
   });
+
+  test('pinching is false with one finger, true once the second lands', () {
+    final t = PinchTracker()..down(1, const Offset(100, 200));
+    expect(t.pinching, isFalse);
+    t.down(2, const Offset(200, 200));
+    expect(t.pinching, isTrue);
+  });
+
+  test('pinching is false after a lift', () {
+    final t = PinchTracker()
+      ..down(1, const Offset(100, 200))
+      ..down(2, const Offset(200, 200));
+    t.up(2);
+    expect(t.pinching, isFalse);
+  });
+
+  test('pinching is false after a cancel', () {
+    final t = PinchTracker()
+      ..down(1, const Offset(100, 200))
+      ..down(2, const Offset(200, 200))
+      ..cancel(1);
+    expect(t.pinching, isFalse);
+  });
 }

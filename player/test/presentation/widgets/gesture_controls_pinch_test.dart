@@ -18,8 +18,10 @@ class _FakePlatformPlayer extends PlatformPlayer {
   @override
   Future<void> playOrPause() async {}
 
+  final List<double> volumes = [];
+
   @override
-  Future<void> setVolume(double volume) async {}
+  Future<void> setVolume(double volume) async => volumes.add(volume);
 
   @override
   Future<void> seek(Duration duration) async {}
@@ -64,5 +66,27 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     expect(asked, isEmpty);
+  });
+
+  testWidgets('a diagonal two-finger spread does not change the volume',
+      (tester) async {
+    final platform = _FakePlatformPlayer();
+    final player = Player(platformPlayer: platform);
+    addTearDown(player.dispose);
+    final asked = <VideoScaling>[];
+    await tester.pumpWidget(_host(player, asked.add));
+
+    final a = await tester.startGesture(const Offset(600, 400), pointer: 1);
+    final b = await tester.startGesture(const Offset(700, 400), pointer: 2);
+    for (var i = 1; i <= 5; i++) {
+      await a.moveBy(const Offset(-6, -30));
+      await b.moveBy(const Offset(6, -30));
+    }
+    await b.up();
+    await a.up();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(platform.volumes, isEmpty);
+    expect(asked, [VideoScaling.fill]);
   });
 }

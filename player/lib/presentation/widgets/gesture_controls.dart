@@ -167,6 +167,9 @@ class _GestureControlsState extends State<GestureControls> {
       },
       onDoubleTap: _handleDoubleTap,
       onVerticalDragUpdate: (details) {
+        // Two fingers down is a pinch: a diagonal spread must not also nudge
+        // volume or brightness.
+        if (_pinch.pinching) return;
         final screenWidth = context.size?.width ?? 0;
         final isRight = details.localPosition.dx > screenWidth / 2;
         if (isRight) {
