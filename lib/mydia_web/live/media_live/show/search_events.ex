@@ -8,7 +8,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   alias Mydia.Downloads
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.SearchResultMetadata
+  alias Mydia.Quality.Sources
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.MediaLive.Show.ExistingFiles
 
   import MydiaWeb.MediaLive.Show.SearchHelpers
   import MydiaWeb.MediaLive.Show.Helpers, only: [parse_int: 1, maybe_add_opt: 3]
@@ -41,6 +43,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        |> assign(:show_manual_search_modal, true)
        |> assign(:manual_search_query, search_query)
        |> assign(:manual_search_context, %{type: :media_item})
+       |> assign_existing_files()
        |> assign(:searching, true)
        # TRUE, not false: the display set is genuinely empty until the first
        # indexer reports. The modal's loading gate is
@@ -135,6 +138,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
          episode_number: episode.episode_number
        }
      )
+     |> assign_existing_files()
      |> assign(:searching, true)
      # true so the spinner shows until the first indexer reports; see
      # manual_search/2 above.
@@ -168,6 +172,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:show_manual_search_modal, true)
      |> assign(:manual_search_query, search_query)
      |> assign(:manual_search_context, %{type: :season, season_number: season_num})
+     |> assign_existing_files()
      |> assign(:searching, true)
      # true so the spinner shows until the first indexer reports; see
      # manual_search/2 above.
@@ -324,11 +329,23 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     assign(socket, :indexer_progress, indexer_progress)
   end
 
+  # Built once when the dialog opens: the files cannot change while it is up,
+  # and recomputing in the template would reparse every filename on each
+  # streamed indexer update.
+  defp assign_existing_files(socket) do
+    assign(
+      socket,
+      :manual_search_existing,
+      ExistingFiles.summarize(socket.assigns.media_item, socket.assigns.manual_search_context)
+    )
+  end
+
   defp reset_search_modal(socket) do
     socket
     |> assign(:show_manual_search_modal, false)
     |> assign(:manual_search_query, "")
     |> assign(:manual_search_context, nil)
+    |> assign(:manual_search_existing, nil)
     |> assign(:searching, false)
     |> assign(:results_empty?, false)
     |> assign(:raw_search_results, [])
@@ -337,6 +354,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     |> assign(:indexer_raw_results, %{})
     |> assign(:result_states, %{})
     |> assign(:download_error, nil)
+    |> assign(:source_filter, nil)
+    |> assign(:codec_filter, nil)
     |> stream(:search_results, [], reset: true)
   end
 
@@ -355,12 +374,24 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
         _ -> nil
       end
 
+    source_filter = known_or_nil(params["source"], Sources.all())
+    codec_filter = known_or_nil(params["codec"], codec_families())
+
     {:noreply,
      socket
      |> assign(:min_seeders, min_seeders)
      |> assign(:quality_filter, quality_filter)
+     |> assign(:source_filter, source_filter)
+     |> assign(:codec_filter, codec_filter)
      |> apply_search_filters()}
   end
+
+  # Filter values come straight from the form, so anything outside the known
+  # vocabulary (including "" for "All") clears the filter.
+  defp known_or_nil(value, known) when is_binary(value),
+    do: if(value in known, do: value, else: nil)
+
+  defp known_or_nil(_value, _known), do: nil
 
   def toggle_close_after_grab(_params, socket) do
     new_value = not socket.assigns.close_after_grab

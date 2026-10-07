@@ -373,6 +373,21 @@ defmodule Mydia.Indexers do
     [max_concurrency: concurrency, deadline_ms: deadline_ms]
   end
 
+  @default_search_timeout_ms 100_000
+
+  @doc """
+  The HTTP receive timeout an indexer search uses when its config sets none.
+
+  It sits just under the 120s interactive deadline so that deadline, not the
+  HTTP client, decides when a manual search gives up. Aggregators like
+  Prowlarr and Jackett can take 30-45s on a cold upstream tracker, which the
+  old 30s default cut off on the first search after a long idle (#1051).
+  Background sweeps are still bounded by `background_search_opts/0`'s 60s
+  task deadline.
+  """
+  @spec default_search_timeout_ms() :: pos_integer()
+  def default_search_timeout_ms, do: @default_search_timeout_ms
+
   @doc """
   Tests the connection to an indexer.
 
@@ -687,7 +702,8 @@ defmodule Mydia.Indexers do
     Enum.map(ranked_results, fn ranked -> ranked.result end)
   end
 
-  defp indexer_config_to_adapter_config(%Settings.IndexerConfig{} = config) do
+  @doc false
+  def indexer_config_to_adapter_config(%Settings.IndexerConfig{} = config) do
     # Resolve environment variable inheritance if env_name is set
     resolved_config = Settings.resolve_env_inheritance(config)
 
@@ -698,7 +714,7 @@ defmodule Mydia.Indexers do
     timeout =
       case settings do
         %{"timeout" => timeout} when is_integer(timeout) -> timeout
-        _ -> 30_000
+        _ -> @default_search_timeout_ms
       end
 
     %{

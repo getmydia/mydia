@@ -883,4 +883,29 @@ defmodule Mydia.IndexersTest do
       assert [] = Indexers.rank_and_dedupe([nil_title], "Dune", [])
     end
   end
+
+  describe "search timeout default" do
+    # A cold Prowlarr/Jackett fan-out can legitimately run past 30s. The old
+    # 30s HTTP timeout fired before the 120s manual deadline, so the first
+    # search after hours idle failed with "Request timeout" (#1051).
+    test "an indexer with no configured timeout waits the shared default" do
+      config = indexer_config_fixture(%{type: :prowlarr, connection_settings: %{}})
+
+      adapter_config = Indexers.indexer_config_to_adapter_config(config)
+
+      assert adapter_config.options.timeout == Indexers.default_search_timeout_ms()
+      assert Indexers.default_search_timeout_ms() == 100_000
+    end
+
+    test "an explicit connection_settings timeout still wins" do
+      config =
+        indexer_config_fixture(%{type: :prowlarr, connection_settings: %{"timeout" => 15_000}})
+
+      assert Indexers.indexer_config_to_adapter_config(config).options.timeout == 15_000
+    end
+
+    test "the default stays under the interactive search deadline" do
+      assert Indexers.default_search_timeout_ms() < 120_000
+    end
+  end
 end

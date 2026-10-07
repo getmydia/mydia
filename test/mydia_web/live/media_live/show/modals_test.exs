@@ -308,6 +308,46 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       render_component(&Modals.manual_search_modal/1, assigns)
     end
 
+    test "shows the existing file name with its full name on hover" do
+      existing = %MydiaWeb.MediaLive.Show.ExistingFiles{
+        kind: :file,
+        filename: "Glass.Harbor.2019.1080p.WEB-DL.x265-GROUP.mkv",
+        extra_count: 1,
+        resolution: "1080p",
+        codec: "HEVC",
+        size: 4_000_000_000
+      }
+
+      html = modal_html(%{}, %{existing: existing})
+      doc = LazyHTML.from_fragment(html)
+
+      assert [_] = LazyHTML.query(doc, "#manual-search-existing") |> Enum.to_list()
+      assert html =~ "Glass.Harbor.2019.1080p.WEB-DL.x265-GROUP.mkv"
+      assert html =~ ~s(title="Glass.Harbor.2019.1080p.WEB-DL.x265-GROUP.mkv")
+      assert html =~ "+1 more"
+    end
+
+    test "summarizes a season" do
+      existing = %MydiaWeb.MediaLive.Show.ExistingFiles{
+        kind: :season,
+        on_disk: 8,
+        total: 10,
+        resolution: "1080p",
+        source: "WEB-DL",
+        codec: "HEVC"
+      }
+
+      html = modal_html(%{}, %{existing: existing})
+
+      assert html =~ "8/10 episodes on disk"
+      assert html =~ "mostly 1080p WEB-DL HEVC"
+    end
+
+    test "renders no existing line when nothing is on disk" do
+      html = modal_html(%{})
+      refute html =~ ~s(id="manual-search-existing")
+    end
+
     test "grab_failed renders a retry button with the reason" do
       html = modal_html(%{grab_failed: "No download clients are configured"})
 

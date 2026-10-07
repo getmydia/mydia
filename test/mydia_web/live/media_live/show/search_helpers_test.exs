@@ -516,4 +516,109 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
       assert first.size == large_size
     end
   end
+
+  describe "codec_family/1" do
+    test "groups encoder and format names into one family" do
+      assert SearchHelpers.codec_family("x265") == "HEVC"
+      assert SearchHelpers.codec_family("H.265") == "HEVC"
+      assert SearchHelpers.codec_family("hevc") == "HEVC"
+      assert SearchHelpers.codec_family("x264") == "AVC"
+      assert SearchHelpers.codec_family("H.264") == "AVC"
+      assert SearchHelpers.codec_family("h264") == "AVC"
+      assert SearchHelpers.codec_family("AV1") == "AV1"
+      assert SearchHelpers.codec_family("XviD") == "XviD"
+    end
+
+    test "unknown and missing codecs have no family" do
+      assert SearchHelpers.codec_family(nil) == nil
+      assert SearchHelpers.codec_family("mpeg2video") == nil
+    end
+  end
+
+  describe "source and codec filters" do
+    defp filter_result(title, source, codec) do
+      %SearchResult{
+        title: title,
+        download_url: "magnet:?xt=urn:btih:#{:erlang.phash2(title)}",
+        indexer: "idx",
+        size: 1,
+        seeders: 10,
+        leechers: 0,
+        quality: %{resolution: "1080p", source: source, codec: codec}
+      }
+    end
+
+    defp filter_assigns(extra) do
+      Map.merge(
+        %{min_seeders: 0, quality_filter: nil, source_filter: nil, codec_filter: nil},
+        extra
+      )
+    end
+
+    setup do
+      %{
+        results: [
+          filter_result("Glass.Harbor.2019.1080p.REMUX.HEVC", "REMUX", "H.265"),
+          filter_result("Glass.Harbor.2019.1080p.BluRay.x264", "BluRay", "x264"),
+          filter_result("Glass.Harbor.2019.1080p.WEB-DL.x265", "WEB-DL", "x265"),
+          filter_result("Glass.Harbor.2019.1080p", nil, nil)
+        ]
+      }
+    end
+
+    test "source and codec combine", %{results: results} do
+      titles =
+        results
+        |> SearchHelpers.filter_search_results(
+          filter_assigns(%{source_filter: "WEB-DL", codec_filter: "HEVC"})
+        )
+        |> Enum.map(& &1.title)
+
+      assert titles == ["Glass.Harbor.2019.1080p.WEB-DL.x265"]
+    end
+
+    test "a codec family matches every member", %{results: results} do
+      titles =
+        results
+        |> SearchHelpers.filter_search_results(filter_assigns(%{codec_filter: "HEVC"}))
+        |> Enum.map(& &1.title)
+
+      assert titles == [
+               "Glass.Harbor.2019.1080p.REMUX.HEVC",
+               "Glass.Harbor.2019.1080p.WEB-DL.x265"
+             ]
+    end
+
+    test "an unparsed release is hidden only while that filter is active", %{results: results} do
+      assert length(SearchHelpers.filter_search_results(results, filter_assigns(%{}))) == 4
+
+      refute Enum.any?(
+               SearchHelpers.filter_search_results(
+                 results,
+                 filter_assigns(%{source_filter: "REMUX"})
+               ),
+               &is_nil(&1.quality.source)
+             )
+    end
+
+    test "callers without the new keys are unaffected", %{results: results} do
+      assert length(
+               SearchHelpers.filter_search_results(results, %{min_seeders: 0, quality_filter: nil})
+             ) == 4
+    end
+
+    test "options list only what the pool contains, in a stable order", %{results: results} do
+      assert SearchHelpers.filter_options(results, nil, nil) == %{
+               sources: ["REMUX", "BluRay", "WEB-DL"],
+               codecs: ["HEVC", "AVC"]
+             }
+    end
+
+    test "a selected value missing from the pool stays listed so it can be cleared" do
+      assert SearchHelpers.filter_options([], "HDTV", "AV1") == %{
+               sources: ["HDTV"],
+               codecs: ["AV1"]
+             }
+    end
+  end
 end
