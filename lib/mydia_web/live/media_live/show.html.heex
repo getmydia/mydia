@@ -444,6 +444,7 @@
   <%= if @show_manual_search_modal do %>
     <Modals.manual_search_modal
       manual_search_context={@manual_search_context}
+      existing={@manual_search_existing}
       media_item={@media_item}
       manual_search_query={@manual_search_query}
       searching={@searching}

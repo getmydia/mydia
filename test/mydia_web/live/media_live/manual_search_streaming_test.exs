@@ -271,6 +271,26 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     refute has_element?(view, "#manual-search-results")
   end
 
+  test "the dialog shows the movie's file on disk", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Glass Harbor", type: "movie"})
+
+    media_file_fixture(%{
+      media_item_id: media_item.id,
+      relative_path: "Glass Harbor (2019)/Glass.Harbor.2019.1080p.WEB-DL.x265.mkv"
+    })
+
+    pending_indexer_fixture("slow-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+
+    assert has_element?(
+             view,
+             "#manual-search-existing",
+             "Glass.Harbor.2019.1080p.WEB-DL.x265.mkv"
+           )
+  end
+
   # Positive control for the refutation above: once an indexer reports
   # results, the list appears and the spinner goes away. Without this, a
   # passing refute could just mean "#manual-search-results" never renders

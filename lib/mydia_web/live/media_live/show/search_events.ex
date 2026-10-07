@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Quality.Sources
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.MediaLive.Show.ExistingFiles
 
   import MydiaWeb.MediaLive.Show.SearchHelpers
   import MydiaWeb.MediaLive.Show.Helpers, only: [parse_int: 1, maybe_add_opt: 3]
@@ -42,6 +43,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        |> assign(:show_manual_search_modal, true)
        |> assign(:manual_search_query, search_query)
        |> assign(:manual_search_context, %{type: :media_item})
+       |> assign_existing_files()
        |> assign(:searching, true)
        # TRUE, not false: the display set is genuinely empty until the first
        # indexer reports. The modal's loading gate is
@@ -136,6 +138,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
          episode_number: episode.episode_number
        }
      )
+     |> assign_existing_files()
      |> assign(:searching, true)
      # true so the spinner shows until the first indexer reports; see
      # manual_search/2 above.
@@ -169,6 +172,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:show_manual_search_modal, true)
      |> assign(:manual_search_query, search_query)
      |> assign(:manual_search_context, %{type: :season, season_number: season_num})
+     |> assign_existing_files()
      |> assign(:searching, true)
      # true so the spinner shows until the first indexer reports; see
      # manual_search/2 above.
@@ -325,11 +329,23 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     assign(socket, :indexer_progress, indexer_progress)
   end
 
+  # Built once when the dialog opens: the files cannot change while it is up,
+  # and recomputing in the template would reparse every filename on each
+  # streamed indexer update.
+  defp assign_existing_files(socket) do
+    assign(
+      socket,
+      :manual_search_existing,
+      ExistingFiles.summarize(socket.assigns.media_item, socket.assigns.manual_search_context)
+    )
+  end
+
   defp reset_search_modal(socket) do
     socket
     |> assign(:show_manual_search_modal, false)
     |> assign(:manual_search_query, "")
     |> assign(:manual_search_context, nil)
+    |> assign(:manual_search_existing, nil)
     |> assign(:searching, false)
     |> assign(:results_empty?, false)
     |> assign(:raw_search_results, [])

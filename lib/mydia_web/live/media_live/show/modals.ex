@@ -165,6 +165,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     if rest == [], do: blocker_name(first), else: "#{blocker_name(first)} and others"
   end
 
+  defp season_quality_suffix(existing) do
+    case Enum.reject([existing.resolution, existing.source, existing.codec], &is_nil/1) do
+      [] -> ""
+      parts -> " · mostly " <> Enum.join(parts, " ")
+    end
+  end
+
   defp blocker_name({:unreadable, rel}), do: "#{Path.basename(rel)} (unreadable)"
   defp blocker_name({_kind, rel}), do: Path.basename(rel)
 
@@ -893,6 +900,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   Uses DaisyUI list components for a cleaner, more scannable UI.
   """
   attr :manual_search_context, :map, default: nil
+  attr :existing, :any, default: nil
   attr :media_item, Mydia.Media.MediaItem, required: true
   attr :manual_search_query, :string, required: true
   attr :searching, :boolean, required: true
@@ -971,6 +979,39 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             <span class="text-base-content/70">Searching for:</span>
             <span class="font-semibold truncate">{@manual_search_query}</span>
           </div>
+          <%= if @existing do %>
+            <div
+              id="manual-search-existing"
+              class="flex items-center gap-2 text-sm mt-1 min-w-0"
+            >
+              <.icon name="hero-archive-box" class="w-4 h-4 text-base-content/60 shrink-0" />
+              <span class="text-base-content/70 shrink-0">On disk:</span>
+              <%= case @existing.kind do %>
+                <% :file -> %>
+                  <span class="font-mono text-xs truncate" title={@existing.filename}>
+                    {@existing.filename}
+                  </span>
+                  <span :if={@existing.resolution} class="badge badge-sm badge-ghost shrink-0">
+                    {@existing.resolution}
+                  </span>
+                  <span :if={@existing.codec} class="badge badge-sm badge-ghost shrink-0">
+                    {@existing.codec}
+                  </span>
+                  <span :if={@existing.size} class="text-xs text-base-content/60 shrink-0">
+                    {format_file_size(@existing.size)}
+                  </span>
+                  <span :if={@existing.extra_count > 0} class="text-xs text-base-content/60 shrink-0">
+                    +{@existing.extra_count} more
+                  </span>
+                <% :season -> %>
+                  <span class="truncate">
+                    {@existing.on_disk}/{@existing.total} episodes on disk{season_quality_suffix(
+                      @existing
+                    )}
+                  </span>
+              <% end %>
+            </div>
+          <% end %>
         </div>
         <%!-- Filters Bar (compact) --%>
         <%!-- Additive to the old `!@searching` gate. Results now stream in

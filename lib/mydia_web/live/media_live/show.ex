@@ -109,6 +109,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_manual_search_modal, false)
      |> assign(:manual_search_query, "")
      |> assign(:manual_search_context, nil)
+     |> assign(:manual_search_existing, nil)
      |> assign(:searching, false)
      |> assign(
        :close_after_grab,
