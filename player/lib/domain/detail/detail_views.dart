@@ -146,7 +146,11 @@ class EpisodeView {
 
   String get fullTitle => '$showTitle - $episodeCode';
 
-  EpisodeView copyWith({Progress? progress, bool clearProgress = false}) =>
+  EpisodeView copyWith({
+    Progress? progress,
+    bool clearProgress = false,
+    List<MediaFile>? files,
+  }) =>
       EpisodeView(
         target: target,
         showTarget: showTarget,
@@ -161,7 +165,7 @@ class EpisodeView {
         showBackdrop: showBackdrop,
         showPoster: showPoster,
         progress: clearProgress ? null : (progress ?? this.progress),
-        files: files,
+        files: files ?? this.files,
         hasFile: hasFile,
         features: features,
       );
