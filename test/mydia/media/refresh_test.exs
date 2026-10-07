@@ -547,4 +547,59 @@ defmodule Mydia.Media.RefreshTest do
       assert to_string(Repo.get!(MediaItem, item.id).category) == "tv_show"
     end
   end
+
+  describe "write_metadata/5" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "writes identity fields and the provider id under the caller's scope", %{
+      bypass: bypass,
+      config: config
+    } do
+      item = media_item_fixture(%{type: "movie", title: "Wrong Pick", year: 1999, tmdb_id: 556})
+
+      Bypass.expect_once(bypass, "GET", "/tmdb/movies/557", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "id" => 557,
+            "title" => "Right Pick",
+            "original_title" => "Right Pick",
+            "release_date" => "2021-03-04",
+            "imdb_id" => "tt7650001",
+            "credits" => %{"cast" => [], "crew" => []},
+            "genres" => []
+          })
+        )
+      end)
+
+      {:ok, metadata} =
+        Mydia.Metadata.fetch_by_ref(config, {:tmdb, 557}, media_type: :movie)
+
+      assert {:ok, updated} =
+               Refresh.write_metadata(
+                 Mydia.Accounts.Scope.unrestricted(),
+                 item,
+                 metadata,
+                 :tmdb,
+                 "Match changed"
+               )
+
+      assert updated.tmdb_id == 557
+      assert updated.title == "Right Pick"
+      assert updated.year == 2021
+      assert updated.imdb_id == "tt7650001"
+    end
+  end
 end

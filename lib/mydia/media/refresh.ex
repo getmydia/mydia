@@ -136,18 +136,37 @@ defmodule Mydia.Media.Refresh do
     Metadata.fetch_by_ref(config, {source, provider_id}, fetch_opts)
   end
 
-  # `source` is threaded in from the resolution that actually produced
-  # `metadata`, never re-derived from the pre-update struct. Re-deriving is what
-  # let a recovered id get written to the wrong column.
-  defp apply_metadata(media_item, metadata, source) do
+  @doc """
+  The fields that say which title an item is: title, original title, year,
+  imdb id, and the metadata blob they came from.
+
+  Shared by a refresh, a fix-match and a provider switch so none of them can
+  leave the page showing the previous title next to the new metadata.
+  """
+  @spec identity_attrs(MediaMetadata.t()) :: map()
+  def identity_attrs(%MediaMetadata{} = metadata) do
+    %{
+      title: metadata.title,
+      original_title: metadata.original_title,
+      year: extract_year(metadata),
+      imdb_id: metadata.imdb_id,
+      metadata: metadata
+    }
+  end
+
+  @doc """
+  Writes `metadata` onto `media_item` as provider `source`, under `scope`.
+
+  Sets the identity fields, the provider id from `metadata.id`, and any free
+  external ids, retrying once without ids another item already holds.
+  `reason` is recorded on the item's audit trail.
+  """
+  @spec write_metadata(Scope.t(), MediaItem.t(), MediaMetadata.t(), :tmdb | :tvdb, String.t()) ::
+          {:ok, MediaItem.t()} | {:error, :update_failed | term()}
+  def write_metadata(%Scope{} = scope, %MediaItem{} = media_item, metadata, source, reason) do
     attrs =
-      %{
-        title: metadata.title,
-        original_title: metadata.original_title,
-        year: extract_year(metadata),
-        imdb_id: metadata.imdb_id,
-        metadata: metadata
-      }
+      metadata
+      |> identity_attrs()
       |> put_provider_id(source, metadata.id)
       |> ExternalIds.put_free_ids(metadata.external_ids,
         type: media_item.type,
@@ -159,24 +178,31 @@ defmodule Mydia.Media.Refresh do
       ExternalIds.write(
         attrs,
         [type: media_item.type, exclude_id: media_item.id, title: metadata.title],
-        fn attrs ->
-          Media.update_media_item(Scope.system(), media_item, attrs, reason: "Metadata refreshed")
-        end
+        fn attrs -> Media.update_media_item(scope, media_item, attrs, reason: reason) end
       )
 
     case result do
       {:ok, updated} ->
         {:ok, updated}
 
-      {:error, changeset} ->
+      {:error, %Ecto.Changeset{} = changeset} ->
         Logger.error("Failed to update media item during refresh",
           media_item_id: media_item.id,
           errors: inspect(changeset.errors)
         )
 
         {:error, :update_failed}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
+
+  # `source` is threaded in from the resolution that actually produced
+  # `metadata`, never re-derived from the pre-update struct. Re-deriving is what
+  # let a recovered id get written to the wrong column.
+  defp apply_metadata(media_item, metadata, source),
+    do: write_metadata(Scope.system(), media_item, metadata, source, "Metadata refreshed")
 
   defp put_provider_id(attrs, _source, nil), do: attrs
   defp put_provider_id(attrs, :tvdb, id), do: Map.put(attrs, :tvdb_id, id)

@@ -2229,6 +2229,25 @@ defmodule Mydia.MediaTest do
                )
     end
 
+    # A switch that only rewrote `metadata` left the page showing the old
+    # show's title and year until the next refresh.
+    test "writes the new show's title and year", ctx do
+      stub_tmdb_show(ctx.bypass, ctx.new_id, "Quillmere Ridge", 2014)
+      stub_tmdb_season(ctx.bypass, ctx.new_id, 1, [1])
+
+      assert {:ok, reconciled} =
+               Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
+                 ctx.item,
+                 ctx.candidate,
+                 :tmdb,
+                 ctx.config
+               )
+
+      assert reconciled.title == "Quillmere Ridge"
+      assert reconciled.year == 2014
+    end
+
     test "a failed new-provider fetch leaves existing episodes intact", ctx do
       Bypass.expect(ctx.bypass, "GET", "/tmdb/tv/shows/#{ctx.new_id}", fn conn ->
         Plug.Conn.resp(conn, 404, "{}")
