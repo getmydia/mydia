@@ -113,6 +113,15 @@ defmodule MydiaWeb.Router do
     plug MydiaWeb.Plugs.LibraryApiContext
   end
 
+  # External-player stream links (see MydiaWeb.StreamLink). No pipeline on
+  # purpose: VLC, mpv and the OS video app send no cookie and no
+  # Authorization header, and this is a web UI feature, so neither the
+  # :player gate nor MediaAuth applies. The signed token in the path is the
+  # credential, and the controller re-authorizes on every request.
+  scope "/", MydiaWeb do
+    get "/stream/:token/:filename", StreamLinkController, :show
+  end
+
   # Health check endpoint (no authentication required)
   scope "/", MydiaWeb do
     pipe_through :api
