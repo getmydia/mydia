@@ -44,6 +44,40 @@ defmodule Mydia.Media.FixMatchTest do
     end
   end
 
+  describe "provider_for/1 against the library" do
+    defp show_in_library(source, stored) do
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Harbor Lights",
+          tvdb_id: System.unique_integer([:positive]),
+          metadata_source: stored
+        })
+
+      lib = library_path_fixture(%{type: "series", tv_metadata_source: source})
+      ep = episode_fixture(%{media_item_id: item.id, season_number: 1, episode_number: 1})
+      media_file_fixture(%{episode_id: ep.id, library_path_id: lib.id})
+      item
+    end
+
+    test "a show lands on its library's provider, not its stored one" do
+      assert FixMatch.provider_for(show_in_library(:tmdb, :tvdb)) == :tmdb
+      assert FixMatch.provider_for(show_in_library(:tvdb, :tmdb)) == :tvdb
+    end
+
+    test "a show with no library keeps its stored provider" do
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Loose Show",
+          tvdb_id: System.unique_integer([:positive]),
+          metadata_source: :tvdb
+        })
+
+      assert FixMatch.provider_for(item) == :tvdb
+    end
+  end
+
   describe "search/5" do
     test "searches the item's provider with the operator's own query", c do
       item = media_item_fixture(%{type: "movie", title: "Wrong Pick", year: 2001, tmdb_id: 11})
@@ -163,6 +197,34 @@ defmodule Mydia.Media.FixMatchTest do
       assert updated.year == 2003
       assert updated.monitored == false
       assert Mydia.Repo.get!(Mydia.Library.MediaFile, file.id).media_item_id == item.id
+    end
+
+    test "a restricted account cannot adopt a title above its age limit", c do
+      new_id = System.unique_integer([:positive])
+
+      item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: new_id + 1})
+
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 12}))
+
+      Bypass.expect_once(c.bypass, "GET", "/tmdb/movies/#{new_id}", fn conn ->
+        body =
+          new_id
+          |> movie_body("Velvet Comet", "2003-06-01")
+          |> Map.put("release_dates", %{
+            "results" => [
+              %{"iso_3166_1" => "US", "release_dates" => [%{"certification" => "R"}]}
+            ]
+          })
+
+        json(conn, body)
+      end)
+
+      assert {:error, :restricted} =
+               FixMatch.adopt(scope, item, candidate(new_id, :movie), c.config)
+
+      reloaded = Mydia.Repo.reload!(item)
+      assert reloaded.title == "Wrong Pick"
+      assert reloaded.tmdb_id == new_id + 1
     end
 
     test "refuses a title that is already another item in the library", c do

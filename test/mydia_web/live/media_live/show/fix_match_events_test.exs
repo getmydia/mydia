@@ -110,6 +110,33 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEventsTest do
     assert s.assigns.fix_match.searching? == false
   end
 
+  test "a restricted refusal shows the generic message", _ do
+    item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: 48})
+    {:noreply, s} = FixMatchEvents.open(%{}, socket(item))
+
+    {:noreply, s} = FixMatchEvents.handle_adopt_async({:ok, {:error, :restricted}}, s)
+
+    assert s.assigns.fix_match == nil
+    assert s.assigns.flash["error"] == Mydia.Media.restricted_message()
+  end
+
+  test "confirm while an adopt is running does nothing", _ do
+    item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: 53})
+    {:noreply, s} = FixMatchEvents.open(%{}, socket(item))
+
+    {:noreply, s} =
+      FixMatchEvents.handle_search_async({:ok, {:ok, [result(54, "Velvet Comet")]}}, s)
+
+    {:noreply, s} = FixMatchEvents.pick(%{"provider_id" => "54"}, s)
+    s = %{s | transport_pid: self()}
+    s = %{s | assigns: Map.put(s.assigns, :fix_match, %{s.assigns.fix_match | adopting?: true})}
+
+    {:noreply, after_confirm} = FixMatchEvents.confirm(%{}, s)
+
+    assert after_confirm == s
+    refute get_in(after_confirm.private, [:live_async, :fix_match_adopt])
+  end
+
   test "a collision closes the modal and says where the title already is", _ do
     item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: 46})
     other = media_item_fixture(%{type: "movie", title: "Velvet Comet", tmdb_id: 47})

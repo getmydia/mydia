@@ -9,7 +9,8 @@ defmodule Mydia.Media.FixMatch do
   match was made.
 
   Changing provider is not this module's job: the library's provider setting
-  and `Mydia.Media.ProviderSwitch` own that.
+  and `Mydia.Media.ProviderSwitch` own that. A show is fixed on its library's
+  provider, so the next Refresh does not re-identify it away from the fix.
   """
 
   import Ecto.Query, only: [from: 2]
@@ -20,20 +21,30 @@ defmodule Mydia.Media.FixMatch do
   alias Mydia.Metadata.Structs.SearchResult
   alias Mydia.Repo
 
-  @doc "The provider a fix-match searches and adopts from."
+  @doc """
+  The provider a fix-match searches and adopts from.
+
+  Movies use TMDB. A show uses its library's provider, so a fix lands where
+  `ProviderSwitch.provider_refresh_decision/1` already expects it and Refresh
+  will not re-identify it away. With no single library provider it falls back
+  to the show's stored source, then TMDB.
+  """
   @spec provider_for(MediaItem.t()) :: :tmdb | :tvdb
   def provider_for(%MediaItem{type: "movie"}), do: :tmdb
 
-  def provider_for(%MediaItem{} = item) do
-    case Refresh.resolve_provider(item) do
-      {_id, source} when source in [:tmdb, :tvdb] ->
-        source
+  def provider_for(%MediaItem{id: nil} = item), do: stored_provider(item)
 
-      _ ->
-        case ProviderSwitch.resolve_library_provider(item) do
-          {:ok, provider} -> provider
-          _ -> :tmdb
-        end
+  def provider_for(%MediaItem{} = item) do
+    case ProviderSwitch.resolve_library_provider(item) do
+      {:ok, provider} when provider in [:tmdb, :tvdb] -> provider
+      _ -> stored_provider(item)
+    end
+  end
+
+  defp stored_provider(item) do
+    case Refresh.resolve_provider(item) do
+      {_id, source} when source in [:tmdb, :tvdb] -> source
+      _ -> :tmdb
     end
   end
 

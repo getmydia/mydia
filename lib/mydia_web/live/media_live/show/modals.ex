@@ -332,8 +332,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             <div class="alert alert-warning text-sm">
               <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
               <span>
-                Episodes are rebuilt from {provider_label(@provider)}. Files go back through
-                import and re-attach to the new episodes. Per-episode watch history is reset.
+                Episodes are rebuilt from {provider_label(@provider)}. Files go back to Import to be matched to the new episodes. Per-episode watch history is reset.
               </span>
             </div>
           <% else %>

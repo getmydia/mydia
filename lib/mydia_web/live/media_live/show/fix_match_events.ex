@@ -90,7 +90,7 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
 
   def confirm(_params, socket) do
     with :ok <- Authorization.authorize_delete_media(socket),
-         %{picked: %{} = picked} <- socket.assigns.fix_match do
+         %{picked: %{} = picked, adopting?: false} <- socket.assigns.fix_match do
       item = socket.assigns.media_item
       scope = socket.assigns.current_scope
       config = socket.assigns[:metadata_config]
@@ -124,6 +124,13 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
        "#{other.title} is already in your library. " <>
          "Use \"Not this #{noun}\" on the files to move them there."
      )}
+  end
+
+  def handle_adopt_async({:ok, {:error, :restricted}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:fix_match, nil)
+     |> put_flash(:error, Mydia.Media.restricted_message())}
   end
 
   def handle_adopt_async({:ok, {:error, reason}}, socket) do
