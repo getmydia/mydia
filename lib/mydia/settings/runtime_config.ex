@@ -16,6 +16,7 @@ defmodule Mydia.Settings.RuntimeConfig do
     MediaServerConfig,
     LibraryPath,
     PathMappingConfig,
+    StorageBackend,
     SubtitleProviderConfig
   }
 
@@ -290,6 +291,16 @@ defmodule Mydia.Settings.RuntimeConfig do
     if is_struct(runtime_config) and Map.has_key?(runtime_config, :media_servers) do
       runtime_config.media_servers
       |> Enum.map(&map_to_media_server_config/1)
+    else
+      []
+    end
+  end
+
+  def get_runtime_storage_backends do
+    runtime_config = get_runtime_config()
+
+    if is_struct(runtime_config) and Map.has_key?(runtime_config, :storage_backends) do
+      Enum.map(runtime_config.storage_backends, &map_to_storage_backend/1)
     else
       []
     end
@@ -588,6 +599,21 @@ defmodule Mydia.Settings.RuntimeConfig do
       updated_by_id: nil,
       inserted_at: nil,
       updated_at: nil
+    }
+  end
+
+  defp map_to_storage_backend(map) when is_map(map) do
+    name = Map.get(map, :name)
+
+    %StorageBackend{
+      id: build_runtime_id(:storage_backend, name),
+      name: name,
+      endpoint: Map.get(map, :endpoint),
+      region: Map.get(map, :region) || "us-east-1",
+      bucket: Map.get(map, :bucket),
+      access_key_id: Map.get(map, :access_key_id),
+      secret_access_key: Map.get(map, :secret_access_key),
+      path_style: Map.get(map, :path_style, true)
     }
   end
 

@@ -512,6 +512,18 @@ defmodule Mydia.Settings do
   defdelegate list_available_env_indexers(), to: Mydia.Settings.ServiceConfigs
 
   @doc """
+  Storage backend (S3-compatible) CRUD. Runtime (env/YAML) backends are merged
+  into `list_storage_backends/0`; database rows win by name.
+  """
+  defdelegate list_storage_backends(), to: Mydia.Settings.StorageBackends
+  defdelegate get_storage_backend_by_name(name), to: Mydia.Settings.StorageBackends
+  defdelegate get_storage_backend!(id), to: Mydia.Settings.StorageBackends
+  defdelegate create_storage_backend(attrs), to: Mydia.Settings.StorageBackends
+  defdelegate update_storage_backend(backend, attrs), to: Mydia.Settings.StorageBackends
+  defdelegate delete_storage_backend(backend), to: Mydia.Settings.StorageBackends
+  defdelegate change_storage_backend(backend, attrs \\ %{}), to: Mydia.Settings.StorageBackends
+
+  @doc """
   Lists all media server configurations.
 
   Returns media servers from both the database and runtime configuration
