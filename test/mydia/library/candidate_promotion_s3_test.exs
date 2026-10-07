@@ -52,6 +52,28 @@ defmodule Mydia.Library.CandidatePromotionS3Test do
     refute Repo.get(ImportCandidate, ctx.candidate.id)
   end
 
+  test "the object is checked before the transaction opens", ctx do
+    test_pid = self()
+
+    Bypass.expect_once(ctx.bypass, fn conn ->
+      send(test_pid, :head)
+
+      conn
+      |> Plug.Conn.put_resp_header("last-modified", "Wed, 01 Oct 2031 10:00:00 GMT")
+      |> Plug.Conn.resp(200, "data")
+    end)
+
+    assert {:ok, %MediaFile{}} =
+             CandidatePromotion.attach(ctx.candidate, ctx.movie,
+               ownership_boundary: fn -> send(test_pid, :in_transaction) end
+             )
+
+    {:messages, messages} = Process.info(self(), :messages)
+
+    assert Enum.find_index(messages, &(&1 == :head)) <
+             Enum.find_index(messages, &(&1 == :in_transaction))
+  end
+
   test "a missing object is :file_missing and drops the candidate", ctx do
     head_object(ctx.bypass, 404)
 

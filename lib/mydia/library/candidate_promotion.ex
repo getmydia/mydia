@@ -78,12 +78,29 @@ defmodule Mydia.Library.CandidatePromotion do
     do: {:error, {:library_path_missing, candidate.library_path_id}}
 
   defp on_disk(%ImportCandidate{library_path: library_path} = candidate) do
-    if Storage.s3?(library_path) do
-      object_present(library_path, candidate.relative_path)
-    else
-      if File.exists?(ImportCandidate.absolute_path(candidate)),
-        do: :ok,
-        else: {:error, :file_missing}
+    cond do
+      # Checked before the transaction by `preflight_object/1`: a slow or dead
+      # backend must not hold SQLite's write lock.
+      Storage.s3?(library_path) ->
+        :ok
+
+      File.exists?(ImportCandidate.absolute_path(candidate)) ->
+        :ok
+
+      true ->
+        {:error, :file_missing}
+    end
+  end
+
+  defp preflight_object(%ImportCandidate{} = candidate) do
+    case Repo.preload(candidate, :library_path) do
+      %ImportCandidate{library_path: %LibraryPath{} = library_path} = loaded ->
+        if Storage.s3?(library_path),
+          do: object_present(library_path, loaded.relative_path),
+          else: :ok
+
+      _ ->
+        :ok
     end
   end
 
@@ -137,6 +154,12 @@ defmodule Mydia.Library.CandidatePromotion do
 
     ownership_attempt(opts)
 
+    with :ok <- preflight_object(candidate) do
+      attach_transaction(candidate, target, parent, opts, transaction_opts)
+    end
+  end
+
+  defp attach_transaction(candidate, target, parent, opts, transaction_opts) do
     Repo.transaction(
       fn ->
         ownership_boundary(opts)
