@@ -289,6 +289,11 @@ defmodule MydiaWeb.Api.RangeHelper do
       {:ok, conn} ->
         conn
 
+      # Browsers cancel ranges on every seek, so a closed client is routine.
+      {:error, :closed} ->
+        Logger.debug("Ranged proxy of #{Mydia.Storage.redact(source.path)} closed by the client")
+        conn
+
       {:error, reason} ->
         Logger.warning(
           "Ranged proxy of #{Mydia.Storage.redact(source.path)} ended early: #{error_kind(reason)}"
