@@ -404,9 +404,7 @@
       </div>
     </div>
 
-    <%!-- Clears the cards' browser-side selection marks when selection mode ends.
-         It cannot sit on #media-items: phx-viewport-bottom already gives that
-         element LiveView's infinite-scroll hook, and an element runs one hook. --%>
+    <%!-- Clears the cards' browser-side selection marks when selection mode ends. --%>
     <div
       id="media-selection-sync"
       phx-hook="MediaSelection"
@@ -420,7 +418,6 @@
     <div
       id="media-items"
       phx-update="stream"
-      phx-viewport-bottom="load_more"
       class={[
         @view_mode == :grid && "grid gap-3 md:gap-4 pb-6 md:pb-8",
         @view_mode == :grid && grid_columns_class(@grid_density),
@@ -760,12 +757,15 @@
       </div>
     </div>
 
-    <%!-- Loading indicator for infinite scroll --%>
-    <%= if @has_more do %>
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-md text-primary"></span>
-      </div>
-    <% end %>
+    <%!-- Asks for the next batch about a screen and a half before the end. --%>
+    <div
+      id="media-items-sentinel"
+      phx-hook="LoadMoreSentinel"
+      data-has-more={to_string(@has_more)}
+      class="flex justify-center py-8"
+    >
+      <span :if={@has_more} class="loading loading-spinner loading-md text-primary"></span>
+    </div>
 
     <%!-- Floating Action Toolbar (shown in selection mode) --%>
     <%= if @selection_mode do %>
