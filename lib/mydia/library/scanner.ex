@@ -92,6 +92,7 @@ defmodule Mydia.Library.Scanner do
   def scan_location(%Mydia.Storage.Location{kind: :s3} = loc, opts) do
     extensions = Keyword.get(opts, :video_extensions, @video_extensions)
     path_callback = Keyword.get(opts, :path_callback)
+    progress_callback = Keyword.get(opts, :progress_callback)
     trash = TrashStore.dir_name()
 
     with {:ok, entries} <- Mydia.Storage.list(loc) do
@@ -100,8 +101,6 @@ defmodule Mydia.Library.Scanner do
             trash not in Path.split(e.relative_path),
             path = Path.join(loc.uri, e.relative_path),
             video_file?(path, extensions) do
-          if path_callback, do: path_callback.(path)
-
           %{
             path: path,
             size: e.size,
@@ -111,6 +110,15 @@ defmodule Mydia.Library.Scanner do
             extension: Path.extname(path) |> String.downcase()
           }
         end
+
+      # Same reporting as the local walk: every path, and the running count
+      # every 100 files.
+      files
+      |> Enum.with_index(1)
+      |> Enum.each(fn {file, count} ->
+        if path_callback, do: path_callback.(file.path)
+        if progress_callback && rem(count, 100) == 0, do: progress_callback.(count)
+      end)
 
       {:ok,
        %{

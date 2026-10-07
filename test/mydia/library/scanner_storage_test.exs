@@ -45,6 +45,28 @@ defmodule Mydia.Library.ScannerStorageTest do
     assert Path.relative_to(file.path, loc.uri) == "Invented Film (2031)/film.mkv"
   end
 
+  test "reports the running count every 100 files and each path, like the local scan", %{
+    bypass: bypass,
+    location: loc
+  } do
+    keys = for n <- 1..250, do: "movies/Invented Film #{n} (2031)/film.mkv"
+    Bypass.expect(bypass, "GET", "/lib", &Plug.Conn.resp(&1, 200, list_xml(keys)))
+
+    test_pid = self()
+
+    assert {:ok, %{total_count: 250}} =
+             Scanner.scan_location(loc,
+               progress_callback: &send(test_pid, {:progress, &1}),
+               path_callback: &send(test_pid, {:path, &1})
+             )
+
+    assert_received {:progress, 100}
+    assert_received {:progress, 200}
+    refute_received {:progress, _}
+
+    for _ <- 1..250, do: assert_received({:path, "s3://m/movies/" <> _})
+  end
+
   test "relativizing against a library path with or without a trailing slash" do
     path = "s3://m/movies/Invented Film (2031)/film.mkv"
 
