@@ -52,6 +52,38 @@ defmodule Mydia.Storage.S3.Request do
   @spec object_url(StorageBackend.t(), String.t()) :: String.t()
   def object_url(b, key), do: bucket_url(b) <> "/" <> encode_key(key)
 
+  @doc "The `x-amz-copy-source` value for an object in the same bucket."
+  @spec copy_source(StorageBackend.t(), String.t()) :: String.t()
+  def copy_source(%StorageBackend{bucket: bucket}, key),
+    do: "/" <> bucket <> "/" <> encode_key(key)
+
+  @spec delete_objects_body([String.t()]) :: String.t()
+  def delete_objects_body(keys) do
+    objects = Enum.map_join(keys, fn key -> "<Object><Key>#{xml_escape(key)}</Key></Object>" end)
+    ~s(<?xml version="1.0" encoding="UTF-8"?><Delete><Quiet>true</Quiet>#{objects}</Delete>)
+  end
+
+  @spec xml_escape(String.t()) :: String.t()
+  def xml_escape(text) do
+    text
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
+    |> String.replace("\"", "&quot;")
+    |> String.replace("'", "&apos;")
+  end
+
+  @doc """
+  CopyObject, UploadPartCopy, CompleteMultipartUpload and a quiet
+  DeleteObjects can all answer 200 with an `<Error>` in the body.
+  """
+  @spec error_body?(term()) :: boolean()
+  def error_body?(body) when is_binary(body), do: String.contains?(body, "<Error>")
+  def error_body?(_), do: false
+
+  @spec content_md5(iodata()) :: String.t()
+  def content_md5(body), do: :md5 |> :crypto.hash(body) |> Base.encode64()
+
   @spec encode_key(String.t()) :: String.t()
   def encode_key(key), do: URI.encode(key, &(URI.char_unreserved?(&1) or &1 == ?/))
 

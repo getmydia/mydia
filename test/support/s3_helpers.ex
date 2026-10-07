@@ -41,6 +41,29 @@ defmodule Mydia.S3Helpers do
     end
   end
 
+  @doc "Creates the `test` storage backend row from MYDIA_TEST_S3_* when it is missing."
+  def ensure_backend_row! do
+    backend = backend()
+
+    unless Mydia.Settings.get_storage_backend_by_name(backend.name) do
+      {:ok, _} =
+        backend
+        |> Map.from_struct()
+        |> Map.take([
+          :name,
+          :endpoint,
+          :region,
+          :bucket,
+          :access_key_id,
+          :secret_access_key,
+          :path_style
+        ])
+        |> Mydia.Settings.create_storage_backend()
+    end
+
+    backend
+  end
+
   def unique_location(backend) do
     prefix = "t-#{System.unique_integer([:positive])}/"
     Location.s3(backend, prefix, "s3://#{backend.name}/#{prefix}")
@@ -97,23 +120,7 @@ defmodule Mydia.S3Helpers do
           subtitle_args ++ ~w(-shortest -c:v libx264 -c:a aac) ++ [video]
       )
 
-    backend = backend()
-
-    unless Mydia.Settings.get_storage_backend_by_name(backend.name) do
-      {:ok, _} =
-        backend
-        |> Map.from_struct()
-        |> Map.take([
-          :name,
-          :endpoint,
-          :region,
-          :bucket,
-          :access_key_id,
-          :secret_access_key,
-          :path_style
-        ])
-        |> Mydia.Settings.create_storage_backend()
-    end
+    backend = ensure_backend_row!()
 
     loc = unique_location(backend)
     put_object!(loc, relative_path, File.read!(video))

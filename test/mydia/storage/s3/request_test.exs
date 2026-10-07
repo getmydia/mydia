@@ -26,6 +26,103 @@ defmodule Mydia.Storage.S3.RequestTest do
     }
   end
 
+  test "an exclusive put checks first and sends If-None-Match", %{bypass: bypass, location: loc} do
+    Bypass.expect_once(bypass, "HEAD", "/lib/movies/a.en.srt", fn conn ->
+      Plug.Conn.resp(conn, 404, "")
+    end)
+
+    Bypass.expect_once(bypass, "PUT", "/lib/movies/a.en.srt", fn conn ->
+      assert Plug.Conn.get_req_header(conn, "if-none-match") == ["*"]
+      Plug.Conn.resp(conn, 412, "")
+    end)
+
+    {:ok, src} = Storage.source(loc, "a.en.srt")
+    assert {:error, %Error{kind: :exists}} = Storage.put_binary(src, "cue", exclusive: true)
+  end
+
+  test "CopyObject answering 200 with an Error body is a failure", %{
+    bypass: bypass,
+    location: loc
+  } do
+    Bypass.expect_once(bypass, "HEAD", "/lib/movies/a.mkv", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_header("last-modified", "Wed, 01 Oct 2031 10:00:00 GMT")
+      |> Plug.Conn.resp(200, "12345")
+    end)
+
+    Bypass.expect_once(bypass, "PUT", "/lib/movies/b.mkv", fn conn ->
+      assert Plug.Conn.get_req_header(conn, "x-amz-copy-source") == ["/lib/movies/a.mkv"]
+      Plug.Conn.resp(conn, 200, "<Error><Code>InternalError</Code></Error>")
+    end)
+
+    {:ok, a} = Storage.source(loc, "a.mkv")
+    {:ok, b} = Storage.source(loc, "b.mkv")
+    assert {:error, %Error{kind: :provider}} = Storage.copy(a, b)
+  end
+
+  test "a move whose delete fails removes the copy", %{bypass: bypass, location: loc} do
+    Bypass.expect_once(bypass, "HEAD", "/lib/movies/a.mkv", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_header("last-modified", "Wed, 01 Oct 2031 10:00:00 GMT")
+      |> Plug.Conn.resp(200, "12345")
+    end)
+
+    Bypass.expect_once(bypass, "PUT", "/lib/movies/b.mkv", fn conn ->
+      Plug.Conn.resp(conn, 200, "<CopyObjectResult><ETag>\"e\"</ETag></CopyObjectResult>")
+    end)
+
+    test_pid = self()
+
+    Bypass.expect(bypass, "DELETE", "/lib/movies/a.mkv", fn conn ->
+      Plug.Conn.resp(conn, 403, "")
+    end)
+
+    Bypass.expect_once(bypass, "DELETE", "/lib/movies/b.mkv", fn conn ->
+      send(test_pid, :copy_removed)
+      Plug.Conn.resp(conn, 204, "")
+    end)
+
+    {:ok, a} = Storage.source(loc, "a.mkv")
+    {:ok, b} = Storage.source(loc, "b.mkv")
+    assert {:error, %Error{kind: :forbidden}} = Storage.move(a, b)
+    assert_received :copy_removed
+  end
+
+  test "DeleteObjects sends Content-MD5 and escaped keys", %{bypass: bypass, location: loc} do
+    Bypass.expect_once(bypass, "GET", "/lib", fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+      assert conn.query_params["prefix"] == "movies/A & B/"
+
+      Plug.Conn.resp(conn, 200, """
+      <ListBucketResult><IsTruncated>false</IsTruncated>
+      <Contents><Key>movies/A &amp; B/x.mkv</Key><Size>1</Size><LastModified>2031-10-01T10:00:00.000Z</LastModified></Contents>
+      </ListBucketResult>
+      """)
+    end)
+
+    Bypass.expect_once(bypass, "POST", "/lib", fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      assert Plug.Conn.get_req_header(conn, "content-md5") == [Request.content_md5(body)]
+      assert body =~ "<Key>movies/A &amp; B/x.mkv</Key>"
+      Plug.Conn.resp(conn, 200, "<DeleteResult></DeleteResult>")
+    end)
+
+    assert :ok = Storage.delete_prefix(loc, "A & B")
+  end
+
+  test "list/1 skips the trash", %{bypass: bypass, location: loc} do
+    Bypass.expect_once(bypass, "GET", "/lib", fn conn ->
+      Plug.Conn.resp(conn, 200, """
+      <ListBucketResult><IsTruncated>false</IsTruncated>
+      <Contents><Key>movies/a.mkv</Key><Size>1</Size><LastModified>2031-10-01T10:00:00.000Z</LastModified></Contents>
+      <Contents><Key>movies/.mydia-trash/1/b.mkv</Key><Size>1</Size><LastModified>2031-10-01T10:00:00.000Z</LastModified></Contents>
+      </ListBucketResult>
+      """)
+    end)
+
+    assert {:ok, [%{relative_path: "a.mkv"}]} = Storage.list(loc)
+  end
+
   test "path-style and virtual-host URLs, with key encoding", %{backend: b} do
     assert Request.object_url(b, "movies/A Film (2031)/a.mkv") ==
              "#{b.endpoint}/lib/movies/A%20Film%20%282031%29/a.mkv"

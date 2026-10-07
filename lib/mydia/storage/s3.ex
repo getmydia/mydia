@@ -26,34 +26,47 @@ defmodule Mydia.Storage.S3 do
   end
 
   @impl true
-  def list(%Location{backend: b} = loc) do
-    with :ok <- Request.check(b), do: list_page(loc, nil, [])
+  def list(%Location{backend: b, prefix: prefix}) do
+    trash = Mydia.Library.TrashStore.dir_name()
+
+    with :ok <- Request.check(b),
+         {:ok, objects} <- list_objects(b, prefix, false) do
+      entries =
+        objects
+        |> Enum.reject(&String.ends_with?(&1.key, "/"))
+        |> Enum.map(fn %{key: key, size: size, last_modified: lm} ->
+          %Entry{
+            relative_path: String.replace_prefix(key, prefix, ""),
+            size: size,
+            mtime: Request.parse_time(lm)
+          }
+        end)
+        # Mirrors Local.walk: the trash lives inside the library prefix on S3.
+        |> Enum.reject(&(trash in Path.split(&1.relative_path)))
+
+      {:ok, entries}
+    end
   end
 
-  defp list_page(%Location{backend: b, prefix: prefix} = loc, token, acc) do
+  # Every object under `key_prefix`, following continuation tokens. With
+  # `delimiter?` only the objects directly under it (no "subdirectories").
+  defp list_objects(b, key_prefix, delimiter?),
+    do: list_objects(b, key_prefix, delimiter?, nil, [])
+
+  defp list_objects(b, key_prefix, delimiter?, token, acc) do
     params =
-      [{"list-type", "2"}, {"prefix", prefix}] ++
+      [{"list-type", "2"}, {"prefix", key_prefix}] ++
+        if(delimiter?, do: [{"delimiter", "/"}], else: []) ++
         if(token, do: [{"continuation-token", token}], else: [])
 
     case Req.request(Request.new(b), method: :get, url: Request.bucket_url(b), params: params) do
       {:ok, %Req.Response{status: 200, body: body}} ->
         {contents, next} = Request.parse_list(body)
-
-        entries =
-          for %{key: key, size: size, last_modified: lm} <- contents,
-              not String.ends_with?(key, "/") do
-            %Entry{
-              relative_path: String.replace_prefix(key, prefix, ""),
-              size: size,
-              mtime: Request.parse_time(lm)
-            }
-          end
-
-        acc = entries ++ acc
-        if next, do: list_page(loc, next, acc), else: {:ok, acc}
+        acc = acc ++ contents
+        if next, do: list_objects(b, key_prefix, delimiter?, next, acc), else: {:ok, acc}
 
       other ->
-        {:error, Request.map_error(other, "s3://#{b.name}/#{prefix}")}
+        {:error, Request.map_error(other, "s3://#{b.name}/#{key_prefix}")}
     end
   end
 
@@ -95,23 +108,169 @@ defmodule Mydia.Storage.S3 do
     end
   end
 
-  # Write operations arrive with the S3 write path; until then they refuse.
   @impl true
-  def put_file(_loc, _rel, _local_path, _opts), do: not_implemented()
-  @impl true
-  def put_binary(_loc, _rel, _data, _opts), do: not_implemented()
-  @impl true
-  def copy(_from, _from_rel, _to, _to_rel), do: not_implemented()
-  @impl true
-  def move(_from, _from_rel, _to, _to_rel), do: not_implemented()
-  @impl true
-  def delete(_loc, _rel), do: not_implemented()
-  @impl true
-  def delete_prefix(_loc, _rel_dir), do: not_implemented()
-  @impl true
-  def ls(_loc, _rel_dir), do: not_implemented()
+  def put_file(%Location{backend: b} = loc, rel, local_path, _opts) do
+    with :ok <- Request.check(b),
+         {:ok, body} <- read_local(local_path) do
+      put_object(b, Location.key(loc, rel), body, [], display(loc, rel))
+    end
+  end
 
-  defp not_implemented, do: {:error, Error.new(:provider, "not implemented")}
+  @impl true
+  def put_binary(%Location{backend: b} = loc, rel, data, opts) do
+    exclusive? = Keyword.get(opts, :exclusive, false)
+
+    with :ok <- Request.check(b),
+         :ok <- if(exclusive?, do: refuse_existing(loc, rel), else: :ok) do
+      headers = if exclusive?, do: [{"if-none-match", "*"}], else: []
+      put_object(b, Location.key(loc, rel), IO.iodata_to_binary(data), headers, display(loc, rel))
+    end
+  end
+
+  @impl true
+  def copy(%Location{backend: b} = from, from_rel, %Location{} = to, to_rel) do
+    with :ok <- Request.check(b),
+         {:ok, %Entry{}} <- stat(from, from_rel) do
+      copy_object(
+        b,
+        Location.key(from, from_rel),
+        Location.key(to, to_rel),
+        display(from, from_rel)
+      )
+    end
+  end
+
+  @impl true
+  def move(from, from_rel, to, to_rel) do
+    with :ok <- copy(from, from_rel, to, to_rel) do
+      case delete(from, from_rel) do
+        :ok ->
+          :ok
+
+        {:error, _} = error ->
+          _ = delete(to, to_rel)
+          error
+      end
+    end
+  end
+
+  @impl true
+  def delete(%Location{backend: b} = loc, rel) do
+    with :ok <- Request.check(b) do
+      case Req.request(Request.new(b),
+             method: :delete,
+             url: Request.object_url(b, Location.key(loc, rel))
+           ) do
+        {:ok, %Req.Response{status: s}} when s in [200, 204, 404] -> :ok
+        other -> {:error, Request.map_error(other, display(loc, rel))}
+      end
+    end
+  end
+
+  @impl true
+  def delete_prefix(%Location{backend: b} = loc, rel_dir) do
+    with :ok <- Request.check(b),
+         {:ok, objects} <- list_objects(b, dir_prefix(loc, rel_dir), false) do
+      objects
+      |> Enum.map(& &1.key)
+      |> Enum.chunk_every(1000)
+      |> Enum.reduce_while(:ok, fn keys, :ok ->
+        case delete_batch(b, keys) do
+          :ok -> {:cont, :ok}
+          error -> {:halt, error}
+        end
+      end)
+    end
+  end
+
+  @impl true
+  def ls(%Location{backend: b} = loc, rel_dir) do
+    prefix = dir_prefix(loc, rel_dir)
+
+    with :ok <- Request.check(b),
+         {:ok, objects} <- list_objects(b, prefix, true) do
+      {:ok,
+       objects
+       |> Enum.reject(&String.ends_with?(&1.key, "/"))
+       |> Enum.map(&String.replace_prefix(&1.key, prefix, ""))}
+    end
+  end
+
+  defp dir_prefix(%Location{prefix: prefix}, rel_dir) when rel_dir in ["", ".", "/"], do: prefix
+
+  defp dir_prefix(%Location{} = loc, rel_dir),
+    do: Location.key(loc, String.trim(rel_dir, "/")) <> "/"
+
+  # If-None-Match is honored by AWS and current RustFS and MinIO, and ignored
+  # by some providers. The HEAD covers those in the common, non-racing case.
+  # Observed against RustFS: a second PUT with `If-None-Match: *` on an existing
+  # key answers 412, which put_object/5 maps to :exists as well.
+  defp refuse_existing(loc, rel) do
+    case stat(loc, rel) do
+      {:ok, _} -> {:error, Error.new(:exists, "already exists: #{display(loc, rel)}")}
+      {:error, %Error{kind: :not_found}} -> :ok
+      {:error, _} = error -> error
+    end
+  end
+
+  defp put_object(b, key, body, headers, what) do
+    case Req.request(Request.new(b),
+           method: :put,
+           url: Request.object_url(b, key),
+           headers: headers,
+           body: body
+         ) do
+      {:ok, %Req.Response{status: 200}} -> :ok
+      {:ok, %Req.Response{status: 412}} -> {:error, Error.new(:exists, "already exists: #{what}")}
+      other -> {:error, Request.map_error(other, what)}
+    end
+  end
+
+  defp copy_object(b, from_key, to_key, what) do
+    case Req.request(Request.new(b),
+           method: :put,
+           url: Request.object_url(b, to_key),
+           headers: [{"x-amz-copy-source", Request.copy_source(b, from_key)}]
+         ) do
+      {:ok, %Req.Response{status: 200, body: body}} ->
+        if Request.error_body?(body),
+          do: {:error, Error.new(:provider, "S3 could not copy #{what}")},
+          else: :ok
+
+      other ->
+        {:error, Request.map_error(other, what)}
+    end
+  end
+
+  defp delete_batch(b, keys) do
+    body = Request.delete_objects_body(keys)
+
+    case Req.request(Request.new(b),
+           method: :post,
+           url: Request.bucket_url(b),
+           params: [{"delete", ""}],
+           headers: [
+             {"content-md5", Request.content_md5(body)},
+             {"content-type", "application/xml"}
+           ],
+           body: body
+         ) do
+      {:ok, %Req.Response{status: 200, body: resp}} ->
+        if Request.error_body?(resp),
+          do: {:error, Error.new(:provider, "S3 refused to delete some objects in #{b.name}")},
+          else: :ok
+
+      other ->
+        {:error, Request.map_error(other, "s3://#{b.name}")}
+    end
+  end
+
+  defp read_local(path) do
+    case File.read(path) do
+      {:ok, body} -> {:ok, body}
+      {:error, reason} -> {:error, Error.from_posix(reason, path)}
+    end
+  end
 
   # Retries are off: a retried request would replay bytes the fold already consumed.
   @impl true

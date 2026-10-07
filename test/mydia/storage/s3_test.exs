@@ -1,5 +1,6 @@
 defmodule Mydia.Storage.S3Test do
-  use ExUnit.Case, async: true
+  # Storage.at/1 resolves s3:// paths through the storage_backends table.
+  use Mydia.DataCase, async: false
 
   # Must precede the contract case: its tests are defined at `use` time and a
   # @moduletag only applies to tests defined after it.
@@ -9,7 +10,7 @@ defmodule Mydia.Storage.S3Test do
   use Mydia.StorageContractCase
 
   setup do
-    loc = Mydia.S3Helpers.unique_location(Mydia.S3Helpers.backend())
+    loc = Mydia.S3Helpers.unique_location(Mydia.S3Helpers.ensure_backend_row!())
     on_exit(fn -> Mydia.S3Helpers.delete_prefix!(loc) end)
     %{location: loc}
   end
