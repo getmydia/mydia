@@ -68,6 +68,15 @@ defmodule Mydia.Library.CandidatePromotionS3Test do
     assert Repo.get(ImportCandidate, ctx.candidate.id)
   end
 
+  test "a deleted storage backend keeps the candidate", ctx do
+    Repo.delete_all(Mydia.Settings.StorageBackend)
+
+    assert {:error, {:storage, %Mydia.Storage.Error{kind: :misconfigured}}} =
+             CandidatePromotion.attach(ctx.candidate, ctx.movie, [])
+
+    assert Repo.get(ImportCandidate, ctx.candidate.id)
+  end
+
   test "a queued delete on an S3 candidate is refused and recorded as failed", ctx do
     {1, _} =
       Repo.update_all(from(c in ImportCandidate, where: c.id == ^ctx.candidate.id),

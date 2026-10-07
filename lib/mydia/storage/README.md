@@ -33,7 +33,9 @@ ffmpeg or ffprobe (re)start with a 12 hour expiry, and redacted at the source in
 `Mydia.Library.Ffmpeg.invoke` (which scrubs error output) plus
 `Storage.redact/1` (URL, query dropped) and `Storage.redact_text/1` (any term,
 inspected and scrubbed) for everything that logs a URL. Secret keys use
-`redact: true` on the schema fields.
+`redact: true` on the schema fields. The secret access key is stored in the
+database like the other service credentials (download client passwords, indexer
+keys), and `secret_access_key` is a Phoenix filtered parameter.
 
 ## Streaming
 
@@ -54,10 +56,18 @@ inspected and scrubbed) for everything that logs a URL. Secret keys use
 
 ## Failure behaviour
 
+Every call returns `{:error, %Error{kind: kind}}` with kind one of
+`:not_found`, `:forbidden`, `:unreachable`, `:provider`, `:read_only` or
+`:misconfigured`. `:misconfigured` is an unknown backend, a malformed storage
+path or an unusable endpoint. Only `:not_found` means "the file is missing";
+every other kind is treated as an outage or setup problem, and callers must
+never delete, stamp or trash because of it.
+
 - A scan that cannot reach the backend fails and trashes nothing. Only a
   definitive not-found for a file marks it missing.
 - `CandidatePromotion` checks S3 existence with `Storage.stat` and keeps the
   candidate on any error other than `:not_found`.
+- A storage backend that a library path still references cannot be deleted.
 - Req retries (`:transient`, 3 attempts) cost about 7 seconds per call against a
   dead backend. Keep calls to an unreachable backend out of DB transactions
   where you can.
@@ -66,8 +76,15 @@ inspected and scrubbed) for everything that logs a URL. Secret keys use
 
 `Storage.ensure_writable/1` returns `{:error, %Error{kind: :read_only}}` for S3
 libraries; import, organize, rename, user-facing trash and delete, and sidecar
-writes call it first. `LibraryPath` also refuses `auto_rename` and write toggles
-on `s3://` paths, and the admin UI disables them.
+writes call it first. `LibraryPath` forces `auto_rename` off (it defaults to
+true) and rejects `auto_organize`, `write_nfo` and the default-library flags on
+`s3://` paths, and the admin UI disables them.
+
+Imports check writability right after the target library is resolved, before any
+file operation, and fail with a read-only message. `TargetResolver` never picks an
+S3 library on its own (default flag, existing files, first compatible); only an
+explicit choice (download override or the item's own library) reaches S3, and it
+fails there.
 
 `TrashStore.store` is deliberately not guarded: the scanner's `:missing` trash
 is database-only (the object is already gone), so it never writes to the bucket.

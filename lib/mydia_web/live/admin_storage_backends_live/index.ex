@@ -68,12 +68,22 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
   def handle_event("delete", %{"id" => id}, socket) do
     case find_editable(socket, id) do
       {:ok, backend} ->
-        {:ok, _} = Settings.delete_storage_backend(backend)
+        case Settings.delete_storage_backend(backend) do
+          {:ok, _} ->
+            {:noreply,
+             socket
+             |> load_backends()
+             |> put_flash(:info, "Storage backend #{backend.name} deleted")}
 
-        {:noreply,
-         socket
-         |> load_backends()
-         |> put_flash(:info, "Storage backend #{backend.name} deleted")}
+          {:error, %Ecto.Changeset{} = changeset} ->
+            {:noreply,
+             socket
+             |> load_backends()
+             |> put_flash(
+               :error,
+               "Cannot delete storage backend #{backend.name}: #{first_error(changeset)}"
+             )}
+        end
 
       :error ->
         {:noreply, put_flash(socket, :error, "That storage backend cannot be deleted")}
@@ -114,6 +124,9 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
     |> update(:testing, &MapSet.delete(&1, name))
     |> put_flash(kind, message)
   end
+
+  defp first_error(%Ecto.Changeset{errors: [{_field, {message, _opts}} | _]}), do: message
+  defp first_error(%Ecto.Changeset{}), do: "it could not be deleted"
 
   defp load_backends(socket), do: assign(socket, :backends, Settings.list_storage_backends())
 

@@ -76,6 +76,15 @@ defmodule Mydia.Jobs.HdrBackfillTest do
       refute_enqueued(worker: HdrBackfill)
     end
 
+    test "leaves an S3 row pending when its storage backend is gone" do
+      {file, _bypass} = s3_media_file_fixture_with_bypass()
+      Repo.delete_all(Mydia.Settings.StorageBackend)
+
+      assert :ok = perform_job(HdrBackfill, %{})
+      assert Repo.get(MediaFile, file.id).hdr_backfilled_at == nil
+      assert HdrBackfill.pending_ids(10) == [file.id]
+    end
+
     test "stamps an S3 row whose object is gone" do
       {file, bypass} = s3_media_file_fixture_with_bypass()
       Bypass.expect(bypass, fn conn -> Plug.Conn.resp(conn, 404, "") end)

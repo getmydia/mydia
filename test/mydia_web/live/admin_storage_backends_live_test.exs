@@ -96,6 +96,29 @@ defmodule MydiaWeb.AdminStorageBackendsLiveTest do
     refute has_element?(view, "#storage-backend-gone")
   end
 
+  test "refuses to delete a backend a library still uses", %{conn: conn} do
+    create_backend("inuse")
+
+    {:ok, _} =
+      Settings.create_library_path(%{path: "s3://inuse/movies", type: :movies, monitored: true})
+
+    {:ok, view, _} = live(conn, ~p"/admin/storage-backends")
+
+    html = view |> element("#delete-storage-backend-inuse") |> render_click()
+    assert html =~ "Cannot delete storage backend inuse"
+    assert has_element?(view, "#storage-backend-inuse")
+  end
+
+  test "a backend already deleted by someone else does not crash the page", %{conn: conn} do
+    backend = create_backend("raced")
+    {:ok, view, _} = live(conn, ~p"/admin/storage-backends")
+    Mydia.Repo.delete!(backend)
+
+    html = render_click(view, "delete", %{"id" => backend.id})
+    assert html =~ "no longer exists"
+    assert Process.alive?(view.pid)
+  end
+
   test "test connection reports a failure message", %{conn: conn} do
     create_backend("down")
 

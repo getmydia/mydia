@@ -33,7 +33,7 @@ defmodule Mydia.Storage do
            backend when not is_nil(backend) <- Settings.get_storage_backend_by_name(name) do
         {:ok, Location.s3(backend, prefix, String.trim_trailing(path, "/"))}
       else
-        nil -> {:error, Error.new(:not_found, "unknown storage backend in #{path}")}
+        nil -> {:error, Error.new(:misconfigured, "unknown storage backend in #{path}")}
         {:error, _} = error -> error
       end
     else
@@ -92,7 +92,7 @@ defmodule Mydia.Storage do
   defp parse(path) do
     case Location.parse_s3(path) do
       {:ok, name, prefix} -> {:ok, name, prefix}
-      :error -> {:error, Error.new(:not_found, "malformed storage path #{path}")}
+      :error -> {:error, Error.new(:misconfigured, "malformed storage path #{path}")}
     end
   end
 

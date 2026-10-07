@@ -23,6 +23,35 @@ defmodule Mydia.Settings.StorageBackendsTest do
     assert Settings.get_storage_backend_by_name("media") == nil
   end
 
+  test "the secret access key is a filtered parameter" do
+    filtered =
+      Phoenix.Logger.filter_values(%{"storage_backend" => %{"secret_access_key" => "s3cr3t"}})
+
+    refute inspect(filtered) =~ "s3cr3t"
+  end
+
+  test "a backend still referenced by a library path cannot be deleted" do
+    {:ok, b} = Settings.create_storage_backend(@valid)
+
+    {:ok, _} =
+      Settings.create_library_path(%{path: "s3://media/movies", type: :movies, monitored: true})
+
+    assert {:error, %Ecto.Changeset{} = cs} = Settings.delete_storage_backend(b)
+    assert %{base: [message]} = errors_on(cs)
+    assert message =~ "library"
+    assert Settings.get_storage_backend_by_name("media")
+  end
+
+  test "a backend whose name is only a prefix of another's can be deleted" do
+    {:ok, b} = Settings.create_storage_backend(@valid)
+    {:ok, _} = Settings.create_storage_backend(%{@valid | name: "media2"})
+
+    {:ok, _} =
+      Settings.create_library_path(%{path: "s3://media2/movies", type: :movies, monitored: true})
+
+    assert {:ok, _} = Settings.delete_storage_backend(b)
+  end
+
   test "name, bucket and keys are required; name is unique" do
     assert {:error, cs} = Settings.create_storage_backend(%{})
     errors = errors_on(cs)

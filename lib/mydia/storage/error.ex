@@ -1,9 +1,13 @@
 defmodule Mydia.Storage.Error do
   @moduledoc "Error returned by every `Mydia.Storage` call. `message` never contains secrets."
 
-  @kinds [:not_found, :forbidden, :unreachable, :provider, :read_only]
+  # `:misconfigured` is a setup problem (unknown backend, malformed storage
+  # path or endpoint). It says nothing about whether a file exists, so callers
+  # treat it like an outage, never as "missing".
+  @kinds [:not_found, :forbidden, :unreachable, :provider, :read_only, :misconfigured]
 
-  @type kind :: :not_found | :forbidden | :unreachable | :provider | :read_only
+  @type kind ::
+          :not_found | :forbidden | :unreachable | :provider | :read_only | :misconfigured
   @type t :: %__MODULE__{kind: kind(), message: String.t()}
 
   defexception [:kind, :message]

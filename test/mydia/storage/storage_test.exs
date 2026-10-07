@@ -51,6 +51,13 @@ defmodule Mydia.StorageTest do
              Storage.media_input(%{mf | relative_path: "gone.mkv"})
   end
 
+  test "an unknown backend or malformed S3 path is :misconfigured, never :not_found" do
+    assert {:error, %Error{kind: :misconfigured}} =
+             Storage.location(%LibraryPath{path: "s3://nobody/movies"})
+
+    assert {:error, %Error{kind: :misconfigured}} = Storage.location(%LibraryPath{path: "s3://"})
+  end
+
   test "an unloaded library_path is an error, not a crash" do
     mf = %MediaFile{relative_path: "a.mkv", library_path: %Ecto.Association.NotLoaded{}}
     assert {:error, %Error{}} = Storage.source(mf)
