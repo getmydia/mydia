@@ -39,17 +39,14 @@ defmodule MydiaWeb.MediaLive.Show.StreamLinkTest do
       %{conn: conn, user: user, item: item, media_file: file}
     end
 
-    test "each file row links to its stream", %{
+    test "movie rows leave the link to the file details modal", %{
       conn: conn,
-      user: user,
       item: item,
       media_file: file
     } do
       {:ok, view, _html} = live(conn, ~p"/media/#{item.id}")
 
-      assert has_element?(view, "#stream-link-#{file.id}")
-      href = href_of(render(view), "#stream-link-#{file.id}")
-      assert verified(href) == {:ok, {user.id, file.id}}
+      refute has_element?(view, "#stream-link-#{file.id}")
     end
 
     test "the file details modal shows the link and a copy button", %{

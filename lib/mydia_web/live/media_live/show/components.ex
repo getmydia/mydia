@@ -794,7 +794,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :refreshing_file_metadata, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
   attr :media_file_subtitle_tracks, :map, default: %{}
-  attr :current_user_id, :string, default: nil
 
   def media_files_section(assigns) do
     files = Enum.filter(all_media_files(assigns.media_item), &is_nil(&1.episode_id))
@@ -973,18 +972,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     >
                       <.icon name="hero-information-circle" class="w-5 h-5" />
                     </button>
-                    <a
-                      :if={@current_user_id}
-                      id={"stream-link-#{file.id}"}
-                      href={MydiaWeb.StreamLink.path(@current_user_id, file)}
-                      target="_blank"
-                      rel="noopener"
-                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
-                      aria-label="Stream link (open in external player)"
-                      title="Stream link (open in external player)"
-                    >
-                      <.icon name="hero-link" class="w-5 h-5" />
-                    </a>
                     <button
                       type="button"
                       phx-click="mark_file_preferred"
