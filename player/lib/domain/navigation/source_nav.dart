@@ -9,6 +9,7 @@ import '../../core/sources/media_source.dart';
 import '../../core/sources/source.dart';
 import '../../presentation/screens/detail/detail_links.dart';
 import '../sources/library.dart';
+import 'all_servers_locations.dart';
 import 'nav_destination.dart';
 
 @immutable
@@ -89,6 +90,40 @@ List<SourceNavEntry> anchoredNavEntries(List<NavDestination> layout) => [
             anchored: true,
           ),
     ];
+
+/// The viewer's sidebar layout, resolved against the merged All servers
+/// views. Rows with no merged view (Calendar, Unwatched, saved filters) are
+/// left out here and still show on a single server.
+List<SourceNavEntry> resolveAllServersNav(List<NavDestination> layout) {
+  String? routeFor(NavDestination d) => switch (d) {
+        FilterDestination() => null,
+        BuiltinDestination() => switch (d.id) {
+            'search' => allServersSearchLocation,
+            'home' => allServersRoot,
+            'continue_watching' => allServersContinueWatchingLocation,
+            'movies' => allServersMoviesLocation,
+            'shows' => allServersShowsLocation,
+            'recently_added' => allServersRecentlyAddedLocation,
+            'favorites' => allServersFavoritesLocation,
+            'collections' => allServersCollectionsLocation,
+            'downloads' || 'settings' => d.route,
+            _ => null,
+          },
+      };
+  return [
+    for (final d in layout)
+      if (routeFor(d) case final route?)
+        SourceNavEntry(
+          id: d.id,
+          label: d.label,
+          icon: d.icon,
+          selectedIcon: d.selectedIcon,
+          route: route,
+          anchored: d.isAnchored,
+          shortLabel: d.id == 'shows' ? 'Shows' : null,
+        ),
+  ];
+}
 
 /// The viewer's sidebar layout, resolved against one source. A builtin
 /// destination appears only when the source can serve it; libraries the

@@ -1,7 +1,7 @@
 // The sidebar resolves the viewer's layout against the source on screen: a
 // source's own libraries and only the destinations it can serve. Edit mode
 // arranges the layout itself, so it stays available at a source's location
-// and is hidden only for All servers.
+// and at All servers, which shares the same layout.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,28 +76,6 @@ void main() {
     await _pump(tester, root);
     expect(find.byTooltip('Edit sidebar'), findsOneWidget);
     expect(find.byType(SidebarEditBar), findsOneWidget);
-  });
-
-  testWidgets('an All servers location shows its own nav, not Mydia\'s',
-      (tester) async {
-    await _pump(tester, '/all/movies');
-    for (final key in ['home', 'movies', 'shows', 'search']) {
-      expect(find.byKey(ValueKey('all-nav-$key')), findsOneWidget);
-    }
-    expect(
-        tester
-            .widget<SidebarRow>(find.byKey(const ValueKey('all-nav-movies')))
-            .isSelected,
-        isTrue);
-    expect(
-        tester
-            .widget<SidebarRow>(find.byKey(const ValueKey('all-nav-home')))
-            .isSelected,
-        isFalse);
-    expect(find.text('Calendar'), findsNothing);
-    expect(find.text('+ New filter'), findsNothing);
-    expect(find.byTooltip('Edit sidebar'), findsNothing);
-    expect(find.byType(SidebarEditBar), findsNothing);
   });
 
   testWidgets('no Search row for a source that is not searchable',

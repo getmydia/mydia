@@ -5,6 +5,7 @@ import '../../../core/navigation/sidebar_layout_providers.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart'
     show activeSourceIdProvider, mediaSourceProvider;
+import '../../../domain/navigation/all_servers_locations.dart';
 import '../../../domain/navigation/sidebar_layout.dart';
 import '../../../domain/navigation/source_nav.dart';
 import '../../../domain/sources/library.dart';
@@ -28,6 +29,7 @@ final sourceNavEntriesProvider =
     _ =>
       SidebarLayout.defaults.reconcile(downloadSupported: isDownloadSupported),
   };
+  if (isAllServersLocation(location)) return resolveAllServersNav(layout);
   final source = ref.watch(currentSourceIdProvider(location));
   return source == null
       ? anchoredNavEntries(layout)

@@ -12,7 +12,7 @@ import '../../screens/filter/filter_editor_sheet.dart';
 import '../channel_badge.dart';
 import '../mydia_logo.dart';
 import '../../../domain/navigation/all_servers_locations.dart';
-import 'all_servers_nav_list.dart';
+import 'all_servers_server_rows.dart';
 import 'nav_badges.dart';
 import 'sidebar_edit_bar.dart';
 import 'sidebar_middle_list.dart';
@@ -143,9 +143,6 @@ class SidebarContent extends ConsumerWidget {
     );
 
     final hasBackWidget = backToMydiaWidget != null;
-    final allServers = isAllServersLocation(location);
-    // All servers replaces the layout, so it cannot be edited.
-    final ownsNav = allServers;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,19 +178,17 @@ class SidebarContent extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (!ownsNav)
-                IconButton(
-                  onPressed: () =>
-                      ref.read(sidebarEditModeProvider.notifier).toggle(),
-                  tooltip: 'Edit sidebar',
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    Icons.edit_outlined,
-                    size: 20,
-                    color:
-                        editing ? AppColors.primary : AppColors.textSecondary,
-                  ),
+              IconButton(
+                onPressed: () =>
+                    ref.read(sidebarEditModeProvider.notifier).toggle(),
+                tooltip: 'Edit sidebar',
+                visualDensity: VisualDensity.compact,
+                icon: Icon(
+                  Icons.edit_outlined,
+                  size: 20,
+                  color: editing ? AppColors.primary : AppColors.textSecondary,
                 ),
+              ),
             ],
           ),
         ),
@@ -202,20 +197,12 @@ class SidebarContent extends ConsumerWidget {
           onNavigate: onNavigate,
           onSwitchSource: onSwitchSource,
         ),
-        if (editing && !ownsNav)
+        if (editing)
           SidebarEditBar(
             onDone: () => ref.read(sidebarEditModeProvider.notifier).exit(),
             onReset: () => _confirmReset(context, ref),
           ),
-        if (allServers)
-          Expanded(
-            child: AllServersNavList(
-              location: location,
-              onNavigate: onNavigate,
-              selectedRowFocusNode: selectedRowFocusNode,
-            ),
-          )
-        else if (!editing)
+        if (!editing)
           Expanded(
             child: _buildSourceNav(
               context: context,
@@ -315,7 +302,9 @@ class SidebarContent extends ConsumerWidget {
   }) {
     final entries = ref.watch(sourceNavEntriesProvider(location));
     final source = ref.watch(currentSourceIdProvider(location));
-    final canFilter = source != null &&
+    final allServers = isAllServersLocation(location);
+    final canFilter = !allServers &&
+        source != null &&
         (ref
                 .watch(mediaSourceProvider(source))
                 ?.capabilities
@@ -349,14 +338,17 @@ class SidebarContent extends ConsumerWidget {
           onTap: () => onNavigate(entry.route),
         );
       }
-      return _buildRow(
-        ref: ref,
-        context: context,
-        destination: destination,
-        selected: null,
-        focusRowId: focusId,
-        route: entry.route,
-        isSelectedOverride: isSelected,
+      return KeyedSubtree(
+        key: ValueKey('source-nav-${entry.id}'),
+        child: _buildRow(
+          ref: ref,
+          context: context,
+          destination: destination,
+          selected: null,
+          focusRowId: focusId,
+          route: entry.route,
+          isSelectedOverride: isSelected,
+        ),
       );
     }
 
@@ -379,6 +371,7 @@ class SidebarContent extends ConsumerWidget {
                   row(entry),
                   const SizedBox(height: 2),
                 ],
+                if (allServers) AllServersServerRows(onNavigate: onNavigate),
               ],
             ),
           ),
