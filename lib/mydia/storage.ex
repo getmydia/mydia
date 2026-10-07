@@ -47,4 +47,5 @@ defmodule Mydia.Storage do
   def redact(other), do: other
 
   defp impl(%Location{kind: :local}), do: Mydia.Storage.Local
+  defp impl(%Location{kind: :s3}), do: Mydia.Storage.S3
 end
