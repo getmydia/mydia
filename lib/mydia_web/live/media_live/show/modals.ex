@@ -1033,7 +1033,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <div class="bg-base-200/50 border-b border-base-300 px-4 py-3">
             <div class="flex flex-wrap items-center gap-3">
               <form phx-change="filter_search" class="flex flex-wrap items-center gap-3">
-                <select name="quality" class="select select-bordered select-sm">
+                <select name="quality" class="select select-bordered select-sm w-auto">
                   <option value="" selected={is_nil(@quality_filter)}>All Quality</option>
                   <option value="720p" selected={@quality_filter == "720p"}>720p</option>
                   <option value="1080p" selected={@quality_filter == "1080p"}>1080p</option>
@@ -1042,7 +1042,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 <select
                   id="manual-search-source-filter"
                   name="source"
-                  class="select select-bordered select-sm"
+                  class="select select-bordered select-sm w-auto"
                 >
                   <option value="" selected={is_nil(@source_filter)}>All Sources</option>
                   <option
@@ -1056,7 +1056,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 <select
                   id="manual-search-codec-filter"
                   name="codec"
-                  class="select select-bordered select-sm"
+                  class="select select-bordered select-sm w-auto"
                 >
                   <option value="" selected={is_nil(@codec_filter)}>All Codecs</option>
                   <option
