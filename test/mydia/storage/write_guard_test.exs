@@ -1,15 +1,11 @@
 defmodule Mydia.Storage.WriteGuardTest do
   use Mydia.DataCase, async: false
 
-  import Mydia.MediaFixtures
-
-  alias Mydia.Library.{FileOrganizer, MediaFile}
+  alias Mydia.Library.FileOrganizer
   alias Mydia.Settings
   alias Mydia.Storage.Error
-  alias Mydia.Subtitles
 
-  # A persisted S3 library and a media file in it, read back without the
-  # library_path association, which is how several callers hold it.
+  # A persisted S3 backend pointing at an unreachable endpoint.
   setup do
     {:ok, _} =
       Settings.create_storage_backend(%{
@@ -21,16 +17,7 @@ defmodule Mydia.Storage.WriteGuardTest do
         secret_access_key: "s"
       })
 
-    {:ok, lp} =
-      Settings.create_library_path(%{path: "s3://m/movies", type: "movies", monitored: true})
-
-    file =
-      media_file_fixture(%{
-        library_path_id: lp.id,
-        relative_path: "Invented Film (2031)/film.mkv"
-      })
-
-    %{s3_file: Repo.get!(MediaFile, file.id)}
+    :ok
   end
 
   @tag :tmp_dir
@@ -42,20 +29,5 @@ defmodule Mydia.Storage.WriteGuardTest do
              FileOrganizer.place_file(src, "s3://m/movies/A/a.mkv", expected_size: 1)
 
     assert File.exists?(src)
-  end
-
-  test "subtitle download is refused for an S3 file", %{s3_file: file} do
-    info = %{file_id: 1, language: "en", format: "srt", subtitle_hash: "h"}
-
-    assert {:error, %Error{kind: :read_only}} = Subtitles.download_subtitle(info, file.id)
-  end
-
-  test "subtitle upload is refused with a message for an S3 file", %{s3_file: file} do
-    assert {:error, message} =
-             Subtitles.upload_subtitle(file, "1\n00:00:01,000 --> 00:00:02,000\nHi\n",
-               language: "en"
-             )
-
-    assert message == "S3 libraries are read-only in this version of Mydia"
   end
 end

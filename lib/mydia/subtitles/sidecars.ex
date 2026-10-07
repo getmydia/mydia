@@ -20,6 +20,7 @@ defmodule Mydia.Subtitles.Sidecars do
   alias Mydia.Library.FileRanking
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
+  alias Mydia.Storage
   alias Mydia.Subtitles.Format
   alias Mydia.Subtitles.ResyncEnqueue
   alias Mydia.Subtitles.Subtitle
@@ -216,7 +217,7 @@ defmodule Mydia.Subtitles.Sidecars do
   """
   @spec reconcile(MediaFile.t()) :: {:ok, tally()} | {:error, term()}
   def reconcile(media_file) do
-    case MediaFile.absolute_path(media_file) do
+    case MediaFile.storage_path(media_file) do
       nil ->
         {:error, :no_absolute_path}
 
@@ -224,7 +225,7 @@ defmodule Mydia.Subtitles.Sidecars do
         dir = Path.dirname(absolute_path)
         media_basename = basename_for(absolute_path)
 
-        case File.ls(dir) do
+        case Storage.ls(dir) do
           {:ok, entries} ->
             siblings = siblings_in_dir(media_file.library_path_id, dir)
             {:ok, reconcile_dir(media_file, dir, media_basename, siblings, entries)}
@@ -261,7 +262,7 @@ defmodule Mydia.Subtitles.Sidecars do
         tally
 
       {dir, files}, tally ->
-        case File.ls(dir) do
+        case Storage.ls(dir) do
           {:ok, entries} ->
             siblings_by_library_path =
               files
@@ -270,7 +271,7 @@ defmodule Mydia.Subtitles.Sidecars do
               |> Map.new(&{&1, siblings_in_dir(&1, dir)})
 
             Enum.reduce(files, tally, fn media_file, acc ->
-              basename = media_file |> MediaFile.absolute_path() |> basename_for()
+              basename = media_file |> MediaFile.storage_path() |> basename_for()
               siblings = Map.fetch!(siblings_by_library_path, media_file.library_path_id)
               merge_tally(acc, reconcile_dir(media_file, dir, basename, siblings, entries))
             end)
@@ -305,7 +306,7 @@ defmodule Mydia.Subtitles.Sidecars do
   """
   @spec owning_media_file_for(MediaFile.t(), String.t()) :: MediaFile.t() | nil
   def owning_media_file_for(media_file, filename) do
-    case MediaFile.absolute_path(media_file) do
+    case MediaFile.storage_path(media_file) do
       nil ->
         nil
 
@@ -319,7 +320,7 @@ defmodule Mydia.Subtitles.Sidecars do
   ## Private
 
   defp dir_for(media_file) do
-    case MediaFile.absolute_path(media_file) do
+    case MediaFile.storage_path(media_file) do
       nil -> nil
       path -> Path.dirname(path)
     end
@@ -357,7 +358,7 @@ defmodule Mydia.Subtitles.Sidecars do
     |> Enum.filter(&(dir_for(&1) == dir))
   end
 
-  # Everything below this point runs only after `File.ls/1` has returned
+  # Everything below this point runs only after `Storage.ls/1` has returned
   # `{:ok, entries}`. That is deliberate and it is the most important line in
   # this module: a directory that fails to list is indistinguishable from an
   # empty one at the call site, and the difference is whether every subtitle
@@ -426,7 +427,7 @@ defmodule Mydia.Subtitles.Sidecars do
   defp owning_media_file(entry, siblings) do
     matches =
       siblings
-      |> Enum.map(&{&1, &1 |> MediaFile.absolute_path() |> basename_for()})
+      |> Enum.map(&{&1, &1 |> MediaFile.storage_path() |> basename_for()})
       |> Enum.filter(fn {_media_file, basename} -> String.starts_with?(entry, basename) end)
 
     case matches do
@@ -451,7 +452,7 @@ defmodule Mydia.Subtitles.Sidecars do
   end
 
   defp adopt(media_file, path, media_basename) do
-    with {:ok, content} <- File.read(path),
+    with {:ok, content} <- Storage.read_path(path),
          {:ok, format} <- Format.detect(content) do
       parsed = parse_filename(Path.basename(path), media_basename)
 

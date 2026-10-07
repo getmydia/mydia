@@ -255,19 +255,16 @@ defmodule Mydia.Subtitles do
 
       subtitle ->
         # Delete file first
-        case File.rm(subtitle.file_path) do
+        # A missing file counts as deleted, so only a real failure lands below.
+        case Mydia.Storage.delete_path(subtitle.file_path) do
           :ok ->
-            delete_record_and_settings(subtitle)
-
-          {:error, :enoent} ->
-            # File already gone, just delete record
             delete_record_and_settings(subtitle)
 
           {:error, reason} ->
             Logger.warning("Failed to delete subtitle file",
               subtitle_id: subtitle_id,
               path: subtitle.file_path,
-              reason: reason
+              reason: inspect(reason)
             )
 
             {:error, {:file_deletion_failed, reason}}

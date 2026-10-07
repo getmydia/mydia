@@ -134,9 +134,9 @@ defmodule Mydia.Subtitles.Delivery do
   end
 
   defp read_file(path) do
-    case File.read(path) do
+    case Storage.read_path(path) do
       {:ok, content} -> {:ok, content}
-      {:error, :enoent} -> {:error, :file_not_found}
+      {:error, %Storage.Error{kind: :not_found}} -> {:error, :file_not_found}
       {:error, reason} -> {:error, {:read_failed, reason}}
     end
   end
