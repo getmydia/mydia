@@ -37,8 +37,20 @@ defmodule MydiaWeb.PosterHoverUnclippedTest do
     media_item_fixture(%{type: "movie", title: "The Lantern Keeper"})
 
     {:ok, view, _html} = live(conn, ~p"/movies")
+    html = render(view)
 
-    assert_posters_unclipped(render(view))
+    assert_posters_unclipped(html)
+
+    doc = LazyHTML.from_fragment(html)
+
+    # The card no longer clips, so the badge row bounds itself: at dense
+    # density its nowrap badges would otherwise overrun the card edge.
+    refute Enum.empty?(LazyHTML.query(doc, ".card .hover-3d figure.rounded-t-box"))
+
+    refute Enum.empty?(
+             LazyHTML.query(doc, ".card .card-body > div > div.min-w-0.overflow-hidden")
+           ),
+           "the grid card's badge row must bound its own overflow"
   end
 
   test "the Recently Added card does not clip its poster", %{conn: conn} do
