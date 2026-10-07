@@ -70,6 +70,9 @@ MediaVersion mediaVersion(Map<String, dynamic> file, {int? durationSeconds}) {
     height: _height(file['resolution']),
     bitrateKbps: bps is int && bps > 0 ? (bps / 1000).round() : null,
     durationSeconds: durationSeconds,
+    sizeBytes: file['size'] is int ? file['size'] as int : null,
+    hdrFormat: file['hdrFormat'] as String?,
+    directPlaySupported: file['directPlaySupported'] as bool?,
     streams: [
       for (final sub in _list(file['subtitles']))
         if (sub['embedded'] != true &&
@@ -138,8 +141,7 @@ ItemSummary seasonSummary(
     ref: _ref(sid, ItemKind.season, seasonExternalId(showId, number)),
     title: number == 0 ? 'Specials' : 'Season $number',
     poster: poster,
-    userState: UserState(
-        watched: _map(season['watchStatus'])['watched'] as bool? ?? false),
+    userState: _watchState(season['watchStatus']),
     childCount: season['episodeCount'] as int?,
     index: number,
   );

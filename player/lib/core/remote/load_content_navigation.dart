@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import '../../domain/detail/detail_target.dart';
 import '../../domain/sources/item.dart';
 import '../../presentation/screens/detail/detail_links.dart';
+import '../player/best_file.dart';
 import '../sources/mydia/mydia_instance_id.dart';
 import '../sources/source.dart';
 import 'remote_control_intent.dart';
@@ -62,17 +63,21 @@ ItemRef? loadContentItemRef(LoadContentIntent intent) {
 /// `showId` and `seasonNumber` ride along for an episode exactly as a local
 /// episode tap carries them, so a remotely started episode keeps its
 /// next/previous-episode capability.
+///
+/// It runs the same `pickBestVersionId` a local tap does, so the two never
+/// disagree on version.
 Future<String?> resolveLoadContentRoute(
   LoadContentIntent intent, {
   required Future<ItemDetail> Function(ItemRef) fetch,
+  required double screenWidth,
 }) async {
   final ref = loadContentItemRef(intent);
   if (ref == null) return null;
 
   try {
     final detail = await fetch(ref);
-    final fileId =
-        detail.summary.defaultVersionId ?? detail.versions.firstOrNull?.id;
+    final fileId = await pickBestVersionId(detail.versions, screenWidth) ??
+        detail.summary.defaultVersionId;
     if (fileId == null) return null;
 
     final isEpisode = ref.kind == ItemKind.episode;
@@ -114,10 +119,15 @@ Future<void> pushLoadContentDestination(
   LoadContentIntent intent, {
   required Future<ItemDetail> Function(ItemRef) fetch,
   required void Function(String path) push,
+  required double screenWidth,
 }) async {
   if (intent.via == null) return;
 
-  final path = await resolveLoadContentRoute(intent, fetch: fetch);
+  final path = await resolveLoadContentRoute(
+    intent,
+    fetch: fetch,
+    screenWidth: screenWidth,
+  );
   push(path ?? loadContentDetailFallback(intent));
 }
 

@@ -263,6 +263,14 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
+  EpisodeView? _withDetailFiles(WidgetRef ref, EpisodeView? episode) {
+    if (episode == null) return null;
+    final files = ref.watch(episodeViewProvider(episode.target)).value?.files;
+    return files == null || files.isEmpty
+        ? episode
+        : episode.copyWith(files: files);
+  }
+
   Widget _buildContent(BuildContext context, WidgetRef ref, ShowView show) {
     final key = target.ref;
     final selectedEpisodeId = ref.watch(selectedEpisodeProvider(key));
@@ -289,12 +297,17 @@ class ShowDetailScreen extends ConsumerWidget {
     );
     final episodes = episodesAsync.value ?? const <EpisodeView>[];
     final selectedEpisode = resolveSelectedEpisode(selectedEpisodeId, episodes);
+    // Season listings carry one stub file per episode. The hero needs the
+    // real versions for its quality label, picker and download button, so it
+    // reads the selected episode's detail (cached, shared with the episode
+    // screen) and keeps the stub until that lands or if it fails.
+    final heroEpisode = _withDetailFiles(ref, selectedEpisode);
 
     return CustomScrollView(
       slivers: [
-        _buildHeroSection(context, ref, show, selectedEpisode),
+        _buildHeroSection(context, ref, show, heroEpisode),
         SliverToBoxAdapter(
-          child: _buildEpisodeHeroBody(context, ref, show, selectedEpisode),
+          child: _buildEpisodeHeroBody(context, ref, show, heroEpisode),
         ),
         SliverToBoxAdapter(
           child: Padding(

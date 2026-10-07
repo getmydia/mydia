@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/player/best_file.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -111,12 +112,13 @@ class _SourceContinueWatchingRowState
 
 enum _Action { details, remove }
 
-/// Plays the item's first version. The session resumes from the detail's
-/// saved position on its own.
+/// Plays the item's best version for this screen. The session resumes from
+/// the detail's saved position on its own.
 Future<void> _play(BuildContext context, WidgetRef ref, ItemRef item) async {
   final source = ref.read(mediaSourceProvider(item.sourceId));
   if (source == null) return;
   final toaster = Toaster.of(context);
+  final screenWidth = MediaQuery.sizeOf(context).width;
   final ItemDetail detail;
   try {
     detail = await source.item(item);
@@ -127,15 +129,15 @@ Future<void> _play(BuildContext context, WidgetRef ref, ItemRef item) async {
     );
     return;
   }
-  final version = detail.versions.firstOrNull;
-  if (version == null) {
+  final fileId = await pickBestVersionId(detail.versions, screenWidth);
+  if (fileId == null) {
     toaster.show('This title has nothing to play.', kind: ToastKind.error);
     return;
   }
   if (!context.mounted) return;
   await context.push(sourcePlayerLocation(
     detail.summary.ref,
-    fileId: version.id,
+    fileId: fileId,
     title: detail.summary.title,
   ));
   if (!context.mounted) return;

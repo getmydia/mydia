@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/player/best_file.dart';
+import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/sources/item.dart';
@@ -99,22 +101,42 @@ class CalendarRow extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 12),
-            _trailing(context),
+            _trailing(context, ref),
           ],
         ),
       ),
     );
   }
 
-  Widget _trailing(BuildContext context) {
+  /// The calendar listing only knows the default version, so a tap fetches
+  /// the item and picks the best version for this screen, as a local Play
+  /// button would.
+  Future<void> _playBest(BuildContext context, WidgetRef ref) async {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final source = ref.read(mediaSourceProvider(entry.ref.sourceId));
+    String? fileId = entry.defaultVersionId;
+    if (source != null) {
+      try {
+        final detail = await source.item(entry.ref);
+        fileId =
+            await pickBestVersionId(detail.versions, screenWidth) ?? fileId;
+      } catch (_) {
+        // Fall back to the listing's version: a calendar tap still plays.
+      }
+    }
+    if (!context.mounted) return;
+    await context.push(sourcePlayerLocation(
+      entry.ref,
+      fileId: fileId,
+      title: entry.title,
+    ));
+  }
+
+  Widget _trailing(BuildContext context, WidgetRef ref) {
     if (entry.isPlayable) {
       return PlayButton(
         key: ValueKey('calendar-play-$_id'),
-        onPressed: () => context.push(sourcePlayerLocation(
-          entry.ref,
-          fileId: entry.defaultVersionId,
-          title: entry.title,
-        )),
+        onPressed: () => _playBest(context, ref),
       );
     }
 

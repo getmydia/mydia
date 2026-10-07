@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/detail/detail_art.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/detail/detail_views.dart';
+import 'package:player/domain/models/media_file.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/detail/source_detail_mapping.dart';
 
@@ -59,6 +60,23 @@ void main() {
     expect(view.nextUpSeasonNumber, 1);
   });
 
+  test('season chips know how many episodes are unwatched', () {
+    const season = ItemSummary(
+      ref: ItemRef(
+          sourceId: fakeSourceId, kind: ItemKind.season, externalId: 'se-1'),
+      title: 'Season 1',
+      index: 1,
+      userState: UserState(unwatchedCount: 3),
+    );
+    final v = showViewFromSource(
+      const ItemDetail(summary: fakeShow),
+      const [season],
+      features: features,
+    );
+    expect(v.seasons.single.watchStatus?.unwatchedEpisodeCount, 3);
+    expect(v.seasons.single.watchStatus?.watched, isFalse);
+  });
+
   test('a source episode in a list plays its default version', () {
     final e = ItemSummary(
       ref: fakeEpisode(1).ref,
@@ -79,8 +97,44 @@ void main() {
         isTrue);
   });
 
+  test('a watched movie keeps the date it was watched', () {
+    final p = progressFromUserState(const UserState(watched: true), 100,
+        lastPlayedAt: DateTime.utc(2026, 3, 4, 20));
+    expect(p?.lastWatchedAt, '2026-03-04T20:00:00.000Z');
+  });
+
+  test('the movie view carries the watched date to its badge', () {
+    final d = ItemDetail(
+      summary: ItemSummary(
+        ref: fakeMovie(1).ref,
+        title: 'Copper Weather',
+        userState: const UserState(watched: true),
+        lastPlayedAt: DateTime.utc(2026, 3, 4),
+      ),
+    );
+    final v = movieViewFromSource(d, features: features);
+    expect(v.progress?.lastWatchedAt, '2026-03-04T00:00:00.000Z');
+  });
+
   test('a target names its item, and only some kinds have a detail screen', () {
     expect(SourceTarget(fakeMovie(1).ref).ref, fakeMovie(1).ref);
     expect(detailKindOf(ItemKind.video), isNull);
+  });
+
+  test('files keep size and HDR for the quality picker', () {
+    final f = filesFromVersions(const [
+      MediaVersion(id: 'f1', height: 2160, sizeBytes: 9, hdrFormat: 'HDR10'),
+    ]).single;
+    expect(f.size, 9);
+    expect(f.hdrFormat, 'HDR10');
+  });
+
+  test('files keep a false direct-play flag and default null to true', () {
+    final files = filesFromVersions(const [
+      MediaVersion(id: 'a', directPlaySupported: false),
+      MediaVersion(id: 'b'),
+    ]);
+    expect(files[0].directPlaySupported, false);
+    expect(files[1].directPlaySupported, true);
   });
 }

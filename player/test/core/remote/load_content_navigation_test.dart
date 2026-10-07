@@ -57,6 +57,7 @@ void main() {
       ItemRef? asked;
       final route = await resolveLoadContentRoute(
         _intent(episodeId: '55'),
+        screenWidth: 1600,
         fetch: (ref) async {
           asked = ref;
           return _detail(
@@ -85,6 +86,7 @@ void main() {
       ItemRef? asked;
       final route = await resolveLoadContentRoute(
         _intent(mediaItemId: 'm9', via: _a),
+        screenWidth: 1600,
         fetch: (ref) async {
           asked = ref;
           return _detail(ref);
@@ -99,16 +101,15 @@ void main() {
       expect(route, isNot(contains('showId')));
     });
 
-    test('the default version wins over the first one', () async {
+    test('the default version is the fallback when no version is listed',
+        () async {
       final route = await resolveLoadContentRoute(
         _intent(),
+        screenWidth: 1600,
         fetch: (ref) async => _detail(
           ref,
           defaultVersionId: 'file-2',
-          versions: const [
-            MediaVersion(id: 'file-1'),
-            MediaVersion(id: 'file-2')
-          ],
+          versions: const [],
         ),
       );
 
@@ -123,6 +124,7 @@ void main() {
           subtitleTrack: 'sub-fre',
           autoplay: false,
         ),
+        screenWidth: 1600,
         fetch: (ref) async => _detail(ref),
       );
 
@@ -135,6 +137,7 @@ void main() {
     test('absent tracks are omitted and autoplay stays implicit', () async {
       final route = await resolveLoadContentRoute(
         _intent(),
+        screenWidth: 1600,
         fetch: (ref) async => _detail(ref),
       );
 
@@ -146,6 +149,7 @@ void main() {
     test('a failed fetch resolves to null', () async {
       final route = await resolveLoadContentRoute(
         _intent(),
+        screenWidth: 1600,
         fetch: (ref) async => throw Exception('server unreachable'),
       );
 
@@ -155,15 +159,29 @@ void main() {
     test('an item with no version resolves to null', () async {
       final route = await resolveLoadContentRoute(
         _intent(),
+        screenWidth: 1600,
         fetch: (ref) async => _detail(ref, versions: const []),
       );
 
       expect(route, isNull);
     });
 
+    test('a remote play picks the best version, not the first', () async {
+      final route = await resolveLoadContentRoute(
+        _intent(),
+        screenWidth: 1600,
+        fetch: (ref) async => _detail(ref, versions: const [
+          MediaVersion(id: 'sd', height: 480),
+          MediaVersion(id: 'hd', height: 1080),
+        ]),
+      );
+      expect(route, contains('fileId=hd'));
+    });
+
     test('an intent with no sending instance resolves to null', () async {
       final route = await resolveLoadContentRoute(
         _intent(via: null),
+        screenWidth: 1600,
         fetch: (ref) async => fail('must not fetch'),
       );
 
@@ -176,6 +194,7 @@ void main() {
       String? pushed;
       await pushLoadContentDestination(
         _intent(),
+        screenWidth: 1600,
         fetch: (ref) async => _detail(ref),
         push: (path) => pushed = path,
       );
@@ -187,6 +206,7 @@ void main() {
       String? pushed;
       await pushLoadContentDestination(
         _intent(episodeId: 'ep-empty'),
+        screenWidth: 1600,
         fetch: (ref) async => _detail(ref, versions: const []),
         push: (path) => pushed = path,
       );
@@ -198,6 +218,7 @@ void main() {
       String? pushed;
       await pushLoadContentDestination(
         _intent(via: null),
+        screenWidth: 1600,
         fetch: (ref) async => fail('must not fetch'),
         push: (path) => pushed = path,
       );

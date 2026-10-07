@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/calendar/calendar_row.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
+import '../detail/detail_harness.dart';
 import 'calendar_test_items.dart';
 
 ItemSummary _entry({
@@ -31,7 +33,76 @@ Future<void> _pump(WidgetTester tester, ItemSummary entry) {
   );
 }
 
+/// Mounts a playable entry over [source] and taps its play control. Returns
+/// the locations the row pushed.
+Future<List<String>> _tapPlay(
+  WidgetTester tester,
+  ScriptedDetailSource source,
+  ItemSummary entry,
+) async {
+  final pushed = <String>[];
+  await pumpDetailScreen(
+    tester,
+    Scaffold(body: CalendarRow(entry: entry, today: DateTime(2026, 8, 27))),
+    [source],
+    size: const Size(1600, 900),
+    routes: [
+      GoRoute(
+        path: '/s/:sourceId/player/:itemId',
+        builder: (context, state) {
+          pushed.add(state.uri.toString());
+          return const Scaffold(body: SizedBox.shrink());
+        },
+      ),
+    ],
+  );
+  await tester
+      .tap(find.byKey(ValueKey('calendar-play-${entry.ref.externalId}')));
+  // The best version is picked after real device detection: poll in real time.
+  for (var i = 0; i < 250 && pushed.isEmpty; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pump();
+  }
+  return pushed;
+}
+
 void main() {
+  testWidgets('play pushes the best version of the fetched item',
+      (tester) async {
+    final entry =
+        _entry(id: '7', airDate: DateTime(2026, 8, 20), playable: true);
+    final source = ScriptedDetailSource(
+      detailOf: (ref) => ItemDetail(
+        summary: entry,
+        versions: const [
+          MediaVersion(id: 'sd', height: 480),
+          MediaVersion(id: 'hd', height: 1080),
+        ],
+      ),
+    );
+
+    final pushed = await _tapPlay(tester, source, entry);
+
+    expect(pushed, hasLength(1));
+    expect(Uri.parse(pushed.single).queryParameters['fileId'], 'hd');
+  });
+
+  testWidgets('play falls back to the listed version when the fetch fails',
+      (tester) async {
+    final entry =
+        _entry(id: '8', airDate: DateTime(2026, 8, 20), playable: true);
+    final source = ScriptedDetailSource(
+      detailOf: (ref) => throw StateError('server unreachable'),
+    );
+
+    final pushed = await _tapPlay(tester, source, entry);
+
+    expect(pushed, hasLength(1));
+    expect(Uri.parse(pushed.single).queryParameters['fileId'], 'file-8');
+  });
+
   testWidgets('a playable past entry offers a play control', (tester) async {
     await _pump(
       tester,
