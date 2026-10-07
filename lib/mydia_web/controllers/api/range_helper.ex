@@ -10,10 +10,17 @@ defmodule MydiaWeb.Api.RangeHelper do
     only: [get_req_header: 2, put_resp_header: 3, put_status: 2, send_file: 3, send_file: 5]
 
   @doc """
-  Parses an HTTP Range header value.
+  Parses an HTTP Range header value (RFC 9110 section 14.1.2).
 
-  Returns {:ok, start, end_pos} for valid ranges or :error for invalid ones.
-  Only supports single byte ranges in the format "bytes=START-END" or "bytes=START-".
+  Returns `{:ok, start, end_pos}` for a satisfiable range or `:error`
+  otherwise. Only a single byte range is supported:
+
+    * `bytes=START-END` (END is clamped to the last byte of the file)
+    * `bytes=START-` (to the end of the file)
+    * `bytes=-N` (the last N bytes; the whole file when N exceeds its size)
+
+  Unsatisfiable or malformed ranges, multi-range headers, and any range on an
+  empty file return `:error`.
 
   ## Examples
 
@@ -23,11 +30,21 @@ defmodule MydiaWeb.Api.RangeHelper do
       iex> parse_range_header("bytes=500-", 1000)
       {:ok, 500, 999}
 
+      iex> parse_range_header("bytes=0-65535", 1000)
+      {:ok, 0, 999}
+
+      iex> parse_range_header("bytes=-500", 1000)
+      {:ok, 500, 999}
+
+      iex> parse_range_header("bytes=-0", 1000)
+      :error
+
       iex> parse_range_header("bytes=invalid", 1000)
       :error
   """
   def parse_range_header(nil, _file_size), do: :error
   def parse_range_header("", _file_size), do: :error
+  def parse_range_header(_range_header, file_size) when file_size <= 0, do: :error
 
   def parse_range_header(range_header, file_size) do
     # Only support single byte range requests
@@ -42,6 +59,15 @@ defmodule MydiaWeb.Api.RangeHelper do
 
   defp parse_range_spec(spec, file_size) do
     case String.split(spec, "-") do
+      ["", length_str] ->
+        # Suffix range like "bytes=-500" (the last N bytes)
+        with {length, ""} <- Integer.parse(length_str),
+             true <- length > 0 do
+          {:ok, max(file_size - length, 0), file_size - 1}
+        else
+          _ -> :error
+        end
+
       [start_str, ""] ->
         # Range like "bytes=500-" (from position to end)
         with {start, ""} <- Integer.parse(start_str),
@@ -52,11 +78,11 @@ defmodule MydiaWeb.Api.RangeHelper do
         end
 
       [start_str, end_str] ->
-        # Range like "bytes=0-499"
+        # Range like "bytes=0-499"; an end past EOF is clamped
         with {start, ""} <- Integer.parse(start_str),
              {end_pos, ""} <- Integer.parse(end_str),
-             true <- start >= 0 and start <= end_pos and end_pos < file_size do
-          {:ok, start, end_pos}
+             true <- start >= 0 and start <= end_pos and start < file_size do
+          {:ok, start, min(end_pos, file_size - 1)}
         else
           _ -> :error
         end

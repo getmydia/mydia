@@ -52,6 +52,17 @@ defmodule MydiaWeb.StreamLinkControllerTest do
     assert get_resp_header(conn, "content-length") == ["10"]
   end
 
+  test "clamps a range end past EOF", %{conn: conn, user: user, media_file: file} do
+    conn =
+      conn
+      |> put_req_header("range", "bytes=0-999999")
+      |> get(StreamLink.path(user.id, file))
+
+    assert conn.status == 206
+    assert get_resp_header(conn, "content-range") == ["bytes 0-#{@size - 1}/#{@size}"]
+    assert get_resp_header(conn, "content-length") == ["#{@size}"]
+  end
+
   test "answers HEAD with headers and no body", %{conn: conn, user: user, media_file: file} do
     conn = head(conn, StreamLink.path(user.id, file))
 
