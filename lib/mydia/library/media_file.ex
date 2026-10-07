@@ -155,6 +155,9 @@ defmodule Mydia.Library.MediaFile do
 
   The library_path association must be preloaded.
 
+  Returns nil for files in an S3 library; use `Mydia.Storage.source/1` or
+  `Mydia.Storage.media_input/1` to read them.
+
   ## Examples
 
       iex> file = %MediaFile{relative_path: "Movie.mkv", library_path: %LibraryPath{path: "/movies"}}
@@ -165,6 +168,10 @@ defmodule Mydia.Library.MediaFile do
       iex> MediaFile.absolute_path(file)
       nil
   """
+  # An S3 object has no local path. Read it through Mydia.Storage.source/1.
+  def absolute_path(%__MODULE__{library_path: %Mydia.Settings.LibraryPath{path: "s3://" <> _}}),
+    do: nil
+
   def absolute_path(%__MODULE__{
         relative_path: relative_path,
         library_path: %Mydia.Settings.LibraryPath{path: path}

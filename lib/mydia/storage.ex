@@ -7,6 +7,9 @@ defmodule Mydia.Storage do
   for S3). See `lib/mydia/storage/README.md`.
   """
 
+  alias Mydia.Library.MediaFile
+  alias Mydia.Settings
+  alias Mydia.Settings.LibraryPath
   alias Mydia.Storage.{Entry, Error, Location, Source}
 
   @spec list(Location.t()) :: {:ok, [Entry.t()]} | {:error, Error.t()}
@@ -18,6 +21,59 @@ defmodule Mydia.Storage do
   @spec source(Location.t(), String.t()) :: {:ok, Source.t()}
   def source(%Location{} = loc, relative_path) when is_binary(relative_path),
     do: {:ok, Source.new(loc, relative_path)}
+
+  @spec location(LibraryPath.t()) :: {:ok, Location.t()} | {:error, Error.t()}
+  def location(%LibraryPath{path: path}) when is_binary(path) do
+    if Location.s3_path?(path) do
+      with {:ok, name, prefix} <- parse(path),
+           backend when not is_nil(backend) <- Settings.get_storage_backend_by_name(name) do
+        {:ok, Location.s3(backend, prefix, String.trim_trailing(path, "/"))}
+      else
+        nil -> {:error, Error.new(:not_found, "unknown storage backend in #{path}")}
+        {:error, _} = error -> error
+      end
+    else
+      {:ok, Location.local(path)}
+    end
+  end
+
+  def location(_), do: {:error, Error.new(:not_found, "library path is not set")}
+
+  @spec source(MediaFile.t()) :: {:ok, Source.t()} | {:error, Error.t()}
+  def source(%MediaFile{relative_path: rel, library_path: %LibraryPath{} = lp})
+      when is_binary(rel) do
+    with {:ok, loc} <- location(lp), do: source(loc, rel)
+  end
+
+  def source(%MediaFile{id: id}),
+    do: {:error, Error.new(:not_found, "media file #{id} has no resolvable location")}
+
+  @doc "Source, existence check and `input/1` in one call."
+  @spec media_input(MediaFile.t()) :: {:ok, String.t()} | {:error, Error.t()}
+  def media_input(%MediaFile{} = mf) do
+    with {:ok, source} <- source(mf), do: input(source)
+  end
+
+  @spec s3?(LibraryPath.t() | MediaFile.t() | String.t() | nil) :: boolean()
+  def s3?(%LibraryPath{path: path}), do: Location.s3_path?(path)
+  def s3?(%MediaFile{library_path: %LibraryPath{} = lp}), do: s3?(lp)
+  def s3?(path) when is_binary(path), do: Location.s3_path?(path)
+  def s3?(_), do: false
+
+  @spec ensure_writable(LibraryPath.t() | MediaFile.t() | String.t() | nil) ::
+          :ok | {:error, Error.t()}
+  def ensure_writable(target) do
+    if s3?(target),
+      do: {:error, Error.new(:read_only, "S3 libraries are read-only in this version of Mydia")},
+      else: :ok
+  end
+
+  defp parse(path) do
+    case Location.parse_s3(path) do
+      {:ok, name, prefix} -> {:ok, name, prefix}
+      :error -> {:error, Error.new(:not_found, "malformed storage path #{path}")}
+    end
+  end
 
   @spec stat(Source.t()) :: {:ok, Entry.t()} | {:error, Error.t()}
   def stat(%Source{location: loc, relative_path: rel}), do: impl(loc).stat(loc, rel)
