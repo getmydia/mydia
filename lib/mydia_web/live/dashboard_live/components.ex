@@ -13,7 +13,7 @@ defmodule MydiaWeb.DashboardLive.Components do
   use MydiaWeb, :verified_routes
 
   import MydiaWeb.CoreComponents, only: [icon: 1, poster_figure: 1]
-  import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1]
+  import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1, poster_rail: 1]
 
   alias MydiaWeb.Live.Helpers.MediaImages
 
@@ -34,17 +34,18 @@ defmodule MydiaWeb.DashboardLive.Components do
         <h2 class="text-2xl font-bold truncate">{@title}</h2>
       </div>
 
-      <div class="flex gap-3 overflow-x-auto snap-x scroll-smooth pb-2">
+      <.poster_rail>
         <div
           :for={{entry, index} <- Enum.with_index(@entries)}
           id={"#{@id}-item-#{entry.media_item.id}"}
           class="snap-start flex-shrink-0 w-36"
         >
-          <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden group">
+          <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 group">
             <.link navigate={~p"/media/#{entry.media_item.id}"}>
               <.poster_figure
                 src={MediaImages.poster_url(entry.media_item, "w342")}
                 alt={entry.media_item.title}
+                class="rounded-t-box"
                 loading={if(index < 6, do: nil, else: "lazy")}
               >
                 <:overlay>
@@ -60,7 +61,7 @@ defmodule MydiaWeb.DashboardLive.Components do
             <.poster_card_body title={entry.media_item.title} />
           </div>
         </div>
-      </div>
+      </.poster_rail>
     </div>
     """
   end

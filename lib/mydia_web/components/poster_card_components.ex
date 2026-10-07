@@ -70,6 +70,42 @@ defmodule MydiaWeb.PosterCardComponents do
     """
   end
 
+  @doc """
+  The horizontal scroller every poster rail sits in.
+
+  `poster_figure/1` scales and tilts the poster past its card on hover. A
+  horizontal scroller clips vertically too (a `visible` overflow axis computes
+  to `auto` when the other axis is not `visible`), so a rail with no room of
+  its own crops that pop-out. This one pads all four sides by 12px for it and
+  pulls the padding back with negative margins: cards stay aligned with the
+  heading, and the bottom keeps exactly the 8px the old `pb-2` reserved for
+  the scrollbar. `scroll-px-3` keeps a snapped card clear of the side padding.
+
+  ## Example
+
+      <.poster_rail id="my-rail">
+        <div :for={item <- @items} class="snap-start flex-shrink-0 w-36">...</div>
+      </.poster_rail>
+  """
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  slot :inner_block, required: true
+
+  def poster_rail(assigns) do
+    ~H"""
+    <div
+      class={[
+        "flex gap-3 overflow-x-auto snap-x scroll-smooth scroll-px-3 p-3 -mx-3 -mt-3 -mb-1",
+        @class
+      ]}
+      {@rest}
+    >
+      {render_slot(@inner_block)}
+    </div>
+    """
+  end
+
   # A TMDB page. Both Metadata.trending_movies/0 and Metadata.discover/2 return
   # a provider page uncapped, so a skeleton grid of this size is replaced
   # one-for-one by real cards and the grid does not resize when they land.
@@ -133,12 +169,7 @@ defmodule MydiaWeb.PosterCardComponents do
 
   def poster_card_rail_skeleton(assigns) do
     ~H"""
-    <div
-      id={@id}
-      class="flex gap-3 overflow-x-auto pb-2"
-      role="status"
-      aria-label="Loading titles"
-    >
+    <.poster_rail id={@id} role="status" aria-label="Loading titles">
       <div :for={_ <- 1..@count//1} class="flex-shrink-0 w-36">
         <div class="card bg-base-100 shadow-lg h-full">
           <div class="skeleton aspect-[2/3] rounded-t-box rounded-b-none"></div>
@@ -152,7 +183,7 @@ defmodule MydiaWeb.PosterCardComponents do
           </div>
         </div>
       </div>
-    </div>
+    </.poster_rail>
     """
   end
 end
