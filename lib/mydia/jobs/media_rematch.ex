@@ -118,13 +118,13 @@ defmodule Mydia.Jobs.MediaRematch do
   end
 
   defp place(media_file, library_path, dest_path, _new_rel) do
-    source_path = MediaFile.absolute_path(media_file)
+    source_path = MediaFile.storage_path(media_file)
 
     cond do
       is_nil(source_path) ->
         {:error, :no_source_path}
 
-      not File.exists?(source_path) and not File.exists?(dest_path) ->
+      not exists?(source_path) and not exists?(dest_path) ->
         {:error, :source_missing}
 
       true ->
@@ -224,10 +224,10 @@ defmodule Mydia.Jobs.MediaRematch do
   end
 
   defp cleanup_source(download, media_file, dest_path) do
-    source_path = MediaFile.absolute_path(media_file)
+    source_path = MediaFile.storage_path(media_file)
 
-    if source_path && source_path != dest_path && File.exists?(source_path) do
-      case File.rm(source_path) do
+    if source_path && source_path != dest_path && exists?(source_path) do
+      case remove_source(source_path) do
         :ok ->
           :ok
 
@@ -245,6 +245,12 @@ defmodule Mydia.Jobs.MediaRematch do
       :ok
     end
   end
+
+  defp exists?("s3://" <> _ = path), do: Mydia.Storage.path_exists?(path)
+  defp exists?(path), do: File.exists?(path)
+
+  defp remove_source("s3://" <> _ = path), do: Mydia.Storage.delete_path(path)
+  defp remove_source(path), do: File.rm(path)
 
   defp record_pending_source_delete(download_id, source_path) do
     case Downloads.get_download(download_id) do
