@@ -272,12 +272,16 @@ void main() {
         addTearDown(tester.view.reset);
 
         await tester.pumpWidget(
-          _host(ChromeTopBar(
-            title: 'A reasonably long episode title',
-            onBack: () {},
-            onScalingTap: () {},
-            castAction: const Icon(Icons.cast_rounded),
-            onCastTap: () {},
+          // PlaybackChrome pads the bar 16px a side (PlayerTopBarSlot).
+          _host(Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ChromeTopBar(
+              title: 'A reasonably long episode title',
+              onBack: () {},
+              onScalingTap: () {},
+              castAction: const Icon(Icons.cast_rounded),
+              onCastTap: () {},
+            ),
           )),
         );
 
@@ -293,6 +297,27 @@ void main() {
         }
       });
     }
+
+    testWidgets('a long title can grow past a third of a wide bar',
+        (tester) async {
+      tester.view.physicalSize = const Size(1200, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        _host(ChromeTopBar(
+          title: 'An extremely long episode title ' * 6,
+          onBack: () {},
+          onScalingTap: () {},
+          castAction: const Icon(Icons.cast_rounded),
+          onCastTap: () {},
+        )),
+      );
+
+      final bar = tester.getSize(find.byType(ChromeTopBar)).width;
+      final title = tester.getSize(find.byKey(ChromeTopBar.titleKey)).width;
+      expect(title, greaterThan(bar / 3));
+    });
 
     testWidgets('omits the scaling pill when no handler is wired',
         (tester) async {

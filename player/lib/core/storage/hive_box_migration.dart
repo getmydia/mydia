@@ -56,7 +56,7 @@ const kMydiaHiveBoxes = <String>[
 /// Never throws. This runs on the startup path ahead of `Hive.init`, and a box
 /// that cannot be moved must cost that box its history, never the launch:
 /// Hive simply creates a fresh empty box at the new path. Each box is isolated
-/// in its own guard so one unreadable file cannot strand the other fourteen.
+/// in its own guard so one unreadable file cannot strand the other boxes.
 ///
 /// Safe to run on every launch. Once a box has moved there is nothing left at
 /// [from] to find, and a box whose data file already exists at [to] is left

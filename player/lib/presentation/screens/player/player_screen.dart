@@ -941,8 +941,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Fit or Fill. Starts at Fit and is replaced by the saved choice once
   /// [VideoScalingPrefs] answers, which is a box read and lands before the
-  /// first frame of video in practice.
+  /// first frame of video in practice. A choice made before that answer
+  /// arrives wins: see [_scalingTouched].
   VideoScaling _scaling = VideoScaling.fit;
+
+  /// Set once the user has picked a mode, so a late [_loadScaling] cannot
+  /// overwrite it with the older saved value.
+  bool _scalingTouched = false;
 
   /// Skippable segments for the file being played. See [SegmentSkipper].
   final SegmentSkipper _segmentSkipper = SegmentSkipper();
@@ -4745,6 +4750,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   Future<void> _loadScaling() async {
     final saved = await VideoScalingPrefs.load();
+    if (_scalingTouched) return;
     if (mounted && saved != _scaling) setState(() => _scaling = saved);
   }
 
@@ -4753,6 +4759,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// same way does not toast again.
   void _setScaling(VideoScaling next) {
     if (next == _scaling) return;
+    _scalingTouched = true;
     setState(() => _scaling = next);
     unawaited(VideoScalingPrefs.save(next));
     _showToast(next.toastMessage);
