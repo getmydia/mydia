@@ -161,6 +161,15 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
     end
   end
 
+  # start_backend/6 resolves the input through Storage.media_input/1, which
+  # checks that the file exists, so the hand-built file needs a real one.
+  defp existing_library_dir do
+    dir = Path.join(System.tmp_dir!(), "mydia-hls-segments-fixture")
+    File.mkdir_p!(dir)
+    File.touch!(Path.join(dir, "movie.mkv"))
+    dir
+  end
+
   defp base_state(overrides \\ []) do
     {:ok, plan} = SegmentPlan.build(600.0, 4)
 
@@ -169,7 +178,7 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
         session_id: "segments-test-session",
         media_file: %MediaFile{
           relative_path: "movie.mkv",
-          library_path: %LibraryPath{path: "/tmp"}
+          library_path: %LibraryPath{path: existing_library_dir()}
         },
         media_file_id: 1,
         user_id: 1,

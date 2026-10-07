@@ -226,8 +226,12 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     # inside build_ffmpeg_args/3 and discarded; it cannot drift now.
     accel_tier = plan.video.tier || :software
 
-    Logger.info("Starting FFmpeg HLS transcoding: #{input_path}")
-    Logger.debug("FFmpeg args: #{inspect(args)}")
+    # The input may be a presigned S3 URL; keep its query string out of the
+    # logs and out of the state (crash reports and get_status print it).
+    shown_input = Mydia.Storage.redact(input_path)
+
+    Logger.info("Starting FFmpeg HLS transcoding: #{shown_input}")
+    Logger.debug("FFmpeg args: #{Mydia.Storage.redact_text(args)}")
 
     # Calculate playlist path for ready detection
     playlist_path = Path.join(output_dir, "index.m3u8")
@@ -236,7 +240,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     case start_ffmpeg_process(args) do
       {:ok, port, pid} ->
         state = %State{
-          input_path: input_path,
+          input_path: shown_input,
           output_dir: output_dir,
           ffmpeg_pid: pid,
           ffmpeg_port: port,
@@ -284,6 +288,11 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
   @impl true
   def handle_info({port, {:data, data}}, %{ffmpeg_port: port} = state) when is_port(port) do
+    # FFmpeg echoes the input URL in its errors. Redacting once at the door
+    # keeps the presigned query out of every log line, the on_error and
+    # on_hwaccel_failed callbacks, and the buffers below.
+    data = Mydia.Storage.redact_text(data)
+
     # Log raw FFmpeg output for debugging (helpful when diagnosing issues)
     if String.trim(data) != "" do
       Logger.debug("FFmpeg: #{String.trim(data)}")

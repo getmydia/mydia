@@ -233,13 +233,14 @@ defmodule Mydia.Streaming.Compatibility do
         |> String.trim()
 
       _ ->
-        # Fall back to file extension from absolute path
-        case MediaFile.absolute_path(media_file) do
+        # Fall back to the file extension; the relative path has it for
+        # local and S3 files alike
+        case media_file.relative_path do
           nil ->
             "unknown"
 
-          absolute_path ->
-            absolute_path
+          relative_path ->
+            relative_path
             |> Path.extname()
             |> String.trim_leading(".")
             |> String.downcase()

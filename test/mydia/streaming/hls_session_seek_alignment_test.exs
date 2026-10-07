@@ -37,13 +37,22 @@ defmodule Mydia.Streaming.HlsSessionSeekAlignmentTest do
     end
   end
 
+  # seek_opts/3 resolves the input through Storage.media_input/1, which checks
+  # that the file exists, so the hand-built file needs a real one behind it.
+  defp existing_library_dir do
+    dir = Path.join(System.tmp_dir!(), "mydia-seek-alignment-fixture")
+    File.mkdir_p!(dir)
+    File.touch!(Path.join(dir, "resume.mkv"))
+    dir
+  end
+
   defp media_file(codec, opts \\ []) do
     %MediaFile{
       id: Ecto.UUID.generate(),
       codec: codec,
       audio_codec: "aac",
       relative_path: "resume.mkv",
-      library_path: %LibraryPath{path: "/lib"},
+      library_path: %LibraryPath{path: existing_library_dir()},
       metadata: %FileMetadata{
         duration: Keyword.get(opts, :duration, 3600.0),
         container: Keyword.get(opts, :container, "mkv"),
@@ -88,7 +97,8 @@ defmodule Mydia.Streaming.HlsSessionSeekAlignmentTest do
       assert opts[:seek_keyframe] == 20.0
       # The requested offset is left alone: the supervisor matches on it.
       assert opts[:start_position] == 27
-      assert_received {:located, "/lib/resume.mkv", 27}
+      assert_received {:located, path, 27}
+      assert path == Path.join(existing_library_dir(), "resume.mkv")
     end
 
     test "pins an MP4 too" do

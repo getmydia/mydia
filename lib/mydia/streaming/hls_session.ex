@@ -685,7 +685,7 @@ defmodule Mydia.Streaming.HlsSession do
              Keyword.get(opts, :max_bitrate),
              Keyword.get(opts, :max_height)
            ),
-         path when is_binary(path) <- MediaFile.absolute_path(media_file),
+         {:ok, path} <- Mydia.Storage.media_input(media_file),
          {:ok, keyframe} <- locate.(path, start_position) do
       Keyword.put(opts, :seek_keyframe, keyframe)
     else
@@ -728,9 +728,9 @@ defmodule Mydia.Streaming.HlsSession do
   @doc false
   @spec transcoder_base_opts(MediaFile.t(), String.t() | nil, String.t(), keyword()) ::
           keyword()
-  def transcoder_base_opts(media_file, absolute_path, temp_dir, opts) do
+  def transcoder_base_opts(media_file, input, temp_dir, opts) do
     [
-      input_path: absolute_path,
+      input_path: input,
       output_dir: temp_dir,
       media_file: media_file,
       start_position: Keyword.get(opts, :start_position, 0),
@@ -1223,9 +1223,22 @@ defmodule Mydia.Streaming.HlsSession do
   # here reachable again; do that first, then reinstate one, rather than
   # assuming this function already degrades gracefully.
   defp start_backend(:ffmpeg, media_file, temp_dir, job_id, opts, generation) do
-    # Resolve absolute path for FFmpeg input
-    absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
-    Logger.info("Starting FFmpeg backend for #{absolute_path}")
+    # Resolved on every (re)start and never kept in session state: a presigned
+    # S3 URL expires, and a seek or hardware fallback restarts FFmpeg long
+    # after the first one was minted.
+    case Mydia.Storage.media_input(media_file) do
+      {:ok, input} ->
+        start_backend_with_input(input, media_file, temp_dir, job_id, opts, generation)
+
+      {:error, %Mydia.Storage.Error{message: message}} ->
+        Logger.error("Cannot start FFmpeg backend for #{media_file.id}: #{message}")
+        {:error, :input_unavailable}
+    end
+  end
+
+  defp start_backend_with_input(input, media_file, temp_dir, job_id, opts, generation) do
+    shown_input = Mydia.Storage.redact(input)
+    Logger.info("Starting FFmpeg backend for #{shown_input}")
 
     # Capture self() to notify when FFmpeg is ready
     session_pid = self()
@@ -1244,7 +1257,7 @@ defmodule Mydia.Streaming.HlsSession do
     # also forwarding it through this filter will desynchronise the two
     # plans silently: the dashboard (reading HlsSession.State.plan) would
     # describe an encode the transcoder never actually runs.
-    base_opts = transcoder_base_opts(media_file, absolute_path, temp_dir, opts)
+    base_opts = transcoder_base_opts(media_file, input, temp_dir, opts)
 
     # Only a :full session has a TranscodeWindow to mark ready, so only wire
     # the callback that reports segment completion for that mode. A :window
@@ -1279,10 +1292,12 @@ defmodule Mydia.Streaming.HlsSession do
             end
           end,
           on_complete: fn ->
-            Logger.info("FFmpeg transcoding completed for #{absolute_path}")
+            Logger.info("FFmpeg transcoding completed for #{shown_input}")
           end,
           on_error: fn error ->
-            Logger.error("FFmpeg transcoding error for #{absolute_path}: #{error}")
+            Logger.error(
+              "FFmpeg transcoding error for #{shown_input}: #{Mydia.Storage.redact_text(error)}"
+            )
           end,
           on_hwaccel_failed: fn output ->
             __MODULE__.notify_hwaccel_failed(session_pid, generation, output)
