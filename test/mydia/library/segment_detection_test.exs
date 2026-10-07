@@ -62,7 +62,14 @@ defmodule Mydia.Library.SegmentDetectionTest do
             metadata: %{"container" => "mkv", "duration" => duration}
           })
 
-        {media_file, MediaFile.absolute_path(Repo.preload(media_file, :library_path))}
+        path = MediaFile.absolute_path(Repo.preload(media_file, :library_path))
+
+        # Storage.media_input/1 checks the file exists. The fingerprinter is
+        # stubbed, so an empty placeholder is enough.
+        File.mkdir_p!(Path.dirname(path))
+        File.write!(path, "")
+
+        {media_file, path}
       end
 
     {media_item, files}

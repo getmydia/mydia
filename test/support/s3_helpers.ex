@@ -57,6 +57,54 @@ defmodule Mydia.S3Helpers do
     :ok
   end
 
+  @doc """
+  Generates a 2s video with ffmpeg, uploads it under a fresh prefix and returns
+  an unsaved `%MediaFile{}` pointing at it (library path preloaded). Creates the
+  storage backend row when missing. Returns `{media_file, location}`; the caller
+  deletes the prefix. Options: `:relative_path`, `:tmp_dir`.
+  """
+  def s3_media_file!(opts \\ []) do
+    relative_path = Keyword.get(opts, :relative_path, "Invented Film (2031)/film.mp4")
+    tmp_dir = Keyword.get_lazy(opts, :tmp_dir, fn -> System.tmp_dir!() end)
+    video = Path.join(tmp_dir, "s3-helper-#{System.unique_integer([:positive])}.mp4")
+
+    {_, 0} =
+      System.cmd(
+        "ffmpeg",
+        ~w(-y -loglevel error -f lavfi -i testsrc=duration=2:size=160x120:rate=10
+           -f lavfi -i sine=duration=2 -shortest -c:v libx264 -c:a aac) ++ [video]
+      )
+
+    backend = backend()
+
+    unless Mydia.Settings.get_storage_backend_by_name(backend.name) do
+      {:ok, _} =
+        backend
+        |> Map.from_struct()
+        |> Map.take([
+          :name,
+          :endpoint,
+          :region,
+          :bucket,
+          :access_key_id,
+          :secret_access_key,
+          :path_style
+        ])
+        |> Mydia.Settings.create_storage_backend()
+    end
+
+    loc = unique_location(backend)
+    put_object!(loc, relative_path, File.read!(video))
+
+    media_file = %Mydia.Library.MediaFile{
+      id: Ecto.UUID.generate(),
+      relative_path: relative_path,
+      library_path: %Mydia.Settings.LibraryPath{path: String.trim_trailing(loc.uri, "/")}
+    }
+
+    {media_file, loc}
+  end
+
   def delete_prefix!(%Location{backend: b, prefix: prefix} = loc) do
     {:ok, entries} = Mydia.Storage.list(loc)
 

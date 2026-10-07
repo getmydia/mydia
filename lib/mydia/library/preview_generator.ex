@@ -85,12 +85,9 @@ defmodule Mydia.Library.PreviewGenerator do
   """
   @spec generate(MediaFile.t(), generate_opts()) :: {:ok, generate_result()} | {:error, term()}
   def generate(%MediaFile{} = media_file, opts \\ []) do
-    input_path = MediaFile.absolute_path(media_file)
-
-    if is_nil(input_path) do
-      {:error, :library_path_not_preloaded}
-    else
-      do_generate(input_path, opts)
+    case Mydia.Storage.media_input(media_file) do
+      {:ok, input} -> do_generate(input, opts)
+      {:error, error} -> {:error, Mydia.Storage.input_error_reason(error)}
     end
   end
 
@@ -144,7 +141,7 @@ defmodule Mydia.Library.PreviewGenerator do
        }}
     else
       {:error, reason} = error ->
-        Logger.error("Failed to generate video preview: #{inspect(reason)}")
+        Logger.error("Failed to generate video preview: #{Mydia.Storage.redact_text(reason)}")
         error
     end
   end

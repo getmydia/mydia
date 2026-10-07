@@ -142,18 +142,23 @@ defmodule Mydia.Jobs.HdrBackfill do
 
   defp backfill_one(id) do
     media_file = Repo.get(MediaFile, id) |> Repo.preload(:library_path)
-    path = media_file && MediaFile.absolute_path(media_file)
+
+    source =
+      case media_file && Mydia.Storage.source(media_file) do
+        {:ok, source} -> source
+        _ -> nil
+      end
 
     cond do
       is_nil(media_file) ->
         :ok
 
-      is_nil(path) or not File.exists?(path) ->
+      is_nil(source) or not Mydia.Storage.exists?(source) ->
         Logger.info("HDR backfill stamping missing file", file_id: id)
         stamp(id, [])
 
       true ->
-        case FileAnalyzer.analyze(path) do
+        case FileAnalyzer.analyze(source) do
           {:ok, %{hdr: %Hdr{} = hdr}} ->
             stamp(id,
               hdr_format: hdr.base,
@@ -167,7 +172,7 @@ defmodule Mydia.Jobs.HdrBackfill do
           {:error, reason} ->
             Logger.warning("HDR backfill ffprobe failed",
               file_id: id,
-              reason: inspect(reason)
+              reason: Mydia.Storage.redact_text(reason)
             )
 
             stamp(id, [])

@@ -54,6 +54,23 @@ defmodule Mydia.Storage do
     with {:ok, source} <- source(mf), do: input(source)
   end
 
+  @doc """
+  Maps a `media_input/1` error to the reasons analysis and generation code has
+  always returned: `:library_path_not_preloaded` when the media file has no
+  resolvable location, `:file_not_found` when the file is missing, and the
+  `Error` itself otherwise.
+  """
+  @spec input_error_reason(Error.t()) ::
+          :library_path_not_preloaded | :file_not_found | Error.t()
+  def input_error_reason(%Error{kind: :not_found, message: "media file " <> rest} = error) do
+    if String.ends_with?(rest, "has no resolvable location"),
+      do: :library_path_not_preloaded,
+      else: error
+  end
+
+  def input_error_reason(%Error{kind: :not_found}), do: :file_not_found
+  def input_error_reason(%Error{} = error), do: error
+
   @spec s3?(LibraryPath.t() | MediaFile.t() | String.t() | nil) :: boolean()
   def s3?(%LibraryPath{path: path}), do: Location.s3_path?(path)
   def s3?(%MediaFile{library_path: %LibraryPath{} = lp}), do: s3?(lp)
@@ -101,6 +118,16 @@ defmodule Mydia.Storage do
   @spec redact(String.t() | nil) :: String.t() | nil
   def redact("http" <> _ = url), do: url |> URI.parse() |> Map.put(:query, nil) |> URI.to_string()
   def redact(other), do: other
+
+  @doc """
+  Renders a term for logging with every URL query string removed. Tool output
+  (ffmpeg stderr, error tuples) can echo the presigned input URL.
+  """
+  @spec redact_text(term()) :: String.t()
+  def redact_text(text) when is_binary(text),
+    do: Regex.replace(~r/(https?:\/\/[^\s'"?]+)\?[^\s'"]*/, text, "\\1")
+
+  def redact_text(term), do: term |> inspect() |> redact_text()
 
   defp impl(%Location{kind: :local}), do: Mydia.Storage.Local
   defp impl(%Location{kind: :s3}), do: Mydia.Storage.S3

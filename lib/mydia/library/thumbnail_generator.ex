@@ -63,12 +63,9 @@ defmodule Mydia.Library.ThumbnailGenerator do
   """
   @spec generate_cover(MediaFile.t(), generate_opts()) :: {:ok, String.t()} | {:error, term()}
   def generate_cover(%MediaFile{} = media_file, opts \\ []) do
-    input_path = MediaFile.absolute_path(media_file)
-
-    if is_nil(input_path) do
-      {:error, :library_path_not_preloaded}
-    else
-      do_generate_cover(input_path, opts)
+    case Mydia.Storage.media_input(media_file) do
+      {:ok, input} -> do_generate_cover(input, opts)
+      {:error, error} -> {:error, Mydia.Storage.input_error_reason(error)}
     end
   end
 
@@ -172,12 +169,15 @@ defmodule Mydia.Library.ThumbnailGenerator do
       {:ok, checksum}
     else
       {:error, :no_video_stream} = error ->
-        Logger.warning("Cannot generate cover for #{input_path}: file has no valid video stream")
+        Logger.warning(
+          "Cannot generate cover for #{Mydia.Storage.redact(input_path)}: file has no valid video stream"
+        )
+
         error
 
       {:error, :corrupted_video} = error ->
         Logger.warning(
-          "Cannot generate cover for #{input_path}: video stream is corrupted or undecodable"
+          "Cannot generate cover for #{Mydia.Storage.redact(input_path)}: video stream is corrupted or undecodable"
         )
 
         error
@@ -186,25 +186,28 @@ defmodule Mydia.Library.ThumbnailGenerator do
         cond do
           String.contains?(output, "Cannot determine format of input stream") ->
             Logger.warning(
-              "Cannot generate cover for #{input_path}: video stream has no decodable frames"
+              "Cannot generate cover for #{Mydia.Storage.redact(input_path)}: video stream has no decodable frames"
             )
 
             {:error, :corrupted_video}
 
           String.contains?(output, "does not contain any stream") ->
             Logger.warning(
-              "Cannot generate cover for #{input_path}: file has no video stream (audio only)"
+              "Cannot generate cover for #{Mydia.Storage.redact(input_path)}: file has no video stream (audio only)"
             )
 
             {:error, :no_video_stream}
 
           true ->
-            Logger.error("Failed to generate cover for #{input_path}: #{inspect(error)}")
+            Logger.error(
+              "Failed to generate cover for #{Mydia.Storage.redact(input_path)}: #{Mydia.Storage.redact_text(error)}"
+            )
+
             error
         end
 
       {:error, reason} = error ->
-        Logger.error("Failed to generate cover: #{inspect(reason)}")
+        Logger.error("Failed to generate cover: #{Mydia.Storage.redact_text(reason)}")
         error
     end
   end
@@ -290,7 +293,10 @@ defmodule Mydia.Library.ThumbnailGenerator do
 
       {:error, reason} ->
         # Fall back to a reasonable default if we can't get duration
-        Logger.warning("Could not get video duration: #{inspect(reason)}, using 10s seek time")
+        Logger.warning(
+          "Could not get video duration: #{Mydia.Storage.redact_text(reason)}, using 10s seek time"
+        )
+
         {:ok, 10.0}
     end
   end
@@ -461,7 +467,10 @@ defmodule Mydia.Library.ThumbnailGenerator do
           {:ok, output}
 
         {output, exit_code} ->
-          Logger.debug("FFprobe failed with exit code #{exit_code}: #{output}")
+          Logger.debug(
+            "FFprobe failed with exit code #{exit_code}: #{Mydia.Storage.redact_text(output)}"
+          )
+
           {:error, {:ffprobe_error, exit_code, output}}
       end
     end
