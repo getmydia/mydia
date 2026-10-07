@@ -35,7 +35,7 @@ defmodule Mydia.Indexers.Adapter.Newznab do
         use_ssl: false,
         options: %{
           api_path: "/api",
-          timeout: 30_000
+          timeout: 100_000
         }
       }
 
@@ -93,7 +93,7 @@ defmodule Mydia.Indexers.Adapter.Newznab do
 
   @impl true
   def search(config, query, opts \\ []) do
-    timeout = get_in(config, [:options, :timeout]) || 30_000
+    timeout = get_in(config, [:options, :timeout]) || Mydia.Indexers.default_search_timeout_ms()
 
     with {:ok, url} <- build_search_url(config, query, opts) do
       Logger.debug("Newznab search: #{url}")

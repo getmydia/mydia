@@ -32,7 +32,7 @@ defmodule Mydia.Indexers.Adapter.Jackett do
         api_key: "your-api-key",
         use_ssl: false,
         options: %{
-          timeout: 30_000
+          timeout: 100_000
         }
       }
 
@@ -82,7 +82,7 @@ defmodule Mydia.Indexers.Adapter.Jackett do
   @impl true
   def search(config, query, opts \\ []) do
     url = build_search_url(config, query, opts)
-    timeout = get_in(config, [:options, :timeout]) || 30_000
+    timeout = get_in(config, [:options, :timeout]) || Mydia.Indexers.default_search_timeout_ms()
 
     Logger.debug("Jackett search: #{url}")
 
