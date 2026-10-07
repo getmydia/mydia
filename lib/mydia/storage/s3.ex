@@ -135,12 +135,23 @@ defmodule Mydia.Storage.S3 do
 
       {:ok, %Req.Response{status: s} = resp} when s in [200, 206] ->
         case Req.Response.get_private(resp, :halted) do
-          nil -> {:ok, Req.Response.get_private(resp, :acc, acc)}
+          # Caller fold errors pass through unchanged.
+          nil -> finish_range(resp, length, acc, display(loc, rel))
           reason -> {:error, reason}
         end
 
       other ->
         {:error, Request.map_error(other, display(loc, rel))}
+    end
+  end
+
+  # The response ended without the caller halting it: a body shorter than the
+  # promised length is a provider fault, not a smaller success.
+  defp finish_range(resp, length, acc, display) do
+    if Req.Response.get_private(resp, :seen, 0) < length do
+      {:error, Error.new(:provider, "unexpected end of stream for #{display}")}
+    else
+      {:ok, Req.Response.get_private(resp, :acc, acc)}
     end
   end
 
