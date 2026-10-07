@@ -4,6 +4,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/stream_timeline.dart';
+import '../../../core/player/video_scaling.dart';
 import 'chrome_subtitle_lift.dart';
 import 'playback_chrome.dart';
 
@@ -32,6 +33,8 @@ Widget Function(VideoState) customVideoControlsBuilderWithCallback({
   VoidCallback? onQualityTap,
   VoidCallback? onFullscreenTap,
   VoidCallback? onAlwaysOnTopTap,
+  VoidCallback? onScalingTap,
+  VideoScaling scaling = VideoScaling.fit,
   VoidCallback? onPreviousEpisode,
   VoidCallback? onNextEpisode,
   VoidCallback? onActivity,
@@ -68,6 +71,8 @@ Widget Function(VideoState) customVideoControlsBuilderWithCallback({
         onQualityTap: onQualityTap,
         onFullscreenTap: onFullscreenTap,
         onAlwaysOnTopTap: onAlwaysOnTopTap,
+        onScalingTap: onScalingTap,
+        scaling: scaling,
         onPreviousEpisode: onPreviousEpisode,
         onNextEpisode: onNextEpisode,
         onActivity: onActivity,

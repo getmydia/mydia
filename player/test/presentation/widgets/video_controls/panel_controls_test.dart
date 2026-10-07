@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/player/video_scaling.dart';
 import 'package:player/presentation/widgets/video_controls/control_button.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 
@@ -505,6 +506,31 @@ void main() {
         fullscreenRect.left - qualityRect.left,
         closeTo(qualityRect.width + gap, 0.5),
       );
+    });
+
+    testWidgets('omits the scaling button when no handler is wired',
+        (tester) async {
+      await tester.pumpWidget(_host(const SecondaryCluster()));
+
+      expect(find.byKey(SecondaryCluster.scalingKey), findsNothing);
+    });
+
+    testWidgets('scaling button shows the current mode and fires',
+        (tester) async {
+      var taps = 0;
+      await tester.pumpWidget(_host(SecondaryCluster(
+        onScalingTap: () => taps++,
+        scaling: VideoScaling.fit,
+      )));
+
+      expect(
+        tester
+            .widget<ControlButton>(find.byKey(SecondaryCluster.scalingKey))
+            .icon,
+        Icons.fit_screen_rounded,
+      );
+      await tester.tap(find.byKey(SecondaryCluster.scalingKey));
+      expect(taps, 1);
     });
   });
 }

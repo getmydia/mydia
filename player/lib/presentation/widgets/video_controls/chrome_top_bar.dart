@@ -1,7 +1,20 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/player/video_scaling.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../glass_surface.dart';
+
+/// The glyph for the mode in effect, shared by the top-bar pill and the TV
+/// cluster button so the two never disagree.
+IconData scalingIcon(VideoScaling scaling) => switch (scaling) {
+      VideoScaling.fit => Icons.fit_screen_rounded,
+      VideoScaling.fill => Icons.crop_free_rounded,
+    };
+
+String scalingTooltip(VideoScaling scaling) => switch (scaling) {
+      VideoScaling.fit => 'Scaling: Fit',
+      VideoScaling.fill => 'Scaling: Fill',
+    };
 
 /// A 36px-tall pill in the OSD material ([GlassSurface.osd]).
 ///
@@ -74,7 +87,7 @@ class GlassPill extends StatelessWidget {
   }
 }
 
-/// The playback screen's top chrome: back, title, and cast pills.
+/// The playback screen's top chrome: back, title, scaling and cast pills.
 ///
 /// Replaces the former left-aligned chevron-and-title row that lived in
 /// `player_screen.dart`, so all playback chrome is owned by one widget.
@@ -102,6 +115,14 @@ class ChromeTopBar extends StatelessWidget {
   /// cursor. When null the pill renders but is inert, like the back pill.
   final VoidCallback? onCastTap;
 
+  /// Fit/Fill toggle. When null the pill is omitted: the remote tier puts
+  /// this control in `SecondaryCluster` instead, because the top bar takes
+  /// no focus there.
+  final VoidCallback? onScalingTap;
+
+  /// The mode in effect, which picks the pill's glyph.
+  final VideoScaling scaling;
+
   const ChromeTopBar({
     super.key,
     this.title,
@@ -109,11 +130,14 @@ class ChromeTopBar extends StatelessWidget {
     this.showBack = true,
     this.castAction,
     this.onCastTap,
+    this.onScalingTap,
+    this.scaling = VideoScaling.fit,
   });
 
   static const Key backKey = Key('chrome-back');
   static const Key titleKey = Key('chrome-title');
   static const Key castKey = Key('chrome-cast');
+  static const Key scalingKey = Key('chrome-scaling');
 
   @override
   Widget build(BuildContext context) {
@@ -173,13 +197,28 @@ class ChromeTopBar extends StatelessWidget {
         Expanded(
           child: Align(
             alignment: Alignment.centerRight,
-            child: cast == null
-                ? const SizedBox.shrink()
-                : GlassPill(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (onScalingTap != null)
+                  Tooltip(
+                    message: scalingTooltip(scaling),
+                    child: GlassPill(
+                      key: scalingKey,
+                      onTap: onScalingTap,
+                      child: Icon(scalingIcon(scaling)),
+                    ),
+                  ),
+                if (onScalingTap != null && cast != null)
+                  const SizedBox(width: 8),
+                if (cast != null)
+                  GlassPill(
                     key: castKey,
                     onTap: onCastTap,
                     child: cast,
                   ),
+              ],
+            ),
           ),
         ),
       ],

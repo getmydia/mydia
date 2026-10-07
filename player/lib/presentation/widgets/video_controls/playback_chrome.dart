@@ -10,6 +10,7 @@ import '../../../core/player/playback_time_format.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/stream_timeline.dart';
+import '../../../core/player/video_scaling.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/window_buttons_bridge.dart';
 import '../../../core/layout/window_chrome_inset.dart';
@@ -668,6 +669,8 @@ class PlaybackChrome extends StatefulWidget {
   final VoidCallback? onQualityTap;
   final VoidCallback? onFullscreenTap;
   final VoidCallback? onAlwaysOnTopTap;
+  final VoidCallback? onScalingTap;
+  final VideoScaling scaling;
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
 
@@ -751,6 +754,8 @@ class PlaybackChrome extends StatefulWidget {
     this.onQualityTap,
     this.onFullscreenTap,
     this.onAlwaysOnTopTap,
+    this.onScalingTap,
+    this.scaling = VideoScaling.fit,
     this.onPreviousEpisode,
     this.onNextEpisode,
     this.onActivity,
@@ -974,6 +979,12 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                                   metrics.showAlwaysOnTop
                                               ? widget.onAlwaysOnTopTap
                                               : null,
+                                      // TV only: the top bar takes no focus
+                                      // there, and remote never shows
+                                      // fullscreen, so scaling takes its slot.
+                                      onScalingTap:
+                                          remote ? widget.onScalingTap : null,
+                                      scaling: widget.scaling,
                                       audioTrackCount: widget.audioTrackCount,
                                       selectedAudioLabel:
                                           widget.selectedAudioLabel,
@@ -1020,6 +1031,8 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                         onBack: widget.onBack,
                         castAction: remote ? null : widget.castAction,
                         onCastTap: remote ? null : widget.onCastTap,
+                        onScalingTap: remote ? null : widget.onScalingTap,
+                        scaling: widget.scaling,
                       ),
                     ),
                   ),

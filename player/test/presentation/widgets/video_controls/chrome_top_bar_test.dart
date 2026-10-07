@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/player/video_scaling.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
@@ -261,6 +262,50 @@ void main() {
       final rowRect = tester.getRect(find.byType(ChromeTopBar));
       final titleRect = tester.getRect(find.byKey(ChromeTopBar.titleKey));
       expect(titleRect.center.dx, closeTo(rowRect.center.dx, 1.0));
+    });
+
+    testWidgets('omits the scaling pill when no handler is wired',
+        (tester) async {
+      await tester.pumpWidget(_host(const ChromeTopBar()));
+
+      expect(find.byKey(ChromeTopBar.scalingKey), findsNothing);
+    });
+
+    testWidgets('scaling pill shows the current mode and fires',
+        (tester) async {
+      var taps = 0;
+      await tester.pumpWidget(
+        _host(ChromeTopBar(
+          onScalingTap: () => taps++,
+          scaling: VideoScaling.fill,
+        )),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byKey(ChromeTopBar.scalingKey),
+          matching: find.byIcon(Icons.crop_free_rounded),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(ChromeTopBar.scalingKey));
+      expect(taps, 1);
+    });
+
+    testWidgets('scaling pill sits left of the cast pill', (tester) async {
+      await tester.pumpWidget(
+        _host(ChromeTopBar(
+          onScalingTap: () {},
+          castAction: const Icon(Icons.cast_rounded),
+          onCastTap: () {},
+        )),
+      );
+
+      expect(
+        tester.getRect(find.byKey(ChromeTopBar.scalingKey)).right,
+        lessThanOrEqualTo(
+            tester.getRect(find.byKey(ChromeTopBar.castKey)).left),
+      );
     });
   });
 
