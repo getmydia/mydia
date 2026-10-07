@@ -2,12 +2,12 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
   @moduledoc false
 
   import Phoenix.Component, only: [assign: 3, to_form: 2]
-  import Phoenix.LiveView, only: [put_flash: 3, start_async: 3]
+  import Phoenix.LiveView, only: [put_flash: 3, push_navigate: 2, start_async: 3]
+
+  use MydiaWeb, :verified_routes
 
   alias Mydia.Media.FixMatch
   alias MydiaWeb.Live.Authorization
-
-  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 2]
 
   require Logger
 
@@ -106,11 +106,12 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
   end
 
   def handle_adopt_async({:ok, {:ok, updated}}, socket) do
+    # Remount: the collection and similar-title sections are derived from the old identity at mount.
     {:noreply,
      socket
      |> assign(:fix_match, nil)
-     |> assign(:media_item, load_media_item(socket.assigns.current_scope, updated.id))
-     |> put_flash(:info, "Match changed to #{updated.title}")}
+     |> put_flash(:info, "Match changed to #{updated.title}")
+     |> push_navigate(to: ~p"/media/#{updated.id}")}
   end
 
   def handle_adopt_async({:ok, {:error, {:already_in_library, other}}}, socket) do

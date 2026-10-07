@@ -137,6 +137,18 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEventsTest do
     refute get_in(after_confirm.private, [:live_async, :fix_match_adopt])
   end
 
+  test "a successful adopt closes the modal and remounts the item page", _ do
+    item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: 60})
+    {:noreply, s} = FixMatchEvents.open(%{}, socket(item))
+
+    {:noreply, s} = FixMatchEvents.handle_adopt_async({:ok, {:ok, item}}, s)
+
+    assert s.assigns.fix_match == nil
+    assert s.assigns.flash["info"] == "Match changed to Wrong Pick"
+    assert {:live, :redirect, %{to: to}} = s.redirected
+    assert to == "/media/#{item.id}"
+  end
+
   test "a collision closes the modal and says where the title already is", _ do
     item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: 46})
     other = media_item_fixture(%{type: "movie", title: "Velvet Comet", tmdb_id: 47})
