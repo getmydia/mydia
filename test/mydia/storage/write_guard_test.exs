@@ -41,9 +41,15 @@ defmodule Mydia.Storage.WriteGuardTest do
     %{s3_file: Repo.get!(MediaFile, file.id)}
   end
 
-  test "place_file refuses an s3 destination" do
-    assert {:error, %Error{kind: :read_only}} =
-             FileOrganizer.place_file("/tmp/src.mkv", "s3://media/movies/A/a.mkv")
+  @tag :tmp_dir
+  test "place_file into an unreachable bucket reports the outage", %{tmp_dir: tmp_dir} do
+    src = Path.join(tmp_dir, "a.mkv")
+    File.write!(src, "x")
+
+    assert {:error, %Error{kind: :unreachable}} =
+             FileOrganizer.place_file(src, "s3://m/movies/A/a.mkv", expected_size: 1)
+
+    assert File.exists?(src)
   end
 
   test "organize, reorganize and rename refuse S3 files" do

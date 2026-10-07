@@ -261,6 +261,10 @@ defmodule Mydia.Library.FileOrganizer do
   primitive behind both import (keep the source for seeding) and reorganize /
   re-match (move the file into place), so the two paths cannot drift.
 
+  Either side may be an `s3://` path; then the bytes are copied (or moved)
+  through `Mydia.Storage`, hardlinks never apply, and a `:copy` leaves the
+  source in place.
+
   ## Options
 
     * `:use_hardlinks` (default `true`) — try a hardlink first on the same filesystem.
@@ -287,11 +291,13 @@ defmodule Mydia.Library.FileOrganizer do
   @spec place_file(String.t(), String.t(), keyword()) ::
           {:ok, :hardlink | :move | :copy | :skip | :exists} | {:error, any()}
   def place_file(source, dest, opts \\ []) do
-    with :ok <- Storage.ensure_writable(dest),
-         :ok <- confine(dest, Keyword.get(opts, :confine_to)) do
+    with :ok <- confine(dest, Keyword.get(opts, :confine_to)) do
       cond do
         source == dest ->
           {:ok, :skip}
+
+        Storage.s3?(dest) or Storage.s3?(source) ->
+          place_via_storage(source, dest, opts)
 
         Keyword.has_key?(opts, :expected_size) and File.exists?(dest) ->
           cond do
@@ -318,6 +324,52 @@ defmodule Mydia.Library.FileOrganizer do
   end
 
   # Private functions
+
+  # Object storage has no hardlinks and no rename: the bytes are copied, and a
+  # move deletes the source once the copy is complete. Without a move the
+  # source stays where it is, exactly as after a hardlink, so a seeding torrent
+  # keeps its file.
+  defp place_via_storage(source, dest, opts) do
+    with {:ok, from} <- Storage.at(source),
+         {:ok, to} <- Storage.at(dest) do
+      case {Keyword.fetch(opts, :expected_size), Storage.stat(to)} do
+        {{:ok, size}, {:ok, %{size: size}}} ->
+          {:ok, :exists}
+
+        {{:ok, _}, {:ok, _}} ->
+          if Storage.exists?(from),
+            do: transfer(from, to, opts),
+            else: {:error, {:size_mismatch_no_source, dest}}
+
+        {_, {:error, %Storage.Error{kind: :not_found}}} ->
+          transfer(from, to, opts)
+
+        {:error, {:ok, _}} ->
+          transfer(from, to, opts)
+
+        {_, {:error, error}} ->
+          {:error, error}
+      end
+    end
+  end
+
+  defp transfer(from, to, opts) do
+    move? =
+      Keyword.get(opts, :fallback, :copy) == :move or
+        Keyword.get(opts, :remove_source_after_hardlink, false)
+
+    if move? do
+      case Storage.move(from, to) do
+        :ok -> {:ok, :move}
+        {:error, error} -> {:error, {:move_failed, error}}
+      end
+    else
+      case Storage.copy(from, to) do
+        :ok -> {:ok, :copy}
+        {:error, error} -> {:error, {:copy_failed, error}}
+      end
+    end
+  end
 
   defp do_place(source, dest, opts) do
     use_hardlinks = Keyword.get(opts, :use_hardlinks, true)
@@ -359,8 +411,8 @@ defmodule Mydia.Library.FileOrganizer do
   defp confine(_dest, nil), do: :ok
 
   defp confine(dest, root) do
-    expanded = Path.expand(dest)
-    root_expanded = Path.expand(root)
+    expanded = Dirs.normalize(dest)
+    root_expanded = Dirs.normalize(root)
 
     if expanded == root_expanded or String.starts_with?(expanded, root_expanded <> "/") do
       :ok

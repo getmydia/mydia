@@ -38,7 +38,6 @@ defmodule Mydia.Library.TargetResolver do
   alias Mydia.Repo
   alias Mydia.Settings
   alias Mydia.Settings.LibraryPath
-  alias Mydia.Storage
 
   @type reason ::
           :download_override | :explicit | :existing_files | :type_default | :first_compatible
@@ -133,7 +132,7 @@ defmodule Mydia.Library.TargetResolver do
   defp default_target(kind), do: Settings.default_library_for(kind)
 
   defp first_compatible(paths, allowed) do
-    Enum.find(paths, &(&1.type in allowed and &1.monitored and not Storage.s3?(&1)))
+    Enum.find(paths, &(&1.type in allowed and &1.monitored))
   end
 
   ## Candidate validation
@@ -156,7 +155,7 @@ defmodule Mydia.Library.TargetResolver do
   # in the import instead of silently landing on another disk.
   defp acceptable?(%LibraryPath{} = candidate, allowed, rules) do
     candidate.type in allowed and not disabled?(candidate) and
-      (rules == :explicit_rules or (candidate.monitored and not Storage.s3?(candidate)))
+      (rules == :explicit_rules or candidate.monitored)
   end
 
   defp acceptable?(_, _, _), do: false

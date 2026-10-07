@@ -225,23 +225,22 @@ defmodule Mydia.Library.TargetResolverTest do
       %{s3: s3}
     end
 
-    test "inferred steps skip S3, including a stale default flag and existing files", %{s3: s3} do
+    test "S3 libraries are eligible targets: a default-flagged one is chosen", %{s3: s3} do
       {:ok, s3} =
         s3 |> Ecto.Changeset.change(default_for_movies: true) |> Mydia.Repo.update()
 
-      local = library_path_fixture(%{type: "movies"})
-      item = movie()
-      file_in(item, s3, "Invented Film (2031)/film.mkv")
+      _local = library_path_fixture(%{type: "movies"})
 
-      assert {:ok, resolved, :first_compatible} = TargetResolver.resolve(item)
-      assert resolved.id == local.id
+      assert {:ok, resolved, _step} = TargetResolver.resolve(movie())
+      assert resolved.id == s3.id
     end
 
-    test "with only an S3 library there is no compatible library", %{s3: _s3} do
-      assert {:error, :no_compatible_library} = TargetResolver.resolve(movie())
+    test "S3 libraries are eligible targets: with only one it is the first compatible", %{s3: s3} do
+      assert {:ok, resolved, :first_compatible} = TargetResolver.resolve(movie())
+      assert resolved.id == s3.id
     end
 
-    test "a download override to S3 is kept so the import can refuse it", %{s3: s3} do
+    test "a download override to S3 is honoured", %{s3: s3} do
       _local = library_path_fixture(%{type: "movies"})
       download = %Mydia.Downloads.Download{library_path_id: s3.id, library_path: s3}
 

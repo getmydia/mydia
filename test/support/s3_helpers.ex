@@ -69,6 +69,24 @@ defmodule Mydia.S3Helpers do
     Location.s3(backend, prefix, "s3://#{backend.name}/#{prefix}")
   end
 
+  @doc """
+  A monitored library path on a fresh prefix of the test backend. The caller
+  registers `on_exit(fn -> delete_prefix!(loc) end)`.
+  """
+  def library_path!(type) do
+    backend = ensure_backend_row!()
+    loc = unique_location(backend)
+
+    {:ok, lp} =
+      Mydia.Settings.create_library_path(%{
+        path: String.trim_trailing(loc.uri, "/"),
+        type: type,
+        monitored: true
+      })
+
+    {lp, loc}
+  end
+
   def put_object!(%Location{backend: b} = loc, rel, body) do
     {:ok, %{status: 200}} =
       Req.request(Request.new(b),

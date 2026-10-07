@@ -239,10 +239,6 @@ defmodule Mydia.Jobs.MediaImport do
   # the same exhausted suffixes; the parse or the download contents need
   # looking at.
   defp terminal_failure?({:too_many_conflicts, _path}, _attempt), do: true
-  # The target library is read-only (an S3 library). Only an operator choosing
-  # another library fixes it, and a pending retry would keep the download
-  # occupying its target for the whole max_attempts budget.
-  defp terminal_failure?(:library_read_only, _attempt), do: true
   # {:destination_not_accessible, _} is intentionally NOT terminal: it's almost
   # always a fixable library-volume permission/disk issue. Retrying indefinitely
   # lets the import self-heal once the path becomes writable (the exact recovery
@@ -420,7 +416,7 @@ defmodule Mydia.Jobs.MediaImport do
     library_path = determine_library_path(download)
 
     result =
-      case writable_library(download, library_path) do
+      case require_library(library_path) do
         {:ok, library_path} ->
           # The resolved library path's auto_rename policy is authoritative at
           # execution time: it drives renaming in both directions, overriding
@@ -434,9 +430,6 @@ defmodule Mydia.Jobs.MediaImport do
             download_id: download.id
           )
 
-          error
-
-        {:error, _} = error ->
           error
       end
 
@@ -631,7 +624,7 @@ defmodule Mydia.Jobs.MediaImport do
 
   defp process_targeted_import(download, target_files, args) do
     # Import specific files with pre-assigned episode IDs (from resolved file mappings)
-    case writable_library(download, determine_library_path(download)) do
+    case require_library(determine_library_path(download)) do
       {:ok, library_path} ->
         do_process_targeted_import(download, target_files, library_path, args)
 
@@ -641,30 +634,12 @@ defmodule Mydia.Jobs.MediaImport do
         )
 
         error
-
-      {:error, _} = error ->
-        error
     end
   end
 
-  # Imports write into the library, so the check runs before any file
-  # operation (directory creation included).
-  defp writable_library(_download, nil), do: {:error, :no_library_path}
-
-  defp writable_library(download, library_path) do
-    case Storage.ensure_writable(library_path) do
-      :ok ->
-        {:ok, library_path}
-
-      {:error, _} ->
-        Logger.warning("Refusing to import into a read-only library",
-          download_id: download.id,
-          library_path_id: library_path.id
-        )
-
-        {:error, :library_read_only}
-    end
-  end
+  # Turns "no library resolved" into an error before any file operation.
+  defp require_library(nil), do: {:error, :no_library_path}
+  defp require_library(library_path), do: {:ok, library_path}
 
   defp do_process_targeted_import(download, target_files, library_path, args) do
     results =
@@ -935,7 +910,7 @@ defmodule Mydia.Jobs.MediaImport do
     library_paths = Settings.list_library_paths()
 
     library_path =
-      Enum.find(library_paths, &(&1.type == :mixed and &1.monitored and not Storage.s3?(&1)))
+      Enum.find(library_paths, &(&1.type == :mixed and &1.monitored))
 
     if is_nil(library_path), do: warn_no_library(download, "unknown")
 
@@ -1545,7 +1520,7 @@ defmodule Mydia.Jobs.MediaImport do
     # permission/filesystem error becomes a handled {:error, ...} that flows
     # through handle_import_failure (persisting import_last_error and surfacing
     # in the UI) instead of crashing the Oban job silently.
-    case File.mkdir_p(dest_dir) do
+    case ensure_destination_dir(dest_dir) do
       :ok ->
         import_file_to_existing_dir(file, episode, dest_dir, download, library_path, args)
 
@@ -1565,7 +1540,7 @@ defmodule Mydia.Jobs.MediaImport do
     dest_path = Path.join(dest_dir, final_filename)
 
     # Check if file already exists
-    if File.exists?(dest_path) do
+    if destination_exists?(dest_path) do
       Logger.warning("File already exists at destination",
         source: file.path,
         dest: dest_path
@@ -1661,7 +1636,7 @@ defmodule Mydia.Jobs.MediaImport do
       candidate = Path.join(dir, "#{base}.#{n}#{ext}")
 
       cond do
-        not File.exists?(candidate) -> {:halt, {:new, candidate}}
+        not destination_exists?(candidate) -> {:halt, {:new, candidate}}
         file_size(candidate) == size -> {:halt, {:existing, candidate}}
         true -> {:cont, nil}
       end
@@ -1669,6 +1644,24 @@ defmodule Mydia.Jobs.MediaImport do
     |> case do
       nil -> {:error, {:too_many_conflicts, dest_path}}
       result -> result
+    end
+  end
+
+  # An S3 library has no directories to create, and its existence checks ask
+  # the bucket. An outage reads as "not there"; the placement that follows
+  # stats the object itself and surfaces the error.
+  defp ensure_destination_dir("s3://" <> _), do: :ok
+  defp ensure_destination_dir(dir), do: File.mkdir_p(dir)
+
+  defp destination_exists?("s3://" <> _ = path), do: Storage.path_exists?(path)
+  defp destination_exists?(path), do: File.exists?(path)
+
+  defp file_size("s3://" <> _ = path) do
+    with {:ok, source} <- Storage.at(path),
+         {:ok, %{size: size}} <- Storage.stat(source) do
+      size
+    else
+      _ -> nil
     end
   end
 
@@ -2203,11 +2196,6 @@ defmodule Mydia.Jobs.MediaImport do
 
     "No library configured for #{media_type}. " <>
       "Add a compatible library in Settings → Libraries."
-  end
-
-  defp format_import_error(:library_read_only, _download) do
-    "The target library is an S3 library, which is read-only in this version of Mydia. " <>
-      "Choose a local library for this download in Settings → Libraries."
   end
 
   defp format_import_error(:no_importable_files, download) do
