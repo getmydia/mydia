@@ -21,6 +21,7 @@ defmodule Mydia.Subtitles.Uploader do
 
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
+  alias Mydia.Storage
   alias Mydia.Subtitles.Format
   alias Mydia.Subtitles.Sidecars
   alias Mydia.Subtitles.Subtitle
@@ -101,7 +102,10 @@ defmodule Mydia.Subtitles.Uploader do
     forced = Keyword.get(opts, :forced, false)
     hearing_impaired = Keyword.get(opts, :hearing_impaired, false)
 
-    with :ok <- validate_language(language),
+    media_file = Repo.preload(media_file, :library_path)
+
+    with :ok <- ensure_writable(media_file),
+         :ok <- validate_language(language),
          {:ok, format} <- detect_format(content),
          {:ok, path} <- destination(media_file, language, format),
          :ok <- check_ownership(media_file, path),
@@ -111,6 +115,15 @@ defmodule Mydia.Subtitles.Uploader do
   end
 
   ## Private
+
+  # The upload form shows `{:error, message}` verbatim, so the storage error
+  # is flattened to its message here rather than leaked as a struct.
+  defp ensure_writable(media_file) do
+    case Storage.ensure_writable(media_file) do
+      :ok -> :ok
+      {:error, %Storage.Error{message: message}} -> {:error, message}
+    end
+  end
 
   # The security boundary for what this function will write to disk, not a
   # display concern: `destination/3` builds a file path by interpolating

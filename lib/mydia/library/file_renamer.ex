@@ -12,6 +12,7 @@ defmodule Mydia.Library.FileRenamer do
   alias Mydia.Library.{FileNamer, MediaFile}
   alias Mydia.Media.MediaItem
   alias Mydia.Repo
+  alias Mydia.Storage
 
   require Logger
 
@@ -128,6 +129,14 @@ defmodule Mydia.Library.FileRenamer do
   def rename_file(%MediaFile{} = file, new_path) when is_binary(new_path) do
     # Preload library_path to resolve absolute path
     file = Repo.preload(file, :library_path)
+
+    with :ok <- Storage.ensure_writable(file),
+         :ok <- Storage.ensure_writable(new_path) do
+      do_rename_file(file, new_path)
+    end
+  end
+
+  defp do_rename_file(%MediaFile{} = file, new_path) do
     current_path = MediaFile.absolute_path(file)
 
     cond do
