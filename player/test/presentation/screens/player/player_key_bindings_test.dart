@@ -190,6 +190,16 @@ void main() {
       );
     });
 
+    test('a toggles video scaling on every tier', () {
+      expect(resolvePlayerKey(_down(LogicalKeyboardKey.keyA), _ctx()),
+          isA<KeyToggleScaling>());
+      expect(
+        resolvePlayerKey(
+            _down(LogicalKeyboardKey.keyA), _ctx(isDesktop: false)),
+        isA<KeyToggleScaling>(),
+      );
+    });
+
     test('escape cancels up-next first, then leaves fullscreen', () {
       expect(
         resolvePlayerKey(_down(LogicalKeyboardKey.escape),

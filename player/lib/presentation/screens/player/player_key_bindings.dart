@@ -190,6 +190,11 @@ final class KeyToggleAlwaysOnTop extends PlayerKeyCommand {
   const KeyToggleAlwaysOnTop();
 }
 
+/// Fit/Fill. `A`, mpv's own aspect key; `Z` is already the subtitle nudge.
+final class KeyToggleScaling extends PlayerKeyCommand {
+  const KeyToggleScaling();
+}
+
 /// mpv's own subtitle-delay binding: z earlier, shift+z later.
 final class KeyNudgeSubtitle extends PlayerKeyCommand {
   const KeyNudgeSubtitle(this.deltaMs);
@@ -293,6 +298,9 @@ PlayerKeyCommand? resolvePlayerKey(KeyEvent event, PlayerKeyContext context) {
     case LogicalKeyboardKey.keyM:
       // Toggle mute
       return KeySetVolume(context.volume > 0 ? 0.0 : 100.0);
+
+    case LogicalKeyboardKey.keyA:
+      return const KeyToggleScaling();
 
     case LogicalKeyboardKey.keyZ:
       // mpv's own subtitle-delay binding: z earlier, shift+z later. A
