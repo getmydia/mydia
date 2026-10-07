@@ -7,6 +7,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_grid_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../domain/merged/fake_merged_source.dart';
 import '../../../test_utils/toast_harness.dart';
@@ -68,6 +69,17 @@ void main() {
     ];
     expect(xs, orderedEquals([...xs]..sort()));
     expect(xs.toSet().length, 3);
+  });
+
+  testWidgets('sits in the browse bar with the cast button', (t) async {
+    final sa = fakeServer('a');
+    final a = FakeMergedSource(sa, sorts: _withReleased, movies: [
+      item(sa, 'apple', sortTitle: 'apple'),
+    ]);
+    await pump(t, kind: LibraryKind.movies, sources: [a]);
+    expect(find.byType(AppBar), findsNothing);
+    expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
+    expect(find.byType(RefreshIndicator), findsOneWidget);
   });
 
   testWidgets('a sort a server lacks names it in the note', (t) async {

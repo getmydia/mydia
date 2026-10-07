@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
@@ -11,6 +12,7 @@ import '../../../core/layout/dock_insets.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 import '../detail/detail_links.dart';
 import 'source_browse_providers.dart';
 import 'source_error_view.dart';
@@ -24,32 +26,38 @@ class SourceItemScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(sourceItemProvider(item));
     final source = ref.watch(mediaSourceProvider(item.sourceId));
-    return Scaffold(
-      appBar: AppBar(backgroundColor: Colors.transparent),
-      extendBodyBehindAppBar: true,
-      body: switch (detail) {
-        AsyncData(:final value) => ListView(
-            padding: EdgeInsets.only(bottom: DockInsets.bottomOf(context)),
-            children: [
-              SourceBackdrop(
-                sourceId: item.sourceId,
-                art: value.summary.backdrop ?? value.summary.poster,
-                height: 280,
+    // The title row draws into the window band, so the page sits under
+    // `removeBand` or the band is counted twice.
+    return WindowChromeInsets.removeBand(
+      child: Builder(
+        builder: (context) => Scaffold(
+          appBar: WindowTitleBar.back(context),
+          extendBodyBehindAppBar: true,
+          body: switch (detail) {
+            AsyncData(:final value) => ListView(
+                padding: EdgeInsets.only(bottom: DockInsets.bottomOf(context)),
+                children: [
+                  SourceBackdrop(
+                    sourceId: item.sourceId,
+                    art: value.summary.backdrop ?? value.summary.poster,
+                    height: 280,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: _Body(detail: value, item: item),
+                  ),
+                  if (item.kind == ItemKind.folder) _Children(parent: item),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: _Body(detail: value, item: item),
+            AsyncError(:final error) => SourceErrorView(
+                error: error,
+                account: source?.source.account,
+                onRetry: () => ref.invalidate(sourceItemProvider(item)),
               ),
-              if (item.kind == ItemKind.folder) _Children(parent: item),
-            ],
-          ),
-        AsyncError(:final error) => SourceErrorView(
-            error: error,
-            account: source?.source.account,
-            onRetry: () => ref.invalidate(sourceItemProvider(item)),
-          ),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
+            _ => const Center(child: CircularProgressIndicator()),
+          },
+        ),
+      ),
     );
   }
 }

@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 import '../player/player_screen.dart';
 import '../player/session/playback_session.dart';
 import '../player/session/source_playback_sessions.dart';
@@ -138,11 +140,15 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
   Widget build(BuildContext context) {
     final session = _session;
     if (session == null) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: const Center(
-          key: Key('source-player-unavailable'),
-          child: Text('This server is not available to play from.'),
+      return WindowChromeInsets.removeBand(
+        child: Builder(
+          builder: (context) => Scaffold(
+            appBar: WindowTitleBar.back(context, showCast: false),
+            body: const Center(
+              key: Key('source-player-unavailable'),
+              child: Text('This server is not available to play from.'),
+            ),
+          ),
         ),
       );
     }

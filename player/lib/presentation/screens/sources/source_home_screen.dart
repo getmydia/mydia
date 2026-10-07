@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
-import '../../widgets/window_chrome/window_title_row.dart';
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
@@ -17,12 +16,14 @@ import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 import '../detail/detail_links.dart';
+import '../home/home_loading_skeleton.dart';
+import 'home_header.dart';
 import 'source_browse_providers.dart';
 import 'source_continue_watching_row.dart';
-import 'source_home_hero.dart';
-import 'source_drawer_button.dart';
 import 'source_error_view.dart';
+import 'source_home_hero.dart';
 import 'source_poster_row.dart';
 
 class SourceHomeScreen extends ConsumerWidget {
@@ -78,8 +79,16 @@ class SourceHomeScreen extends ConsumerWidget {
   /// A `@visibleForTesting` seam so the cast alignment test needs no
   /// providers: this is the exact widget the screen puts in `appBar`.
   @visibleForTesting
-  static PreferredSizeWidget header(BuildContext context) =>
-      WindowTitleBar(height: WindowTitleRow.heightOf(context));
+  static PreferredSizeWidget header(
+    BuildContext context, {
+    String? title,
+    VoidCallback? onSearch,
+  }) =>
+      homeHeader(
+        context,
+        mobileTitle: title == null ? null : HomeServerTitle(title),
+        onSearch: onSearch,
+      );
 
   Widget _scaffold(
     BuildContext context,
@@ -88,101 +97,80 @@ class SourceHomeScreen extends ConsumerWidget {
   ) {
     final source = ref.watch(mediaSourceProvider(sourceId));
     final hero = _heroItem(ref);
+    final searchable = source?.as<Searchable>() != null;
+    // Read above the Scaffold: inside `extendBodyBehindAppBar` Flutter
+    // rewrites padding.top to the bar's bottom edge (see BrowseScaffold).
+    final chromeTop = freshnessTopInset(
+      context,
+      appBarHeight: WindowTitleRow.heightOf(context),
+    );
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: header(context),
-      body: SafeArea(
-        top: false,
-        child: switch (libraries) {
-          AsyncData(:final value) => Column(
-              children: [
-                FreshnessHeader(queryKeys: [
-                  SourceKeys.libraries(sourceId),
-                  SourceKeys.continueWatching(sourceId),
-                  SourceKeys.hubs(sourceId),
-                ]),
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: () => _refresh(ref),
-                    child: ListView(
-                      key: const Key('source-home-list'),
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: EdgeInsets.fromLTRB(
-                          0, 16, 0, DockInsets.bottomOf(context)),
-                      children: [
-                        _Header(
-                            title: source?.displayName ?? 'Server',
-                            sourceId: sourceId,
-                            searchable: source?.as<Searchable>() != null),
-                        if (hero != null)
-                          SourceHomeHero(
-                            key: ValueKey(
-                                'source-home-hero-${hero.ref.externalId}'),
-                            sourceId: sourceId,
-                            item: hero,
-                          ),
-                        SourceContinueWatchingRow(sourceId: sourceId),
-                        _Rows(sourceId: sourceId, libraries: value),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          AsyncError(:final error) => Column(
-              children: [
-                _Header(
-                    title: source?.displayName ?? 'Server',
-                    sourceId: sourceId,
-                    searchable: false),
-                Expanded(
-                  child: SourceErrorView(
-                    error: error,
-                    account: source?.source.account,
-                    onRetry: () =>
-                        ref.invalidate(sourceLibrariesProvider(sourceId)),
-                  ),
-                ),
-              ],
-            ),
-          _ => const Center(child: CircularProgressIndicator()),
-        },
+      extendBodyBehindAppBar: true,
+      appBar: header(
+        context,
+        title: source?.displayName ?? 'Server',
+        onSearch: searchable
+            ? () => context.push(sourceSearchLocation(sourceId))
+            : null,
       ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.title,
-    required this.sourceId,
-    required this.searchable,
-  });
-
-  final bool searchable;
-  final String title;
-  final SourceId sourceId;
-
-  @override
-  Widget build(BuildContext context) {
-    final drawerButton = SourceDrawerButton.maybe(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: Row(
-        children: [
-          if (drawerButton != null) drawerButton,
-          Expanded(
-            child:
-                Text(title, style: Theme.of(context).textTheme.headlineSmall),
+      body: switch (libraries) {
+        AsyncData(:final value) => Stack(
+            children: [
+              RefreshIndicator(
+                edgeOffset: chromeTop,
+                onRefresh: () => _refresh(ref),
+                child: ListView(
+                  key: const Key('source-home-list'),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  // The hero is drawn under the bar; without one, the first
+                  // row clears it.
+                  padding: EdgeInsets.fromLTRB(
+                    0,
+                    hero == null ? chromeTop : 0,
+                    0,
+                    DockInsets.bottomOf(context),
+                  ),
+                  children: [
+                    if (hero != null)
+                      SourceHomeHero(
+                        key:
+                            ValueKey('source-home-hero-${hero.ref.externalId}'),
+                        sourceId: sourceId,
+                        item: hero,
+                      ),
+                    SourceContinueWatchingRow(sourceId: sourceId),
+                    _Rows(sourceId: sourceId, libraries: value),
+                  ],
+                ),
+              ),
+              // Overlaid, never a Column sibling: a refetch must not shove
+              // the list (see BrowseScaffold's class doc).
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: FreshnessHeader(
+                  topInset: chromeTop,
+                  queryKeys: [
+                    SourceKeys.libraries(sourceId),
+                    SourceKeys.continueWatching(sourceId),
+                    SourceKeys.hubs(sourceId),
+                  ],
+                ),
+              ),
+            ],
           ),
-          if (searchable)
-            IconButton(
-              key: const Key('source-open-search'),
-              icon: const Icon(Icons.search),
-              onPressed: () => context.push(sourceSearchLocation(sourceId)),
+        AsyncError(:final error) => Padding(
+            padding: EdgeInsets.only(top: chromeTop),
+            child: SourceErrorView(
+              error: error,
+              account: source?.source.account,
+              onRetry: () => ref.invalidate(sourceLibrariesProvider(sourceId)),
             ),
-        ],
-      ),
+          ),
+        _ => const HomeLoadingSkeleton(),
+      },
     );
   }
 }
