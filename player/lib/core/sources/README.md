@@ -486,6 +486,24 @@ server's ranking and interleaves servers within Movies, Shows, Episodes and
 Videos. `/all*` redirects to `/` when fewer than two servers are included,
 including on a cold start before the saved servers load, as `/s/<id>` does.
 
+With two or more included servers, `/` and `/search` open `/all` and
+`/all/search` instead of a single server (`legacyLocation(allServers:)`).
+
+A title on several servers is one card. Copies match when their item kind
+is equal and any of tmdb, tvdb or imdb agree, transitively
+(`domain/merged/merge_key.dart`). The kept copy is the one with the most
+progress, else the one on the earlier server; in the paged grids the first
+in sort order wins. A merged card shows "Server +N". Ids come from Plex
+`Guid` (every `container()` GET sends `includeGuids=1`), Jellyfin
+`ProviderIds`, and Mydia `tmdbId`, `tvdbId` and `imdbId` on movies, shows and
+the rail and search item types. Mydia episodes and Stash items never match.
+A Mydia server without the rail and search fields is queried through its
+`<Op>NoIds` and then `...Legacy` documents (`MydiaClient.query(fallbacks:)`).
+
+The All servers sidebar is the one shared, editable sidebar layout resolved
+against `/all` routes. Rows with no merged view are hidden, and a fixed
+Servers section follows them.
+
 Each server's "Include in All servers" switch (Manage servers) is stored by
 `SourceId` beside the accounts; Stash defaults to off. Every Mydia joins
 through `mediaSourceProvider` like any other server, and every item opens
