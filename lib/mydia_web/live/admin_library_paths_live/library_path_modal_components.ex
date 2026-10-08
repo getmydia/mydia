@@ -12,275 +12,267 @@ defmodule MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents do
 
   def library_path_modal(assigns) do
     ~H"""
-    <div class="modal modal-open">
-      <div class="modal-box max-w-xl">
-        <.form
-          for={@library_path_form}
-          id="library-path-form"
-          phx-change="validate_library_path"
-          phx-submit="save_library_path"
-        >
-          <%!-- Header --%>
-          <div class="flex items-center justify-between mb-5">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-                <.icon
-                  name={
-                    if(@library_path_mode == :new, do: "hero-folder-plus", else: "hero-pencil-square")
-                  }
-                  class="w-5 h-5 text-primary"
-                />
-              </div>
-              <div>
-                <h3 class="font-bold text-lg">
-                  {if @library_path_mode == :new, do: "Add Library", else: "Edit Library"}
-                </h3>
-                <p class="text-sm text-base-content/60">
-                  {if @library_path_mode == :new,
-                    do: "Configure a new media directory",
-                    else: "Update library settings"}
-                </p>
-              </div>
-            </div>
-            <label class="label cursor-pointer gap-2">
-              <span class="label-text text-sm">Monitored</span>
-              <input type="hidden" name={@library_path_form[:monitored].name} value="false" />
-              <input
-                type="checkbox"
-                name={@library_path_form[:monitored].name}
-                value="true"
-                checked={
-                  Phoenix.HTML.Form.normalize_value("checkbox", @library_path_form[:monitored].value)
-                }
-                class="toggle toggle-success toggle-sm"
-              />
-            </label>
+    <.admin_modal
+      id="library-path-modal"
+      icon={if @library_path_mode == :new, do: "hero-folder-plus", else: "hero-pencil-square"}
+      title={if @library_path_mode == :new, do: "Add Library", else: "Edit Library"}
+      subtitle={
+        if @library_path_mode == :new,
+          do: "Configure a new media directory",
+          else: "Update library settings"
+      }
+      on_close="close_library_path_modal"
+    >
+      <:header_aside>
+        <label class="label cursor-pointer gap-2">
+          <span class="label-text text-sm">Monitored</span>
+          <input
+            type="hidden"
+            form="library-path-form"
+            name={@library_path_form[:monitored].name}
+            value="false"
+          />
+          <input
+            type="checkbox"
+            form="library-path-form"
+            name={@library_path_form[:monitored].name}
+            value="true"
+            checked={
+              Phoenix.HTML.Form.normalize_value("checkbox", @library_path_form[:monitored].value)
+            }
+            class="toggle toggle-success toggle-sm"
+          />
+        </label>
+      </:header_aside>
+      <.form
+        for={@library_path_form}
+        id="library-path-form"
+        phx-change="validate_library_path"
+        phx-submit="save_library_path"
+      >
+        <div class="space-y-5">
+          <div>
+            <.input
+              field={@library_path_form[:name]}
+              type="text"
+              label="Name"
+              placeholder={name_placeholder(@library_path_form[:path].value)}
+              maxlength="60"
+            />
           </div>
-          <div class="space-y-5">
-            <div>
+          <%!-- Path and Type Row --%>
+          <div class="grid grid-cols-6 gap-3">
+            <div class="col-span-6 md:col-span-4">
               <.input
-                field={@library_path_form[:name]}
+                field={@library_path_form[:path]}
                 type="text"
-                label="Name"
-                placeholder={name_placeholder(@library_path_form[:path].value)}
-                maxlength="60"
+                label="Path"
+                placeholder="/path/to/media"
+                required
               />
-            </div>
-            <%!-- Path and Type Row --%>
-            <div class="grid grid-cols-6 gap-3">
-              <div class="col-span-6 md:col-span-4">
-                <.input
-                  field={@library_path_form[:path]}
-                  type="text"
-                  label="Path"
-                  placeholder="/path/to/media"
-                  required
-                />
-                <p class="text-xs text-base-content/50 mt-1">
-                  A folder on this server, or s3://&lt;storage backend&gt;/&lt;prefix&gt;.
-                </p>
-              </div>
-              <div class="col-span-6 md:col-span-2">
-                <.input
-                  field={@library_path_form[:type]}
-                  type="select"
-                  label="Type"
-                  options={[
-                    {"Movies", "movies"},
-                    {"TV Shows", "series"},
-                    {"Mixed", "mixed"}
-                  ]}
-                  required
-                />
-              </div>
-            </div>
-
-            <%!-- Automatic scanning: opt-in per library. Presets rather than a
-                  free-form seconds field, which is a demonstrated footgun here. --%>
-            <div>
-              <.input
-                field={@library_path_form[:scan_interval]}
-                type="select"
-                label="Automatic scanning"
-                options={[
-                  {"Off (manual only)", nil},
-                  {"Every 15 minutes", 900},
-                  {"Every hour", 3600},
-                  {"Every 6 hours", 21600},
-                  {"Every 12 hours", 43200},
-                  {"Daily", 86400}
-                ]}
-              />
-              <p class="text-sm text-base-content/60 mt-1">
-                How often Mydia rescans this folder for files added outside of downloads.
-                Manual re-scans always work regardless of this setting.
+              <p class="text-xs text-base-content/50 mt-1">
+                A folder on this server, or s3://&lt;storage backend&gt;/&lt;prefix&gt;.
               </p>
             </div>
+            <div class="col-span-6 md:col-span-2">
+              <.input
+                field={@library_path_form[:type]}
+                type="select"
+                label="Type"
+                options={[
+                  {"Movies", "movies"},
+                  {"TV Shows", "series"},
+                  {"Mixed", "mixed"}
+                ]}
+                required
+              />
+            </div>
+          </div>
 
-            <%!-- TV Metadata Source (only for series/mixed) --%>
-            <%= if to_string(@library_path_form[:type].value) in ["series", "mixed"] do %>
-              <div class="grid grid-cols-6 gap-3">
-                <div class="col-span-6 md:col-span-3">
-                  <.input
-                    field={@library_path_form[:tv_metadata_source]}
-                    type="select"
-                    label="TV Metadata Source"
-                    options={[{"TheTVDB", "tvdb"}, {"TMDB", "tmdb"}]}
-                  />
-                  <p class="text-xs text-base-content/50 mt-1">
-                    Provider for TV show metadata. Existing shows keep their data until refreshed.
-                  </p>
+          <%!-- Automatic scanning: opt-in per library. Presets rather than a
+                  free-form seconds field, which is a demonstrated footgun here. --%>
+          <div>
+            <.input
+              field={@library_path_form[:scan_interval]}
+              type="select"
+              label="Automatic scanning"
+              options={[
+                {"Off (manual only)", nil},
+                {"Every 15 minutes", 900},
+                {"Every hour", 3600},
+                {"Every 6 hours", 21600},
+                {"Every 12 hours", 43200},
+                {"Daily", 86400}
+              ]}
+            />
+            <p class="text-sm text-base-content/60 mt-1">
+              How often Mydia rescans this folder for files added outside of downloads.
+              Manual re-scans always work regardless of this setting.
+            </p>
+          </div>
+
+          <%!-- TV Metadata Source (only for series/mixed) --%>
+          <%= if to_string(@library_path_form[:type].value) in ["series", "mixed"] do %>
+            <div class="grid grid-cols-6 gap-3">
+              <div class="col-span-6 md:col-span-3">
+                <.input
+                  field={@library_path_form[:tv_metadata_source]}
+                  type="select"
+                  label="TV Metadata Source"
+                  options={[{"TheTVDB", "tvdb"}, {"TMDB", "tmdb"}]}
+                />
+                <p class="text-xs text-base-content/50 mt-1">
+                  Provider for TV show metadata. Existing shows keep their data until refreshed.
+                </p>
+              </div>
+            </div>
+          <% end %>
+
+          <div class="divider my-1"></div>
+
+          <%!-- Options Section --%>
+          <div class="space-y-3">
+            <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
+              <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
+              <span>Options</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <%!-- Auto Import Toggle --%>
+              <div class="flex items-center justify-between bg-base-200 rounded-lg px-4 py-3">
+                <div class="flex items-center gap-3">
+                  <.icon name="hero-arrow-down-tray" class="w-4 h-4 text-base-content/60" />
+                  <div>
+                    <span class="text-sm font-medium">Auto Import</span>
+                    <p class="text-xs text-base-content/50">
+                      Let background scans import confident matches
+                    </p>
+                  </div>
                 </div>
+                <input type="hidden" name={@library_path_form[:auto_import].name} value="false" />
+                <input
+                  type="checkbox"
+                  name={@library_path_form[:auto_import].name}
+                  value="true"
+                  checked={
+                    Phoenix.HTML.Form.normalize_value(
+                      "checkbox",
+                      @library_path_form[:auto_import].value
+                    )
+                  }
+                  class="toggle toggle-primary toggle-sm"
+                />
               </div>
-            <% end %>
 
-            <div class="divider my-1"></div>
-
-            <%!-- Options Section --%>
-            <div class="space-y-3">
-              <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
-                <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
-                <span>Options</span>
+              <%!-- Auto Organize Toggle --%>
+              <div class="flex items-center justify-between bg-base-200 rounded-lg px-4 py-3">
+                <div class="flex items-center gap-3">
+                  <.icon name="hero-folder-open" class="w-4 h-4 text-base-content/60" />
+                  <div>
+                    <span class="text-sm font-medium">Auto Organize</span>
+                    <p class="text-xs text-base-content/50">Sort into category folders</p>
+                  </div>
+                </div>
+                <input type="hidden" name={@library_path_form[:auto_organize].name} value="false" />
+                <input
+                  type="checkbox"
+                  name={@library_path_form[:auto_organize].name}
+                  value="true"
+                  checked={
+                    Phoenix.HTML.Form.normalize_value(
+                      "checkbox",
+                      @library_path_form[:auto_organize].value
+                    )
+                  }
+                  class="toggle toggle-secondary toggle-sm"
+                />
               </div>
 
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <%!-- Auto Import Toggle --%>
+              <.input
+                :if={@library_path_form[:type].value in ["movies", "mixed", :movies, :mixed]}
+                field={@library_path_form[:default_for_movies]}
+                type="checkbox"
+                label="Default library for movies"
+              />
+              <.input
+                :if={@library_path_form[:type].value in ["series", "mixed", :series, :mixed]}
+                field={@library_path_form[:default_for_series]}
+                type="checkbox"
+                label="Default library for series"
+              />
+
+              <%!-- Write NFO Toggle (only for movies/series/mixed) --%>
+              <%= if to_string(@library_path_form[:type].value) in ["movies", "series", "mixed"] do %>
                 <div class="flex items-center justify-between bg-base-200 rounded-lg px-4 py-3">
                   <div class="flex items-center gap-3">
-                    <.icon name="hero-arrow-down-tray" class="w-4 h-4 text-base-content/60" />
+                    <.icon
+                      name="hero-document-text"
+                      class="w-4 h-4 text-base-content/60"
+                    />
                     <div>
-                      <span class="text-sm font-medium">Auto Import</span>
+                      <span class="text-sm font-medium">Write NFO Files</span>
                       <p class="text-xs text-base-content/50">
-                        Let background scans import confident matches
+                        Jellyfin/Kodi metadata files
                       </p>
                     </div>
                   </div>
-                  <input type="hidden" name={@library_path_form[:auto_import].name} value="false" />
+                  <input type="hidden" name={@library_path_form[:write_nfo].name} value="false" />
                   <input
                     type="checkbox"
-                    name={@library_path_form[:auto_import].name}
+                    name={@library_path_form[:write_nfo].name}
                     value="true"
                     checked={
                       Phoenix.HTML.Form.normalize_value(
                         "checkbox",
-                        @library_path_form[:auto_import].value
+                        @library_path_form[:write_nfo].value
                       )
                     }
-                    class="toggle toggle-primary toggle-sm"
+                    class="toggle toggle-accent toggle-sm"
                   />
                 </div>
+              <% end %>
 
-                <%!-- Auto Organize Toggle --%>
-                <div class="flex items-center justify-between bg-base-200 rounded-lg px-4 py-3">
-                  <div class="flex items-center gap-3">
-                    <.icon name="hero-folder-open" class="w-4 h-4 text-base-content/60" />
-                    <div>
-                      <span class="text-sm font-medium">Auto Organize</span>
-                      <p class="text-xs text-base-content/50">Sort into category folders</p>
-                    </div>
+              <%!-- Auto Rename Toggle --%>
+              <div class="flex items-center justify-between bg-base-200 rounded-lg px-4 py-3">
+                <div class="flex items-center gap-3">
+                  <.icon name="hero-pencil-square" class="w-4 h-4 text-base-content/60" />
+                  <div>
+                    <span class="text-sm font-medium">Auto Rename</span>
+                    <p class="text-xs text-base-content/50">Rename files on import</p>
                   </div>
-                  <input type="hidden" name={@library_path_form[:auto_organize].name} value="false" />
-                  <input
-                    type="checkbox"
-                    name={@library_path_form[:auto_organize].name}
-                    value="true"
-                    checked={
-                      Phoenix.HTML.Form.normalize_value(
-                        "checkbox",
-                        @library_path_form[:auto_organize].value
-                      )
-                    }
-                    class="toggle toggle-secondary toggle-sm"
-                  />
                 </div>
-
-                <.input
-                  :if={@library_path_form[:type].value in ["movies", "mixed", :movies, :mixed]}
-                  field={@library_path_form[:default_for_movies]}
+                <input type="hidden" name={@library_path_form[:auto_rename].name} value="false" />
+                <input
                   type="checkbox"
-                  label="Default library for movies"
+                  name={@library_path_form[:auto_rename].name}
+                  value="true"
+                  checked={
+                    Phoenix.HTML.Form.normalize_value(
+                      "checkbox",
+                      @library_path_form[:auto_rename].value
+                    )
+                  }
+                  class="toggle toggle-warning toggle-sm"
                 />
-                <.input
-                  :if={@library_path_form[:type].value in ["series", "mixed", :series, :mixed]}
-                  field={@library_path_form[:default_for_series]}
-                  type="checkbox"
-                  label="Default library for series"
-                />
-
-                <%!-- Write NFO Toggle (only for movies/series/mixed) --%>
-                <%= if to_string(@library_path_form[:type].value) in ["movies", "series", "mixed"] do %>
-                  <div class="flex items-center justify-between bg-base-200 rounded-lg px-4 py-3">
-                    <div class="flex items-center gap-3">
-                      <.icon
-                        name="hero-document-text"
-                        class="w-4 h-4 text-base-content/60"
-                      />
-                      <div>
-                        <span class="text-sm font-medium">Write NFO Files</span>
-                        <p class="text-xs text-base-content/50">
-                          Jellyfin/Kodi metadata files
-                        </p>
-                      </div>
-                    </div>
-                    <input type="hidden" name={@library_path_form[:write_nfo].name} value="false" />
-                    <input
-                      type="checkbox"
-                      name={@library_path_form[:write_nfo].name}
-                      value="true"
-                      checked={
-                        Phoenix.HTML.Form.normalize_value(
-                          "checkbox",
-                          @library_path_form[:write_nfo].value
-                        )
-                      }
-                      class="toggle toggle-accent toggle-sm"
-                    />
-                  </div>
-                <% end %>
-
-                <%!-- Auto Rename Toggle --%>
-                <div class="flex items-center justify-between bg-base-200 rounded-lg px-4 py-3">
-                  <div class="flex items-center gap-3">
-                    <.icon name="hero-pencil-square" class="w-4 h-4 text-base-content/60" />
-                    <div>
-                      <span class="text-sm font-medium">Auto Rename</span>
-                      <p class="text-xs text-base-content/50">Rename files on import</p>
-                    </div>
-                  </div>
-                  <input type="hidden" name={@library_path_form[:auto_rename].name} value="false" />
-                  <input
-                    type="checkbox"
-                    name={@library_path_form[:auto_rename].name}
-                    value="true"
-                    checked={
-                      Phoenix.HTML.Form.normalize_value(
-                        "checkbox",
-                        @library_path_form[:auto_rename].value
-                      )
-                    }
-                    class="toggle toggle-warning toggle-sm"
-                  />
-                </div>
               </div>
             </div>
-
-            <%!-- Category Paths (only shown when auto-organize is enabled) --%>
-            <.auto_organize_paths form={@library_path_form} />
           </div>
 
-          <div class="modal-action mt-6 pt-4 border-t border-base-300">
-            <button type="button" class="btn btn-ghost" phx-click="close_library_path_modal">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary gap-2">
-              <.icon name="hero-check" class="w-4 h-4" />
-              {if @library_path_mode == :new, do: "Add Library", else: "Save Changes"}
-            </button>
-          </div>
-        </.form>
-      </div>
-      <div class="modal-backdrop bg-black/50" phx-click="close_library_path_modal"></div>
-    </div>
+          <%!-- Category Paths (only shown when auto-organize is enabled) --%>
+          <.auto_organize_paths form={@library_path_form} />
+        </div>
+
+        <.admin_modal_actions>
+          <button type="button" class="btn btn-ghost" phx-click="close_library_path_modal">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary gap-2">
+            <.icon name="hero-check" class="w-4 h-4" />
+            {if @library_path_mode == :new, do: "Add Library", else: "Save Changes"}
+          </button>
+        </.admin_modal_actions>
+      </.form>
+    </.admin_modal>
     """
   end
 

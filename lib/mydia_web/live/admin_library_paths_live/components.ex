@@ -3,6 +3,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
   use MydiaWeb, :html
 
   alias Mydia.Settings.LibraryPath
+  alias Mydia.Settings.RuntimeConfig
 
   @doc """
   Renders the Library Paths tab content.
@@ -12,51 +13,17 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
   attr :reclassifying_library_ids, :any, default: MapSet.new()
 
   def library_paths_tab(assigns) do
-    {enabled, disabled} = Enum.split_with(assigns.library_paths, &(!&1.disabled))
-
-    assigns =
-      assigns
-      |> assign(:enabled_paths, enabled)
-      |> assign(:disabled_paths, disabled)
-
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <%= if @library_paths == [] do %>
-        <div class="alert alert-info">
-          <.icon name="hero-information-circle" class="w-5 h-5" />
-          <span>No library paths configured yet. Add a media directory to get started.</span>
-        </div>
-      <% else %>
-        <%!-- Enabled Libraries --%>
-        <%= if @enabled_paths != [] do %>
-          <div class="bg-base-200 rounded-box divide-y divide-base-300">
-            <%= for library_path <- @enabled_paths do %>
-              <.library_path_row
-                library_path={library_path}
-                is_reorganizing={MapSet.member?(@reorganizing_library_ids, library_path.id)}
-                is_reclassifying={MapSet.member?(@reclassifying_library_ids, library_path.id)}
-              />
-            <% end %>
-          </div>
-        <% end %>
-
-        <%!-- Disabled Libraries --%>
-        <%= if @disabled_paths != [] do %>
-          <div class="divider text-base-content/50 text-sm">
-            <.icon name="hero-eye-slash" class="w-4 h-4" /> Disabled ({length(@disabled_paths)})
-          </div>
-          <div class="bg-base-200 rounded-box divide-y divide-base-300 opacity-60">
-            <%= for library_path <- @disabled_paths do %>
-              <.library_path_row
-                library_path={library_path}
-                is_reorganizing={MapSet.member?(@reorganizing_library_ids, library_path.id)}
-                is_reclassifying={MapSet.member?(@reclassifying_library_ids, library_path.id)}
-              />
-            <% end %>
-          </div>
-        <% end %>
-      <% end %>
-    </div>
+    <.admin_list id="library-paths" items={@library_paths}>
+      <:row :let={library_path}>
+        <.library_path_row
+          library_path={library_path}
+          is_reorganizing={MapSet.member?(@reorganizing_library_ids, library_path.id)}
+          is_reclassifying={MapSet.member?(@reclassifying_library_ids, library_path.id)}
+        />
+      </:row>
+      <:empty>No library paths configured yet. Add a media directory to get started.</:empty>
+    </.admin_list>
     """
   end
 
@@ -81,7 +48,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
           </li>
         </ul>
       </div>
-      <button class="btn btn-sm btn-primary" phx-click="new_library_path">
+      <button id="new-library-path" class="btn btn-sm btn-primary" phx-click="new_library_path">
         <.icon name="hero-plus" class="w-4 h-4" /> New
       </button>
     </div>
@@ -94,162 +61,169 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
 
   defp library_path_row(assigns) do
     assigns =
-      assign(
-        assigns,
+      assigns
+      |> assign(
         :metadata_source,
         library_metadata_source(
           assigns.library_path.type,
           assigns.library_path.tv_metadata_source
         )
       )
+      |> assign(
+        :runtime?,
+        assigns.library_path.from_env or RuntimeConfig.runtime_config?(assigns.library_path)
+      )
 
     ~H"""
-    <div id={"library-path-#{@library_path.id}"} class="p-3 sm:p-4">
-      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-        <%!-- Path Info --%>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span id={"library-path-#{@library_path.id}-name"} class="font-semibold">
-              {LibraryPath.display_name(@library_path)}
-            </span>
-            <%= if @library_path.from_env do %>
-              <span
-                class="badge badge-primary badge-xs tooltip"
-                data-tip="Configured via environment variables (read-only)"
-              >
-                <.icon name="hero-lock-closed" class="w-3 h-3" /> ENV
-              </span>
-            <% end %>
-          </div>
-          <div class="text-xs opacity-60 font-mono truncate mt-0.5">{@library_path.path}</div>
-          <%= if @library_path.last_scan_at do %>
-            <div class="text-xs opacity-50 mt-1">
-              Last scan: {Calendar.strftime(@library_path.last_scan_at, "%Y-%m-%d %H:%M")}
-            </div>
-          <% end %>
+    <.admin_row id={"library-path-#{@library_path.id}"}>
+      <:title>
+        <span id={"library-path-#{@library_path.id}-name"}>
+          {LibraryPath.display_name(@library_path)}
+        </span>
+        <.env_lock_badge :if={@runtime?} />
+      </:title>
+      <:descriptor><span class="font-mono">{@library_path.path}</span></:descriptor>
+      <:details :if={@library_path.last_scan_at}>
+        <p class="text-xs text-base-content/50">
+          Last scan: {Calendar.strftime(@library_path.last_scan_at, "%Y-%m-%d %H:%M")}
+        </p>
+      </:details>
+      <:badges>
+        <span
+          :if={@metadata_source}
+          class={["badge badge-sm tooltip", metadata_source_badge_class(@metadata_source)]}
+          data-tip="Metadata source"
+        >
+          <.icon name="hero-circle-stack" class="w-3 h-3 mr-1" />
+          {metadata_source_display(@metadata_source)}
+        </span>
+        <span class={["badge badge-sm", library_type_badge_class(@library_path.type)]}>
+          <.icon name={library_type_icon(@library_path.type)} class="w-3 h-3 mr-1" />
+          {library_type_display(@library_path.type)}
+        </span>
+        <span
+          :if={@library_path.default_for_movies or @library_path.default_for_series}
+          class="badge badge-sm badge-outline"
+        >
+          Default
+        </span>
+        <span class={[
+          "badge badge-sm",
+          if(@library_path.monitored, do: "badge-success", else: "badge-ghost")
+        ]}>
+          {if @library_path.monitored, do: "Monitored", else: "Not Monitored"}
+        </span>
+      </:badges>
+      <:actions>
+        <div class="flex items-center gap-2 ml-auto sm:ml-2">
+          <.maintenance_menu
+            library_path={@library_path}
+            is_reorganizing={@is_reorganizing}
+            is_reclassifying={@is_reclassifying}
+          />
+          <.row_actions>
+            <.row_action
+              id={"edit-library-path-#{@library_path.id}"}
+              icon="hero-pencil"
+              title="Edit"
+              disabled={@runtime?}
+              disabled_reason={@runtime? && "Cannot edit environment-configured libraries"}
+              phx-click="edit_library_path"
+              phx-value-id={@library_path.id}
+            />
+            <.row_action
+              id={"delete-library-path-#{@library_path.id}"}
+              icon="hero-trash"
+              title="Delete"
+              destructive
+              disabled={@runtime?}
+              disabled_reason={@runtime? && "Cannot delete environment-configured libraries"}
+              phx-click="delete_library_path"
+              phx-value-id={@library_path.id}
+              data-confirm={"Delete library #{LibraryPath.display_name(@library_path)}?"}
+            />
+          </.row_actions>
         </div>
+      </:actions>
+    </.admin_row>
+    """
+  end
 
-        <%!-- Badges + Actions --%>
-        <div class="flex flex-wrap items-center gap-2">
-          <%= if @metadata_source do %>
-            <span
-              class={["badge badge-sm tooltip", metadata_source_badge_class(@metadata_source)]}
-              data-tip="Metadata source"
-            >
-              <.icon name="hero-circle-stack" class="w-3 h-3 mr-1" />
-              {metadata_source_display(@metadata_source)}
-            </span>
-          <% end %>
-          <span class={["badge badge-sm", library_type_badge_class(@library_path.type)]}>
-            <.icon name={library_type_icon(@library_path.type)} class="w-3 h-3 mr-1" />
-            {library_type_display(@library_path.type)}
-          </span>
-          <span
-            :if={@library_path.default_for_movies or @library_path.default_for_series}
-            class="badge badge-sm badge-outline"
+  # Re-classify is always available; reorganizing only when auto_organize is on.
+  # The dropdown sits beside the join, never inside it (daisyUI's
+  # `.join > :has(:focus)` rule would stack it under its siblings).
+  attr :library_path, :map, required: true
+  attr :is_reorganizing, :boolean, default: false
+  attr :is_reclassifying, :boolean, default: false
+
+  defp maintenance_menu(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @is_reorganizing -> %>
+        <div class="btn btn-sm btn-ghost gap-1 no-animation">
+          <span class="loading loading-spinner loading-xs"></span>
+          <span class="hidden sm:inline">Reorganizing...</span>
+        </div>
+      <% @is_reclassifying -> %>
+        <div class="btn btn-sm btn-ghost gap-1 no-animation">
+          <span class="loading loading-spinner loading-xs"></span>
+          <span class="hidden sm:inline">Reclassifying...</span>
+        </div>
+      <% true -> %>
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="btn btn-sm btn-ghost gap-1">
+            <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
+            <span class="hidden sm:inline">Actions</span>
+            <.icon name="hero-chevron-down" class="w-3 h-3" />
+          </div>
+          <ul
+            tabindex="0"
+            class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-56"
           >
-            Default
-          </span>
-          <span class={[
-            "badge badge-sm",
-            if(@library_path.monitored, do: "badge-success", else: "badge-ghost")
-          ]}>
-            {if @library_path.monitored, do: "Monitored", else: "Not Monitored"}
-          </span>
-
-          <div class="flex items-center gap-2 ml-auto sm:ml-2">
-            <%!-- Organize dropdown - Re-classify always available, Reorganize only if auto_organize enabled --%>
-            <%= cond do %>
-              <% @is_reorganizing -> %>
-                <div class="btn btn-sm btn-ghost gap-1 no-animation">
-                  <span class="loading loading-spinner loading-xs"></span>
-                  <span class="hidden sm:inline">Reorganizing...</span>
-                </div>
-              <% @is_reclassifying -> %>
-                <div class="btn btn-sm btn-ghost gap-1 no-animation">
-                  <span class="loading loading-spinner loading-xs"></span>
-                  <span class="hidden sm:inline">Reclassifying...</span>
-                </div>
-              <% true -> %>
-                <div class="dropdown dropdown-end">
-                  <div tabindex="0" role="button" class="btn btn-sm btn-ghost gap-1">
-                    <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
-                    <span class="hidden sm:inline">Actions</span>
-                    <.icon name="hero-chevron-down" class="w-3 h-3" />
-                  </div>
-                  <ul
-                    tabindex="0"
-                    class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-56"
-                  >
-                    <li>
-                      <button phx-click="reclassify_library" phx-value-id={@library_path.id}>
-                        <.icon name="hero-tag" class="w-4 h-4" /> Re-classify All
-                      </button>
-                    </li>
-                    <%= if @library_path.auto_organize do %>
-                      <li class="menu-title pt-2">
-                        <span>File Organization</span>
-                      </li>
-                      <li>
-                        <button phx-click="preview_reorganize" phx-value-id={@library_path.id}>
-                          <.icon name="hero-eye" class="w-4 h-4" /> Preview Organization
-                        </button>
-                      </li>
-                      <li>
-                        <button phx-click="reorganize_library" phx-value-id={@library_path.id}>
-                          <.icon name="hero-folder-arrow-down" class="w-4 h-4" /> Reorganize Files
-                        </button>
-                      </li>
-                    <% else %>
-                      <li class="menu-title pt-2">
-                        <span class="text-base-content/50">File Organization</span>
-                      </li>
-                      <li class="disabled">
-                        <span class="text-base-content/40 text-xs">
-                          Enable auto-organize to move files
-                        </span>
-                      </li>
-                    <% end %>
-                  </ul>
-                </div>
+            <li>
+              <button
+                phx-click="reclassify_library_path"
+                phx-value-id={@library_path.id}
+                onclick="document.activeElement && document.activeElement.blur()"
+              >
+                <.icon name="hero-tag" class="w-4 h-4" /> Re-classify All
+              </button>
+            </li>
+            <%= if @library_path.auto_organize do %>
+              <li class="menu-title pt-2">
+                <span>File Organization</span>
+              </li>
+              <li>
+                <button
+                  phx-click="preview_reorganize_library_path"
+                  phx-value-id={@library_path.id}
+                  onclick="document.activeElement && document.activeElement.blur()"
+                >
+                  <.icon name="hero-eye" class="w-4 h-4" /> Preview Organization
+                </button>
+              </li>
+              <li>
+                <button
+                  phx-click="reorganize_library_path"
+                  phx-value-id={@library_path.id}
+                  onclick="document.activeElement && document.activeElement.blur()"
+                >
+                  <.icon name="hero-folder-arrow-down" class="w-4 h-4" /> Reorganize Files
+                </button>
+              </li>
+            <% else %>
+              <li class="menu-title pt-2">
+                <span class="text-base-content/50">File Organization</span>
+              </li>
+              <li class="disabled">
+                <span class="text-base-content/40 text-xs">
+                  Enable auto-organize to move files
+                </span>
+              </li>
             <% end %>
-
-            <div class="join">
-              <%= if @library_path.from_env do %>
-                <div class="tooltip" data-tip="Cannot edit environment-configured libraries">
-                  <button class="btn btn-sm btn-ghost join-item" disabled>
-                    <.icon name="hero-pencil" class="w-4 h-4 opacity-30" />
-                  </button>
-                </div>
-                <div class="tooltip" data-tip="Cannot delete environment-configured libraries">
-                  <button class="btn btn-sm btn-ghost join-item" disabled>
-                    <.icon name="hero-trash" class="w-4 h-4 opacity-30" />
-                  </button>
-                </div>
-              <% else %>
-                <button
-                  class="btn btn-sm btn-ghost join-item"
-                  phx-click="edit_library_path"
-                  phx-value-id={@library_path.id}
-                  title="Edit"
-                >
-                  <.icon name="hero-pencil" class="w-4 h-4" />
-                </button>
-                <button
-                  class="btn btn-sm btn-ghost join-item text-error"
-                  phx-click="delete_library_path"
-                  phx-value-id={@library_path.id}
-                  data-confirm="Are you sure you want to delete this library path?"
-                  title="Delete"
-                >
-                  <.icon name="hero-trash" class="w-4 h-4" />
-                </button>
-              <% end %>
-            </div>
-          </div>
+          </ul>
         </div>
-      </div>
-    </div>
+    <% end %>
     """
   end
 

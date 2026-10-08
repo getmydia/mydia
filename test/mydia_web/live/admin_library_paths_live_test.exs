@@ -359,6 +359,67 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
 
       assert saved_path(dir).scan_interval == nil
     end
+
+    test "the editor is the shared modal with Monitored in the header", %{view: view} do
+      open_new_form(view)
+
+      assert has_element?(view, "#library-path-modal .modal-box.max-w-2xl .w-10.h-10.rounded-xl")
+
+      assert has_element?(
+               view,
+               ~s(#library-path-modal input[type=checkbox][form="library-path-form"])
+             )
+    end
+  end
+
+  describe "runtime library paths" do
+    @runtime_path "/media/env-films"
+    @runtime_id "runtime::library_path::/media/env-films"
+
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      original = Application.get_env(:mydia, :runtime_config)
+
+      on_exit(fn ->
+        if original,
+          do: Application.put_env(:mydia, :runtime_config, original),
+          else: Application.delete_env(:mydia, :runtime_config)
+      end)
+
+      base = Mydia.Config.Schema.defaults()
+
+      Application.put_env(:mydia, :runtime_config, %{
+        base
+        | library_paths: [%{path: @runtime_path, type: :movies}]
+      })
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/library-paths")
+      %{view: view}
+    end
+
+    test "a runtime library path is locked", %{view: view} do
+      row = "[id='library-path-#{@runtime_id}']"
+
+      assert has_element?(view, "#{row} .badge-primary", "ENV")
+      assert has_element?(view, "#{row} button[title=Edit][disabled]")
+      assert has_element?(view, "#{row} button[title=Delete][disabled]")
+    end
+
+    test "edit and delete refuse a runtime library path on the server", %{view: view} do
+      render_click(view, "edit_library_path", %{"id" => @runtime_id})
+      refute has_element?(view, "#library-path-modal")
+
+      html = render_click(view, "delete_library_path", %{"id" => @runtime_id})
+      assert html =~ "environment"
+      assert has_element?(view, "[id='library-path-#{@runtime_id}']")
+    end
   end
 
   defp open_new_form(view) do

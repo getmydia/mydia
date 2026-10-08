@@ -9,20 +9,13 @@ defmodule MydiaWeb.AdminPageConventionsTest do
   itself is in `lib/mydia_web/components/README.md`.
 
   The scope is every `live` route under `/admin` in `MydiaWeb.Router`, so a new
-  admin page is scanned from its first commit. `@pending` lists pages not yet
-  migrated.
+  admin page is scanned from its first commit.
   """
 
   use ExUnit.Case, async: true
 
   @live_root Path.expand("../../lib/mydia_web/live", __DIR__)
   @max_template_lines 60
-
-  # Pages not yet migrated, by directory basename (or file rootname for a
-  # single-file LiveView). Each page task deletes its key.
-  @pending ~w(
-    admin_library_paths_live
-  )
 
   # Single files outside a page directory that hold migrated admin markup,
   # relative to the live root.
@@ -52,7 +45,6 @@ defmodule MydiaWeb.AdminPageConventionsTest do
     assert "jobs_live" in keys
     assert "admin_subtitle_providers_live" in keys
     assert Enum.all?(pages, &(&1.files != [])), "a page resolved to no files"
-    assert @pending -- keys == [], "@pending names a page with no /admin route"
 
     assert Enum.any?(
              pages,
@@ -114,8 +106,7 @@ defmodule MydiaWeb.AdminPageConventionsTest do
   end
 
   defp enforced_paths do
-    page_paths =
-      for page <- admin_pages(), page.key not in @pending, path <- page.files, do: path
+    page_paths = for page <- admin_pages(), path <- page.files, do: path
 
     page_paths ++ Enum.map(@enforced_files, &Path.expand(&1, @live_root))
   end

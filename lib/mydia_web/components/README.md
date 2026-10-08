@@ -318,7 +318,9 @@ as a duplicate group's files. Never a `card`/`card-body`.
 buttons: icon-only `btn btn-sm btn-ghost join-item`, `title=` doubling as the
 accessible name, `destructive` for delete. A row with more than three actions
 keeps the common ones in the join and puts maintenance actions in an "Actions"
-dropdown beside it, as library paths do.
+dropdown beside it, as library paths do. The dropdown sits beside the join
+inside one `flex items-center gap-2 ml-auto sm:ml-2` wrapper, never inside the
+join, and each menu button blurs itself on click so the menu closes.
 
 **Tables.** A page with many rows and several columns (jobs, release
 blacklist, users) uses `<.admin_table id rows row_id>` with `:col`, `:action`
