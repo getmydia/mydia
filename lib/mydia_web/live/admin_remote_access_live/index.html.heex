@@ -6,9 +6,9 @@
       remote_access_source={@remote_access_source}
       remote_access_locked={@remote_access_locked}
       p2p_status={@p2p_status}
-      show_add_url_modal={@show_add_url_modal}
-      new_url={@new_url}
-      show_advanced={@show_advanced}
     />
+    <%= if assigns[:show_direct_url_modal] do %>
+      <MydiaWeb.AdminRemoteAccessLive.Components.direct_url_modal direct_url={@direct_url} />
+    <% end %>
   </.admin_page>
 </Layouts.app>

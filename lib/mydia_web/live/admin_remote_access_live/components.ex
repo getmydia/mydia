@@ -9,9 +9,6 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
   attr :remote_access_setting, :boolean, required: true
   attr :remote_access_source, :atom, default: :default
   attr :remote_access_locked, :boolean, default: false
-  attr :show_add_url_modal, :boolean, default: false
-  attr :new_url, :string, default: ""
-  attr :show_advanced, :boolean, default: false
 
   def remote_access_panel(assigns) do
     # Check if P2P is running
@@ -21,9 +18,6 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
     # Pairing requires relay to be connected (so we can produce a node_addr)
     pairing_available = p2p_running && assigns.p2p_status.relay_connected
 
-    # Get local address info
-    local_addr = get_local_address()
-
     # Get auto-detected URLs (public + local)
     detected_urls = get_detected_urls()
 
@@ -31,11 +25,10 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
       assigns
       |> assign(:p2p_running, p2p_running)
       |> assign(:pairing_available, pairing_available)
-      |> assign(:local_addr, local_addr)
       |> assign(:detected_urls, detected_urls)
 
     ~H"""
-    <div class="p-4 sm:p-6 space-y-5">
+    <div class="p-4 sm:p-6 space-y-4">
       <%!-- Header --%>
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -169,7 +162,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
                   href="https://www.iroh.computer/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="text-xs text-base-content/30 hover:text-purple-500 transition-colors shrink-0"
+                  class="text-xs text-base-content/30 hover:text-secondary transition-colors shrink-0"
                   title="P2P powered by iroh"
                 >
                   iroh
@@ -179,113 +172,75 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
           </div>
         </div>
 
-        <%!-- Direct URLs Card --%>
-        <div class="card bg-base-200">
-          <div class="card-body p-4 gap-3">
-            <div class="flex items-center justify-between">
-              <h4 class="card-title text-sm gap-2">
-                <.icon name="hero-link" class="w-4 h-4 opacity-60" /> Direct URLs
-              </h4>
-              <button
-                class="btn btn-sm btn-ghost gap-1"
-                phx-click="open_add_url_modal"
-              >
-                <.icon name="hero-plus" class="w-4 h-4" /> Add URL
-              </button>
-            </div>
+        <.admin_section
+          id="direct-urls"
+          title="Direct URLs"
+          icon="hero-link"
+          count={length(@ra_config.direct_urls || [])}
+        >
+          <:actions>
+            <button type="button" class="btn btn-sm btn-ghost" phx-click="new_direct_url">
+              <.icon name="hero-plus" class="w-4 h-4" /> Add URL
+            </button>
+          </:actions>
+          <p class="text-xs text-base-content/60">
+            Direct URLs allow the app to bypass the relay when on the same network for faster streaming.
+          </p>
+          <.admin_list id="direct-urls-list" items={@ra_config.direct_urls || []}>
+            <:row :let={url}>
+              <.admin_row id={"direct-url-#{:erlang.phash2(url)}"}>
+                <:title><code class="font-mono text-sm break-all">{url}</code></:title>
+                <:actions>
+                  <.row_actions>
+                    <.row_action
+                      icon="hero-trash"
+                      title="Remove URL"
+                      destructive
+                      phx-click="delete_direct_url"
+                      phx-value-url={url}
+                    />
+                  </.row_actions>
+                </:actions>
+              </.admin_row>
+            </:row>
+            <:empty>No manual URLs yet. Add one so the player can skip the relay.</:empty>
+          </.admin_list>
+        </.admin_section>
 
-            <p class="text-xs text-base-content/60 -mt-1">
-              Direct URLs allow the app to bypass the relay when on the same network for faster streaming.
-            </p>
+        <.admin_section
+          id="detected-urls"
+          title="Auto-detected URLs"
+          icon="hero-signal"
+          count={length(@detected_urls)}
+        >
+          <.admin_list id="detected-urls-list" items={@detected_urls}>
+            <:row :let={url}>
+              <.admin_row id={"detected-url-#{:erlang.phash2(url)}"}>
+                <:title><code class="font-mono text-sm break-all">{url}</code></:title>
+                <:badges><span class="badge badge-sm badge-outline">Auto</span></:badges>
+              </.admin_row>
+            </:row>
+            <:empty>No URLs detected. Check the server's network configuration.</:empty>
+          </.admin_list>
+        </.admin_section>
 
-            <div class="grid gap-4 sm:grid-cols-2 mt-1">
-              <%!-- Manual URLs Section --%>
-              <div class="space-y-2">
-                <div class="flex items-center gap-2">
-                  <.icon name="hero-pencil-square" class="w-3.5 h-3.5 opacity-50" />
-                  <span class="text-xs font-medium text-base-content/70">Manual URLs</span>
-                  <%= if @ra_config.direct_urls && @ra_config.direct_urls != [] do %>
-                    <span class="badge badge-ghost badge-xs">{length(@ra_config.direct_urls)}</span>
-                  <% end %>
-                </div>
-
-                <%= if @ra_config.direct_urls && @ra_config.direct_urls != [] do %>
-                  <div class="space-y-1.5">
-                    <%= for url <- @ra_config.direct_urls do %>
-                      <div class="flex items-center gap-2 bg-base-300/50 rounded-lg px-3 py-2 group">
-                        <.icon name="hero-link" class="w-3.5 h-3.5 opacity-40 shrink-0" />
-                        <code class="font-mono text-xs truncate flex-1">{url}</code>
-                        <button
-                          class="btn btn-xs btn-ghost btn-square opacity-50 group-hover:opacity-100 hover:btn-error"
-                          phx-click="remove_direct_url"
-                          phx-value-url={url}
-                          title="Remove URL"
-                        >
-                          <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    <% end %>
-                  </div>
-                <% else %>
-                  <div class="flex items-center gap-2 text-xs text-base-content/50 italic bg-base-300/30 rounded-lg px-3 py-3">
-                    <.icon name="hero-plus-circle" class="w-4 h-4 opacity-40" />
-                    <span>Click "Add URL" to add custom addresses</span>
-                  </div>
-                <% end %>
-              </div>
-
-              <%!-- Auto-detected URLs Section --%>
-              <div class="space-y-2">
-                <div class="flex items-center gap-2">
-                  <.icon name="hero-signal" class="w-3.5 h-3.5 opacity-50" />
-                  <span class="text-xs font-medium text-base-content/70">Auto-detected</span>
-                  <%= if @detected_urls != [] do %>
-                    <span class="badge badge-ghost badge-xs">{length(@detected_urls)}</span>
-                  <% end %>
-                </div>
-
-                <%= if @detected_urls != [] do %>
-                  <div class="space-y-1.5">
-                    <%= for url <- @detected_urls do %>
-                      <div class="flex items-center gap-2 bg-base-300/30 rounded-lg px-3 py-2 border border-dashed border-base-300">
-                        <.icon name="hero-signal" class="w-3.5 h-3.5 opacity-40 shrink-0" />
-                        <code class="font-mono text-xs truncate flex-1 text-base-content/70">
-                          {url}
-                        </code>
-                        <span class="badge badge-xs badge-ghost">Auto</span>
-                      </div>
-                    <% end %>
-                  </div>
-                <% else %>
-                  <div class="flex items-center gap-2 text-xs text-base-content/50 italic bg-base-300/30 rounded-lg px-3 py-3">
-                    <.icon name="hero-exclamation-circle" class="w-4 h-4 opacity-40" />
-                    <span>No URLs detected. Check network config.</span>
-                  </div>
-                <% end %>
-              </div>
-            </div>
-
-            <div class="divider my-1"></div>
-
-            <div class="alert bg-info/10 border-info/20 py-2.5">
-              <.icon name="hero-light-bulb" class="w-5 h-5 text-primary" />
-              <div class="text-xs">
-                <span class="font-semibold">Tip:</span>
-                Use
-                <a
-                  href="https://tailscale.com"
-                  target="_blank"
-                  rel="noopener"
-                  class="link link-info font-medium"
-                >
-                  Tailscale
-                </a>
-                for secure access anywhere. Add your Tailscale address, e.g.
-                <code class="bg-info/20 px-1.5 py-0.5 rounded font-mono text-primary">
-                  http://mydia.tail1234.ts.net:4000
-                </code>
-              </div>
-            </div>
+        <div class="alert bg-info/10 border-info/20 py-2.5">
+          <.icon name="hero-light-bulb" class="w-5 h-5 text-primary" />
+          <div class="text-xs">
+            <span class="font-semibold">Tip:</span>
+            Use
+            <a
+              href="https://tailscale.com"
+              target="_blank"
+              rel="noopener"
+              class="link link-info font-medium"
+            >
+              Tailscale
+            </a>
+            for secure access anywhere. Add your Tailscale address, e.g.
+            <code class="bg-info/20 px-1.5 py-0.5 rounded font-mono text-primary">
+              http://mydia.tail1234.ts.net:4000
+            </code>
           </div>
         </div>
       <% else %>
@@ -300,77 +255,47 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
           </div>
         </div>
       <% end %>
-
-      <%!-- Add Direct URL Modal --%>
-      <%= if @show_add_url_modal do %>
-        <div class="modal modal-open">
-          <div class="modal-box">
-            <h3 class="font-bold text-lg mb-4">Add Direct URL</h3>
-            <p class="text-sm text-base-content/70 mb-4">
-              Add a URL where your server can be reached directly (e.g., on the same network).
-            </p>
-            <.form
-              for={%{}}
-              as={:direct_url}
-              id="add-direct-url-form"
-              phx-change="update_new_url"
-              phx-submit="add_direct_url"
-            >
-              <input
-                type="url"
-                name="url"
-                placeholder="https://mydia.local:4000"
-                class="input input-bordered w-full"
-                value={@new_url}
-              />
-              <div class="modal-action">
-                <button
-                  type="button"
-                  phx-click="close_add_url_modal"
-                  class="btn btn-ghost"
-                >
-                  Cancel
-                </button>
-                <button type="submit" class="btn btn-primary" disabled={@new_url == ""}>
-                  Add
-                </button>
-              </div>
-            </.form>
-          </div>
-          <div class="modal-backdrop" phx-click="close_add_url_modal"></div>
-        </div>
-      <% end %>
     </div>
     """
   end
 
-  ## Helper functions used by the template
+  attr :direct_url, :string, default: ""
 
-  defp get_local_address do
-    config = Application.get_env(:mydia, :direct_urls, [])
-    port = Keyword.get(config, :external_port, 4000)
-
-    case :inet.getifaddrs() do
-      {:ok, interfaces} ->
-        ip =
-          interfaces
-          |> Enum.flat_map(fn {_iface, props} ->
-            props
-            |> Enum.filter(fn {key, _} -> key == :addr end)
-            |> Enum.map(fn {:addr, addr} -> addr end)
-            |> Enum.filter(&valid_local_ip?/1)
-          end)
-          |> List.first()
-
-        case ip do
-          {a, b, c, d} -> %{ip: "#{a}.#{b}.#{c}.#{d}", port: port}
-          _ -> %{ip: nil, port: port}
-        end
-
-      {:error, _} ->
-        %{ip: nil, port: port}
-    end
+  def direct_url_modal(assigns) do
+    ~H"""
+    <.admin_modal
+      id="direct-url-modal"
+      icon="hero-link"
+      title="Add direct URL"
+      subtitle="Where this server can be reached directly, e.g. on the same network"
+      on_close="close_direct_url_modal"
+    >
+      <.form
+        for={%{}}
+        as={:direct_url}
+        id="direct-url-form"
+        phx-change="validate_direct_url"
+        phx-submit="save_direct_url"
+      >
+        <input
+          type="url"
+          name="url"
+          placeholder="https://mydia.local:4000"
+          class="input input-bordered w-full"
+          value={@direct_url}
+        />
+        <.admin_modal_actions>
+          <button type="button" class="btn btn-ghost" phx-click="close_direct_url_modal">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary" disabled={@direct_url == ""}>Add</button>
+        </.admin_modal_actions>
+      </.form>
+    </.admin_modal>
+    """
   end
+
+  ## Helper functions used by the template
 
   defp get_detected_urls do
     public_urls = Mydia.RemoteAccess.DirectUrls.detect_public_urls()
@@ -379,17 +304,6 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
     (public_urls ++ local_urls)
     |> Enum.uniq()
   end
-
-  defp valid_local_ip?({127, _, _, _}), do: false
-  defp valid_local_ip?({169, 254, _, _}), do: false
-  defp valid_local_ip?({172, 17, _, _}), do: false
-
-  defp valid_local_ip?({a, b, c, d})
-       when is_integer(a) and is_integer(b) and is_integer(c) and is_integer(d) and
-              tuple_size({a, b, c, d}) == 4,
-       do: true
-
-  defp valid_local_ip?(_), do: false
 
   defp display_relay_url(nil), do: "(connecting...)"
   defp display_relay_url(url), do: url

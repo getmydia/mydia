@@ -24,9 +24,8 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Remote Access")
-     |> assign(:show_add_url_modal, false)
-     |> assign(:new_url, "")
-     |> assign(:show_advanced, false)
+     |> assign(:show_direct_url_modal, false)
+     |> assign(:direct_url, "")
      |> load_config()
      |> load_remote_access_setting()
      |> load_p2p_status()}
@@ -76,42 +75,38 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
     {:noreply, put_flash(socket, :info, "Node ID copied to clipboard")}
   end
 
-  def handle_event("open_add_url_modal", _params, socket) do
+  def handle_event("new_direct_url", _params, socket) do
     {:noreply,
      socket
-     |> assign(:show_add_url_modal, true)
-     |> assign(:new_url, "")}
+     |> assign(:show_direct_url_modal, true)
+     |> assign(:direct_url, "")}
   end
 
-  def handle_event("close_add_url_modal", _params, socket) do
+  def handle_event("close_direct_url_modal", _params, socket) do
     {:noreply,
      socket
-     |> assign(:show_add_url_modal, false)
-     |> assign(:new_url, "")}
+     |> assign(:show_direct_url_modal, false)
+     |> assign(:direct_url, "")}
   end
 
-  def handle_event("update_new_url", %{"url" => value}, socket) do
-    {:noreply, assign(socket, :new_url, value)}
+  def handle_event("validate_direct_url", %{"url" => value}, socket) do
+    {:noreply, assign(socket, :direct_url, value)}
   end
 
-  def handle_event("update_new_url", %{"direct_url" => %{"url" => value}}, socket) do
-    {:noreply, assign(socket, :new_url, value)}
-  end
-
-  def handle_event("add_direct_url", _params, socket) do
+  def handle_event("save_direct_url", _params, socket) do
     config = socket.assigns.ra_config
-    new_url = String.trim(socket.assigns.new_url)
+    direct_url = String.trim(socket.assigns.direct_url)
 
-    if new_url != "" do
+    if direct_url != "" do
       current_urls = config.direct_urls || []
-      updated_urls = Enum.uniq(current_urls ++ [new_url])
+      updated_urls = Enum.uniq(current_urls ++ [direct_url])
 
       case RemoteAccess.upsert_config(%{direct_urls: updated_urls}) do
         {:ok, _config} ->
           {:noreply,
            socket
-           |> assign(:show_add_url_modal, false)
-           |> assign(:new_url, "")
+           |> assign(:show_direct_url_modal, false)
+           |> assign(:direct_url, "")
            |> load_config()
            |> put_flash(:info, "Direct URL added successfully")}
 
@@ -125,7 +120,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
     end
   end
 
-  def handle_event("remove_direct_url", %{"url" => url}, socket) do
+  def handle_event("delete_direct_url", %{"url" => url}, socket) do
     config = socket.assigns.ra_config
     current_urls = config.direct_urls || []
     updated_urls = Enum.reject(current_urls, &(&1 == url))
@@ -149,10 +144,6 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
      socket
      |> refresh_status()
      |> put_flash(:info, "Status refreshed")}
-  end
-
-  def handle_event("toggle_advanced", _params, socket) do
-    {:noreply, assign(socket, :show_advanced, !socket.assigns.show_advanced)}
   end
 
   ## Private Helpers
