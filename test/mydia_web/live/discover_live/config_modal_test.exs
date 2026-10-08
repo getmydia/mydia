@@ -339,10 +339,105 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
     end
   end
 
+  # #1080: swapping the preview popup to a title from its own rail, then
+  # opening Configure from the popup header, lost that title's poster because
+  # the title was in none of the lists the dialog's preview is resolved from.
+  describe "Configure after swapping the detail modal through its rail" do
+    setup %{provider_id: provider_id} do
+      recommended_id = unique_provider_id()
+
+      warm_recommendations_cache(provider_id, :movie, [
+        %{
+          "id" => recommended_id,
+          "title" => "Second Reef",
+          "release_date" => "2023-01-01",
+          "poster_path" => "/second-reef.jpg"
+        }
+      ])
+
+      # The swapped-to title's own rail, warmed empty so the popup header holds
+      # the only caret for it.
+      warm_recommendations_cache(recommended_id, :movie, [])
+
+      bypass = Bypass.open()
+      previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        case previous_metadata_relay_url do
+          nil -> Application.delete_env(:mydia, :metadata_relay_url)
+          value -> Application.put_env(:mydia, :metadata_relay_url, value)
+        end
+      end)
+
+      # Both detail fetches are uncached. stub rather than expect: the swap
+      # test does not care how often each is read.
+      for {id, title} <- [{provider_id, "Quiet Harbour"}, {recommended_id, "Second Reef"}] do
+        Bypass.stub(bypass, "GET", "/tmdb/movies/#{id}", fn conn ->
+          body = %{
+            "id" => id,
+            "title" => title,
+            "release_date" => "2023-01-01",
+            "belongs_to_collection" => nil
+          }
+
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(200, Jason.encode!(body))
+        end)
+      end
+
+      %{recommended_id: recommended_id}
+    end
+
+    test "the dialog shows the swapped-to title's poster",
+         %{conn: conn, provider_id: provider_id, recommended_id: recommended_id} do
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
+
+      view
+      |> element("div[phx-click='show_details'][phx-value-id='#{provider_id}']")
+      |> render_click()
+
+      rail_item =
+        "#discover-recommendations-rail-item-#{recommended_id} [phx-click='show_details']"
+
+      render_async_until(view, rail_item)
+      view |> element(rail_item) |> render_click()
+
+      header_caret =
+        "#discover-detail-modal [data-test='add-config-caret'][phx-value-ref='tmdb:#{recommended_id}']"
+
+      render_async_until(view, header_caret)
+      view |> element(header_caret) |> render_click()
+
+      assert has_element?(view, "#add-config-modal[open] img[src*='second-reef.jpg']")
+    end
+  end
+
   # The add completes in a handle_info the submit's render_submit/render_hook
   # round trip does not wait on: it fetches metadata over Bypass before
   # creating the row. Matches the wait_until/1 helper hide_owned_test.exs
   # uses for the same reason.
+  # show_details only queues the detail fetch, which in turn queues the
+  # recommendations start_async, so a bare render_async can return before the
+  # async task exists. Poll until the selector renders.
+  defp render_async_until(view, selector, retries \\ 200)
+
+  defp render_async_until(_view, selector, 0) do
+    flunk("#{selector} never rendered")
+  end
+
+  defp render_async_until(view, selector, retries) do
+    render_async(view, 5000)
+
+    if has_element?(view, selector) do
+      :ok
+    else
+      Process.sleep(10)
+      render_async_until(view, selector, retries - 1)
+    end
+  end
+
   defp wait_until_media_item(provider_id, retries \\ 200)
 
   defp wait_until_media_item(provider_id, 0) do
