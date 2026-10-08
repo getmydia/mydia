@@ -5,8 +5,8 @@ defmodule MydiaWeb.AdminQualityProfilesLive.CustomFormatSection do
   Definitions are global and edited on the Custom Formats admin page. This
   section only assigns what each format is worth to one profile.
 
-  Lives in its own module because the sibling `components.ex` is already well
-  past the project's ~500 LOC per component file guidance.
+  Lives in its own module to keep the editor modal in `modal_components.ex`
+  under the project's ~500 LOC per component file guidance.
   """
   use MydiaWeb, :html
 

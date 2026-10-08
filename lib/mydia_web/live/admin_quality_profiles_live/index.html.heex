@@ -10,7 +10,7 @@
 
     <%!-- Quality Profile Modal --%>
     <%= if assigns[:show_quality_profile_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.quality_profile_modal
+      <MydiaWeb.AdminQualityProfilesLive.ModalComponents.quality_profile_modal
         quality_profile_form={@quality_profile_form}
         quality_profile_mode={@quality_profile_mode}
         quality_profile_active_tab={@quality_profile_active_tab}
@@ -21,7 +21,7 @@
 
     <%!-- Quality Profile Delete Confirm Modal --%>
     <%= if assigns[:show_delete_profile_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.quality_profile_delete_confirm_modal
+      <MydiaWeb.AdminQualityProfilesLive.ModalComponents.quality_profile_delete_confirm_modal
         profile_to_delete={@profile_to_delete}
         affected_media_count={@affected_media_count}
       />
@@ -29,14 +29,14 @@
 
     <%!-- Import Quality Profile Modal --%>
     <%= if assigns[:show_import_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.import_modal import_error={
+      <MydiaWeb.AdminQualityProfilesLive.ModalComponents.import_modal import_error={
         assigns[:import_error]
       } />
     <% end %>
 
     <%!-- Browse Presets Modal --%>
     <%= if assigns[:show_browse_presets_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.browse_presets_modal
+      <MydiaWeb.AdminQualityProfilesLive.PresetsComponents.browse_presets_modal
         presets={assigns[:browse_presets] || []}
         selected_category={assigns[:browse_presets_category] || :all}
       />
