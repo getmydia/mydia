@@ -129,7 +129,7 @@ defmodule MydiaWeb.MediaRequestComponents do
   def format_date(nil), do: "N/A"
   def format_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %d, %Y at %I:%M %p")
 
-  @doc "Human label for a request media type (\"tv_show\" becomes \"Tv show\")."
+  @doc ~S[Human label for a request media type ("tv_show" becomes "Tv show").]
   def media_type_text(media_type) do
     media_type
     |> String.replace("_", " ")
