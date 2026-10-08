@@ -68,20 +68,22 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
                 <% :hwaccel -> %>
                   <.admin_row id="hwaccel-status">
                     <:title>Hardware transcoding</:title>
-                    <:descriptor>
-                      <%= if @hwaccel.backend == :none do %>
-                        Unavailable: {@hwaccel.reason}
-                      <% else %>
-                        {@hwaccel.backend} on {@hwaccel.device || "unknown device"}
-                        <%= if @hwaccel.decode_profiles != [] do %>
-                          &middot; decodes {Enum.map_join(
-                            @hwaccel.decode_profiles,
-                            ", ",
-                            &to_string/1
-                          )}
+                    <:details>
+                      <div class="text-xs opacity-60">
+                        <%= if @hwaccel.backend == :none do %>
+                          Unavailable: {@hwaccel.reason}
+                        <% else %>
+                          {@hwaccel.backend} on {@hwaccel.device || "unknown device"}
+                          <%= if @hwaccel.decode_profiles != [] do %>
+                            &middot; decodes {Enum.map_join(
+                              @hwaccel.decode_profiles,
+                              ", ",
+                              &to_string/1
+                            )}
+                          <% end %>
                         <% end %>
-                      <% end %>
-                    </:descriptor>
+                      </div>
+                    </:details>
                     <:badges>
                       <span class={[
                         "badge",
