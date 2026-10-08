@@ -176,8 +176,8 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
 
         {:noreply,
          socket
-         |> assign(:show_delete_profile_modal, true)
-         |> assign(:profile_to_delete, profile)
+         |> assign(:show_delete_quality_profile_modal, true)
+         |> assign(:deleting_quality_profile, profile)
          |> assign(:affected_media_count, affected_count)}
 
       {:error, error} ->
@@ -196,7 +196,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
 
   @impl true
   def handle_event("confirm_delete_quality_profile", _params, socket) do
-    profile = socket.assigns.profile_to_delete
+    profile = socket.assigns.deleting_quality_profile
 
     case Settings.force_delete_quality_profile(profile) do
       {:ok, _deleted_profile} ->
@@ -210,8 +210,8 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
 
         {:noreply,
          socket
-         |> assign(:show_delete_profile_modal, false)
-         |> assign(:profile_to_delete, nil)
+         |> assign(:show_delete_quality_profile_modal, false)
+         |> assign(:deleting_quality_profile, nil)
          |> assign(:affected_media_count, 0)
          |> put_flash(:info, "Quality profile deleted and unassigned from media items")
          |> load_data()}
@@ -229,17 +229,17 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
 
         {:noreply,
          socket
-         |> assign(:show_delete_profile_modal, false)
+         |> assign(:show_delete_quality_profile_modal, false)
          |> put_flash(:error, error_msg)}
     end
   end
 
   @impl true
-  def handle_event("cancel_delete_quality_profile", _params, socket) do
+  def handle_event("close_delete_quality_profile_modal", _params, socket) do
     {:noreply,
      socket
-     |> assign(:show_delete_profile_modal, false)
-     |> assign(:profile_to_delete, nil)
+     |> assign(:show_delete_quality_profile_modal, false)
+     |> assign(:deleting_quality_profile, nil)
      |> assign(:affected_media_count, 0)}
   end
 
@@ -279,8 +279,8 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
       {:ok, _profile} ->
         {:noreply,
          socket
-         |> assign(:show_import_modal, false)
-         |> assign(:import_error, nil)
+         |> assign(:show_import_quality_profile_modal, false)
+         |> assign(:import_quality_profile_error, nil)
          |> put_flash(:info, "Profile imported successfully from URL")
          |> load_data()}
 
@@ -298,61 +298,64 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
             _ -> "Failed to import profile: #{inspect(reason)}"
           end
 
-        {:noreply, assign(socket, :import_error, error_msg)}
+        {:noreply, assign(socket, :import_quality_profile_error, error_msg)}
     end
   end
 
   @impl true
-  def handle_event("show_import_modal", _params, socket) do
+  def handle_event("open_import_quality_profile_modal", _params, socket) do
     {:noreply,
      socket
-     |> assign(:show_import_modal, true)
-     |> assign(:import_error, nil)}
+     |> assign(:show_import_quality_profile_modal, true)
+     |> assign(:import_quality_profile_error, nil)}
   end
 
   @impl true
-  def handle_event("close_import_modal", _params, socket) do
+  def handle_event("close_import_quality_profile_modal", _params, socket) do
     {:noreply,
      socket
-     |> assign(:show_import_modal, false)
-     |> assign(:import_error, nil)}
+     |> assign(:show_import_quality_profile_modal, false)
+     |> assign(:import_quality_profile_error, nil)}
   end
 
   ## Browse Presets Events
 
   @impl true
-  def handle_event("show_browse_presets_modal", _params, socket) do
+  def handle_event("open_quality_profile_presets_modal", _params, socket) do
     alias Mydia.Settings.QualityProfilePresets
 
     {:noreply,
      socket
-     |> assign(:show_browse_presets_modal, true)
-     |> assign(:browse_presets_category, :all)
-     |> assign(:browse_presets, QualityProfilePresets.list_presets())}
+     |> assign(:show_quality_profile_presets_modal, true)
+     |> assign(:quality_profile_presets_category, :all)
+     |> assign(:quality_profile_presets, QualityProfilePresets.list_presets())}
   end
 
   @impl true
-  def handle_event("close_browse_presets_modal", _params, socket) do
+  def handle_event("close_quality_profile_presets_modal", _params, socket) do
     {:noreply,
      socket
-     |> assign(:show_browse_presets_modal, false)
-     |> assign(:browse_presets, [])
-     |> assign(:browse_presets_category, :all)}
+     |> assign(:show_quality_profile_presets_modal, false)
+     |> assign(:quality_profile_presets, [])
+     |> assign(:quality_profile_presets_category, :all)}
   end
 
   @impl true
-  def handle_event("filter_presets", %{"category" => category}, socket) do
+  def handle_event("filter_quality_profile_presets", %{"category" => category}, socket) do
     alias Mydia.Settings.QualityProfilePresets
     category_atom = String.to_existing_atom(category)
 
     {:noreply,
      socket
-     |> assign(:browse_presets_category, category_atom)
-     |> assign(:browse_presets, QualityProfilePresets.list_presets_by_category(category_atom))}
+     |> assign(:quality_profile_presets_category, category_atom)
+     |> assign(
+       :quality_profile_presets,
+       QualityProfilePresets.list_presets_by_category(category_atom)
+     )}
   end
 
   @impl true
-  def handle_event("import_preset", %{"preset-id" => preset_id}, socket) do
+  def handle_event("import_quality_profile_preset", %{"preset-id" => preset_id}, socket) do
     alias Mydia.Settings.QualityProfilePresets
 
     case QualityProfilePresets.get_preset(preset_id) do
@@ -362,7 +365,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
             {:noreply,
              socket
              |> put_flash(:info, "Preset \"#{preset.name}\" imported successfully")
-             |> assign(:show_browse_presets_modal, false)
+             |> assign(:show_quality_profile_presets_modal, false)
              |> load_data()}
 
           {:error, changeset} ->
@@ -422,11 +425,11 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
     |> assign(:quality_profiles, Settings.list_quality_profiles())
     |> assign(:default_quality_profile_id, Settings.get_default_quality_profile_id())
     |> assign(:show_quality_profile_modal, false)
-    |> assign(:show_delete_profile_modal, false)
-    |> assign(:profile_to_delete, nil)
+    |> assign(:show_delete_quality_profile_modal, false)
+    |> assign(:deleting_quality_profile, nil)
     |> assign(:affected_media_count, 0)
-    |> assign(:show_import_modal, false)
-    |> assign(:show_browse_presets_modal, false)
+    |> assign(:show_import_quality_profile_modal, false)
+    |> assign(:show_quality_profile_presets_modal, false)
   end
 
   defp transform_quality_profile_params(params) do
