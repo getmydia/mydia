@@ -62,6 +62,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.PresetsComponents do
                   :if={preset.source_url}
                   href={preset.source_url}
                   target="_blank"
+                  rel="noopener noreferrer"
                   class="link link-hover flex items-center gap-1"
                 >
                   <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" /> Docs

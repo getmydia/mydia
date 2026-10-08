@@ -102,7 +102,6 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
                     destructive
                     phx-click="delete_quality_profile"
                     phx-value-id={profile.id}
-                    data-confirm={"Delete #{profile.name}?"}
                   />
                 </.row_actions>
                 <div class="dropdown dropdown-end">

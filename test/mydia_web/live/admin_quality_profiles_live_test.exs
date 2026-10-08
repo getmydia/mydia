@@ -75,7 +75,9 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
       {:ok, view, _} = live(conn, ~p"/admin/quality")
 
       assert has_element?(view, "#quality-profile-#{profile.id}")
-      assert has_element?(view, ~s(#delete-quality-profile-#{profile.id}[data-confirm]))
+      # The assigned-media modal is the only confirmation; no browser confirm first.
+      assert has_element?(view, "#delete-quality-profile-#{profile.id}.text-error")
+      refute has_element?(view, ~s(#delete-quality-profile-#{profile.id}[data-confirm]))
 
       view |> element(~s(button[phx-click="new_quality_profile"])) |> render_click()
       assert has_element?(view, "#quality-profile-modal .modal-box.max-w-4xl")
