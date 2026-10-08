@@ -10,9 +10,10 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   with two controls, no labels, and no way to tell which one decided the
   file's fate.
 
-  Each group carries two buttons rather than one that swaps meaning: a marking
-  toggle, and a button that actually trashes. The marking half still swaps its
-  label so the row never goes dead once everything in it is kept.
+  Each group carries two icon-only `row_action`s rather than one that swaps
+  meaning: a marking toggle, and an action that actually trashes. The marking
+  half still swaps its `title` ("Mark all for trash" or "Keep all") so the row
+  never goes dead once everything in it is kept.
   """
 
   use MydiaWeb, :html

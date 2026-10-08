@@ -21,7 +21,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
     {:unknown, "Unknown", "Trashed before Mydia recorded a reason"}
   ]
 
-  @doc "The reason list, for the filter chips and the row badges."
+  @doc "The reason list, for the filter segmented control and the row badges."
   def reasons, do: @reasons
 
   attr :summary, :map, required: true

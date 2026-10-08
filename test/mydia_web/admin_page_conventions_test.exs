@@ -136,7 +136,7 @@ defmodule MydiaWeb.AdminPageConventionsTest do
     cond do
       # A dependency's LiveView mounted under /admin (the error tracker
       # dashboard) is not ours to restyle.
-      not String.starts_with?(source, @live_root <> "/") ->
+      String.contains?(source, "/deps/") ->
         nil
 
       dir == @live_root ->

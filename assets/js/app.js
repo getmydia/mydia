@@ -447,7 +447,6 @@ const liveSocket = new LiveSocket("/live", Socket, {
     PersistedCheckbox,
     PwaInstallMenuItem,
     GridDensity,
-    AddDirectUrl,
     BatchSelect,
     MediaSelection,
     LoadMoreSentinel,
@@ -563,18 +562,6 @@ const BatchSelect = {
       this.lastClicked = null;
     }
   }
-};
-
-// Hook for adding direct URL
-const AddDirectUrl = {
-  mounted() {
-    this.el.addEventListener("click", () => {
-      const input = document.getElementById("new-direct-url-input");
-      if (input && input.value.trim()) {
-        this.pushEvent("add_direct_url", { url: input.value.trim() });
-      }
-    });
-  },
 };
 
 // connect if there are any LiveViews on the page
