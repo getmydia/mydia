@@ -285,6 +285,11 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   socket untouched: the caret only ever sends a well-formed ref and "movie" or
   "tv_show", so anything else is a forged event and opening a dialog on it
   would be worse than doing nothing.
+
+  The detail popup's `:selected_item`, when present and of the same media type,
+  is searched before `candidate_lists`. Swapping the popup to a title from its
+  own rail leaves that title in no host list, and the dialog would otherwise
+  open without its poster (#1080).
   """
   @spec put_add_config(Phoenix.LiveView.Socket.t(), map(), Mydia.Accounts.User.t() | nil, [
           list()
@@ -466,9 +471,24 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       ref: ref,
       media_type: media_type,
       defaults: AddDefaults.resolve(user, media_type),
-      preview: preview_for(candidate_lists, ref, params["title"]),
+      preview:
+        preview_for(
+          [selected_item_list(socket, media_type) | candidate_lists],
+          ref,
+          params["title"]
+        ),
       libraries: candidate_libraries(media_type)
     })
+  end
+
+  # The detail popup's own title, first because it is the one on screen. After
+  # a swap through the popup's rail it is in no host list (#1080). Matched on
+  # media type because TMDB ids collide across movies and shows.
+  defp selected_item_list(socket, media_type) do
+    case socket.assigns[:selected_item] do
+      %{media_type: ^media_type} = item -> [item]
+      _ -> []
+    end
   end
 
   defp entry_id(%FranchiseEntry{tmdb_id: id}) when not is_nil(id), do: to_string(id)

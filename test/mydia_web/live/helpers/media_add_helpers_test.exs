@@ -676,6 +676,69 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
     end
   end
 
+  # #1080: swapping the preview popup to a title from its own "More Like This"
+  # rail makes that title :selected_item and replaces the rail, so the title
+  # the popup shows is in none of the host's candidate lists. The selected
+  # item itself has to be a candidate or the dialog loses its poster.
+  describe "put_add_config/4 preview from the popup's selected item" do
+    defp selected_socket(selected_item) do
+      %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, selected_item: selected_item}}
+    end
+
+    defp tidewater(media_type) do
+      %Mydia.Metadata.Structs.SearchResult{
+        provider_id: "8812",
+        provider: :tmdb,
+        media_type: media_type,
+        title: "Tidewater Almanac",
+        year: 2019,
+        poster_path: "/tidewater.jpg",
+        overview: "A lighthouse keeper keeps a second log."
+      }
+    end
+
+    defp open_tidewater(socket, media_type) do
+      MediaAddHelpers.put_add_config(
+        socket,
+        %{"ref" => "tmdb:8812", "media_type" => media_type, "title" => "Tidewater Almanac"},
+        nil,
+        [[], []]
+      )
+    end
+
+    test "a title found only as the selected item keeps its poster and overview" do
+      updated = open_tidewater(selected_socket(tidewater(:movie)), "movie")
+
+      assert updated.assigns.add_config.preview == %{
+               title: "Tidewater Almanac",
+               year: 2019,
+               poster_path: "/tidewater.jpg",
+               overview: "A lighthouse keeper keeps a second log."
+             }
+    end
+
+    # TMDB namespaces ids per media type and the dashboard's lists mix them,
+    # so a selected show must not lend its poster to a same-id movie.
+    test "a selected item of the other media type is ignored" do
+      updated = open_tidewater(selected_socket(tidewater(:tv_show)), "movie")
+
+      assert updated.assigns.add_config.preview.poster_path == nil
+    end
+
+    test "a host without the detail modal falls back to the candidate lists" do
+      socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}}}
+
+      updated = open_tidewater(socket, "movie")
+
+      assert updated.assigns.add_config.preview == %{
+               title: "Tidewater Almanac",
+               year: nil,
+               poster_path: nil,
+               overview: nil
+             }
+    end
+  end
+
   describe "resolve_add_config_submit/2" do
     setup do
       library = library_path_fixture(%{type: :movies, monitored: true})
