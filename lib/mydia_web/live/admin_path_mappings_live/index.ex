@@ -25,12 +25,12 @@ defmodule MydiaWeb.AdminPathMappingsLive.Index do
 
     {:noreply,
      socket
-     |> assign(:show_modal, true)
-     |> assign(:mode, :new)
-     |> assign(:editing, nil)
+     |> assign(:show_path_mapping_modal, true)
+     |> assign(:path_mapping_mode, :new)
+     |> assign(:editing_path_mapping, nil)
      |> assign(:remote_suggestions, Downloads.list_failed_remote_paths())
      |> assign(:local_suggestions, [])
-     |> assign(:form, to_form(changeset))}
+     |> assign(:path_mapping_form, to_form(changeset))}
   end
 
   @impl true
@@ -44,21 +44,21 @@ defmodule MydiaWeb.AdminPathMappingsLive.Index do
 
       {:noreply,
        socket
-       |> assign(:show_modal, true)
-       |> assign(:mode, :edit)
-       |> assign(:editing, mapping)
+       |> assign(:show_path_mapping_modal, true)
+       |> assign(:path_mapping_mode, :edit)
+       |> assign(:editing_path_mapping, mapping)
        |> assign(:remote_suggestions, Downloads.list_failed_remote_paths())
        |> assign(:local_suggestions, DirectoryBrowser.suggest(mapping.local_prefix))
-       |> assign(:form, to_form(changeset))}
+       |> assign(:path_mapping_form, to_form(changeset))}
     end
   end
 
   @impl true
   def handle_event("validate_path_mapping", %{"path_mapping_config" => params}, socket) do
     base =
-      case socket.assigns.mode do
+      case socket.assigns.path_mapping_mode do
         :new -> %PathMappingConfig{}
-        :edit -> socket.assigns.editing
+        :edit -> socket.assigns.editing_path_mapping
       end
 
     changeset =
@@ -68,28 +68,28 @@ defmodule MydiaWeb.AdminPathMappingsLive.Index do
 
     {:noreply,
      socket
-     |> assign(:form, to_form(changeset))
+     |> assign(:path_mapping_form, to_form(changeset))
      |> assign(:local_suggestions, DirectoryBrowser.suggest(params["local_prefix"]))}
   end
 
   @impl true
   def handle_event("save_path_mapping", %{"path_mapping_config" => params}, socket) do
     result =
-      case socket.assigns.mode do
+      case socket.assigns.path_mapping_mode do
         :new -> Settings.create_path_mapping_config(params)
-        :edit -> Settings.update_path_mapping_config(socket.assigns.editing, params)
+        :edit -> Settings.update_path_mapping_config(socket.assigns.editing_path_mapping, params)
       end
 
     case result do
       {:ok, _mapping} ->
         {:noreply,
          socket
-         |> assign(:show_modal, false)
+         |> assign(:show_path_mapping_modal, false)
          |> put_flash(:info, "Path mapping saved")
          |> load_data()}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset))}
+        {:noreply, assign(socket, :path_mapping_form, to_form(changeset))}
     end
   end
 
@@ -114,14 +114,14 @@ defmodule MydiaWeb.AdminPathMappingsLive.Index do
   end
 
   @impl true
-  def handle_event("close_modal", _params, socket) do
-    {:noreply, assign(socket, :show_modal, false)}
+  def handle_event("close_path_mapping_modal", _params, socket) do
+    {:noreply, assign(socket, :show_path_mapping_modal, false)}
   end
 
   defp load_data(socket) do
     socket
     |> assign(:path_mappings, Settings.list_path_mapping_configs())
-    |> assign(:show_modal, false)
+    |> assign(:show_path_mapping_modal, false)
     |> assign(:remote_suggestions, [])
     |> assign(:local_suggestions, [])
   end

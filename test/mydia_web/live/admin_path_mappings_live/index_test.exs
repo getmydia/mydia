@@ -56,7 +56,7 @@ defmodule MydiaWeb.AdminPathMappingsLive.IndexTest do
       })
       |> render_submit()
 
-      assert has_element?(view, "#path-mappings-list")
+      assert has_element?(view, "#path-mappings")
       assert render(view) =~ "/downloads/complete"
       assert [mapping] = Settings.list_path_mapping_configs()
       assert mapping.local_prefix == "/data/torrents/complete"
@@ -93,6 +93,19 @@ defmodule MydiaWeb.AdminPathMappingsLive.IndexTest do
              )
     end
 
+    test "the modal uses the shared shell", %{view: view} do
+      view |> element("button", "Add mapping") |> render_click()
+      assert has_element?(view, ".modal-box.max-w-2xl .w-10.h-10.rounded-xl")
+
+      assert has_element?(
+               view,
+               ".modal-backdrop.bg-black\\/50[phx-click=close_path_mapping_modal]"
+             )
+
+      view |> element("button[phx-click=close_path_mapping_modal]", "Cancel") |> render_click()
+      refute has_element?(view, "#path-mapping-modal")
+    end
+
     test "deletes a DB mapping", %{conn: conn, token: token} do
       {:ok, mapping} =
         Settings.create_path_mapping_config(%{
@@ -103,7 +116,7 @@ defmodule MydiaWeb.AdminPathMappingsLive.IndexTest do
       {:ok, view, _html} = live(authed(conn, token), ~p"/admin/path-mappings")
 
       view
-      |> element("#mapping-#{mapping.id} button[phx-click='delete_path_mapping']")
+      |> element("#path-mapping-#{mapping.id} button[phx-click='delete_path_mapping']")
       |> render_click()
 
       assert Settings.list_path_mapping_configs() == []
