@@ -18,7 +18,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> assign(:page_title, "Configuration - Indexers")
      |> assign(:cardigann_enabled, CardigannFeatureFlags.enabled?())
      |> assign(:flaresolverr_status, %{configured: false, status: :loading})
-     |> assign(:flaresolverr_modal_open, false)
+     |> assign(:show_flaresolverr_modal, false)
      |> assign(:flaresolverr_sources, %{})
      |> assign(:flaresolverr_form, to_form(flaresolverr_changeset(%{}), as: :flaresolverr))
      |> init_library_assigns()
@@ -662,7 +662,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
     {:noreply,
      socket
-     |> assign(:flaresolverr_modal_open, true)
+     |> assign(:show_flaresolverr_modal, true)
      |> assign(:flaresolverr_sources, sources)
      |> assign(
        :flaresolverr_form,
@@ -694,7 +694,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
             socket =
               socket
-              |> assign(:flaresolverr_modal_open, false)
+              |> assign(:show_flaresolverr_modal, false)
               |> load_data()
               |> maybe_load_flaresolverr_status()
 
@@ -720,13 +720,13 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   @impl true
   def handle_event("close_flaresolverr_modal", _params, socket) do
-    {:noreply, assign(socket, :flaresolverr_modal_open, false)}
+    {:noreply, assign(socket, :show_flaresolverr_modal, false)}
   end
 
   ## Indexer Library Events (flattened from IndexerLibraryComponent)
 
   @impl true
-  def handle_event("library_filter", params, socket) do
+  def handle_event("filter_library_indexers", params, socket) do
     {:noreply,
      socket
      |> assign(:library_filter_type, params["type"] || socket.assigns.library_filter_type)
@@ -742,7 +742,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   end
 
   @impl true
-  def handle_event("library_search", %{"search" => %{"query" => query}}, socket) do
+  def handle_event("search_library_indexers", %{"search" => %{"query" => query}}, socket) do
     {:noreply,
      socket
      |> assign(:library_search_query, query)
@@ -750,7 +750,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   end
 
   @impl true
-  def handle_event("library_toggle_indexer", %{"id" => id}, socket) do
+  def handle_event("toggle_library_definition", %{"id" => id}, socket) do
     definition = Indexers.get_cardigann_definition!(id)
 
     result =
@@ -781,7 +781,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   end
 
   @impl true
-  def handle_event("library_sync_definitions", _params, socket) do
+  def handle_event("sync_library_definitions", _params, socket) do
     parent = self()
 
     Task.start(fn ->
@@ -796,7 +796,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   end
 
   @impl true
-  def handle_event("library_configure_indexer", %{"id" => id}, socket) do
+  def handle_event("configure_library_definition", %{"id" => id}, socket) do
     definition = Indexers.get_cardigann_definition!(id)
     config = definition.config || %{}
 
@@ -813,7 +813,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   end
 
   @impl true
-  def handle_event("library_close_config", _params, socket) do
+  def handle_event("close_library_definition_config_modal", _params, socket) do
     {:noreply,
      socket
      |> assign(:library_configuring_definition, nil)
