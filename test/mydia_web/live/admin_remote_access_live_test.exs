@@ -88,14 +88,26 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
 
       url = "https://mydia-add-test.local:4000"
 
-      render_click(view, "open_add_url_modal", %{})
-      render_change(view, "update_new_url", %{"url" => url})
-      html = render_submit(view, "add_direct_url", %{})
+      render_click(view, "new_direct_url", %{})
+      render_change(view, "validate_direct_url", %{"url" => url})
+      html = render_submit(view, "save_direct_url", %{})
 
       assert html =~ "Direct URL added successfully"
 
       persisted_config = RemoteAccess.get_config()
       assert url in persisted_config.direct_urls
+    end
+
+    test "direct URLs are an admin list in a section, the modal is the shared shell", %{
+      conn: conn
+    } do
+      {:ok, view, _} = live(conn, ~p"/admin/remote-access")
+
+      assert has_element?(view, "#direct-urls h2", "Direct URLs")
+      assert has_element?(view, "#direct-urls-actions button[phx-click=new_direct_url]")
+
+      render_click(view, "new_direct_url", %{})
+      assert has_element?(view, "#direct-url-modal .w-10.h-10.rounded-xl")
     end
 
     test "removing a direct URL through the admin UI persists the removal", %{conn: conn} do
@@ -104,7 +116,7 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/admin/remote-access")
 
-      html = render_click(view, "remove_direct_url", %{"url" => url})
+      html = render_click(view, "delete_direct_url", %{"url" => url})
 
       assert html =~ "Direct URL removed successfully"
 

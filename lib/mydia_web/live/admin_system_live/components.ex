@@ -15,7 +15,7 @@ defmodule MydiaWeb.AdminSystemLive.Components do
 
   def status_tab(assigns) do
     ~H"""
-    <div class="space-y-6 sm:space-y-8 p-4 sm:p-6">
+    <div class="p-4 sm:p-6 space-y-4">
       <%!--
       Stuck upgrades. Only rendered when there is something wrong: a zero here
       is the normal state and would be pure noise on every visit.
@@ -42,12 +42,9 @@ defmodule MydiaWeb.AdminSystemLive.Components do
       <% end %>
 
       <%!-- Top Row: System Info + Database --%>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <%!-- System Information --%>
-        <div>
-          <h3 class="text-lg font-semibold flex items-center gap-2 mb-3 sm:mb-4">
-            <.icon name="hero-server" class="w-5 h-5 text-primary" /> System
-          </h3>
+        <.admin_section id="status-system" title="System" icon="hero-server">
           <div class="grid grid-cols-2 gap-2 sm:gap-4">
             <div class="stat p-3 sm:p-4 bg-base-200 rounded-lg">
               <div class="stat-title text-xs sm:text-sm">Version</div>
@@ -73,16 +70,15 @@ defmodule MydiaWeb.AdminSystemLive.Components do
               <div class="stat-value text-base sm:text-xl">{@system_info.uptime}</div>
             </div>
           </div>
-        </div>
+        </.admin_section>
 
         <%!-- Database Information --%>
-        <div>
-          <h3 class="text-lg font-semibold flex items-center gap-2 mb-3 sm:mb-4 flex-wrap">
-            <.icon name="hero-circle-stack" class="w-5 h-5 text-primary" /> Database
+        <.admin_section id="status-database" title="Database" icon="hero-circle-stack">
+          <:actions>
             <span class={"badge badge-sm sm:badge-md #{health_badge(@database_info.health)}"}>
               {if @database_info.health == :healthy, do: "Healthy", else: "Unhealthy"}
             </span>
-          </h3>
+          </:actions>
           <div class="space-y-2 sm:space-y-3 bg-base-200 rounded-lg p-3 sm:p-5">
             <%= if @database_info.adapter == :postgres do %>
               <div class="flex justify-between items-center gap-2">
@@ -131,58 +127,62 @@ defmodule MydiaWeb.AdminSystemLive.Components do
               </div>
             <% end %>
           </div>
-        </div>
+        </.admin_section>
       </div>
-
-      <div class="divider"></div>
 
       <%!-- Bottom Row: Configuration Summary --%>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
-        <div class="stat p-4 bg-base-200 rounded-lg">
-          <div class="stat-figure text-primary">
-            <.icon name="hero-folder" class="w-8 h-8" />
+      <.admin_section
+        id="status-configuration"
+        title="Configuration"
+        icon="hero-adjustments-horizontal"
+      >
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="stat p-4 bg-base-200 rounded-lg">
+            <div class="stat-figure text-primary">
+              <.icon name="hero-folder" class="w-8 h-8" />
+            </div>
+            <div class="stat-title">Library Paths</div>
+            <div class="stat-value text-xl">{@library_paths_count}</div>
+            <div class="stat-desc">
+              <%= if @library_paths_count == 0 do %>
+                No paths configured
+              <% else %>
+                Configured
+              <% end %>
+            </div>
           </div>
-          <div class="stat-title">Library Paths</div>
-          <div class="stat-value text-xl">{@library_paths_count}</div>
-          <div class="stat-desc">
-            <%= if @library_paths_count == 0 do %>
-              No paths configured
-            <% else %>
-              Configured
-            <% end %>
-          </div>
-        </div>
 
-        <div class="stat p-4 bg-base-200 rounded-lg">
-          <div class="stat-figure text-primary">
-            <.icon name="hero-arrow-down-tray" class="w-8 h-8" />
+          <div class="stat p-4 bg-base-200 rounded-lg">
+            <div class="stat-figure text-primary">
+              <.icon name="hero-arrow-down-tray" class="w-8 h-8" />
+            </div>
+            <div class="stat-title">Download Clients</div>
+            <div class="stat-value text-xl">{@download_clients_count}</div>
+            <div class="stat-desc">
+              <%= if @download_clients_count == 0 do %>
+                No clients configured
+              <% else %>
+                Configured
+              <% end %>
+            </div>
           </div>
-          <div class="stat-title">Download Clients</div>
-          <div class="stat-value text-xl">{@download_clients_count}</div>
-          <div class="stat-desc">
-            <%= if @download_clients_count == 0 do %>
-              No clients configured
-            <% else %>
-              Configured
-            <% end %>
-          </div>
-        </div>
 
-        <div class="stat p-4 bg-base-200 rounded-lg">
-          <div class="stat-figure text-primary">
-            <.icon name="hero-magnifying-glass" class="w-8 h-8" />
-          </div>
-          <div class="stat-title">Indexers</div>
-          <div class="stat-value text-xl">{@indexers_count}</div>
-          <div class="stat-desc">
-            <%= if @indexers_count == 0 do %>
-              No indexers configured
-            <% else %>
-              Configured
-            <% end %>
+          <div class="stat p-4 bg-base-200 rounded-lg">
+            <div class="stat-figure text-primary">
+              <.icon name="hero-magnifying-glass" class="w-8 h-8" />
+            </div>
+            <div class="stat-title">Indexers</div>
+            <div class="stat-value text-xl">{@indexers_count}</div>
+            <div class="stat-desc">
+              <%= if @indexers_count == 0 do %>
+                No indexers configured
+              <% else %>
+                Configured
+              <% end %>
+            </div>
           </div>
         </div>
-      </div>
+      </.admin_section>
     </div>
     """
   end

@@ -8,9 +8,8 @@
       default_quality_profile_id={@default_quality_profile_id}
     />
 
-    <%!-- Quality Profile Modal --%>
     <%= if assigns[:show_quality_profile_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.quality_profile_modal
+      <MydiaWeb.AdminQualityProfilesLive.ModalComponents.quality_profile_modal
         quality_profile_form={@quality_profile_form}
         quality_profile_mode={@quality_profile_mode}
         quality_profile_active_tab={@quality_profile_active_tab}
@@ -19,26 +18,23 @@
       />
     <% end %>
 
-    <%!-- Quality Profile Delete Confirm Modal --%>
-    <%= if assigns[:show_delete_profile_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.quality_profile_delete_confirm_modal
-        profile_to_delete={@profile_to_delete}
+    <%= if assigns[:show_delete_quality_profile_modal] do %>
+      <MydiaWeb.AdminQualityProfilesLive.ModalComponents.quality_profile_delete_confirm_modal
+        deleting_quality_profile={@deleting_quality_profile}
         affected_media_count={@affected_media_count}
       />
     <% end %>
 
-    <%!-- Import Quality Profile Modal --%>
-    <%= if assigns[:show_import_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.import_modal import_error={
-        assigns[:import_error]
+    <%= if assigns[:show_import_quality_profile_modal] do %>
+      <MydiaWeb.AdminQualityProfilesLive.ModalComponents.import_modal import_quality_profile_error={
+        assigns[:import_quality_profile_error]
       } />
     <% end %>
 
-    <%!-- Browse Presets Modal --%>
-    <%= if assigns[:show_browse_presets_modal] do %>
-      <MydiaWeb.AdminQualityProfilesLive.Components.browse_presets_modal
-        presets={assigns[:browse_presets] || []}
-        selected_category={assigns[:browse_presets_category] || :all}
+    <%= if assigns[:show_quality_profile_presets_modal] do %>
+      <MydiaWeb.AdminQualityProfilesLive.PresetsComponents.browse_presets_modal
+        presets={assigns[:quality_profile_presets] || []}
+        selected_category={assigns[:quality_profile_presets_category] || :all}
       />
     <% end %>
   </.admin_page>

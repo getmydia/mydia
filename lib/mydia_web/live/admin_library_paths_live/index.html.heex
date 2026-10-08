@@ -11,7 +11,7 @@
 
     <%!-- Library Path Modal --%>
     <%= if assigns[:show_library_path_modal] do %>
-      <MydiaWeb.AdminLibraryPathsLive.Components.library_path_modal
+      <MydiaWeb.AdminLibraryPathsLive.LibraryPathModalComponents.library_path_modal
         library_path_form={@library_path_form}
         library_path_mode={@library_path_mode}
       />

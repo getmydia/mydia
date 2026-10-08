@@ -2,19 +2,121 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
-  alias MydiaWeb.AdminDashboardLive.ChartGeometry
+  alias MydiaWeb.AdminDashboardLive.PlaysChartComponents
 
   import MydiaWeb.Formatters, only: [format_file_size: 1]
 
-  @chart_w 600
-  @chart_h 160
-  @stack_gap 2
+  attr :active_sessions, :list, required: true
+  attr :background_jobs, :list, required: true
+  attr :recent_activity, :list, required: true
+  attr :last_play_at, :any, default: nil
+  attr :plays_today, :integer, required: true
+  attr :plays_yesterday, :integer, required: true
+  attr :plays_week, :integer, required: true
+  attr :plays_prior_week, :integer, required: true
+  attr :days, :list, required: true
+  attr :range_days, :integer, required: true
 
-  # @chart_w / @chart_h are the PLOT box. Padding is added around it in the
-  # viewBox so tick labels have somewhere to live without being clipped.
-  @pad_l 28
-  @pad_t 8
-  @pad_b 24
+  def dashboard_tab(assigns) do
+    ~H"""
+    <div class="p-4 sm:p-6 space-y-4">
+      <.kpi_row
+        active_streams={length(@active_sessions)}
+        plays_today={@plays_today}
+        plays_yesterday={@plays_yesterday}
+        plays_week={@plays_week}
+        plays_prior_week={@plays_prior_week}
+        idle_for={@last_play_at && elapsed_label(@last_play_at)}
+      />
+
+      <.dash_section
+        id="now-playing"
+        title="Now Playing"
+        icon="hero-play-circle"
+        empty?={@active_sessions == []}
+        empty_text={now_playing_idle_text(@last_play_at)}
+      >
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <.now_playing_card :for={session <- @active_sessions} session={session} />
+        </div>
+      </.dash_section>
+
+      <%!--
+      Background transcodes only, never playback. Sessions already appear above
+      as now-playing cards, and both session types also insert a TranscodeJob
+      row, so listing every active job here would show each viewer twice.
+      --%>
+      <.admin_section
+        :if={@background_jobs != []}
+        id="background-transcodes"
+        title="Background transcodes"
+        icon="hero-cog-6-tooth"
+        count={length(@background_jobs)}
+      >
+        <.admin_list id="background-transcodes-list" items={@background_jobs}>
+          <:row :let={job}>
+            <.admin_row id={"transcode-job-#{job.id}"}>
+              <:title>{transcode_job_title(job)}</:title>
+              <:descriptor>
+                {job_type_label(job.type)}<span :if={job.file_size}> · {format_file_size(
+                  job.file_size
+                )}</span>
+              </:descriptor>
+              <:badges>
+                <span class="badge badge-sm badge-outline">{job.status}</span>
+              </:badges>
+              <:actions>
+                <.row_actions>
+                  <.row_action
+                    icon="hero-x-mark"
+                    title="Cancel transcode"
+                    destructive
+                    phx-click="cancel_transcode_job"
+                    phx-value-id={job.id}
+                  />
+                </.row_actions>
+              </:actions>
+            </.admin_row>
+          </:row>
+          <:empty>No background transcodes.</:empty>
+        </.admin_list>
+      </.admin_section>
+
+      <PlaysChartComponents.plays_chart days={@days} range={@range_days} />
+
+      <.dash_section
+        id="recent-activity"
+        title="Recent Activity"
+        icon="hero-clock"
+        empty?={@recent_activity == []}
+        empty_text="Nothing has happened yet."
+      >
+        <div class="bg-base-200 rounded-box divide-y divide-base-300">
+          <%= for item <- @recent_activity do %>
+            <%= if item.type == :transcode_job do %>
+              <.recent_job_card job={item.data} />
+            <% else %>
+              <.recent_watch_card progress={item.data} />
+            <% end %>
+          <% end %>
+        </div>
+      </.dash_section>
+    </div>
+    """
+  end
+
+  defp job_type_label("direct"), do: "Direct"
+  defp job_type_label("stream"), do: "Stream"
+  defp job_type_label(_download), do: "Download"
+
+  # `recent_plays/1` reads playback.started events, so this is when a play
+  # began. There is no durable session-end record, and claiming a stream
+  # "ended" would be a lie the data cannot support.
+  defp now_playing_idle_text(nil), do: "Nobody is watching."
+
+  defp now_playing_idle_text(at) do
+    "Nobody is watching. Last played #{elapsed_label(at)} ago."
+  end
 
   attr :active_streams, :integer, required: true
   attr :plays_today, :integer, required: true
@@ -61,18 +163,11 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
   attr :icon, :string, required: true
   attr :empty?, :boolean, default: false
   attr :empty_text, :string, default: nil
-  slot :actions
   slot :inner_block, required: true
 
   def dash_section(assigns) do
     ~H"""
-    <div id={@id}>
-      <div class="flex items-center justify-between gap-2 mb-3">
-        <h3 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name={@icon} class="w-5 h-5 text-primary" />{@title}
-        </h3>
-        {render_slot(@actions)}
-      </div>
+    <.admin_section id={@id} title={@title} icon={@icon}>
       <p
         :if={@empty?}
         id={"#{@id}-idle"}
@@ -81,7 +176,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
         <.icon name={@icon} class="w-4 h-4 opacity-40" />{@empty_text}
       </p>
       <div :if={!@empty?}>{render_slot(@inner_block)}</div>
-    </div>
+    </.admin_section>
     """
   end
 
@@ -101,116 +196,6 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
       diff < 86_400 -> "#{div(diff, 3600)}h"
       true -> "#{div(diff, 86_400)}d"
     end
-  end
-
-  @ranges [7, 30, 90]
-
-  attr :days, :list, required: true
-  attr :range, :integer, required: true
-
-  def plays_chart(assigns) do
-    assigns =
-      assigns
-      |> assign(:columns, ChartGeometry.bar_columns(assigns.days, @chart_w, @chart_h))
-      |> assign(:y_ticks, ChartGeometry.y_ticks(assigns.days, @chart_h))
-      |> assign(:x_ticks, ChartGeometry.x_ticks(assigns.days, @chart_w))
-      |> assign(:chart_w, @chart_w)
-      |> assign(:chart_h, @chart_h)
-      |> assign(:stack_gap, @stack_gap)
-      |> assign(:pad_l, @pad_l)
-      |> assign(:pad_t, @pad_t)
-      |> assign(:view_w, @chart_w + @pad_l)
-      |> assign(:view_h, @chart_h + @pad_t + @pad_b)
-      |> assign(:ranges, @ranges)
-
-    ~H"""
-    <div class="space-y-2">
-      <div class="flex items-center justify-between gap-2">
-        <h3 class="font-semibold text-base-content">Plays</h3>
-        <form id="plays-range" phx-change="set_range">
-          <div class="join">
-            <input
-              :for={days <- @ranges}
-              type="radio"
-              name="range"
-              value={days}
-              class="join-item btn btn-sm"
-              aria-label={"#{days}d"}
-              checked={@range == days}
-            />
-          </div>
-        </form>
-      </div>
-      <div id="plays-chart">
-        <svg viewBox={"0 0 #{@view_w} #{@view_h}"} class="w-full h-48">
-          <g transform={"translate(#{@pad_l}, #{@pad_t})"}>
-            <line
-              :for={tick <- @y_ticks}
-              x1="0"
-              y1={tick.y}
-              x2={@chart_w}
-              y2={tick.y}
-              class="stroke-base-300"
-              stroke-width="1"
-            />
-            <text
-              :for={tick <- @y_ticks}
-              x="-6"
-              y={tick.y + 3}
-              text-anchor="end"
-              font-size="9"
-              class="fill-base-content/60"
-              phx-no-format
-            >{tick.value}</text>
-            <%= for col <- @columns do %>
-              <% gap = if col.episodes.height > 0 and col.movies.height > 0, do: @stack_gap, else: 0 %>
-              <rect
-                :if={col.episodes.height > 0}
-                x={col.x}
-                y={col.episodes.y}
-                width={col.width}
-                height={max(col.episodes.height - gap / 2, 0)}
-                class="fill-primary"
-              />
-              <rect
-                :if={col.movies.height > 0}
-                x={col.x}
-                y={col.movies.y + gap / 2}
-                width={col.width}
-                height={max(col.movies.height - gap / 2, 0)}
-                class="fill-secondary"
-              />
-              <rect x={col.x} y="0" width={col.width} height={@chart_h} fill="transparent">
-                <title>
-                  {col.label}: {col.movies.count} movies, {col.episodes.count} episodes
-                </title>
-              </rect>
-            <% end %>
-            <text
-              :for={tick <- @x_ticks}
-              x={tick.x}
-              y={@chart_h + 16}
-              text-anchor="middle"
-              font-size="9"
-              class="fill-base-content/60"
-            >
-              {tick.label}
-            </text>
-          </g>
-        </svg>
-        <div id="plays-chart-legend" class="flex flex-wrap gap-3 mt-2">
-          <div class="flex items-center gap-1.5 text-xs text-base-content">
-            <span class="inline-block w-2.5 h-2.5 rounded-sm bg-primary"></span>
-            <span class="opacity-60">Episodes</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-xs text-base-content">
-            <span class="inline-block w-2.5 h-2.5 rounded-sm bg-secondary"></span>
-            <span class="opacity-60">Movies</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    """
   end
 
   attr :session, :map, required: true
@@ -247,67 +232,65 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     ~H"""
     <div
       id={"now-playing-#{@session.media_file_id}"}
-      class="card bg-base-100 shadow-sm border border-base-300"
+      class="bg-base-200 rounded-box p-3 space-y-2"
     >
-      <div class="card-body p-3 gap-2">
-        <div class="flex items-center gap-3">
-          <%= if @session.poster_path do %>
-            <div class="avatar">
-              <div class="w-10 rounded">
-                <img src={build_image_url(@session.poster_path)} alt="Poster" />
-              </div>
+      <div class="flex items-center gap-3">
+        <%= if @session.poster_path do %>
+          <div class="avatar">
+            <div class="w-10 rounded">
+              <img src={build_image_url(@session.poster_path)} alt="Poster" />
             </div>
-          <% else %>
-            <div class="avatar placeholder">
-              <div class="bg-neutral text-neutral-content rounded-full w-10">
-                <span class="text-sm uppercase">
-                  {String.slice(@username, 0, 2)}
-                </span>
-              </div>
-            </div>
-          <% end %>
-          <div class="flex-1 min-w-0">
-            <div class="font-medium text-sm truncate" title={@session.media_title}>
-              {@session.media_title}
-            </div>
-            <div class="text-xs opacity-60 truncate">
-              {@session.episode_info || "Movie"}
-            </div>
-            <div class="text-xs opacity-60 truncate">{@username}</div>
           </div>
-          <div class="flex flex-col items-end gap-1">
-            <span class={["badge badge-xs badge-outline", @mode_class]}>
-              {@mode_label}
-            </span>
-            <%= if @mbps do %>
-              <span class="text-xs font-mono opacity-60">{format_mbps(@mbps)} Mbps</span>
-            <% end %>
-          </div>
-        </div>
-        <%= if @progress_pct do %>
-          <progress
-            class="progress progress-primary w-full h-1"
-            value={@progress_pct}
-            max="100"
-          ></progress>
-          <div class="flex justify-between text-xs font-mono opacity-60">
-            <span>{format_clock(@session.position_seconds)}</span>
-            <span>{format_clock(@session.duration_seconds)}</span>
+        <% else %>
+          <div class="avatar placeholder">
+            <div class="bg-neutral text-neutral-content rounded-full w-10">
+              <span class="text-sm uppercase">
+                {String.slice(@username, 0, 2)}
+              </span>
+            </div>
           </div>
         <% end %>
-        <div
-          :if={@video_line || @resolution_line || @audio_line}
-          class="text-xs font-mono opacity-60 space-y-0.5"
-        >
-          <div :if={@video_line} id={"now-playing-video-#{@session.media_file_id}"}>
-            <span class="opacity-60">Video</span> {@video_line}
+        <div class="flex-1 min-w-0">
+          <div class="font-medium text-sm truncate" title={@session.media_title}>
+            {@session.media_title}
           </div>
-          <div :if={@resolution_line} id={"now-playing-resolution-#{@session.media_file_id}"}>
-            <span class="opacity-60">Res</span> {@resolution_line}
+          <div class="text-xs opacity-60 truncate">
+            {@session.episode_info || "Movie"}
           </div>
-          <div :if={@audio_line} id={"now-playing-audio-#{@session.media_file_id}"}>
-            <span class="opacity-60">Audio</span> {@audio_line}
-          </div>
+          <div class="text-xs opacity-60 truncate">{@username}</div>
+        </div>
+        <div class="flex flex-col items-end gap-1">
+          <span class={["badge badge-xs badge-outline", @mode_class]}>
+            {@mode_label}
+          </span>
+          <%= if @mbps do %>
+            <span class="text-xs font-mono opacity-60">{format_mbps(@mbps)} Mbps</span>
+          <% end %>
+        </div>
+      </div>
+      <%= if @progress_pct do %>
+        <progress
+          class="progress progress-primary w-full h-1"
+          value={@progress_pct}
+          max="100"
+        ></progress>
+        <div class="flex justify-between text-xs font-mono opacity-60">
+          <span>{format_clock(@session.position_seconds)}</span>
+          <span>{format_clock(@session.duration_seconds)}</span>
+        </div>
+      <% end %>
+      <div
+        :if={@video_line || @resolution_line || @audio_line}
+        class="text-xs font-mono opacity-60 space-y-0.5"
+      >
+        <div :if={@video_line} id={"now-playing-video-#{@session.media_file_id}"}>
+          <span class="opacity-60">Video</span> {@video_line}
+        </div>
+        <div :if={@resolution_line} id={"now-playing-resolution-#{@session.media_file_id}"}>
+          <span class="opacity-60">Res</span> {@resolution_line}
+        </div>
+        <div :if={@audio_line} id={"now-playing-audio-#{@session.media_file_id}"}>
+          <span class="opacity-60">Audio</span> {@audio_line}
         </div>
       </div>
     </div>
@@ -317,18 +300,23 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
   attr :job, :map, required: true
 
   def recent_job_card(assigns) do
-    assigns = assign(assigns, :title, transcode_job_title(assigns.job))
+    {status_icon, status_text, status_badge} = job_status_tone(assigns.job.status)
+
+    assigns =
+      assigns
+      |> assign(:title, transcode_job_title(assigns.job))
+      |> assign(:status_icon, status_icon)
+      |> assign(:status_text, status_text)
+      |> assign(:status_badge, status_badge)
+      |> assign(:action_label, job_action_label(assigns.job.status))
 
     ~H"""
     <div class="p-3 flex items-center gap-3 hover:bg-base-200/50 transition-colors">
       <div class={[
         "flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full",
-        if(@job.status == "ready", do: "text-success", else: "text-error")
+        @status_text
       ]}>
-        <.icon
-          name={if(@job.status == "ready", do: "hero-check-circle", else: "hero-x-circle")}
-          class="w-5 h-5"
-        />
+        <.icon name={@status_icon} class="w-5 h-5" />
       </div>
       <div class="flex-1 min-w-0">
         <div class="text-sm font-medium truncate" title={@title}>{@title}</div>
@@ -341,10 +329,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
             <% true -> %>
               <span class="badge badge-xs badge-ghost">DL</span>
           <% end %>
-          <span class={[
-            "badge badge-xs",
-            if(@job.status == "ready", do: "badge-success", else: "badge-error")
-          ]}>
+          <span class={["badge badge-xs", @status_badge]}>
             {@job.status}
           </span>
           <%= if @job.file_size do %>
@@ -357,8 +342,11 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
           {relative_time(@job.updated_at)}
         </span>
         <button
+          type="button"
           class="btn btn-ghost btn-xs btn-square text-error"
-          phx-click="delete_transcode_job"
+          title={@action_label}
+          aria-label={@action_label}
+          phx-click="cancel_transcode_job"
           phx-value-id={@job.id}
           data-confirm={if @job.status == "ready", do: "Delete this file?", else: nil}
         >
@@ -368,6 +356,14 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     </div>
     """
   end
+
+  # A finished row's button deletes the file; only a live job is cancelled.
+  defp job_action_label(status) when status in ["ready", "failed"], do: "Delete"
+  defp job_action_label(_in_progress), do: "Cancel transcode"
+
+  defp job_status_tone("ready"), do: {"hero-check-circle", "text-success", "badge-success"}
+  defp job_status_tone("failed"), do: {"hero-x-circle", "text-error", "badge-error"}
+  defp job_status_tone(_in_progress), do: {"hero-arrow-path", "text-info", "badge-info"}
 
   attr :progress, :map, required: true
 

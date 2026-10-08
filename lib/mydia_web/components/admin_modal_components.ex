@@ -16,7 +16,16 @@ defmodule MydiaWeb.AdminModalComponents do
   attr :icon, :string, required: true
   attr :title, :string, required: true
   attr :subtitle, :string, default: nil
-  attr :on_close, :any, required: true, doc: "event name or JS for the backdrop"
+
+  attr :on_close, :any,
+    required: true,
+    doc: "event name or JS for the backdrop; nil for a modal a stray click must not dismiss"
+
+  attr :tone, :atom,
+    default: :primary,
+    values: [:primary, :error],
+    doc: ":error for destructive confirmations"
+
   attr :size, :atom, default: :md, values: [:md, :lg], doc: ":lg for browsers and catalogues"
   slot :header_aside, doc: "right side of the header, e.g. an Enabled toggle"
   slot :inner_block, required: true
@@ -34,8 +43,11 @@ defmodule MydiaWeb.AdminModalComponents do
       <div class={["modal-box", box_width(@size)]}>
         <div class="flex items-center justify-between gap-3 mb-5">
           <div class="flex items-center gap-3 min-w-0">
-            <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
-              <.icon name={@icon} class="w-5 h-5 text-primary" />
+            <div class={[
+              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+              tile_tone(@tone)
+            ]}>
+              <.icon name={@icon} class={"w-5 h-5 " <> icon_tone(@tone)} />
             </div>
             <div class="min-w-0">
               <h3 id={"#{@id}-title"} class="font-bold text-lg">{@title}</h3>
@@ -60,6 +72,12 @@ defmodule MydiaWeb.AdminModalComponents do
     <div class="modal-action mt-6 pt-4 border-t border-base-300">{render_slot(@inner_block)}</div>
     """
   end
+
+  defp tile_tone(:primary), do: "bg-primary/20"
+  defp tile_tone(:error), do: "bg-error/20"
+
+  defp icon_tone(:primary), do: "text-primary"
+  defp icon_tone(:error), do: "text-error"
 
   defp box_width(:md), do: "max-w-2xl"
   defp box_width(:lg), do: "max-w-4xl"

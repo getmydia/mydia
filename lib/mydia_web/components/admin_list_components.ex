@@ -16,17 +16,27 @@ defmodule MydiaWeb.AdminListComponents do
   attr :title, :string, required: true
   attr :icon, :string, required: true
   attr :count, :integer, default: nil, doc: "shown as a ghost badge beside the title"
+  slot :actions, doc: "right side of the heading: buttons, a picker or a status badge"
   slot :inner_block, required: true
 
   @doc "A real subsection of an admin page (Needs Attention, Scheduled Jobs)."
   def admin_section(assigns) do
     ~H"""
     <section id={@id} class="space-y-3">
-      <h2 id={@id && "#{@id}-title"} class="text-lg font-semibold flex items-center gap-2">
-        <.icon name={@icon} class="w-5 h-5 opacity-60" />
-        {@title}
-        <span :if={@count} class="badge badge-ghost">{@count}</span>
-      </h2>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 id={@id && "#{@id}-title"} class="text-lg font-semibold flex items-center gap-2">
+          <.icon name={@icon} class="w-5 h-5 opacity-60" />
+          {@title}
+          <span :if={@count} class="badge badge-ghost">{@count}</span>
+        </h2>
+        <div
+          :if={@actions != []}
+          id={@id && "#{@id}-actions"}
+          class="flex flex-wrap items-center gap-2"
+        >
+          {render_slot(@actions)}
+        </div>
+      </div>
       {render_slot(@inner_block)}
     </section>
     """
@@ -65,6 +75,7 @@ defmodule MydiaWeb.AdminListComponents do
 
   slot :badges, doc: "badge badge-sm badge-outline status badges"
   slot :actions, doc: "a row_actions/1 strip"
+  slot :body, doc: "full-width content below the row, e.g. a nested file list"
 
   @doc "One row of an admin_list/1: name and descriptor, then badges, then actions."
   def admin_row(assigns) do
@@ -85,6 +96,7 @@ defmodule MydiaWeb.AdminListComponents do
           {render_slot(@actions)}
         </div>
       </div>
+      <div :if={@body != []} class="mt-3">{render_slot(@body)}</div>
     </div>
     """
   end

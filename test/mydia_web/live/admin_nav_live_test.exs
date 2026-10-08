@@ -184,7 +184,7 @@ defmodule MydiaWeb.AdminNavLiveTest do
 
       assert has_element?(view, "#admin-page-hub", "Administration")
       assert has_element?(view, "h1#admin-page-title", "Background Jobs")
-      assert has_element?(view, "#admin-page-actions button[phx-click=refresh]")
+      assert has_element?(view, "#admin-page-actions button[phx-click=refresh_jobs]")
     end
 
     test "Requests filters by status with a segmented control, not tabs", %{conn: conn} do

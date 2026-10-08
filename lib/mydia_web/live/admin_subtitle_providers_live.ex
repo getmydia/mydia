@@ -7,6 +7,8 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
   alias Mydia.Subtitles.Health
   alias Mydia.Subtitles.ProviderRegistry
 
+  import MydiaWeb.AdminSubtitleProvidersLive.Components, only: [registry_config?: 1]
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
@@ -26,10 +28,10 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
 
     {:noreply,
      socket
-     |> assign(:show_modal, true)
-     |> assign(:form, to_form(changeset))
-     |> assign(:mode, :new)
-     |> assign(:editing, nil)}
+     |> assign(:show_subtitle_provider_modal, true)
+     |> assign(:subtitle_provider_form, to_form(changeset))
+     |> assign(:subtitle_provider_mode, :new)
+     |> assign(:editing_subtitle_provider, nil)}
   end
 
   @impl true
@@ -56,10 +58,10 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
 
         {:noreply,
          socket
-         |> assign(:show_modal, true)
-         |> assign(:form, to_form(changeset))
-         |> assign(:mode, :new)
-         |> assign(:editing, nil)
+         |> assign(:show_subtitle_provider_modal, true)
+         |> assign(:subtitle_provider_form, to_form(changeset))
+         |> assign(:subtitle_provider_mode, :new)
+         |> assign(:editing_subtitle_provider, nil)
          |> put_flash(
            :info,
            "Saving will create a database-managed configuration for this provider"
@@ -78,19 +80,19 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
 
         {:noreply,
          socket
-         |> assign(:show_modal, true)
-         |> assign(:form, to_form(changeset))
-         |> assign(:mode, :edit)
-         |> assign(:editing, config)}
+         |> assign(:show_subtitle_provider_modal, true)
+         |> assign(:subtitle_provider_form, to_form(changeset))
+         |> assign(:subtitle_provider_mode, :edit)
+         |> assign(:editing_subtitle_provider, config)}
     end
   end
 
   @impl true
   def handle_event("validate_subtitle_provider", %{"subtitle_provider_config" => params}, socket) do
     config =
-      case socket.assigns.mode do
+      case socket.assigns.subtitle_provider_mode do
         :new -> %SubtitleProviderConfig{}
-        :edit -> socket.assigns.editing
+        :edit -> socket.assigns.editing_subtitle_provider
       end
 
     changeset =
@@ -98,33 +100,39 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
       |> SubtitleProviderConfig.changeset(params)
       |> Map.put(:action, :validate)
 
-    {:noreply, assign(socket, :form, to_form(changeset))}
+    {:noreply, assign(socket, :subtitle_provider_form, to_form(changeset))}
   end
 
   @impl true
   def handle_event("save_subtitle_provider", %{"subtitle_provider_config" => params}, socket) do
     result =
-      case socket.assigns.mode do
-        :new -> ServiceConfigs.create_subtitle_provider_config(params)
-        :edit -> ServiceConfigs.update_subtitle_provider_config(socket.assigns.editing, params)
+      case socket.assigns.subtitle_provider_mode do
+        :new ->
+          ServiceConfigs.create_subtitle_provider_config(params)
+
+        :edit ->
+          ServiceConfigs.update_subtitle_provider_config(
+            socket.assigns.editing_subtitle_provider,
+            params
+          )
       end
 
     case result do
       {:ok, _config} ->
         {:noreply,
          socket
-         |> assign(:show_modal, false)
+         |> assign(:show_subtitle_provider_modal, false)
          |> put_flash(:info, "Subtitle provider saved successfully")
          |> load_data()}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset))}
+        {:noreply, assign(socket, :subtitle_provider_form, to_form(changeset))}
     end
   end
 
   @impl true
   def handle_event("close_subtitle_provider_modal", _params, socket) do
-    {:noreply, assign(socket, :show_modal, false)}
+    {:noreply, assign(socket, :show_subtitle_provider_modal, false)}
   end
 
   @impl true
@@ -224,14 +232,11 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
     socket
     |> assign(:providers, providers)
     |> assign(:circuit, circuit)
-    |> assign(:show_modal, false)
-    |> assign_new(:form, fn ->
+    |> assign(:show_subtitle_provider_modal, false)
+    |> assign_new(:subtitle_provider_form, fn ->
       to_form(SubtitleProviderConfig.changeset(%SubtitleProviderConfig{}, %{}))
     end)
-    |> assign_new(:mode, fn -> :new end)
-    |> assign_new(:editing, fn -> nil end)
+    |> assign_new(:subtitle_provider_mode, fn -> :new end)
+    |> assign_new(:editing_subtitle_provider, fn -> nil end)
   end
-
-  defp registry_config?(%{id: id}) when is_binary(id), do: String.starts_with?(id, "registry::")
-  defp registry_config?(_), do: false
 end

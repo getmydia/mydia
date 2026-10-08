@@ -12,11 +12,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
 
   def language_section(assigns) do
     ~H"""
-    <div id="language-settings" class="space-y-2">
-      <h3 class="font-semibold flex items-center gap-2 px-1">
-        <.icon name="hero-language" class="w-4 h-4 opacity-60" /> Language
-      </h3>
-
+    <.admin_section id="language-settings" title="Language" icon="hero-language">
       <.form for={%{}} id="language-settings-form" phx-change="save_language_settings">
         <div class="bg-base-200 rounded-box divide-y divide-base-300">
           <.language_row
@@ -93,7 +89,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
           </.language_row>
         </div>
       </.form>
-    </div>
+    </.admin_section>
     """
   end
 

@@ -172,6 +172,8 @@ defmodule Mydia.Downloads.Transcoding do
     |> Repo.all()
   end
 
+  def get_transcode_job(id), do: Repo.get(TranscodeJob, id)
+
   def cancel_transcode_job(%TranscodeJob{} = job) do
     alias Mydia.Downloads.JobManager
     alias Mydia.Streaming.HlsSessionSupervisor

@@ -3,6 +3,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
 
   alias Mydia.Settings
   alias Mydia.Settings.LibraryPath
+  alias Mydia.Settings.RuntimeConfig
 
   alias Mydia.Logger, as: MydiaLogger
 
@@ -108,14 +109,20 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
   @impl true
   def handle_event("edit_library_path", %{"id" => id}, socket) do
     path = Settings.get_library_path!(id)
-    changeset = LibraryPath.changeset(path, %{})
 
-    {:noreply,
-     socket
-     |> assign(:show_library_path_modal, true)
-     |> assign(:library_path_form, to_form(changeset))
-     |> assign(:library_path_mode, :edit)
-     |> assign(:editing_library_path, path)}
+    if runtime_library_path?(path) do
+      {:noreply,
+       put_flash(socket, :error, "Library paths from environment variables cannot be edited here")}
+    else
+      changeset = LibraryPath.changeset(path, %{})
+
+      {:noreply,
+       socket
+       |> assign(:show_library_path_modal, true)
+       |> assign(:library_path_form, to_form(changeset))
+       |> assign(:library_path_mode, :edit)
+       |> assign(:editing_library_path, path)}
+    end
   end
 
   @impl true
@@ -204,6 +211,76 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
   def handle_event("delete_library_path", %{"id" => id}, socket) do
     path = Settings.get_library_path!(id)
 
+    if runtime_library_path?(path) do
+      {:noreply,
+       put_flash(socket, :error, "Library paths from environment variables cannot be deleted")}
+    else
+      delete_library_path(socket, path, id)
+    end
+  end
+
+  @impl true
+  def handle_event("close_library_path_modal", _params, socket) do
+    {:noreply, assign(socket, :show_library_path_modal, false)}
+  end
+
+  @impl true
+  def handle_event("preview_reorganize_library_path", %{"id" => id}, socket) do
+    alias Mydia.Library.FileOrganizer
+
+    library_path = Settings.get_library_path!(id)
+
+    {:ok, summary} = FileOrganizer.reorganize_library(library_path, dry_run: true)
+
+    message =
+      if summary.total == 0 do
+        "No files need reorganization"
+      else
+        "Preview: #{summary.moved} of #{summary.total} files would be moved to category folders"
+      end
+
+    {:noreply, put_flash(socket, :info, message)}
+  end
+
+  @impl true
+  def handle_event("reorganize_library_path", %{"id" => id}, socket) do
+    alias Mydia.Jobs.LibraryReorganize
+
+    case LibraryReorganize.enqueue(id) do
+      {:ok, _job} ->
+        {:noreply,
+         socket
+         |> update(:reorganizing_library_ids, &MapSet.put(&1, id))
+         |> put_flash(:info, "Library reorganization started...")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to start reorganization")}
+    end
+  end
+
+  @impl true
+  def handle_event("reclassify_library_path", %{"id" => id}, socket) do
+    alias Mydia.Jobs.MediaReclassify
+
+    case MediaReclassify.enqueue(id) do
+      {:ok, _job} ->
+        {:noreply,
+         socket
+         |> update(:reclassifying_library_ids, &MapSet.put(&1, id))
+         |> put_flash(:info, "Media reclassification started...")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to start reclassification")}
+    end
+  end
+
+  ## Private Helpers
+
+  # Runtime (env/YAML) rows have no database row to change.
+  defp runtime_library_path?(%{} = library_path),
+    do: library_path.from_env or RuntimeConfig.runtime_config?(library_path)
+
+  defp delete_library_path(socket, path, id) do
     case Settings.delete_library_path(path) do
       {:ok, _path} ->
         {:noreply,
@@ -225,63 +302,6 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
         {:noreply, put_flash(socket, :error, error_msg)}
     end
   end
-
-  @impl true
-  def handle_event("close_library_path_modal", _params, socket) do
-    {:noreply, assign(socket, :show_library_path_modal, false)}
-  end
-
-  @impl true
-  def handle_event("preview_reorganize", %{"id" => id}, socket) do
-    alias Mydia.Library.FileOrganizer
-
-    library_path = Settings.get_library_path!(id)
-
-    {:ok, summary} = FileOrganizer.reorganize_library(library_path, dry_run: true)
-
-    message =
-      if summary.total == 0 do
-        "No files need reorganization"
-      else
-        "Preview: #{summary.moved} of #{summary.total} files would be moved to category folders"
-      end
-
-    {:noreply, put_flash(socket, :info, message)}
-  end
-
-  @impl true
-  def handle_event("reorganize_library", %{"id" => id}, socket) do
-    alias Mydia.Jobs.LibraryReorganize
-
-    case LibraryReorganize.enqueue(id) do
-      {:ok, _job} ->
-        {:noreply,
-         socket
-         |> update(:reorganizing_library_ids, &MapSet.put(&1, id))
-         |> put_flash(:info, "Library reorganization started...")}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start reorganization")}
-    end
-  end
-
-  @impl true
-  def handle_event("reclassify_library", %{"id" => id}, socket) do
-    alias Mydia.Jobs.MediaReclassify
-
-    case MediaReclassify.enqueue(id) do
-      {:ok, _job} ->
-        {:noreply,
-         socket
-         |> update(:reclassifying_library_ids, &MapSet.put(&1, id))
-         |> put_flash(:info, "Media reclassification started...")}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start reclassification")}
-    end
-  end
-
-  ## Private Helpers
 
   defp strip_new_default_flags(params, library_path) do
     Enum.reduce(["default_for_movies", "default_for_series"], params, fn key, acc ->

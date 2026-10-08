@@ -6,13 +6,12 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   alias Mydia.Downloads
   alias Mydia.Playback
   alias Mydia.Streaming
-  alias MydiaWeb.AdminDashboardLive.Components
+  alias MydiaWeb.AdminDashboardLive.PlaysChartComponents
 
   # Now Playing updates on PubSub push; only the day-bucketed figures need a
   # timer, since a daily bucket does not move often.
   @history_refresh :timer.seconds(60)
   @default_range 30
-  @ranges [7, 30, 90]
 
   # The stat tiles compare this week against the week before, so they need a
   # fixed fourteen days that does not move when the chart's range does.
@@ -51,11 +50,22 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
-  def handle_event("set_range", %{"range" => range}, socket) do
+  def handle_event("set_plays_range", %{"range" => range}, socket) do
     {:noreply,
      socket
      |> assign(:range_days, parse_range(range))
      |> load_history()}
+  end
+
+  def handle_event("cancel_transcode_job", %{"id" => id}, socket) do
+    case Downloads.get_transcode_job(id) do
+      nil ->
+        {:noreply, socket |> load_now_playing() |> put_flash(:error, "Transcode job not found")}
+
+      job ->
+        {:ok, _job} = Downloads.cancel_transcode_job(job)
+        {:noreply, socket |> load_now_playing() |> put_flash(:info, "Transcode job cancelled")}
+    end
   end
 
   defp load_now_playing(socket) do
@@ -93,7 +103,7 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
 
   defp parse_range(value) do
     case Integer.parse(value) do
-      {days, ""} when days in @ranges -> days
+      {days, ""} -> if days in PlaysChartComponents.ranges(), do: days, else: @default_range
       _ -> @default_range
     end
   end
@@ -109,15 +119,6 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
 
   defp plays_on(nil), do: 0
   defp plays_on(day), do: day.movies + day.episodes
-
-  # `recent_plays/1` reads playback.started events, so this is when a play
-  # began. There is no durable session-end record, and claiming a stream
-  # "ended" would be a lie the data cannot support.
-  defp now_playing_idle_text(nil), do: "Nobody is watching."
-
-  defp now_playing_idle_text(at) do
-    "Nobody is watching. Last played #{Components.elapsed_label(at)} ago."
-  end
 
   defp recent_activity do
     job_preloads = [:user, media_file: [:media_item, episode: [:media_item]]]

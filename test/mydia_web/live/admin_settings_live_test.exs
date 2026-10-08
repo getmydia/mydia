@@ -151,8 +151,14 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
       # text inputs and blurring one would surface "Invalid setting value".
       refute has_element?(view, "input[phx-value-key='database.path']")
       refute has_element?(view, "input[phx-value-key='database.pool_size']")
-      assert has_element?(view, "div.text-xs.font-mono.truncate", "database.path")
-      assert has_element?(view, "div.text-xs.font-mono.truncate", "database.pool_size")
+      assert has_element?(view, "#setting-database-path", "database.path")
+      assert has_element?(view, "#setting-database-pool_size", "database.pool_size")
+    end
+
+    test "categories are shared sections of admin rows", %{view: view} do
+      assert has_element?(view, "#settings-database h2", "Database")
+      assert has_element?(view, "#settings-database-list #setting-database-path")
+      assert has_element?(view, "#language-settings h2", "Language")
     end
 
     test "offers the transcode height ceiling", %{view: view} do

@@ -186,4 +186,21 @@ defmodule MydiaWeb.Components.SegmentedControlTest do
     assert html |> LazyHTML.from_fragment() |> LazyHTML.query("button > span") |> Enum.empty?()
     assert html |> buttons() |> LazyHTML.text() =~ "Alpha"
   end
+
+  test "an option id lands on its button" do
+    assigns = %{}
+
+    html =
+      rendered_to_string(~H"""
+      <.segmented_control value="a" event="pick" param="choice" label="Pick one">
+        <:option value="a" label="Alpha" id="pick-alpha" />
+        <:option value="b" label="Beta" />
+      </.segmented_control>
+      """)
+
+    # LazyHTML.attribute/2 omits buttons without the attribute, so one entry
+    # means only the first button has an id.
+    assert attrs(html, "id") == ["pick-alpha"]
+    assert html |> buttons() |> Enum.count() == 2
+  end
 end

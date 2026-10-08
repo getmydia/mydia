@@ -277,7 +277,9 @@ components. Before they existed the standard was a list of class strings to
 copy, and an audit on 2026-10-07 found only two of 23 pages still matching it.
 Convention drift reads as a defect on its own, independent of whether the page
 works. `test/mydia_web/admin_page_conventions_test.exs` fails the build on the
-drift patterns that audit found, for every page listed in its `@enforced`.
+drift patterns that audit found, for every LiveView mounted under `/admin`
+(dependency LiveViews outside `lib/mydia_web/live`, such as the error tracker
+dashboard, are skipped).
 
 **Registered in `MydiaWeb.AdminNav`.** A new admin page needs an entry in
 `lib/mydia_web/admin_nav.ex` with its hub (Configuration for acquisition levers,
@@ -300,33 +302,47 @@ one admin-only page outside the hubs; it renders `<.admin_header>` directly.
 never repeats the page name.
 
 **Body.** It opens with `<div class="p-4 sm:p-6 space-y-4">`. A real subsection
-(Needs Attention, Scheduled Jobs) is `<.admin_section title icon count>`.
-One-of-N filters use `<.segmented_control>`; `tabs` mean hub navigation, or
-switching content panes inside a modal. Colours come from theme tokens such as
-`text-base-content/60`, never `text-gray-*`.
+(Needs Attention, Scheduled Jobs) is `<.admin_section title icon count>`. Its
+`:actions` slot holds what sits beside the heading: a button, a range picker, a
+health badge. One-of-N filters and pickers use `<.segmented_control>` (the
+Trash filter, the quality presets, the Dashboard range); `tabs` mean hub
+navigation, or switching content panes inside a modal. Colours come from theme
+tokens such as `text-base-content/60`, never `text-gray-*`.
 
 **Lists.** `<.admin_list id items>` with a `:row` and an `:empty` slot renders
 the `bg-base-200 rounded-box divide-y divide-base-300` container, or an
 `alert alert-info` when empty. Each row is `<.admin_row id>` with `:title`,
 `:descriptor` (one truncated `text-xs opacity-60` line), `:details`
 (multi-line notes and warnings, not truncated or dimmed), `:badges`
-(`badge badge-sm badge-outline`) and `:actions`. Never a `card`/`card-body`.
+(`badge badge-sm badge-outline`) and `:actions`. `:body` is full width under
+the row, for a nested list such as a duplicate group's files. Never a
+`card`/`card-body`. Two lists stay hand-rolled on purpose: the Dashboard's
+Recent Activity, whose watch rows have no id, and the Settings Language form, a
+fixed set of form rows with mixed controls.
 
 **Row actions.** `<.row_actions>` holding `<.row_action icon title ...>`
 buttons: icon-only `btn btn-sm btn-ghost join-item`, `title=` doubling as the
 accessible name, `destructive` for delete. A row with more than three actions
 keeps the common ones in the join and puts maintenance actions in an "Actions"
-dropdown beside it, as library paths do.
+dropdown beside it, as library paths do; quality profiles keep an Export
+dropdown beside the join the same way. The dropdown sits beside the join inside
+one `flex items-center gap-2 ml-auto sm:ml-2` wrapper, never inside the join,
+and each menu button blurs itself on click so the menu closes.
 
 **Tables.** A page with many rows and several columns (jobs, release
 blacklist, users) uses `<.admin_table id rows row_id>` with `:col`, `:action`
-and `:empty` slots: the same empty state and the same row actions.
+and `:empty` slots: the same empty state and the same row actions. History
+tables that page by offset keep their Load More or prev/next controls outside
+`admin_table`.
 
 **Env-sourced rows.** `Settings.runtime_config?/1` rows show `<.env_lock_badge>`
 and their Edit and Delete are `<.row_action disabled disabled_reason=...>`:
 visible and disabled, never hidden. Indexers is the one exception: Edit stays
 enabled on an env indexer because it offers "Convert to database-managed".
 Singletons such as FlareSolverr use one row plus Edit, with no add or delete.
+A page that shows where each value came from, such as Settings, uses
+`<.config_source_badge source>` instead, which has four states (ENV, DB, YAML
+and Default).
 
 **Modals.** `<.admin_modal id icon title subtitle on_close>` renders
 `modal modal-open`, a `max-w-2xl` box (`size={:lg}` for `max-w-4xl` browsers
@@ -337,7 +353,12 @@ header (an Enabled toggle, say); a form field there needs
 `form="<form-id>"` because it lives outside the `<form>`. The page puts its own
 `<.form for={@<x>_form} id="<x>-form" phx-change="validate_<x>" phx-submit="save_<x>">`
 inside; a form whose buttons must be inside the `<form>` renders
-`<.admin_modal_actions>` itself.
+`<.admin_modal_actions>` itself. `tone={:error}` tints the icon tile for a
+destructive confirmation. `on_close={nil}` keeps the backdrop but makes it
+inert, for content a stray click must not dismiss (a one-time API key).
+
+**Filters.** A `<.segmented_control>` option takes an `id` when a test or a
+link needs to address it.
 
 **Namespaced events and assigns.** `new_<x>`, `edit_<x>`, `validate_<x>`,
 `save_<x>`, `delete_<x>`, `test_<x>`, `filter_<x>` and `close_<x>_modal`,
@@ -347,7 +368,8 @@ Never bare `new`, `edit`, `save`, `cancel`, `close`, `delete`, `remove`,
 blast radius worth showing, in which case a dedicated confirm modal, as
 download clients do.
 
-Copy `admin_storage_backends_live/` for the smallest complete example.
+Every admin page is built this way now; `admin_storage_backends_live/` is the
+smallest complete example.
 
 ## The sidebar
 

@@ -65,6 +65,40 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
       assert html =~ "HD"
     end
 
+    test "the editor is a large shared modal and the list has row ids", %{conn: conn} do
+      {:ok, profile} =
+        Settings.create_quality_profile(%{
+          name: "Row Id Profile",
+          quality_standards: %{preferred_resolutions: ["1080p"]}
+        })
+
+      {:ok, view, _} = live(conn, ~p"/admin/quality")
+
+      assert has_element?(view, "#quality-profile-#{profile.id}")
+      # The assigned-media modal is the only confirmation; no browser confirm first.
+      assert has_element?(view, "#delete-quality-profile-#{profile.id}.text-error")
+      refute has_element?(view, ~s(#delete-quality-profile-#{profile.id}[data-confirm]))
+
+      view |> element(~s(button[phx-click="new_quality_profile"])) |> render_click()
+      assert has_element?(view, "#quality-profile-modal .modal-box.max-w-4xl")
+    end
+
+    test "presets filter by source with a segmented control", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/quality")
+      render_click(view, "open_quality_profile_presets_modal", %{})
+
+      assert has_element?(view, "#quality-profile-presets-modal .modal-box.max-w-4xl")
+
+      view
+      |> element(~s(#quality-profile-presets-filter button[phx-value-category="trash_guides"]))
+      |> render_click()
+
+      assert has_element?(
+               view,
+               ~s(#quality-profile-presets-filter button[phx-value-category="trash_guides"][aria-pressed="true"])
+             )
+    end
+
     test "opens modal when clicking new profile button", %{view: view} do
       view
       |> element(~s{button[phx-click="new_quality_profile"]})

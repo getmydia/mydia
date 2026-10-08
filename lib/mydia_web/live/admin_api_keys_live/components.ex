@@ -16,32 +16,19 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
         header. Each key acts as you.
       </p>
 
-      <div
-        :if={@env_key_set}
-        id="env-library-api-key"
-        class="bg-base-200 rounded-box p-4 flex items-center gap-3"
-      >
-        <.icon name="hero-lock-closed" class="w-5 h-5 opacity-60" />
-        <div class="flex-1">
-          <div class="font-medium flex items-center gap-2">
-            LIBRARY_API_KEY <MydiaWeb.AdminComponents.config_source_badge source={:env} />
-          </div>
-          <p class="text-sm text-base-content/70">
+      <div :if={@env_key_set} class="bg-base-200 rounded-box">
+        <.admin_row id="env-library-api-key">
+          <:title>LIBRARY_API_KEY <.env_lock_badge /></:title>
+          <:details>
             Set by LIBRARY_API_KEY. Remove the variable and restart to revoke.
-          </p>
-        </div>
+          </:details>
+        </.admin_row>
       </div>
 
-      <%= if @api_keys == [] do %>
-        <div id="api-keys-empty" class="alert alert-info">
-          <.icon name="hero-information-circle" class="w-5 h-5" />
-          <span>No API keys yet. Create one to use the Library API.</span>
-        </div>
-      <% else %>
-        <div id="api-keys" class="bg-base-200 rounded-box divide-y divide-base-300">
-          <.api_key_row :for={key <- @api_keys} key={key} />
-        </div>
-      <% end %>
+      <.admin_list id="api-keys" items={@api_keys}>
+        <:row :let={key}><.api_key_row key={key} /></:row>
+        <:empty>No API keys yet. Create one to use the Library API.</:empty>
+      </.admin_list>
     </div>
     """
   end
@@ -61,42 +48,39 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
     assigns = assign(assigns, :state, state(assigns.key))
 
     ~H"""
-    <div id={"api-key-#{@key.id}"} class="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-      <div class="flex-1 min-w-0">
-        <div class="font-medium flex items-center gap-2 flex-wrap">
-          {@key.name}
-          <span class="badge badge-sm badge-ghost">{scope(@key)}</span>
-          <span class={["badge badge-sm", state_class(@state)]}>{state_label(@state)}</span>
-        </div>
-        <div class="text-sm text-base-content/60 font-mono">{@key.key_prefix}...</div>
-        <div class="text-xs text-base-content/60 mt-1">
-          Created {date(@key.inserted_at)} · Last used {date(@key.last_used_at) || "never"} · Expires {date(
-            @key.expires_at
-          ) || "never"}
-        </div>
-      </div>
-      <div class="join">
-        <button
-          :if={@state == :active}
-          id={"revoke-api-key-#{@key.id}"}
-          class="btn btn-sm btn-ghost join-item"
-          phx-click="confirm_revoke_api_key"
-          phx-value-id={@key.id}
-          title="Revoke"
-        >
-          <.icon name="hero-no-symbol" class="w-4 h-4" />
-        </button>
-        <button
-          id={"delete-api-key-#{@key.id}"}
-          class="btn btn-sm btn-ghost join-item text-error"
-          phx-click="confirm_delete_api_key"
-          phx-value-id={@key.id}
-          title="Delete"
-        >
-          <.icon name="hero-trash" class="w-4 h-4" />
-        </button>
-      </div>
-    </div>
+    <.admin_row id={"api-key-#{@key.id}"}>
+      <:title>{@key.name}</:title>
+      <:descriptor>
+        <span class="font-mono">{@key.key_prefix}...</span>
+        · Created {date(@key.inserted_at)} · Last used {date(@key.last_used_at) || "never"} · Expires {date(
+          @key.expires_at
+        ) || "never"}
+      </:descriptor>
+      <:badges>
+        <span class="badge badge-sm badge-outline">{scope(@key)}</span>
+        <span class={["badge badge-sm", state_class(@state)]}>{state_label(@state)}</span>
+      </:badges>
+      <:actions>
+        <.row_actions>
+          <.row_action
+            :if={@state == :active}
+            id={"revoke-api-key-#{@key.id}"}
+            icon="hero-no-symbol"
+            title="Revoke"
+            phx-click="confirm_revoke_api_key"
+            phx-value-id={@key.id}
+          />
+          <.row_action
+            id={"delete-api-key-#{@key.id}"}
+            icon="hero-trash"
+            title="Delete"
+            destructive
+            phx-click="confirm_delete_api_key"
+            phx-value-id={@key.id}
+          />
+        </.row_actions>
+      </:actions>
+    </.admin_row>
     """
   end
 
@@ -104,123 +88,133 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
 
   def api_key_modal(assigns) do
     ~H"""
-    <div id="api-key-modal" class="modal modal-open">
-      <div class="modal-box max-w-lg">
-        <.form for={@form} id="api-key-form" phx-change="validate_api_key" phx-submit="save_api_key">
-          <h3 class="font-bold text-lg mb-4">New API key</h3>
-          <.input field={@form[:name]} type="text" label="Name" placeholder="Home automation" />
-          <.input
-            field={@form[:expiry]}
-            type="select"
-            label="Expires"
-            options={[
-              {"Never", "never"},
-              {"In 30 days", "30"},
-              {"In 90 days", "90"},
-              {"In 365 days", "365"}
-            ]}
-          />
-          <.input
-            field={@form[:scope]}
-            type="select"
-            label="Scope"
-            options={[{"Library API", "library"}]}
-          />
-          <div class="modal-action mt-6 pt-4 border-t border-base-300">
-            <button type="button" class="btn btn-ghost" phx-click="close_api_key_modal">
-              Cancel
-            </button>
-            <button type="submit" id="save-api-key" class="btn btn-primary">Create key</button>
-          </div>
-        </.form>
-      </div>
-      <div class="modal-backdrop bg-black/50" phx-click="close_api_key_modal"></div>
-    </div>
+    <.admin_modal
+      id="api-key-modal"
+      icon="hero-key"
+      title="New API key"
+      subtitle="A key for the Library API"
+      on_close="close_api_key_modal"
+    >
+      <.form for={@form} id="api-key-form" phx-change="validate_api_key" phx-submit="save_api_key">
+        <.input field={@form[:name]} type="text" label="Name" placeholder="Home automation" />
+        <.input
+          field={@form[:expiry]}
+          type="select"
+          label="Expires"
+          options={[
+            {"Never", "never"},
+            {"In 30 days", "30"},
+            {"In 90 days", "90"},
+            {"In 365 days", "365"}
+          ]}
+        />
+        <.input
+          field={@form[:scope]}
+          type="select"
+          label="Scope"
+          options={[{"Library API", "library"}]}
+        />
+        <.admin_modal_actions>
+          <button type="button" class="btn btn-ghost" phx-click="close_api_key_modal">
+            Cancel
+          </button>
+          <button type="submit" id="save-api-key" class="btn btn-primary">Create key</button>
+        </.admin_modal_actions>
+      </.form>
+    </.admin_modal>
     """
   end
 
-  attr :key, :string, required: true
+  attr :created_api_key, :string, required: true
 
   def created_key_modal(assigns) do
     ~H"""
-    <div id="created-api-key-modal" class="modal modal-open">
-      <div class="modal-box max-w-lg">
-        <h3 class="font-bold text-lg">Your new API key</h3>
-        <p class="py-2 text-sm text-base-content/70">
-          Copy it now. It is shown only once and cannot be recovered.
-        </p>
-        <div class="join w-full">
-          <input
-            id="created-api-key"
-            type="text"
-            readonly
-            value={@key}
-            class="input join-item w-full font-mono"
-          />
-          <%!-- The key rides in an escaped data attribute, never inside the
-               onclick string, so no character in it can break out into script.
-               Same pattern as the devices page's claim code. --%>
-          <button
-            id="copy-api-key"
-            class="btn join-item"
-            phx-click="copy_api_key"
-            data-key={@key}
-            onclick="navigator.clipboard?.writeText(this.dataset.key)"
-            title="Copy key"
-          >
-            <.icon name="hero-clipboard-document" class="w-4 h-4" />
-          </button>
-        </div>
-        <div class="alert alert-warning mt-4">
-          <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-          <span>
-            This key also authenticates on the player API as you. Treat it like your password.
-          </span>
-        </div>
-        <div class="modal-action">
-          <button id="close-created-api-key" class="btn btn-primary" phx-click="close_created_api_key">
-            Done
-          </button>
-        </div>
+    <.admin_modal
+      id="created-api-key-modal"
+      icon="hero-key"
+      title="Your new API key"
+      subtitle="Copy it now. It is shown only once and cannot be recovered."
+      on_close={nil}
+    >
+      <div class="join w-full">
+        <input
+          id="created-api-key"
+          type="text"
+          readonly
+          value={@created_api_key}
+          class="input join-item w-full font-mono"
+        />
+        <%!-- The key rides in an escaped data attribute, never inside the
+             onclick string, so no character in it can break out into script.
+             Same pattern as the devices page's claim code. --%>
+        <button
+          id="copy-api-key"
+          class="btn join-item"
+          phx-click="copy_api_key"
+          data-key={@created_api_key}
+          onclick="navigator.clipboard?.writeText(this.dataset.key)"
+          title="Copy key"
+        >
+          <.icon name="hero-clipboard-document" class="w-4 h-4" />
+        </button>
       </div>
-    </div>
+      <div class="alert alert-warning mt-4">
+        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+        <span>
+          This key also authenticates on the player API as you. Treat it like your password.
+        </span>
+      </div>
+      <:actions>
+        <button
+          id="close-created-api-key"
+          class="btn btn-primary"
+          phx-click="close_created_api_key_modal"
+        >
+          Done
+        </button>
+      </:actions>
+    </.admin_modal>
     """
   end
 
-  attr :confirm, :any, required: true, doc: "{:revoke | :delete, %ApiKey{}}"
+  attr :api_key_confirm, :any, required: true, doc: "{:revoke | :delete, %ApiKey{}}"
 
-  def confirm_modal(%{confirm: {action, key}} = assigns) do
+  def confirm_modal(%{api_key_confirm: {action, key}} = assigns) do
     assigns = assign(assigns, action: action, key: key)
 
     ~H"""
-    <div id="api-key-confirm-modal" class="modal modal-open">
-      <div class="modal-box">
-        <h3 class="text-lg font-bold">
-          {if @action == :revoke, do: "Revoke", else: "Delete"} '{@key.name}'?
-        </h3>
-        <p class="py-2">
-          <%= if @action == :revoke do %>
-            Anything using this key stops working immediately. It stays listed as revoked.
-          <% else %>
-            Anything using this key stops working immediately, and it leaves this list.
-          <% end %>
-        </p>
-        <div class="modal-action">
-          <button id="cancel-api-key-confirm" class="btn btn-ghost" phx-click="cancel_api_key_confirm">
-            Cancel
-          </button>
-          <button
-            id="confirm-api-key-action"
-            class="btn btn-error"
-            phx-click={"#{@action}_api_key"}
-            phx-disable-with="Working..."
-          >
-            {if @action == :revoke, do: "Revoke key", else: "Delete key"}
-          </button>
-        </div>
-      </div>
-      <div class="modal-backdrop" phx-click="cancel_api_key_confirm"></div>
-    </div>
+    <.admin_modal
+      id="api-key-confirm-modal"
+      tone={:error}
+      icon={if @action == :revoke, do: "hero-no-symbol", else: "hero-trash"}
+      title={"#{if @action == :revoke, do: "Revoke", else: "Delete"} '#{@key.name}'?"}
+      on_close="close_api_key_confirm_modal"
+    >
+      <p>
+        <%= if @action == :revoke do %>
+          Anything using this key stops working immediately. It stays listed as revoked.
+        <% else %>
+          Anything using this key stops working immediately, and it leaves this list.
+        <% end %>
+      </p>
+      <:actions>
+        <button
+          id="cancel-api-key-confirm"
+          class="btn btn-ghost"
+          phx-click="close_api_key_confirm_modal"
+        >
+          Cancel
+        </button>
+        <button
+          id="confirm-api-key-action"
+          class="btn btn-error"
+          phx-click={"#{@action}_api_key"}
+          phx-disable-with="Working..."
+        >
+          {if @action == :revoke, do: "Revoke key", else: "Delete key"}
+        </button>
+      </:actions>
+    </.admin_modal>
     """
   end
 

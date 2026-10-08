@@ -95,6 +95,7 @@ defmodule MydiaWeb.SegmentedControl do
     attr :value, :any, required: true
     attr :label, :string, required: true
     attr :icon, :string
+    attr :id, :string
   end
 
   def segmented_control(assigns) do
@@ -139,6 +140,7 @@ defmodule MydiaWeb.SegmentedControl do
 
     ~H"""
     <button
+      id={Map.get(@option, :id)}
       type="button"
       class={[
         "btn join-item",

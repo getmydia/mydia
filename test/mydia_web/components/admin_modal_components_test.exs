@@ -70,6 +70,40 @@ defmodule MydiaWeb.AdminModalComponentsTest do
 
       assert count(html, ".modal-action") == 0
     end
+
+    test "tone :error tints the icon tile" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminModalComponents.admin_modal
+          id="m"
+          icon="hero-trash"
+          title="Empty the trash?"
+          on_close="close_m_modal"
+          tone={:error}
+        >
+          body
+        </AdminModalComponents.admin_modal>
+        """)
+
+      assert count(html, ".w-10.h-10.rounded-xl.bg-error\\/20") == 1
+      assert count(html, ".bg-primary\\/20") == 0
+    end
+
+    test "on_close nil keeps the backdrop but makes it inert" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminModalComponents.admin_modal id="m" icon="hero-key" title="Your key" on_close={nil}>
+          body
+        </AdminModalComponents.admin_modal>
+        """)
+
+      assert count(html, ".modal-backdrop.bg-black\\/50") == 1
+      assert count(html, ".modal-backdrop[phx-click]") == 0
+    end
   end
 
   test "admin_modal_actions/1 is the bordered action row" do

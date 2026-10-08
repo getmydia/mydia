@@ -53,7 +53,7 @@ defmodule MydiaWeb.AdminReleaseBlacklistLiveTest do
       render(view)
 
       # Navigate to refresh the LiveView state by triggering an event.
-      render_change(view, "filter", %{"failure_reason" => ""})
+      render_change(view, "filter_blacklist", %{"failure_reason" => ""})
 
       assert has_element?(view, "#blacklist-row-#{row.id}")
       assert has_element?(view, "#remove-#{row.id}")
@@ -65,7 +65,7 @@ defmodule MydiaWeb.AdminReleaseBlacklistLiveTest do
         Blacklists.add("nzbhydra2", "abc-rm", "Show.S01E02", "stalled")
 
       # Refresh data so the row appears.
-      render_change(view, "filter", %{"failure_reason" => ""})
+      render_change(view, "filter_blacklist", %{"failure_reason" => ""})
       assert has_element?(view, "#blacklist-row-#{row.id}")
 
       view
@@ -82,7 +82,7 @@ defmodule MydiaWeb.AdminReleaseBlacklistLiveTest do
 
       assert row.expires_at != nil
 
-      render_change(view, "filter", %{"failure_reason" => ""})
+      render_change(view, "filter_blacklist", %{"failure_reason" => ""})
 
       view
       |> element("#block-forever-#{row.id}")
@@ -92,6 +92,15 @@ defmodule MydiaWeb.AdminReleaseBlacklistLiveTest do
       assert is_nil(updated.expires_at)
     end
 
+    test "the blacklist is an admin table with icon actions", %{view: view} do
+      {:ok, row} = Blacklists.add("nzbhydra2", "abc-tbl", "Show.S01E09", "stalled")
+      render_change(view, "filter_blacklist", %{"failure_reason" => ""})
+
+      assert has_element?(view, "#blacklist table.table-zebra tr#blacklist-row-#{row.id}")
+      assert has_element?(view, ~s(#remove-#{row.id}.text-error[title="Remove"][data-confirm]))
+      assert has_element?(view, "#admin-page-count")
+    end
+
     test "filters by failure reason", %{view: view} do
       {:ok, row_par2} =
         Blacklists.add("nzbhydra2", "filter-1", "T1", "par2_failed")
@@ -99,7 +108,7 @@ defmodule MydiaWeb.AdminReleaseBlacklistLiveTest do
       {:ok, row_stalled} =
         Blacklists.add("nzbhydra2", "filter-2", "T2", "stalled")
 
-      render_change(view, "filter", %{"failure_reason" => "par2_failed"})
+      render_change(view, "filter_blacklist", %{"failure_reason" => "par2_failed"})
 
       assert has_element?(view, "#blacklist-row-#{row_par2.id}")
       refute has_element?(view, "#blacklist-row-#{row_stalled.id}")
@@ -112,7 +121,7 @@ defmodule MydiaWeb.AdminReleaseBlacklistLiveTest do
       {:ok, row_stalled} =
         Blacklists.add("nzbhydra2", "clear-2", "T2", "stalled")
 
-      render_change(view, "filter", %{"failure_reason" => "par2_failed"})
+      render_change(view, "filter_blacklist", %{"failure_reason" => "par2_failed"})
       refute has_element?(view, "#blacklist-row-#{row_stalled.id}")
 
       # The clear-filter button is only rendered when a filter is active.
@@ -140,7 +149,7 @@ defmodule MydiaWeb.AdminReleaseBlacklistLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/admin/release-blacklist")
 
-      assert has_element?(view, "#blacklist-rows span[title='missing_files']", "missing files")
+      assert has_element?(view, "#blacklist span[title='missing_files']", "missing files")
     end
 
     test "keeps the filter option value as the raw slug", %{conn: conn} do

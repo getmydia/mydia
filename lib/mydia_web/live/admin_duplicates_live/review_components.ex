@@ -14,8 +14,9 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
   `:duplicate_registration` groups get no controls. Both of their rows point at
   one path, and the fix there is a rescan.
 
-  This module calls `Components` for the shared display helpers and never the
-  other way round, so the two do not depend on each other at compile time.
+  This module calls `Components` for the shared display helpers. `Components`
+  only renders `needs_attention/1` from its tab template, a runtime call, so
+  the two do not depend on each other at compile time.
   """
 
   use MydiaWeb, :html
@@ -33,12 +34,13 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
 
   def needs_attention(assigns) do
     ~H"""
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-      <h2 class="text-lg font-semibold flex items-center gap-2">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5 opacity-60" /> Needs Attention
-        <span class="badge badge-ghost">{length(@refusals)}</span>
-      </h2>
-      <div class="flex items-center gap-2">
+    <.admin_section
+      id="duplicates-needs-attention"
+      title="Needs Attention"
+      icon="hero-exclamation-triangle"
+      count={length(@refusals)}
+    >
+      <:actions>
         <button
           :if={@overridden?}
           id="duplicates-review-reset"
@@ -58,26 +60,28 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
           <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
           Send {Components.file_count(MapSet.size(@returning))} to Review
         </button>
-      </div>
-    </div>
+      </:actions>
 
-    <p class="text-sm text-base-content/60">
-      These are matching or scanning problems rather than duplicates. Files whose names don't
-      match their item start on <span class="font-medium text-base-content">Review</span>.
-      Sending a file to Review detaches it from the item, leaves it on disk, and holds it
-      there until someone matches it. Every item always keeps at least one file.
-    </p>
+      <p class="text-sm text-base-content/60">
+        These are matching or scanning problems rather than duplicates. Files whose names don't
+        match their item start on <span class="font-medium text-base-content">Review</span>.
+        Sending a file to Review detaches it from the item, leaves it on disk, and holds it
+        there until someone matches it. Every item always keeps at least one file.
+      </p>
 
-    <div class="bg-base-200 rounded-box divide-y divide-base-300">
-      <.refusal_row
-        :for={{group, reason, detail} <- @refusals}
-        group={group}
-        reason={reason}
-        detail={detail}
-        suspects={Map.get(@suspects, group.subject_id, MapSet.new())}
-        returning={@returning}
-      />
-    </div>
+      <.admin_list id="duplicates-refusals" items={@refusals}>
+        <:row :let={{group, reason, detail}}>
+          <.refusal_row
+            group={group}
+            reason={reason}
+            detail={detail}
+            suspects={Map.get(@suspects, group.subject_id, MapSet.new())}
+            returning={@returning}
+          />
+        </:row>
+        <:empty>Nothing needs attention.</:empty>
+      </.admin_list>
+    </.admin_section>
     """
   end
 
@@ -94,44 +98,36 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
 
   def review_confirm_modal(assigns) do
     ~H"""
-    <div id="duplicates-review-modal" class="modal modal-open">
-      <div class="modal-box">
-        <div class="flex items-center gap-3 mb-5">
-          <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-            <.icon name="hero-arrow-uturn-left" class="w-5 h-5 text-primary" />
-          </div>
-          <h3 class="font-bold text-lg">
-            Send {Components.file_count(@count)} from {Components.item_count(@items)} to Review?
-          </h3>
-        </div>
-
-        <p class="py-2">
-          They stay on disk and wait in Review until someone matches them. Nothing is
-          re-attached automatically.
-        </p>
-
-        <div class="modal-action mt-6 pt-4 border-t border-base-300">
-          <button
-            id="duplicates-review-cancel"
-            type="button"
-            class="btn btn-ghost"
-            phx-click="close_review_modal"
-          >
-            Cancel
-          </button>
-          <button
-            id="duplicates-review-confirm"
-            type="button"
-            class="btn btn-primary"
-            phx-click="confirm_review"
-            phx-disable-with="Sending..."
-          >
-            <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Send to Review
-          </button>
-        </div>
-      </div>
-      <div class="modal-backdrop bg-black/50" phx-click="close_review_modal"></div>
-    </div>
+    <.admin_modal
+      id="duplicates-review-modal"
+      icon="hero-arrow-uturn-left"
+      title={"Send #{Components.file_count(@count)} from #{Components.item_count(@items)} to Review?"}
+      on_close="close_review_modal"
+    >
+      <p class="py-2">
+        They stay on disk and wait in Review until someone matches them. Nothing is
+        re-attached automatically.
+      </p>
+      <:actions>
+        <button
+          id="duplicates-review-cancel"
+          type="button"
+          class="btn btn-ghost"
+          phx-click="close_review_modal"
+        >
+          Cancel
+        </button>
+        <button
+          id="duplicates-review-confirm"
+          type="button"
+          class="btn btn-primary"
+          phx-click="confirm_review"
+          phx-disable-with="Sending..."
+        >
+          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Send to Review
+        </button>
+      </:actions>
+    </.admin_modal>
     """
   end
 
@@ -152,56 +148,50 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
       |> assign(:left_count, length(files) - returning_count)
 
     ~H"""
-    <div class="p-3 sm:p-4" id={"duplicates-refusal-#{@group.subject_id}"}>
-      <div class="flex items-center gap-3">
-        <div class="flex-1 min-w-0">
-          <div class="font-medium truncate">{Components.subject_label(@group)}</div>
-          <div class="text-xs opacity-60 truncate">
-            {Components.file_count(length(@group.files))}
-          </div>
-        </div>
+    <.admin_row id={"duplicates-refusal-#{@group.subject_id}"}>
+      <:title>{Components.subject_label(@group)}</:title>
+      <:descriptor>{Components.file_count(length(@group.files))}</:descriptor>
+      <:details>
+        <p class="text-base-content/60">{refusal_explanation(@reason, @detail)}</p>
+      </:details>
+      <:badges>
         <span class="badge badge-sm badge-outline badge-warning">{refusal_label(@reason)}</span>
-        <span
-          :if={@controls? and @returning_count > 0}
-          class="badge badge-sm badge-outline hidden sm:inline-flex"
-        >
+        <span :if={@controls? and @returning_count > 0} class="badge badge-sm badge-outline">
           {@returning_count} to Review
         </span>
-        <button
-          :if={@controls?}
-          id={"duplicates-review-group-#{@group.subject_id}"}
-          type="button"
-          class="btn btn-sm"
-          disabled={@returning_count == 0}
-          aria-label={"Send the marked files in #{Components.subject_label(@group)} to Review"}
-          phx-click="send_group_to_review"
-          phx-value-subject={@group.subject_id}
-          phx-disable-with="Sending..."
-        >
-          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
-          Send {Components.file_count(@returning_count)} to Review
-        </button>
-      </div>
-
-      <p class="text-sm text-base-content/60 mt-2">{refusal_explanation(@reason, @detail)}</p>
-
-      <%= if @controls? do %>
-        <div class="bg-base-100 rounded-box divide-y divide-base-300 mt-3">
-          <.review_file_row
-            :for={file <- @group.files}
-            file={file}
-            subject_id={@group.subject_id}
-            suspect?={MapSet.member?(@suspects, file.id)}
-            returning?={MapSet.member?(@returning, file.id)}
-            last_left?={@left_count == 1 and not MapSet.member?(@returning, file.id)}
+      </:badges>
+      <:actions>
+        <.row_actions :if={@controls?}>
+          <.row_action
+            id={"duplicates-review-group-#{@group.subject_id}"}
+            icon="hero-arrow-uturn-left"
+            title={"Send #{Components.file_count(@returning_count)} to Review"}
+            disabled={@returning_count == 0}
+            phx-click="send_group_to_review"
+            phx-value-subject={@group.subject_id}
+            phx-disable-with="Sending..."
           />
-        </div>
-      <% else %>
-        <ul class="text-xs opacity-60 list-disc pl-5 mt-1">
-          <li :for={file <- @group.files}>{file.relative_path}</li>
-        </ul>
-      <% end %>
-    </div>
+        </.row_actions>
+      </:actions>
+      <:body>
+        <%= if @controls? do %>
+          <div class="bg-base-100 rounded-box divide-y divide-base-300">
+            <.review_file_row
+              :for={file <- @group.files}
+              file={file}
+              subject_id={@group.subject_id}
+              suspect?={MapSet.member?(@suspects, file.id)}
+              returning?={MapSet.member?(@returning, file.id)}
+              last_left?={@left_count == 1 and not MapSet.member?(@returning, file.id)}
+            />
+          </div>
+        <% else %>
+          <ul class="text-xs opacity-60 list-disc pl-5">
+            <li :for={file <- @group.files}>{file.relative_path}</li>
+          </ul>
+        <% end %>
+      </:body>
+    </.admin_row>
     """
   end
 

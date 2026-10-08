@@ -35,7 +35,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
   end
 
   @impl true
-  def handle_event("scan", _params, socket) do
+  def handle_event("scan_misfiled", _params, socket) do
     {:noreply,
      socket
      |> assign(scanning?: true, scan_failed?: false)
@@ -50,7 +50,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
     {:noreply, put_override(socket, item_id, file_id, :review)}
   end
 
-  def handle_event("send_item", %{"item" => item_id}, socket) do
+  def handle_event("send_misfiled_item", %{"item" => item_id}, socket) do
     ids =
       for finding <- socket.assigns.findings || [],
           finding.media_item.id == item_id,
@@ -61,7 +61,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
     {:noreply, send_files(socket, ids)}
   end
 
-  def handle_event("send_all", _params, socket) do
+  def handle_event("send_all_misfiled", _params, socket) do
     {:noreply, send_files(socket, MapSet.to_list(socket.assigns.returning))}
   end
 
@@ -175,18 +175,19 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id={@id} class="space-y-3">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-document-magnifying-glass" class="w-5 h-5 opacity-60" /> Misfiled
-          <span :if={@findings} class="badge badge-ghost">{length(@findings)}</span>
-        </h2>
-        <div class="flex items-center gap-2">
+    <div id={@id}>
+      <.admin_section
+        id="misfiled-section"
+        title="Misfiled"
+        icon="hero-document-magnifying-glass"
+        count={@findings && length(@findings)}
+      >
+        <:actions>
           <button
             id="misfiled-scan"
             type="button"
             class="btn btn-sm"
-            phx-click="scan"
+            phx-click="scan_misfiled"
             phx-target={@myself}
             disabled={@scanning?}
           >
@@ -200,7 +201,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
             type="button"
             class="btn btn-sm btn-primary"
             disabled={MapSet.size(@returning) == 0}
-            phx-click="send_all"
+            phx-click="send_all_misfiled"
             phx-target={@myself}
             phx-disable-with="Sending..."
             data-confirm={"Send #{Components.file_count(MapSet.size(@returning))} to Review? They stay on disk and wait in Review until someone matches them."}
@@ -208,91 +209,85 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
             <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
             Send {Components.file_count(MapSet.size(@returning))} to Review
           </button>
+        </:actions>
+
+        <p class="text-sm text-base-content/60">
+          Files attached to an item while their own name and folder point to a different
+          title or episode. They don't collide with another file, so Needs Attention can't
+          see them. Scanning reads every file in the library and can take a while.
+        </p>
+
+        <div :if={@scan_failed?} id="misfiled-error" role="alert" class="alert alert-error text-sm">
+          The scan failed. Check the server logs, then try again.
         </div>
-      </div>
 
-      <p class="text-sm text-base-content/60">
-        Files attached to an item while their own name and folder point to a different
-        title or episode. They don't collide with another file, so Needs Attention can't
-        see them. Scanning reads every file in the library and can take a while.
-      </p>
-
-      <div :if={@scan_failed?} id="misfiled-error" role="alert" class="alert alert-error text-sm">
-        The scan failed. Check the server logs, then try again.
-      </div>
-
-      <%= cond do %>
-        <% is_nil(@findings) -> %>
-        <% @findings == [] -> %>
-          <div id="misfiled-empty" class="bg-base-200 rounded-box p-4 text-sm text-base-content/70">
-            <.icon name="hero-check-circle" class="w-5 h-5 text-success inline" />
-            No misfiled files found.
-          </div>
-        <% true -> %>
-          <div class="bg-base-200 rounded-box divide-y divide-base-300">
-            <div
-              :for={finding <- @findings}
-              id={"misfiled-item-#{finding.media_item.id}"}
-              class="p-3 sm:p-4"
-            >
-              <div class="flex items-center gap-3 flex-wrap">
-                <div class="basis-full sm:basis-auto sm:flex-1 min-w-0">
-                  <div class="font-medium truncate">{finding.media_item.title}</div>
-                  <div class="text-xs opacity-60 truncate">
-                    {Components.file_count(length(finding.suspects))} of {finding.file_count} flagged
-                  </div>
-                </div>
-                <%!-- Wrapped so the title above keeps a full line at phone
-                      width: the basis-full text block fills the row and pushes
-                      this group to a line of its own, where ml-auto
-                      right-aligns it. --%>
-                <div class="flex items-center gap-3 ml-auto sm:ml-0">
-                  <span
-                    :if={finding.nothing_binds?}
-                    class="badge badge-sm badge-outline badge-warning"
-                  >
-                    Nothing matches
-                  </span>
-                  <button
-                    id={"misfiled-send-item-#{finding.media_item.id}"}
-                    type="button"
-                    class="btn btn-sm"
-                    disabled={item_returning(@returning, finding) == 0}
-                    phx-click="send_item"
-                    phx-value-item={finding.media_item.id}
-                    phx-target={@myself}
-                    phx-disable-with="Sending..."
-                  >
-                    <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
-                    Send {Components.file_count(item_returning(@returning, finding))} to Review
-                  </button>
-                </div>
-              </div>
-
-              <p :if={finding.nothing_binds?} class="text-sm text-base-content/60 mt-2">
-                None of this item's files match its title, so nothing says which one is right.
-                Check the item's match before sending anything.
-              </p>
-
-              <div class="bg-base-100 rounded-box divide-y divide-base-300 mt-3">
-                <ReviewComponents.review_file_row
-                  :for={{file, reason} <- finding.suspects}
-                  file={file}
-                  subject_id={finding.media_item.id}
-                  suspect?={true}
-                  suspect_label={reason_label(reason)}
-                  returning?={MapSet.member?(@returning, file.id)}
-                  last_left?={
-                    not MapSet.member?(@returning, file.id) and
-                      last_left?(@returning, finding, file.id)
-                  }
-                  id_prefix="misfiled"
-                  target={@myself}
-                />
-              </div>
+        <%= cond do %>
+          <% is_nil(@findings) -> %>
+          <% @findings == [] -> %>
+            <div id="misfiled-empty" class="bg-base-200 rounded-box p-4 text-sm text-base-content/70">
+              <.icon name="hero-check-circle" class="w-5 h-5 text-success inline" />
+              No misfiled files found.
             </div>
-          </div>
-      <% end %>
+          <% true -> %>
+            <.admin_list id="misfiled-items" items={@findings}>
+              <:row :let={finding}>
+                <.admin_row id={"misfiled-item-#{finding.media_item.id}"}>
+                  <:title>{finding.media_item.title}</:title>
+                  <:descriptor>
+                    {Components.file_count(length(finding.suspects))} of {finding.file_count} flagged
+                  </:descriptor>
+                  <:details :if={finding.nothing_binds?}>
+                    <p class="text-base-content/60">
+                      None of this item's files match its title, so nothing says which one is right.
+                      Check the item's match before sending anything.
+                    </p>
+                  </:details>
+                  <:badges>
+                    <span
+                      :if={finding.nothing_binds?}
+                      class="badge badge-sm badge-outline badge-warning"
+                    >
+                      Nothing matches
+                    </span>
+                  </:badges>
+                  <:actions>
+                    <.row_actions>
+                      <.row_action
+                        id={"misfiled-send-item-#{finding.media_item.id}"}
+                        icon="hero-arrow-uturn-left"
+                        title="Send to Review"
+                        disabled={item_returning(@returning, finding) == 0}
+                        phx-click="send_misfiled_item"
+                        phx-value-item={finding.media_item.id}
+                        phx-target={@myself}
+                        phx-disable-with="Sending..."
+                      />
+                    </.row_actions>
+                  </:actions>
+                  <:body>
+                    <div class="bg-base-100 rounded-box divide-y divide-base-300">
+                      <ReviewComponents.review_file_row
+                        :for={{file, reason} <- finding.suspects}
+                        file={file}
+                        subject_id={finding.media_item.id}
+                        suspect?={true}
+                        suspect_label={reason_label(reason)}
+                        returning?={MapSet.member?(@returning, file.id)}
+                        last_left?={
+                          not MapSet.member?(@returning, file.id) and
+                            last_left?(@returning, finding, file.id)
+                        }
+                        id_prefix="misfiled"
+                        target={@myself}
+                      />
+                    </div>
+                  </:body>
+                </.admin_row>
+              </:row>
+              <:empty>No misfiled files found.</:empty>
+            </.admin_list>
+        <% end %>
+      </.admin_section>
     </div>
     """
   end

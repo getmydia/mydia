@@ -13,7 +13,6 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
   use MydiaWeb, :live_view
 
   alias Mydia.Accounts
-  alias MydiaWeb.AdminApiKeysLive.Components
 
   @expiry_days %{"30" => 30, "90" => 90, "365" => 365}
   @form_types %{name: :string, expiry: :string, scope: :string}
@@ -25,8 +24,8 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
      |> assign(:page_title, "Configuration - API Keys")
      |> assign(:env_key_set, is_binary(Application.get_env(:mydia, :library_api_key)))
      |> assign(:show_api_key_modal, false)
-     |> assign(:created_key, nil)
-     |> assign(:confirm, nil)
+     |> assign(:created_api_key, nil)
+     |> assign(:api_key_confirm, nil)
      |> assign(:api_key_form, new_form())
      |> load_keys()}
   end
@@ -55,8 +54,8 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
     end
   end
 
-  def handle_event("close_created_api_key", _params, socket) do
-    {:noreply, assign(socket, :created_key, nil)}
+  def handle_event("close_created_api_key_modal", _params, socket) do
+    {:noreply, assign(socket, :created_api_key, nil)}
   end
 
   def handle_event("copy_api_key", _params, socket) do
@@ -69,16 +68,24 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
   def handle_event("confirm_delete_api_key", %{"id" => id}, socket),
     do: confirm(socket, :delete, id)
 
-  def handle_event("cancel_api_key_confirm", _params, socket) do
-    {:noreply, assign(socket, :confirm, nil)}
+  def handle_event("close_api_key_confirm_modal", _params, socket) do
+    {:noreply, assign(socket, :api_key_confirm, nil)}
   end
 
-  def handle_event("revoke_api_key", _params, %{assigns: %{confirm: {:revoke, key}}} = socket) do
-    socket |> assign(:confirm, nil) |> finish(Accounts.revoke_api_key(key), "Key revoked")
+  def handle_event(
+        "revoke_api_key",
+        _params,
+        %{assigns: %{api_key_confirm: {:revoke, key}}} = socket
+      ) do
+    socket |> assign(:api_key_confirm, nil) |> finish(Accounts.revoke_api_key(key), "Key revoked")
   end
 
-  def handle_event("delete_api_key", _params, %{assigns: %{confirm: {:delete, key}}} = socket) do
-    socket |> assign(:confirm, nil) |> finish(Accounts.delete_api_key(key), "Key deleted")
+  def handle_event(
+        "delete_api_key",
+        _params,
+        %{assigns: %{api_key_confirm: {:delete, key}}} = socket
+      ) do
+    socket |> assign(:api_key_confirm, nil) |> finish(Accounts.delete_api_key(key), "Key deleted")
   end
 
   # A second click after the modal closed has nothing to act on.
@@ -92,7 +99,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
   defp confirm(socket, action, id) do
     case Enum.find(socket.assigns.api_keys, &(&1.id == id)) do
       nil -> {:noreply, put_flash(socket, :error, "That key no longer exists")}
-      key -> {:noreply, assign(socket, :confirm, {action, key})}
+      key -> {:noreply, assign(socket, :api_key_confirm, {action, key})}
     end
   end
 
@@ -114,7 +121,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
         {:noreply,
          socket
          |> assign(:show_api_key_modal, false)
-         |> assign(:created_key, plain_key)
+         |> assign(:created_api_key, plain_key)
          |> load_keys()}
 
       {:error, _changeset} ->

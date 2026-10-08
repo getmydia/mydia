@@ -8,25 +8,14 @@ defmodule MydiaWeb.AdminPageConventionsTest do
   It cannot prove a page conforms, only catch those patterns. The standard
   itself is in `lib/mydia_web/components/README.md`.
 
-  `@enforced` lists the page directories already migrated. Add a page when it
-  moves onto the components.
+  The scope is every `live` route under `/admin` in `MydiaWeb.Router`, so a new
+  admin page is scanned from its first commit.
   """
 
   use ExUnit.Case, async: true
 
   @live_root Path.expand("../../lib/mydia_web/live", __DIR__)
   @max_template_lines 60
-
-  @enforced [
-    "admin_storage_backends_live",
-    "admin_path_mappings_live",
-    "admin_media_servers_live",
-    "admin_plugins_live",
-    "admin_indexers_live",
-    "admin_users_live",
-    "admin_requests_live",
-    "admin_import_lists_live"
-  ]
 
   # Single files outside a page directory that hold migrated admin markup,
   # relative to the live root.
@@ -36,7 +25,7 @@ defmodule MydiaWeb.AdminPageConventionsTest do
 
   @bare_events ~w(new edit save cancel close close_modal delete remove test validate filter)
 
-  test "enforced pages follow the admin page conventions" do
+  test "admin pages follow the admin page conventions" do
     offenders =
       for path <- enforced_paths(),
           violation <- violations(File.read!(path), path) do
@@ -48,13 +37,22 @@ defmodule MydiaWeb.AdminPageConventionsTest do
              Enum.join(offenders, "\n")
   end
 
-  test "every enforced directory and file exists" do
-    missing_dirs = Enum.reject(@enforced, &File.dir?(Path.join(@live_root, &1)))
+  test "the scan covers every admin LiveView route" do
+    pages = admin_pages()
+    keys = Enum.map(pages, & &1.key)
 
-    missing_files =
-      Enum.reject(@enforced_files, &File.regular?(Path.expand(&1, @live_root)))
+    assert length(keys) >= 22
+    assert "jobs_live" in keys
+    assert "admin_subtitle_providers_live" in keys
+    assert Enum.all?(pages, &(&1.files != [])), "a page resolved to no files"
 
-    assert missing_dirs ++ missing_files == []
+    assert Enum.any?(
+             pages,
+             &(&1.key == "admin_subtitle_providers_live" and
+                 Enum.any?(&1.files, fn f -> String.ends_with?(f, ".html.heex") end))
+           )
+
+    assert Enum.all?(Enum.map(@enforced_files, &Path.expand(&1, @live_root)), &File.regular?/1)
   end
 
   describe "the scanner" do
@@ -108,12 +106,52 @@ defmodule MydiaWeb.AdminPageConventionsTest do
   end
 
   defp enforced_paths do
-    dir_paths =
-      for dir <- @enforced,
-          path <- Path.wildcard(Path.join([@live_root, dir, "**", "*.{ex,heex}"])),
-          do: path
+    page_paths = for page <- admin_pages(), path <- page.files, do: path
 
-    dir_paths ++ Enum.map(@enforced_files, &Path.expand(&1, @live_root))
+    page_paths ++ Enum.map(@enforced_files, &Path.expand(&1, @live_root))
+  end
+
+  # Every LiveView mounted under /admin, with the files that make up its page:
+  # the module's directory, or for a single-file LiveView in the live root its
+  # .ex, its .html.heex and a same-named directory of components.
+  defp admin_pages do
+    MydiaWeb.Router.__routes__()
+    |> Enum.filter(&String.starts_with?(&1.path, "/admin/"))
+    |> Enum.flat_map(fn route ->
+      case route.metadata[:phoenix_live_view] do
+        live when is_tuple(live) -> [elem(live, 0)]
+        _ -> []
+      end
+    end)
+    |> Enum.uniq()
+    |> Enum.map(&page_files/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp page_files(module) do
+    Code.ensure_loaded!(module)
+    source = module.module_info(:compile)[:source] |> to_string() |> Path.expand()
+    dir = Path.dirname(source)
+
+    cond do
+      # A dependency's LiveView mounted under /admin (the error tracker
+      # dashboard) is not ours to restyle.
+      String.contains?(source, "/deps/") ->
+        nil
+
+      dir == @live_root ->
+        base = Path.rootname(source)
+
+        %{
+          key: Path.basename(base),
+          files:
+            [source | Path.wildcard(base <> ".html.heex")] ++
+              Path.wildcard(Path.join(base, "**/*.{ex,heex}"))
+        }
+
+      true ->
+        %{key: Path.basename(dir), files: Path.wildcard(Path.join(dir, "**/*.{ex,heex}"))}
+    end
   end
 
   defp violations(content, path) do

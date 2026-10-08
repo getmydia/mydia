@@ -631,6 +631,12 @@ defmodule Mydia.Downloads do
   defdelegate list_transcode_jobs(opts \\ []), to: Mydia.Downloads.Transcoding
 
   @doc """
+  Fetches a transcode job by id, or nil.
+  """
+  @spec get_transcode_job(term()) :: TranscodeJob.t() | nil
+  defdelegate get_transcode_job(id), to: Mydia.Downloads.Transcoding
+
+  @doc """
   Cancels a transcode job.
   """
   @spec cancel_transcode_job(TranscodeJob.t()) :: {:ok, TranscodeJob.t()}

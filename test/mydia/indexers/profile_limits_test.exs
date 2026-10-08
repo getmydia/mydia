@@ -238,7 +238,10 @@ defmodule Mydia.Indexers.ProfileLimitsTest do
 
       form_keys =
         ~r/quality_standards\]\[([a-z_]+)\]/
-        |> Regex.scan(File.read!("lib/mydia_web/live/admin_quality_profiles_live/components.ex"))
+        |> Regex.scan(
+          Path.wildcard("lib/mydia_web/live/admin_quality_profiles_live/*.ex")
+          |> Enum.map_join("\n", &File.read!/1)
+        )
         |> Enum.map(fn [_, key] -> String.to_atom(key) end)
 
       unclassified = Enum.uniq(default_keys ++ preset_keys ++ form_keys) -- classified

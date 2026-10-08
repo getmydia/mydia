@@ -155,4 +155,15 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
     assert has_element?(view, "#custom-format-reset-lang-vff")
     refute has_element?(view, "#custom-format-reset-lang-vff[disabled]")
   end
+
+  test "the modal uses the shared shell", %{conn: conn} do
+    {:ok, view, _} = live(conn, ~p"/admin/custom-formats")
+    view |> element("#custom-format-new") |> render_click()
+    assert has_element?(view, "#custom-format-modal .modal-box.max-w-2xl .w-10.h-10.rounded-xl")
+
+    assert has_element?(
+             view,
+             "#custom-format-modal .modal-backdrop[phx-click=close_custom_format_modal]"
+           )
+  end
 end
