@@ -28,23 +28,23 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
   end
 
   @impl true
-  def handle_event("open_add", _params, socket) do
+  def handle_event("open_add_source", _params, socket) do
     {:noreply,
      assign(socket, adding?: true, preview: nil, error: nil, form: to_form(%{"url" => ""}))}
   end
 
-  def handle_event("cancel_add", _params, socket) do
+  def handle_event("close_add_source_modal", _params, socket) do
     {:noreply, assign(socket, adding?: false, preview: nil, previewing?: false, error: nil)}
   end
 
-  def handle_event("preview", %{"url" => url}, socket) do
+  def handle_event("preview_source", %{"url" => url}, socket) do
     {:noreply,
      socket
      |> assign(previewing?: true, preview: nil, error: nil, form: to_form(%{"url" => url}))
      |> start_async(:preview, fn -> Index.preview_source(url) end)}
   end
 
-  def handle_event("confirm_add", _params, %{assigns: %{preview: preview}} = socket)
+  def handle_event("confirm_add_source", _params, %{assigns: %{preview: preview}} = socket)
       when not is_nil(preview) do
     attrs = %{url: preview.url, name: preview.name, public_key: preview.public_key}
 
@@ -57,9 +57,9 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
     end
   end
 
-  def handle_event("confirm_add", _params, socket), do: {:noreply, socket}
+  def handle_event("confirm_add_source", _params, socket), do: {:noreply, socket}
 
-  def handle_event("remove", %{"id" => id}, socket) do
+  def handle_event("remove_source", %{"id" => id}, socket) do
     with %{} = source <- Sources.get_source(id),
          {:ok, _} <- Sources.remove_source(source) do
       {:noreply, load_sources(socket)}
@@ -83,160 +83,142 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="plugin-sources" class="bg-base-200 rounded-box p-3 sm:p-4 space-y-3">
-      <div class="flex items-center justify-between gap-2">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-globe-alt" class="w-5 h-5 opacity-60" /> Plugin sources
-        </h2>
-        <button
-          id="add-source"
-          type="button"
-          class="btn btn-sm btn-primary"
-          phx-click="open_add"
-          phx-target={@myself}
-        >
-          <.icon name="hero-plus" class="w-4 h-4" /> Add source
-        </button>
-      </div>
-
-      <div class="overflow-x-auto">
-        <table class="table table-sm">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>URL</th>
-              <th>Key</th>
-              <th>Plugins</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr :if={@official} id="source-row-official">
-              <td class="font-medium">Mydia plugin index</td>
-              <td class="text-xs break-all min-w-48">{@official.url}</td>
-              <td class="font-mono text-xs">{fingerprint(@official.public_key)}</td>
-              <td></td>
-              <td><span class="badge badge-sm badge-ghost">Official</span></td>
-            </tr>
-            <tr :for={source <- @sources} id={"source-row-#{source.id}"}>
-              <td class="font-medium break-words">{source.name || source.url}</td>
-              <td class="text-xs break-all min-w-48">{source.url}</td>
-              <td class="font-mono text-xs">{source.key_id}</td>
-              <td>{source.plugin_count}</td>
-              <td>
-                <div class="flex flex-wrap items-center gap-1">
-                  <span
-                    :if={source.declared}
-                    class="badge badge-sm badge-ghost"
-                    title="Set in the environment or config file"
-                  >
-                    Declared
-                  </span>
-                  <span :if={not source.enabled} class="badge badge-sm badge-ghost">Disabled</span>
-                  <span :if={source.last_error} class="text-error text-xs break-words">
-                    {source.last_error}
-                  </span>
-                  <button
-                    :if={not source.declared}
-                    id={"remove-source-#{source.id}"}
-                    type="button"
-                    class="btn btn-ghost btn-xs text-error"
-                    phx-click="remove"
-                    phx-value-id={source.id}
-                    phx-target={@myself}
-                    data-confirm="Remove this source? Plugins installed from it keep running but stop receiving updates."
-                  >
-                    Remove
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div :if={@adding?} id="add-source-modal" class="modal modal-open">
-        <div class="modal-box max-w-lg">
-          <h3 class="text-lg font-bold flex items-center gap-2">
-            <.icon name="hero-plus-circle" class="w-5 h-5" /> Add a plugin source
-          </h3>
-
-          <.form
-            for={@form}
-            id="add-source-form"
-            phx-submit="preview"
+    <div id="plugin-sources">
+      <.admin_section title="Plugin sources" icon="hero-globe-alt">
+        <div class="flex justify-end">
+          <button
+            id="add-source"
+            type="button"
+            class="btn btn-sm btn-primary"
+            phx-click="open_add_source"
             phx-target={@myself}
-            class="mt-4"
           >
-            <.input
-              field={@form[:url]}
-              type="url"
-              label="Catalog URL"
-              placeholder="https://example.com/index.json"
-            />
-            <button type="submit" class="btn btn-sm btn-outline" disabled={@previewing?}>
-              <span :if={@previewing?} class="loading loading-spinner loading-xs"></span> Check source
-            </button>
-          </.form>
+            <.icon name="hero-plus" class="w-4 h-4" /> Add source
+          </button>
+        </div>
 
-          <div :if={@error} id="source-error" class="alert alert-error mt-4 text-sm">
-            <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
-            <span class="break-words min-w-0">{@error}</span>
-          </div>
-
-          <div :if={@preview} id="source-preview" class="mt-4 space-y-3">
-            <dl class="text-sm space-y-1">
-              <div>
-                <dt class="text-base-content/60 text-xs">Name</dt>
-                <dd class="font-medium break-words">{@preview.name}</dd>
-              </div>
-              <div>
-                <dt class="text-base-content/60 text-xs">URL</dt>
-                <dd class="break-all">{@preview.url}</dd>
-              </div>
-              <div>
-                <dt class="text-base-content/60 text-xs">Signing key</dt>
-                <dd class="font-mono">{@preview.fingerprint}</dd>
-              </div>
-              <div>
-                <dt class="text-base-content/60 text-xs">Plugins listed</dt>
-                <dd>{@preview.plugin_count}</dd>
-              </div>
-            </dl>
-            <div class="alert alert-warning text-sm">
-              <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
-              <span>
-                Adding this source trusts whoever holds the signing key {@preview.fingerprint}. Mydia
-                has not reviewed its plugins. Compare the fingerprint with the one the publisher
-                gives you before you continue.
+        <.admin_table
+          id="plugin-sources-table"
+          rows={source_rows(@official, @sources)}
+          row_id={& &1.dom_id}
+        >
+          <:col :let={row} label="Name"><span class="font-medium break-words">{row.name}</span></:col>
+          <:col :let={row} label="URL"><span class="text-xs break-all">{row.url}</span></:col>
+          <:col :let={row} label="Key"><span class="font-mono text-xs">{row.key}</span></:col>
+          <:col :let={row} label="Plugins">{row.plugin_count}</:col>
+          <:col :let={row} label="Status">
+            <div class="flex flex-wrap items-center gap-1">
+              <span :if={row.official?} class="badge badge-sm badge-ghost">Official</span>
+              <span
+                :if={row.declared?}
+                class="badge badge-sm badge-ghost"
+                title="Set in the environment or config file"
+              >
+                Declared
+              </span>
+              <span :if={row.disabled?} class="badge badge-sm badge-ghost">Disabled</span>
+              <span :if={row.last_error} class="text-error text-xs break-words">
+                {row.last_error}
               </span>
             </div>
-          </div>
+          </:col>
+          <:action :let={row}>
+            <.row_action
+              :if={row.removable?}
+              id={"remove-source-#{row.id}"}
+              icon="hero-trash"
+              title="Remove"
+              destructive
+              phx-click="remove_source"
+              phx-value-id={row.id}
+              phx-target={@myself}
+              data-confirm="Remove this source? Plugins installed from it keep running but stop receiving updates."
+            />
+          </:action>
+          <:empty>No plugin sources.</:empty>
+        </.admin_table>
+      </.admin_section>
 
-          <div class="modal-action">
-            <button
-              id="cancel-source"
-              type="button"
-              class="btn btn-ghost"
-              phx-click="cancel_add"
-              phx-target={@myself}
-            >
-              Cancel
-            </button>
-            <button
-              :if={@preview}
-              id="confirm-source"
-              type="button"
-              class="btn btn-primary"
-              phx-click="confirm_add"
-              phx-target={@myself}
-            >
-              Trust and add
-            </button>
+      <.admin_modal
+        :if={@adding?}
+        id="add-source-modal"
+        icon="hero-plus-circle"
+        title="Add a plugin source"
+        on_close={JS.push("close_add_source_modal", target: @myself)}
+      >
+        <.form
+          for={@form}
+          id="add-source-form"
+          phx-submit="preview_source"
+          phx-target={@myself}
+        >
+          <.input
+            field={@form[:url]}
+            type="url"
+            label="Catalog URL"
+            placeholder="https://example.com/index.json"
+          />
+          <button type="submit" class="btn btn-sm btn-outline" disabled={@previewing?}>
+            <span :if={@previewing?} class="loading loading-spinner loading-xs"></span> Check source
+          </button>
+        </.form>
+
+        <div :if={@error} id="source-error" class="alert alert-error mt-4 text-sm">
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+          <span class="break-words min-w-0">{@error}</span>
+        </div>
+
+        <div :if={@preview} id="source-preview" class="mt-4 space-y-3">
+          <dl class="text-sm space-y-1">
+            <div>
+              <dt class="text-base-content/60 text-xs">Name</dt>
+              <dd class="font-medium break-words">{@preview.name}</dd>
+            </div>
+            <div>
+              <dt class="text-base-content/60 text-xs">URL</dt>
+              <dd class="break-all">{@preview.url}</dd>
+            </div>
+            <div>
+              <dt class="text-base-content/60 text-xs">Signing key</dt>
+              <dd class="font-mono">{@preview.fingerprint}</dd>
+            </div>
+            <div>
+              <dt class="text-base-content/60 text-xs">Plugins listed</dt>
+              <dd>{@preview.plugin_count}</dd>
+            </div>
+          </dl>
+          <div class="alert alert-warning text-sm">
+            <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+            <span>
+              Adding this source trusts whoever holds the signing key {@preview.fingerprint}. Mydia
+              has not reviewed its plugins. Compare the fingerprint with the one the publisher
+              gives you before you continue.
+            </span>
           </div>
         </div>
-        <div class="modal-backdrop bg-black/50" phx-click="cancel_add" phx-target={@myself}></div>
-      </div>
+
+        <:actions>
+          <button
+            id="cancel-source"
+            type="button"
+            class="btn btn-ghost"
+            phx-click="close_add_source_modal"
+            phx-target={@myself}
+          >
+            Cancel
+          </button>
+          <button
+            :if={@preview}
+            id="confirm-source"
+            type="button"
+            class="btn btn-primary"
+            phx-click="confirm_add_source"
+            phx-target={@myself}
+          >
+            Trust and add
+          </button>
+        </:actions>
+      </.admin_modal>
     </div>
     """
   end
@@ -250,4 +232,44 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
   end
 
   defp fingerprint(key), do: Signature.fingerprint(key)
+
+  defp source_rows(official, sources) do
+    official_rows =
+      if official do
+        [
+          %{
+            id: nil,
+            dom_id: "source-row-official",
+            name: "Mydia plugin index",
+            url: official.url,
+            key: fingerprint(official.public_key),
+            plugin_count: nil,
+            official?: true,
+            declared?: false,
+            disabled?: false,
+            last_error: nil,
+            removable?: false
+          }
+        ]
+      else
+        []
+      end
+
+    official_rows ++
+      Enum.map(sources, fn source ->
+        %{
+          id: source.id,
+          dom_id: "source-row-#{source.id}",
+          name: source.name || source.url,
+          url: source.url,
+          key: source.key_id,
+          plugin_count: source.plugin_count,
+          official?: false,
+          declared?: source.declared,
+          disabled?: not source.enabled,
+          last_error: source.last_error,
+          removable?: not source.declared
+        }
+      end)
+  end
 end

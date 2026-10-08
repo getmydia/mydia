@@ -305,7 +305,10 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   # :no_matching_users verdict is no longer buried under a newer "Linking
   # accounts" row that describes a state already dead.
   defp handle_no_links(config) do
-    if Mydia.Jobs.MediaServerLinkSeed.seeded_before?(config) do
+    # A runtime (env/YAML) server can never hold links, so there is nothing to
+    # seed and nothing the operator could map.
+    if Settings.runtime_config?(config) or
+         Mydia.Jobs.MediaServerLinkSeed.seeded_before?(config) do
       record_skip(config, :no_user_mapping)
     else
       enqueue_seed(config)

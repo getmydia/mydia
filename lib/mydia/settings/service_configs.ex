@@ -358,19 +358,32 @@ defmodule Mydia.Settings.ServiceConfigs do
 
   ## Media Server User Links
 
+  # Env/YAML media servers carry synthetic ids such as
+  # "runtime::media_server::name", which are not UUIDs and can never own a link
+  # row. SQLite compares them untyped and returns nothing; PostgreSQL raises
+  # Ecto.Query.CastError. Guard here so every caller gets the empty answer.
   def list_media_server_user_links(media_server_config_id) do
-    MediaServerUserLink
-    |> where([l], l.media_server_config_id == ^media_server_config_id)
-    |> order_by([l], asc: l.remote_username)
-    |> Repo.all()
+    if linkable_config_id?(media_server_config_id) do
+      MediaServerUserLink
+      |> where([l], l.media_server_config_id == ^media_server_config_id)
+      |> order_by([l], asc: l.remote_username)
+      |> Repo.all()
+    else
+      []
+    end
   end
 
   def get_media_server_user_link(media_server_config_id, user_id) do
-    Repo.get_by(MediaServerUserLink,
-      media_server_config_id: media_server_config_id,
-      user_id: user_id
-    )
+    if linkable_config_id?(media_server_config_id) do
+      Repo.get_by(MediaServerUserLink,
+        media_server_config_id: media_server_config_id,
+        user_id: user_id
+      )
+    end
   end
+
+  defp linkable_config_id?(id) when is_binary(id), do: match?({:ok, _}, Ecto.UUID.cast(id))
+  defp linkable_config_id?(_id), do: false
 
   # One remote account belongs to at most one Mydia user per server. Two links
   # naming the same account would each import that account's watch history under
@@ -406,8 +419,13 @@ defmodule Mydia.Settings.ServiceConfigs do
   #     between two people and one account's watch history.
   def upsert_media_server_user_link(attrs, opts \\ []) do
     changeset = MediaServerUserLink.changeset(%MediaServerUserLink{}, attrs)
+    config_id = Ecto.Changeset.get_field(changeset, :media_server_config_id)
 
-    with :ok <- ensure_link_new(changeset, Keyword.get(opts, :only_new, false)),
+    # A non-UUID id is an env/YAML server, which the FK forbids from owning
+    # links; querying with it would raise CastError on PostgreSQL. A missing id
+    # is left to the changeset's own validation.
+    with :ok <- ensure_linkable(config_id),
+         :ok <- ensure_link_new(changeset, Keyword.get(opts, :only_new, false)),
          :ok <- ensure_account_unclaimed(changeset, Keyword.get(opts, :claim_check, true)) do
       Repo.insert(changeset,
         on_conflict:
@@ -421,6 +439,12 @@ defmodule Mydia.Settings.ServiceConfigs do
         conflict_target: [:media_server_config_id, :user_id]
       )
     end
+  end
+
+  defp ensure_linkable(nil), do: :ok
+
+  defp ensure_linkable(config_id) do
+    if linkable_config_id?(config_id), do: :ok, else: {:error, :runtime_media_server}
   end
 
   defp ensure_link_new(_changeset, false), do: :ok
@@ -494,9 +518,14 @@ defmodule Mydia.Settings.ServiceConfigs do
   """
   @spec replace_media_server_user_links(binary(), [map()]) ::
           {:ok, [MediaServerUserLink.t()]}
-          | {:error, :duplicate_remote_account | Ecto.Changeset.t() | term()}
+          | {:error,
+             :duplicate_remote_account | :runtime_media_server | Ecto.Changeset.t() | term()}
   def replace_media_server_user_links(media_server_config_id, entries) do
-    with :ok <- ensure_one_user_per_account(entries) do
+    # media_server_user_links.media_server_config_id is a foreign key to
+    # media_server_configs, so an env/YAML server (synthetic "runtime::" id) can
+    # never own links. Refuse rather than report an empty success.
+    with true <- linkable_config_id?(media_server_config_id) || {:error, :runtime_media_server},
+         :ok <- ensure_one_user_per_account(entries) do
       Repo.transaction(fn ->
         keep = MapSet.new(entries, & &1.user_id)
         existing = list_media_server_user_links(media_server_config_id)

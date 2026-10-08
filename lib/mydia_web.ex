@@ -94,6 +94,8 @@ defmodule MydiaWeb do
       import MydiaWeb.CollectionComponents
       # Admin chrome: sidebar Admin section (admin_nav) and page header (admin_page)
       import MydiaWeb.AdminComponents
+      import MydiaWeb.AdminListComponents
+      import MydiaWeb.AdminModalComponents
       # Poster card body: shared title box and bottom-pinned metadata
       import MydiaWeb.PosterCardComponents
       # Content rating and show status badges: library card, detail hero, trending modal

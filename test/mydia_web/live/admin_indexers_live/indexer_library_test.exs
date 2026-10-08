@@ -178,9 +178,14 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
 
       view
       |> element(
-        "input[type='checkbox'][phx-click='library_toggle_indexer'][phx-value-id='#{definition.id}']"
+        "input[type='checkbox'][phx-click='toggle_library_definition'][phx-value-id='#{definition.id}']"
       )
       |> render_click()
+
+      assert has_element?(
+               view,
+               "input[phx-click='toggle_library_definition'][aria-label='Disable #{definition.name}']"
+             )
 
       # Verify the indexer is now enabled
       updated_definition = Indexers.get_cardigann_definition!(definition.id)
@@ -199,7 +204,7 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
 
       view
       |> element(
-        "input[type='checkbox'][phx-click='library_toggle_indexer'][phx-value-id='#{definition.id}']"
+        "input[type='checkbox'][phx-click='toggle_library_definition'][phx-value-id='#{definition.id}']"
       )
       |> render_click()
 
@@ -227,7 +232,7 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
       html =
         view
         |> element(
-          "button[phx-click='library_configure_indexer'][phx-value-id='#{definition.id}']"
+          "button[phx-click='configure_library_definition'][phx-value-id='#{definition.id}']"
         )
         |> render_click()
 
@@ -248,7 +253,9 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
 
       # Open config modal
       view
-      |> element("button[phx-click='library_configure_indexer'][phx-value-id='#{definition.id}']")
+      |> element(
+        "button[phx-click='configure_library_definition'][phx-value-id='#{definition.id}']"
+      )
       |> render_click()
 
       # Submit config
@@ -332,6 +339,25 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
 
       # Should NOT show the Library Indexers section (since no enabled ones exist)
       refute html =~ "Disabled Library Indexer"
+    end
+
+    test "library indexer rows use the shared row actions", %{conn: conn} do
+      set_cardigann_feature_flag(true)
+      cardigann_definition_fixture(%{name: "Row Actions Indexer", enabled: true})
+
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+
+      assert has_element?(view, "#library-indexers .join .join-item[title=Configure]")
+      assert has_element?(view, "#library-indexers .join .join-item[title=Test]")
+    end
+
+    test "library indexer enable toggle has an accessible name", %{conn: conn} do
+      set_cardigann_feature_flag(true)
+      cardigann_definition_fixture(%{name: "Named Toggle Indexer", enabled: true})
+
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+
+      assert has_element?(view, "input[aria-label='Disable Named Toggle Indexer']")
     end
 
     test "no Cardigann terminology visible in UI", %{conn: conn} do

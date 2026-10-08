@@ -65,9 +65,12 @@ defmodule Mydia.Jobs.MediaServerLinkSeed do
   # Nothing is lost: the scheduler path only enqueues a seed once sync is on, and turning
   # sync on later is itself a config save that re-triggers
   # `maybe_seed_user_links/1`.
+  #
+  # Env/YAML servers (synthetic "runtime::" ids) are never seeded: the links
+  # table has a foreign key to media_server_configs, so they cannot own rows.
   defp seedable?(%{type: type, enabled: true, token: token} = config)
        when type == :jellyfin and is_binary(token) and token != "" do
-    watched_sync_enabled?(config)
+    not Settings.runtime_config?(config) and watched_sync_enabled?(config)
   end
 
   defp seedable?(_), do: false

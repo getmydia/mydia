@@ -107,7 +107,7 @@ defmodule MydiaWeb.AdminNavLiveTest do
     end
 
     test "pages without a list show no count", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/users")
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
       refute has_element?(view, "#admin-page-count")
     end
@@ -156,7 +156,7 @@ defmodule MydiaWeb.AdminNavLiveTest do
 
       assert has_element?(view, "h1", "Import Lists")
       assert has_element?(view, "button[phx-click=sync_all]")
-      assert has_element?(view, "button[phx-click=new_list]")
+      assert has_element?(view, "button[phx-click=new_import_list]")
       refute has_element?(view, "#admin-page-tabs")
       refute has_element?(view, "#admin-page-hub")
       assert has_element?(view, ~s|a#nav-import-lists.menu-active[href="/admin/import-lists"]|)

@@ -17,6 +17,12 @@ defmodule MydiaWeb.AdminUsersLiveTest do
     %{conn: conn, admin: admin}
   end
 
+  test "the page passes a user count and uses the shared table", %{conn: conn} do
+    {:ok, view, _} = live(conn, ~p"/admin/users")
+    assert has_element?(view, "#admin-page-count")
+    assert has_element?(view, "#users table.table-zebra")
+  end
+
   describe "an account with no username" do
     setup do
       %{nameless: nameless_user_fixture(%{display_name: "Robin Vega"})}
@@ -47,7 +53,7 @@ defmodule MydiaWeb.AdminUsersLiveTest do
       |> element(~s{button[phx-click="open_edit_role_modal"][phx-value-id="#{nameless.id}"]})
       |> render_click()
 
-      assert has_element?(view, "#edit-role-modal-title", "Robin Vega")
+      assert has_element?(view, "#edit-role-modal", "Robin Vega")
     end
 
     test "the delete modal names them", %{conn: conn, nameless: nameless} do
@@ -100,7 +106,7 @@ defmodule MydiaWeb.AdminUsersLiveTest do
 
     defp switch_create_mode(view, mode) do
       view
-      |> element(~s{button[phx-click="toggle_password_mode"][phx-value-mode="#{mode}"]})
+      |> element(~s{#create-password-mode button[phx-value-mode="#{mode}"]})
       |> render_click()
 
       view
@@ -192,7 +198,7 @@ defmodule MydiaWeb.AdminUsersLiveTest do
       open_reset(view, target)
 
       view
-      |> element(~s{button[phx-click="toggle_password_mode_reset"][phx-value-mode="manual"]})
+      |> element(~s{#reset-password-mode button[phx-value-mode="manual"]})
       |> render_click()
 
       view

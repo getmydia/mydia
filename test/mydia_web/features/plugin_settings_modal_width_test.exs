@@ -19,7 +19,7 @@ defmodule MydiaWeb.Features.PluginSettingsModalWidthTest do
 
   defp box_metrics(session) do
     eval_js(session, """
-    var box = document.querySelector('#settings-modal .modal-box');
+    var box = document.querySelector('#plugin-settings-modal .modal-box');
     if (!box) return null;
     return {scroll: box.scrollWidth, client: box.clientWidth};
     """)

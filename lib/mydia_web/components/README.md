@@ -273,70 +273,81 @@ specifics rather than complying reflexively or dismissing it.
 ## The admin page scaffolding standard
 
 Every admin page (`lib/mydia_web/live/admin_*_live/`) is built from the same
-scaffolding, not just the external-service ones. Verified 2026-08-10 against
-download clients, indexers, media servers, library paths and quality profiles,
-which are byte-for-byte consistent on the class strings below. Convention drift
-here reads as a defect on its own, independent of whether the page works.
+components. Before they existed the standard was a list of class strings to
+copy, and an audit on 2026-10-07 found only two of 23 pages still matching it.
+Convention drift reads as a defect on its own, independent of whether the page
+works. `test/mydia_web/admin_page_conventions_test.exs` fails the build on the
+drift patterns that audit found, for every page listed in its `@enforced`.
 
 **Registered in `MydiaWeb.AdminNav`.** A new admin page needs an entry in
 `lib/mydia_web/admin_nav.ex` with its hub (Configuration for acquisition levers,
 Administration for work to act on, System for the server itself), label,
 one-line description, icon and `~p` path under `/admin/<slug>`. That entry is
 the page's sidebar link and its header. `test/mydia_web/admin_nav_test.exs`
-fails for a live route under `/admin` that has no entry.
+fails for a live route under `/admin` that has no entry. Import Lists is the
+one admin-only page outside the hubs; it renders `<.admin_header>` directly.
 
 **Thin template shell.** `index.html.heex` contains only
 `<Layouts.app {assigns}><.admin_page page={:<key>}>`, one call to the sibling
 `<MydiaWeb.Admin<X>Live.Components.<x>_tab ...>`, then each modal behind
 `<%= if assigns[:show_<x>_modal] do %>`. All markup lives in a sibling
 `components.ex`. Pass the key as a literal: `admin_page/1` declares
-`values: AdminNav.keys()`, so a typo fails the build.
+`values: AdminNav.keys()`, so a typo fails the build. Sixty lines at most.
 
-**One header per page.** `<.admin_page>` renders the hub label, the page `<h1>`,
-the description and the hub's tab strip from `AdminNav`. A list page passes its
-size as `count={length(@items)}`, and its buttons go in `<:actions>` through a
-`header_actions/1` function component in the page's own `components.ex`, as
-`btn-sm` buttons (the primary one `btn-primary`). The body never repeats the
-page name. It opens with `<div class="p-4 sm:p-6 space-y-4">`, and an `<h2>` is
-only for a real subsection (Needs Attention, Scheduled Jobs):
-`<h2 class="text-lg font-semibold flex items-center gap-2">` with a leading
-`<.icon class="w-5 h-5 opacity-60">`, the title, and an optional
-`<span class="badge badge-ghost">` count. One-of-N filters inside a page use
-`<.segmented_control>`; tabs mean hub navigation. Colours come from theme
-tokens such as `text-base-content/60`, never `text-gray-*`.
+**Header.** A list page passes `count={length(@items)}`, and its buttons go in
+`<:actions>` through a `header_actions/1` function component in the page's own
+`components.ex`, as `btn-sm` buttons (the primary one `btn-primary`). The body
+never repeats the page name.
 
-**Empty state, then the list.** `<div class="alert alert-info">` with
-`hero-information-circle` when empty, otherwise
-`<div class="bg-base-200 rounded-box divide-y divide-base-300">` wrapping
-`<div class="p-3 sm:p-4">` rows. Not a `card`/`card-body`.
+**Body.** It opens with `<div class="p-4 sm:p-6 space-y-4">`. A real subsection
+(Needs Attention, Scheduled Jobs) is `<.admin_section title icon count>`.
+One-of-N filters use `<.segmented_control>`; `tabs` mean hub navigation, or
+switching content panes inside a modal. Colours come from theme tokens such as
+`text-base-content/60`, never `text-gray-*`.
 
-**Row shape.** A `flex-1 min-w-0` block with the name and a
-`text-xs opacity-60 truncate` one-line descriptor, then status badges
-(`badge badge-sm badge-outline`, enabled and health), then
-`<div class="join ml-auto sm:ml-2">` of icon-only
-`btn btn-sm btn-ghost join-item` buttons with `title=` tooltips for Test, Edit and
-Delete, where delete gets `text-error`. Not labelled text buttons, and not
-`<.button>`.
+**Lists.** `<.admin_list id items>` with a `:row` and an `:empty` slot renders
+the `bg-base-200 rounded-box divide-y divide-base-300` container, or an
+`alert alert-info` when empty. Each row is `<.admin_row id>` with `:title`,
+`:descriptor` (one truncated `text-xs opacity-60` line), `:details`
+(multi-line notes and warnings, not truncated or dimmed), `:badges`
+(`badge badge-sm badge-outline`) and `:actions`. Never a `card`/`card-body`.
 
-**Edit modal.** `<div class="modal modal-open"><div class="modal-box max-w-2xl">`
-containing
-`<.form for={@<x>_form} id="<x>-form" phx-change="validate_<x>" phx-submit="save_<x>">`,
-a header with a `w-10 h-10 rounded-xl bg-primary/20` icon tile plus title and a
-`text-sm text-base-content/60` subtitle, then
-`<div class="modal-action mt-6 pt-4 border-t border-base-300">` and
-`<div class="modal-backdrop bg-black/50" phx-click="close_<x>_modal">`.
+**Row actions.** `<.row_actions>` holding `<.row_action icon title ...>`
+buttons: icon-only `btn btn-sm btn-ghost join-item`, `title=` doubling as the
+accessible name, `destructive` for delete. A row with more than three actions
+keeps the common ones in the join and puts maintenance actions in an "Actions"
+dropdown beside it, as library paths do.
+
+**Tables.** A page with many rows and several columns (jobs, release
+blacklist, users) uses `<.admin_table id rows row_id>` with `:col`, `:action`
+and `:empty` slots: the same empty state and the same row actions.
+
+**Env-sourced rows.** `Settings.runtime_config?/1` rows show `<.env_lock_badge>`
+and their Edit and Delete are `<.row_action disabled disabled_reason=...>`:
+visible and disabled, never hidden. Indexers is the one exception: Edit stays
+enabled on an env indexer because it offers "Convert to database-managed".
+Singletons such as FlareSolverr use one row plus Edit, with no add or delete.
+
+**Modals.** `<.admin_modal id icon title subtitle on_close>` renders
+`modal modal-open`, a `max-w-2xl` box (`size={:lg}` for `max-w-4xl` browsers
+and catalogues), the `w-10 h-10 rounded-xl bg-primary/20` icon tile, the
+bordered `modal-action` from its `:actions` slot and a `bg-black/50` backdrop
+that fires `on_close`. The `:header_aside` slot sits on the right of the
+header (an Enabled toggle, say); a form field there needs
+`form="<form-id>"` because it lives outside the `<form>`. The page puts its own
+`<.form for={@<x>_form} id="<x>-form" phx-change="validate_<x>" phx-submit="save_<x>">`
+inside; a form whose buttons must be inside the `<form>` renders
+`<.admin_modal_actions>` itself.
 
 **Namespaced events and assigns.** `new_<x>`, `edit_<x>`, `validate_<x>`,
-`save_<x>` and `close_<x>_modal`, backed by `show_<x>_modal`, `<x>_form` and
-`<x>_mode` (`:new` or `:edit`). Never bare `new`, `edit`, `save` or `cancel`.
-Delete uses `data-confirm` unless there is a blast radius worth showing, in which
-case a dedicated confirm modal, as download clients do.
+`save_<x>`, `delete_<x>`, `test_<x>`, `filter_<x>` and `close_<x>_modal`,
+backed by `show_<x>_modal`, `<x>_form` and `<x>_mode` (`:new` or `:edit`).
+Never bare `new`, `edit`, `save`, `cancel`, `close`, `delete`, `remove`,
+`test`, `validate` or `filter`. Delete uses `data-confirm` unless there is a
+blast radius worth showing, in which case a dedicated confirm modal, as
+download clients do.
 
-Copy `admin_library_paths_live/` for the smallest complete example, or
-`admin_download_clients_live/components.ex:85` (`download_clients_tab`) and `:239`
-(`download_client_modal`). Env-sourced fields (`Settings.runtime_config?/1`)
-render read-only with an ENV lock badge and disabled Edit and Delete. Singletons
-such as FlareSolverr use one row plus Edit, with no add or delete.
+Copy `admin_storage_backends_live/` for the smallest complete example.
 
 ## The sidebar
 

@@ -82,6 +82,46 @@ defmodule MydiaWeb.AdminComponents do
   defp source_label(:yaml), do: "YAML"
   defp source_label(_source), do: "Default"
 
+  attr :title, :string, required: true
+  attr :description, :string, default: nil
+  attr :eyebrow, :string, default: nil, doc: "small label above the title (the hub)"
+  attr :count, :integer, default: nil, doc: "item count shown beside the title"
+  slot :actions, doc: "header buttons, right-aligned from the md breakpoint up"
+
+  @doc """
+  The page header on its own: title, description, count and actions.
+  `admin_page/1` renders it for every `MydiaWeb.AdminNav` page; an admin page
+  that lives outside the hubs (Import Lists) renders it directly.
+  """
+  def admin_header(assigns) do
+    ~H"""
+    <div
+      id="admin-page-header"
+      class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6"
+    >
+      <div>
+        <p
+          :if={@eyebrow}
+          id="admin-page-hub"
+          class="text-xs uppercase tracking-wide text-base-content/60"
+        >
+          {@eyebrow}
+        </p>
+        <h1 id="admin-page-title" class="text-3xl font-bold flex items-center gap-3">
+          {@title}
+          <span :if={@count} id="admin-page-count" class="badge badge-neutral">{@count}</span>
+        </h1>
+        <p :if={@description} id="admin-page-description" class="text-base-content/70 mt-1">
+          {@description}
+        </p>
+      </div>
+      <div :if={@actions != []} id="admin-page-actions" class="flex flex-wrap items-center gap-2">
+        {render_slot(@actions)}
+      </div>
+    </div>
+    """
+  end
+
   attr :page, :atom,
     required: true,
     values: AdminNav.keys(),
@@ -111,26 +151,14 @@ defmodule MydiaWeb.AdminComponents do
       )
 
     ~H"""
-    <div
-      id="admin-page-header"
-      class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6"
+    <.admin_header
+      title={@nav_page.label}
+      description={@nav_page.description}
+      eyebrow={@hub_label}
+      count={@count}
     >
-      <div>
-        <p id="admin-page-hub" class="text-xs uppercase tracking-wide text-base-content/60">
-          {@hub_label}
-        </p>
-        <h1 id="admin-page-title" class="text-3xl font-bold flex items-center gap-3">
-          {@nav_page.label}
-          <span :if={@count} id="admin-page-count" class="badge badge-neutral">{@count}</span>
-        </h1>
-        <p id="admin-page-description" class="text-base-content/70 mt-1">
-          {@nav_page.description}
-        </p>
-      </div>
-      <div :if={@actions != []} id="admin-page-actions" class="flex flex-wrap items-center gap-2">
-        {render_slot(@actions)}
-      </div>
-    </div>
+      <:actions :if={@actions != []}>{render_slot(@actions)}</:actions>
+    </.admin_header>
 
     <nav
       id="admin-page-tabs"

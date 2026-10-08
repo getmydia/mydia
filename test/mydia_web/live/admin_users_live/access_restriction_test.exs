@@ -17,7 +17,7 @@ defmodule MydiaWeb.AdminUsersLive.AccessRestrictionTest do
 
     view |> element("#open-access-#{user.id}") |> render_click()
 
-    assert has_element?(view, "#access-modal")
+    assert has_element?(view, "#user-access-modal")
   end
 
   test "offers no access action for an admin row", %{conn: conn} do

@@ -23,13 +23,13 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
       {:ok,
        socket
        |> assign(:page_title, "Import Lists")
-       |> assign(:show_list_modal, false)
-       |> assign(:show_items_modal, false)
+       |> assign(:show_import_list_modal, false)
+       |> assign(:show_import_list_items_modal, false)
        |> assign(:show_preset_confirm_modal, false)
        |> assign(:pending_preset_id, nil)
-       |> assign(:list_mode, nil)
+       |> assign(:import_list_mode, nil)
        |> assign(:selected_list, nil)
-       |> assign(:form, nil)
+       |> assign(:import_list_form, nil)
        |> assign(:items, [])
        |> assign(:items_filter, "all")
        |> assign(:syncing_list_id, nil)
@@ -194,32 +194,32 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   ## Event Handlers - List CRUD
 
   @impl true
-  def handle_event("new_list", _params, socket) do
+  def handle_event("new_import_list", _params, socket) do
     changeset = ImportLists.change_import_list(%ImportList{})
 
     {:noreply,
      socket
-     |> assign(:show_list_modal, true)
-     |> assign(:list_mode, :new)
+     |> assign(:show_import_list_modal, true)
+     |> assign(:import_list_mode, :new)
      |> assign(:selected_list, nil)
-     |> assign(:form, to_form(changeset))}
+     |> assign(:import_list_form, to_form(changeset))}
   end
 
   @impl true
-  def handle_event("edit_list", %{"id" => id}, socket) do
+  def handle_event("edit_import_list", %{"id" => id}, socket) do
     import_list = ImportLists.get_import_list!(id, preload: [:quality_profile, :library_path])
     changeset = ImportLists.change_import_list(import_list)
 
     {:noreply,
      socket
-     |> assign(:show_list_modal, true)
-     |> assign(:list_mode, :edit)
+     |> assign(:show_import_list_modal, true)
+     |> assign(:import_list_mode, :edit)
      |> assign(:selected_list, import_list)
-     |> assign(:form, to_form(changeset))}
+     |> assign(:import_list_form, to_form(changeset))}
   end
 
   @impl true
-  def handle_event("validate_list", %{"import_list" => params}, socket) do
+  def handle_event("validate_import_list", %{"import_list" => params}, socket) do
     import_list = socket.assigns.selected_list || %ImportList{}
 
     changeset =
@@ -227,19 +227,19 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
       |> ImportLists.change_import_list(coerce_media_type(params))
       |> Map.put(:action, :validate)
 
-    {:noreply, assign(socket, :form, to_form(changeset))}
+    {:noreply, assign(socket, :import_list_form, to_form(changeset))}
   end
 
   @impl true
-  def handle_event("save_list", %{"import_list" => params}, socket) do
-    case socket.assigns.list_mode do
+  def handle_event("save_import_list", %{"import_list" => params}, socket) do
+    case socket.assigns.import_list_mode do
       :new ->
         case ImportLists.create_import_list(params) do
           {:ok, import_list} ->
             {:noreply,
              socket
              |> put_flash(:info, "Import list created")
-             |> assign(:show_list_modal, false)
+             |> assign(:show_import_list_modal, false)
              |> load_data()
              |> then(fn s ->
                # Trigger initial sync
@@ -248,7 +248,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
              end)}
 
           {:error, changeset} ->
-            {:noreply, assign(socket, :form, to_form(changeset))}
+            {:noreply, assign(socket, :import_list_form, to_form(changeset))}
         end
 
       :edit ->
@@ -257,26 +257,26 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
             {:noreply,
              socket
              |> put_flash(:info, "Import list updated")
-             |> assign(:show_list_modal, false)
+             |> assign(:show_import_list_modal, false)
              |> load_data()}
 
           {:error, changeset} ->
-            {:noreply, assign(socket, :form, to_form(changeset))}
+            {:noreply, assign(socket, :import_list_form, to_form(changeset))}
         end
     end
   end
 
   @impl true
-  def handle_event("close_list_modal", _params, socket) do
+  def handle_event("close_import_list_modal", _params, socket) do
     {:noreply,
      socket
-     |> assign(:show_list_modal, false)
+     |> assign(:show_import_list_modal, false)
      |> assign(:selected_list, nil)
-     |> assign(:form, nil)}
+     |> assign(:import_list_form, nil)}
   end
 
   @impl true
-  def handle_event("toggle_list", %{"id" => id}, socket) do
+  def handle_event("toggle_import_list", %{"id" => id}, socket) do
     import_list = ImportLists.get_import_list!(id)
 
     case ImportLists.toggle_import_list(import_list) do
@@ -294,7 +294,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   end
 
   @impl true
-  def handle_event("delete_list", %{"id" => id}, socket) do
+  def handle_event("delete_import_list", %{"id" => id}, socket) do
     import_list = ImportLists.get_import_list!(id)
 
     case ImportLists.delete_import_list(import_list) do
@@ -312,7 +312,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   ## Event Handlers - Sync
 
   @impl true
-  def handle_event("sync_list", %{"id" => id}, socket) do
+  def handle_event("sync_import_list", %{"id" => id}, socket) do
     import_list = ImportLists.get_import_list!(id)
 
     case ImportListSync.enqueue(import_list.id) do
@@ -341,26 +341,26 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   ## Event Handlers - Items
 
   @impl true
-  def handle_event("view_items", %{"id" => id}, socket) do
+  def handle_event("view_import_list_items", %{"id" => id}, socket) do
     import_list = ImportLists.get_import_list!(id)
 
     {:noreply,
      socket
-     |> assign(:show_items_modal, true)
+     |> assign(:show_import_list_items_modal, true)
      |> assign(:selected_list, import_list)
      |> load_list_items(import_list, "all")}
   end
 
   @impl true
-  def handle_event("filter_items", %{"status" => status}, socket) do
+  def handle_event("filter_import_list_items", %{"status" => status}, socket) do
     {:noreply, load_list_items(socket, socket.assigns.selected_list, status)}
   end
 
   @impl true
-  def handle_event("close_items_modal", _params, socket) do
+  def handle_event("close_import_list_items_modal", _params, socket) do
     {:noreply,
      socket
-     |> assign(:show_items_modal, false)
+     |> assign(:show_import_list_items_modal, false)
      |> assign(:selected_list, nil)
      |> assign(:items, [])}
   end

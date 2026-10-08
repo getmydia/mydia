@@ -1,9 +1,6 @@
 defmodule MydiaWeb.AdminRequestsLive.Index do
   use MydiaWeb, :live_view
 
-  import MydiaWeb.MediaRequestComponents
-  import MydiaWeb.AddMediaComponents
-
   alias Mydia.Media.AddDefaults
   alias Mydia.Media.MediaRequest
   alias Mydia.MediaRequests
@@ -39,7 +36,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
   ## Event Handlers
 
   @impl true
-  def handle_event("filter", %{"status" => status}, socket) do
+  def handle_event("filter_requests", %{"status" => status}, socket) do
     {:noreply, push_patch(socket, to: ~p"/admin/requests?status=#{status}")}
   end
 
@@ -139,7 +136,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
     end
   end
 
-  def handle_event("show_details", %{"id" => id}, socket) do
+  def handle_event("show_request_details", %{"id" => id}, socket) do
     request = Enum.find(socket.assigns.requests, &(&1.id == id))
     item = request && MediaRequestHelpers.to_search_result(request)
 
@@ -156,6 +153,13 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
     end
   end
 
+  def handle_event("close_request_details_modal", _params, socket) do
+    {:noreply, close_details(socket)}
+  end
+
+  # TrendingDetailModal is shared with Discover and the dashboard and hardwires
+  # close_details onto its X button, backdrop and Escape key, so those still
+  # arrive under that name.
   def handle_event("close_details", _params, socket) do
     {:noreply, close_details(socket)}
   end

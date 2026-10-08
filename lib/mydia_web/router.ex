@@ -272,6 +272,9 @@ defmodule MydiaWeb.Router do
     # Device management is a user action now. This kept old bookmarks working;
     # the page it replaced only ever listed the signed-in admin's own devices.
     get "/devices", RedirectController, :devices
+
+    # The transcode list lives on the Dashboard; this page duplicated it.
+    get "/transcodes", RedirectController, :transcodes
   end
 
   # Admin LiveView routes
@@ -303,7 +306,6 @@ defmodule MydiaWeb.Router do
       live "/api-keys", AdminApiKeysLive.Index, :index
       live "/import-lists", AdminImportListsLive.Index, :index
       live "/jobs", JobsLive.Index, :index
-      live "/transcodes", TranscodesLive.Index, :index
       live "/requests", AdminRequestsLive.Index, :index
       live "/users", AdminUsersLive.Index, :index
       live "/release-blacklist", AdminReleaseBlacklistLive.Index, :index

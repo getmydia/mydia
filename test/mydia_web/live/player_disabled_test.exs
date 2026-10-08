@@ -18,7 +18,6 @@ defmodule MydiaWeb.PlayerDisabledTest do
           "/devices",
           "/admin/remote-access",
           "/admin/dashboard",
-          "/admin/transcodes",
           "/play/movie/00000000-0000-0000-0000-000000000000"
         ] do
       test "#{path} redirects home with a flash", %{conn: conn} do

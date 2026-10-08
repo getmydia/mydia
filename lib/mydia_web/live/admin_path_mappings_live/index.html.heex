@@ -5,10 +5,10 @@
     </:actions>
     <MydiaWeb.AdminPathMappingsLive.Components.path_mappings_tab path_mappings={@path_mappings} />
 
-    <%= if @show_modal do %>
+    <%= if assigns[:show_path_mapping_modal] do %>
       <MydiaWeb.AdminPathMappingsLive.Components.path_mapping_modal
-        form={@form}
-        mode={@mode}
+        path_mapping_form={@path_mapping_form}
+        path_mapping_mode={@path_mapping_mode}
         remote_suggestions={@remote_suggestions}
         local_suggestions={@local_suggestions}
       />

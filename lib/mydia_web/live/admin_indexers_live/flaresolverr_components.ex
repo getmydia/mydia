@@ -25,41 +25,34 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
 
   def flaresolverr_row(assigns) do
     ~H"""
-    <div id="flaresolverr-panel" class="bg-base-200 rounded-box">
-      <div class="p-3 sm:p-4">
-        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div class="flex-1 min-w-0">
-            <div class="font-semibold flex items-center gap-2 flex-wrap">
-              <.icon name="hero-shield-check" class="w-4 h-4 opacity-70" /> FlareSolverr
-              <%= if @flaresolverr.env? do %>
-                <span
-                  class="badge badge-primary badge-xs tooltip"
-                  data-tip="Configured via environment variables"
-                >
-                  <.icon name="hero-lock-closed" class="w-3 h-3" /> ENV
-                </span>
-              <% end %>
-            </div>
-            <div class="text-xs opacity-60 mt-1 truncate">
-              <%= if @flaresolverr.configured do %>
-                <span class="font-mono">{@flaresolverr.url}</span>
-              <% else %>
-                Cloudflare bypass for protected indexers (not configured)
-              <% end %>
-            </div>
-          </div>
-
-          <div class="flex flex-wrap items-center gap-2">
+    <.admin_list id="flaresolverr" items={[@flaresolverr]}>
+      <:row :let={flaresolverr}>
+        <.admin_row id="flaresolverr-panel">
+          <:title>
+            <.icon name="hero-shield-check" class="w-4 h-4 opacity-70" /> FlareSolverr
+            <.env_lock_badge :if={flaresolverr.env?} tip="Configured via environment variables" />
+          </:title>
+          <:descriptor>
+            <%= if flaresolverr.configured do %>
+              <span class="font-mono">{flaresolverr.url}</span>
+            <% else %>
+              Cloudflare bypass for protected indexers (not configured)
+            <% end %>
+          </:descriptor>
+          <:badges>
             <span class={[
-              "badge badge-sm",
-              if(@flaresolverr.enabled, do: "badge-success", else: "badge-ghost")
+              "badge badge-sm badge-outline",
+              if(flaresolverr.enabled, do: "badge-success", else: "badge-ghost")
             ]}>
-              {if @flaresolverr.enabled, do: "Enabled", else: "Disabled"}
+              {if flaresolverr.enabled, do: "Enabled", else: "Disabled"}
             </span>
             <%!-- Connection health, shown only when enabled (the Enabled/Disabled
                   badge already conveys the off state). --%>
             <%= if @flaresolverr_status.status != :disabled do %>
-              <span class={["badge badge-sm", fs_badge_class(@flaresolverr_status.status)]}>
+              <span class={[
+                "badge badge-sm badge-outline",
+                fs_badge_class(@flaresolverr_status.status)
+              ]}>
                 <.icon name={fs_status_icon(@flaresolverr_status.status)} class="w-3 h-3 mr-1" />
                 {fs_status_label(@flaresolverr_status.status)}
               </span>
@@ -72,35 +65,34 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
                 </div>
               <% end %>
             <% end %>
-
-            <div class="join ml-auto sm:ml-2">
-              <button
+          </:badges>
+          <:actions>
+            <.row_actions>
+              <.row_action
                 id="flaresolverr-row-test"
-                class="btn btn-sm btn-ghost join-item"
-                phx-click="test_flaresolverr"
+                icon="hero-signal"
                 title="Test Connection"
-              >
-                <.icon name="hero-signal" class="w-4 h-4" />
-              </button>
-              <button
-                class="btn btn-sm btn-ghost join-item"
-                phx-click="edit_flaresolverr"
+                phx-click="test_flaresolverr"
+              />
+              <.row_action
+                id="flaresolverr-row-edit"
+                icon="hero-pencil"
                 title="Edit"
-              >
-                <.icon name="hero-pencil" class="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+                phx-click="edit_flaresolverr"
+              />
+            </.row_actions>
+          </:actions>
+        </.admin_row>
+      </:row>
+      <:empty>FlareSolverr is unavailable.</:empty>
+    </.admin_list>
     """
   end
 
   @doc """
   Renders the FlareSolverr edit modal.
 
-  A standard `modal-box` form (`Save` / `Cancel` / `Test`) over the four
+  An `admin_modal` form (`Save` / `Cancel` / `Test`) over the four
   `flaresolverr.*` fields. Each field shows its ENV/DB/Default source; env-sourced
   fields render disabled (read-only) since environment variables win at runtime.
   `Test` probes the URL currently in the form, saved or not, regardless of the
@@ -114,74 +106,67 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
 
   def flaresolverr_modal(assigns) do
     ~H"""
-    <div class="modal modal-open" id="flaresolverr-modal">
-      <div class="modal-box max-w-lg">
-        <.form
-          for={@form}
-          id="flaresolverr-form"
-          phx-change="validate_flaresolverr"
-          phx-submit="save_flaresolverr"
-        >
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-              <.icon name="hero-shield-check" class="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h3 class="font-semibold text-lg">FlareSolverr</h3>
-              <p class="text-xs text-base-content/60">Cloudflare bypass proxy</p>
-            </div>
-          </div>
+    <.admin_modal
+      id="flaresolverr-modal"
+      icon="hero-shield-check"
+      title="FlareSolverr"
+      subtitle="Cloudflare bypass proxy"
+      on_close="close_flaresolverr_modal"
+    >
+      <.form
+        for={@form}
+        id="flaresolverr-form"
+        phx-change="validate_flaresolverr"
+        phx-submit="save_flaresolverr"
+      >
+        <p class="text-sm text-base-content/70 mb-4">
+          FlareSolverr is a local proxy that solves Cloudflare challenges so Mydia can reach
+          protected indexers. Configure the connection here, then enable Cloudflare bypass
+          per-indexer in the list.
+        </p>
 
-          <p class="text-sm text-base-content/70 mb-4">
-            FlareSolverr is a local proxy that solves Cloudflare challenges so Mydia can reach
-            protected indexers. Configure the connection here, then enable Cloudflare bypass
-            per-indexer in the list.
-          </p>
+        <.fs_modal_field
+          field={@form[:enabled]}
+          label="Enabled"
+          type="checkbox"
+          source={@sources["flaresolverr.enabled"]}
+        />
+        <.fs_modal_field
+          field={@form[:url]}
+          label="URL"
+          type="text"
+          placeholder="http://flaresolverr:8191"
+          source={@sources["flaresolverr.url"]}
+        />
+        <.fs_modal_field
+          field={@form[:timeout]}
+          label="Timeout (ms)"
+          type="number"
+          source={@sources["flaresolverr.timeout"]}
+        />
+        <.fs_modal_field
+          field={@form[:max_timeout]}
+          label="Max Timeout (ms)"
+          type="number"
+          source={@sources["flaresolverr.max_timeout"]}
+        />
 
-          <.fs_modal_field
-            field={@form[:enabled]}
-            label="Enabled"
-            type="checkbox"
-            source={@sources["flaresolverr.enabled"]}
-          />
-          <.fs_modal_field
-            field={@form[:url]}
-            label="URL"
-            type="text"
-            placeholder="http://flaresolverr:8191"
-            source={@sources["flaresolverr.url"]}
-          />
-          <.fs_modal_field
-            field={@form[:timeout]}
-            label="Timeout (ms)"
-            type="number"
-            source={@sources["flaresolverr.timeout"]}
-          />
-          <.fs_modal_field
-            field={@form[:max_timeout]}
-            label="Max Timeout (ms)"
-            type="number"
-            source={@sources["flaresolverr.max_timeout"]}
-          />
-
-          <div class="modal-action">
-            <button
-              id="flaresolverr-modal-test"
-              type="button"
-              class="btn btn-ghost btn-sm gap-1.5"
-              phx-click="test_flaresolverr_form"
-            >
-              <.icon name="hero-signal" class="w-4 h-4" /> Test
-            </button>
-            <button type="button" class="btn btn-ghost btn-sm" phx-click="close_flaresolverr_modal">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary btn-sm">Save</button>
-          </div>
-        </.form>
-      </div>
-      <label class="modal-backdrop" phx-click="close_flaresolverr_modal">Close</label>
-    </div>
+        <.admin_modal_actions>
+          <button
+            id="flaresolverr-modal-test"
+            type="button"
+            class="btn btn-ghost gap-1.5"
+            phx-click="test_flaresolverr_form"
+          >
+            <.icon name="hero-signal" class="w-4 h-4" /> Test
+          </button>
+          <button type="button" class="btn btn-ghost" phx-click="close_flaresolverr_modal">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </.admin_modal_actions>
+      </.form>
+    </.admin_modal>
     """
   end
 

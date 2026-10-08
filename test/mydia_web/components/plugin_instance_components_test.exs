@@ -36,7 +36,7 @@ defmodule MydiaWeb.PluginInstanceComponentsTest do
       links: []
     }
 
-    render_component(&PluginInstanceComponents.instance_card/1, Map.merge(defaults, attrs))
+    render_component(&PluginInstanceComponents.plugin_instance_row/1, Map.merge(defaults, attrs))
     |> LazyHTML.from_fragment()
   end
 
@@ -61,11 +61,12 @@ defmodule MydiaWeb.PluginInstanceComponentsTest do
     doc = render_card(%{instance: instance(%{source: :runtime})})
     id = instance().id
 
-    assert has?(doc, "#plugin-instance-sync-#{id}")
-    assert has?(doc, "#plugin-instance-test-#{id}")
-    refute has?(doc, "#plugin-instance-delete-#{id}")
-    refute has?(doc, "#plugin-instance-toggle-#{id}")
-    refute has?(doc, "#plugin-instance-reconnect-#{id}")
+    assert has?(doc, "#plugin-instance-sync-#{id}:not([disabled])")
+    assert has?(doc, "#plugin-instance-test-#{id}:not([disabled])")
+    assert has?(doc, "#plugin-instance-delete-#{id}[disabled]")
+    assert has?(doc, "#plugin-instance-toggle-#{id}[disabled]")
+    assert has?(doc, "#plugin-instance-reconnect-#{id}[disabled]")
+    assert has?(doc, ".badge-primary .hero-lock-closed")
     refute has?(doc, "#plugin-instance-endpoint-remove-#{id}-0")
   end
 

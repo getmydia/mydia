@@ -40,12 +40,14 @@ defmodule MydiaWeb.RequestDetailPopupTest do
     request
   end
 
-  defp open_details(view, request) do
+  # The admin page names its event show_request_details; My Requests still
+  # uses show_details.
+  defp open_details(view, request, event \\ "show_request_details") do
     view
-    |> element(~s(#request-#{request.id} button.link[phx-click="show_details"]))
+    |> element(~s(#request-#{request.id} button.link[phx-click="#{event}"]))
     |> render_click()
 
-    # show_details now fetches request metadata through start_async, so
+    # The details event now fetches request metadata through start_async, so
     # render_async/1 is needed to await it before callers assert on
     # detail_metadata-derived content.
     render_async(view)
@@ -65,16 +67,15 @@ defmodule MydiaWeb.RequestDetailPopupTest do
     assert has_element?(view, "#request-detail-modal[open]")
     assert render(view) =~ MetadataStubProvider.movie_title()
 
-    # Text filter disambiguates: TrendingDetailModal always renders three
-    # phx-click="close_details" buttons when open (the header's icon-only X,
-    # the backdrop, and this Close button from the request pages' :actions
-    # slot, which also renders in the header's action cluster), matching the
-    # codebase's idiom for a modal with multiple same-selector buttons (see
-    # import_media_review_test.exs). The backdrop button's text is lowercase
-    # "close", so "Close" targets only the actions-slot button and not the
-    # backdrop as well.
+    # The page's own Close button (from the :actions slot) sends
+    # close_request_details_modal. The modal's built-in X, backdrop and Escape
+    # still send the shared close_details event, so the text filter picks the
+    # slot button.
     view
-    |> element(~s(#request-detail-modal button[phx-click="close_details"]), "Close")
+    |> element(
+      ~s(#request-detail-modal button[phx-click="close_request_details_modal"]),
+      "Close"
+    )
     |> render_click()
 
     refute has_element?(view, "#request-detail-modal[open]")
@@ -85,7 +86,7 @@ defmodule MydiaWeb.RequestDetailPopupTest do
 
     {:ok, view, _html} = live(log_in_user(conn, guest), ~p"/requests")
 
-    open_details(view, request)
+    open_details(view, request, "show_details")
 
     assert has_element?(view, "#request-detail-modal[open]")
   end
@@ -142,7 +143,7 @@ defmodule MydiaWeb.RequestDetailPopupTest do
     assert has_element?(view, "#request-detail-modal[open]")
 
     view
-    |> element(~s(button[phx-click="filter"][phx-value-status="all"]))
+    |> element(~s(button[phx-click="filter_requests"][phx-value-status="all"]))
     |> render_click()
 
     refute has_element?(view, "#request-detail-modal[open]")
@@ -157,6 +158,9 @@ defmodule MydiaWeb.RequestDetailPopupTest do
 
     {:ok, view, _html} = live(log_in_user(conn, admin), ~p"/admin/requests")
 
-    refute has_element?(view, ~s(#request-#{request.id} button[phx-click="show_details"]))
+    refute has_element?(
+             view,
+             ~s(#request-#{request.id} button[phx-click="show_request_details"])
+           )
   end
 end

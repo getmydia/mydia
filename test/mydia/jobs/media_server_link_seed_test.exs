@@ -51,6 +51,32 @@ defmodule Mydia.Jobs.MediaServerLinkSeedTest do
     assert [] = all_enqueued(worker: MediaServerWatchedSync)
   end
 
+  test "never seeds an env-configured server, which cannot own link rows" do
+    original = Application.get_env(:mydia, :runtime_config)
+    on_exit(fn -> Application.put_env(:mydia, :runtime_config, original) end)
+
+    Application.put_env(:mydia, :runtime_config, %{
+      Mydia.Config.Schema.defaults()
+      | media_servers: [
+          %{
+            name: "from-env",
+            type: :jellyfin,
+            enabled: true,
+            url: "http://127.0.0.1:9",
+            token: "tok",
+            connection_settings: %{"sync_watched" => "true"}
+          }
+        ]
+    })
+
+    id = "runtime::media_server::from-env"
+    assert Settings.runtime_config?(Settings.get_media_server_config!(id))
+
+    assert :ok = perform_job(MediaServerLinkSeed, %{"config_id" => id})
+    assert [] = Settings.list_media_server_user_links(id)
+    assert [] = all_enqueued(worker: MediaServerWatchedSync)
+  end
+
   test "is a no-op when the config was deleted between enqueue and execution" do
     config = jellyfin_config()
     {:ok, _} = Settings.delete_media_server_config(config)

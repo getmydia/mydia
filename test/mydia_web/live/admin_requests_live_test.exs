@@ -42,6 +42,40 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
     |> render_click()
   end
 
+  describe "list conventions" do
+    test "pending requests render as a standard list with icon-only actions", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/requests")
+
+      assert has_element?(view, "#requests.bg-base-200")
+      assert has_element?(view, ".join-item[title=Approve]")
+      assert has_element?(view, ".join-item.text-error[title=Reject]")
+    end
+
+    test "rejected requests offer no approve or reject action", %{
+      conn: conn,
+      admin: admin,
+      request: request
+    } do
+      {:ok, _} =
+        MediaRequests.reject_request(request, %{
+          approved_by_id: admin.id,
+          rejection_reason: "nope"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/requests?status=rejected")
+
+      assert has_element?(view, "#request-#{request.id}")
+      refute has_element?(view, ".join-item[title=Approve]")
+      refute has_element?(view, ".join-item.text-error[title=Reject]")
+    end
+
+    test "shows an info alert when there are no requests", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/requests?status=approved")
+
+      assert has_element?(view, "#requests-empty.alert-info")
+    end
+  end
+
   describe "approve modal configuration fields" do
     test "renders the config controls", %{conn: conn, request: request} do
       library_path_fixture(%{type: "movies"})

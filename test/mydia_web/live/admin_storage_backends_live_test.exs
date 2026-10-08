@@ -114,7 +114,7 @@ defmodule MydiaWeb.AdminStorageBackendsLiveTest do
     {:ok, view, _} = live(conn, ~p"/admin/storage-backends")
     Mydia.Repo.delete!(backend)
 
-    html = render_click(view, "delete", %{"id" => backend.id})
+    html = render_click(view, "delete_storage_backend", %{"id" => backend.id})
     assert html =~ "no longer exists"
     assert Process.alive?(view.pid)
   end
@@ -125,5 +125,56 @@ defmodule MydiaWeb.AdminStorageBackendsLiveTest do
     {:ok, view, _} = live(conn, ~p"/admin/storage-backends")
     view |> element("#test-storage-backend-down") |> render_click()
     assert render_async(view, 30_000) =~ "cannot reach storage"
+  end
+
+  test "shows an info alert when there are no backends", %{conn: conn} do
+    {:ok, view, _} = live(conn, ~p"/admin/storage-backends")
+    assert has_element?(view, "#storage-backends-empty.alert-info")
+    refute has_element?(view, "#storage-backends")
+  end
+
+  test "row actions are icon-only buttons with titles", %{conn: conn} do
+    create_backend("iconic")
+    {:ok, view, _} = live(conn, ~p"/admin/storage-backends")
+
+    assert has_element?(view, "#storage-backends.bg-base-200 #storage-backend-iconic")
+    assert has_element?(view, "#test-storage-backend-iconic.join-item[title='Test connection']")
+    assert has_element?(view, "#edit-storage-backend-iconic.join-item[title=Edit]")
+    assert has_element?(view, "#delete-storage-backend-iconic.join-item.text-error[title=Delete]")
+  end
+
+  test "the modal uses the shared shell and closes from the backdrop", %{conn: conn} do
+    {:ok, view, _} = live(conn, ~p"/admin/storage-backends")
+    view |> element("#new-storage-backend") |> render_click()
+
+    assert has_element?(view, "#storage-backend-modal .modal-box.max-w-2xl")
+    view |> element("#storage-backend-modal .modal-backdrop") |> render_click()
+    refute has_element?(view, "#storage-backend-modal")
+  end
+
+  test "env-defined backends show the lock badge and disabled Edit and Delete", %{conn: conn} do
+    original = Application.get_env(:mydia, :runtime_config)
+    on_exit(fn -> Application.put_env(:mydia, :runtime_config, original) end)
+
+    Application.put_env(:mydia, :runtime_config, %{
+      Mydia.Config.Schema.defaults()
+      | storage_backends: [
+          %{
+            name: "from-env",
+            endpoint: "http://127.0.0.1:9",
+            region: "us-east-1",
+            bucket: "b",
+            access_key_id: "k",
+            secret_access_key: "s",
+            path_style: true
+          }
+        ]
+    })
+
+    {:ok, view, _} = live(conn, ~p"/admin/storage-backends")
+
+    assert has_element?(view, "#storage-backend-from-env .badge-primary .hero-lock-closed")
+    assert has_element?(view, "#edit-storage-backend-from-env[disabled]")
+    assert has_element?(view, "#delete-storage-backend-from-env[disabled]")
   end
 end

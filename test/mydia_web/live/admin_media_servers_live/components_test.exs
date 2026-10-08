@@ -81,6 +81,22 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
     end
   end
 
+  describe "account link count" do
+    test "a server with linked accounts shows the count as a badge" do
+      s = server(%{connection_settings: %{"sync_watched" => "true"}})
+
+      html =
+        render_component(&Components.media_servers_tab/1, %{
+          media_servers: [s],
+          media_server_health: %{s.id => %{status: :healthy}},
+          link_counts: %{s.id => 3}
+        })
+
+      assert html =~ "3 accounts"
+      assert html =~ "Accounts (3)"
+    end
+  end
+
   describe "env-configured servers" do
     defp runtime_server do
       server(%{id: "runtime::media_server::storage"})
@@ -95,13 +111,31 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       assert html =~ "Configured via environment variables"
     end
 
-    test "an env-configured server offers no edit or delete control" do
+    test "an env-configured server keeps edit and delete visible but disabled" do
       s = runtime_server()
 
-      html = render_tab([s], %{s.id => %{status: :unknown}})
+      doc =
+        [s]
+        |> render_tab(%{s.id => %{status: :unknown}})
+        |> LazyHTML.from_fragment()
 
-      refute html =~ "edit_media_server"
-      refute html =~ "delete_media_server"
+      assert LazyHTML.query(doc, "button[disabled][title=Edit]") |> Enum.count() == 1
+      assert LazyHTML.query(doc, "button[disabled][title=Delete]") |> Enum.count() == 1
+    end
+
+    test "an env-configured server with watched sync shows Accounts disabled" do
+      s =
+        server(%{
+          id: "runtime::media_server::storage",
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      doc =
+        [s]
+        |> render_tab(%{s.id => %{status: :unknown}})
+        |> LazyHTML.from_fragment()
+
+      assert LazyHTML.query(doc, "button[disabled][data-test=map-accounts]") |> Enum.count() == 1
     end
 
     test "a normal server offers edit and delete and carries no env note" do
