@@ -20,7 +20,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
      socket
      |> assign(:page_title, "Custom Formats")
      |> assign(:show_custom_format_modal, false)
-     |> assign(:test_results, [])
+     |> assign(:custom_format_test_results, [])
      |> load_formats()}
   end
 
@@ -69,7 +69,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
     {:noreply,
      socket
      |> assign(:custom_format_form, to_form(params, as: :custom_format))
-     |> assign(:test_results, test_patterns(patterns, title))}
+     |> assign(:custom_format_test_results, test_patterns(patterns, title))}
   end
 
   def handle_event("save_custom_format", %{"custom_format" => params}, socket) do
@@ -140,10 +140,10 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
     |> assign(:show_custom_format_modal, true)
     |> assign(:custom_format_mode, mode)
     |> assign(:editing_custom_format, format)
-    |> assign(:test_results, [])
+    |> assign(:custom_format_test_results, [])
   end
 
-  defp load_formats(socket), do: assign(socket, :formats, CustomFormats.list_all())
+  defp load_formats(socket), do: assign(socket, :custom_formats, CustomFormats.list_all())
 
   defp split_patterns(text) do
     text
@@ -191,7 +191,7 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
         Map.get(params, "description", Ecto.Changeset.get_field(changeset, :description) || ""),
       "patterns_text" => patterns_text,
       # Carried through so a failed save does not wipe what the user typed into
-      # the pattern tester while `@test_results` stays on screen.
+      # the pattern tester while `@custom_format_test_results` stays on screen.
       "test_title" => Map.get(params, "test_title", "")
     }
 

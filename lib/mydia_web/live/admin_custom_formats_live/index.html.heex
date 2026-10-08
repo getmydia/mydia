@@ -1,9 +1,11 @@
 <Layouts.app {assigns}>
-  <.admin_page page={:custom_formats} count={length(@formats)}>
+  <.admin_page page={:custom_formats} count={length(@custom_formats)}>
     <:actions>
       <MydiaWeb.AdminCustomFormatsLive.Components.header_actions />
     </:actions>
-    <MydiaWeb.AdminCustomFormatsLive.Components.custom_formats_tab formats={@formats} />
+    <MydiaWeb.AdminCustomFormatsLive.Components.custom_formats_tab custom_formats={
+      @custom_formats
+    } />
 
     <%!-- Custom Format Modal --%>
     <%= if assigns[:show_custom_format_modal] do %>
@@ -11,7 +13,7 @@
         custom_format_form={@custom_format_form}
         custom_format_mode={@custom_format_mode}
         editing_custom_format={@editing_custom_format}
-        test_results={@test_results}
+        custom_format_test_results={@custom_format_test_results}
       />
     <% end %>
   </.admin_page>
