@@ -22,7 +22,8 @@ defmodule MydiaWeb.AdminPageConventionsTest do
     "admin_path_mappings_live",
     "admin_media_servers_live",
     "admin_plugins_live",
-    "admin_indexers_live"
+    "admin_indexers_live",
+    "admin_users_live"
   ]
 
   @bare_events ~w(new edit save cancel close close_modal delete remove test validate filter)

@@ -39,14 +39,14 @@ defmodule MydiaWeb.AdminUsersLive.Index do
   ## Event Handlers
 
   @impl true
-  def handle_event("search", %{"search" => query}, socket) do
+  def handle_event("search_users", %{"search" => query}, socket) do
     {:noreply,
      socket
      |> assign(:search_query, query)
      |> load_users()}
   end
 
-  def handle_event("filter", %{"role" => role}, socket) do
+  def handle_event("filter_users", %{"role" => role}, socket) do
     {:noreply, push_patch(socket, to: ~p"/admin/users?role=#{role}")}
   end
 
@@ -69,7 +69,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
      |> assign(:show_password, false)}
   end
 
-  def handle_event("toggle_password_mode", %{"mode" => mode}, socket) do
+  def handle_event("set_password_mode", %{"mode" => mode}, socket) do
     {:noreply,
      socket
      |> assign(:password_mode, mode)
@@ -239,7 +239,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
      |> assign(:password_reset_success, false)}
   end
 
-  def handle_event("toggle_password_mode_reset", %{"mode" => mode}, socket) do
+  def handle_event("set_reset_password_mode", %{"mode" => mode}, socket) do
     {:noreply,
      socket
      |> assign(:password_mode_reset, mode)
@@ -655,24 +655,4 @@ defmodule MydiaWeb.AdminUsersLive.Index do
 
   defp is_oidc_user?(%User{oidc_sub: oidc_sub}) when not is_nil(oidc_sub), do: true
   defp is_oidc_user?(_user), do: false
-
-  defp format_date(nil), do: "Never"
-
-  defp format_date(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%b %d, %Y")
-  end
-
-  defp role_badge_class("admin"), do: "badge-error"
-  defp role_badge_class("user"), do: "badge-primary"
-  defp role_badge_class("readonly"), do: "badge-info"
-  defp role_badge_class("guest"), do: "badge-warning"
-  defp role_badge_class(_), do: "badge-ghost"
-
-  defp auth_type_text(%User{oidc_sub: oidc_sub}) when not is_nil(oidc_sub), do: "OIDC"
-  defp auth_type_text(_user), do: "Local"
-
-  defp passkey_count(%{passkeys: passkeys}) when is_list(passkeys), do: length(passkeys)
-  defp passkey_count(_user), do: 0
-
-  defp second_factor_on?(user), do: Accounts.totp_enabled?(user) or passkey_count(user) > 0
 end
