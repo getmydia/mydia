@@ -134,7 +134,7 @@ defmodule MydiaWeb.AdminListComponents do
       type="button"
       id={@id}
       class={[
-        "btn btn-sm btn-ghost join-item",
+        "btn btn-sm btn-ghost join-item disabled:text-base-content/40",
         if(@destructive and not (@disabled or @loading), do: "text-error")
       ]}
       title={@title}

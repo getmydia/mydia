@@ -181,6 +181,7 @@ defmodule MydiaWeb.AdminListComponentsTest do
 
         assert count(html, "button.text-error") == 0
         assert count(html, "button[disabled]") == 1
+        assert html =~ "disabled:text-base-content/40"
       end
     end
 
