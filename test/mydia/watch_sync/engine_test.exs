@@ -318,6 +318,9 @@ defmodule Mydia.WatchSync.EngineTest do
       assert counts.exported == 1
       assert_received {:applied, "rk-4k", %{watched: true}}
       assert_received {:applied, "rk-1080", %{watched: true}}
+
+      assert %State{synced_watched: true} =
+               Repo.get_by(State, user_id: user.id, media_item_id: movie.id)
     end
 
     test "a push that fails on one copy records no snapshot", %{user: user, movie: movie} do
@@ -333,9 +336,13 @@ defmodule Mydia.WatchSync.EngineTest do
           %{fail_remote_ids: ["rk-1080"]}
         )
 
-      {:ok, counts} = WatchSync.sync(StubProvider, instance, scope(user), provider: "stub")
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:ok, %{exported: 0}} =
+                   WatchSync.sync(StubProvider, instance, scope(user), provider: "stub")
+        end)
 
-      assert counts.exported == 0
+      assert log =~ "watch sync push failed"
       assert Repo.get_by(State, user_id: user.id, media_item_id: movie.id) == nil
     end
 

@@ -50,4 +50,34 @@ defmodule Mydia.WatchSync.SchemasTest do
     assert {:error, changeset} = insert.("copy-a")
     assert {"already mapped to this remote item", _} = changeset.errors[:remote_id]
   end
+
+  test "an episode can map to several remote copies, each only once" do
+    {:ok, show} =
+      Mydia.Media.create_media_item(
+        Mydia.Accounts.Scope.unrestricted(),
+        %{title: "Copy Index Show", type: "tv_show", tvdb_id: 900_001},
+        skip_episode_refresh: true
+      )
+
+    {:ok, episode} =
+      Mydia.Media.create_episode(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: 1,
+        title: "Pilot"
+      })
+
+    attrs = %{provider: "jellyfin", provider_instance_id: "i", episode_id: episode.id}
+
+    insert = fn remote_id ->
+      %Mapping{}
+      |> Mapping.changeset(Map.put(attrs, :remote_id, remote_id))
+      |> Repo.insert()
+    end
+
+    assert {:ok, _} = insert.("copy-a")
+    assert {:ok, _} = insert.("copy-b")
+    assert {:error, changeset} = insert.("copy-a")
+    assert {"already mapped to this remote item", _} = changeset.errors[:remote_id]
+  end
 end
