@@ -10,7 +10,7 @@
 
     <%!-- Download Client Modal --%>
     <%= if assigns[:show_download_client_modal] do %>
-      <MydiaWeb.AdminDownloadClientsLive.Components.download_client_modal
+      <MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents.download_client_modal
         download_client_form={@download_client_form}
         download_client_mode={@download_client_mode}
         testing_download_client_connection={assigns[:testing_download_client_connection] || false}
