@@ -121,6 +121,20 @@ defmodule Mydia.Settings.MediaServerUserLinksTest do
     end
   end
 
+  describe "runtime (env/YAML) media server ids" do
+    # Synthetic ids are not UUIDs. PostgreSQL raises Ecto.Query.CastError if one
+    # reaches a binary_id comparison; SQLite silently returns nothing.
+    @runtime_id "runtime::media_server::from-env"
+
+    test "list_media_server_user_links/1 returns [] without querying" do
+      assert Settings.list_media_server_user_links(@runtime_id) == []
+    end
+
+    test "get_media_server_user_link/2 returns nil without querying", ctx do
+      assert Settings.get_media_server_user_link(@runtime_id, ctx.alex.id) == nil
+    end
+  end
+
   defp upsert(config, user, remote_user_id) do
     Settings.upsert_media_server_user_link(entry(config, user, remote_user_id))
   end

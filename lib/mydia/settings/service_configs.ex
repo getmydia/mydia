@@ -358,19 +358,32 @@ defmodule Mydia.Settings.ServiceConfigs do
 
   ## Media Server User Links
 
+  # Env/YAML media servers carry synthetic ids such as
+  # "runtime::media_server::name", which are not UUIDs and can never own a link
+  # row. SQLite compares them untyped and returns nothing; PostgreSQL raises
+  # Ecto.Query.CastError. Guard here so every caller gets the empty answer.
   def list_media_server_user_links(media_server_config_id) do
-    MediaServerUserLink
-    |> where([l], l.media_server_config_id == ^media_server_config_id)
-    |> order_by([l], asc: l.remote_username)
-    |> Repo.all()
+    if linkable_config_id?(media_server_config_id) do
+      MediaServerUserLink
+      |> where([l], l.media_server_config_id == ^media_server_config_id)
+      |> order_by([l], asc: l.remote_username)
+      |> Repo.all()
+    else
+      []
+    end
   end
 
   def get_media_server_user_link(media_server_config_id, user_id) do
-    Repo.get_by(MediaServerUserLink,
-      media_server_config_id: media_server_config_id,
-      user_id: user_id
-    )
+    if linkable_config_id?(media_server_config_id) do
+      Repo.get_by(MediaServerUserLink,
+        media_server_config_id: media_server_config_id,
+        user_id: user_id
+      )
+    end
   end
+
+  defp linkable_config_id?(id) when is_binary(id), do: match?({:ok, _}, Ecto.UUID.cast(id))
+  defp linkable_config_id?(_id), do: false
 
   # One remote account belongs to at most one Mydia user per server. Two links
   # naming the same account would each import that account's watch history under
