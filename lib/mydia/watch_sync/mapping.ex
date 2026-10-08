@@ -48,14 +48,29 @@ defmodule Mydia.WatchSync.Mapping do
     ])
     |> validate_required([:provider, :provider_instance_id, :remote_id])
     |> validate_one_parent()
-    |> unique_constraint([:provider, :provider_instance_id, :media_item_id],
-      name: :remote_item_mappings_movie_index
-    )
-    |> unique_constraint([:provider, :provider_instance_id, :episode_id],
-      name: :remote_item_mappings_episode_index
-    )
+    |> unique_copy_constraints()
     |> foreign_key_constraint(:media_item_id)
     |> foreign_key_constraint(:episode_id)
+  end
+
+  # Two names per index. Postgres reports the real index name on a violation;
+  # SQLite reports only the columns, and ecto_sqlite3 guesses Ecto's
+  # conventional "<table>_<cols>_index" name from them. Declaring both lets
+  # either adapter resolve to the same changeset error. See priv/repo/README.md.
+  @copy_index_names [
+    :remote_item_mappings_movie_copy_index,
+    :remote_item_mappings_provider_provider_instance_id_media_item_id_remote_id_index,
+    :remote_item_mappings_episode_copy_index,
+    :remote_item_mappings_provider_provider_instance_id_episode_id_remote_id_index
+  ]
+
+  defp unique_copy_constraints(changeset) do
+    Enum.reduce(@copy_index_names, changeset, fn name, acc ->
+      unique_constraint(acc, :remote_id,
+        name: name,
+        message: "already mapped to this remote item"
+      )
+    end)
   end
 
   # Ensure either media_item_id or episode_id is set, but not both

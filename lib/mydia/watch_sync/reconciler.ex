@@ -66,6 +66,31 @@ defmodule Mydia.WatchSync.Reconciler do
     end
   end
 
+  @doc """
+  Folds several remote copies of one local item into a single remote side.
+
+  A server can hold one movie or episode as several items, for instance a
+  1080p library and a 4K library, each with its own played flag. The item is
+  watched if any copy is. Position and time come from the most recently played
+  copy; when no copy carries a date (Jellyfin's `UpdatePlayState` never stamps
+  one), the furthest position wins.
+  """
+  @spec merge_remotes([side(), ...]) :: side()
+  def merge_remotes([_ | _] = sides) do
+    source = Enum.max_by(sides, &recency_key/1)
+
+    %{
+      watched: Enum.any?(sides, & &1.watched),
+      position_seconds: source.position_seconds,
+      at: source.at
+    }
+  end
+
+  defp recency_key(%{at: nil} = side), do: {0, 0, side.position_seconds || 0}
+
+  defp recency_key(%{at: at} = side),
+    do: {1, DateTime.to_unix(at, :microsecond), side.position_seconds || 0}
+
   defp resolve_position(local, remote, snapshot) do
     local_delta = position_delta(local.position_seconds, snapshot.position_seconds)
     remote_delta = position_delta(remote.position_seconds, snapshot.position_seconds)

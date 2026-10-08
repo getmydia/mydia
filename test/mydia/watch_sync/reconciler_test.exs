@@ -105,4 +105,37 @@ defmodule Mydia.WatchSync.ReconcilerTest do
       assert change.watched == true
     end
   end
+
+  describe "merge_remotes/1" do
+    test "a single copy passes through" do
+      assert Reconciler.merge_remotes([side(true, 30, at(5))]) == side(true, 30, at(5))
+    end
+
+    test "any watched copy makes the item watched" do
+      merged = Reconciler.merge_remotes([side(false, nil, at(10)), side(true, nil, at(1))])
+      assert merged.watched
+    end
+
+    test "position and time come from the most recently played copy" do
+      merged = Reconciler.merge_remotes([side(false, 900, at(1)), side(false, 120, at(10))])
+      assert merged == side(false, 120, at(10))
+    end
+
+    test "a dated copy outranks an undated one" do
+      merged = Reconciler.merge_remotes([side(false, 900, nil), side(false, 120, at(10))])
+      assert merged == side(false, 120, at(10))
+    end
+
+    test "with no dates at all the furthest position wins" do
+      merged =
+        Reconciler.merge_remotes([side(false, 120, nil), side(true, 900, nil), side(false)])
+
+      assert merged == side(true, 900, nil)
+    end
+
+    test "extra keys on the inputs are dropped" do
+      merged = Reconciler.merge_remotes([Map.put(side(true, 5, at(0)), :remote_id, "x")])
+      assert merged == side(true, 5, at(0))
+    end
+  end
 end
