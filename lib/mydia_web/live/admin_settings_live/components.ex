@@ -13,11 +13,11 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
 
   def general_settings_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-6 sm:space-y-8">
+    <div class="p-4 sm:p-6 space-y-4">
       <div
         :if={@invalid_config_settings != []}
         id="invalid-config-settings"
-        class="alert alert-warning mb-6"
+        class="alert alert-warning"
       >
         <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
         <div>
@@ -34,15 +34,14 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
               class="flex items-center justify-between gap-3"
             >
               <span class="font-mono text-sm">{reason}</span>
-              <button
-                type="button"
+              <.row_action
                 id={"delete-invalid-config-setting-#{String.replace(setting.key, ".", "-")}"}
-                class="btn btn-sm btn-ghost"
+                icon="hero-trash"
+                title="Remove"
+                destructive
                 phx-click="delete_invalid_config_setting"
                 phx-value-id={setting.id}
-              >
-                Remove
-              </button>
+              />
             </li>
           </ul>
         </div>
@@ -55,44 +54,21 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
 
       <%!-- Settings Categories --%>
       <%= for {category, settings} <- @config_settings_with_sources do %>
-        <div class="space-y-2">
-          <h3 class="font-semibold flex items-center gap-2 px-1">
-            <.icon name={category_icon(category)} class="w-4 h-4 opacity-60" />
-            {category}
-          </h3>
-
-          <div class="bg-base-200 rounded-box divide-y divide-base-300">
-            <%= for setting <- settings do %>
-              <div class="p-3 sm:p-4">
-                <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                  <div class="flex-1 min-w-0">
-                    <div class="font-medium flex items-center gap-2 flex-wrap">
-                      {setting.label}
-                      <.config_source_badge source={setting.source} />
-                    </div>
-                    <div class="text-xs opacity-50 font-mono truncate">{setting.key}</div>
-                    <%= if Map.get(setting, :description) do %>
-                      <div class="text-xs opacity-60 mt-1">{setting.description}</div>
-                    <% end %>
-                  </div>
-                  <div class="sm:ml-auto">
-                    <.setting_value_control
-                      setting={setting}
-                      category={category}
-                      editable={Map.get(setting, :editable, setting.source != :env)}
-                    />
-                  </div>
-                </div>
-              </div>
-            <% end %>
-            <%= if category == "Streaming" do %>
-              <div id="hwaccel-status" class="p-3 sm:p-4">
-                <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                  <div class="flex-1 min-w-0">
-                    <div class="font-medium flex items-center gap-2 flex-wrap">
-                      Hardware transcoding
-                    </div>
-                    <div class="text-xs opacity-60 mt-1">
+        <.admin_section
+          id={"settings-#{category_slug(category)}"}
+          title={category}
+          icon={category_icon(category)}
+        >
+          <.admin_list
+            id={"settings-#{category_slug(category)}-list"}
+            items={rows_for(category, settings)}
+          >
+            <:row :let={row}>
+              <%= case row do %>
+                <% :hwaccel -> %>
+                  <.admin_row id="hwaccel-status">
+                    <:title>Hardware transcoding</:title>
+                    <:descriptor>
                       <%= if @hwaccel.backend == :none do %>
                         Unavailable: {@hwaccel.reason}
                       <% else %>
@@ -105,25 +81,43 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
                           )}
                         <% end %>
                       <% end %>
-                    </div>
-                  </div>
-                  <div class="sm:ml-auto">
-                    <span class={[
-                      "badge",
-                      if(@hwaccel.backend == :none, do: "badge-ghost", else: "badge-success")
-                    ]}>
-                      {if @hwaccel.backend == :none, do: "Software", else: "Accelerated"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            <% end %>
-          </div>
+                    </:descriptor>
+                    <:badges>
+                      <span class={[
+                        "badge",
+                        if(@hwaccel.backend == :none, do: "badge-ghost", else: "badge-success")
+                      ]}>
+                        {if @hwaccel.backend == :none, do: "Software", else: "Accelerated"}
+                      </span>
+                    </:badges>
+                  </.admin_row>
+                <% setting -> %>
+                  <.admin_row id={"setting-#{String.replace(setting.key, ".", "-")}"}>
+                    <:title>
+                      {setting.label} <.config_source_badge source={setting.source} />
+                    </:title>
+                    <:descriptor><span class="font-mono">{setting.key}</span></:descriptor>
+                    <:details :if={Map.get(setting, :description)}>
+                      {setting.description}
+                    </:details>
+                    <:actions>
+                      <.setting_value_control
+                        setting={setting}
+                        category={category}
+                        editable={Map.get(setting, :editable, setting.source != :env)}
+                      />
+                    </:actions>
+                  </.admin_row>
+              <% end %>
+            </:row>
+            <:empty>No settings in this category.</:empty>
+          </.admin_list>
 
-          <%= if category == "Crash Reporting" and @crash_report_stats.enabled do %>
-            <.crash_report_stats stats={@crash_report_stats} />
-          <% end %>
-        </div>
+          <.crash_report_stats
+            :if={category == "Crash Reporting" and @crash_report_stats.enabled}
+            stats={@crash_report_stats}
+          />
+        </.admin_section>
       <% end %>
 
       <%!-- Legend --%>
@@ -133,6 +127,9 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
         </span>
         <span class="flex items-center gap-1">
           <span class="badge badge-primary badge-xs">DB</span> Database stored
+        </span>
+        <span class="flex items-center gap-1">
+          <.config_source_badge source={:yaml} size="xs" /> Config file
         </span>
         <span class="flex items-center gap-1">
           <span class="badge badge-ghost badge-xs">Default</span> Built-in value
@@ -270,6 +267,12 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
     <% end %>
     """
   end
+
+  defp category_slug(category),
+    do: category |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
+
+  defp rows_for("Streaming", settings), do: settings ++ [:hwaccel]
+  defp rows_for(_category, settings), do: settings
 
   defp category_icon("Server"), do: "hero-server"
   defp category_icon("Database"), do: "hero-circle-stack"
