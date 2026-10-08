@@ -308,6 +308,46 @@ defmodule Mydia.WatchSync.EngineTest do
       assert counts.exported == 0
       assert Repo.get_by(State, user_id: user.id, media_item_id: movie.id) == nil
     end
+
+    test "a forced crawl prunes copies the server no longer lists", %{user: user, movie: movie} do
+      an_hour_ago = DateTime.utc_now() |> DateTime.add(-3600) |> DateTime.truncate(:second)
+
+      Repo.insert!(%Mapping{
+        provider: "stub",
+        provider_instance_id: "inst-copies",
+        media_item_id: movie.id,
+        remote_id: "rk-gone",
+        last_seen_at: an_hour_ago
+      })
+
+      {:ok, _} =
+        WatchSync.sync(StubProvider, two_copies([]), scope(user),
+          provider: "stub",
+          refresh_mappings: :force
+        )
+
+      assert mapped_remote_ids("inst-copies") == ["rk-1080", "rk-4k"]
+    end
+
+    test "an empty crawl prunes nothing", %{user: user, movie: movie} do
+      an_hour_ago = DateTime.utc_now() |> DateTime.add(-3600) |> DateTime.truncate(:second)
+
+      Repo.insert!(%Mapping{
+        provider: "stub",
+        provider_instance_id: "inst-copies",
+        media_item_id: movie.id,
+        remote_id: "rk-4k",
+        last_seen_at: an_hour_ago
+      })
+
+      {:ok, _} =
+        WatchSync.sync(StubProvider, two_copies([], %{mappings: []}), scope(user),
+          provider: "stub",
+          refresh_mappings: :force
+        )
+
+      assert mapped_remote_ids("inst-copies") == ["rk-4k"]
+    end
   end
 
   defp scope(user), do: %{user_id: user.id, access_token: nil}

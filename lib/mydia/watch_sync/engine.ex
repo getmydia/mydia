@@ -79,6 +79,8 @@ defmodule Mydia.WatchSync.Engine do
   end
 
   defp do_refresh(provider_mod, instance, provider, instance_id) do
+    crawl_started_at = now()
+
     with {:ok, mappings} <- provider_mod.refresh_mappings(instance, []) do
       Enum.each(mappings, fn mapping ->
         case resolve_local(mapping) do
@@ -87,8 +89,23 @@ defmodule Mydia.WatchSync.Engine do
         end
       end)
 
-      :ok
+      prune_unseen(provider, instance_id, mappings, crawl_started_at)
     end
+  end
+
+  # Every copy the crawl resolved was just stamped with last_seen_at >= the
+  # crawl's start, so anything older is a deleted or re-scanned server item.
+  # An empty listing is far likelier a server hiccup than an emptied library,
+  # and pruning on it would drop every mapping until the next forced crawl.
+  defp prune_unseen(_provider, _instance_id, [], _crawl_started_at), do: :ok
+
+  defp prune_unseen(provider, instance_id, _mappings, crawl_started_at) do
+    Mapping
+    |> where([m], m.provider == ^provider and m.provider_instance_id == ^instance_id)
+    |> where([m], is_nil(m.last_seen_at) or m.last_seen_at < ^crawl_started_at)
+    |> Repo.delete_all()
+
+    :ok
   end
 
   defp resolve_local(%{type: :movie} = mapping) do
