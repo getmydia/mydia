@@ -72,7 +72,9 @@ defmodule MydiaWeb.AdminListComponents do
     <div id={@id} class={["p-3 sm:p-4", @class]}>
       <div class="flex flex-col sm:flex-row sm:items-center gap-3">
         <div class="flex-1 min-w-0">
-          <div class="font-semibold flex items-center gap-2 flex-wrap">{render_slot(@title)}</div>
+          <div class="font-semibold flex items-center gap-2 flex-wrap [overflow-wrap:anywhere]">
+            {render_slot(@title)}
+          </div>
           <div :if={@descriptor != []} class="text-xs opacity-60 mt-1 truncate">
             {render_slot(@descriptor)}
           </div>
@@ -114,7 +116,10 @@ defmodule MydiaWeb.AdminListComponents do
   def row_action(assigns) do
     ~H"""
     <%= if @disabled and @disabled_reason do %>
-      <div class="tooltip" data-tip={@disabled_reason}>
+      <div
+        class="tooltip tooltip-left before:max-w-[12rem] sm:before:max-w-[20rem]"
+        data-tip={@disabled_reason}
+      >
         <.row_action_button {assigns} />
       </div>
     <% else %>
@@ -138,7 +143,7 @@ defmodule MydiaWeb.AdminListComponents do
       <.icon
         :if={not @loading}
         name={@icon}
-        class={if(@disabled, do: "w-4 h-4 opacity-30", else: "w-4 h-4")}
+        class="w-4 h-4"
       />
     </button>
     """

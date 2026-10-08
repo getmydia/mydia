@@ -92,6 +92,7 @@ defmodule MydiaWeb.AdminListComponentsTest do
 
       assert count(html, "#row-1.p-3") == 1
       assert count(html, "#row-1 .flex-1.min-w-0") == 1
+      assert count(html, "#row-1 .font-semibold[class*=\"overflow-wrap:anywhere\"]") == 1
       assert count(html, "#row-1 .text-xs.opacity-60.truncate") == 1
       assert count(html, "#row-1 .badge") == 1
       assert count(html, "#row-1 #act") == 1
@@ -170,7 +171,7 @@ defmodule MydiaWeb.AdminListComponentsTest do
       assert count(html, "button.text-error") == 1
     end
 
-    test "disabled with a reason wraps the button in a tooltip and dims the icon" do
+    test "disabled with a reason wraps the button in a left-opening tooltip" do
       html =
         render_component(&AdminListComponents.row_action/1,
           icon: "hero-trash",
@@ -181,11 +182,9 @@ defmodule MydiaWeb.AdminListComponentsTest do
 
       assert count(
                html,
-               "div.tooltip[data-tip='Configured via environment variables'] > button[disabled]"
+               "div.tooltip.tooltip-left[data-tip='Configured via environment variables'] > button[disabled]"
              ) ==
                1
-
-      assert count(html, "button .opacity-30") == 1
     end
 
     test "loading replaces the icon with a spinner and disables the button" do
