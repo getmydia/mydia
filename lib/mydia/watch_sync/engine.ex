@@ -125,7 +125,7 @@ defmodule Mydia.WatchSync.Engine do
     %Mapping{}
     |> Mapping.changeset(attrs)
     |> Repo.insert(
-      on_conflict: {:replace, [:remote_id, :last_seen_at, :updated_at]},
+      on_conflict: {:replace, [:last_seen_at, :updated_at]},
       conflict_target: mapping_conflict_target(content_id)
     )
     |> case do
@@ -137,10 +137,10 @@ defmodule Mydia.WatchSync.Engine do
   end
 
   defp mapping_conflict_target(media_item_id: _),
-    do: [:provider, :provider_instance_id, :media_item_id]
+    do: [:provider, :provider_instance_id, :media_item_id, :remote_id]
 
   defp mapping_conflict_target(episode_id: _),
-    do: [:provider, :provider_instance_id, :episode_id]
+    do: [:provider, :provider_instance_id, :episode_id, :remote_id]
 
   defp mapped_any?(provider, instance_id) do
     Mapping

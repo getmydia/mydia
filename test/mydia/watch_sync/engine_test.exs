@@ -4,9 +4,12 @@ defmodule Mydia.WatchSync.EngineTest do
   import Mydia.MediaFixtures
   import Mydia.AccountsFixtures
 
+  import Ecto.Query
+
   alias Mydia.Accounts.Scope
   alias Mydia.Playback
   alias Mydia.WatchSync
+  alias Mydia.WatchSync.Mapping
 
   defmodule StubProvider do
     @behaviour Mydia.WatchSync.Provider
@@ -20,7 +23,10 @@ defmodule Mydia.WatchSync.EngineTest do
     @impl true
     def apply_change(instance, _scope, remote_id, change) do
       send(instance.test_pid, {:applied, remote_id, change})
-      :ok
+
+      if remote_id in Map.get(instance, :fail_remote_ids, []),
+        do: {:error, :unreachable},
+        else: :ok
     end
   end
 
@@ -220,5 +226,60 @@ defmodule Mydia.WatchSync.EngineTest do
     assert counts.not_found == 0
     assert counts.imported == 1
     assert %{watched: true} = Playback.get_progress(user.id, episode_id: episode.id)
+  end
+
+  describe "a movie with two copies on one server (#1079)" do
+    test "every copy gets a mapping", %{user: user} do
+      {:ok, _} = WatchSync.sync(StubProvider, two_copies([]), scope(user), provider: "stub")
+
+      assert mapped_remote_ids("inst-copies") == ["rk-1080", "rk-4k"]
+    end
+
+    test "a watch on the copy crawled first is imported", %{user: user, movie: movie} do
+      instance =
+        two_copies([
+          %{remote_id: "rk-4k", watched: true, position_seconds: 0, at: DateTime.utc_now()}
+        ])
+
+      {:ok, counts} = WatchSync.sync(StubProvider, instance, scope(user), provider: "stub")
+
+      assert counts.not_found == 0
+      assert counts.imported == 1
+      assert %{watched: true} = Playback.get_progress(user.id, media_item_id: movie.id)
+    end
+  end
+
+  defp scope(user), do: %{user_id: user.id, access_token: nil}
+
+  defp copy(remote_id) do
+    %{
+      remote_id: remote_id,
+      type: :movie,
+      external_ids: %{tmdb: "12345"},
+      season_number: nil,
+      episode_number: nil
+    }
+  end
+
+  # The 4K copy is crawled first, so the old one-mapping-per-item upsert let the
+  # 1080p copy overwrite it and every 4K watch came back as not_found.
+  defp two_copies(changes, extra \\ %{}) do
+    Map.merge(
+      %{
+        id: "inst-copies",
+        test_pid: self(),
+        mappings: [copy("rk-4k"), copy("rk-1080")],
+        changes: changes
+      },
+      extra
+    )
+  end
+
+  defp mapped_remote_ids(instance_id) do
+    Mapping
+    |> where([m], m.provider_instance_id == ^instance_id)
+    |> select([m], m.remote_id)
+    |> Repo.all()
+    |> Enum.sort()
   end
 end
