@@ -21,6 +21,26 @@ defmodule MydiaWeb.AdminSubtitleProvidersLiveTest do
     assert has_element?(view, "#subtitle-provider-row-gestdown")
   end
 
+  test "the modal uses the shared shell with Enabled in the header", %{conn: conn} do
+    {:ok, view, _} = live(conn, ~p"/admin/subtitle-providers")
+    view |> element("#subtitle-provider-add") |> render_click()
+
+    assert has_element?(
+             view,
+             "#subtitle-provider-modal .modal-box.max-w-2xl .w-10.h-10.rounded-xl"
+           )
+
+    assert has_element?(
+             view,
+             ~s(#subtitle-provider-modal input[type=checkbox][form="subtitle-provider-form"])
+           )
+  end
+
+  test "row toggles carry an accessible name", %{conn: conn} do
+    {:ok, view, _} = live(conn, ~p"/admin/subtitle-providers")
+    assert has_element?(view, "#subtitle-provider-row-relay input[type=checkbox][aria-label]")
+  end
+
   test "opens the editor modal", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/subtitle-providers")
 

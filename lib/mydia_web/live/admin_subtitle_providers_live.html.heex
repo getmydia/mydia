@@ -8,10 +8,10 @@
       circuit={@circuit}
     />
 
-    <%= if @show_modal do %>
+    <%= if assigns[:show_subtitle_provider_modal] do %>
       <MydiaWeb.AdminSubtitleProvidersLive.Components.provider_modal
-        form={@form}
-        mode={@mode}
+        subtitle_provider_form={@subtitle_provider_form}
+        subtitle_provider_mode={@subtitle_provider_mode}
       />
     <% end %>
   </.admin_page>
