@@ -91,4 +91,24 @@ defmodule Mydia.Storage.FlowTest do
     assert :ok = scan(ctx.library_path)
     assert Library.get_media_file!(ctx.media_file.id).trashed_at != nil
   end
+
+  test "trash survives a rescan, restore brings the object back, delete removes it",
+       %{library_path: lp, media_file: mf, loc: loc} do
+    mf = Mydia.Repo.preload(mf, :library_path)
+    {:ok, trashed} = Library.trash_media_file(mf, reason: :manual)
+
+    assert :ok = scan(lp)
+    assert Mydia.Repo.reload!(trashed).trashed_at, "the scan must not resurrect a trashed object"
+
+    {:ok, restored} = Library.restore_media_file(Mydia.Repo.reload!(trashed))
+    {:ok, object} = Mydia.Storage.source(loc, @relative_path)
+    assert Mydia.Storage.exists?(object)
+
+    assert {:ok, _} =
+             Library.delete_media_file(Mydia.Repo.preload(restored, :library_path),
+               delete_files: true
+             )
+
+    refute Mydia.Storage.exists?(object)
+  end
 end

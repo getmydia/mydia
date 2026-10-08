@@ -103,14 +103,6 @@ defmodule Mydia.Storage do
   def s3?(path) when is_binary(path), do: Location.s3_path?(path)
   def s3?(_), do: false
 
-  @spec ensure_writable(LibraryPath.t() | MediaFile.t() | String.t() | nil) ::
-          :ok | {:error, Error.t()}
-  def ensure_writable(target) do
-    if s3?(target),
-      do: {:error, Error.new(:read_only, "S3 libraries are read-only in this version of Mydia")},
-      else: :ok
-  end
-
   defp parse(path) do
     case Location.parse_s3(path) do
       {:ok, name, prefix} -> {:ok, name, prefix}

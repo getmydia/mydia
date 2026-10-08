@@ -90,7 +90,7 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
       refute has_element?(view, ~s{div[class*="modal-open"]})
     end
 
-    test "disables the write toggles for s3:// paths", %{view: view} do
+    test "keeps the write toggles enabled for s3:// paths", %{view: view} do
       view |> element(~s{button[phx-click="new_library_path"]}) |> render_click()
 
       refute has_element?(view, "#library-path-form input[type=checkbox][disabled]")
@@ -102,11 +102,12 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
       for field <- ~w(auto_organize auto_rename write_nfo) do
         assert has_element?(
                  view,
-                 ~s{#library-path-form input[type=checkbox][name="library_path[#{field}]"][disabled]}
+                 ~s{#library-path-form input[type=checkbox][name="library_path[#{field}]"]}
                )
       end
 
-      assert has_element?(view, "#library-path-s3-note")
+      refute has_element?(view, "#library-path-form input[type=checkbox][disabled]")
+      refute has_element?(view, "#library-path-s3-note")
     end
 
     test "saves a display name and shows it on the card", %{view: view} do

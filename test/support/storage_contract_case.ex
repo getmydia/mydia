@@ -8,6 +8,8 @@ defmodule Mydia.StorageContractCase do
   """
 
   defmacro __using__(_opts) do
+    # The contract is one long list of tests injected into each backend's module.
+    # credo:disable-for-next-line Credo.Check.Refactor.LongQuoteBlocks
     quote do
       alias Mydia.Storage
       alias Mydia.Storage.{Entry, Error}

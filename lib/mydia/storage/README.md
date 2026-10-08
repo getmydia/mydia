@@ -7,7 +7,9 @@ directories (`Mydia.Storage.Local`) and S3-compatible buckets
 table, `storage_backends:` in YAML, or `STORAGE_BACKEND_<N>_*` env vars
 (layered like the rest of the config, see `lib/mydia/config/README.md`).
 
-PR 1 of the S3 work is the read path. Everything that writes is refused for S3.
+S3 libraries are fully supported: scanning, analysis and streaming (the read
+path), and import, organize, rename, trash, delete, NFO and subtitle writes
+(see Writes below).
 
 ## The seam
 
@@ -57,8 +59,8 @@ keys), and `secret_access_key` is a Phoenix filtered parameter.
 ## Failure behaviour
 
 Every call returns `{:error, %Error{kind: kind}}` with kind one of
-`:not_found`, `:forbidden`, `:unreachable`, `:provider`, `:read_only` or
-`:misconfigured`. `:misconfigured` is an unknown backend, a malformed storage
+`:not_found`, `:forbidden`, `:unreachable`, `:provider`, `:misconfigured` or
+`:exists` (a refused exclusive create). `:misconfigured` is an unknown backend, a malformed storage
 path or an unusable endpoint. Only `:not_found` means "the file is missing";
 every other kind is treated as an outage or setup problem, and callers must
 never delete, stamp or trash because of it.
@@ -72,26 +74,45 @@ never delete, stamp or trash because of it.
   dead backend. Keep calls to an unreachable backend out of DB transactions
   where you can.
 
-## Read-only guard
+## Writes
 
-`Storage.ensure_writable/1` returns `{:error, %Error{kind: :read_only}}` for S3
-libraries; import, organize, rename, user-facing trash and delete, and sidecar
-writes call it first. `LibraryPath` forces `auto_rename` off (it defaults to
-true) and rejects `auto_organize`, `write_nfo` and the default-library flags on
-`s3://` paths, and the admin UI disables them.
+Every write goes through the facade, so local and S3 libraries share one call
+shape. Local code keeps its branch; S3 gets an explicit one for placement,
+rename, trash, delete and item folders.
 
-Imports check writability right after the target library is resolved, before any
-file operation, and fail with a read-only message. `TargetResolver` never picks an
-S3 library on its own (default flag, existing files, first compatible); only an
-explicit choice (download override or the item's own library) reaches S3, and it
-fails there.
+- `put_file/3` uploads a local file. Up to 64 MB it is a single PUT; above that
+  it is a multipart upload with 64 MB parts streamed from disk, one part in
+  memory at a time. A failure aborts the upload, and the object appears only
+  after `CompleteMultipartUpload`, so nothing partial is ever visible.
+- `put_binary/3` replaces an object atomically. `exclusive: true` sends
+  `If-None-Match: *` after a HEAD check and returns `:exists` when the target is
+  taken. `mkdir:` is local only and off by default, so an unmounted share never
+  gets a directory tree created on the root filesystem.
+- `copy/2` and `move/2` work across any backend pair: CopyObject within a
+  bucket, `UploadPartCopy` above 5 GB, and a temp file for S3 to S3 across
+  backends. A move is copy then delete; if the source delete fails, the copy is
+  deleted and the error returned.
+- `delete/1` is idempotent. `delete_prefix/2` refuses the whole location; on S3
+  it deletes in batches of 1000 with `Content-MD5`.
+- `ls/1` never turns an error into an empty listing.
+- Path helpers for code that still holds a string: `at/1` (string to `Source`),
+  `path_exists?/1`, `read_path/1` and `delete_path/1`. `MediaFile.storage_path/1`
+  is the string form of a file's location, local or `s3://`.
+- S3 ListObjectsV2 query strings are built with RFC 3986 encoding
+  (`Request.bucket_query_url/2`). Req would encode a space as `+`, which SigV4
+  rejects with a signature mismatch.
 
-`TrashStore.store` is deliberately not guarded: the scanner's `:missing` trash
-is database-only (the object is already gone), so it never writes to the bucket.
-`Library.trash_media_file` refuses every other reason for S3.
+Behaviour to know:
 
-PR 2 (write path) removes the guard, adds `put_file`, `copy`, `move` and
-`delete` to the backend behaviour, and then this section.
+- Imports copy into S3 and keep the source in place for seeding. `use_hardlinks`
+  does not apply to S3 destinations.
+- The S3 trash is `<library prefix>.mydia-trash/<media_file_id>/<basename>` in
+  the same bucket. It ignores `MYDIA_TRASH_DIR`, and the trash audit and sweep
+  do not cover it. The scanner's `:missing` trash stays database-only, since
+  the object is already gone.
+- `Dirs.prune_empty/2` is a no-op on S3, where folders do not exist on their own.
+- `LibraryPath` accepts `auto_organize`, `auto_rename`, `write_nfo` and the
+  default-library flags on `s3://` paths like on any other library.
 
 ## Tests
 

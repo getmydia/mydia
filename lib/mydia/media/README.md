@@ -290,7 +290,10 @@ The chain, verified 2026-08-15:
    on each. Its comment claims these files are missing from disk, "the one case
    `trash_media_file/1` has nothing to move". That assumption is what breaks.
 3. `TrashStore.store/1` (`trash_store.ex:105`) checks `File.exists?(source)`,
-   finds it true, and moves the bytes into `.mydia-trash/<id>/`.
+   finds it true, and moves the bytes into `.mydia-trash/<id>/`. That is the
+   local branch. For an S3 library `store` asks the storage seam instead and
+   moves the object to `<library prefix>.mydia-trash/<id>/` inside the bucket,
+   and a storage error other than `:not_found` leaves the file in place.
 4. `Mydia.Jobs.TrashCleanup` runs daily at 05:00 and permanently deletes the row
    and the bytes after `@default_retention_days 30`.
 

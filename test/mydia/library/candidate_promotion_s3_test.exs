@@ -33,14 +33,24 @@ defmodule Mydia.Library.CandidatePromotionS3Test do
     %{bypass: bypass, lp: lp, candidate: candidate, movie: movie}
   end
 
-  defp head_object(bypass, status) do
-    Bypass.expect_once(bypass, fn conn ->
-      assert conn.method == "HEAD"
-      assert URI.decode(conn.request_path) == "/lib/movies/#{@rel}"
+  # Answers the HEAD for the candidate's object. Attaching also reconciles
+  # sidecar subtitles, which lists the item folder; the bucket is empty.
+  defp head_object(bypass, status, on_head \\ fn -> :ok end) do
+    Bypass.expect(bypass, fn
+      %{method: "HEAD"} = conn ->
+        assert URI.decode(conn.request_path) == "/lib/movies/#{@rel}"
+        on_head.()
 
-      conn
-      |> Plug.Conn.put_resp_header("last-modified", "Wed, 01 Oct 2031 10:00:00 GMT")
-      |> Plug.Conn.resp(status, "data")
+        conn
+        |> Plug.Conn.put_resp_header("last-modified", "Wed, 01 Oct 2031 10:00:00 GMT")
+        |> Plug.Conn.resp(status, "data")
+
+      %{method: "GET"} = conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>"
+        )
     end)
   end
 
@@ -55,13 +65,7 @@ defmodule Mydia.Library.CandidatePromotionS3Test do
   test "the object is checked before the transaction opens", ctx do
     test_pid = self()
 
-    Bypass.expect_once(ctx.bypass, fn conn ->
-      send(test_pid, :head)
-
-      conn
-      |> Plug.Conn.put_resp_header("last-modified", "Wed, 01 Oct 2031 10:00:00 GMT")
-      |> Plug.Conn.resp(200, "data")
-    end)
+    head_object(ctx.bypass, 200, fn -> send(test_pid, :head) end)
 
     assert {:ok, %MediaFile{}} =
              CandidatePromotion.attach(ctx.candidate, ctx.movie,

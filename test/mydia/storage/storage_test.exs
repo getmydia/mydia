@@ -67,14 +67,4 @@ defmodule Mydia.StorageTest do
     mf = %MediaFile{relative_path: "a.mkv", library_path: %LibraryPath{path: "s3://media/m"}}
     assert MediaFile.absolute_path(mf) == nil
   end
-
-  test "ensure_writable/1" do
-    assert :ok = Storage.ensure_writable(%LibraryPath{path: "/data"})
-
-    assert {:error, %Error{kind: :read_only}} =
-             Storage.ensure_writable(%LibraryPath{path: "s3://m/x"})
-
-    assert {:error, %Error{kind: :read_only}} = Storage.ensure_writable("s3://m/x/file.mkv")
-    assert :ok = Storage.ensure_writable(nil)
-  end
 end

@@ -5,14 +5,13 @@ defmodule Mydia.Storage.Error do
   # path or endpoint). It says nothing about whether a file exists, so callers
   # treat it like an outage, never as "missing". `:exists` is a refused
   # exclusive create.
-  @kinds [:not_found, :forbidden, :unreachable, :provider, :read_only, :misconfigured, :exists]
+  @kinds [:not_found, :forbidden, :unreachable, :provider, :misconfigured, :exists]
 
   @type kind ::
           :not_found
           | :forbidden
           | :unreachable
           | :provider
-          | :read_only
           | :misconfigured
           | :exists
   @type t :: %__MODULE__{kind: kind(), message: String.t()}

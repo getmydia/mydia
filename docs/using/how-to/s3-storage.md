@@ -5,13 +5,6 @@ R2, Backblaze B2, RustFS and similar) instead of a folder on disk. Mydia scans
 the bucket, analyzes the files, and streams them to the web player and the
 mobile and desktop apps, including over remote access.
 
-!!! warning "Read-only for now"
-    S3 libraries can be scanned and played, but Mydia does not write to them yet.
-    Downloads are not imported into an S3 library, and renaming, organizing,
-    deleting files and saving sidecar files (NFO, downloaded subtitles) are
-    refused for S3 libraries. Keep your download and import workflow on a local
-    library, or move files into the bucket yourself and rescan.
-
 ## Add a storage backend
 
 A storage backend is a named connection to one bucket. You can add one in the
@@ -70,6 +63,18 @@ as in a local library, such as `Movies/Invented Film (2031)/Invented Film (2031)
 If the bucket cannot be reached during a scan, the scan fails and Mydia leaves
 your library as it was. Files are only marked missing when the bucket answers and
 the file is really gone.
+
+## What Mydia writes to the bucket
+
+- Imported downloads. Mydia copies the file into the bucket and leaves the
+  original where it is, so torrents keep seeding.
+- Renames and organizing, when Auto Rename and Auto Organize are on for the
+  library.
+- NFO files and downloaded subtitles, next to the media file.
+- A trash folder named `.mydia-trash` inside the library prefix. Files you delete
+  or replace go there first and are removed after the usual trash retention.
+
+Imports upload the whole file, and some providers bill for requests and egress.
 
 ## Things to know
 
