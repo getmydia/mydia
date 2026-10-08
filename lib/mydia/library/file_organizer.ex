@@ -131,9 +131,7 @@ defmodule Mydia.Library.FileOrganizer do
     # Preload required associations
     media_file = preload_associations(media_file)
 
-    # library_path is preloaded above; an unloaded one would read as writable.
-    with :ok <- Storage.ensure_writable(media_file),
-         {:ok, media_item} <- get_media_item(media_file),
+    with {:ok, media_item} <- get_media_item(media_file),
          {:ok, library_path} <- get_library_path(media_file),
          {:ok, source_path} <- get_source_path(media_file),
          {:ok, dest_path} <- calculate_destination(media_file, media_item, library_path) do
@@ -187,9 +185,7 @@ defmodule Mydia.Library.FileOrganizer do
   @spec reorganize_library(LibraryPath.t(), organize_opts()) ::
           {:ok, reorganize_result()} | {:error, any()}
   def reorganize_library(%LibraryPath{} = library_path, opts \\ []) do
-    with :ok <- Storage.ensure_writable(library_path) do
-      do_reorganize_library(library_path, opts)
-    end
+    do_reorganize_library(library_path, opts)
   end
 
   defp do_reorganize_library(%LibraryPath{} = library_path, opts) do
@@ -261,6 +257,10 @@ defmodule Mydia.Library.FileOrganizer do
   primitive behind both import (keep the source for seeding) and reorganize /
   re-match (move the file into place), so the two paths cannot drift.
 
+  Either side may be an `s3://` path; then the bytes are copied (or moved)
+  through `Mydia.Storage`, hardlinks never apply, and a `:copy` leaves the
+  source in place.
+
   ## Options
 
     * `:use_hardlinks` (default `true`) — try a hardlink first on the same filesystem.
@@ -287,11 +287,13 @@ defmodule Mydia.Library.FileOrganizer do
   @spec place_file(String.t(), String.t(), keyword()) ::
           {:ok, :hardlink | :move | :copy | :skip | :exists} | {:error, any()}
   def place_file(source, dest, opts \\ []) do
-    with :ok <- Storage.ensure_writable(dest),
-         :ok <- confine(dest, Keyword.get(opts, :confine_to)) do
+    with :ok <- confine(dest, Keyword.get(opts, :confine_to)) do
       cond do
         source == dest ->
           {:ok, :skip}
+
+        Storage.s3?(dest) or Storage.s3?(source) ->
+          place_via_storage(source, dest, opts)
 
         Keyword.has_key?(opts, :expected_size) and File.exists?(dest) ->
           cond do
@@ -318,6 +320,60 @@ defmodule Mydia.Library.FileOrganizer do
   end
 
   # Private functions
+
+  # Object storage has no hardlinks and no rename: the bytes are copied, and a
+  # move deletes the source once the copy is complete. Without a move the
+  # source stays where it is, exactly as after a hardlink, so a seeding torrent
+  # keeps its file.
+  defp place_via_storage(source, dest, opts) do
+    with {:ok, from} <- Storage.at(source),
+         {:ok, to} <- Storage.at(dest) do
+      s3_dest? = Storage.s3?(dest)
+
+      case {Keyword.fetch(opts, :expected_size), Storage.stat(to)} do
+        {{:ok, size}, {:ok, %{size: size}}} ->
+          {:ok, :exists}
+
+        # An S3 object only becomes visible once it is complete, so one of a
+        # different size is somebody else's real file, never a crashed partial.
+        # Never replace it.
+        {_, {:ok, _}} when s3_dest? ->
+          {:error, {:destination_exists, dest}}
+
+        {{:ok, _}, {:ok, _}} ->
+          if Storage.exists?(from),
+            do: transfer(from, to, opts),
+            else: {:error, {:size_mismatch_no_source, dest}}
+
+        {_, {:error, %Storage.Error{kind: :not_found}}} ->
+          transfer(from, to, opts)
+
+        {:error, {:ok, _}} ->
+          transfer(from, to, opts)
+
+        {_, {:error, error}} ->
+          {:error, error}
+      end
+    end
+  end
+
+  defp transfer(from, to, opts) do
+    move? =
+      Keyword.get(opts, :fallback, :copy) == :move or
+        Keyword.get(opts, :remove_source_after_hardlink, false)
+
+    if move? do
+      case Storage.move(from, to) do
+        :ok -> {:ok, :move}
+        {:error, error} -> {:error, {:move_failed, error}}
+      end
+    else
+      case Storage.copy(from, to) do
+        :ok -> {:ok, :copy}
+        {:error, error} -> {:error, {:copy_failed, error}}
+      end
+    end
+  end
 
   defp do_place(source, dest, opts) do
     use_hardlinks = Keyword.get(opts, :use_hardlinks, true)
@@ -359,8 +415,8 @@ defmodule Mydia.Library.FileOrganizer do
   defp confine(_dest, nil), do: :ok
 
   defp confine(dest, root) do
-    expanded = Path.expand(dest)
-    root_expanded = Path.expand(root)
+    expanded = Dirs.normalize(dest)
+    root_expanded = Dirs.normalize(root)
 
     if expanded == root_expanded or String.starts_with?(expanded, root_expanded <> "/") do
       :ok
@@ -394,7 +450,7 @@ defmodule Mydia.Library.FileOrganizer do
   defp get_library_path(_), do: {:error, :no_library_path}
 
   defp get_source_path(%MediaFile{} = media_file) do
-    case MediaFile.absolute_path(media_file) do
+    case MediaFile.storage_path(media_file) do
       nil -> {:error, :no_source_path}
       path -> {:ok, path}
     end
@@ -418,7 +474,7 @@ defmodule Mydia.Library.FileOrganizer do
     # Ensure destination directory exists
     dest_dir = Path.dirname(dest_path)
 
-    case File.mkdir_p(dest_dir) do
+    case ensure_dir(dest_dir) do
       :ok ->
         # Perform the file operation
         case move_or_copy_file(source_path, dest_path, use_hardlinks, force_move) do
@@ -441,7 +497,7 @@ defmodule Mydia.Library.FileOrganizer do
 
               {:error, reason} ->
                 # Rollback: move file back
-                File.rename(dest_path, source_path)
+                rollback_move(dest_path, source_path)
 
                 {:ok,
                  %{
@@ -472,6 +528,20 @@ defmodule Mydia.Library.FileOrganizer do
          }}
     end
   end
+
+  # Object stores have no directories to create.
+  defp ensure_dir("s3://" <> _), do: :ok
+  defp ensure_dir(dir), do: File.mkdir_p(dir)
+
+  # Puts the file back after the row could not be updated. Returns the move's
+  # result so the caller can log a failed rollback.
+  defp rollback_move("s3://" <> _ = dest_path, source_path) do
+    with {:ok, from} <- Storage.at(dest_path),
+         {:ok, to} <- Storage.at(source_path),
+         do: Storage.move(from, to)
+  end
+
+  defp rollback_move(dest_path, source_path), do: File.rename(dest_path, source_path)
 
   defp move_or_copy_file(source, dest, use_hardlinks, force_move) do
     # Reorganize removes the source after a successful hardlink (single path),

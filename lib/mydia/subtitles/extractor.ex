@@ -127,7 +127,7 @@ defmodule Mydia.Subtitles.Extractor do
 
       subtitle ->
         if subtitle.media_file_id == media_file.id do
-          if File.exists?(subtitle.file_path) do
+          if Storage.path_exists?(subtitle.file_path) do
             {:ok, subtitle.file_path}
           else
             {:error, :file_not_found}

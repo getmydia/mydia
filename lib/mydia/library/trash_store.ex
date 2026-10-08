@@ -40,6 +40,11 @@ defmodule Mydia.Library.TrashStore do
   media: a trash root on another mount forces a copy-then-delete, which this
   module will still perform, but slowly and with a loud warning.
 
+  An S3 library trashes inside its own bucket, at
+  `<library prefix>.mydia-trash/<media_file_id>/<basename>`, which
+  `Mydia.Storage.list/1` and the scanner skip. `MYDIA_TRASH_DIR` is a local
+  directory and does not apply. The audit and sweep below only walk local roots.
+
   Inside the root each file gets its own directory named after the media file
   id (`<root>/<media_file_id>/<basename>`), so two files with the same basename
   never collide and the original filename stays readable to an operator looking
@@ -70,6 +75,7 @@ defmodule Mydia.Library.TrashStore do
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Repo
+  alias Mydia.Storage
 
   @dir_name ".mydia-trash"
 
@@ -129,16 +135,50 @@ defmodule Mydia.Library.TrashStore do
   def store(%MediaFile{} = media_file, opts \\ []) do
     move? = Keyword.get(opts, :move, true)
 
-    case MediaFile.absolute_path(media_file) do
-      nil ->
-        {:ok, :missing}
+    if Storage.s3?(media_file) do
+      store_object(media_file, move?)
+    else
+      case MediaFile.absolute_path(media_file) do
+        nil ->
+          {:ok, :missing}
 
-      source ->
-        cond do
-          not File.exists?(source) -> {:ok, :missing}
-          move? -> do_store(media_file, source)
-          true -> {:error, :file_present}
-        end
+        source ->
+          cond do
+            not File.exists?(source) -> {:ok, :missing}
+            move? -> do_store(media_file, source)
+            true -> {:error, :file_present}
+          end
+      end
+    end
+  end
+
+  # S3: the trash is `<library prefix>.mydia-trash/<id>/<basename>` in the same
+  # bucket, which Storage.list and the scanner skip. MYDIA_TRASH_DIR is a local
+  # directory and does not apply. Only a definite not-found is :missing; any
+  # other error fails the trash so the row is never stamped during an outage.
+  defp store_object(media_file, move?) do
+    with {:ok, source} <- Storage.source(media_file) do
+      case Storage.stat(source) do
+        {:error, %Storage.Error{kind: :not_found}} -> {:ok, :missing}
+        {:error, _} = error -> error
+        {:ok, _} when not move? -> {:error, :file_present}
+        {:ok, _} -> move_object_to_trash(media_file, source)
+      end
+    end
+  end
+
+  defp move_object_to_trash(media_file, source) do
+    destination =
+      Path.join([root_for(media_file), media_file.id, Path.basename(media_file.relative_path)])
+
+    with {:ok, target} <- Storage.at(destination),
+         :ok <- Storage.move(source, target) do
+      Logger.info("Moved a media file into the trash directory",
+        media_file_id: media_file.id,
+        to: destination
+      )
+
+      {:ok, {:moved, destination}}
     end
   end
 
@@ -161,6 +201,42 @@ defmodule Mydia.Library.TrashStore do
   @spec restore(MediaFile.t(), String.t() | nil) ::
           :ok | {:ok, :trash_copy_retained} | {:error, term()}
   def restore(%MediaFile{}, nil), do: :ok
+
+  def restore(%MediaFile{} = media_file, "s3://" <> _ = trash_path) do
+    with {:ok, trashed} <- Storage.at(trash_path),
+         {:ok, original} <- Storage.source(media_file) do
+      case {Storage.stat(trashed), Storage.stat(original)} do
+        {{:error, %Storage.Error{kind: :not_found}}, _} ->
+          Logger.warning("Restoring a media file whose trashed copy is gone from disk",
+            media_file_id: media_file.id,
+            trashed_path: trash_path
+          )
+
+          :ok
+
+        {{:error, _} = error, _} ->
+          error
+
+        {{:ok, _}, {:ok, _}} ->
+          Logger.error(
+            "Restoring a media file whose library path is already occupied; leaving the trashed " <>
+              "copy in place rather than overwriting what is there. The trashed copy stays " <>
+              "referenced by the row so it remains recoverable, but nothing will delete it " <>
+              "automatically - remove it by hand once you have decided which copy you want.",
+            media_file_id: media_file.id,
+            trashed_path: trash_path
+          )
+
+          {:ok, :trash_copy_retained}
+
+        {{:ok, _}, {:error, %Storage.Error{kind: :not_found}}} ->
+          Storage.move(trashed, original)
+
+        {{:ok, _}, {:error, _} = error} ->
+          error
+      end
+    end
+  end
 
   def restore(%MediaFile{} = media_file, trash_path) when is_binary(trash_path) do
     destination = MediaFile.absolute_path(media_file)
@@ -251,6 +327,18 @@ defmodule Mydia.Library.TrashStore do
   """
   @spec discard(MediaFile.t(), {:moved, String.t()} | :missing | :legacy) ::
           :ok | {:error, term()}
+  def discard(%MediaFile{} = media_file, {:moved, "s3://" <> _ = trash_path}) do
+    with :ok <- Storage.delete_path(trash_path) do
+      # The NFO is never moved into the trash; it goes once the media file has.
+      case MediaFile.storage_path(media_file) do
+        nil -> :ok
+        path -> Mydia.Metadata.NfoWriter.delete_nfo_for_file(path)
+      end
+
+      :ok
+    end
+  end
+
   def discard(%MediaFile{} = media_file, {:moved, trash_path}) when is_binary(trash_path) do
     result = delete_file(media_file, trash_path)
     prune_container(trash_path)
@@ -297,8 +385,13 @@ defmodule Mydia.Library.TrashStore do
   The trash root for a media file's library path.
 
   Exposed for operator-facing surfaces and tests; `store/1` resolves it itself.
+  For an S3 library it is the `.mydia-trash` prefix inside the library, whatever
+  `MYDIA_TRASH_DIR` says.
   """
   @spec root_for(MediaFile.t()) :: String.t() | nil
+  def root_for(%MediaFile{library_path: %{path: "s3://" <> _ = path}}),
+    do: Path.join(path, @dir_name)
+
   def root_for(%MediaFile{library_path: %{path: path}}) when is_binary(path) do
     case Application.get_env(:mydia, :trash_dir) do
       configured when is_binary(configured) and configured != "" ->
@@ -608,6 +701,8 @@ defmodule Mydia.Library.TrashStore do
       _ ->
         from(lp in Mydia.Settings.LibraryPath, select: lp.path)
         |> Repo.all()
+        # S3 trash lives in the bucket; the audit and sweep only walk local roots.
+        |> Enum.reject(&Storage.s3?/1)
         |> Enum.map(&default_root/1)
         |> Enum.uniq()
     end

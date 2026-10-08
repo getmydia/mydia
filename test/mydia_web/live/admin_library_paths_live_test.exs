@@ -90,7 +90,7 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
       refute has_element?(view, ~s{div[class*="modal-open"]})
     end
 
-    test "disables the write toggles for s3:// paths", %{view: view} do
+    test "keeps the write toggles enabled for s3:// paths", %{view: view} do
       view |> element(~s{button[phx-click="new_library_path"]}) |> render_click()
 
       refute has_element?(view, "#library-path-form input[type=checkbox][disabled]")
@@ -102,11 +102,59 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
       for field <- ~w(auto_organize auto_rename write_nfo) do
         assert has_element?(
                  view,
-                 ~s{#library-path-form input[type=checkbox][name="library_path[#{field}]"][disabled]}
+                 ~s{#library-path-form input[type=checkbox][name="library_path[#{field}]"]}
                )
       end
 
-      assert has_element?(view, "#library-path-s3-note")
+      refute has_element?(view, "#library-path-form input[type=checkbox][disabled]")
+      refute has_element?(view, "#library-path-s3-note")
+    end
+
+    test "an s3:// path on an unreachable backend is rejected by the storage check", %{
+      view: view
+    } do
+      name = "dead#{System.unique_integer([:positive])}"
+
+      {:ok, _} =
+        Mydia.Settings.create_storage_backend(%{
+          name: name,
+          endpoint: "http://localhost:1",
+          region: "us-east-1",
+          bucket: "lib",
+          access_key_id: "k",
+          secret_access_key: "s",
+          path_style: true
+        })
+
+      view |> element(~s{button[phx-click="new_library_path"]}) |> render_click()
+
+      html =
+        view
+        |> form("#library-path-form",
+          library_path: %{path: "s3://#{name}/movies", type: "movies", monitored: "true"}
+        )
+        |> render_submit()
+
+      assert html =~ "Invalid directory"
+      refute html =~ "directory does not exist"
+      assert has_element?(view, "#library-path-form")
+    end
+
+    @tag :s3
+    test "an s3:// path on a reachable backend saves", %{view: view} do
+      backend = Mydia.S3Helpers.ensure_backend_row!()
+      path = "s3://#{backend.name}/t-#{System.unique_integer([:positive])}"
+
+      view |> element(~s{button[phx-click="new_library_path"]}) |> render_click()
+
+      view
+      |> form("#library-path-form",
+        library_path: %{path: path, type: "movies", monitored: "true"}
+      )
+      |> render_submit()
+
+      assert Enum.any?(Mydia.Settings.list_library_paths(), &(&1.path == path))
+      refute has_element?(view, ~s{div[class*="modal-open"]})
     end
 
     test "saves a display name and shows it on the card", %{view: view} do

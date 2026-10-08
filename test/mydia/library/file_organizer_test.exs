@@ -430,4 +430,35 @@ defmodule Mydia.Library.FileOrganizerTest do
       refute File.exists?(Path.join(tmp, "outside/movie.mkv"))
     end
   end
+
+  describe "place_file/3 into an S3 library" do
+    @describetag :tmp_dir
+
+    setup do
+      # A persisted S3 backend pointing at an unreachable endpoint.
+      {:ok, _} =
+        Mydia.Settings.create_storage_backend(%{
+          name: "organizer-down",
+          endpoint: "http://localhost:1",
+          region: "us-east-1",
+          bucket: "lib",
+          access_key_id: "k",
+          secret_access_key: "s"
+        })
+
+      :ok
+    end
+
+    test "an unreachable bucket reports the outage", %{tmp_dir: tmp_dir} do
+      src = Path.join(tmp_dir, "a.mkv")
+      File.write!(src, "x")
+
+      assert {:error, %Mydia.Storage.Error{kind: :unreachable}} =
+               FileOrganizer.place_file(src, "s3://organizer-down/movies/A/a.mkv",
+                 expected_size: 1
+               )
+
+      assert File.exists?(src)
+    end
+  end
 end

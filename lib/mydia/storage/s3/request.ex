@@ -9,6 +9,15 @@ defmodule Mydia.Storage.S3.Request do
 
   @presign_seconds 12 * 60 * 60
 
+  # A 512 MiB part, a part copy, a Complete or a single CopyObject on a huge
+  # object keeps the connection open well past the default 30s while the
+  # provider works.
+  @long_timeout 10 * 60_000
+
+  @doc "Receive timeout for requests the provider answers only once it has finished the work."
+  @spec long_timeout() :: pos_integer()
+  def long_timeout, do: @long_timeout
+
   @spec new(StorageBackend.t(), keyword()) :: Req.Request.t()
   def new(%StorageBackend{} = b, opts \\ []) do
     [
@@ -49,8 +58,77 @@ defmodule Mydia.Storage.S3.Request do
     URI.to_string(%URI{uri | host: "#{b.bucket}.#{uri.host}", path: nil})
   end
 
+  @doc """
+  The bucket URL with `params` as an RFC 3986 query string. Req's own `:params`
+  encodes a space as `+`, which the SigV4 canonical query does not, so a prefix
+  holding a space (any "Title (Year)" folder) fails with a signature mismatch.
+  """
+  @spec bucket_query_url(StorageBackend.t(), [{String.t(), String.t()}]) :: String.t()
+  def bucket_query_url(b, params),
+    do: bucket_url(b) <> "?" <> URI.encode_query(params, :rfc3986)
+
   @spec object_url(StorageBackend.t(), String.t()) :: String.t()
   def object_url(b, key), do: bucket_url(b) <> "/" <> encode_key(key)
+
+  @doc "The `x-amz-copy-source` value for an object in the same bucket."
+  @spec copy_source(StorageBackend.t(), String.t()) :: String.t()
+  def copy_source(%StorageBackend{bucket: bucket}, key),
+    do: "/" <> bucket <> "/" <> encode_key(key)
+
+  @spec delete_objects_body([String.t()]) :: String.t()
+  def delete_objects_body(keys) do
+    objects = Enum.map_join(keys, fn key -> "<Object><Key>#{xml_escape(key)}</Key></Object>" end)
+    ~s(<?xml version="1.0" encoding="UTF-8"?><Delete><Quiet>true</Quiet>#{objects}</Delete>)
+  end
+
+  @spec xml_escape(String.t()) :: String.t()
+  def xml_escape(text) do
+    text
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
+    |> String.replace("\"", "&quot;")
+    |> String.replace("'", "&apos;")
+  end
+
+  @doc """
+  CopyObject, UploadPartCopy, CompleteMultipartUpload and a quiet
+  DeleteObjects can all answer 200 with an `<Error>` in the body.
+  """
+  @spec error_body?(term()) :: boolean()
+  def error_body?(body) when is_binary(body), do: String.contains?(body, "<Error>")
+  def error_body?(_), do: false
+
+  @spec parse_upload_id(binary()) :: String.t() | nil
+  def parse_upload_id(body), do: xml_text(body, ~x"//UploadId/text()"s)
+
+  @doc "The ETag from a CopyObjectResult or CopyPartResult body."
+  @spec parse_etag(binary()) :: String.t() | nil
+  def parse_etag(body), do: xml_text(body, ~x"//ETag/text()"s)
+
+  @spec complete_body([{pos_integer(), String.t()}]) :: String.t()
+  def complete_body(parts) do
+    inner =
+      Enum.map_join(parts, fn {n, etag} ->
+        "<Part><PartNumber>#{n}</PartNumber><ETag>#{xml_escape(etag)}</ETag></Part>"
+      end)
+
+    "<CompleteMultipartUpload>#{inner}</CompleteMultipartUpload>"
+  end
+
+  defp xml_text(body, path) when is_binary(body) and body != "" do
+    case xpath(SweetXml.parse(body, quiet: true), path) do
+      "" -> nil
+      text -> text
+    end
+  catch
+    _, _ -> nil
+  end
+
+  defp xml_text(_, _), do: nil
+
+  @spec content_md5(iodata()) :: String.t()
+  def content_md5(body), do: :md5 |> :crypto.hash(body) |> Base.encode64()
 
   @spec encode_key(String.t()) :: String.t()
   def encode_key(key), do: URI.encode(key, &(URI.char_unreserved?(&1) or &1 == ?/))

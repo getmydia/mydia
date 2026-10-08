@@ -33,4 +33,19 @@ defmodule Mydia.Storage.LocationTest do
     assert Location.key(loc, "Some Film (2031)/film.mkv") == "movies/Some Film (2031)/film.mkv"
     assert Location.key(Location.s3(%{name: "m"}, "", "s3://m"), "a.mkv") == "a.mkv"
   end
+
+  test "child/2 narrows a location to a subdirectory" do
+    local = Mydia.Storage.Location.local("/media/movies")
+    assert Mydia.Storage.Location.child(local, ".") == local
+
+    assert %{root: "/media/movies/Film", uri: "/media/movies/Film"} =
+             Mydia.Storage.Location.child(local, "Film")
+
+    s3 = Mydia.Storage.Location.s3(%{name: "m"}, "movies/", "s3://m/movies")
+
+    assert %{prefix: "movies/Film/", uri: "s3://m/movies/Film"} =
+             Mydia.Storage.Location.child(s3, "Film/")
+
+    assert Mydia.Storage.Location.child(s3, "") == s3
+  end
 end

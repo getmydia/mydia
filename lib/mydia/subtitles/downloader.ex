@@ -83,7 +83,6 @@ defmodule Mydia.Subtitles.Downloader do
     # because only the adapter knows how many requests its download takes.
 
     with {:ok, media_file} <- fetch_media_file(media_file_id),
-         :ok <- Storage.ensure_writable(media_file),
          :ok <- validate_subtitle_info(subtitle_info),
          {:ok, _existing} <- check_duplicate(media_file_id, subtitle_info.subtitle_hash),
          {:ok, content} <- fetch_subtitle_content(subtitle_info, provider_config),
@@ -253,7 +252,7 @@ defmodule Mydia.Subtitles.Downloader do
   end
 
   defp resolve_absolute_path(media_file) do
-    case MediaFile.absolute_path(media_file) do
+    case MediaFile.storage_path(media_file) do
       nil -> {:error, :media_file_path_not_resolved}
       absolute_path -> {:ok, absolute_path}
     end
@@ -261,10 +260,9 @@ defmodule Mydia.Subtitles.Downloader do
 
   # `language` comes from a provider's search result, external data the same
   # way an upload's language field is. A traversal through it is not
-  # currently exploitable (File.mkdir_p!/1 below targets the media file's own
-  # known-good directory, never the computed path's dirname, so a traversal
-  # has no phantom directory to resolve through and the write fails outright),
-  # but this allowlist is the same containment Uploader applies at its own
+  # currently exploitable (the write targets a path inside the media file's
+  # own directory, and a traversal would have to resolve through directories
+  # that do not exist, so the write fails outright), but this allowlist is the same containment Uploader applies at its own
   # boundary, kept independent on purpose.
   #
   # Deliberately NOT shared with Uploader.validate_language/1 as a common
@@ -303,7 +301,7 @@ defmodule Mydia.Subtitles.Downloader do
     media_dir = Path.dirname(absolute_path)
     final_path = Path.join(media_dir, "#{base_filename}.#{language}.#{format}")
 
-    if File.exists?(final_path) do
+    if Storage.path_exists?(final_path) do
       {:error, :subtitle_already_exists}
     else
       {:ok, final_path}
@@ -343,24 +341,24 @@ defmodule Mydia.Subtitles.Downloader do
   #     the same way it does there: the loser gets :eexist here instead.
   #   * It also removes the need for the old exdev cross-device fallback:
   #     @temp_dir (the OS temp directory) is commonly a different filesystem
-  #     than a library path on a self-hosted NAS setup, and File.write/3
-  #     writes directly to final_path's own filesystem regardless, where
-  #     File.rename/2 could not cross that boundary at all.
+  #     than a library path on a self-hosted NAS setup, and an exclusive put
+  #     writes directly to final_path's own storage regardless, where
+  #     File.rename/2 could not cross that boundary at all. For an S3 library
+  #     it is the only option.
   #
-  # mkdir_p targets media_dir, derived from absolute_path (a database-backed
-  # value), never from final_path itself, for the same reason
-  # Uploader.write/3 keeps that same separation: language is already
-  # known-good by the time this runs, but this stays safe even for some
-  # future caller of destination/3 that skipped that check.
-  defp move_to_final_path(temp_path, absolute_path, final_path) do
-    media_dir = Path.dirname(absolute_path)
-    File.mkdir_p!(media_dir)
-
+  # `mkdir: true` creates missing parent directories for a local library
+  # and is a no-op for S3, where directories do not exist.
+  defp move_to_final_path(temp_path, _absolute_path, final_path) do
     with {:ok, content} <- File.read(temp_path),
-         :ok <- File.write(final_path, content, [:exclusive]) do
+         {:ok, target} <- Storage.at(final_path),
+         :ok <- Storage.put_binary(target, content, exclusive: true, mkdir: true) do
       File.rm(temp_path)
       {:ok, final_path}
     else
+      {:error, %Storage.Error{kind: :exists}} ->
+        File.rm(temp_path)
+        {:error, {:file_store_failed, :eexist}}
+
       {:error, reason} ->
         File.rm(temp_path)
         {:error, {:file_store_failed, reason}}
@@ -390,7 +388,7 @@ defmodule Mydia.Subtitles.Downloader do
 
       {:error, changeset} ->
         # Clean up file if database insert fails
-        File.rm(file_path)
+        Storage.delete_path(file_path)
 
         Logger.error("Failed to persist subtitle to database",
           errors: inspect(changeset.errors)

@@ -104,8 +104,7 @@ defmodule Mydia.Subtitles.Uploader do
 
     media_file = Repo.preload(media_file, :library_path)
 
-    with :ok <- ensure_writable(media_file),
-         :ok <- validate_language(language),
+    with :ok <- validate_language(language),
          {:ok, format} <- detect_format(content),
          {:ok, path} <- destination(media_file, language, format),
          :ok <- check_ownership(media_file, path),
@@ -115,15 +114,6 @@ defmodule Mydia.Subtitles.Uploader do
   end
 
   ## Private
-
-  # The upload form shows `{:error, message}` verbatim, so the storage error
-  # is flattened to its message here rather than leaked as a struct.
-  defp ensure_writable(media_file) do
-    case Storage.ensure_writable(media_file) do
-      :ok -> :ok
-      {:error, %Storage.Error{message: message}} -> {:error, message}
-    end
-  end
 
   # The security boundary for what this function will write to disk, not a
   # display concern: `destination/3` builds a file path by interpolating
@@ -176,14 +166,14 @@ defmodule Mydia.Subtitles.Uploader do
   # predictable beats clever when the result is a file written into
   # someone's library.
   defp destination(media_file, language, format) do
-    case MediaFile.absolute_path(media_file) do
+    case MediaFile.storage_path(media_file) do
       nil ->
         {:error, "Could not resolve where that media file lives on disk"}
 
       absolute_path ->
         path = "#{Path.rootname(absolute_path)}.#{language}.#{format}"
 
-        if File.exists?(path) do
+        if Storage.path_exists?(path) do
           {:error, "There is already a subtitle for that language. Delete it first."}
         else
           {:ok, path}
@@ -215,37 +205,19 @@ defmodule Mydia.Subtitles.Uploader do
   # consumed), so there is nothing to rename or clean up here beyond the
   # final path itself.
   #
-  # The directory mkdir_p targets is deliberately recomputed from
-  # `media_file` via MediaFile.absolute_path/1, a database-backed value,
-  # and NOT derived from `path` (Path.dirname(path) would have been the
-  # obvious shortcut). `path` is built in destination/3 by interpolating
-  # the caller-supplied `language`; validate_language/1 in upload/3 already
-  # rejects anything that is not a bare language code before path is ever
-  # built, but mkdir_p-ing a directory computed from that same path would
-  # have been a second, independent way for a "../../etc/evil" style value
-  # to escape: mkdir_p is exactly the primitive that turns a `..`-laden
-  # path into a real, walkable filesystem location, since File.write/3
-  # alone cannot resolve a path through directories that do not yet exist.
-  # Keeping mkdir_p's target pinned to the media file's own real directory
-  # means this stays safe even for some future caller of destination/3
-  # that does not go through upload/3's validation.
+  # `mkdir: true` creates missing parent directories for a local library and
+  # is a no-op for S3. `language` is validated by validate_language/1 before
+  # `path` is ever built, so the path cannot escape the media directory.
   #
-  # mkdir_p is the non-raising form: the media directory normally already
-  # exists (the video file lives there), so this never actually attempts a
-  # write; File.write/3 below is what surfaces a read-only mount, and it
-  # returns an error tuple rather than raising.
-  #
-  # :exclusive closes the gap between destination/3's own File.exists?
-  # check and this write: two uploads racing for the same path would both
-  # pass that check, and without :exclusive the second write would silently
-  # overwrite the first's bytes on disk while both still insert their own
-  # database row. With it, the loser gets :eexist here instead, reported the
-  # same as if destination/3 had caught it up front.
-  defp write(media_file, path, content) do
-    media_dir = media_file |> MediaFile.absolute_path() |> Path.dirname()
-
-    with :ok <- File.mkdir_p(media_dir),
-         :ok <- File.write(path, content, [:exclusive]) do
+  # exclusive closes the gap between destination/3's own existence check and
+  # this write: two uploads racing for the same path would both pass that
+  # check, and without it the second write would silently overwrite the
+  # first's bytes while both still insert their own database row. With it,
+  # the loser gets kind :exists here instead, reported the same as if
+  # destination/3 had caught it up front.
+  defp write(_media_file, path, content) do
+    with {:ok, target} <- Storage.at(path),
+         :ok <- Storage.put_binary(target, content, exclusive: true, mkdir: true) do
       :ok
     else
       {:error, reason} -> {:error, write_error_message(path, reason)}
@@ -260,7 +232,16 @@ defmodule Mydia.Subtitles.Uploader do
   # depends on the test process not running as root, which is not true of
   # every environment this suite runs in (see the skipped test in
   # test/mydia/library/scanner_test.exs for the established precedent).
-  @spec write_error_message(Path.t(), atom()) :: String.t()
+  @spec write_error_message(Path.t() | nil, atom() | Storage.Error.t()) :: String.t()
+  def write_error_message(_path, %Storage.Error{kind: :exists}),
+    do: write_error_message(nil, :eexist)
+
+  def write_error_message(path, %Storage.Error{kind: :forbidden}),
+    do: write_error_message(path, :eacces)
+
+  def write_error_message(_path, %Storage.Error{message: message}),
+    do: "Could not write the subtitle file: #{message}"
+
   def write_error_message(_path, :eexist) do
     "There is already a subtitle for that language. Delete it first."
   end
@@ -292,7 +273,7 @@ defmodule Mydia.Subtitles.Uploader do
         {:ok, subtitle}
 
       {:error, changeset} ->
-        File.rm(path)
+        Storage.delete_path(path)
 
         Logger.warning("Subtitle upload not saved",
           media_file_id: media_file.id,

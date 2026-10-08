@@ -95,9 +95,6 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
   attr :library_path_mode, :atom, required: true
 
   def library_path_modal(assigns) do
-    assigns =
-      assign(assigns, :s3?, Mydia.Storage.s3?(to_string(assigns.library_path_form[:path].value)))
-
     ~H"""
     <div class="modal modal-open">
       <div class="modal-box max-w-xl">
@@ -165,9 +162,6 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
                 />
                 <p class="text-xs text-base-content/50 mt-1">
                   A folder on this server, or s3://&lt;storage backend&gt;/&lt;prefix&gt;.
-                </p>
-                <p :if={@s3?} id="library-path-s3-note" class="text-xs text-warning mt-1">
-                  Auto organize, auto rename and NFO files are not available for S3 libraries yet.
                 </p>
               </div>
               <div class="col-span-6 md:col-span-2">
@@ -280,7 +274,6 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
                         @library_path_form[:auto_organize].value
                       )
                     }
-                    disabled={@s3?}
                     class="toggle toggle-secondary toggle-sm"
                   />
                 </div>
@@ -324,7 +317,6 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
                           @library_path_form[:write_nfo].value
                         )
                       }
-                      disabled={@s3?}
                       class="toggle toggle-accent toggle-sm"
                     />
                   </div>
@@ -350,7 +342,6 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
                         @library_path_form[:auto_rename].value
                       )
                     }
-                    disabled={@s3?}
                     class="toggle toggle-warning toggle-sm"
                   />
                 </div>

@@ -73,24 +73,24 @@ defmodule Mydia.Metadata.NfoWriter do
 
   @doc """
   Deletes the NFO file associated with a media file, if it exists.
+
+  Takes the stored path of the media file (absolute or `s3://`).
   """
   @spec delete_nfo_for_file(String.t()) :: :ok
-  def delete_nfo_for_file(absolute_path) when is_binary(absolute_path) do
-    nfo_path = Path.rootname(absolute_path) <> ".nfo"
+  def delete_nfo_for_file(path) when is_binary(path) do
+    nfo_path = Path.rootname(path) <> ".nfo"
 
-    if File.exists?(nfo_path) do
-      case File.rm(nfo_path) do
+    if Storage.path_exists?(nfo_path) do
+      case Storage.delete_path(nfo_path) do
         :ok ->
           Logger.info("Deleted NFO file", path: nfo_path)
-          :ok
 
         {:error, reason} ->
           Logger.warning("Failed to delete NFO file #{nfo_path}: #{inspect(reason)}")
-          :ok
       end
-    else
-      :ok
     end
+
+    :ok
   end
 
   @doc """
@@ -101,24 +101,20 @@ defmodule Mydia.Metadata.NfoWriter do
   and `<filename>.nfo` for each episode file.
 
   Returns `:ok` regardless of individual file write failures (failures are logged).
-  An S3 library is read-only, so it returns `{:error, %Mydia.Storage.Error{}}`
-  without touching the filesystem.
   """
   @spec write_for_media_item(MediaItem.t(), LibraryPath.t()) :: :ok | {:error, Storage.Error.t()}
   def write_for_media_item(%MediaItem{metadata: nil}, _library_path), do: :ok
 
   def write_for_media_item(%MediaItem{} = media_item, %LibraryPath{} = library_path) do
-    with :ok <- Storage.ensure_writable(library_path) do
-      media_files = get_active_media_files(media_item, library_path)
+    media_files = get_active_media_files(media_item, library_path)
 
-      if media_files == [] do
-        :ok
-      else
-        case media_item.type do
-          "movie" -> write_movie_nfos(media_item, media_files, library_path)
-          "tv_show" -> write_tv_show_nfos(media_item, media_files, library_path)
-          _other -> :ok
-        end
+    if media_files == [] do
+      :ok
+    else
+      case media_item.type do
+        "movie" -> write_movie_nfos(media_item, media_files, library_path)
+        "tv_show" -> write_tv_show_nfos(media_item, media_files, library_path)
+        _other -> :ok
       end
     end
   end
@@ -127,7 +123,7 @@ defmodule Mydia.Metadata.NfoWriter do
     xml = generate_movie_xml(media_item)
 
     Enum.each(media_files, fn media_file ->
-      case MediaFile.absolute_path(media_file) do
+      case MediaFile.storage_path(media_file) do
         nil ->
           :ok
 
@@ -173,7 +169,7 @@ defmodule Mydia.Metadata.NfoWriter do
       episode = get_episode(media_file, episodes_by_id)
 
       if episode do
-        case MediaFile.absolute_path(media_file) do
+        case MediaFile.storage_path(media_file) do
           nil ->
             :ok
 
@@ -301,22 +297,19 @@ defmodule Mydia.Metadata.NfoWriter do
   # File Operations
 
   @doc """
-  Writes content to an NFO file atomically (write to .tmp, then rename).
+  Writes content to an NFO file at a local path or an `s3://` URI.
 
-  Returns `:ok` on success, logs a warning on failure.
+  A local write goes to a `.tmp` file first and is then renamed. Returns `:ok`
+  on success, logs a warning on failure.
   """
-  @spec write_nfo_file(String.t(), String.t()) :: :ok | {:error, term()}
+  @spec write_nfo_file(String.t(), iodata()) :: :ok | {:error, Mydia.Storage.Error.t()}
   def write_nfo_file(path, content) do
-    tmp_path = path <> ".tmp"
-
-    with :ok <- File.write(tmp_path, content),
-         :ok <- File.rename(tmp_path, path) do
+    with {:ok, target} <- Storage.at(path),
+         :ok <- Storage.put_binary(target, content) do
       :ok
     else
       {:error, reason} = error ->
         Logger.warning("Failed to write NFO file #{path}: #{inspect(reason)}")
-        # Clean up tmp file if it exists
-        File.rm(tmp_path)
         error
     end
   end

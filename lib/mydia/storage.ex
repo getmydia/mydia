@@ -43,6 +43,28 @@ defmodule Mydia.Storage do
 
   def location(_), do: {:error, Error.new(:not_found, "library path is not set")}
 
+  @doc """
+  Resolves a stored path to a `Source`: an absolute local path, or
+  `s3://<backend>/<key>`. This is what `MediaFile.storage_path/1`,
+  `Subtitle.file_path` and the trash's recorded path hold. An S3 source made
+  here is rooted at the bucket (empty prefix), so its relative path is the key.
+  """
+  @spec at(String.t()) :: {:ok, Source.t()} | {:error, Error.t()}
+  def at("s3://" <> _ = uri) do
+    with {:ok, name, prefix} <- parse(uri),
+         {:key, key} when key != "" <- {:key, String.trim_trailing(prefix, "/")},
+         backend when not is_nil(backend) <- Settings.get_storage_backend_by_name(name) do
+      {:ok, Source.new(Location.s3(backend, "", "s3://#{name}"), key)}
+    else
+      {:key, ""} -> {:error, Error.new(:misconfigured, "storage path #{uri} names no object")}
+      nil -> {:error, Error.new(:misconfigured, "unknown storage backend in #{uri}")}
+      {:error, _} = error -> error
+    end
+  end
+
+  def at(path) when is_binary(path),
+    do: {:ok, Source.new(Location.local(Path.dirname(path)), Path.basename(path))}
+
   @spec source(MediaFile.t()) :: {:ok, Source.t()} | {:error, Error.t()}
   def source(%MediaFile{relative_path: rel, library_path: %LibraryPath{} = lp})
       when is_binary(rel) do
@@ -81,14 +103,6 @@ defmodule Mydia.Storage do
   def s3?(path) when is_binary(path), do: Location.s3_path?(path)
   def s3?(_), do: false
 
-  @spec ensure_writable(LibraryPath.t() | MediaFile.t() | String.t() | nil) ::
-          :ok | {:error, Error.t()}
-  def ensure_writable(target) do
-    if s3?(target),
-      do: {:error, Error.new(:read_only, "S3 libraries are read-only in this version of Mydia")},
-      else: :ok
-  end
-
   defp parse(path) do
     case Location.parse_s3(path) do
       {:ok, name, prefix} -> {:ok, name, prefix}
@@ -117,6 +131,186 @@ defmodule Mydia.Storage do
         when acc: term()
   def stream_range(%Source{location: loc, relative_path: rel}, offset, length, acc, fun),
     do: impl(loc).stream_range(loc, rel, offset, length, acc, fun)
+
+  @spec put_file(Source.t(), Path.t(), keyword()) :: :ok | {:error, Error.t()}
+  def put_file(%Source{location: loc, relative_path: rel}, local_path, opts \\ []),
+    do: impl(loc).put_file(loc, rel, local_path, opts)
+
+  @doc """
+  Writes `data`. `exclusive: true` refuses an existing file with kind
+  `:exists`; otherwise an existing file is replaced atomically. `mkdir: true`
+  creates missing local parent directories (S3 has none to create).
+  """
+  @spec put_binary(Source.t(), iodata(), keyword()) :: :ok | {:error, Error.t()}
+  def put_binary(%Source{location: loc, relative_path: rel}, data, opts \\ []),
+    do: impl(loc).put_binary(loc, rel, data, opts)
+
+  @spec copy(Source.t(), Source.t()) :: :ok | {:error, Error.t()}
+  def copy(%Source{} = from, %Source{} = to) do
+    if same_backend?(from.location, to.location),
+      do:
+        impl(from.location).copy(from.location, from.relative_path, to.location, to.relative_path),
+      else: transfer(from, to)
+  end
+
+  @doc "Copy then delete. If the delete fails the copy is removed and the error returned."
+  @spec move(Source.t(), Source.t()) :: :ok | {:error, Error.t()}
+  def move(%Source{} = from, %Source{} = to) do
+    if same_backend?(from.location, to.location) do
+      impl(from.location).move(from.location, from.relative_path, to.location, to.relative_path)
+    else
+      with :ok <- transfer(from, to) do
+        case delete(from) do
+          :ok ->
+            :ok
+
+          {:error, _} = error ->
+            _ = delete(to)
+            error
+        end
+      end
+    end
+  end
+
+  @doc "Deletes a file. A file that is already gone is `:ok`."
+  @spec delete(Source.t()) :: :ok | {:error, Error.t()}
+  def delete(%Source{location: loc, relative_path: rel}), do: impl(loc).delete(loc, rel)
+
+  @doc "Deletes everything under `rel_dir` inside `location`. Never the location itself."
+  @spec delete_prefix(Location.t(), String.t()) :: :ok | {:error, Error.t()}
+  def delete_prefix(%Location{} = loc, rel_dir) do
+    segments = rel_dir |> String.trim("/") |> Path.split() |> Enum.reject(&(&1 == ""))
+
+    if segments == [] or Enum.any?(segments, &(&1 in [".", ".."])) do
+      {:error, Error.new(:misconfigured, "refusing to delete a whole storage location")}
+    else
+      impl(loc).delete_prefix(loc, rel_dir)
+    end
+  end
+
+  @doc """
+  Names directly inside the directory at `dir` (a stored path). A listing
+  failure is an error, never `{:ok, []}`: callers reconcile against it.
+  """
+  @spec ls(String.t()) :: {:ok, [String.t()]} | {:error, Error.t()}
+  def ls("s3://" <> rest = dir) do
+    case String.split(rest, "/", parts: 2) do
+      [name] -> ls_at(dir, name, "")
+      [name, key] -> ls_at(dir, name, key)
+    end
+  end
+
+  def ls(dir) when is_binary(dir), do: Mydia.Storage.Local.ls(Location.local(dir), "")
+
+  defp ls_at(dir, name, key) do
+    case Settings.get_storage_backend_by_name(name) do
+      nil ->
+        {:error, Error.new(:misconfigured, "unknown storage backend in #{dir}")}
+
+      backend ->
+        loc = Location.s3(backend, "", "s3://#{name}")
+        Mydia.Storage.S3.ls(loc, String.trim(key, "/"))
+    end
+  end
+
+  @spec read(Source.t()) :: {:ok, binary()} | {:error, Error.t()}
+  def read(%Source{} = source) do
+    with {:ok, %Entry{size: size}} <- stat(source) do
+      if size == 0, do: {:ok, ""}, else: read_range(source, 0, size)
+    end
+  end
+
+  @doc "Copies a file to a local path, creating its directory."
+  @spec download(Source.t(), Path.t()) :: :ok | {:error, Error.t()}
+  def download(%Source{} = source, local_path) do
+    with {:ok, %Entry{size: size}} <- stat(source),
+         :ok <- local_mkdir(Path.dirname(local_path)),
+         {:ok, io} <- local_open(local_path) do
+      result =
+        try do
+          if size == 0,
+            do: {:ok, nil},
+            else: stream_range(source, 0, size, nil, &write_chunk(io, local_path, &1, &2))
+        after
+          File.close(io)
+        end
+
+      case result do
+        {:ok, _} ->
+          :ok
+
+        {:error, reason} ->
+          File.rm(local_path)
+          {:error, as_error(reason, source)}
+      end
+    end
+  end
+
+  @doc "False for a missing file and for any lookup or storage error."
+  @spec path_exists?(String.t()) :: boolean()
+  def path_exists?(path) do
+    case at(path) do
+      {:ok, source} -> exists?(source)
+      {:error, _} -> false
+    end
+  end
+
+  @spec read_path(String.t()) :: {:ok, binary()} | {:error, Error.t()}
+  def read_path(path), do: with({:ok, source} <- at(path), do: read(source))
+
+  @spec delete_path(String.t()) :: :ok | {:error, Error.t()}
+  def delete_path(path), do: with({:ok, source} <- at(path), do: delete(source))
+
+  defp same_backend?(%Location{kind: :local}, %Location{kind: :local}), do: true
+
+  defp same_backend?(%Location{kind: :s3, backend: a}, %Location{kind: :s3, backend: b}),
+    do: a.name == b.name
+
+  defp same_backend?(_, _), do: false
+
+  # Between backends a local side is used in place; S3 to S3 goes through a
+  # local temp file.
+  defp transfer(%Source{location: %Location{kind: :local}} = from, to),
+    do: put_file(to, from.path)
+
+  defp transfer(from, %Source{location: %Location{kind: :local}} = to),
+    do: download(from, to.path)
+
+  defp transfer(from, to) do
+    tmp = Path.join(System.tmp_dir!(), "mydia-transfer-#{System.unique_integer([:positive])}")
+
+    try do
+      with :ok <- download(from, tmp), do: put_file(to, tmp)
+    after
+      File.rm(tmp)
+    end
+  end
+
+  defp local_mkdir(dir) do
+    case File.mkdir_p(dir) do
+      :ok -> :ok
+      {:error, reason} -> {:error, Error.from_posix(reason, dir)}
+    end
+  end
+
+  defp local_open(path) do
+    case File.open(path, [:write, :binary, :raw]) do
+      {:ok, io} -> {:ok, io}
+      {:error, reason} -> {:error, Error.from_posix(reason, path)}
+    end
+  end
+
+  defp write_chunk(io, path, chunk, acc) do
+    case :file.write(io, chunk) do
+      :ok -> {:ok, acc}
+      {:error, reason} -> {:error, Error.from_posix(reason, path)}
+    end
+  end
+
+  defp as_error(%Error{} = error, _source), do: error
+
+  defp as_error(other, source),
+    do: Error.new(:provider, "#{inspect(other)} reading #{source.path}")
 
   @doc "Strips the query string (presigned credentials) from a URL. Paths pass through."
   @spec redact(String.t() | nil) :: String.t() | nil

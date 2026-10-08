@@ -239,10 +239,6 @@ defmodule Mydia.Jobs.MediaImport do
   # the same exhausted suffixes; the parse or the download contents need
   # looking at.
   defp terminal_failure?({:too_many_conflicts, _path}, _attempt), do: true
-  # The target library is read-only (an S3 library). Only an operator choosing
-  # another library fixes it, and a pending retry would keep the download
-  # occupying its target for the whole max_attempts budget.
-  defp terminal_failure?(:library_read_only, _attempt), do: true
   # {:destination_not_accessible, _} is intentionally NOT terminal: it's almost
   # always a fixable library-volume permission/disk issue. Retrying indefinitely
   # lets the import self-heal once the path becomes writable (the exact recovery
@@ -420,7 +416,7 @@ defmodule Mydia.Jobs.MediaImport do
     library_path = determine_library_path(download)
 
     result =
-      case writable_library(download, library_path) do
+      case require_library(library_path) do
         {:ok, library_path} ->
           # The resolved library path's auto_rename policy is authoritative at
           # execution time: it drives renaming in both directions, overriding
@@ -434,9 +430,6 @@ defmodule Mydia.Jobs.MediaImport do
             download_id: download.id
           )
 
-          error
-
-        {:error, _} = error ->
           error
       end
 
@@ -631,7 +624,7 @@ defmodule Mydia.Jobs.MediaImport do
 
   defp process_targeted_import(download, target_files, args) do
     # Import specific files with pre-assigned episode IDs (from resolved file mappings)
-    case writable_library(download, determine_library_path(download)) do
+    case require_library(determine_library_path(download)) do
       {:ok, library_path} ->
         do_process_targeted_import(download, target_files, library_path, args)
 
@@ -641,30 +634,12 @@ defmodule Mydia.Jobs.MediaImport do
         )
 
         error
-
-      {:error, _} = error ->
-        error
     end
   end
 
-  # Imports write into the library, so the check runs before any file
-  # operation (directory creation included).
-  defp writable_library(_download, nil), do: {:error, :no_library_path}
-
-  defp writable_library(download, library_path) do
-    case Storage.ensure_writable(library_path) do
-      :ok ->
-        {:ok, library_path}
-
-      {:error, _} ->
-        Logger.warning("Refusing to import into a read-only library",
-          download_id: download.id,
-          library_path_id: library_path.id
-        )
-
-        {:error, :library_read_only}
-    end
-  end
+  # Turns "no library resolved" into an error before any file operation.
+  defp require_library(nil), do: {:error, :no_library_path}
+  defp require_library(library_path), do: {:ok, library_path}
 
   defp do_process_targeted_import(download, target_files, library_path, args) do
     results =
@@ -935,7 +910,7 @@ defmodule Mydia.Jobs.MediaImport do
     library_paths = Settings.list_library_paths()
 
     library_path =
-      Enum.find(library_paths, &(&1.type == :mixed and &1.monitored and not Storage.s3?(&1)))
+      Enum.find(library_paths, &(&1.type == :mixed and &1.monitored))
 
     if is_nil(library_path), do: warn_no_library(download, "unknown")
 
@@ -1545,7 +1520,7 @@ defmodule Mydia.Jobs.MediaImport do
     # permission/filesystem error becomes a handled {:error, ...} that flows
     # through handle_import_failure (persisting import_last_error and surfacing
     # in the UI) instead of crashing the Oban job silently.
-    case File.mkdir_p(dest_dir) do
+    case ensure_destination_dir(dest_dir) do
       :ok ->
         import_file_to_existing_dir(file, episode, dest_dir, download, library_path, args)
 
@@ -1565,51 +1540,80 @@ defmodule Mydia.Jobs.MediaImport do
     dest_path = Path.join(dest_dir, final_filename)
 
     # Check if file already exists
-    if File.exists?(dest_path) do
-      Logger.warning("File already exists at destination",
-        source: file.path,
-        dest: dest_path
-      )
+    case destination_exists?(dest_path) do
+      {:error, error} ->
+        Logger.error("Could not check the destination",
+          dest: dest_path,
+          reason: inspect(error)
+        )
 
-      # Try to find existing media_file record
-      case Library.get_media_file_by_path(dest_path) do
-        nil ->
-          # File exists but not in DB - this is a conflict
-          handle_file_conflict(file, dest_path, episode, download, library_path, args)
+        {:error, error}
 
-        existing_file ->
-          # File exists and is in DB - reuse it
-          Logger.info("Reusing existing media file", path: dest_path)
-          {:ok, existing_file}
-      end
-    else
-      # Copy or move file. `:expected_size` closes the window between the
-      # File.exists?/1 check above and the placement itself: a concurrent
-      # import that already wrote the right bytes is adopted rather than
-      # hardlinked-onto-EEXIST and re-copied.
-      case copy_or_move_file(file.path, dest_path, args, expected_size: file.size) do
-        :ok ->
-          create_media_file_record(dest_path, file.size, episode, download, library_path)
+      true ->
+        import_into_existing_destination(file, dest_path, episode, download, library_path, args)
 
-        {:error, reason} ->
-          Logger.error("Failed to copy/move file",
-            source: file.path,
-            dest: dest_path,
-            reason: inspect(reason)
-          )
+      false ->
+        import_into_free_destination(file, dest_path, episode, download, library_path, args)
+    end
+  end
 
-          {:error, reason}
-      end
+  defp import_into_existing_destination(file, dest_path, episode, download, library_path, args) do
+    Logger.warning("File already exists at destination",
+      source: file.path,
+      dest: dest_path
+    )
+
+    # Try to find existing media_file record
+    case Library.get_media_file_by_path(dest_path) do
+      nil ->
+        # File exists but not in DB - this is a conflict
+        handle_file_conflict(file, dest_path, episode, download, library_path, args)
+
+      existing_file ->
+        # File exists and is in DB - reuse it
+        Logger.info("Reusing existing media file", path: dest_path)
+        {:ok, existing_file}
+    end
+  end
+
+  defp import_into_free_destination(file, dest_path, episode, download, library_path, args) do
+    # Copy or move file. `:expected_size` closes the window between the
+    # existence check and the placement itself: a concurrent import that
+    # already wrote the right bytes is adopted rather than
+    # hardlinked-onto-EEXIST and re-copied.
+    case copy_or_move_file(file.path, dest_path, args, expected_size: file.size) do
+      :ok ->
+        create_media_file_record(dest_path, file.size, episode, download, library_path)
+
+      {:error, reason} ->
+        Logger.error("Failed to copy/move file",
+          source: file.path,
+          dest: dest_path,
+          reason: inspect(reason)
+        )
+
+        {:error, reason}
     end
   end
 
   defp handle_file_conflict(file, dest_path, episode, download, library_path, args) do
-    if file_size(dest_path) == file.size do
-      # Files are likely identical - create DB record
-      Logger.info("File sizes match, creating DB record", path: dest_path)
-      create_media_file_record(dest_path, file.size, episode, download, library_path)
-    else
-      place_conflicting_file(file, dest_path, episode, download, library_path, args)
+    case file_size(dest_path) do
+      {:ok, size} when size == file.size ->
+        # Files are likely identical - create DB record
+        Logger.info("File sizes match, creating DB record", path: dest_path)
+        create_media_file_record(dest_path, file.size, episode, download, library_path)
+
+      {:ok, _other} ->
+        place_conflicting_file(file, dest_path, episode, download, library_path, args)
+
+      {:error, error} ->
+        # A storage error says nothing about the content; never guess "different".
+        Logger.error("Could not read the size of the existing destination",
+          dest: dest_path,
+          reason: inspect(error)
+        )
+
+        {:error, error}
     end
   end
 
@@ -1660,10 +1664,10 @@ defmodule Mydia.Jobs.MediaImport do
     Enum.reduce_while(1..@max_conflict_suffixes, nil, fn n, _acc ->
       candidate = Path.join(dir, "#{base}.#{n}#{ext}")
 
-      cond do
-        not File.exists?(candidate) -> {:halt, {:new, candidate}}
-        file_size(candidate) == size -> {:halt, {:existing, candidate}}
-        true -> {:cont, nil}
+      case destination_exists?(candidate) do
+        {:error, error} -> {:halt, {:error, error}}
+        false -> {:halt, {:new, candidate}}
+        true -> conflict_candidate(candidate, size)
       end
     end)
     |> case do
@@ -1672,12 +1676,48 @@ defmodule Mydia.Jobs.MediaImport do
     end
   end
 
+  defp conflict_candidate(candidate, size) do
+    case file_size(candidate) do
+      {:ok, ^size} -> {:halt, {:existing, candidate}}
+      {:ok, _other} -> {:cont, nil}
+      {:error, error} -> {:halt, {:error, error}}
+    end
+  end
+
+  # An S3 library has no directories to create, and its existence checks ask
+  # the bucket.
+  defp ensure_destination_dir("s3://" <> _), do: :ok
+  defp ensure_destination_dir(dir), do: File.mkdir_p(dir)
+
+  # Tri-state: true, false, or {:error, error}. Only a not-found answer from
+  # the bucket means the name is free; an outage must never read as "free".
+  defp destination_exists?("s3://" <> _ = path) do
+    with {:ok, source} <- Storage.at(path) do
+      case Storage.stat(source) do
+        {:ok, _} -> true
+        {:error, %Storage.Error{kind: :not_found}} -> false
+        {:error, error} -> {:error, error}
+      end
+    end
+  end
+
+  defp destination_exists?(path), do: File.exists?(path)
+
+  # `{:ok, size | nil}` or `{:error, error}`. On S3 any storage error is
+  # surfaced, since "unknown size" must not read as "different content".
+  defp file_size("s3://" <> _ = path) do
+    with {:ok, source} <- Storage.at(path),
+         {:ok, %{size: size}} <- Storage.stat(source) do
+      {:ok, size}
+    end
+  end
+
   # File.stat/1 rather than File.stat!/1: the caller has already checked the
   # path exists, but a file that vanishes in between should not crash the job.
   defp file_size(path) do
     case File.stat(path) do
-      {:ok, %File.Stat{size: size}} -> size
-      {:error, _} -> nil
+      {:ok, %File.Stat{size: size}} -> {:ok, size}
+      {:error, _} -> {:ok, nil}
     end
   end
 
@@ -2203,11 +2243,6 @@ defmodule Mydia.Jobs.MediaImport do
 
     "No library configured for #{media_type}. " <>
       "Add a compatible library in Settings → Libraries."
-  end
-
-  defp format_import_error(:library_read_only, _download) do
-    "The target library is an S3 library, which is read-only in this version of Mydia. " <>
-      "Choose a local library for this download in Settings → Libraries."
   end
 
   defp format_import_error(:no_importable_files, download) do

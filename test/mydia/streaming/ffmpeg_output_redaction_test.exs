@@ -44,8 +44,16 @@ defmodule Mydia.Streaming.FfmpegOutputRedactionTest do
         on_hwaccel_failed: fn out -> send(test_pid, {:on_hwaccel_failed, out}) end
       )
 
+    # The transcoder can stop on its own between the alive? check and the
+    # stop, which then exits with :shutdown or :noproc.
     on_exit(fn ->
-      if Process.alive?(pid), do: FfmpegHlsTranscoder.stop_transcoding(pid)
+      if Process.alive?(pid) do
+        try do
+          FfmpegHlsTranscoder.stop_transcoding(pid)
+        catch
+          :exit, {reason, {GenServer, :stop, _}} when reason in [:noproc, :shutdown] -> :ok
+        end
+      end
     end)
 
     pid

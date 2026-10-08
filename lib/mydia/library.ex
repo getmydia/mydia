@@ -646,22 +646,18 @@ defmodule Mydia.Library do
     media_file =
       if delete_files, do: Repo.preload(media_file, :library_path), else: media_file
 
-    # Refuse before the row goes: deleting the record of an S3 object we cannot
-    # delete would only report a misleading disk failure.
-    with :ok <- if(delete_files, do: Mydia.Storage.ensure_writable(media_file), else: :ok) do
-      case Repo.delete(media_file) do
-        {:ok, deleted} when delete_files ->
-          case delete_media_file_from_disk(media_file) do
-            :ok -> {:ok, deleted}
-            {:error, _reason} -> {:ok, deleted, :file_delete_failed}
-          end
+    case Repo.delete(media_file) do
+      {:ok, deleted} when delete_files ->
+        case delete_media_file_from_disk(media_file) do
+          :ok -> {:ok, deleted}
+          {:error, _reason} -> {:ok, deleted, :file_delete_failed}
+        end
 
-        {:ok, deleted} ->
-          {:ok, deleted}
+      {:ok, deleted} ->
+        {:ok, deleted}
 
-        {:error, changeset} ->
-          {:error, changeset}
-      end
+      {:error, changeset} ->
+        {:error, changeset}
     end
   end
 
@@ -707,24 +703,12 @@ defmodule Mydia.Library do
   """
   @spec trash_media_file(MediaFile.t(), keyword()) ::
           {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
-  # Besides the errors above, `{:error, %Mydia.Storage.Error{kind: :read_only}}`
-  # for an S3 file unless `reason: :missing`.
+  # Besides the errors above, an S3 outage returns
+  # `{:error, {:trash_move_failed, %Mydia.Storage.Error{}}}`.
   def trash_media_file(%MediaFile{} = media_file, opts \\ []) do
-    media_file = Repo.preload(media_file, :library_path)
-
-    with :ok <- ensure_trashable(media_file, opts) do
-      do_trash_media_file(media_file, opts)
-    end
-  end
-
-  # An S3 object is never moved, so trashing one only stamps the row, and the
-  # next scan would find the object still listed and restore it. The one
-  # honest use is `reason: :missing`: a successful listing no longer shows the
-  # object, so there is nothing to refuse to touch.
-  defp ensure_trashable(media_file, opts) do
-    if Keyword.get(opts, :reason) == :missing,
-      do: :ok,
-      else: Mydia.Storage.ensure_writable(media_file)
+    media_file
+    |> Repo.preload(:library_path)
+    |> do_trash_media_file(opts)
   end
 
   defp do_trash_media_file(media_file, opts) do
@@ -1129,18 +1113,16 @@ defmodule Mydia.Library do
   def delete_media_file_from_disk(%MediaFile{} = media_file) do
     media_file = Repo.preload(media_file, :library_path)
 
-    with :ok <- Mydia.Storage.ensure_writable(media_file) do
-      case MediaFile.absolute_path(media_file) do
-        nil ->
-          Logger.error("Cannot delete media file from disk - path could not be resolved",
-            media_file_id: media_file.id
-          )
+    case MediaFile.storage_path(media_file) do
+      nil ->
+        Logger.error("Cannot delete media file from disk - path could not be resolved",
+          media_file_id: media_file.id
+        )
 
-          {:error, :path_not_resolved}
+        {:error, :path_not_resolved}
 
-        absolute_path ->
-          delete_path_from_disk(absolute_path)
-      end
+      path ->
+        delete_path_from_disk(path)
     end
   end
 
@@ -1161,6 +1143,27 @@ defmodule Mydia.Library do
   # (`:enoent`) and not a failure. The sidecar is left alone in that case: this
   # call removed nothing, and a same-named `.nfo` can belong to another copy of
   # the episode (`Episode.mp4` beside a vanished `Episode.mkv`).
+  def delete_path_from_disk("s3://" <> _ = path) do
+    with {:ok, source} <- Mydia.Storage.at(path) do
+      case Mydia.Storage.stat(source) do
+        # Removed nothing, so the sidecar is left alone, as for a local :enoent.
+        {:error, %Mydia.Storage.Error{kind: :not_found}} ->
+          Logger.debug("Media file already doesn't exist in storage", path: path)
+          :ok
+
+        {:error, _} = error ->
+          error
+
+        {:ok, _} ->
+          with :ok <- Mydia.Storage.delete(source) do
+            Logger.info("Deleted media file from storage", path: path)
+            Mydia.Metadata.NfoWriter.delete_nfo_for_file(path)
+            :ok
+          end
+      end
+    end
+  end
+
   def delete_path_from_disk(absolute_path) when is_binary(absolute_path) do
     case File.rm(absolute_path) do
       :ok ->

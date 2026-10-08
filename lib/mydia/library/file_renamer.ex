@@ -25,8 +25,8 @@ defmodule Mydia.Library.FileRenamer do
     # Load associations if needed - force reload to ensure we have fresh data
     file = Repo.preload(file, [:library_path, :media_item, episode: :media_item], force: true)
 
-    # Get the file details - use absolute_path for filesystem operations
-    current_path = MediaFile.absolute_path(file)
+    # storage_path keeps the s3:// URI for S3 files and is the absolute path otherwise
+    current_path = MediaFile.storage_path(file)
     directory = Path.dirname(current_path)
     current_filename = Path.basename(current_path)
 
@@ -130,9 +130,79 @@ defmodule Mydia.Library.FileRenamer do
     # Preload library_path to resolve absolute path
     file = Repo.preload(file, :library_path)
 
-    with :ok <- Storage.ensure_writable(file),
-         :ok <- Storage.ensure_writable(new_path) do
-      do_rename_file(file, new_path)
+    cond do
+      Storage.s3?(file) != Storage.s3?(new_path) -> {:error, :cross_storage_rename}
+      Storage.s3?(file) -> rename_object(file, new_path)
+      true -> do_rename_file(file, new_path)
+    end
+  end
+
+  defp rename_object(file, new_path) do
+    current_path = MediaFile.storage_path(file)
+
+    with {:ok, from} <- Storage.at(current_path),
+         {:ok, to} <- Storage.at(new_path),
+         :ok <- present(from),
+         :ok <- if(current_path == new_path, do: :same, else: absent(to)),
+         :ok <- Storage.move(from, to) do
+      commit_rename(file, current_path, new_path, fn -> Storage.move(to, from) end)
+    else
+      :same -> {:ok, file}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp present(source) do
+    case Storage.stat(source) do
+      {:ok, _} -> :ok
+      {:error, %Storage.Error{kind: :not_found}} -> {:error, :file_not_found}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp absent(source) do
+    case Storage.stat(source) do
+      {:error, %Storage.Error{kind: :not_found}} -> :ok
+      {:ok, _} -> {:error, :target_exists}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp commit_rename(file, current_path, new_path, rollback) do
+    new_relative_path = Path.relative_to(new_path, file.library_path.path)
+
+    # Update the database with the new relative path
+    case Mydia.Library.update_media_file(file, %{relative_path: new_relative_path}) do
+      {:ok, updated_file} ->
+        Logger.info("Successfully renamed file",
+          file_id: file.id,
+          old_path: current_path,
+          new_path: new_path,
+          new_relative_path: new_relative_path
+        )
+
+        {:ok, updated_file}
+
+      {:error, changeset} ->
+        # Rollback: put the file back
+        case rollback.() do
+          :ok ->
+            Logger.error("Failed to update database after rename, rolled back",
+              file_id: file.id,
+              errors: inspect(changeset.errors)
+            )
+
+          rollback_error ->
+            Logger.error("Failed to update database after rename and the rollback failed",
+              file_id: file.id,
+              current_path: new_path,
+              original_path: current_path,
+              errors: inspect(changeset.errors),
+              rollback_error: inspect(rollback_error)
+            )
+        end
+
+        {:error, :database_update_failed}
     end
   end
 
@@ -160,33 +230,9 @@ defmodule Mydia.Library.FileRenamer do
 
         case File.rename(current_path, new_path) do
           :ok ->
-            # Calculate the new relative path
-            library_path_root = file.library_path.path
-            new_relative_path = Path.relative_to(new_path, library_path_root)
-
-            # Update the database with the new relative path
-            case Mydia.Library.update_media_file(file, %{relative_path: new_relative_path}) do
-              {:ok, updated_file} ->
-                Logger.info("Successfully renamed file",
-                  file_id: file.id,
-                  old_path: current_path,
-                  new_path: new_path,
-                  new_relative_path: new_relative_path
-                )
-
-                {:ok, updated_file}
-
-              {:error, changeset} ->
-                # Rollback: rename file back
-                File.rename(new_path, current_path)
-
-                Logger.error("Failed to update database after rename, rolled back",
-                  file_id: file.id,
-                  errors: inspect(changeset.errors)
-                )
-
-                {:error, :database_update_failed}
-            end
+            commit_rename(file, current_path, new_path, fn ->
+              File.rename(new_path, current_path)
+            end)
 
           {:error, reason} ->
             Logger.error("Failed to rename file",
@@ -257,7 +303,7 @@ defmodule Mydia.Library.FileRenamer do
   defp generate_filename_from_path(%MediaFile{} = file) do
     # For TV show files not associated with episodes, parse the filename
     # to extract season/episode info and generate a TRaSH-style name
-    absolute_path = MediaFile.absolute_path(file)
+    absolute_path = MediaFile.storage_path(file)
     current_filename = Path.basename(absolute_path)
     extension = Path.extname(absolute_path)
     basename = Path.basename(absolute_path, extension)

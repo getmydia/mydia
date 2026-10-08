@@ -84,7 +84,7 @@ defmodule Mydia.Media.DiskRemoval do
   end
 
   defp video_dir(file) do
-    case MediaFile.absolute_path(file) do
+    case MediaFile.storage_path(file) do
       nil -> nil
       path -> Path.dirname(path)
     end
@@ -128,11 +128,8 @@ defmodule Mydia.Media.DiskRemoval do
   end
 
   defp delete_subtitle(path) do
-    case File.rm(path) do
+    case Mydia.Storage.delete_path(path) do
       :ok ->
-        :ok
-
-      {:error, :enoent} ->
         :ok
 
       {:error, reason} ->
@@ -143,7 +140,7 @@ defmodule Mydia.Media.DiskRemoval do
   # A no-op inside a removed folder: its directories are already gone.
   defp prune_after(%MediaFile{library_path: %LibraryPath{path: root}} = file)
        when is_binary(root) do
-    case MediaFile.absolute_path(file) do
+    case MediaFile.storage_path(file) do
       nil -> :ok
       path -> Dirs.prune_empty(Path.dirname(path), root)
     end
@@ -173,7 +170,7 @@ defmodule Mydia.Media.DiskRemoval do
   end
 
   defp loose?(%MediaFile{trashed_at: nil} = file, folders) do
-    case MediaFile.absolute_path(file) do
+    case MediaFile.storage_path(file) do
       nil -> false
       path -> not Enum.any?(folders, &Dirs.inside?(path, &1.absolute))
     end

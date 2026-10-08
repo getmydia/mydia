@@ -28,36 +28,25 @@ defmodule Mydia.Settings.LibraryPathS3Test do
     end
   end
 
-  test "rejects write features on S3 libraries in this release" do
-    for flag <- [:auto_organize, :auto_rename, :write_nfo] do
-      cs =
-        LibraryPath.changeset(%LibraryPath{}, %{
-          :path => "s3://media/m",
-          :type => :movies,
-          flag => true
-        })
+  test "accepts every write feature on S3 libraries" do
+    assert {:ok, lp} =
+             Mydia.Settings.create_library_path(%{
+               path: "s3://media/movies",
+               type: "movies",
+               auto_organize: true,
+               auto_rename: true,
+               write_nfo: true,
+               default_for_movies: true
+             })
 
-      assert errors_on(cs)[flag], "#{flag} should be rejected"
-    end
+    assert lp.auto_organize and lp.auto_rename and lp.write_nfo and lp.default_for_movies
   end
 
-  test "rejects default_for_movies and default_for_series on S3 libraries" do
-    for {flag, type} <- [default_for_movies: :movies, default_for_series: :series] do
-      cs =
-        LibraryPath.changeset(%LibraryPath{}, %{
-          :path => "s3://media/m",
-          :type => type,
-          flag => true
-        })
+  test "auto_rename defaults to true on S3 libraries too" do
+    assert {:ok, lp} =
+             Mydia.Settings.create_library_path(%{path: "s3://media/tv", type: "series"})
 
-      assert errors_on(cs)[flag], "#{flag} should be rejected"
-    end
-  end
-
-  test "auto_rename defaults to true, so an S3 path without it set must still be valid" do
-    cs = LibraryPath.changeset(%LibraryPath{}, %{path: "s3://media/m", type: :movies})
-    assert cs.valid?
-    refute Ecto.Changeset.get_field(cs, :auto_rename)
+    assert lp.auto_rename
   end
 
   describe "changing a library path to an S3 location" do

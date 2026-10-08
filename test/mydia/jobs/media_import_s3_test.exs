@@ -2,34 +2,30 @@ defmodule Mydia.Jobs.MediaImportS3Test do
   use Mydia.DataCase, async: false
   use Oban.Testing, repo: Mydia.Repo
 
-  alias Mydia.Jobs.MediaImport
-  alias Mydia.Repo
-  alias Mydia.Settings
+  @moduletag :s3
+  @moduletag :tmp_dir
 
+  import Ecto.Query
   import Mydia.DownloadsFixtures
   import Mydia.MediaFixtures
 
-  @moduletag :tmp_dir
+  alias Mydia.Jobs.MediaImport
+  alias Mydia.Library.MediaFile
+  alias Mydia.S3Helpers
+  alias Mydia.Settings
+  alias Mydia.Storage
+
+  @mib 1024 * 1024
 
   setup %{tmp_dir: tmp_dir} do
     # A stale directory from an earlier run would hide a regression.
     File.rm_rf!("s3:")
 
-    {:ok, _} =
-      Settings.create_storage_backend(%{
-        name: "media",
-        endpoint: "http://localhost:1",
-        bucket: "b",
-        access_key_id: "k",
-        secret_access_key: "s"
-      })
-
-    {:ok, s3_library} =
-      Settings.create_library_path(%{path: "s3://media/movies", type: :movies, monitored: true})
+    {library_path, loc} = S3Helpers.library_path!("movies")
+    on_exit(fn -> S3Helpers.delete_prefix!(loc) end)
 
     download_dir = Path.join(tmp_dir, "download")
     File.mkdir_p!(download_dir)
-    File.write!(Path.join(download_dir, "Invented.Film.2031.mkv"), :binary.copy(<<0>>, 4096))
 
     {:ok, _} =
       Settings.create_download_client_config(%{
@@ -44,8 +40,7 @@ defmodule Mydia.Jobs.MediaImportS3Test do
       })
 
     movie = media_item_fixture(%{type: "movie", title: "Invented Film", year: 2031})
-
-    %{s3_library: s3_library, download_dir: download_dir, movie: movie}
+    %{library_path: library_path, loc: loc, download_dir: download_dir, movie: movie}
   end
 
   defp download_for(movie, attrs \\ %{}) do
@@ -63,35 +58,58 @@ defmodule Mydia.Jobs.MediaImportS3Test do
     )
   end
 
-  defp run(download, download_dir),
-    do: perform_job(MediaImport, %{"download_id" => download.id, "save_path" => download_dir})
+  defp run(download, save_path),
+    do: perform_job(MediaImport, %{"download_id" => download.id, "save_path" => save_path})
 
-  test "an inferred import never lands in an S3 library", %{
-    download_dir: download_dir,
-    movie: movie
-  } do
-    download = download_for(movie)
+  defp files_in(library_path),
+    do: Repo.all(from f in MediaFile, where: f.library_path_id == ^library_path.id)
 
-    assert {:error, :no_library_path} = run(download, download_dir)
+  test "a completed download is copied into the bucket and the source kept for seeding", ctx do
+    source = Path.join(ctx.download_dir, "Invented.Film.2031.mkv")
+    File.write!(source, :binary.copy("v", 4096))
+    download = download_for(ctx.movie, %{library_path_id: ctx.library_path.id})
+
+    assert {:ok, :imported} = run(download, ctx.download_dir)
+
+    assert [%MediaFile{relative_path: rel, size: 4096}] = files_in(ctx.library_path)
+    {:ok, object} = Storage.source(ctx.loc, rel)
+    assert {:ok, %{size: 4096}} = Storage.stat(object)
+    assert File.exists?(source)
     refute File.exists?("s3:")
-    assert Repo.reload!(download).imported_at == nil
   end
 
-  test "an S3 download override fails read-only before touching the filesystem", %{
-    s3_library: s3_library,
-    download_dir: download_dir,
-    movie: movie
-  } do
-    download = download_for(movie, %{library_path_id: s3_library.id})
+  test "an inferred import can land in an S3 library", ctx do
+    File.write!(Path.join(ctx.download_dir, "Invented.Film.2031.mkv"), "abc")
+    download = download_for(ctx.movie)
 
-    # Terminal: a read-only library never becomes writable by retrying, and a
-    # pending retry would keep the download occupying its target.
-    assert {:cancel, :library_read_only} = run(download, download_dir)
-    refute File.exists?("s3:")
+    assert {:ok, :imported} = run(download, ctx.download_dir)
+    assert [_] = files_in(ctx.library_path)
+  end
 
-    reloaded = Repo.reload!(download)
-    assert reloaded.import_last_error =~ "read-only"
-    assert reloaded.import_next_retry_at == nil
-    assert reloaded.import_failure_reason == "library_read_only"
+  test "a file above the part size is uploaded in parts", ctx do
+    File.write!(
+      Path.join(ctx.download_dir, "Invented.Film.2031.mkv"),
+      :binary.copy("p", 11 * @mib)
+    )
+
+    download = download_for(ctx.movie, %{library_path_id: ctx.library_path.id})
+
+    assert {:ok, :imported} = run(download, ctx.download_dir)
+    [file] = files_in(ctx.library_path)
+    {:ok, object} = Storage.source(ctx.loc, file.relative_path)
+    assert {:ok, %{size: size}} = Storage.stat(object)
+    assert size == 11 * @mib
+  end
+
+  test "re-running an import adopts the object it already uploaded", ctx do
+    File.write!(Path.join(ctx.download_dir, "Invented.Film.2031.mkv"), "abc")
+    download = download_for(ctx.movie, %{library_path_id: ctx.library_path.id})
+
+    assert {:ok, :imported} = run(download, ctx.download_dir)
+    Repo.delete_all(MediaFile)
+
+    download = Repo.update!(Ecto.Changeset.change(Repo.reload!(download), imported_at: nil))
+    assert {:ok, :imported} = run(download, ctx.download_dir)
+    assert [_] = files_in(ctx.library_path)
   end
 end

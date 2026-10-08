@@ -12,7 +12,7 @@ If you are starting from nothing, begin with a
 - [Indexers](connect-indexer.md) - connect Prowlarr, Jackett, or a Cardigann indexer
 - [Cardigann indexers](cardigann-indexers.md) - configure Mydia's built-in Cardigann support
 - [Managing libraries](manage-libraries.md) - create, scan, and maintain library paths
-- [S3 storage](s3-storage.md) - keep a library in an S3-compatible bucket (read-only)
+- [S3 storage](s3-storage.md) - keep a library in an S3-compatible bucket
 - [Adding media](add-media.md) - search for and add media you do not already have
 - [Importing an existing collection](import-existing-collection.md) - bring files already on disk into a library
 - [Quality profiles](quality-profiles.md) - create and assign quality profiles

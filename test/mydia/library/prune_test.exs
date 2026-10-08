@@ -135,7 +135,7 @@ defmodule Mydia.Library.PruneTest do
       refute Mydia.Repo.get!(Mydia.Library.MediaFile, keeper.id).trashed_at
     end
 
-    test "an S3 loser is reported as failed (read-only), not crashed on or trashed" do
+    test "an S3 loser whose bucket is unreachable is reported as failed, not trashed" do
       {:ok, _} =
         Mydia.Settings.create_storage_backend(%{
           name: "media",
@@ -173,7 +173,10 @@ defmodule Mydia.Library.PruneTest do
       result = Prune.execute([loser.id], "admin")
 
       assert result.trashed == []
-      assert [{id, %Mydia.Storage.Error{kind: :read_only}}] = result.failed
+
+      assert [{id, {:trash_move_failed, %Mydia.Storage.Error{kind: :unreachable}}}] =
+               result.failed
+
       assert id == loser.id
       refute trashed_at(loser.id)
       refute trashed_at(keeper.id)

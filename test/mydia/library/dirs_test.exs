@@ -60,4 +60,23 @@ defmodule Mydia.Library.DirsTest do
       assert :ok = Dirs.prune_empty(Path.join(tmp, "gone/deeper"), tmp)
     end
   end
+
+  describe "s3:// paths" do
+    test "inside?/2 compares without expanding" do
+      assert Dirs.inside?("s3://m/movies/A/a.mkv", "s3://m/movies")
+      assert Dirs.inside?("s3://m/movies/A", "s3://m/movies/")
+      refute Dirs.inside?("s3://m/movies", "s3://m/movies")
+      refute Dirs.inside?("s3://m/movies 2/a.mkv", "s3://m/movies")
+    end
+
+    test "normalize/1 never turns a scheme into a directory" do
+      assert Dirs.normalize("s3://m/movies/") == "s3://m/movies"
+      assert Dirs.normalize("/media/./movies") == "/media/movies"
+    end
+
+    test "prune_empty/2 does nothing" do
+      assert :ok = Dirs.prune_empty("s3://m/movies/A", "s3://m/movies")
+      refute File.exists?("s3:")
+    end
+  end
 end
