@@ -95,7 +95,11 @@ defmodule MydiaWeb.RequestPagesPosterTest do
     render(view)
 
     assert has_element?(view, ~s(#request-#{request.id} img[src="/images/no-poster.svg"]))
-    refute has_element?(view, ~s(#request-#{request.id} button[phx-click="show_details"]))
+
+    refute has_element?(
+             view,
+             ~s(#request-#{request.id} button[phx-click="show_request_details"])
+           )
   end
 
   test "a permanently-unresolvable request is attempted once, not retried in a loop", %{
@@ -132,7 +136,7 @@ defmodule MydiaWeb.RequestPagesPosterTest do
     # so this also proves an already-attempted id is not retried on a second
     # pass within the same connected session.
     view
-    |> element(~s(button[phx-click="filter"][phx-value-status="all"]))
+    |> element(~s(button[phx-click="filter_requests"][phx-value-status="all"]))
     |> render_click()
 
     assert has_element?(view, ~s(#request-#{request.id}))
