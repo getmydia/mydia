@@ -23,7 +23,7 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   `TrashStore.sweep/1` calls `File.rm_rf/1` on whatever paths it is handed and
   does not re-validate that they sit under a trash root; that is safe today
   only because `TrashStore.audit/0` is the sole producer of entries. The
-  `"sweep"` handler below reads the audit result already held in
+  `"sweep_trash"` handler below reads the audit result already held in
   `socket.assigns.audit` and never accepts a path, id, or any other
   filesystem reference from event params.
   """
@@ -45,7 +45,7 @@ defmodule MydiaWeb.AdminTrashLive.Index do
      |> assign(:reason, nil)
      |> assign(:page, 0)
      |> assign(:page_size, @per_page)
-     |> assign(:show_empty_modal, false)
+     |> assign(:show_empty_trash_modal, false)
      |> assign(:audit, nil)
      |> assign(:scanning, false)
      |> assign(:sweeping, false)
@@ -89,11 +89,11 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   defp matching_count(counts, reason), do: Map.get(counts, reason, 0)
 
   @impl true
-  def handle_event("filter_reason", %{"reason" => ""}, socket) do
+  def handle_event("filter_trash", %{"reason" => ""}, socket) do
     {:noreply, socket |> assign(reason: nil, page: 0, selection: MapSet.new()) |> load()}
   end
 
-  def handle_event("filter_reason", %{"reason" => reason}, socket) do
+  def handle_event("filter_trash", %{"reason" => reason}, socket) do
     # Never String.to_atom/1 on request data. The chip values come from the
     # component's own fixed list, so an unknown one is a bug or a forged
     # event, and both mean "no filter".
@@ -110,11 +110,11 @@ defmodule MydiaWeb.AdminTrashLive.Index do
     {:noreply, socket |> assign(reason: parsed, page: 0, selection: MapSet.new()) |> load()}
   end
 
-  def handle_event("paginate", %{"page" => page}, socket) do
+  def handle_event("paginate_trash", %{"page" => page}, socket) do
     {:noreply, socket |> assign(:page, String.to_integer(page)) |> load()}
   end
 
-  def handle_event("toggle_select", %{"id" => id}, socket) do
+  def handle_event("toggle_trash_selection", %{"id" => id}, socket) do
     selection =
       case socket.assigns.selection do
         # Ticking a box after "select all matching" drops back to an explicit
@@ -126,18 +126,18 @@ defmodule MydiaWeb.AdminTrashLive.Index do
     {:noreply, assign(socket, :selection, selection)}
   end
 
-  def handle_event("select_all_matching", _params, socket) do
+  def handle_event("select_all_trash", _params, socket) do
     {:noreply, assign(socket, :selection, {:all_matching, socket.assigns.reason})}
   end
 
-  def handle_event("clear_selection", _params, socket) do
+  def handle_event("clear_trash_selection", _params, socket) do
     {:noreply, assign(socket, :selection, MapSet.new())}
   end
 
-  def handle_event("bulk_restore", _params, socket), do: enqueue(socket, "restore")
-  def handle_event("bulk_purge", _params, socket), do: enqueue(socket, "purge")
+  def handle_event("restore_selected_trash", _params, socket), do: enqueue(socket, "restore")
+  def handle_event("purge_selected_trash", _params, socket), do: enqueue(socket, "purge")
 
-  def handle_event("restore_file", %{"id" => id}, socket) do
+  def handle_event("restore_trash_file", %{"id" => id}, socket) do
     case fetch_trashed(id) do
       nil ->
         {:noreply, put_flash(socket, :error, "That file is no longer in the trash.")}
@@ -167,7 +167,7 @@ defmodule MydiaWeb.AdminTrashLive.Index do
     end
   end
 
-  def handle_event("purge_file", %{"id" => id}, socket) do
+  def handle_event("purge_trash_file", %{"id" => id}, socket) do
     case fetch_trashed(id) do
       nil ->
         {:noreply, put_flash(socket, :error, "That file is no longer in the trash.")}
@@ -185,12 +185,12 @@ defmodule MydiaWeb.AdminTrashLive.Index do
     end
   end
 
-  def handle_event("confirm_empty", _params, socket) do
-    {:noreply, assign(socket, :show_empty_modal, true)}
+  def handle_event("open_empty_trash_modal", _params, socket) do
+    {:noreply, assign(socket, :show_empty_trash_modal, true)}
   end
 
-  def handle_event("close_modal", _params, socket) do
-    {:noreply, assign(socket, :show_empty_modal, false)}
+  def handle_event("close_empty_trash_modal", _params, socket) do
+    {:noreply, assign(socket, :show_empty_trash_modal, false)}
   end
 
   def handle_event("empty_trash", _params, socket) do
@@ -198,13 +198,13 @@ defmodule MydiaWeb.AdminTrashLive.Index do
 
     {:noreply,
      socket
-     |> assign(:show_empty_modal, false)
+     |> assign(:show_empty_trash_modal, false)
      |> assign(:page, 0)
      |> put_flash(:info, "Purged #{count} file(s) from the trash.")
      |> load()}
   end
 
-  def handle_event("scan_directory", _params, socket) do
+  def handle_event("scan_trash_directory", _params, socket) do
     {:noreply,
      socket
      |> assign(:scanning, true)
@@ -220,10 +220,10 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   # mid-sweep puts a fresh one back. Two sweeps over overlapping entries would
   # race `File.rm_rf/1` and make the reported counts depend on which task
   # finished last, so one at a time.
-  def handle_event("sweep", _params, %{assigns: %{sweeping: true}} = socket),
+  def handle_event("sweep_trash", _params, %{assigns: %{sweeping: true}} = socket),
     do: {:noreply, socket}
 
-  def handle_event("sweep", _params, socket) do
+  def handle_event("sweep_trash", _params, socket) do
     # `sweep/1` calls `File.rm_rf/1` per entry, so it inherits the same
     # disconnected-mount hazard as the audit walk and runs off the LiveView
     # process for the same reason.

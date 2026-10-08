@@ -217,6 +217,27 @@ defmodule MydiaWeb.AdminTrashLiveTest do
     assert is_nil(Repo.get(Mydia.Library.MediaFile, file.id))
   end
 
+  @tag :tmp_dir
+  test "the reason filter is a segmented control and the empty modal is error toned",
+       %{conn: conn} = ctx do
+    _file = trashed(ctx, "a.mkv", :missing, 10)
+
+    {:ok, view, _html} = live(conn, ~p"/admin/trash")
+
+    assert has_element?(
+             view,
+             ~s(#trash-reason-filter button#trash-filter-all[aria-pressed="true"])
+           )
+
+    view |> element("#trash-empty") |> render_click()
+    assert has_element?(view, "#trash-empty-modal .w-10.h-10.rounded-xl.bg-error\\/20")
+
+    assert has_element?(
+             view,
+             "#trash-empty-modal .modal-backdrop[phx-click=close_empty_trash_modal]"
+           )
+  end
+
   describe "bulk actions" do
     @tag :tmp_dir
     test "selecting a row shows the bulk bar", %{conn: conn} = ctx do

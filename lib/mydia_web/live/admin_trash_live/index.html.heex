@@ -18,7 +18,7 @@
       page={@page}
     />
 
-    <%= if @show_empty_modal do %>
+    <%= if assigns[:show_empty_trash_modal] do %>
       <MydiaWeb.AdminTrashLive.Components.empty_confirm_modal
         count={@summary.count}
         bytes={@summary.bytes}

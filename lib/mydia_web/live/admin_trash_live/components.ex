@@ -52,12 +52,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
       <.audit_result :if={@audit} audit={@audit} />
 
-      <div class="space-y-2">
-        <h3 class="font-semibold flex items-center gap-2 px-1">
-          <.icon name="hero-funnel" class="w-4 h-4 opacity-60" /> Filter by reason
-        </h3>
-        <.reason_filters counts={@counts} active={@reason} />
-      </div>
+      <.reason_filters counts={@counts} active={@reason} />
 
       <.bulk_bar
         selection={@selection}
@@ -91,7 +86,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         id="trash-scan"
         type="button"
         class="btn btn-sm btn-ghost join-item"
-        phx-click="scan_directory"
+        phx-click="scan_trash_directory"
       >
         <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Scan directory
       </button>
@@ -99,7 +94,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         id="trash-empty"
         type="button"
         class="btn btn-sm btn-error join-item"
-        phx-click="confirm_empty"
+        phx-click="open_empty_trash_modal"
         disabled={@summary.count == 0}
       >
         <.icon name="hero-trash" class="w-4 h-4" /> Empty trash
@@ -125,29 +120,22 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   def reason_filters(assigns) do
     ~H"""
-    <div class="filter">
-      <input
-        id="trash-filter-all"
-        class="btn btn-sm"
-        type="radio"
-        name="trash_reason"
-        aria-label="All"
-        checked={is_nil(@active)}
-        phx-click="filter_reason"
-        phx-value-reason=""
-      />
-      <%= for {reason, label, _hint} <- reasons(), count_for(@counts, reason) > 0 do %>
-        <input
+    <div class="overflow-x-auto">
+      <.segmented_control
+        id="trash-reason-filter"
+        value={@active || ""}
+        event="filter_trash"
+        param="reason"
+        label="Filter by reason"
+      >
+        <:option value="" label="All" id="trash-filter-all" />
+        <:option
+          :for={{reason, label, _hint} <- visible_reasons(@counts)}
+          value={reason}
+          label={"#{label} (#{count_for(@counts, reason)})"}
           id={"trash-filter-#{reason}"}
-          class="btn btn-sm"
-          type="radio"
-          name="trash_reason"
-          aria-label={"#{label} (#{count_for(@counts, reason)})"}
-          checked={@active == reason}
-          phx-click="filter_reason"
-          phx-value-reason={reason}
         />
-      <% end %>
+      </.segmented_control>
     </div>
     """
   end
@@ -158,70 +146,58 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   def trash_list(assigns) do
     ~H"""
-    <div id="trash-list">
-      <div :if={@files == []} class="alert alert-info">
-        <.icon name="hero-information-circle" class="w-5 h-5" />
-        <span>Nothing in the trash.</span>
-      </div>
-
-      <div :if={@files != []} class="bg-base-200 rounded-box divide-y divide-base-300">
-        <div
-          :for={file <- @files}
-          id={"trash-row-#{file.id}"}
-          class="flex items-center gap-3 p-3 sm:p-4 hover:bg-base-300/50 transition-colors"
-        >
-          <input
-            id={"trash-select-#{file.id}"}
-            type="checkbox"
-            class="checkbox checkbox-sm"
-            checked={selected?(@selection, file.id)}
-            phx-click="toggle_select"
-            phx-value-id={file.id}
-          />
-
-          <div class="min-w-0 flex-1">
-            <div class="font-medium truncate">{label_for(file)}</div>
-            <div class="text-xs opacity-60 flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
-              <span
-                id={"trash-reason-#{file.id}"}
-                class={["badge badge-sm", badge_class(file.trashed_reason)]}
-              >
-                {reason_label(file.trashed_reason)}
-              </span>
-              <span>{format_file_size(file.size)}</span>
-              <span>Trashed {relative_age(file.trashed_at)}</span>
-              <span>Purges {purge_due(file.trashed_at, @retention_days)}</span>
-            </div>
-          </div>
-
-          <div class="join ml-auto sm:ml-2 shrink-0">
-            <button
-              id={"trash-restore-#{file.id}"}
-              type="button"
-              class="btn btn-sm btn-ghost join-item"
-              title="Restore"
-              aria-label="Restore"
-              phx-click="restore_file"
+    <.admin_list id="trash-list" items={@files}>
+      <:empty>Nothing in the trash.</:empty>
+      <:row :let={file}>
+        <.admin_row id={"trash-row-#{file.id}"}>
+          <:title>
+            <input
+              id={"trash-select-#{file.id}"}
+              type="checkbox"
+              class="checkbox checkbox-sm"
+              checked={selected?(@selection, file.id)}
+              phx-click="toggle_trash_selection"
               phx-value-id={file.id}
+            />
+            {label_for(file)}
+          </:title>
+          <:descriptor>
+            {format_file_size(file.size)} · Trashed {relative_age(file.trashed_at)} · Purges {purge_due(
+              file.trashed_at,
+              @retention_days
+            )}
+          </:descriptor>
+          <:badges>
+            <span
+              id={"trash-reason-#{file.id}"}
+              class={["badge badge-sm", badge_class(file.trashed_reason)]}
             >
-              <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
-            </button>
-            <button
-              id={"trash-purge-#{file.id}"}
-              type="button"
-              class="btn btn-sm btn-ghost join-item text-error"
-              title="Delete permanently"
-              aria-label="Delete permanently"
-              phx-click="purge_file"
-              phx-value-id={file.id}
-              data-confirm="Permanently delete this file? This cannot be undone."
-            >
-              <.icon name="hero-x-mark" class="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+              {reason_label(file.trashed_reason)}
+            </span>
+          </:badges>
+          <:actions>
+            <.row_actions>
+              <.row_action
+                id={"trash-restore-#{file.id}"}
+                icon="hero-arrow-uturn-left"
+                title="Restore"
+                phx-click="restore_trash_file"
+                phx-value-id={file.id}
+              />
+              <.row_action
+                id={"trash-purge-#{file.id}"}
+                icon="hero-x-mark"
+                title="Delete permanently"
+                destructive
+                phx-click="purge_trash_file"
+                phx-value-id={file.id}
+                data-confirm="Permanently delete this file? This cannot be undone."
+              />
+            </.row_actions>
+          </:actions>
+        </.admin_row>
+      </:row>
+    </.admin_list>
     """
   end
 
@@ -240,20 +216,25 @@ defmodule MydiaWeb.AdminTrashLive.Components do
     <div
       :if={selection_count(@selection, @total_matching) > 0}
       id="trash-bulk-bar"
-      class="flex flex-wrap items-center gap-3 mb-4 p-3 rounded-lg bg-base-200"
+      class="flex flex-wrap items-center gap-3 p-3 rounded-lg bg-base-200"
     >
       <span class="font-medium">
         {selection_count(@selection, @total_matching)} selected
       </span>
 
-      <button id="trash-bulk-restore" type="button" class="btn btn-sm" phx-click="bulk_restore">
+      <button
+        id="trash-bulk-restore"
+        type="button"
+        class="btn btn-sm"
+        phx-click="restore_selected_trash"
+      >
         <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Restore
       </button>
       <button
         id="trash-bulk-purge"
         type="button"
         class="btn btn-sm btn-error"
-        phx-click="bulk_purge"
+        phx-click="purge_selected_trash"
         data-confirm="Permanently delete every selected file? This cannot be undone."
       >
         <.icon name="hero-x-mark" class="w-4 h-4" /> Delete permanently
@@ -263,7 +244,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         id="trash-clear-selection"
         type="button"
         class="btn btn-sm btn-ghost"
-        phx-click="clear_selection"
+        phx-click="clear_trash_selection"
       >
         Clear
       </button>
@@ -278,7 +259,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         id="trash-select-all-matching"
         type="button"
         class="btn btn-sm btn-ghost"
-        phx-click="select_all_matching"
+        phx-click="select_all_trash"
       >
         Select all {@total_matching} matching
       </button>
@@ -298,7 +279,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
       |> assign(:to, min((assigns.page + 1) * assigns.page_size, assigns.total_matching))
 
     ~H"""
-    <div id="trash-pagination" class="flex items-center justify-between gap-3 mt-4">
+    <div id="trash-pagination" class="flex items-center justify-between gap-3">
       <span class="text-sm text-base-content/60">
         Showing {@from}-{@to} of {@total_matching}
       </span>
@@ -309,7 +290,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
           type="button"
           class="btn btn-sm join-item"
           disabled={@page == 0}
-          phx-click="paginate"
+          phx-click="paginate_trash"
           phx-value-page={@page - 1}
         >
           <.icon name="hero-chevron-left" class="w-4 h-4" /> Prev
@@ -319,7 +300,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
           type="button"
           class="btn btn-sm join-item"
           disabled={@page >= @last_page}
-          phx-click="paginate"
+          phx-click="paginate_trash"
           phx-value-page={@page + 1}
         >
           Next <.icon name="hero-chevron-right" class="w-4 h-4" />
@@ -334,43 +315,40 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   def empty_confirm_modal(assigns) do
     ~H"""
-    <div id="trash-empty-modal" class="modal modal-open">
-      <div class="modal-box">
-        <div class="flex items-center gap-3 mb-5">
-          <div class="w-10 h-10 rounded-xl bg-error/20 flex items-center justify-center">
-            <.icon name="hero-trash" class="w-5 h-5 text-error" />
-          </div>
-          <div>
-            <h3 class="font-bold text-lg">Empty the trash?</h3>
-            <p class="text-sm text-base-content/60">
-              {file_count(@count)}, reclaiming {format_file_size(@bytes)}.
-            </p>
-          </div>
-        </div>
+    <.admin_modal
+      id="trash-empty-modal"
+      tone={:error}
+      icon="hero-trash"
+      title="Empty the trash?"
+      subtitle={"#{file_count(@count)}, reclaiming #{format_file_size(@bytes)}."}
+      on_close="close_empty_trash_modal"
+    >
+      <p class="py-2">
+        This purges everything in the trash now, including files trashed moments ago, rather
+        than waiting out the retention period. Rows trashed because their file had already
+        vanished from disk only lose the row; nothing on your library path is touched.
+      </p>
 
-        <p class="py-2">
-          This purges everything in the trash now, including files trashed moments ago, rather
-          than waiting out the retention period. Rows trashed because their file had already
-          vanished from disk only lose the row; nothing on your library path is touched.
-        </p>
-
-        <div class="modal-action mt-6 pt-4 border-t border-base-300">
-          <button id="trash-empty-cancel" type="button" class="btn btn-ghost" phx-click="close_modal">
-            Cancel
-          </button>
-          <button
-            id="trash-empty-confirm"
-            type="button"
-            class="btn btn-error"
-            phx-click="empty_trash"
-            phx-disable-with="Emptying..."
-          >
-            <.icon name="hero-trash" class="w-4 h-4" /> Empty trash
-          </button>
-        </div>
-      </div>
-      <div class="modal-backdrop bg-black/50" phx-click="close_modal"></div>
-    </div>
+      <:actions>
+        <button
+          id="trash-empty-cancel"
+          type="button"
+          class="btn btn-ghost"
+          phx-click="close_empty_trash_modal"
+        >
+          Cancel
+        </button>
+        <button
+          id="trash-empty-confirm"
+          type="button"
+          class="btn btn-error"
+          phx-click="empty_trash"
+          phx-disable-with="Emptying..."
+        >
+          <.icon name="hero-trash" class="w-4 h-4" /> Empty trash
+        </button>
+      </:actions>
+    </.admin_modal>
     """
   end
 
@@ -378,7 +356,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   def audit_result(assigns) do
     ~H"""
-    <div :if={audit_total(@audit) > 0} id="trash-audit" class="alert alert-warning mb-5">
+    <div :if={audit_total(@audit) > 0} id="trash-audit" class="alert alert-warning">
       <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
       <div>
         <div class="font-medium">
@@ -391,7 +369,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
           Total {format_file_size(audit_bytes(@audit))}.
         </div>
       </div>
-      <button id="trash-sweep" type="button" class="btn btn-sm" phx-click="sweep">
+      <button id="trash-sweep" type="button" class="btn btn-sm" phx-click="sweep_trash">
         Sweep them
       </button>
     </div>
@@ -403,6 +381,9 @@ defmodule MydiaWeb.AdminTrashLive.Components do
   defp audit_bytes(audit) do
     (audit.retained ++ audit.orphaned) |> Enum.map(& &1.bytes) |> Enum.sum()
   end
+
+  defp visible_reasons(counts),
+    do: Enum.filter(@reasons, fn {r, _, _} -> count_for(counts, r) > 0 end)
 
   defp count_for(counts, :unknown), do: Map.get(counts, nil, 0)
   defp count_for(counts, reason), do: Map.get(counts, reason, 0)
