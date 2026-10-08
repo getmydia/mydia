@@ -10,9 +10,10 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Storage")
-     |> assign(:form, nil)
-     |> assign(:mode, :new)
-     |> assign(:editing, nil)
+     |> assign(:show_storage_backend_modal, false)
+     |> assign(:storage_backend_form, nil)
+     |> assign(:storage_backend_mode, :new)
+     |> assign(:editing_storage_backend, nil)
      |> assign(:testing, MapSet.new())
      |> load_backends()}
   end
@@ -21,35 +22,36 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
   def handle_params(_params, _url, socket), do: {:noreply, socket}
 
   @impl true
-  def handle_event("new", _params, socket) do
+  def handle_event("new_storage_backend", _params, socket) do
     {:noreply, open_form(socket, :new, %StorageBackend{})}
   end
 
-  def handle_event("edit", %{"id" => id}, socket) do
+  def handle_event("edit_storage_backend", %{"id" => id}, socket) do
     case find_editable(socket, id) do
       {:ok, backend} -> {:noreply, open_form(socket, :edit, backend)}
       :error -> {:noreply, put_flash(socket, :error, "That storage backend cannot be edited")}
     end
   end
 
-  def handle_event("close", _params, socket), do: {:noreply, close_form(socket)}
+  def handle_event("close_storage_backend_modal", _params, socket),
+    do: {:noreply, close_form(socket)}
 
-  def handle_event("validate", %{"storage_backend" => params}, socket) do
+  def handle_event("validate_storage_backend", %{"storage_backend" => params}, socket) do
     changeset =
-      socket.assigns.editing
+      socket.assigns.editing_storage_backend
       |> Settings.change_storage_backend(clean_params(socket, params))
       |> Map.put(:action, :validate)
 
-    {:noreply, assign(socket, :form, to_form(changeset))}
+    {:noreply, assign(socket, :storage_backend_form, to_form(changeset))}
   end
 
-  def handle_event("save", %{"storage_backend" => params}, socket) do
+  def handle_event("save_storage_backend", %{"storage_backend" => params}, socket) do
     params = clean_params(socket, params)
 
     result =
-      case socket.assigns.mode do
+      case socket.assigns.storage_backend_mode do
         :new -> Settings.create_storage_backend(params)
-        :edit -> Settings.update_storage_backend(socket.assigns.editing, params)
+        :edit -> Settings.update_storage_backend(socket.assigns.editing_storage_backend, params)
       end
 
     case result do
@@ -61,11 +63,11 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
          |> put_flash(:info, "Storage backend #{backend.name} saved")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset))}
+        {:noreply, assign(socket, :storage_backend_form, to_form(changeset))}
     end
   end
 
-  def handle_event("delete", %{"id" => id}, socket) do
+  def handle_event("delete_storage_backend", %{"id" => id}, socket) do
     case find_editable(socket, id) do
       {:ok, backend} ->
         case Settings.delete_storage_backend(backend) do
@@ -90,7 +92,7 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
     end
   end
 
-  def handle_event("test", %{"id" => id}, socket) do
+  def handle_event("test_storage_backend", %{"id" => id}, socket) do
     case Enum.find(socket.assigns.backends, &(&1.id == id)) do
       nil ->
         {:noreply, put_flash(socket, :error, "That storage backend no longer exists")}
@@ -145,18 +147,25 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
 
   defp open_form(socket, mode, backend) do
     socket
-    |> assign(:mode, mode)
-    |> assign(:editing, backend)
-    |> assign(:form, to_form(Settings.change_storage_backend(backend)))
+    |> assign(:storage_backend_mode, mode)
+    |> assign(:editing_storage_backend, backend)
+    |> assign(:storage_backend_form, to_form(Settings.change_storage_backend(backend)))
+    |> assign(:show_storage_backend_modal, true)
   end
 
   defp close_form(socket) do
-    socket |> assign(:form, nil) |> assign(:editing, nil)
+    socket
+    |> assign(:show_storage_backend_modal, false)
+    |> assign(:storage_backend_form, nil)
+    |> assign(:editing_storage_backend, nil)
   end
 
   # On edit a blank secret means "keep the stored one".
-  defp clean_params(%{assigns: %{mode: :edit}}, %{"secret_access_key" => ""} = params),
-    do: Map.delete(params, "secret_access_key")
+  defp clean_params(
+         %{assigns: %{storage_backend_mode: :edit}},
+         %{"secret_access_key" => ""} = params
+       ),
+       do: Map.delete(params, "secret_access_key")
 
   defp clean_params(_socket, params), do: params
 end

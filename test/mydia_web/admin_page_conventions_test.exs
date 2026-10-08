@@ -17,7 +17,7 @@ defmodule MydiaWeb.AdminPageConventionsTest do
   @live_root Path.expand("../../lib/mydia_web/live", __DIR__)
   @max_template_lines 60
 
-  @enforced []
+  @enforced ["admin_storage_backends_live"]
 
   @bare_events ~w(new edit save cancel close close_modal delete remove test validate filter)
 
