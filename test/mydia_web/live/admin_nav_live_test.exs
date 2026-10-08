@@ -107,7 +107,7 @@ defmodule MydiaWeb.AdminNavLiveTest do
     end
 
     test "pages without a list show no count", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/users")
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
       refute has_element?(view, "#admin-page-count")
     end

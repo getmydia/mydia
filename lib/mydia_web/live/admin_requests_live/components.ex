@@ -3,14 +3,17 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
   use MydiaWeb, :html
 
   import MydiaWeb.MediaRequestComponents,
-    only: [format_date: 1, status_badge_class: 1, status_text: 1]
+    only: [
+      format_date: 1,
+      media_type_text: 1,
+      poster_src: 1,
+      status_badge_class: 1,
+      status_text: 1
+    ]
 
   import MydiaWeb.AddMediaComponents, only: [add_config_fields: 1]
 
   alias Mydia.Media.MediaRequest
-  alias Mydia.Metadata.ImageUrl
-
-  @placeholder_poster "/images/no-poster.svg"
 
   attr :requests, :list, required: true
   attr :filter_status, :string, required: true
@@ -342,13 +345,4 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
     </.admin_modal>
     """
   end
-
-  defp media_type_text(media_type) do
-    media_type
-    |> String.replace("_", " ")
-    |> String.capitalize()
-  end
-
-  defp poster_src(%MediaRequest{poster_path: nil}), do: @placeholder_poster
-  defp poster_src(%MediaRequest{poster_path: path}), do: ImageUrl.poster_url(path, "w185")
 end

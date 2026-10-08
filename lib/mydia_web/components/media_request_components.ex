@@ -1,14 +1,15 @@
 defmodule MydiaWeb.MediaRequestComponents do
   @moduledoc """
-  Card chrome shared by the two media request pages.
+  Request card chrome for My Requests, plus the request helpers (status
+  labels, dates, media type, poster URL) that the admin Requests page reuses.
 
-  Imported by `MydiaWeb.AdminRequestsLive.Index` and
-  `MydiaWeb.MyRequestsLive.Index` rather than added to `html_helpers`: the
-  project reserves global imports for components used by three or more
-  LiveViews, which is how `MydiaWeb.DiscoverComponents` is wired.
+  `MydiaWeb.MyRequestsLive.Index` imports the card, and
+  `MydiaWeb.AdminRequestsLive.Components` imports the helpers. It is not added
+  to `html_helpers`: the project reserves global imports for components used by
+  three or more LiveViews.
 
-  Everything the two pages disagree about lives in the `:badges`, `:details`
-  and `:actions` slots, so neither page needs a flag for the other's chrome.
+  Everything a caller needs to vary in the card lives in the `:badges`,
+  `:details` and `:actions` slots.
   """
   use Phoenix.Component
 
@@ -128,12 +129,14 @@ defmodule MydiaWeb.MediaRequestComponents do
   def format_date(nil), do: "N/A"
   def format_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %d, %Y at %I:%M %p")
 
-  defp media_type_text(media_type) do
+  @doc "Human label for a request media type (\"tv_show\" becomes \"Tv show\")."
+  def media_type_text(media_type) do
     media_type
     |> String.replace("_", " ")
     |> String.capitalize()
   end
 
-  defp poster_src(%MediaRequest{poster_path: nil}), do: @placeholder_poster
-  defp poster_src(%MediaRequest{poster_path: path}), do: ImageUrl.poster_url(path, @poster_size)
+  @doc "Poster URL for a request, or the placeholder image when it has none."
+  def poster_src(%MediaRequest{poster_path: nil}), do: @placeholder_poster
+  def poster_src(%MediaRequest{poster_path: path}), do: ImageUrl.poster_url(path, @poster_size)
 end
