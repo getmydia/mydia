@@ -39,6 +39,46 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
       assert has_element?(view, "h1", "Import Lists")
     end
 
+    test "renders the shared admin header and list", %{conn: conn} do
+      {:ok, _list} =
+        Mydia.ImportLists.create_import_list(%{
+          name: "Header List #{System.unique_integer([:positive])}",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      {:ok, view, _} = live(conn, ~p"/admin/import-lists")
+
+      assert has_element?(view, "#admin-page-title", "Import Lists")
+      refute has_element?(view, "#admin-page-tabs")
+      assert has_element?(view, "#import-lists.bg-base-200")
+      assert has_element?(view, ".join-item[title=Sync]")
+    end
+
+    test "the items modal filters by status with a segmented control", %{conn: conn} do
+      {:ok, list} =
+        Mydia.ImportLists.create_import_list(%{
+          name: "Items List #{System.unique_integer([:positive])}",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      {:ok, view, _} = live(conn, ~p"/admin/import-lists")
+
+      view
+      |> element("#view-import-list-items-#{list.id}")
+      |> render_click()
+
+      assert has_element?(view, "#import-list-items-modal")
+      assert has_element?(view, "#import-list-items-filter")
+
+      view
+      |> element(~s{#import-list-items-filter button[phx-value-status="pending"]})
+      |> render_click()
+
+      assert has_element?(view, "#import-list-items-modal")
+    end
+
     test "the nav link is present", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
@@ -49,7 +89,7 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
       {:ok, view, _html} = live(conn, ~p"/admin/import-lists")
 
       view
-      |> element("button[phx-click='new_list']")
+      |> element("button[phx-click='new_import_list']")
       |> render_click()
 
       assert has_element?(view, "#import-list-form")
@@ -75,7 +115,7 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
       {:ok, view, _html} = live(conn, ~p"/admin/import-lists")
 
       view
-      |> element(~s{button[phx-click="edit_list"][phx-value-id="#{list.id}"]})
+      |> element(~s{button[phx-click="edit_import_list"][phx-value-id="#{list.id}"]})
       |> render_click()
 
       view
