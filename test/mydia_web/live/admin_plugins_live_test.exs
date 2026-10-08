@@ -13,6 +13,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   alias Mydia.Plugins.Registry
   alias Mydia.Settings
   alias MydiaWeb.AdminPluginsLive.Components
+  alias MydiaWeb.AdminPluginsLive.ModalComponents
 
   # A prebuilt wasm32-wasip2 component (the host only accepts components, not
   # core-wasm modules) — see test/support/fixtures/plugins/host_test_fixture/.
@@ -287,9 +288,9 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       view |> element("#browse-store") |> render_click()
       render_async(view)
 
-      assert has_element?(view, "#store-modal #catalog-empty")
-      refute has_element?(view, "#store-modal #plugin-catalog")
-      refute has_element?(view, "#store-modal #browse-error")
+      assert has_element?(view, "#plugin-store-modal #catalog-empty")
+      refute has_element?(view, "#plugin-store-modal #plugin-catalog")
+      refute has_element?(view, "#plugin-store-modal #browse-error")
     end
 
     test "a failing source opens the modal with the error", %{conn: conn} do
@@ -300,8 +301,8 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       view |> element("#browse-store") |> render_click()
       render_async(view)
 
-      assert has_element?(view, "#store-modal #browse-error")
-      refute has_element?(view, "#store-modal #catalog-empty")
+      assert has_element?(view, "#plugin-store-modal #browse-error")
+      refute has_element?(view, "#plugin-store-modal #catalog-empty")
     end
 
     test "Close dismisses the store", %{conn: conn} do
@@ -312,7 +313,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       render_async(view)
       view |> element("#close-store") |> render_click()
 
-      refute has_element?(view, "#store-modal")
+      refute has_element?(view, "#plugin-store-modal")
     end
 
     test "an approval hides the store, and declining brings it back", %{conn: conn} do
@@ -324,16 +325,16 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       render_async(view)
       view |> element("#approve-webhook-notifier") |> render_click()
 
-      assert has_element?(view, "#approval-modal")
-      refute has_element?(view, "#store-modal")
+      assert has_element?(view, "#plugin-approval-modal")
+      refute has_element?(view, "#plugin-store-modal")
 
       view |> element("#decline-approval") |> render_click()
-      assert has_element?(view, "#store-modal")
+      assert has_element?(view, "#plugin-store-modal")
     end
 
     test "the store modal shows a spinner before results arrive" do
       doc =
-        render_component(&Components.store_modal/1, browse: nil)
+        render_component(&ModalComponents.store_modal/1, browse: nil)
         |> LazyHTML.from_fragment()
 
       refute doc |> LazyHTML.query("#store-loading") |> Enum.empty?()
@@ -381,7 +382,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       }
 
       doc =
-        render_component(&Components.store_modal/1, browse: browse)
+        render_component(&ModalComponents.store_modal/1, browse: browse)
         |> LazyHTML.from_fragment()
 
       text = fn selector ->
@@ -419,7 +420,8 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       }
 
       doc =
-        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+        render_component(&ModalComponents.store_modal/1, browse: browse)
+        |> LazyHTML.from_fragment()
 
       key = "src-#{sid}-fixture-tool"
 
@@ -449,7 +451,8 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       browse = %BrowseResult{status: :available, source_count: 1, catalog: [item]}
 
       doc =
-        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+        render_component(&ModalComponents.store_modal/1, browse: browse)
+        |> LazyHTML.from_fragment()
 
       assert doc |> LazyHTML.query("#install-official-fixture-tool") |> LazyHTML.text() =~
                "Replace"
@@ -468,7 +471,8 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       }
 
       doc =
-        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+        render_component(&ModalComponents.store_modal/1, browse: browse)
+        |> LazyHTML.from_fragment()
 
       assert doc |> LazyHTML.query("#browse-error") |> LazyHTML.text() =~ "1 of 2 sources"
     end
@@ -508,7 +512,9 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       # No catalog source is reachable in tests, so seed the browse result the
       # store would hold, then let any message re-render the view.
       :sys.replace_state(view.pid, fn state ->
-        socket = Phoenix.Component.assign(state.socket, browse: browse, store_open?: true)
+        socket =
+          Phoenix.Component.assign(state.socket, browse: browse, show_plugin_store_modal: true)
+
         %{state | socket: socket}
       end)
 
@@ -555,13 +561,13 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       # Pending plugin is inactive and offers a review/approve action.
       assert has_element?(view, "#plugin-row-webhook-notifier")
       assert has_element?(view, "#approve-webhook-notifier")
-      refute has_element?(view, "#approval-modal")
+      refute has_element?(view, "#plugin-approval-modal")
       refute Host.running?("webhook-notifier")
 
       # Opening review shows the approval modal with the requested capabilities
       # and the network destination in plain language.
       view |> element("#approve-webhook-notifier") |> render_click()
-      assert has_element?(view, "#approval-modal")
+      assert has_element?(view, "#plugin-approval-modal")
       assert has_element?(view, "#approval-capabilities")
       assert has_element?(view, "#approval-capabilities-group-talks_to", "discord.com")
       assert has_element?(view, "#approval-capabilities-also", "reacts to new titles")
@@ -584,7 +590,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
       # Approving activates the plugin.
       view |> element("#confirm-approval") |> render_click()
-      refute has_element?(view, "#approval-modal")
+      refute has_element?(view, "#plugin-approval-modal")
       assert Host.running?("webhook-notifier")
       assert render(view) =~ "active"
     end
@@ -603,7 +609,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       }
 
       render_approval = fn approval ->
-        render_component(&Components.approval_modal/1, approval: approval)
+        render_component(&ModalComponents.approval_modal/1, approval: approval)
         |> LazyHTML.from_fragment()
       end
 
@@ -627,7 +633,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       view |> element("#approve-webhook-notifier") |> render_click()
       view |> element("#decline-approval") |> render_click()
 
-      refute has_element?(view, "#approval-modal")
+      refute has_element?(view, "#plugin-approval-modal")
       refute Host.running?("webhook-notifier")
     end
 
@@ -769,7 +775,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert has_element?(view, "#approve-notifier")
 
       view |> element("#approve-notifier") |> render_click()
-      assert has_element?(view, "#approval-modal")
+      assert has_element?(view, "#plugin-approval-modal")
       # One grouped list, with only the widened values badged.
       assert has_element?(view, "#approval-reapproval-note", "2 things")
       assert has_element?(view, "#approval-capabilities-group-can_see [data-new]", "Media items")
@@ -786,7 +792,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
       view |> element("#confirm-approval") |> render_click()
 
-      refute has_element?(view, "#approval-modal")
+      refute has_element?(view, "#plugin-approval-modal")
       refute has_element?(view, "#reapproval-badge-notifier")
 
       config = Settings.get_plugin_config_by_slug("notifier")
@@ -910,8 +916,21 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       {:ok, view, _} = live(conn, ~p"/admin/plugins")
       view |> element("#details-notifier") |> render_click()
 
-      assert has_element?(view, "#detail-modal")
+      assert has_element?(view, "#plugin-detail-modal")
       refute has_element?(view, "#detail-revoke-notifier")
+    end
+
+    test "plugin rows use icon-only actions", %{conn: conn} do
+      seed_plugin("notifier", "Notifier",
+        enabled: true,
+        granted: %{"net:http" => ["discord.com"]}
+      )
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#plugin-row-notifier .join-item[title=Details]")
+      assert has_element?(view, "#plugin-row-notifier .join-item[title=Logs]")
+      assert has_element?(view, "#plugin-row-notifier .join-item.text-error[title=Remove]")
     end
 
     test "remove deletes the plugin row", %{conn: conn} do
@@ -981,7 +1000,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       })
       |> render_submit()
 
-      refute has_element?(view, "#settings-modal")
+      refute has_element?(view, "#plugin-settings-modal")
 
       config = Settings.get_plugin_config_by_slug("webhook-notifier")
       assert config.settings["webhook_url"] == "https://ntfy.example.com/mydia"
@@ -1002,7 +1021,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
         |> render_submit()
 
       # Modal stays open with an error; nothing is persisted.
-      assert has_element?(view, "#settings-modal")
+      assert has_element?(view, "#plugin-settings-modal")
       assert html =~ "full URL"
       config = Settings.get_plugin_config_by_slug("webhook-notifier")
       refute Map.has_key?(config.settings, "webhook_url")
@@ -1259,8 +1278,8 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert has_element?(view, "#settings-plex[disabled]")
       assert render(view) =~ "Configured per server on Media servers"
 
-      render_hook(view, "edit_settings", %{"slug" => "plex"})
-      refute has_element?(view, "#settings-modal")
+      render_hook(view, "edit_plugin_settings", %{"slug" => "plex"})
+      refute has_element?(view, "#plugin-settings-modal")
     end
 
     test "a single-instance plugin with the same schema keeps its settings form", %{conn: conn} do
@@ -1495,7 +1514,8 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       }
 
       doc =
-        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+        render_component(&ModalComponents.store_modal/1, browse: browse)
+        |> LazyHTML.from_fragment()
 
       text =
         doc |> LazyHTML.query("#catalog-description-official-notifier-text") |> LazyHTML.text()
@@ -1535,7 +1555,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
       view |> element("#details-notifier") |> render_click()
 
-      assert view |> element("#detail-modal #detail-description") |> render() =~
+      assert view |> element("#plugin-detail-modal #detail-description") |> render() =~
                "household channel"
     end
   end

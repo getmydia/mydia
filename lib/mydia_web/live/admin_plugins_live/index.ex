@@ -48,7 +48,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
      |> assign(:page_title, "Configuration - Plugins")
      |> assign(:browse, nil)
      |> assign(:browsing?, false)
-     |> assign(:store_open?, false)
+     |> assign(:show_plugin_store_modal, false)
      |> assign(:approval, nil)
      |> assign(:detail, nil)
      |> assign(:logs, nil)
@@ -66,21 +66,21 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   @impl true
   # A click while a browse is in flight still opens the store; the result fills
   # it when it lands.
-  def handle_event("browse_store", _params, %{assigns: %{browsing?: true}} = socket),
-    do: {:noreply, assign(socket, :store_open?, true)}
+  def handle_event("open_plugin_store", _params, %{assigns: %{browsing?: true}} = socket),
+    do: {:noreply, assign(socket, :show_plugin_store_modal, true)}
 
-  def handle_event("browse_store", _params, socket) do
+  def handle_event("open_plugin_store", _params, socket) do
     # Computed outside the closure so the task does not copy the socket.
     installed = socket.assigns.installed
 
     {:noreply,
      socket
-     |> assign(store_open?: true, browsing?: true, browse: nil)
+     |> assign(show_plugin_store_modal: true, browsing?: true, browse: nil)
      |> start_async(:browse, fn -> Index.browse(installed) end)}
   end
 
-  def handle_event("close_store", _params, socket) do
-    {:noreply, assign(socket, store_open?: false, browse: nil)}
+  def handle_event("close_plugin_store_modal", _params, socket) do
+    {:noreply, assign(socket, show_plugin_store_modal: false, browse: nil)}
   end
 
   ## Capability approval (KTD6, AE1)
@@ -123,7 +123,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
           |> put_flash(:info, approval_flash(approval))
           |> assign(:approval, nil)
           |> assign(:browse, nil)
-          |> assign(:store_open?, false)
+          |> assign(:show_plugin_store_modal, false)
           |> load_installed()
 
         {:error, error} ->
@@ -135,32 +135,32 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
   ## Lifecycle (R14)
 
-  def handle_event("toggle_enabled", %{"slug" => slug}, socket) do
+  def handle_event("toggle_plugin", %{"slug" => slug}, socket) do
     config = Settings.get_plugin_config_by_slug(slug)
     enable? = !(config && config.enabled)
     apply_lifecycle(socket, fn -> Plugins.set_enabled(slug, enable?) end, "Updated #{slug}.")
   end
 
-  def handle_event("remove", %{"slug" => slug}, socket) do
+  def handle_event("remove_plugin", %{"slug" => slug}, socket) do
     apply_lifecycle(socket, fn -> Plugins.remove(slug) end, "Removed #{slug}.")
   end
 
   ## Settings modal (operator-editable config — U3)
 
-  def handle_event("edit_settings", %{"slug" => slug}, socket) do
+  def handle_event("edit_plugin_settings", %{"slug" => slug}, socket) do
     case Settings.get_plugin_config_by_slug(slug) do
       nil -> {:noreply, socket}
       config -> {:noreply, open_settings(socket, config)}
     end
   end
 
-  def handle_event("close_settings", _params, socket) do
+  def handle_event("close_plugin_settings_modal", _params, socket) do
     {:noreply, assign(socket, :settings, nil)}
   end
 
   # Re-renders the open modal as the operator edits, so `visible_when` fields
   # show/hide live when the controlling value (e.g. `target`) changes. No save.
-  def handle_event("settings_changed", params, socket) do
+  def handle_event("validate_plugin_settings", params, socket) do
     case socket.assigns.settings do
       nil ->
         {:noreply, socket}
@@ -192,7 +192,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   def handle_event("save_ceilings", _params, socket),
     do: {:noreply, put_flash(socket, :error, "Could not save permissions.")}
 
-  def handle_event("save_settings", %{"slug" => slug} = params, socket) do
+  def handle_event("save_plugin_settings", %{"slug" => slug} = params, socket) do
     case Settings.get_plugin_config_by_slug(slug) do
       nil ->
         {:noreply, socket}
@@ -224,20 +224,20 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
   ## Detail modal (granted caps + host grants)
 
-  def handle_event("show_detail", %{"slug" => slug}, socket) do
+  def handle_event("show_plugin_detail", %{"slug" => slug}, socket) do
     case Settings.get_plugin_config_by_slug(slug) do
       nil -> {:noreply, socket}
       config -> {:noreply, assign(socket, :detail, detail_for(config))}
     end
   end
 
-  def handle_event("close_detail", _params, socket) do
+  def handle_event("close_plugin_detail_modal", _params, socket) do
     {:noreply, assign(socket, :detail, nil)}
   end
 
   ## Logs modal (U6/U7) — activity log + network activity + test
 
-  def handle_event("show_logs", %{"slug" => slug}, socket) do
+  def handle_event("show_plugin_logs", %{"slug" => slug}, socket) do
     case Settings.get_plugin_config_by_slug(slug) do
       nil ->
         {:noreply, socket}
@@ -254,7 +254,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     end
   end
 
-  def handle_event("close_logs", _params, socket) do
+  def handle_event("close_plugin_logs_modal", _params, socket) do
     {:noreply,
      socket
      |> unsubscribe_logs()
@@ -265,7 +265,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
   ## Debug logs (U6) — filter + live tail
 
-  def handle_event("filter_logs", params, socket) do
+  def handle_event("filter_plugin_logs", params, socket) do
     logs = socket.assigns.logs
     min_level = parse_level(params["level"])
     query = String.trim(params["query"] || "")

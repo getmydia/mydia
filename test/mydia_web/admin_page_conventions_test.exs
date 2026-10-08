@@ -20,7 +20,8 @@ defmodule MydiaWeb.AdminPageConventionsTest do
   @enforced [
     "admin_storage_backends_live",
     "admin_path_mappings_live",
-    "admin_media_servers_live"
+    "admin_media_servers_live",
+    "admin_plugins_live"
   ]
 
   @bare_events ~w(new edit save cancel close close_modal delete remove test validate filter)

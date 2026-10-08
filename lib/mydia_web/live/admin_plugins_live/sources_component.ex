@@ -28,23 +28,23 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
   end
 
   @impl true
-  def handle_event("open_add", _params, socket) do
+  def handle_event("open_add_source", _params, socket) do
     {:noreply,
      assign(socket, adding?: true, preview: nil, error: nil, form: to_form(%{"url" => ""}))}
   end
 
-  def handle_event("cancel_add", _params, socket) do
+  def handle_event("close_add_source_modal", _params, socket) do
     {:noreply, assign(socket, adding?: false, preview: nil, previewing?: false, error: nil)}
   end
 
-  def handle_event("preview", %{"url" => url}, socket) do
+  def handle_event("preview_source", %{"url" => url}, socket) do
     {:noreply,
      socket
      |> assign(previewing?: true, preview: nil, error: nil, form: to_form(%{"url" => url}))
      |> start_async(:preview, fn -> Index.preview_source(url) end)}
   end
 
-  def handle_event("confirm_add", _params, %{assigns: %{preview: preview}} = socket)
+  def handle_event("confirm_add_source", _params, %{assigns: %{preview: preview}} = socket)
       when not is_nil(preview) do
     attrs = %{url: preview.url, name: preview.name, public_key: preview.public_key}
 
@@ -57,9 +57,9 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
     end
   end
 
-  def handle_event("confirm_add", _params, socket), do: {:noreply, socket}
+  def handle_event("confirm_add_source", _params, socket), do: {:noreply, socket}
 
-  def handle_event("remove", %{"id" => id}, socket) do
+  def handle_event("remove_source", %{"id" => id}, socket) do
     with %{} = source <- Sources.get_source(id),
          {:ok, _} <- Sources.remove_source(source) do
       {:noreply, load_sources(socket)}
@@ -92,7 +92,7 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
           id="add-source"
           type="button"
           class="btn btn-sm btn-primary"
-          phx-click="open_add"
+          phx-click="open_add_source"
           phx-target={@myself}
         >
           <.icon name="hero-plus" class="w-4 h-4" /> Add source
@@ -136,18 +136,18 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
                   <span :if={source.last_error} class="text-error text-xs break-words">
                     {source.last_error}
                   </span>
-                  <button
-                    :if={not source.declared}
-                    id={"remove-source-#{source.id}"}
-                    type="button"
-                    class="btn btn-ghost btn-xs text-error"
-                    phx-click="remove"
-                    phx-value-id={source.id}
-                    phx-target={@myself}
-                    data-confirm="Remove this source? Plugins installed from it keep running but stop receiving updates."
-                  >
-                    Remove
-                  </button>
+                  <.row_actions :if={not source.declared}>
+                    <.row_action
+                      id={"remove-source-#{source.id}"}
+                      icon="hero-trash"
+                      title="Remove"
+                      destructive
+                      phx-click="remove_source"
+                      phx-value-id={source.id}
+                      phx-target={@myself}
+                      data-confirm="Remove this source? Plugins installed from it keep running but stop receiving updates."
+                    />
+                  </.row_actions>
                 </div>
               </td>
             </tr>
@@ -155,88 +155,86 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
         </table>
       </div>
 
-      <div :if={@adding?} id="add-source-modal" class="modal modal-open">
-        <div class="modal-box max-w-lg">
-          <h3 class="text-lg font-bold flex items-center gap-2">
-            <.icon name="hero-plus-circle" class="w-5 h-5" /> Add a plugin source
-          </h3>
+      <.admin_modal
+        :if={@adding?}
+        id="add-source-modal"
+        icon="hero-plus-circle"
+        title="Add a plugin source"
+        on_close={JS.push("close_add_source_modal", target: @myself)}
+      >
+        <.form
+          for={@form}
+          id="add-source-form"
+          phx-submit="preview_source"
+          phx-target={@myself}
+        >
+          <.input
+            field={@form[:url]}
+            type="url"
+            label="Catalog URL"
+            placeholder="https://example.com/index.json"
+          />
+          <button type="submit" class="btn btn-sm btn-outline" disabled={@previewing?}>
+            <span :if={@previewing?} class="loading loading-spinner loading-xs"></span> Check source
+          </button>
+        </.form>
 
-          <.form
-            for={@form}
-            id="add-source-form"
-            phx-submit="preview"
-            phx-target={@myself}
-            class="mt-4"
-          >
-            <.input
-              field={@form[:url]}
-              type="url"
-              label="Catalog URL"
-              placeholder="https://example.com/index.json"
-            />
-            <button type="submit" class="btn btn-sm btn-outline" disabled={@previewing?}>
-              <span :if={@previewing?} class="loading loading-spinner loading-xs"></span> Check source
-            </button>
-          </.form>
+        <div :if={@error} id="source-error" class="alert alert-error mt-4 text-sm">
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+          <span class="break-words min-w-0">{@error}</span>
+        </div>
 
-          <div :if={@error} id="source-error" class="alert alert-error mt-4 text-sm">
-            <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
-            <span class="break-words min-w-0">{@error}</span>
-          </div>
-
-          <div :if={@preview} id="source-preview" class="mt-4 space-y-3">
-            <dl class="text-sm space-y-1">
-              <div>
-                <dt class="text-base-content/60 text-xs">Name</dt>
-                <dd class="font-medium break-words">{@preview.name}</dd>
-              </div>
-              <div>
-                <dt class="text-base-content/60 text-xs">URL</dt>
-                <dd class="break-all">{@preview.url}</dd>
-              </div>
-              <div>
-                <dt class="text-base-content/60 text-xs">Signing key</dt>
-                <dd class="font-mono">{@preview.fingerprint}</dd>
-              </div>
-              <div>
-                <dt class="text-base-content/60 text-xs">Plugins listed</dt>
-                <dd>{@preview.plugin_count}</dd>
-              </div>
-            </dl>
-            <div class="alert alert-warning text-sm">
-              <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
-              <span>
-                Adding this source trusts whoever holds the signing key {@preview.fingerprint}. Mydia
-                has not reviewed its plugins. Compare the fingerprint with the one the publisher
-                gives you before you continue.
-              </span>
+        <div :if={@preview} id="source-preview" class="mt-4 space-y-3">
+          <dl class="text-sm space-y-1">
+            <div>
+              <dt class="text-base-content/60 text-xs">Name</dt>
+              <dd class="font-medium break-words">{@preview.name}</dd>
             </div>
-          </div>
-
-          <div class="modal-action">
-            <button
-              id="cancel-source"
-              type="button"
-              class="btn btn-ghost"
-              phx-click="cancel_add"
-              phx-target={@myself}
-            >
-              Cancel
-            </button>
-            <button
-              :if={@preview}
-              id="confirm-source"
-              type="button"
-              class="btn btn-primary"
-              phx-click="confirm_add"
-              phx-target={@myself}
-            >
-              Trust and add
-            </button>
+            <div>
+              <dt class="text-base-content/60 text-xs">URL</dt>
+              <dd class="break-all">{@preview.url}</dd>
+            </div>
+            <div>
+              <dt class="text-base-content/60 text-xs">Signing key</dt>
+              <dd class="font-mono">{@preview.fingerprint}</dd>
+            </div>
+            <div>
+              <dt class="text-base-content/60 text-xs">Plugins listed</dt>
+              <dd>{@preview.plugin_count}</dd>
+            </div>
+          </dl>
+          <div class="alert alert-warning text-sm">
+            <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+            <span>
+              Adding this source trusts whoever holds the signing key {@preview.fingerprint}. Mydia
+              has not reviewed its plugins. Compare the fingerprint with the one the publisher
+              gives you before you continue.
+            </span>
           </div>
         </div>
-        <div class="modal-backdrop bg-black/50" phx-click="cancel_add" phx-target={@myself}></div>
-      </div>
+
+        <:actions>
+          <button
+            id="cancel-source"
+            type="button"
+            class="btn btn-ghost"
+            phx-click="close_add_source_modal"
+            phx-target={@myself}
+          >
+            Cancel
+          </button>
+          <button
+            :if={@preview}
+            id="confirm-source"
+            type="button"
+            class="btn btn-primary"
+            phx-click="confirm_add_source"
+            phx-target={@myself}
+          >
+            Trust and add
+          </button>
+        </:actions>
+      </.admin_modal>
     </div>
     """
   end

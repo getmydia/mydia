@@ -1,47 +1,42 @@
 <Layouts.app {assigns}>
   <.admin_page page={:plugins} count={length(@installed)}>
     <:actions>
-      <MydiaWeb.AdminPluginsLive.Components.header_actions browsing?={@browsing? and @store_open?} />
+      <MydiaWeb.AdminPluginsLive.Components.header_actions browsing?={
+        @browsing? and @show_plugin_store_modal
+      } />
     </:actions>
     <MydiaWeb.AdminPluginsLive.Components.plugins_tab
       installed={@installed}
       updates={@updates}
     />
 
-    <div class="p-4 sm:p-6 pt-0 sm:pt-0">
-      <.live_component
-        module={MydiaWeb.AdminPluginsLive.SourcesComponent}
-        id="plugin-sources-card"
-      />
-    </div>
-
     <%!-- Store modal: always opens on Browse store; hidden while an approval is open --%>
-    <%= if @store_open? and is_nil(@approval) do %>
-      <MydiaWeb.AdminPluginsLive.Components.store_modal browse={@browse} />
+    <%= if assigns[:show_plugin_store_modal] and is_nil(@approval) do %>
+      <MydiaWeb.AdminPluginsLive.ModalComponents.store_modal browse={@browse} />
     <% end %>
 
     <%!-- Capability approval modal (the emphasized surface) --%>
     <%= if @approval do %>
-      <MydiaWeb.AdminPluginsLive.Components.approval_modal approval={@approval} />
+      <MydiaWeb.AdminPluginsLive.ModalComponents.approval_modal approval={@approval} />
     <% end %>
 
     <%!-- Per-plugin detail modal: granted caps + host grants --%>
     <%= if @detail do %>
-      <MydiaWeb.AdminPluginsLive.Components.detail_modal detail={@detail} />
+      <MydiaWeb.AdminPluginsLive.ModalComponents.detail_modal detail={@detail} />
     <% end %>
 
     <%!-- Dedicated logs modal: activity log + network requests + test --%>
     <%= if @logs do %>
-      <MydiaWeb.AdminPluginsLive.Components.logs_modal
+      <MydiaWeb.AdminPluginsLive.ModalComponents.logs_modal
         logs={@logs}
         log_rows={@streams.plugin_logs}
         net_rows={@streams.plugin_net}
       />
     <% end %>
 
-    <%!-- Operator settings modal (host-granting config — U3) --%>
+    <%!-- Operator settings modal (host-granting config) --%>
     <%= if @settings do %>
-      <MydiaWeb.AdminPluginsLive.Components.settings_modal settings={@settings} />
+      <MydiaWeb.AdminPluginsLive.ModalComponents.settings_modal settings={@settings} />
     <% end %>
   </.admin_page>
 </Layouts.app>
