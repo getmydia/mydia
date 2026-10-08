@@ -180,225 +180,212 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
       |> assign(:content_types, @content_types)
 
     ~H"""
-    <div class="modal modal-open">
-      <div class="modal-box max-w-2xl">
-        <.form
-          for={@download_client_form}
-          id="download-client-form"
-          phx-change="validate_download_client"
-          phx-submit="save_download_client"
-        >
-          <%!-- Header --%>
-          <div class="flex items-center justify-between mb-5">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-                <.icon
-                  name={
-                    if(@download_client_mode == :new,
-                      do: "hero-plus-circle",
-                      else: "hero-pencil-square"
-                    )
-                  }
-                  class="w-5 h-5 text-primary"
-                />
-              </div>
-              <div>
-                <h3 class="font-bold text-lg">
-                  {if @download_client_mode == :new,
-                    do: "Add Download Client",
-                    else: "Edit Download Client"}
-                </h3>
-                <p class="text-sm text-base-content/60">
-                  {if @download_client_mode == :new,
-                    do: "Configure a new download client",
-                    else: "Update client settings"}
-                </p>
-              </div>
+    <.admin_modal
+      id="download-client-modal"
+      icon={if @download_client_mode == :new, do: "hero-plus-circle", else: "hero-pencil-square"}
+      title={
+        if @download_client_mode == :new, do: "Add Download Client", else: "Edit Download Client"
+      }
+      subtitle={
+        if @download_client_mode == :new,
+          do: "Configure a new download client",
+          else: "Update client settings"
+      }
+      on_close="close_download_client_modal"
+    >
+      <:header_aside>
+        <label class="label cursor-pointer gap-2">
+          <span class="label-text text-sm">Enabled</span>
+          <input
+            type="hidden"
+            name={@download_client_form[:enabled].name}
+            value="false"
+            form="download-client-form"
+          />
+          <input
+            type="checkbox"
+            name={@download_client_form[:enabled].name}
+            value="true"
+            checked={
+              Phoenix.HTML.Form.normalize_value("checkbox", @download_client_form[:enabled].value)
+            }
+            class="toggle toggle-success toggle-sm"
+            form="download-client-form"
+          />
+        </label>
+      </:header_aside>
+      <.form
+        for={@download_client_form}
+        id="download-client-form"
+        phx-change="validate_download_client"
+        phx-submit="save_download_client"
+      >
+        <div class="space-y-5">
+          <%!-- Basic Settings Row --%>
+          <div class="grid grid-cols-6 gap-3">
+            <div class="col-span-6 md:col-span-3">
+              <.input field={@download_client_form[:name]} type="text" label="Name" required />
             </div>
-            <label class="label cursor-pointer gap-2">
-              <span class="label-text text-sm">Enabled</span>
-              <input type="hidden" name={@download_client_form[:enabled].name} value="false" />
-              <input
-                type="checkbox"
-                name={@download_client_form[:enabled].name}
-                value="true"
-                checked={
-                  Phoenix.HTML.Form.normalize_value("checkbox", @download_client_form[:enabled].value)
-                }
-                class="toggle toggle-success toggle-sm"
+            <div class="col-span-4 md:col-span-2">
+              <.input
+                field={@download_client_form[:type]}
+                type="select"
+                label="Type"
+                options={[
+                  {"qBittorrent", "qbittorrent"},
+                  {"Transmission", "transmission"},
+                  {"rqbit", "rqbit"},
+                  {"rTorrent", "rtorrent"},
+                  {"Blackhole", "blackhole"},
+                  {"SABnzbd", "sabnzbd"},
+                  {"NZBGet", "nzbget"},
+                  {"Debrid", "debrid"}
+                ]}
+                required
               />
-            </label>
+            </div>
+            <div class="col-span-2 md:col-span-1">
+              <.input field={@download_client_form[:priority]} type="number" label="Priority" />
+            </div>
           </div>
-          <div class="space-y-5">
-            <%!-- Basic Settings Row --%>
-            <div class="grid grid-cols-6 gap-3">
-              <div class="col-span-6 md:col-span-3">
-                <.input field={@download_client_form[:name]} type="text" label="Name" required />
-              </div>
-              <div class="col-span-4 md:col-span-2">
-                <.input
-                  field={@download_client_form[:type]}
-                  type="select"
-                  label="Type"
-                  options={[
-                    {"qBittorrent", "qbittorrent"},
-                    {"Transmission", "transmission"},
-                    {"rqbit", "rqbit"},
-                    {"rTorrent", "rtorrent"},
-                    {"Blackhole", "blackhole"},
-                    {"SABnzbd", "sabnzbd"},
-                    {"NZBGet", "nzbget"},
-                    {"Debrid", "debrid"}
-                  ]}
-                  required
-                />
-              </div>
-              <div class="col-span-2 md:col-span-1">
-                <.input field={@download_client_form[:priority]} type="number" label="Priority" />
-              </div>
-            </div>
 
-            <div class="divider my-1"></div>
+          <div class="divider my-1"></div>
 
-            <%= cond do %>
-              <% @selected_type == "debrid" -> %>
-                <ConnectionFieldsComponents.debrid_fields download_client_form={@download_client_form} />
-              <% @selected_type == "blackhole" -> %>
-                <ConnectionFieldsComponents.blackhole_fields download_client_form={
-                  @download_client_form
-                } />
-              <% true -> %>
-                <ConnectionFieldsComponents.network_fields download_client_form={
-                  @download_client_form
-                } />
-            <% end %>
+          <%= cond do %>
+            <% @selected_type == "debrid" -> %>
+              <ConnectionFieldsComponents.debrid_fields download_client_form={@download_client_form} />
+            <% @selected_type == "blackhole" -> %>
+              <ConnectionFieldsComponents.blackhole_fields download_client_form={
+                @download_client_form
+              } />
+            <% true -> %>
+              <ConnectionFieldsComponents.network_fields download_client_form={@download_client_form} />
+          <% end %>
 
-            <%!-- Per-content-type categories. Hidden for blackhole and debrid clients. --%>
-            <%= if @show_categories? do %>
-              <CategoryRoutingComponents.categories_section
-                content_types={@content_types}
-                categories_value={@categories_value}
-                legacy_category={@legacy_category}
-                has_legacy_only?={@has_legacy_only?}
-              />
-            <% end %>
+          <%!-- Per-content-type categories. Hidden for blackhole and debrid clients. --%>
+          <%= if @show_categories? do %>
+            <CategoryRoutingComponents.categories_section
+              content_types={@content_types}
+              categories_value={@categories_value}
+              legacy_category={@legacy_category}
+              has_legacy_only?={@has_legacy_only?}
+            />
+          <% end %>
 
-            <%!-- What to do with torrents this client already holds that Mydia
+          <%!-- What to do with torrents this client already holds that Mydia
                  did not add. See Mydia.Downloads.ExternalPolicy and #531. --%>
-            <%= if @show_external_torrents? do %>
-              <CategoryRoutingComponents.external_torrents_section
-                download_client_form={@download_client_form}
-                external_torrent_modes={@external_torrent_modes}
-                category_capable_type?={@category_capable_type?}
-              />
-            <% end %>
+          <%= if @show_external_torrents? do %>
+            <CategoryRoutingComponents.external_torrents_section
+              download_client_form={@download_client_form}
+              external_torrent_modes={@external_torrent_modes}
+              category_capable_type?={@category_capable_type?}
+            />
+          <% end %>
 
-            <%!-- Stalled timeout. Visible for every client type. The entered
+          <%!-- Stalled timeout. Visible for every client type. The entered
                  value is only the FIRST threshold; the give-up deadline is
                  derived from it and was previously invisible everywhere. --%>
-            <div class="space-y-2">
-              <.input
-                field={@download_client_form[:incomplete_grace_minutes]}
-                id="download-client-grace-minutes"
-                type="number"
-                label="Stalled timeout (minutes)"
-                placeholder="60"
-                min="1"
-              />
-              <% grace = grace_minutes_value(@download_client_form[:incomplete_grace_minutes].value) %>
-              <% escalation = StallDetector.escalation_minutes(grace) %>
-              <p class="text-xs text-base-content/50">
-                Flagged as stalled after {format_duration(grace * 60)} without progress.
-                If it still hasn't moved {format_duration(escalation * 60)} later
-                ({format_duration((grace + escalation) * 60)} total), Mydia removes it
-                and searches for a different release.
-              </p>
-            </div>
+          <div class="space-y-2">
+            <.input
+              field={@download_client_form[:incomplete_grace_minutes]}
+              id="download-client-grace-minutes"
+              type="number"
+              label="Stalled timeout (minutes)"
+              placeholder="60"
+              min="1"
+            />
+            <% grace = grace_minutes_value(@download_client_form[:incomplete_grace_minutes].value) %>
+            <% escalation = StallDetector.escalation_minutes(grace) %>
+            <p class="text-xs text-base-content/50">
+              Flagged as stalled after {format_duration(grace * 60)} without progress.
+              If it still hasn't moved {format_duration(escalation * 60)} later
+              ({format_duration((grace + escalation) * 60)} total), Mydia removes it
+              and searches for a different release.
+            </p>
+          </div>
 
-            <%!-- Priority profile (collapsed advanced section). --%>
-            <%= if @show_priority_profile? do %>
-              <CategoryRoutingComponents.priority_profile_section
-                priority_tiers={@priority_tiers}
-                priority_placeholders={@priority_placeholders}
-                priority_profile_value={@priority_profile_value}
-              />
-            <% end %>
+          <%!-- Priority profile (collapsed advanced section). --%>
+          <%= if @show_priority_profile? do %>
+            <CategoryRoutingComponents.priority_profile_section
+              priority_tiers={@priority_tiers}
+              priority_placeholders={@priority_placeholders}
+              priority_profile_value={@priority_profile_value}
+            />
+          <% end %>
 
-            <%!-- Remote seedbox (SFTP pull). Visible only for network torrent-client
+          <%!-- Remote seedbox (SFTP pull). Visible only for network torrent-client
                  types that can point at a remote host. --%>
-            <%= if @show_remote_fetch? do %>
-              <SeedboxComponents.remote_fetch_section download_client_form={@download_client_form} />
-            <% end %>
+          <%= if @show_remote_fetch? do %>
+            <SeedboxComponents.remote_fetch_section download_client_form={@download_client_form} />
+          <% end %>
 
-            <div class="divider my-1"></div>
+          <div class="divider my-1"></div>
 
-            <%!-- Options Section --%>
-            <div class="space-y-3">
-              <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
-                <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
-                <span>Options</span>
-              </div>
+          <%!-- Options Section --%>
+          <div class="space-y-3">
+            <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
+              <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
+              <span>Options</span>
+            </div>
 
-              <div class="flex items-center justify-between bg-base-200 rounded-lg px-4 py-3">
-                <div class="flex items-center gap-3">
-                  <.icon name="hero-trash" class="w-4 h-4 text-base-content/60" />
-                  <div>
-                    <span class="text-sm font-medium">Remove After Import</span>
-                    <p class="text-xs text-base-content/50">
-                      Remove downloads from the client after importing. Torrent clients
-                      that support seeding wait until the torrent is stopped or paused
-                      (seed ratio/time), then remove. Usenet and similar clients remove
-                      immediately.
-                    </p>
-                  </div>
+            <div class="flex items-center justify-between bg-base-200 rounded-lg px-4 py-3">
+              <div class="flex items-center gap-3">
+                <.icon name="hero-trash" class="w-4 h-4 text-base-content/60" />
+                <div>
+                  <span class="text-sm font-medium">Remove After Import</span>
+                  <p class="text-xs text-base-content/50">
+                    Remove downloads from the client after importing. Torrent clients
+                    that support seeding wait until the torrent is stopped or paused
+                    (seed ratio/time), then remove. Usenet and similar clients remove
+                    immediately.
+                  </p>
                 </div>
-                <input
-                  type="hidden"
-                  name={@download_client_form[:remove_completed].name}
-                  value="false"
-                />
-                <input
-                  type="checkbox"
-                  name={@download_client_form[:remove_completed].name}
-                  value="true"
-                  checked={
-                    Phoenix.HTML.Form.normalize_value(
-                      "checkbox",
-                      @download_client_form[:remove_completed].value
-                    )
-                  }
-                  class="toggle toggle-primary toggle-sm"
-                />
               </div>
+              <input
+                type="hidden"
+                name={@download_client_form[:remove_completed].name}
+                value="false"
+              />
+              <input
+                type="checkbox"
+                name={@download_client_form[:remove_completed].name}
+                value="true"
+                checked={
+                  Phoenix.HTML.Form.normalize_value(
+                    "checkbox",
+                    @download_client_form[:remove_completed].value
+                  )
+                }
+                class="toggle toggle-primary toggle-sm"
+              />
             </div>
           </div>
+        </div>
 
-          <%!-- Modal Actions --%>
-          <div class="modal-action mt-6 pt-4 border-t border-base-300">
-            <button type="button" class="btn btn-ghost" phx-click="close_download_client_modal">
-              Cancel
-            </button>
-            <button
-              type="button"
-              class="btn btn-outline btn-secondary gap-2"
-              phx-click="test_download_client_connection"
-              disabled={@testing_download_client_connection}
-            >
-              <%= if @testing_download_client_connection do %>
-                <span class="loading loading-spinner loading-sm"></span> Testing...
-              <% else %>
-                <.icon name="hero-signal" class="w-4 h-4" /> Test Connection
-              <% end %>
-            </button>
-            <button type="submit" class="btn btn-primary gap-2">
-              <.icon name="hero-check" class="w-4 h-4" />
-              {if @download_client_mode == :new, do: "Add Client", else: "Save Changes"}
-            </button>
-          </div>
-        </.form>
-      </div>
-      <div class="modal-backdrop bg-black/50" phx-click="close_download_client_modal"></div>
-    </div>
+        <%!-- Modal Actions --%>
+        <.admin_modal_actions>
+          <button type="button" class="btn btn-ghost" phx-click="close_download_client_modal">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline btn-secondary gap-2"
+            phx-click="test_download_client_connection"
+            disabled={@testing_download_client_connection}
+          >
+            <%= if @testing_download_client_connection do %>
+              <span class="loading loading-spinner loading-sm"></span> Testing...
+            <% else %>
+              <.icon name="hero-signal" class="w-4 h-4" /> Test Connection
+            <% end %>
+          </button>
+          <button type="submit" class="btn btn-primary gap-2">
+            <.icon name="hero-check" class="w-4 h-4" />
+            {if @download_client_mode == :new, do: "Add Client", else: "Save Changes"}
+          </button>
+        </.admin_modal_actions>
+      </.form>
+    </.admin_modal>
     """
   end
 

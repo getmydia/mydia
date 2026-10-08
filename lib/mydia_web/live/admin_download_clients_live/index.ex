@@ -13,8 +13,8 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Download Clients")
-     |> assign(:pending_delete_client, nil)
-     |> assign(:pending_delete_count, 0)
+     |> assign(:pending_delete_download_client, nil)
+     |> assign(:pending_delete_download_count, 0)
      |> load_data()}
   end
 
@@ -125,17 +125,17 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
 
       {:noreply,
        socket
-       |> assign(:pending_delete_client, client)
-       |> assign(:pending_delete_count, count)}
+       |> assign(:pending_delete_download_client, client)
+       |> assign(:pending_delete_download_count, count)}
     end
   end
 
   @impl true
-  def handle_event("cancel_delete_download_client", _params, socket) do
+  def handle_event("close_delete_download_client_modal", _params, socket) do
     {:noreply,
      socket
-     |> assign(:pending_delete_client, nil)
-     |> assign(:pending_delete_count, 0)}
+     |> assign(:pending_delete_download_client, nil)
+     |> assign(:pending_delete_download_count, 0)}
   end
 
   # Nothing pending means the modal already fired once (a double-click sends
@@ -146,21 +146,21 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
   def handle_event(
         "delete_download_client",
         _params,
-        %{assigns: %{pending_delete_client: nil}} = socket
+        %{assigns: %{pending_delete_download_client: nil}} = socket
       ) do
     {:noreply, socket}
   end
 
   @impl true
   def handle_event("delete_download_client", _params, socket) do
-    client = socket.assigns.pending_delete_client
+    client = socket.assigns.pending_delete_download_client
 
     case Settings.delete_download_client_config(client) do
       {:ok, _client} ->
         {:noreply,
          socket
-         |> assign(:pending_delete_client, nil)
-         |> assign(:pending_delete_count, 0)
+         |> assign(:pending_delete_download_client, nil)
+         |> assign(:pending_delete_download_count, 0)
          |> put_flash(:info, "Download client deleted successfully")
          |> load_data()}
 
@@ -177,8 +177,8 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
 
         {:noreply,
          socket
-         |> assign(:pending_delete_client, nil)
-         |> assign(:pending_delete_count, 0)
+         |> assign(:pending_delete_download_client, nil)
+         |> assign(:pending_delete_download_count, 0)
          |> put_flash(:error, error_msg)}
     end
   end

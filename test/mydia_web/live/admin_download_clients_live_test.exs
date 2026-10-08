@@ -132,6 +132,61 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
       refute has_element?(view, "#delete-download-client-modal", "5 downloads")
     end
 
+    test "rows use the shared row actions with stable ids", %{conn: conn} do
+      {:ok, client} =
+        Mydia.Settings.create_download_client_config(%{
+          name: "qbit-shared-row",
+          type: :qbittorrent,
+          host: "localhost",
+          port: 8080,
+          enabled: true
+        })
+
+      {:ok, view, _} = live(conn, ~p"/admin/clients")
+
+      assert has_element?(view, "#download-clients #download-client-#{client.id}")
+      assert has_element?(view, ~s(#test-download-client-#{client.id}[title="Test connection"]))
+
+      assert has_element?(
+               view,
+               ~s(#edit-download-client-#{client.id}[phx-click="edit_download_client"])
+             )
+    end
+
+    test "the delete confirmation is an error-toned shared modal", %{conn: conn} do
+      {:ok, client} =
+        Mydia.Settings.create_download_client_config(%{
+          name: "qbit-shared-modal",
+          type: :qbittorrent,
+          host: "localhost",
+          port: 8080,
+          enabled: true
+        })
+
+      {:ok, view, _} = live(conn, ~p"/admin/clients")
+      view |> element("#delete-download-client-#{client.id}") |> render_click()
+
+      assert has_element?(view, "#delete-download-client-modal .bg-error\\/20")
+
+      assert has_element?(
+               view,
+               "#delete-download-client-modal .modal-backdrop[phx-click=close_delete_download_client_modal]"
+             )
+
+      view |> element("#cancel-delete-download-client") |> render_click()
+      refute has_element?(view, "#delete-download-client-modal")
+    end
+
+    test "the editor puts Enabled in the header bound to the form", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/clients")
+      view |> element(~s(button[phx-click="new_download_client"])) |> render_click()
+
+      assert has_element?(
+               view,
+               ~s(#download-client-modal input[type=checkbox][form="download-client-form"])
+             )
+    end
+
     test "deletes the client after the warning is confirmed", %{conn: conn} do
       {:ok, client} =
         Mydia.Settings.create_download_client_config(%{
@@ -167,7 +222,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
       view |> element("#delete-download-client-#{client.id}") |> render_click()
       view |> element("#confirm-delete-download-client") |> render_click()
 
-      # The modal is gone and pending_delete_client is nil now. A second
+      # The modal is gone and pending_delete_download_client is nil now. A second
       # "delete_download_client" event, as a fast double-click would send
       # before the DOM re-renders, must not reach
       # Settings.delete_download_client_config/1 with nil and crash the

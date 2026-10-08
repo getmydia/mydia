@@ -13,148 +13,109 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
   def download_clients_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
-      <%= if @download_clients == [] do %>
-        <div class="alert alert-info">
-          <.icon name="hero-information-circle" class="w-5 h-5" />
-          <span>
-            No download clients configured yet. Add qBittorrent or Transmission to get started.
-          </span>
-        </div>
-      <% else %>
-        <div class="bg-base-200 rounded-box divide-y divide-base-300">
-          <%= for client <- @download_clients do %>
-            <% health = Map.get(@client_health, client.id, %{status: :unknown}) %>
-            <% is_runtime = Settings.runtime_config?(client) %>
-
-            <div class="p-3 sm:p-4">
-              <%!-- Mobile: stacked, Desktop: flex row --%>
-              <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-                <%!-- Client Info --%>
-                <div class="flex-1 min-w-0">
-                  <div class="font-semibold flex items-center gap-2 flex-wrap">
-                    {client.name}
-                    <%= if is_runtime do %>
-                      <span
-                        class="badge badge-primary badge-xs tooltip"
-                        data-tip="Configured via environment variables (read-only)"
-                      >
-                        <.icon name="hero-lock-closed" class="w-3 h-3" /> ENV
-                      </span>
-                    <% end %>
-                  </div>
-                  <div class="text-xs opacity-60 mt-1 truncate">
-                    <span class="font-mono">
-                      <%= cond do %>
-                        <% client.type == :blackhole -> %>
-                          {get_in(client.connection_settings || %{}, ["watch_folder"]) ||
-                            "No watch folder"}
-                        <% client.type == :debrid -> %>
-                          {debrid_provider_label(client)}
-                        <% true -> %>
-                          {if client.use_ssl, do: "https://", else: "http://"}{client.host}:{client.port}
-                      <% end %>
-                    </span>
-                    <%= if client.category do %>
-                      <span class="ml-2">Category: {client.category}</span>
-                    <% end %>
-                    <%!-- Only when the operator changed it. :auto is the
-                          default and says nothing worth a row of chrome. --%>
-                    <%= if client.external_torrents && client.external_torrents != :auto do %>
-                      <span class="ml-2">External: {client.external_torrents}</span>
-                    <% end %>
-                  </div>
-                </div>
-
-                <%!-- Status Badges + Actions row --%>
-                <div class="flex flex-wrap items-center gap-2">
-                  <%!-- Status Badges --%>
-                  <span class="badge badge-sm badge-outline">{client.type}</span>
-                  <span
-                    :if={client_remote_fetch_enabled?(client)}
-                    class="badge badge-sm badge-outline gap-1"
-                    title="Pulls completed torrents from a remote seedbox over SFTP"
-                  >
-                    <.icon name="hero-cloud-arrow-down" class="w-3 h-3" /> Seedbox
-                  </span>
-                  <span class={[
-                    "badge badge-sm",
-                    if(client.enabled, do: "badge-success", else: "badge-ghost")
-                  ]}>
-                    {if client.enabled, do: "Enabled", else: "Disabled"}
-                  </span>
-                  <span class={"badge badge-sm #{health_status_badge_class(health.status)}"}>
-                    <.icon name={health_status_icon(health.status)} class="w-3 h-3 mr-1" />
-                    {health_status_label(health.status)}
-                  </span>
-                  <%= if health.status == :unhealthy and health[:error] do %>
-                    <div class="tooltip tooltip-left" data-tip={health.error}>
-                      <.icon name="hero-information-circle" class="w-4 h-4 text-error" />
-                    </div>
-                  <% end %>
-                  <%= if health.status == :healthy and health[:details] && Map.get(health.details, :version) do %>
-                    <div
-                      class="tooltip tooltip-left"
-                      data-tip={"Version: #{health.details.version}"}
-                    >
-                      <.icon name="hero-information-circle" class="w-4 h-4 text-success" />
-                    </div>
-                  <% end %>
-
-                  <%!-- Actions --%>
-                  <div class="join ml-auto sm:ml-2">
-                    <button
-                      class="btn btn-sm btn-ghost join-item"
-                      phx-click="test_download_client"
-                      phx-value-id={client.id}
-                      title="Test Connection"
-                    >
-                      <.icon name="hero-signal" class="w-4 h-4" />
-                    </button>
-                    <%= if is_runtime do %>
-                      <div class="tooltip" data-tip="Cannot edit runtime-configured clients">
-                        <button class="btn btn-sm btn-ghost join-item" disabled>
-                          <.icon name="hero-pencil" class="w-4 h-4 opacity-30" />
-                        </button>
-                      </div>
-                      <div class="tooltip" data-tip="Cannot delete runtime-configured clients">
-                        <button class="btn btn-sm btn-ghost join-item" disabled>
-                          <.icon name="hero-trash" class="w-4 h-4 opacity-30" />
-                        </button>
-                      </div>
-                    <% else %>
-                      <button
-                        class="btn btn-sm btn-ghost join-item"
-                        phx-click="edit_download_client"
-                        phx-value-id={client.id}
-                        title="Edit"
-                      >
-                        <.icon name="hero-pencil" class="w-4 h-4" />
-                      </button>
-                      <button
-                        id={"delete-download-client-#{client.id}"}
-                        class="btn btn-sm btn-ghost join-item text-error"
-                        phx-click="confirm_delete_download_client"
-                        phx-value-id={client.id}
-                        title="Delete"
-                      >
-                        <.icon name="hero-trash" class="w-4 h-4" />
-                      </button>
-                    <% end %>
-                  </div>
-                </div>
-              </div>
-            </div>
-          <% end %>
-        </div>
-      <% end %>
+      <.admin_list id="download-clients" items={@download_clients}>
+        <:empty>
+          No download clients configured yet. Add qBittorrent or Transmission to get started.
+        </:empty>
+        <:row :let={client}>
+          <.download_client_row
+            client={client}
+            health={Map.get(@client_health, client.id, %{status: :unknown})}
+            runtime?={Settings.runtime_config?(client)}
+          />
+        </:row>
+      </.admin_list>
     </div>
+    """
+  end
+
+  attr :client, :map, required: true
+  attr :health, :map, required: true
+  attr :runtime?, :boolean, required: true
+
+  defp download_client_row(assigns) do
+    ~H"""
+    <.admin_row id={"download-client-#{@client.id}"}>
+      <:title>
+        {@client.name} <.env_lock_badge :if={@runtime?} />
+      </:title>
+      <:descriptor>
+        <span class="font-mono">{endpoint_label(@client)}</span>
+        <span :if={@client.category} class="ml-2">Category: {@client.category}</span>
+        <%!-- Only when the operator changed it. :auto is the
+              default and says nothing worth a row of chrome. --%>
+        <span :if={@client.external_torrents && @client.external_torrents != :auto} class="ml-2">
+          External: {@client.external_torrents}
+        </span>
+      </:descriptor>
+      <:badges>
+        <span class="badge badge-sm badge-outline">{@client.type}</span>
+        <span
+          :if={client_remote_fetch_enabled?(@client)}
+          class="badge badge-sm badge-outline gap-1"
+          title="Pulls completed torrents from a remote seedbox over SFTP"
+        >
+          <.icon name="hero-cloud-arrow-down" class="w-3 h-3" /> Seedbox
+        </span>
+        <span class={[
+          "badge badge-sm",
+          if(@client.enabled, do: "badge-success", else: "badge-ghost")
+        ]}>
+          {if @client.enabled, do: "Enabled", else: "Disabled"}
+        </span>
+        <span class={"badge badge-sm #{health_status_badge_class(@health.status)}"}>
+          <.icon name={health_status_icon(@health.status)} class="w-3 h-3 mr-1" />
+          {health_status_label(@health.status)}
+        </span>
+        <%= if @health.status == :unhealthy and @health[:error] do %>
+          <div class="tooltip tooltip-left" data-tip={@health.error}>
+            <.icon name="hero-information-circle" class="w-4 h-4 text-error" />
+          </div>
+        <% end %>
+        <%= if @health.status == :healthy and @health[:details] && Map.get(@health.details, :version) do %>
+          <div class="tooltip tooltip-left" data-tip={"Version: #{@health.details.version}"}>
+            <.icon name="hero-information-circle" class="w-4 h-4 text-success" />
+          </div>
+        <% end %>
+      </:badges>
+      <:actions>
+        <.row_actions>
+          <.row_action
+            id={"test-download-client-#{@client.id}"}
+            icon="hero-signal"
+            title="Test connection"
+            phx-click="test_download_client"
+            phx-value-id={@client.id}
+          />
+          <.row_action
+            id={"edit-download-client-#{@client.id}"}
+            icon="hero-pencil"
+            title="Edit"
+            disabled={@runtime?}
+            disabled_reason={@runtime? && "Cannot edit runtime-configured clients"}
+            phx-click="edit_download_client"
+            phx-value-id={@client.id}
+          />
+          <.row_action
+            id={"delete-download-client-#{@client.id}"}
+            icon="hero-trash"
+            title="Delete"
+            destructive
+            disabled={@runtime?}
+            disabled_reason={@runtime? && "Cannot delete runtime-configured clients"}
+            phx-click="confirm_delete_download_client"
+            phx-value-id={@client.id}
+          />
+        </.row_actions>
+      </:actions>
+    </.admin_row>
     """
   end
 
   @doc "The page header's New button."
   def header_actions(assigns) do
     ~H"""
-    <button class="btn btn-sm btn-primary" phx-click="new_download_client">
+    <button id="new-download-client" class="btn btn-sm btn-primary" phx-click="new_download_client">
       <.icon name="hero-plus" class="w-4 h-4" /> New
     </button>
     """
@@ -171,52 +132,63 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
   imported, or one that was never matched, never enters the missing handler
   that writes the Issues-tab error.
   """
-  attr :client, :map, default: nil
+  attr :client, :map, required: true
   attr :count, :integer, default: 0
 
   def delete_download_client_modal(assigns) do
     ~H"""
-    <div :if={@client} id="delete-download-client-modal" class="modal modal-open">
-      <div class="modal-box">
-        <h3 class="text-lg font-bold">Delete '{@client.name}'?</h3>
+    <.admin_modal
+      id="delete-download-client-modal"
+      tone={:error}
+      icon="hero-trash"
+      title={"Delete '#{@client.name}'?"}
+      on_close="close_delete_download_client_modal"
+    >
+      <p :if={@count > 0} class="py-2">
+        {@count} {if @count == 1, do: "download is", else: "downloads are"} still waiting on
+        this client. Deleting it will not stop them in the client itself, and the ones still
+        in flight move to the Issues tab where you can clear them. If you re-add a client
+        holding these same torrents, Mydia picks them back up automatically.
+      </p>
 
-        <p :if={@count > 0} class="py-2">
-          {@count} {if @count == 1, do: "download is", else: "downloads are"} still waiting on
-          this client. Deleting it will not stop them in the client itself, and the ones still
-          in flight move to the Issues tab where you can clear them. If you re-add a client
-          holding these same torrents, Mydia picks them back up automatically.
-        </p>
+      <p :if={@count == 0} class="py-2">
+        No downloads are waiting on this client.
+      </p>
 
-        <p :if={@count == 0} class="py-2">
-          No downloads are waiting on this client.
-        </p>
-
-        <div class="modal-action">
-          <button
-            id="cancel-delete-download-client"
-            class="btn btn-ghost"
-            phx-click="cancel_delete_download_client"
-          >
-            Cancel
-          </button>
-          <button
-            id="confirm-delete-download-client"
-            class="btn btn-error"
-            phx-click="delete_download_client"
-            phx-disable-with="Deleting..."
-          >
-            Delete client
-          </button>
-        </div>
-      </div>
-      <div class="modal-backdrop" phx-click="cancel_delete_download_client"></div>
-    </div>
+      <:actions>
+        <button
+          id="cancel-delete-download-client"
+          class="btn btn-ghost"
+          phx-click="close_delete_download_client_modal"
+        >
+          Cancel
+        </button>
+        <button
+          id="confirm-delete-download-client"
+          class="btn btn-error"
+          phx-click="delete_download_client"
+          phx-disable-with="Deleting..."
+        >
+          Delete client
+        </button>
+      </:actions>
+    </.admin_modal>
     """
   end
 
   # ============================================================================
   # Helper Functions
   # ============================================================================
+
+  defp endpoint_label(%{type: :blackhole} = client) do
+    get_in(client.connection_settings || %{}, ["watch_folder"]) || "No watch folder"
+  end
+
+  defp endpoint_label(%{type: :debrid} = client), do: debrid_provider_label(client)
+
+  defp endpoint_label(client) do
+    "#{if client.use_ssl, do: "https://", else: "http://"}#{client.host}:#{client.port}"
+  end
 
   defp health_status_badge_class(:healthy), do: "badge-success"
   defp health_status_badge_class(:unhealthy), do: "badge-error"
