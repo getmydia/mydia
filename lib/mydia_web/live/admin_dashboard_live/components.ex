@@ -317,18 +317,22 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
   attr :job, :map, required: true
 
   def recent_job_card(assigns) do
-    assigns = assign(assigns, :title, transcode_job_title(assigns.job))
+    {status_icon, status_text, status_badge} = job_status_tone(assigns.job.status)
+
+    assigns =
+      assigns
+      |> assign(:title, transcode_job_title(assigns.job))
+      |> assign(:status_icon, status_icon)
+      |> assign(:status_text, status_text)
+      |> assign(:status_badge, status_badge)
 
     ~H"""
     <div class="p-3 flex items-center gap-3 hover:bg-base-200/50 transition-colors">
       <div class={[
         "flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full",
-        if(@job.status == "ready", do: "text-success", else: "text-error")
+        @status_text
       ]}>
-        <.icon
-          name={if(@job.status == "ready", do: "hero-check-circle", else: "hero-x-circle")}
-          class="w-5 h-5"
-        />
+        <.icon name={@status_icon} class="w-5 h-5" />
       </div>
       <div class="flex-1 min-w-0">
         <div class="text-sm font-medium truncate" title={@title}>{@title}</div>
@@ -341,10 +345,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
             <% true -> %>
               <span class="badge badge-xs badge-ghost">DL</span>
           <% end %>
-          <span class={[
-            "badge badge-xs",
-            if(@job.status == "ready", do: "badge-success", else: "badge-error")
-          ]}>
+          <span class={["badge badge-xs", @status_badge]}>
             {@job.status}
           </span>
           <%= if @job.file_size do %>
@@ -357,8 +358,11 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
           {relative_time(@job.updated_at)}
         </span>
         <button
+          type="button"
           class="btn btn-ghost btn-xs btn-square text-error"
-          phx-click="delete_transcode_job"
+          title="Cancel transcode"
+          aria-label="Cancel transcode"
+          phx-click="cancel_transcode_job"
           phx-value-id={@job.id}
           data-confirm={if @job.status == "ready", do: "Delete this file?", else: nil}
         >
@@ -368,6 +372,10 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     </div>
     """
   end
+
+  defp job_status_tone("ready"), do: {"hero-check-circle", "text-success", "badge-success"}
+  defp job_status_tone("failed"), do: {"hero-x-circle", "text-error", "badge-error"}
+  defp job_status_tone(_in_progress), do: {"hero-arrow-path", "text-info", "badge-info"}
 
   attr :progress, :map, required: true
 

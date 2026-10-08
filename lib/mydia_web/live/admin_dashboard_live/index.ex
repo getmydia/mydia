@@ -58,6 +58,17 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
      |> load_history()}
   end
 
+  def handle_event("cancel_transcode_job", %{"id" => id}, socket) do
+    case Downloads.get_transcode_job(id) do
+      nil ->
+        {:noreply, socket |> load_now_playing() |> put_flash(:error, "Transcode job not found")}
+
+      job ->
+        {:ok, _job} = Downloads.cancel_transcode_job(job)
+        {:noreply, socket |> load_now_playing() |> put_flash(:info, "Transcode job cancelled")}
+    end
+  end
+
   defp load_now_playing(socket) do
     sessions = Streaming.list_active_sessions()
 

@@ -100,6 +100,34 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
       |> Mydia.Repo.insert!()
     end
 
+    test "cancelling a download job removes it", %{conn: conn, token: token, user: user} do
+      movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "The Brass Lantern"})
+      media_file = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+      job = insert_job(media_file, user, "download", "transcoding")
+
+      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+      view
+      |> element(
+        ~s(#background-transcodes button[phx-click="cancel_transcode_job"][phx-value-id="#{job.id}"])
+      )
+      |> render_click()
+
+      refute Mydia.Repo.get(Mydia.Downloads.TranscodeJob, job.id)
+      refute has_element?(view, "#background-transcodes")
+    end
+
+    test "an in-progress job is not styled as a failure", %{conn: conn, token: token, user: user} do
+      movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "The Brass Lantern"})
+      media_file = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+      insert_job(media_file, user, "download", "pending")
+
+      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+      refute has_element?(view, "#background-transcodes .badge-error")
+      refute has_element?(view, "#background-transcodes .text-error .hero-x-circle")
+    end
+
     test "a download job is listed", %{conn: conn, token: token, user: user} do
       movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "Arrival"})
       media_file = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: movie.id})

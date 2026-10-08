@@ -163,7 +163,7 @@ defmodule MydiaWeb.AdminSystemLiveTest do
       {:ok, view, _html} = live(conn, ~p"/admin/status")
 
       refute has_element?(view, "button[phx-click='clear_recent_activity']")
-      refute has_element?(view, "button[phx-click='delete_transcode_job']")
+      refute has_element?(view, "button[phx-click='cancel_transcode_job']")
 
       # Empty-state Activity panels omit the buttons above, so also assert the
       # section itself is gone (always rendered today via the Activity divider).
