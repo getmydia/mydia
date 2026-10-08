@@ -52,10 +52,7 @@ defmodule MydiaWeb.UnrestrictedRouteCrawlTest do
     "/admin/remote-access" =>
       "reads no media; its render detects the public IP over the network, which " <>
         "admin_remote_access_live_test.exs disables through global app env",
-    "/admin/jobs" => "admin Oban dashboard; Oban is not started in tests",
-    "/admin/transcodes" =>
-      "pre-existing, unrelated to scope: the template reads @streams.jobs.list, " <>
-        "which LiveView 1.2 streams no longer have, so its static render raises"
+    "/admin/jobs" => "admin Oban dashboard; Oban is not started in tests"
   }
 
   # Routes naming a seeded record must render it, not bounce to "/" or 404.

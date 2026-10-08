@@ -131,9 +131,7 @@ defmodule MydiaWeb.AdminNavTest do
   defp hub_keys(hub), do: hub |> AdminNav.visible_pages() |> Enum.map(& &1.key)
 
   # ErrorTracker mounts its own live routes under /admin/errors,
-  # /admin/transcodes is a bare page the Dashboard already covers, and
   # /admin/import-lists is an Acquisition page that keeps its admin-only URL.
-  defp unlisted?("/admin/transcodes"), do: true
   defp unlisted?("/admin/errors"), do: true
   defp unlisted?("/admin/errors/" <> _), do: true
   # An Acquisition page that keeps its admin-only URL (spec, Revision 2).

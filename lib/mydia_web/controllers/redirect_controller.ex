@@ -62,6 +62,12 @@ defmodule MydiaWeb.RedirectController do
     redirect(conn, to: ~p"/devices")
   end
 
+  @doc """
+  Redirects /admin/transcodes to the Dashboard, which lists and cancels active
+  transcode jobs.
+  """
+  def transcodes(conn, _params), do: moved_permanently(conn, ~p"/admin/dashboard")
+
   defp moved_permanently(conn, path) do
     conn
     |> put_status(:moved_permanently)

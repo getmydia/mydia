@@ -52,6 +52,11 @@ defmodule MydiaWeb.RedirectControllerTest do
       end
     end
 
+    test "/admin/transcodes moved to the dashboard", %{conn: conn} do
+      conn = get(conn, ~p"/admin/transcodes")
+      assert redirected_to(conn, 301) == ~p"/admin/dashboard"
+    end
+
     test "an /admin/config path that is not a registered page is a 404", %{conn: conn} do
       assert conn |> get("/admin/config/bogus") |> html_response(404)
       assert conn |> get("/admin/config/trash/extra") |> html_response(404)
