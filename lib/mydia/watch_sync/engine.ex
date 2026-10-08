@@ -31,25 +31,28 @@ defmodule Mydia.WatchSync.Engine do
     with :ok <- maybe_refresh(provider_mod, instance, provider, instance_id, opts),
          cursor = cursor(user_scope.user_id, provider, instance_id),
          {:ok, changes} <- provider_mod.list_changes(instance, user_scope, cursor) do
-      index = mapping_index(provider, instance_id)
+      {by_remote, by_content} = mapping_index(provider, instance_id)
+      {mapped, unmapped} = Enum.split_with(changes, &Map.has_key?(by_remote, &1.remote_id))
+      context = {provider, instance_id, origin, direction}
+      initial = %{@empty_counts | not_found: length(unmapped)}
 
+      # A server can hold one item as several copies (a 1080p and a 4K library).
+      # Reconciling each copy on its own would let an unwatched copy unwatch an
+      # item another copy has watched, so copies fold into one remote side first.
       counts =
-        Enum.reduce(changes, @empty_counts, fn change, acc ->
-          case Map.get(index, change.remote_id) do
-            nil ->
-              bump(acc, :not_found)
-
-            content_id ->
-              reconcile_one(
-                provider_mod,
-                instance,
-                user_scope,
-                {provider, instance_id, origin, direction},
-                content_id,
-                change,
-                acc
-              )
-          end
+        mapped
+        |> Enum.group_by(&Map.fetch!(by_remote, &1.remote_id))
+        |> Enum.reduce(initial, fn {content_id, copies}, acc ->
+          reconcile_one(
+            provider_mod,
+            instance,
+            user_scope,
+            context,
+            content_id,
+            Map.fetch!(by_content, content_id),
+            Reconciler.merge_remotes(copies),
+            acc
+          )
         end)
 
       {:ok, counts}
@@ -150,15 +153,21 @@ defmodule Mydia.WatchSync.Engine do
   end
 
   defp mapping_index(provider, instance_id) do
-    Mapping
-    |> where([m], m.provider == ^provider and m.provider_instance_id == ^instance_id)
-    |> Repo.all()
-    |> Map.new(fn m ->
-      content_id =
-        if m.episode_id, do: [episode_id: m.episode_id], else: [media_item_id: m.media_item_id]
+    rows =
+      Mapping
+      |> where([m], m.provider == ^provider and m.provider_instance_id == ^instance_id)
+      |> select([m], {m.remote_id, m.media_item_id, m.episode_id})
+      |> Repo.all()
+      |> Enum.map(fn {remote_id, media_item_id, episode_id} ->
+        content_id =
+          if episode_id, do: [episode_id: episode_id], else: [media_item_id: media_item_id]
 
-      {m.remote_id, content_id}
-    end)
+        {remote_id, content_id}
+      end)
+
+    by_remote = Map.new(rows)
+    by_content = Enum.group_by(rows, &elem(&1, 1), &elem(&1, 0))
+    {by_remote, by_content}
   end
 
   # ── Reconciliation ─────────────────────────────────────────────────
@@ -169,13 +178,13 @@ defmodule Mydia.WatchSync.Engine do
          user_scope,
          {provider, instance_id, origin, direction},
          content_id,
-         change,
+         remote_ids,
+         remote,
          acc
        ) do
     user_id = user_scope.user_id
 
     local = local_side(user_id, content_id)
-    remote = %{watched: change.watched, position_seconds: change.position_seconds, at: change.at}
     state_row = get_state(user_id, provider, instance_id, content_id)
 
     case Reconciler.resolve(local, remote, snapshot_side(state_row)) do
@@ -199,13 +208,15 @@ defmodule Mydia.WatchSync.Engine do
         bump(acc, :imported)
 
       {:push, resolved} ->
-        case provider_mod.apply_change(instance, user_scope, change.remote_id, resolved) do
-          :ok ->
+        case push_to_copies(provider_mod, instance, user_scope, remote_ids, resolved) do
+          [] ->
             put_state(state_row, user_id, provider, instance_id, content_id, resolved, remote.at)
             bump(acc, :exported)
 
-          {:error, reason} ->
-            Logger.warning("watch sync push failed: #{inspect(reason)}")
+          # Recording the snapshot after a partial push would make the next run
+          # see local and snapshot agree and never retry the failed copies.
+          failures ->
+            Logger.warning("watch sync push failed: #{inspect(failures)}")
             acc
         end
 
@@ -213,6 +224,15 @@ defmodule Mydia.WatchSync.Engine do
         put_state(state_row, user_id, provider, instance_id, content_id, resolved, remote.at)
         bump(acc, :unchanged)
     end
+  end
+
+  defp push_to_copies(provider_mod, instance, user_scope, remote_ids, resolved) do
+    Enum.flat_map(remote_ids, fn remote_id ->
+      case provider_mod.apply_change(instance, user_scope, remote_id, resolved) do
+        :ok -> []
+        {:error, reason} -> [{remote_id, reason}]
+      end
+    end)
   end
 
   # An absent progress row is not "no information": it is the state a local

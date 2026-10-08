@@ -9,7 +9,7 @@ defmodule Mydia.WatchSync.EngineTest do
   alias Mydia.Accounts.Scope
   alias Mydia.Playback
   alias Mydia.WatchSync
-  alias Mydia.WatchSync.Mapping
+  alias Mydia.WatchSync.{Mapping, State}
 
   defmodule StubProvider do
     @behaviour Mydia.WatchSync.Provider
@@ -246,6 +246,67 @@ defmodule Mydia.WatchSync.EngineTest do
       assert counts.not_found == 0
       assert counts.imported == 1
       assert %{watched: true} = Playback.get_progress(user.id, media_item_id: movie.id)
+    end
+
+    test "an unwatched copy does not unwatch a movie another copy has watched",
+         %{user: user, movie: movie} do
+      watched = %{remote_id: "rk-4k", watched: true, position_seconds: 0, at: DateTime.utc_now()}
+      unwatched = %{remote_id: "rk-1080", watched: false, position_seconds: nil, at: nil}
+
+      # The first sync imports the watch and records a watched snapshot.
+      {:ok, _} =
+        WatchSync.sync(StubProvider, two_copies([watched, unwatched]), scope(user),
+          provider: "stub"
+        )
+
+      # A full listing reports the unwatched copy first.
+      {:ok, counts} =
+        WatchSync.sync(StubProvider, two_copies([unwatched, watched]), scope(user),
+          provider: "stub"
+        )
+
+      assert counts.imported == 0
+      assert counts.unchanged == 1
+      assert %{watched: true} = Playback.get_progress(user.id, media_item_id: movie.id)
+    end
+
+    test "a local watch is pushed to every copy, including ones not in the changes",
+         %{user: user, movie: movie} do
+      {:ok, _} =
+        Playback.save_progress(user.id, [media_item_id: movie.id], %{
+          position_seconds: 100,
+          duration_seconds: 100
+        })
+
+      instance =
+        two_copies([
+          %{remote_id: "rk-4k", watched: false, position_seconds: nil, at: DateTime.utc_now()}
+        ])
+
+      {:ok, counts} = WatchSync.sync(StubProvider, instance, scope(user), provider: "stub")
+
+      assert counts.exported == 1
+      assert_received {:applied, "rk-4k", %{watched: true}}
+      assert_received {:applied, "rk-1080", %{watched: true}}
+    end
+
+    test "a push that fails on one copy records no snapshot", %{user: user, movie: movie} do
+      {:ok, _} =
+        Playback.save_progress(user.id, [media_item_id: movie.id], %{
+          position_seconds: 100,
+          duration_seconds: 100
+        })
+
+      instance =
+        two_copies(
+          [%{remote_id: "rk-4k", watched: false, position_seconds: nil, at: DateTime.utc_now()}],
+          %{fail_remote_ids: ["rk-1080"]}
+        )
+
+      {:ok, counts} = WatchSync.sync(StubProvider, instance, scope(user), provider: "stub")
+
+      assert counts.exported == 0
+      assert Repo.get_by(State, user_id: user.id, media_item_id: movie.id) == nil
     end
   end
 
