@@ -38,6 +38,34 @@ defmodule MydiaWeb.AdminListComponentsTest do
 
       assert count(html, ".badge") == 0
     end
+
+    test "renders an actions slot beside the heading" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminListComponents.admin_section id="s" title="Plays" icon="hero-chart-bar">
+          <:actions><button id="pick">7d</button></:actions>
+          body
+        </AdminListComponents.admin_section>
+        """)
+
+      assert count(html, "#s-actions #pick") == 1
+      assert count(html, "h2#s-title #pick") == 0
+    end
+
+    test "omits the actions container without the slot" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminListComponents.admin_section id="s" title="Plays" icon="hero-chart-bar">
+          body
+        </AdminListComponents.admin_section>
+        """)
+
+      assert count(html, "#s-actions") == 0
+    end
   end
 
   describe "admin_list/1" do
@@ -128,6 +156,26 @@ defmodule MydiaWeb.AdminListComponentsTest do
         """)
 
       assert count(html, ".truncate") == 0
+    end
+
+    test "renders a full-width body below the row" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminListComponents.admin_row id="r">
+          <:title>Group</:title>
+          <:body>
+            <ul id="files">
+              <li>one</li>
+            </ul>
+          </:body>
+        </AdminListComponents.admin_row>
+        """)
+
+      # Full width: under the row, never inside the title column.
+      assert count(html, "#r #files") == 1
+      assert count(html, "#r .flex-1 #files") == 0
     end
   end
 

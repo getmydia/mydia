@@ -300,7 +300,8 @@ one admin-only page outside the hubs; it renders `<.admin_header>` directly.
 never repeats the page name.
 
 **Body.** It opens with `<div class="p-4 sm:p-6 space-y-4">`. A real subsection
-(Needs Attention, Scheduled Jobs) is `<.admin_section title icon count>`.
+(Needs Attention, Scheduled Jobs) is `<.admin_section title icon count>`. Its `:actions` slot holds what sits
+beside the heading: a button, a range picker, a health badge.
 One-of-N filters use `<.segmented_control>`; `tabs` mean hub navigation, or
 switching content panes inside a modal. Colours come from theme tokens such as
 `text-base-content/60`, never `text-gray-*`.
@@ -310,7 +311,8 @@ the `bg-base-200 rounded-box divide-y divide-base-300` container, or an
 `alert alert-info` when empty. Each row is `<.admin_row id>` with `:title`,
 `:descriptor` (one truncated `text-xs opacity-60` line), `:details`
 (multi-line notes and warnings, not truncated or dimmed), `:badges`
-(`badge badge-sm badge-outline`) and `:actions`. Never a `card`/`card-body`.
+(`badge badge-sm badge-outline`) and `:actions`. `:body` is full width under the row, for a nested list such
+as a duplicate group's files. Never a `card`/`card-body`.
 
 **Row actions.** `<.row_actions>` holding `<.row_action icon title ...>`
 buttons: icon-only `btn btn-sm btn-ghost join-item`, `title=` doubling as the
@@ -337,7 +339,12 @@ header (an Enabled toggle, say); a form field there needs
 `form="<form-id>"` because it lives outside the `<form>`. The page puts its own
 `<.form for={@<x>_form} id="<x>-form" phx-change="validate_<x>" phx-submit="save_<x>">`
 inside; a form whose buttons must be inside the `<form>` renders
-`<.admin_modal_actions>` itself.
+`<.admin_modal_actions>` itself. `tone={:error}` tints the icon tile for a
+destructive confirmation. `on_close={nil}` keeps the backdrop but makes it
+inert, for content a stray click must not dismiss (a one-time API key).
+
+**Filters.** A `<.segmented_control>` option takes an `id` when a test or a
+link needs to address it.
 
 **Namespaced events and assigns.** `new_<x>`, `edit_<x>`, `validate_<x>`,
 `save_<x>`, `delete_<x>`, `test_<x>`, `filter_<x>` and `close_<x>_modal`,
