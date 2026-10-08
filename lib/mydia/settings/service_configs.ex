@@ -507,9 +507,14 @@ defmodule Mydia.Settings.ServiceConfigs do
   """
   @spec replace_media_server_user_links(binary(), [map()]) ::
           {:ok, [MediaServerUserLink.t()]}
-          | {:error, :duplicate_remote_account | Ecto.Changeset.t() | term()}
+          | {:error,
+             :duplicate_remote_account | :runtime_media_server | Ecto.Changeset.t() | term()}
   def replace_media_server_user_links(media_server_config_id, entries) do
-    with :ok <- ensure_one_user_per_account(entries) do
+    # media_server_user_links.media_server_config_id is a foreign key to
+    # media_server_configs, so an env/YAML server (synthetic "runtime::" id) can
+    # never own links. Refuse rather than report an empty success.
+    with true <- linkable_config_id?(media_server_config_id) || {:error, :runtime_media_server},
+         :ok <- ensure_one_user_per_account(entries) do
       Repo.transaction(fn ->
         keep = MapSet.new(entries, & &1.user_id)
         existing = list_media_server_user_links(media_server_config_id)

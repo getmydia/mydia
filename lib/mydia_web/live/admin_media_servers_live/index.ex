@@ -19,6 +19,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   alias Mydia.Logger, as: MydiaLogger
 
+  @runtime_mapping_message "Account mapping needs a database-managed server. Servers configured through env or YAML cannot store account links."
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
@@ -181,16 +183,20 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   def handle_event("open_account_mapping", %{"id" => id}, socket) do
     config = Settings.get_media_server_config!(id)
 
-    {:noreply,
-     socket
-     |> assign(:show_account_mapping_modal, true)
-     |> assign(:account_mapping_config, config)
-     |> assign(:account_mapping_state, :loading)
-     |> assign(:account_mapping_accounts, [])
-     |> assign(:account_mapping_users, Accounts.list_users())
-     |> assign(:account_mapping, %{})
-     |> assign(:account_mapping_saving, false)
-     |> start_accounts_load(config)}
+    if Settings.runtime_config?(config) do
+      {:noreply, put_flash(socket, :error, @runtime_mapping_message)}
+    else
+      {:noreply,
+       socket
+       |> assign(:show_account_mapping_modal, true)
+       |> assign(:account_mapping_config, config)
+       |> assign(:account_mapping_state, :loading)
+       |> assign(:account_mapping_accounts, [])
+       |> assign(:account_mapping_users, Accounts.list_users())
+       |> assign(:account_mapping, %{})
+       |> assign(:account_mapping_saving, false)
+       |> start_accounts_load(config)}
+    end
   end
 
   @impl true
@@ -479,6 +485,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     |> clear_account_mapping()
     |> put_flash(:info, link_flash(links, config))
     |> load_data()
+  end
+
+  defp apply_mapping_save(socket, _config, {:error, :runtime_media_server}) do
+    mapping_save_error(socket, @runtime_mapping_message)
   end
 
   defp apply_mapping_save(socket, config, {:error, :duplicate_user}) do

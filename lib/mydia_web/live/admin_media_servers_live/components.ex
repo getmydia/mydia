@@ -154,6 +154,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
               icon="hero-user-group"
               title={if(@link_count > 0, do: "Accounts (#{@link_count})", else: "Accounts")}
               data-test="map-accounts"
+              disabled={@runtime?}
+              disabled_reason={if(@runtime?, do: "Account mapping needs a database-managed server")}
               phx-click="open_account_mapping"
               phx-value-id={@server.id}
             />

@@ -614,7 +614,8 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
               type: :jellyfin,
               enabled: true,
               url: "http://127.0.0.1:9",
-              token: "tok"
+              token: "tok",
+              connection_settings: %{"sync_watched" => "true"}
             }
           ]
       })
@@ -624,6 +625,14 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       assert has_element?(view, ".badge-primary .hero-lock-closed")
       assert has_element?(view, "button[disabled][title=Edit]")
       assert has_element?(view, "button[disabled][title=Delete]")
+      assert has_element?(view, "button[disabled][data-test=map-accounts]")
+
+      # A hand-sent event is refused with a flash rather than opening the modal.
+      html =
+        render_click(view, "open_account_mapping", %{"id" => "runtime::media_server::from-env"})
+
+      assert html =~ "database-managed server"
+      refute has_element?(view, "#account-mapping-form")
     end
 
     test "the account mapping modal uses the shared shell and closes from the backdrop",
