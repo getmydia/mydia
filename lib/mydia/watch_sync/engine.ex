@@ -50,7 +50,7 @@ defmodule Mydia.WatchSync.Engine do
             context,
             content_id,
             Map.fetch!(by_content, content_id),
-            Reconciler.merge_remotes(copies),
+            copies,
             acc
           )
         end)
@@ -196,13 +196,14 @@ defmodule Mydia.WatchSync.Engine do
          {provider, instance_id, origin, direction},
          content_id,
          remote_ids,
-         remote,
+         copies,
          acc
        ) do
     user_id = user_scope.user_id
 
     local = local_side(user_id, content_id)
     state_row = get_state(user_id, provider, instance_id, content_id)
+    remote = remote_side(copies, remote_ids, state_row)
 
     case Reconciler.resolve(local, remote, snapshot_side(state_row)) do
       :noop ->
@@ -233,7 +234,10 @@ defmodule Mydia.WatchSync.Engine do
           # Recording the snapshot after a partial push would make the next run
           # see local and snapshot agree and never retry the failed copies.
           failures ->
-            Logger.warning("watch sync push failed: #{inspect(failures)}")
+            Logger.warning(
+              "watch sync push failed for #{inspect(content_id)}: #{inspect(failures)}"
+            )
+
             acc
         end
 
@@ -241,6 +245,21 @@ defmodule Mydia.WatchSync.Engine do
         put_state(state_row, user_id, provider, instance_id, content_id, resolved, remote.at)
         bump(acc, :unchanged)
     end
+  end
+
+  # Folds the listed copies into one remote side. When the listing omits some
+  # of the item's mapped copies (an incremental run drops copies not played
+  # since the cursor), the absent ones are assumed to still hold the last agreed
+  # state, so a snapshot of watched keeps the item watched. Consequence: an
+  # incremental run never unwatches a multi-copy item through a partial
+  # listing; only a full listing (first sync) can.
+  defp remote_side(copies, remote_ids, state_row) do
+    merged = Reconciler.merge_remotes(copies)
+    listed = copies |> Enum.map(& &1.remote_id) |> Enum.uniq() |> length()
+
+    if state_row && listed < length(remote_ids),
+      do: %{merged | watched: merged.watched or state_row.synced_watched},
+      else: merged
   end
 
   defp push_to_copies(provider_mod, instance, user_scope, remote_ids, resolved) do

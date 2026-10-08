@@ -270,6 +270,36 @@ defmodule Mydia.WatchSync.EngineTest do
       assert %{watched: true} = Playback.get_progress(user.id, media_item_id: movie.id)
     end
 
+    test "a partial listing does not unwatch a movie whose other copy was watched",
+         %{user: user, movie: movie} do
+      watched = %{
+        remote_id: "rk-1080",
+        watched: true,
+        position_seconds: 0,
+        at: DateTime.utc_now()
+      }
+
+      unwatched = %{remote_id: "rk-4k", watched: false, position_seconds: nil, at: nil}
+
+      {:ok, _} =
+        WatchSync.sync(StubProvider, two_copies([watched, unwatched]), scope(user),
+          provider: "stub"
+        )
+
+      # An incremental run only lists the copy played since the cursor.
+      partial = %{
+        remote_id: "rk-4k",
+        watched: false,
+        position_seconds: 300,
+        at: DateTime.utc_now()
+      }
+
+      {:ok, _} =
+        WatchSync.sync(StubProvider, two_copies([partial]), scope(user), provider: "stub")
+
+      assert %{watched: true} = Playback.get_progress(user.id, media_item_id: movie.id)
+    end
+
     test "a local watch is pushed to every copy, including ones not in the changes",
          %{user: user, movie: movie} do
       {:ok, _} =
