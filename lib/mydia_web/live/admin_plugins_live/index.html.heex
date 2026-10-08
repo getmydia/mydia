@@ -27,7 +27,7 @@
 
     <%!-- Dedicated logs modal: activity log + network requests + test --%>
     <%= if @logs do %>
-      <MydiaWeb.AdminPluginsLive.ModalComponents.logs_modal
+      <MydiaWeb.AdminPluginsLive.LogsModalComponents.logs_modal
         logs={@logs}
         log_rows={@streams.plugin_logs}
         net_rows={@streams.plugin_net}

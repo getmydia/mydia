@@ -933,6 +933,37 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert has_element?(view, "#plugin-row-notifier .join-item.text-error[title=Remove]")
     end
 
+    test "an enabled plugin offers a Disable toggle action", %{conn: conn} do
+      seed_plugin("notifier", "Notifier",
+        enabled: true,
+        granted: %{"net:http" => ["discord.com"]}
+      )
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#toggle-notifier.join-item[title=Disable]")
+    end
+
+    test "the detail, logs and settings modals each close", %{conn: conn} do
+      seed_with_schema("webhook-notifier", "Webhook Notifier", enabled: true)
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#details-webhook-notifier") |> render_click()
+      assert has_element?(view, "#plugin-detail-modal")
+      view |> element("#close-plugin-detail") |> render_click()
+      refute has_element?(view, "#plugin-detail-modal")
+
+      view |> element("#logs-webhook-notifier") |> render_click()
+      assert has_element?(view, "#plugin-logs-modal")
+      view |> element("#close-plugin-logs") |> render_click()
+      refute has_element?(view, "#plugin-logs-modal")
+
+      view |> element("#settings-webhook-notifier") |> render_click()
+      assert has_element?(view, "#plugin-settings-modal")
+      view |> element("#plugin-settings-modal .modal-backdrop") |> render_click()
+      refute has_element?(view, "#plugin-settings-modal")
+    end
+
     test "remove deletes the plugin row", %{conn: conn} do
       seed_plugin("notifier", "Notifier",
         enabled: true,

@@ -59,6 +59,10 @@ defmodule MydiaWeb.AdminListComponents do
   attr :class, :string, default: nil, doc: "extra classes, e.g. opacity-60 for a disabled row"
   slot :title, required: true
   slot :descriptor, doc: "one line, truncated"
+
+  slot :details,
+    doc: "multi-line notes, warnings and sub-lists; below the descriptor, not truncated or dimmed"
+
   slot :badges, doc: "badge badge-sm badge-outline status badges"
   slot :actions, doc: "a row_actions/1 strip"
 
@@ -72,6 +76,7 @@ defmodule MydiaWeb.AdminListComponents do
           <div :if={@descriptor != []} class="text-xs opacity-60 mt-1 truncate">
             {render_slot(@descriptor)}
           </div>
+          <div :if={@details != []} class="mt-2 space-y-1 text-sm">{render_slot(@details)}</div>
         </div>
         <div :if={@badges != [] or @actions != []} class="flex flex-wrap items-center gap-2">
           {render_slot(@badges)}

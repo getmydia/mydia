@@ -97,6 +97,25 @@ defmodule MydiaWeb.AdminListComponentsTest do
       assert count(html, "#row-1 #act") == 1
     end
 
+    test "renders details below the descriptor, neither truncated nor dimmed" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminListComponents.admin_row id="row-1">
+          <:title>Name</:title>
+          <:descriptor>desc</:descriptor>
+          <:details>
+            <p id="note">A long warning</p>
+          </:details>
+        </AdminListComponents.admin_row>
+        """)
+
+      assert count(html, "#row-1 .flex-1.min-w-0 #note") == 1
+      assert count(html, ".truncate #note") == 0
+      assert count(html, ".opacity-60 #note") == 0
+    end
+
     test "omits the descriptor line when the slot is absent" do
       assigns = %{}
 

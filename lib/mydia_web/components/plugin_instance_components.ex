@@ -32,8 +32,10 @@ defmodule MydiaWeb.PluginInstanceComponents do
         <.env_lock_badge :if={@read_only} />
       </:title>
       <:descriptor>
-        <div>{@plugin.name} plugin</div>
-        <div :if={@health[:message]} class="text-error/80 whitespace-normal break-words">
+        {@plugin.name} plugin
+      </:descriptor>
+      <:details>
+        <div :if={@health[:message]} class="text-error/80 break-words">
           {@health.message}
         </div>
         <button
@@ -45,13 +47,13 @@ defmodule MydiaWeb.PluginInstanceComponents do
         >
           {health_action_label(@health.action)}
         </button>
-        <div :if={@last_run} class="whitespace-normal">
+        <div :if={@last_run}>
           <span class={["badge badge-xs", run_badge_class(@last_run.status)]}>
             {run_label(@last_run)}
           </span>
           <span :if={@last_run.error} class="text-error/80 break-words">{@last_run.error}</span>
         </div>
-        <ul :if={@instance.approved_endpoints != []} class="whitespace-normal font-mono">
+        <ul :if={@instance.approved_endpoints != []} class="font-mono">
           <li
             :for={{endpoint, index} <- Enum.with_index(@instance.approved_endpoints)}
             id={"plugin-instance-endpoint-#{@instance.id}-#{index}"}
@@ -74,7 +76,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
             </button>
           </li>
         </ul>
-        <ul :if={@links != []} class="flex flex-wrap gap-1 whitespace-normal mt-1">
+        <ul :if={@links != []} class="flex flex-wrap gap-1">
           <li
             :for={link <- @links}
             class={["badge badge-sm", link_badge_class(link.status)]}
@@ -83,7 +85,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
           </li>
         </ul>
         <div :if={@read_only}>Configured via environment variables, read-only</div>
-      </:descriptor>
+      </:details>
       <:badges>
         <span class={[
           "badge badge-sm badge-outline",

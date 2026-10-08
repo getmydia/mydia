@@ -102,16 +102,18 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
         <.env_lock_badge :if={@runtime?} />
       </:title>
       <:descriptor>
-        <div class="font-mono truncate">{@server.url}</div>
+        <span class="font-mono">{@server.url}</span>
+      </:descriptor>
+      <:details>
         <div
           :if={@health[:error]}
           data-test="health-error"
           title={@health.error}
-          class="text-error/80 whitespace-normal break-words"
+          class="text-error/80 break-words"
         >
           {@health.error}
         </div>
-        <div :if={@sync_enabled?} data-test="watched-sync-enabled" class="whitespace-normal">
+        <div :if={@sync_enabled?} data-test="watched-sync-enabled">
           Watched sync enabled
           <%= if @last_sync do %>
             &middot; Last synced {@last_sync}
@@ -121,7 +123,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
         <div :if={@runtime?} data-test="env-config-note">
           Configured via environment variables, read-only
         </div>
-      </:descriptor>
+      </:details>
       <:badges>
         <span class="badge badge-sm badge-outline">{media_server_type_label(@server.type)}</span>
         <span class={[
@@ -199,7 +201,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
 
   defp last_run_lines(assigns) do
     ~H"""
-    <div data-test="last-sync-run" class="whitespace-normal space-y-0.5">
+    <div data-test="last-sync-run" class="space-y-0.5">
       <span class={[
         "badge badge-xs",
         @last_run.status == :ok && "badge-success",

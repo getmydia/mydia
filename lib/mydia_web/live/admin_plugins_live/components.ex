@@ -133,8 +133,8 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
         <span class="truncate">{@plugin.name}</span>
         <span class="text-xs font-normal text-base-content/50">v{@plugin.version}</span>
       </:title>
-      <:descriptor>
-        <div class="whitespace-normal">
+      <:details>
+        <div>
           <.plugin_description id={"plugin-description-#{@plugin.slug}"} text={@plugin.description} />
           <p :if={@plugin.network_hosts != []} class="text-xs text-base-content/60 mt-1">
             <.icon name="hero-globe-alt" class="w-3 h-3 inline" />
@@ -172,7 +172,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
             </li>
           </ul>
         </div>
-      </:descriptor>
+      </:details>
       <:badges>
         <.source_badge
           id={"origin-badge-#{@plugin.slug}"}
