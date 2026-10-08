@@ -92,6 +92,15 @@ defmodule Mydia.Library.TargetResolverTest do
       assert resolved.id == default.id
     end
 
+    test "the fallback skips a disabled library that sorts first" do
+      disabled = library_path_fixture(%{type: "movies", path: "/tmp/aaa-movies"})
+      enabled = library_path_fixture(%{type: "movies", path: "/tmp/zzz-movies"})
+      {:ok, _} = Settings.update_library_path(disabled, %{disabled: true})
+
+      assert {:ok, resolved, :first_compatible} = TargetResolver.resolve(movie())
+      assert resolved.id == enabled.id
+    end
+
     test "falls back to the alphabetically first compatible library" do
       first = library_path_fixture(%{type: "movies", path: "/tmp/aaa-movies"})
       _second = library_path_fixture(%{type: "movies", path: "/tmp/zzz-movies"})

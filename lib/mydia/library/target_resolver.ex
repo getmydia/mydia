@@ -132,7 +132,7 @@ defmodule Mydia.Library.TargetResolver do
   defp default_target(kind), do: Settings.default_library_for(kind)
 
   defp first_compatible(paths, allowed) do
-    Enum.find(paths, &(&1.type in allowed and &1.monitored))
+    Enum.find(paths, &(&1.type in allowed and &1.monitored and not disabled?(&1)))
   end
 
   ## Candidate validation

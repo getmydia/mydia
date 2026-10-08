@@ -324,6 +324,16 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
   defp validate_directory(nil), do: {:error, "path cannot be blank"}
   defp validate_directory(""), do: {:error, "path cannot be blank"}
 
+  # An S3 library has no directory on disk; ask the storage backend instead.
+  defp validate_directory("s3://" <> _ = path) do
+    with {:ok, loc} <- Mydia.Storage.location(%LibraryPath{path: path}),
+         :ok <- Mydia.Storage.validate(loc) do
+      :ok
+    else
+      {:error, %Mydia.Storage.Error{message: message}} -> {:error, message}
+    end
+  end
+
   defp validate_directory(path) when is_binary(path) do
     cond do
       not File.exists?(path) ->

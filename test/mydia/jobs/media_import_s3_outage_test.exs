@@ -83,6 +83,33 @@ defmodule Mydia.Jobs.MediaImportS3OutageTest do
     assert Mydia.Library.list_media_files() == []
   end
 
+  test "a 503 on the destination size check fails the import without uploading", ctx do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    # First HEAD (existence) answers with a size; the second (size check) is down.
+    Bypass.stub(ctx.bypass, "HEAD", @ideal, fn conn ->
+      n = Agent.get_and_update(counter, &{&1 + 1, &1 + 1})
+
+      if n == 1 do
+        conn
+        |> Plug.Conn.put_resp_header("content-length", "99")
+        |> Plug.Conn.put_resp_header("last-modified", "Wed, 01 Oct 2031 10:00:00 GMT")
+        |> Plug.Conn.resp(200, "")
+      else
+        Plug.Conn.resp(conn, 503, "")
+      end
+    end)
+
+    result =
+      perform_job(MediaImport, %{
+        "download_id" => ctx.download.id,
+        "save_path" => ctx.download_dir
+      })
+
+    assert {:error, %Mydia.Storage.Error{kind: :provider}} = result
+    assert Mydia.Library.list_media_files() == []
+  end
+
   test "a 503 while probing a conflict name fails the import without uploading", ctx do
     # The ideal name exists with other content; every suffixed candidate is
     # unreachable.

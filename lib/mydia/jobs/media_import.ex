@@ -1597,12 +1597,23 @@ defmodule Mydia.Jobs.MediaImport do
   end
 
   defp handle_file_conflict(file, dest_path, episode, download, library_path, args) do
-    if file_size(dest_path) == file.size do
-      # Files are likely identical - create DB record
-      Logger.info("File sizes match, creating DB record", path: dest_path)
-      create_media_file_record(dest_path, file.size, episode, download, library_path)
-    else
-      place_conflicting_file(file, dest_path, episode, download, library_path, args)
+    case file_size(dest_path) do
+      {:ok, size} when size == file.size ->
+        # Files are likely identical - create DB record
+        Logger.info("File sizes match, creating DB record", path: dest_path)
+        create_media_file_record(dest_path, file.size, episode, download, library_path)
+
+      {:ok, _other} ->
+        place_conflicting_file(file, dest_path, episode, download, library_path, args)
+
+      {:error, error} ->
+        # A storage error says nothing about the content; never guess "different".
+        Logger.error("Could not read the size of the existing destination",
+          dest: dest_path,
+          reason: inspect(error)
+        )
+
+        {:error, error}
     end
   end
 
@@ -1666,7 +1677,11 @@ defmodule Mydia.Jobs.MediaImport do
   end
 
   defp conflict_candidate(candidate, size) do
-    if file_size(candidate) == size, do: {:halt, {:existing, candidate}}, else: {:cont, nil}
+    case file_size(candidate) do
+      {:ok, ^size} -> {:halt, {:existing, candidate}}
+      {:ok, _other} -> {:cont, nil}
+      {:error, error} -> {:halt, {:error, error}}
+    end
   end
 
   # An S3 library has no directories to create, and its existence checks ask
@@ -1688,12 +1703,12 @@ defmodule Mydia.Jobs.MediaImport do
 
   defp destination_exists?(path), do: File.exists?(path)
 
+  # `{:ok, size | nil}` or `{:error, error}`. On S3 any storage error is
+  # surfaced, since "unknown size" must not read as "different content".
   defp file_size("s3://" <> _ = path) do
     with {:ok, source} <- Storage.at(path),
          {:ok, %{size: size}} <- Storage.stat(source) do
-      size
-    else
-      _ -> nil
+      {:ok, size}
     end
   end
 
@@ -1701,8 +1716,8 @@ defmodule Mydia.Jobs.MediaImport do
   # path exists, but a file that vanishes in between should not crash the job.
   defp file_size(path) do
     case File.stat(path) do
-      {:ok, %File.Stat{size: size}} -> size
-      {:error, _} -> nil
+      {:ok, %File.Stat{size: size}} -> {:ok, size}
+      {:error, _} -> {:ok, nil}
     end
   end
 

@@ -180,7 +180,7 @@ defmodule Mydia.Storage.Local do
   # Write to a sibling and rename over the target, so a reader never sees half
   # a file. This is what the NFO writer has always done.
   defp write_atomic(dest, data) do
-    tmp = dest <> ".tmp"
+    tmp = dest <> ".tmp-" <> Integer.to_string(System.unique_integer([:positive]))
 
     with :ok <- File.write(tmp, data),
          :ok <- File.rename(tmp, dest) do

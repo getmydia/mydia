@@ -22,8 +22,9 @@ path), and import, organize, rename, trash, delete, NFO and subtitle writes
   preloaded; an unloaded association reads as local.
 - `s3://` strings survive `Path.join/2`, `Path.relative_to/2` and
   `Path.dirname/1`, but **never** pass one to `Path.expand/1`: it turns the
-  scheme into a path segment under the working directory. `Dirs.inside?/2`
-  expands, so keep `s3://` values away from it.
+  scheme into a path segment under the working directory. `Dirs.normalize/1`
+  and `Dirs.inside?/2` are S3-safe, but `Path.expand/1` itself must still never
+  see an `s3://` string.
 - `Source` and `Location` carry the backend; `Location.key/2` builds the object
   key from the prefix and a relative path.
 
