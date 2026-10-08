@@ -414,10 +414,6 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
     end
   end
 
-  # The add completes in a handle_info the submit's render_submit/render_hook
-  # round trip does not wait on: it fetches metadata over Bypass before
-  # creating the row. Matches the wait_until/1 helper hide_owned_test.exs
-  # uses for the same reason.
   # show_details only queues the detail fetch, which in turn queues the
   # recommendations start_async, so a bare render_async can return before the
   # async task exists. Poll until the selector renders.
@@ -438,6 +434,10 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
     end
   end
 
+  # The add completes in a handle_info the submit's render_submit/render_hook
+  # round trip does not wait on: it fetches metadata over Bypass before
+  # creating the row. Matches the wait_until/1 helper hide_owned_test.exs
+  # uses for the same reason.
   defp wait_until_media_item(provider_id, retries \\ 200)
 
   defp wait_until_media_item(provider_id, 0) do
