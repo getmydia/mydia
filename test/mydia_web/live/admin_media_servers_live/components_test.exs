@@ -81,6 +81,22 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
     end
   end
 
+  describe "account link count" do
+    test "a server with linked accounts shows the count as a badge" do
+      s = server(%{connection_settings: %{"sync_watched" => "true"}})
+
+      html =
+        render_component(&Components.media_servers_tab/1, %{
+          media_servers: [s],
+          media_server_health: %{s.id => %{status: :healthy}},
+          link_counts: %{s.id => 3}
+        })
+
+      assert html =~ "3 accounts"
+      assert html =~ "Accounts (3)"
+    end
+  end
+
   describe "env-configured servers" do
     defp runtime_server do
       server(%{id: "runtime::media_server::storage"})

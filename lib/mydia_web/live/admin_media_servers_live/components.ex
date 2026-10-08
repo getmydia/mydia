@@ -2,7 +2,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
-  alias Mydia.Plugins.Instance
   alias Mydia.Settings
   alias MydiaWeb.PluginInstanceComponents
 
@@ -66,7 +65,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
       >
         <.admin_list id="plugin-media-servers" items={@plugin_instances}>
           <:row :let={{plugin, instance}}>
-            <.plugin_instance_row
+            <PluginInstanceComponents.plugin_instance_row
               plugin={plugin}
               instance={instance}
               health={Map.get(@plugin_instance_health, instance.id, %{status: :unknown})}
@@ -139,6 +138,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           <.icon name={health_status_icon(@health.status)} class="w-3 h-3" />
           {health_status_label(@health.status)}
         </span>
+        <span :if={@link_count > 0} class="badge badge-sm badge-outline">
+          {@link_count} {if @link_count == 1, do: "account", else: "accounts"}
+        </span>
         <span :if={@health[:checked_at]} class="text-xs text-base-content/50">
           Checked {Calendar.strftime(@health.checked_at, "%H:%M")}
         </span>
@@ -190,6 +192,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     """
   end
 
+  defp env_reason, do: "Configured via environment variables (read-only)"
+
   attr :server, :map, required: true
   attr :last_run, :map, required: true
 
@@ -217,159 +221,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     </div>
     """
   end
-
-  attr :plugin, :map, required: true
-  attr :instance, :map, required: true
-  attr :health, :map, required: true
-  attr :last_run, :any, default: nil
-  attr :links, :list, default: []
-
-  defp plugin_instance_row(assigns) do
-    assigns = assign(assigns, :read_only, assigns.instance.source == :runtime)
-
-    ~H"""
-    <.admin_row
-      id={"plugin-instance-#{@instance.id}"}
-      class={if(not @instance.enabled, do: "opacity-60")}
-    >
-      <:title>
-        <.icon name="hero-puzzle-piece" class="w-5 h-5 text-base-content/60" />
-        {@instance.name}
-        <.env_lock_badge :if={@read_only} />
-      </:title>
-      <:descriptor>
-        <div>{@plugin.name} plugin</div>
-        <div :if={@health[:message]} class="text-error/80 whitespace-normal break-words">
-          {@health.message}
-        </div>
-        <button
-          :if={@health[:action] && not @read_only}
-          id={"plugin-instance-health-action-#{@instance.id}"}
-          class="btn btn-warning btn-xs my-1"
-          phx-click="plugin_instance_health_action"
-          phx-value-id={@instance.id}
-        >
-          {PluginInstanceComponents.health_action_label(@health.action)}
-        </button>
-        <div :if={@last_run} class="whitespace-normal">
-          <span class={["badge badge-xs", PluginInstanceComponents.run_badge_class(@last_run.status)]}>
-            {PluginInstanceComponents.run_label(@last_run)}
-          </span>
-          <span :if={@last_run.error} class="text-error/80 break-words">{@last_run.error}</span>
-        </div>
-        <ul :if={@instance.approved_endpoints != []} class="whitespace-normal font-mono">
-          <li
-            :for={{endpoint, index} <- Enum.with_index(@instance.approved_endpoints)}
-            id={"plugin-instance-endpoint-#{@instance.id}-#{index}"}
-            class="flex items-center gap-2"
-          >
-            <span class="break-all">{Instance.endpoint_label(endpoint)}</span>
-            <button
-              :if={not @read_only}
-              id={"plugin-instance-endpoint-remove-#{@instance.id}-#{index}"}
-              class="btn btn-ghost btn-xs text-error"
-              phx-click="plugin_instance_remove_endpoint"
-              phx-value-id={@instance.id}
-              phx-value-scheme={endpoint["scheme"]}
-              phx-value-host={endpoint["host"]}
-              phx-value-port={endpoint["port"]}
-              data-confirm="Remove this address? The plugin will no longer be able to reach it."
-              aria-label="Remove address"
-            >
-              <.icon name="hero-x-mark" class="w-3 h-3" />
-            </button>
-          </li>
-        </ul>
-        <ul :if={@links != []} class="flex flex-wrap gap-1 whitespace-normal mt-1">
-          <li
-            :for={link <- @links}
-            class={["badge badge-sm", PluginInstanceComponents.link_badge_class(link.status)]}
-          >
-            {link.external_username || link.external_user_id}
-          </li>
-        </ul>
-        <div :if={@read_only}>Configured via environment variables, read-only</div>
-      </:descriptor>
-      <:badges>
-        <span class={[
-          "badge badge-sm badge-outline",
-          if(@instance.enabled, do: "badge-success", else: "badge-ghost")
-        ]}>
-          {if @instance.enabled, do: "Active", else: "Inactive"}
-        </span>
-        <span class={[
-          "badge badge-sm badge-outline gap-1",
-          PluginInstanceComponents.health_badge_class(@health.status)
-        ]}>
-          {PluginInstanceComponents.health_label(@health.status)}
-        </span>
-        <span :if={@health[:checked_at]} class="text-xs text-base-content/50">
-          Checked {Calendar.strftime(@health.checked_at, "%H:%M")}
-        </span>
-      </:badges>
-      <:actions>
-        <.row_actions>
-          <.row_action
-            id={"plugin-instance-sync-#{@instance.id}"}
-            icon="hero-arrow-path"
-            title="Sync now"
-            phx-click="plugin_instance_sync"
-            phx-value-id={@instance.id}
-          />
-          <.row_action
-            id={"plugin-instance-test-#{@instance.id}"}
-            icon="hero-signal"
-            title="Test"
-            phx-click="plugin_instance_test"
-            phx-value-id={@instance.id}
-          />
-          <.row_action
-            :if={@plugin.setup}
-            id={"plugin-instance-accounts-#{@instance.id}"}
-            icon="hero-user-group"
-            title="Accounts"
-            disabled={@read_only}
-            disabled_reason={if(@read_only, do: env_reason())}
-            phx-click="plugin_instance_accounts"
-            phx-value-id={@instance.id}
-          />
-          <.row_action
-            :if={@plugin.setup}
-            id={"plugin-instance-reconnect-#{@instance.id}"}
-            icon="hero-key"
-            title="Reconnect"
-            disabled={@read_only}
-            disabled_reason={if(@read_only, do: env_reason())}
-            phx-click="plugin_instance_reconnect"
-            phx-value-id={@instance.id}
-          />
-          <.row_action
-            id={"plugin-instance-toggle-#{@instance.id}"}
-            icon="hero-power"
-            title={if(@instance.enabled, do: "Disable", else: "Enable")}
-            disabled={@read_only}
-            disabled_reason={if(@read_only, do: env_reason())}
-            phx-click="plugin_instance_toggle"
-            phx-value-id={@instance.id}
-          />
-          <.row_action
-            id={"plugin-instance-delete-#{@instance.id}"}
-            icon="hero-trash"
-            title="Delete"
-            destructive
-            disabled={@read_only}
-            disabled_reason={if(@read_only, do: env_reason())}
-            phx-click="plugin_instance_delete"
-            phx-value-id={@instance.id}
-            data-confirm={"Delete #{@instance.name}? Its account links and sync state are removed."}
-          />
-        </.row_actions>
-      </:actions>
-    </.admin_row>
-    """
-  end
-
-  defp env_reason, do: "Configured via environment variables (read-only)"
 
   @doc """
   The page header's Add server menu: the native Jellyfin form plus one entry per
