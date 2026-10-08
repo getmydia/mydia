@@ -88,7 +88,7 @@ defmodule MydiaWeb.AdminSystemLiveTest do
     end
 
     test "displays system information", %{view: view} do
-      assert has_element?(view, "h3", "System")
+      assert has_element?(view, "#status-system-title", "System")
       assert has_element?(view, ".stat-title", "Version")
       assert has_element?(view, ".stat-title", "Elixir")
       assert has_element?(view, ".stat-title", "Memory")
@@ -96,7 +96,12 @@ defmodule MydiaWeb.AdminSystemLiveTest do
     end
 
     test "displays database information", %{view: view} do
-      assert has_element?(view, "h3", "Database")
+      assert has_element?(view, "#status-database-title", "Database")
+    end
+
+    test "the database health badge sits beside its heading", %{view: view} do
+      assert has_element?(view, "#status-database-actions .badge")
+      assert has_element?(view, "#status-configuration h2", "Configuration")
     end
 
     test "no longer renders the FlareSolverr External Services card", %{view: view} do
