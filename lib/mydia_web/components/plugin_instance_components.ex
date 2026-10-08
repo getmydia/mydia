@@ -125,7 +125,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
             icon="hero-user-group"
             title="Accounts"
             disabled={@read_only}
-            disabled_reason={if(@read_only, do: env_reason())}
+            disabled_reason={if(@read_only, do: env_read_only_reason())}
             phx-click="plugin_instance_accounts"
             phx-value-id={@instance.id}
           />
@@ -135,7 +135,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
             icon="hero-key"
             title="Reconnect"
             disabled={@read_only}
-            disabled_reason={if(@read_only, do: env_reason())}
+            disabled_reason={if(@read_only, do: env_read_only_reason())}
             phx-click="plugin_instance_reconnect"
             phx-value-id={@instance.id}
           />
@@ -144,7 +144,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
             icon="hero-power"
             title={if(@instance.enabled, do: "Disable", else: "Enable")}
             disabled={@read_only}
-            disabled_reason={if(@read_only, do: env_reason())}
+            disabled_reason={if(@read_only, do: env_read_only_reason())}
             phx-click="plugin_instance_toggle"
             phx-value-id={@instance.id}
           />
@@ -154,7 +154,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
             title="Delete"
             destructive
             disabled={@read_only}
-            disabled_reason={if(@read_only, do: env_reason())}
+            disabled_reason={if(@read_only, do: env_read_only_reason())}
             phx-click="plugin_instance_delete"
             phx-value-id={@instance.id}
             data-confirm={"Delete #{@instance.name}? Its account links and sync state are removed."}
@@ -164,8 +164,6 @@ defmodule MydiaWeb.PluginInstanceComponents do
     </.admin_row>
     """
   end
-
-  defp env_reason, do: "Configured via environment variables (read-only)"
 
   attr :declarations, :list, required: true
 

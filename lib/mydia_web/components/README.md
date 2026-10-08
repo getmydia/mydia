@@ -308,7 +308,8 @@ switching content panes inside a modal. Colours come from theme tokens such as
 **Lists.** `<.admin_list id items>` with a `:row` and an `:empty` slot renders
 the `bg-base-200 rounded-box divide-y divide-base-300` container, or an
 `alert alert-info` when empty. Each row is `<.admin_row id>` with `:title`,
-`:descriptor` (one truncated `text-xs opacity-60` line), `:badges`
+`:descriptor` (one truncated `text-xs opacity-60` line), `:details`
+(multi-line notes and warnings, not truncated or dimmed), `:badges`
 (`badge badge-sm badge-outline`) and `:actions`. Never a `card`/`card-body`.
 
 **Row actions.** `<.row_actions>` holding `<.row_action icon title ...>`
@@ -331,7 +332,9 @@ Singletons such as FlareSolverr use one row plus Edit, with no add or delete.
 `modal modal-open`, a `max-w-2xl` box (`size={:lg}` for `max-w-4xl` browsers
 and catalogues), the `w-10 h-10 rounded-xl bg-primary/20` icon tile, the
 bordered `modal-action` from its `:actions` slot and a `bg-black/50` backdrop
-that fires `on_close`. The page puts its own
+that fires `on_close`. The `:header_aside` slot sits on the right of the
+header (an Enabled toggle, say); a form field there needs
+`form="<form-id>"` because it lives outside the `<form>`. The page puts its own
 `<.form for={@<x>_form} id="<x>-form" phx-change="validate_<x>" phx-submit="save_<x>">`
 inside; a form whose buttons must be inside the `<form>` renders
 `<.admin_modal_actions>` itself.

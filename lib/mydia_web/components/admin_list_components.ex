@@ -152,7 +152,12 @@ defmodule MydiaWeb.AdminListComponents do
     """
   end
 
-  attr :tip, :string, default: "Configured via environment variables (read-only)"
+  @env_read_only_reason "Configured via environment variables (read-only)"
+
+  @doc "Why an env or YAML row cannot be edited; the default tip and disabled_reason."
+  def env_read_only_reason, do: @env_read_only_reason
+
+  attr :tip, :string, default: @env_read_only_reason
 
   @doc "Marks a row that comes from env or YAML and cannot be edited here."
   def env_lock_badge(assigns) do

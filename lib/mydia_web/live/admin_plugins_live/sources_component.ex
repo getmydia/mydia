@@ -83,77 +83,61 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="plugin-sources" class="bg-base-200 rounded-box p-3 sm:p-4 space-y-3">
-      <div class="flex items-center justify-between gap-2">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-globe-alt" class="w-5 h-5 opacity-60" /> Plugin sources
-        </h2>
-        <button
-          id="add-source"
-          type="button"
-          class="btn btn-sm btn-primary"
-          phx-click="open_add_source"
-          phx-target={@myself}
-        >
-          <.icon name="hero-plus" class="w-4 h-4" /> Add source
-        </button>
-      </div>
+    <div id="plugin-sources">
+      <.admin_section title="Plugin sources" icon="hero-globe-alt">
+        <div class="flex justify-end">
+          <button
+            id="add-source"
+            type="button"
+            class="btn btn-sm btn-primary"
+            phx-click="open_add_source"
+            phx-target={@myself}
+          >
+            <.icon name="hero-plus" class="w-4 h-4" /> Add source
+          </button>
+        </div>
 
-      <div class="overflow-x-auto">
-        <table class="table table-sm">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>URL</th>
-              <th>Key</th>
-              <th>Plugins</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr :if={@official} id="source-row-official">
-              <td class="font-medium">Mydia plugin index</td>
-              <td class="text-xs break-all min-w-48">{@official.url}</td>
-              <td class="font-mono text-xs">{fingerprint(@official.public_key)}</td>
-              <td></td>
-              <td><span class="badge badge-sm badge-ghost">Official</span></td>
-            </tr>
-            <tr :for={source <- @sources} id={"source-row-#{source.id}"}>
-              <td class="font-medium break-words">{source.name || source.url}</td>
-              <td class="text-xs break-all min-w-48">{source.url}</td>
-              <td class="font-mono text-xs">{source.key_id}</td>
-              <td>{source.plugin_count}</td>
-              <td>
-                <div class="flex flex-wrap items-center gap-1">
-                  <span
-                    :if={source.declared}
-                    class="badge badge-sm badge-ghost"
-                    title="Set in the environment or config file"
-                  >
-                    Declared
-                  </span>
-                  <span :if={not source.enabled} class="badge badge-sm badge-ghost">Disabled</span>
-                  <span :if={source.last_error} class="text-error text-xs break-words">
-                    {source.last_error}
-                  </span>
-                  <.row_actions :if={not source.declared}>
-                    <.row_action
-                      id={"remove-source-#{source.id}"}
-                      icon="hero-trash"
-                      title="Remove"
-                      destructive
-                      phx-click="remove_source"
-                      phx-value-id={source.id}
-                      phx-target={@myself}
-                      data-confirm="Remove this source? Plugins installed from it keep running but stop receiving updates."
-                    />
-                  </.row_actions>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+        <.admin_table
+          id="plugin-sources-table"
+          rows={source_rows(@official, @sources)}
+          row_id={& &1.dom_id}
+        >
+          <:col :let={row} label="Name"><span class="font-medium break-words">{row.name}</span></:col>
+          <:col :let={row} label="URL"><span class="text-xs break-all">{row.url}</span></:col>
+          <:col :let={row} label="Key"><span class="font-mono text-xs">{row.key}</span></:col>
+          <:col :let={row} label="Plugins">{row.plugin_count}</:col>
+          <:col :let={row} label="Status">
+            <div class="flex flex-wrap items-center gap-1">
+              <span :if={row.official?} class="badge badge-sm badge-ghost">Official</span>
+              <span
+                :if={row.declared?}
+                class="badge badge-sm badge-ghost"
+                title="Set in the environment or config file"
+              >
+                Declared
+              </span>
+              <span :if={row.disabled?} class="badge badge-sm badge-ghost">Disabled</span>
+              <span :if={row.last_error} class="text-error text-xs break-words">
+                {row.last_error}
+              </span>
+            </div>
+          </:col>
+          <:action :let={row}>
+            <.row_action
+              :if={row.removable?}
+              id={"remove-source-#{row.id}"}
+              icon="hero-trash"
+              title="Remove"
+              destructive
+              phx-click="remove_source"
+              phx-value-id={row.id}
+              phx-target={@myself}
+              data-confirm="Remove this source? Plugins installed from it keep running but stop receiving updates."
+            />
+          </:action>
+          <:empty>No plugin sources.</:empty>
+        </.admin_table>
+      </.admin_section>
 
       <.admin_modal
         :if={@adding?}
@@ -248,4 +232,44 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
   end
 
   defp fingerprint(key), do: Signature.fingerprint(key)
+
+  defp source_rows(official, sources) do
+    official_rows =
+      if official do
+        [
+          %{
+            id: nil,
+            dom_id: "source-row-official",
+            name: "Mydia plugin index",
+            url: official.url,
+            key: fingerprint(official.public_key),
+            plugin_count: nil,
+            official?: true,
+            declared?: false,
+            disabled?: false,
+            last_error: nil,
+            removable?: false
+          }
+        ]
+      else
+        []
+      end
+
+    official_rows ++
+      Enum.map(sources, fn source ->
+        %{
+          id: source.id,
+          dom_id: "source-row-#{source.id}",
+          name: source.name || source.url,
+          url: source.url,
+          key: source.key_id,
+          plugin_count: source.plugin_count,
+          official?: false,
+          declared?: source.declared,
+          disabled?: not source.enabled,
+          last_error: source.last_error,
+          removable?: not source.declared
+        }
+      end)
+  end
 end

@@ -28,12 +28,17 @@ defmodule MydiaWeb.AdminPageConventionsTest do
     "admin_import_lists_live"
   ]
 
+  # Single files outside a page directory that hold migrated admin markup,
+  # relative to the live root.
+  @enforced_files [
+    "../components/plugin_instance_components.ex"
+  ]
+
   @bare_events ~w(new edit save cancel close close_modal delete remove test validate filter)
 
   test "enforced pages follow the admin page conventions" do
     offenders =
-      for dir <- @enforced,
-          path <- Path.wildcard(Path.join([@live_root, dir, "**", "*.{ex,heex}"])),
+      for path <- enforced_paths(),
           violation <- violations(File.read!(path), path) do
         "  #{Path.relative_to(path, @live_root)}: #{violation}"
       end
@@ -43,9 +48,13 @@ defmodule MydiaWeb.AdminPageConventionsTest do
              Enum.join(offenders, "\n")
   end
 
-  test "every enforced directory exists" do
-    missing = Enum.reject(@enforced, &File.dir?(Path.join(@live_root, &1)))
-    assert missing == []
+  test "every enforced directory and file exists" do
+    missing_dirs = Enum.reject(@enforced, &File.dir?(Path.join(@live_root, &1)))
+
+    missing_files =
+      Enum.reject(@enforced_files, &File.regular?(Path.expand(&1, @live_root)))
+
+    assert missing_dirs ++ missing_files == []
   end
 
   describe "the scanner" do
@@ -96,6 +105,15 @@ defmodule MydiaWeb.AdminPageConventionsTest do
       assert ["raw grey" <> _] = violations(~S(<p class="text-gray-500">), "x.ex")
       assert ["<.button>" <> _] = violations(~S(<.button class="btn">Go</.button>), "x.ex")
     end
+  end
+
+  defp enforced_paths do
+    dir_paths =
+      for dir <- @enforced,
+          path <- Path.wildcard(Path.join([@live_root, dir, "**", "*.{ex,heex}"])),
+          do: path
+
+    dir_paths ++ Enum.map(@enforced_files, &Path.expand(&1, @live_root))
   end
 
   defp violations(content, path) do

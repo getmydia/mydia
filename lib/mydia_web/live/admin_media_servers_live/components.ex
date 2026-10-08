@@ -174,7 +174,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
             icon="hero-pencil"
             title="Edit"
             disabled={@runtime?}
-            disabled_reason={if(@runtime?, do: env_reason())}
+            disabled_reason={if(@runtime?, do: env_read_only_reason())}
             phx-click="edit_media_server"
             phx-value-id={@server.id}
           />
@@ -183,7 +183,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
             title="Delete"
             destructive
             disabled={@runtime?}
-            disabled_reason={if(@runtime?, do: env_reason())}
+            disabled_reason={if(@runtime?, do: env_read_only_reason())}
             phx-click="delete_media_server"
             phx-value-id={@server.id}
             data-confirm="Are you sure you want to delete this media server?"
@@ -193,8 +193,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     </.admin_row>
     """
   end
-
-  defp env_reason, do: "Configured via environment variables (read-only)"
 
   attr :server, :map, required: true
   attr :last_run, :map, required: true
