@@ -1,68 +1,16 @@
 <Layouts.app {assigns}>
   <.admin_page page={:dashboard}>
-    <div class="space-y-6 sm:space-y-8 p-4 sm:p-6">
-      <MydiaWeb.AdminDashboardLive.Components.kpi_row
-        active_streams={length(@active_sessions)}
-        plays_today={@plays_today}
-        plays_yesterday={@plays_yesterday}
-        plays_week={@plays_week}
-        plays_prior_week={@plays_prior_week}
-        idle_for={@last_play_at && Components.elapsed_label(@last_play_at)}
-      />
-
-      <MydiaWeb.AdminDashboardLive.Components.dash_section
-        id="now-playing"
-        title="Now Playing"
-        icon="hero-play-circle"
-        empty?={@active_sessions == []}
-        empty_text={now_playing_idle_text(@last_play_at)}
-      >
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <MydiaWeb.AdminDashboardLive.Components.now_playing_card
-            :for={session <- @active_sessions}
-            session={session}
-          />
-        </div>
-      </MydiaWeb.AdminDashboardLive.Components.dash_section>
-
-      <%!--
-      Background transcodes only, never playback. Sessions already appear above
-      as now-playing cards, and both session types also insert a TranscodeJob
-      row, so listing every active job here would show each viewer twice.
-      --%>
-      <%= if @background_jobs != [] do %>
-        <div id="background-transcodes">
-          <h3 class="text-lg font-semibold flex items-center gap-2 mb-3">
-            <.icon name="hero-cog-6-tooth" class="w-5 h-5 text-primary" /> Background transcodes
-          </h3>
-          <div class="divide-y divide-base-300 bg-base-100 rounded-box border border-base-300">
-            <MydiaWeb.AdminDashboardLive.Components.recent_job_card
-              :for={job <- @background_jobs}
-              job={job}
-            />
-          </div>
-        </div>
-      <% end %>
-
-      <MydiaWeb.AdminDashboardLive.Components.plays_chart days={@days} range={@range_days} />
-
-      <MydiaWeb.AdminDashboardLive.Components.dash_section
-        id="recent-activity"
-        title="Recent Activity"
-        icon="hero-clock"
-        empty?={@recent_activity == []}
-        empty_text="Nothing has happened yet."
-      >
-        <div class="divide-y divide-base-300 bg-base-100 rounded-box border border-base-300">
-          <%= for item <- @recent_activity do %>
-            <%= if item.type == :transcode_job do %>
-              <MydiaWeb.AdminDashboardLive.Components.recent_job_card job={item.data} />
-            <% else %>
-              <MydiaWeb.AdminDashboardLive.Components.recent_watch_card progress={item.data} />
-            <% end %>
-          <% end %>
-        </div>
-      </MydiaWeb.AdminDashboardLive.Components.dash_section>
-    </div>
+    <MydiaWeb.AdminDashboardLive.Components.dashboard_tab
+      active_sessions={@active_sessions}
+      background_jobs={@background_jobs}
+      recent_activity={@recent_activity}
+      last_play_at={@last_play_at}
+      plays_today={@plays_today}
+      plays_yesterday={@plays_yesterday}
+      plays_week={@plays_week}
+      plays_prior_week={@plays_prior_week}
+      days={@days}
+      range_days={@range_days}
+    />
   </.admin_page>
 </Layouts.app>

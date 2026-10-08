@@ -117,6 +117,26 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
       refute has_element?(view, "#background-transcodes")
     end
 
+    test "the background transcode list is an admin list with an icon cancel", %{
+      conn: conn,
+      token: token,
+      user: user
+    } do
+      movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "The Brass Lantern"})
+      media_file = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+      job = insert_job(media_file, user, "download", "transcoding")
+
+      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+      assert has_element?(view, "#background-transcodes h2", "Background transcodes")
+      assert has_element?(view, "#background-transcodes-list #transcode-job-#{job.id}")
+
+      assert has_element?(
+               view,
+               ~s(#transcode-job-#{job.id} button.text-error[title="Cancel transcode"])
+             )
+    end
+
     test "an in-progress job is not styled as a failure", %{conn: conn, token: token, user: user} do
       movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "The Brass Lantern"})
       media_file = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
@@ -205,13 +225,13 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
       {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
 
       assert view
-             |> form("#plays-range", %{"range" => "7"})
-             |> render_change()
+             |> element(~s(#plays-range button[phx-value-range="7"]))
+             |> render_click()
              |> plays_columns() == 7
 
       assert view
-             |> form("#plays-range", %{"range" => "90"})
-             |> render_change()
+             |> element(~s(#plays-range button[phx-value-range="90"]))
+             |> render_click()
              |> plays_columns() == 90
     end
 
@@ -219,7 +239,7 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
       {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
 
       assert view
-             |> render_change("set_range", %{"range" => "not-a-number"})
+             |> render_click("set_plays_range", %{"range" => "not-a-number"})
              |> plays_columns() == 30
     end
   end
@@ -257,16 +277,16 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
 
     html_7 =
       view
-      |> form("#plays-range", %{"range" => "7"})
-      |> render_change()
+      |> element(~s(#plays-range button[phx-value-range="7"]))
+      |> render_click()
 
     assert kpi_value(html_7, "kpi-plays-today") == today
     assert kpi_value(html_7, "kpi-plays-week") == week
 
     html_90 =
       view
-      |> form("#plays-range", %{"range" => "90"})
-      |> render_change()
+      |> element(~s(#plays-range button[phx-value-range="90"]))
+      |> render_click()
 
     assert kpi_value(html_90, "kpi-plays-today") == today
     assert kpi_value(html_90, "kpi-plays-week") == week
@@ -322,8 +342,8 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
 
     html_7 =
       view
-      |> form("#plays-range", %{"range" => "7"})
-      |> render_change()
+      |> element(~s(#plays-range button[phx-value-range="7"]))
+      |> render_click()
 
     assert kpi_value(html_7, "kpi-plays-week") == 4
     assert kpi_desc(html_7, "kpi-plays-week") == "1 the week before"

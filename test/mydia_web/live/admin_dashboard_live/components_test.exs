@@ -4,6 +4,7 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
   import Phoenix.LiveViewTest
 
   alias MydiaWeb.AdminDashboardLive.Components
+  alias MydiaWeb.AdminDashboardLive.PlaysChartComponents
 
   describe "dash_section/1" do
     test "renders one line and no box when empty" do
@@ -68,7 +69,7 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
     test "draws an axis rather than an empty box when every day is zero" do
       days = for i <- 0..6, do: %{date: Date.add(~D[2026-09-03], i), movies: 0, episodes: 0}
 
-      html = render_component(&Components.plays_chart/1, days: days, range: 30)
+      html = render_component(&PlaysChartComponents.plays_chart/1, days: days, range: 30)
 
       refute html =~ "plays-chart-empty"
       assert html =~ "plays-chart"
@@ -81,7 +82,7 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
         %{date: ~D[2026-09-02], movies: 0, episodes: 3}
       ]
 
-      html = render_component(&Components.plays_chart/1, days: days, range: 30)
+      html = render_component(&PlaysChartComponents.plays_chart/1, days: days, range: 30)
 
       assert html =~ "plays-chart"
       assert html =~ "<rect"
@@ -93,7 +94,7 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
         %{date: ~D[2026-09-02], movies: 0, episodes: 1}
       ]
 
-      html = render_component(&Components.plays_chart/1, days: days, range: 30)
+      html = render_component(&PlaysChartComponents.plays_chart/1, days: days, range: 30)
 
       assert html =~ ">6</text>"
       assert html =~ ">0</text>"
@@ -102,35 +103,64 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
     test "marks the active range and offers the other two" do
       days = for i <- 0..6, do: %{date: Date.add(~D[2026-09-03], i), movies: 0, episodes: 0}
 
-      html = render_component(&Components.plays_chart/1, days: days, range: 7)
+      html = render_component(&PlaysChartComponents.plays_chart/1, days: days, range: 7)
 
-      assert html =~ ~s(value="7")
-      assert html =~ ~s(value="30")
-      assert html =~ ~s(value="90")
+      assert html =~ ~s(phx-value-range="7")
+      assert html =~ ~s(phx-value-range="30")
+      assert html =~ ~s(phx-value-range="90")
       assert html =~ "plays-range"
     end
 
-    # A wrong or inverted `checked={@range == days}` would leave every
-    # assertion above passing while highlighting the wrong button. Pin the
-    # actual checked state per radio, not just that the values are present.
-    test "checks exactly the radio matching the active range" do
+    # A wrong or inverted selection test would leave every assertion above
+    # passing while highlighting the wrong button. Pin aria-pressed per button,
+    # not just that the values are present.
+    test "presses exactly the button matching the active range" do
       days = for i <- 0..6, do: %{date: Date.add(~D[2026-09-03], i), movies: 0, episodes: 0}
 
-      html = render_component(&Components.plays_chart/1, days: days, range: 7)
+      html = render_component(&PlaysChartComponents.plays_chart/1, days: days, range: 7)
       doc = LazyHTML.from_fragment(html)
 
-      checked_values =
+      pressed_values =
         for range <- [7, 30, 90] do
-          radio_checked? =
+          pressed =
             doc
-            |> LazyHTML.query(~s(input[name="range"][value="#{range}"]))
-            |> LazyHTML.attribute("checked")
-            |> Enum.any?()
+            |> LazyHTML.query(~s(button[phx-value-range="#{range}"]))
+            |> LazyHTML.attribute("aria-pressed")
 
-          {range, radio_checked?}
+          {range, pressed}
         end
 
-      assert checked_values == [{7, true}, {30, false}, {90, false}]
+      assert pressed_values == [{7, ["true"]}, {30, ["false"]}, {90, ["false"]}]
+    end
+  end
+
+  describe "recent_job_card/1" do
+    defp job_card(status) do
+      job = %{
+        id: "job-1",
+        type: "download",
+        status: status,
+        file_size: nil,
+        updated_at: DateTime.utc_now(),
+        media_file: %{episode: nil, media_item: %{title: "The Brass Lantern"}}
+      }
+
+      render_component(&Components.recent_job_card/1, job: job)
+    end
+
+    test "the button reads Delete on finished rows and Cancel transcode otherwise" do
+      for status <- ["ready", "failed"] do
+        html = job_card(status)
+        assert html =~ ~s(title="Delete")
+        assert html =~ ~s(aria-label="Delete")
+        refute html =~ "Cancel transcode"
+      end
+
+      for status <- ["pending", "transcoding"] do
+        html = job_card(status)
+        assert html =~ ~s(title="Cancel transcode")
+        assert html =~ ~s(aria-label="Cancel transcode")
+      end
     end
   end
 

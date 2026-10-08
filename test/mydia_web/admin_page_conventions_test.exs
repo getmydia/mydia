@@ -21,7 +21,6 @@ defmodule MydiaWeb.AdminPageConventionsTest do
   # Pages not yet migrated, by directory basename (or file rootname for a
   # single-file LiveView). Each page task deletes its key.
   @pending ~w(
-    admin_dashboard_live
     admin_download_clients_live
     admin_library_paths_live
   )
