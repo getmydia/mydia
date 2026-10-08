@@ -277,7 +277,7 @@ components. Before they existed the standard was a list of class strings to
 copy, and an audit on 2026-10-07 found only two of 23 pages still matching it.
 Convention drift reads as a defect on its own, independent of whether the page
 works. `test/mydia_web/admin_page_conventions_test.exs` fails the build on the
-drift patterns that audit found, for every page listed in its `@enforced`.
+drift patterns that audit found, for every LiveView mounted under `/admin`.
 
 **Registered in `MydiaWeb.AdminNav`.** A new admin page needs an entry in
 `lib/mydia_web/admin_nav.ex` with its hub (Configuration for acquisition levers,
