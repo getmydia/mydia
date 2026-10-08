@@ -95,13 +95,16 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       assert html =~ "Configured via environment variables"
     end
 
-    test "an env-configured server offers no edit or delete control" do
+    test "an env-configured server keeps edit and delete visible but disabled" do
       s = runtime_server()
 
-      html = render_tab([s], %{s.id => %{status: :unknown}})
+      doc =
+        [s]
+        |> render_tab(%{s.id => %{status: :unknown}})
+        |> LazyHTML.from_fragment()
 
-      refute html =~ "edit_media_server"
-      refute html =~ "delete_media_server"
+      assert LazyHTML.query(doc, "button[disabled][title=Edit]") |> Enum.count() == 1
+      assert LazyHTML.query(doc, "button[disabled][title=Delete]") |> Enum.count() == 1
     end
 
     test "a normal server offers edit and delete and carries no env note" do

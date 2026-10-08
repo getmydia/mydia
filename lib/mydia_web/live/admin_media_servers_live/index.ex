@@ -183,6 +183,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
     {:noreply,
      socket
+     |> assign(:show_account_mapping_modal, true)
      |> assign(:account_mapping_config, config)
      |> assign(:account_mapping_state, :loading)
      |> assign(:account_mapping_accounts, [])
@@ -193,7 +194,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   end
 
   @impl true
-  def handle_event("close_account_mapping", _params, socket) do
+  def handle_event("close_account_mapping_modal", _params, socket) do
     {:noreply, clear_account_mapping(socket)}
   end
 
@@ -582,6 +583,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   defp clear_account_mapping(socket) do
     socket
+    |> assign(:show_account_mapping_modal, false)
     |> assign(:account_mapping_config, nil)
     |> assign(:account_mapping_state, :loading)
     |> assign(:account_mapping_accounts, [])

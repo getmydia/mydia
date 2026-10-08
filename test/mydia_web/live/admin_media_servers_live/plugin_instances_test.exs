@@ -40,7 +40,7 @@ defmodule MydiaWeb.AdminMediaServersLive.PluginInstancesTest do
   end
 
   test "renders a card for each media server plugin instance", %{view: view, instance: i} do
-    assert has_element?(view, "#plugin-instances #plugin-instance-#{i.id}")
+    assert has_element?(view, "#plugin-media-servers #plugin-instance-#{i.id}")
   end
 
   test "the add-server menu offers Jellyfin and each media server plugin", %{view: view} do

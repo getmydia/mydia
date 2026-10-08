@@ -571,6 +571,84 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
   # honest pin for this fix lives in components_test.exs ("media server modal, Enabled
   # toggle form association"), which asserts the form= attribute on the rendered markup.
 
+  describe "Standard admin list" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn}
+    end
+
+    test "media servers render as a standard list with icon-only actions", %{conn: conn} do
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Lantern Vault",
+          type: :jellyfin,
+          url: "http://localhost:8096",
+          token: "tok"
+        })
+
+      {:ok, view, _} = live(conn, ~p"/admin/media-servers")
+
+      assert has_element?(view, "#media-servers.bg-base-200.rounded-box.divide-y")
+      assert has_element?(view, "#media-server-#{config.id}")
+      refute has_element?(view, ".card-body .btn")
+      assert has_element?(view, "#media-server-#{config.id} .join-item[title=Edit]")
+      assert has_element?(view, "#media-server-#{config.id} .join-item[title=Delete]")
+    end
+
+    test "an env-configured server keeps Edit and Delete visible and disabled", %{conn: conn} do
+      original = Application.get_env(:mydia, :runtime_config)
+      on_exit(fn -> Application.put_env(:mydia, :runtime_config, original) end)
+
+      Application.put_env(:mydia, :runtime_config, %{
+        Mydia.Config.Schema.defaults()
+        | media_servers: [
+            %{
+              name: "from-env",
+              type: :jellyfin,
+              enabled: true,
+              url: "http://127.0.0.1:9",
+              token: "tok"
+            }
+          ]
+      })
+
+      {:ok, view, _} = live(conn, ~p"/admin/media-servers")
+
+      assert has_element?(view, ".badge-primary .hero-lock-closed")
+      assert has_element?(view, "button[disabled][title=Edit]")
+      assert has_element?(view, "button[disabled][title=Delete]")
+    end
+
+    test "the account mapping modal uses the shared shell and closes from the backdrop",
+         %{conn: conn} do
+      {:ok, config} =
+        Mydia.Settings.create_media_server_config(%{
+          name: "Lantern Vault",
+          type: :jellyfin,
+          url: "http://127.0.0.1:9",
+          token: "tok",
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      {:ok, view, _} = live(conn, ~p"/admin/media-servers")
+
+      view
+      |> element(~s{[phx-click="open_account_mapping"][phx-value-id="#{config.id}"]})
+      |> render_click()
+
+      assert has_element?(view, "#account-mapping-modal .modal-box")
+      view |> element("#account-mapping-modal .modal-backdrop") |> render_click()
+      refute has_element?(view, "#account-mapping-modal")
+    end
+  end
+
   describe "Empty state and skip reasons" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)

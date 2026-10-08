@@ -2,8 +2,6 @@ defmodule MydiaWeb.AdminMediaServersLive.AccountMappingComponents do
   @moduledoc false
   use MydiaWeb, :html
 
-  import MydiaWeb.AdminMediaServersLive.Components, only: [modal_action_btn: 0]
-
   alias Mydia.Accounts.User
   alias Mydia.MediaServer.RemoteAccount
 
@@ -24,113 +22,99 @@ defmodule MydiaWeb.AdminMediaServersLive.AccountMappingComponents do
 
   def account_mapping_modal(assigns) do
     ~H"""
-    <div class="modal modal-open" id="account-mapping-modal">
-      <div class="modal-box max-w-2xl">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <h3 class="font-bold text-lg">{account_heading(@config)}</h3>
-            <p class="text-sm text-base-content/60 mt-1">
-              {account_intro(@config)}
-            </p>
-          </div>
-          <button
-            type="button"
-            class="btn btn-sm btn-circle btn-ghost"
-            phx-click="close_account_mapping"
-            aria-label="Close"
-          >
-            <.icon name="hero-x-mark" class="w-4 h-4" />
-          </button>
-        </div>
-
-        <div class="mt-5">
-          <%= case @state do %>
-            <% :loading -> %>
-              <div
-                id="account-mapping-loading"
-                class="flex items-center justify-center gap-3 py-10 text-sm text-base-content/70"
-              >
-                <span class="loading loading-spinner loading-sm"></span>
-                {account_loading_message(@config)}
+    <.admin_modal
+      id="account-mapping-modal"
+      icon="hero-user-group"
+      title={account_heading(@config)}
+      subtitle={account_intro(@config)}
+      on_close="close_account_mapping_modal"
+    >
+      <div class="mt-5">
+        <%= case @state do %>
+          <% :loading -> %>
+            <div
+              id="account-mapping-loading"
+              class="flex items-center justify-center gap-3 py-10 text-sm text-base-content/70"
+            >
+              <span class="loading loading-spinner loading-sm"></span>
+              {account_loading_message(@config)}
+            </div>
+          <% {:error, message} -> %>
+            <div id="account-mapping-error" class="alert alert-error">
+              <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+              <span>{message}</span>
+            </div>
+          <% :ready -> %>
+            <%= if @accounts == [] do %>
+              <div id="account-mapping-empty" class="text-center py-10">
+                <p class="text-sm text-base-content/70">
+                  {account_empty_message(@config)}
+                </p>
               </div>
-            <% {:error, message} -> %>
-              <div id="account-mapping-error" class="alert alert-error">
-                <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-                <span>{message}</span>
-              </div>
-            <% :ready -> %>
-              <%= if @accounts == [] do %>
-                <div id="account-mapping-empty" class="text-center py-10">
-                  <p class="text-sm text-base-content/70">
-                    {account_empty_message(@config)}
-                  </p>
+            <% else %>
+              <form id="account-mapping-form" phx-submit="save_account_mapping">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium">
+                    {length(@accounts)} {found_label(@config, @accounts)}
+                  </span>
+                  <span class="text-xs text-base-content/50">Mydia user</span>
                 </div>
-              <% else %>
-                <form id="account-mapping-form" phx-submit="save_account_mapping">
-                  <div class="flex items-center justify-between mb-2">
-                    <span class="text-sm font-medium">
-                      {length(@accounts)} {found_label(@config, @accounts)}
-                    </span>
-                    <span class="text-xs text-base-content/50">Mydia user</span>
-                  </div>
 
-                  <div class="flex flex-col gap-2">
-                    <div
-                      :for={account <- @accounts}
-                      id={"account-#{account.id}"}
-                      class="flex flex-col gap-2 rounded-lg bg-base-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div class="flex items-center gap-2 min-w-0">
-                        <.icon name="hero-user-circle" class="w-4 h-4 text-base-content/50" />
-                        <%!-- Falls back to the account id: both servers allow a
+                <div class="flex flex-col gap-2">
+                  <div
+                    :for={account <- @accounts}
+                    id={"account-#{account.id}"}
+                    class="flex flex-col gap-2 rounded-lg bg-base-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div class="flex items-center gap-2 min-w-0">
+                      <.icon name="hero-user-circle" class="w-4 h-4 text-base-content/50" />
+                      <%!-- Falls back to the account id: both servers allow a
                         nameless account, and an unlabelled row is worse than a
                         raw id when the operator has to pick one. --%>
-                        <span class="truncate text-sm font-medium">
-                          {RemoteAccount.label(account)}
-                        </span>
-                        <span :if={account.admin?} class="badge badge-xs badge-warning">owner</span>
-                      </div>
-                      <div class="sm:w-56">
-                        <.input
-                          type="select"
-                          id={"account-select-#{account.id}"}
-                          name={"mapping[#{account.id}]"}
-                          value={Map.get(@mapping, account.id)}
-                          options={user_options(@users)}
-                          class="select select-sm select-bordered w-full"
-                        />
-                      </div>
+                      <span class="truncate text-sm font-medium">
+                        {RemoteAccount.label(account)}
+                      </span>
+                      <span :if={account.admin?} class="badge badge-xs badge-warning">owner</span>
+                    </div>
+                    <div class="sm:w-56">
+                      <.input
+                        type="select"
+                        id={"account-select-#{account.id}"}
+                        name={"mapping[#{account.id}]"}
+                        value={Map.get(@mapping, account.id)}
+                        options={user_options(@users)}
+                        class="select select-sm select-bordered w-full"
+                      />
                     </div>
                   </div>
+                </div>
 
-                  <div class="modal-action mt-6">
-                    <button
-                      type="button"
-                      class={["btn btn-ghost", modal_action_btn()]}
-                      phx-click="close_account_mapping"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      id="account-mapping-save"
-                      class={["btn btn-primary gap-2", modal_action_btn()]}
-                      disabled={@saving}
-                    >
-                      <%= if @saving do %>
-                        <span class="loading loading-spinner loading-sm"></span> Saving...
-                      <% else %>
-                        <.icon name="hero-check" class="w-4 h-4" /> Save links
-                      <% end %>
-                    </button>
-                  </div>
-                </form>
-              <% end %>
-          <% end %>
-        </div>
+                <.admin_modal_actions>
+                  <button
+                    type="button"
+                    class="btn btn-ghost"
+                    phx-click="close_account_mapping_modal"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    id="account-mapping-save"
+                    class="btn btn-primary gap-2"
+                    disabled={@saving}
+                  >
+                    <%= if @saving do %>
+                      <span class="loading loading-spinner loading-sm"></span> Saving...
+                    <% else %>
+                      <.icon name="hero-check" class="w-4 h-4" /> Save links
+                    <% end %>
+                  </button>
+                </.admin_modal_actions>
+              </form>
+            <% end %>
+        <% end %>
       </div>
-      <div class="modal-backdrop bg-black/50" phx-click="close_account_mapping"></div>
-    </div>
+    </.admin_modal>
     """
   end
 

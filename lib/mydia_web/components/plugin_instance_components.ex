@@ -247,47 +247,53 @@ defmodule MydiaWeb.PluginInstanceComponents do
 
   defp action_btn, do: "btn-sm min-h-11 sm:min-h-8"
 
-  defp health_label(:ok), do: "Healthy"
-  defp health_label(:degraded), do: "Degraded"
-  defp health_label(:unauthorized), do: "Sign-in expired"
-  defp health_label(:unreachable), do: "Unreachable"
-  defp health_label(:disabled), do: "Disabled"
-  defp health_label(:unsupported), do: "No health check"
-  defp health_label(_), do: "Unknown"
+  @doc false
+  def health_label(:ok), do: "Healthy"
+  def health_label(:degraded), do: "Degraded"
+  def health_label(:unauthorized), do: "Sign-in expired"
+  def health_label(:unreachable), do: "Unreachable"
+  def health_label(:disabled), do: "Disabled"
+  def health_label(:unsupported), do: "No health check"
+  def health_label(_), do: "Unknown"
 
-  defp health_badge_class(:ok), do: "badge-success"
-  defp health_badge_class(:degraded), do: "badge-warning"
-  defp health_badge_class(:unauthorized), do: "badge-error"
-  defp health_badge_class(:unreachable), do: "badge-error"
-  defp health_badge_class(_), do: "badge-ghost"
+  @doc false
+  def health_badge_class(:ok), do: "badge-success"
+  def health_badge_class(:degraded), do: "badge-warning"
+  def health_badge_class(:unauthorized), do: "badge-error"
+  def health_badge_class(:unreachable), do: "badge-error"
+  def health_badge_class(_), do: "badge-ghost"
 
-  defp health_action_label(:reconnect), do: "Reconnect"
-  defp health_action_label(:confirm_endpoints), do: "Confirm new addresses"
+  @doc false
+  def health_action_label(:reconnect), do: "Reconnect"
+  def health_action_label(:confirm_endpoints), do: "Confirm new addresses"
 
-  defp run_badge_class(:ok), do: "badge-success"
-  defp run_badge_class(:partial), do: "badge-warning"
-  defp run_badge_class(:error), do: "badge-error"
-  defp run_badge_class(:skipped), do: "badge-warning"
-  defp run_badge_class(_), do: "badge-ghost"
+  @doc false
+  def run_badge_class(:ok), do: "badge-success"
+  def run_badge_class(:partial), do: "badge-warning"
+  def run_badge_class(:error), do: "badge-error"
+  def run_badge_class(:skipped), do: "badge-warning"
+  def run_badge_class(_), do: "badge-ghost"
 
-  defp run_label(%{status: :ok, counts: counts}) when is_map(counts) do
+  @doc false
+  def run_label(%{status: :ok, counts: counts}) when is_map(counts) do
     "Synced: pulled #{Map.get(counts, "pulled", 0)}, pushed #{Map.get(counts, "pushed", 0)}"
   end
 
   # A partial run finished with some item errors. The counts may lack "errors".
-  defp run_label(%{status: :partial, counts: %{"errors" => errors}})
-       when is_integer(errors) and errors > 0,
-       do: "Partly synced: #{errors} errors"
+  def run_label(%{status: :partial, counts: %{"errors" => errors}})
+      when is_integer(errors) and errors > 0,
+      do: "Partly synced: #{errors} errors"
 
-  defp run_label(%{status: :partial}), do: "Partly synced"
+  def run_label(%{status: :partial}), do: "Partly synced"
 
-  defp run_label(%{status: :skipped}), do: "Skipped"
-  defp run_label(%{status: :error}), do: "Failed"
-  defp run_label(_), do: "Ran"
+  def run_label(%{status: :skipped}), do: "Skipped"
+  def run_label(%{status: :error}), do: "Failed"
+  def run_label(_), do: "Ran"
 
-  defp link_badge_class(:active), do: "badge-success badge-outline"
-  defp link_badge_class(:error), do: "badge-error"
-  defp link_badge_class(_), do: "badge-ghost"
+  @doc false
+  def link_badge_class(:active), do: "badge-success badge-outline"
+  def link_badge_class(:error), do: "badge-error"
+  def link_badge_class(_), do: "badge-ghost"
 
   defp link_status_label(:active), do: "Active"
   defp link_status_label(:error), do: "Needs attention"
