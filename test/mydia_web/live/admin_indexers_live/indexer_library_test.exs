@@ -182,6 +182,11 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
       )
       |> render_click()
 
+      assert has_element?(
+               view,
+               "input[phx-click='toggle_library_definition'][aria-label='Disable #{definition.name}']"
+             )
+
       # Verify the indexer is now enabled
       updated_definition = Indexers.get_cardigann_definition!(definition.id)
       assert updated_definition.enabled

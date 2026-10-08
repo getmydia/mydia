@@ -232,6 +232,11 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
             checked={@definition.enabled}
             phx-click="toggle_library_definition"
             phx-value-id={@definition.id}
+            aria-label={
+              if @definition.enabled,
+                do: "Disable #{@definition.name}",
+                else: "Enable #{@definition.name}"
+            }
           />
         </label>
       </:badges>
