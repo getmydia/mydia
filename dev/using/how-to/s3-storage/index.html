@@ -1001,6 +1001,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-mydia-writes-to-the-bucket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Mydia writes to the bucket
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#things-to-know" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3422,6 +3433,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-mydia-writes-to-the-bucket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Mydia writes to the bucket
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#things-to-know" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3457,14 +3479,6 @@
 R2, Backblaze B2, RustFS and similar) instead of a folder on disk. Mydia scans
 the bucket, analyzes the files, and streams them to the web player and the
 mobile and desktop apps, including over remote access.</p>
-<div class="admonition warning">
-<p class="admonition-title">Read-only for now</p>
-<p>S3 libraries can be scanned and played, but Mydia does not write to them yet.
-Downloads are not imported into an S3 library, and renaming, organizing,
-deleting files and saving sidecar files (NFO, downloaded subtitles) are
-refused for S3 libraries. Keep your download and import workflow on a local
-library, or move files into the bucket yourself and rescan.</p>
-</div>
 <h2 id="add-a-storage-backend">Add a storage backend</h2>
 <p>A storage backend is a named connection to one bucket. You can add one in the
 interface or declare it in configuration.</p>
@@ -3510,6 +3524,19 @@ as in a local library, such as <code>Movies/Invented Film (2031)/Invented Film (
 <p>If the bucket cannot be reached during a scan, the scan fails and Mydia leaves
 your library as it was. Files are only marked missing when the bucket answers and
 the file is really gone.</p>
+<h2 id="what-mydia-writes-to-the-bucket">What Mydia writes to the bucket</h2>
+<ul>
+<li>Imported downloads. Mydia copies the file into the bucket and leaves the
+  original where it is, so torrents keep seeding.</li>
+<li>Renames and organizing, when Auto Rename and Auto Organize are on for the
+  library.</li>
+<li>NFO files and downloaded subtitles, next to the media file.</li>
+<li>A trash folder named <code>.mydia-trash</code> inside the library prefix. Files replaced
+  by an upgrade or pruned go there first and are removed after the usual trash
+  retention. Deleting a movie or show together with its files removes them from
+  the bucket right away.</li>
+</ul>
+<p>Imports upload the whole file, and some providers bill for requests and egress.</p>
 <h2 id="things-to-know">Things to know</h2>
 <ul>
 <li>Playback goes through your Mydia server. Video bytes travel from the bucket to
