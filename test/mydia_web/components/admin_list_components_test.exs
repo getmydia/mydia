@@ -171,6 +171,19 @@ defmodule MydiaWeb.AdminListComponentsTest do
       assert count(html, "button.text-error") == 1
     end
 
+    test "disabled or loading destructive actions drop text-error" do
+      for extra <- [[disabled: true], [loading: true]] do
+        html =
+          render_component(
+            &AdminListComponents.row_action/1,
+            [icon: "hero-trash", title: "Delete", destructive: true] ++ extra
+          )
+
+        assert count(html, "button.text-error") == 0
+        assert count(html, "button[disabled]") == 1
+      end
+    end
+
     test "disabled with a reason wraps the button in a left-opening tooltip" do
       html =
         render_component(&AdminListComponents.row_action/1,

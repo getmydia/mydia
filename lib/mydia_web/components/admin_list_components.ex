@@ -133,7 +133,10 @@ defmodule MydiaWeb.AdminListComponents do
     <button
       type="button"
       id={@id}
-      class={["btn btn-sm btn-ghost join-item", @destructive && "text-error"]}
+      class={[
+        "btn btn-sm btn-ghost join-item",
+        if(@destructive and not (@disabled or @loading), do: "text-error")
+      ]}
       title={@title}
       aria-label={@title}
       disabled={@disabled or @loading}
