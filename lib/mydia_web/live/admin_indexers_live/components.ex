@@ -219,6 +219,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             checked={@indexer.enabled}
             phx-click="toggle_library_indexer"
             phx-value-id={@indexer.id}
+            aria-label={"#{if @indexer.enabled, do: "Disable", else: "Enable"} #{@indexer.name}"}
           />
         </div>
 
@@ -246,6 +247,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
                 checked={@indexer.flaresolverr_enabled}
                 phx-click="toggle_library_flaresolverr"
                 phx-value-id={@indexer.id}
+                aria-label={"#{if @indexer.flaresolverr_enabled, do: "Disable", else: "Enable"} Cloudflare bypass for #{@indexer.name}"}
               />
             </label>
           </div>

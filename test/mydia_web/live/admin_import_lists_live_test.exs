@@ -40,7 +40,7 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
     end
 
     test "renders the shared admin header and list", %{conn: conn} do
-      {:ok, _list} =
+      {:ok, list} =
         Mydia.ImportLists.create_import_list(%{
           name: "Header List #{System.unique_integer([:positive])}",
           type: "tmdb_trending",
@@ -53,6 +53,7 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
       refute has_element?(view, "#admin-page-tabs")
       assert has_element?(view, "#import-lists.bg-base-200")
       assert has_element?(view, ".join-item[title=Sync]")
+      assert has_element?(view, "input[aria-label='Disable #{list.name}']")
     end
 
     test "the items modal filters by status with a segmented control", %{conn: conn} do

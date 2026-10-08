@@ -103,6 +103,7 @@ defmodule MydiaWeb.AdminImportListsLive.Components do
           phx-click="toggle_import_list"
           phx-value-id={@list.id}
           title={if @list.enabled, do: "Disable", else: "Enable"}
+          aria-label={"#{if @list.enabled, do: "Disable", else: "Enable"} #{@list.name}"}
         />
         <span :if={@list.auto_add} class="badge badge-info badge-sm badge-outline gap-1">
           <.icon name="hero-bolt" class="w-3 h-3" /> Auto-add

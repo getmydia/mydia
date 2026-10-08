@@ -346,6 +346,15 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
       assert has_element?(view, "#library-indexers .join .join-item[title=Test]")
     end
 
+    test "library indexer enable toggle has an accessible name", %{conn: conn} do
+      set_cardigann_feature_flag(true)
+      cardigann_definition_fixture(%{name: "Named Toggle Indexer", enabled: true})
+
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+
+      assert has_element?(view, "input[aria-label='Disable Named Toggle Indexer']")
+    end
+
     test "no Cardigann terminology visible in UI", %{conn: conn} do
       set_cardigann_feature_flag(true)
 
