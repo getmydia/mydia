@@ -87,8 +87,8 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
      |> assign(:kept, MapSet.new())
      |> assign(:keepers, %{})
      |> assign(:review_overrides, %{})
-     |> assign(:show_trash_modal, false)
-     |> assign(:show_review_modal, false)
+     |> assign(:show_trash_duplicates_modal, false)
+     |> assign(:show_send_to_review_modal, false)
      |> assign(:last_run, nil)
      |> assign(:retention_days, retention_days)
      |> load_plan()}
@@ -160,11 +160,12 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   end
 
   def handle_event("open_review_modal", _params, socket) do
-    {:noreply, assign(socket, :show_review_modal, MapSet.size(socket.assigns.returning) > 0)}
+    {:noreply,
+     assign(socket, :show_send_to_review_modal, MapSet.size(socket.assigns.returning) > 0)}
   end
 
   def handle_event("close_review_modal", _params, socket) do
-    {:noreply, assign(socket, :show_review_modal, false)}
+    {:noreply, assign(socket, :show_send_to_review_modal, false)}
   end
 
   def handle_event("confirm_review", _params, socket) do
@@ -174,7 +175,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
 
     {:noreply,
      socket
-     |> assign(:show_review_modal, false)
+     |> assign(:show_send_to_review_modal, false)
      |> run_send(MapSet.to_list(socket.assigns.returning), label)}
   end
 
@@ -250,11 +251,12 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   end
 
   def handle_event("open_trash_modal", _params, socket) do
-    {:noreply, assign(socket, :show_trash_modal, MapSet.size(socket.assigns.selected) > 0)}
+    {:noreply,
+     assign(socket, :show_trash_duplicates_modal, MapSet.size(socket.assigns.selected) > 0)}
   end
 
   def handle_event("close_trash_modal", _params, socket) do
-    {:noreply, assign(socket, :show_trash_modal, false)}
+    {:noreply, assign(socket, :show_trash_duplicates_modal, false)}
   end
 
   def handle_event("confirm_trash", _params, socket) do
@@ -280,7 +282,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     {:noreply,
      socket
      |> report_run(result, label)
-     |> assign(:show_trash_modal, false)
+     |> assign(:show_trash_duplicates_modal, false)
      |> load_plan()}
   end
 

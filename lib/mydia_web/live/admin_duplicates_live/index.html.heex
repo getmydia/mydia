@@ -7,31 +7,19 @@
         reclaimable={@reclaimable}
       />
     </:actions>
-    <div class="p-4 sm:p-6 space-y-4">
-      <MydiaWeb.AdminDuplicatesLive.Components.duplicates_tab
-        decisions={@decisions}
-        refusals={@refusals}
-        selected={@selected}
-        retention_days={@retention_days}
-      />
 
-      <MydiaWeb.AdminDuplicatesLive.ReviewComponents.needs_attention
-        :if={@refusals != []}
-        refusals={@refusals}
-        suspects={@suspects}
-        returning={@returning}
-        overridden?={@review_overrides != %{}}
-      />
+    <MydiaWeb.AdminDuplicatesLive.Components.duplicates_tab
+      decisions={@decisions}
+      refusals={@refusals}
+      selected={@selected}
+      retention_days={@retention_days}
+      suspects={@suspects}
+      returning={@returning}
+      overridden?={@review_overrides != %{}}
+      current_scope={@current_scope}
+    />
 
-      <.live_component
-        module={MydiaWeb.AdminDuplicatesLive.MisfiledComponent}
-        id="misfiled"
-        current_scope={@current_scope}
-      />
-    </div>
-
-    <%!-- Trash Confirmation Modal --%>
-    <%= if @show_trash_modal do %>
+    <%= if assigns[:show_trash_duplicates_modal] do %>
       <MydiaWeb.AdminDuplicatesLive.Components.trash_confirm_modal
         count={MapSet.size(@selected)}
         items={@affected_items}
@@ -40,8 +28,7 @@
       />
     <% end %>
 
-    <%!-- Send to Review Confirmation Modal --%>
-    <%= if @show_review_modal do %>
+    <%= if assigns[:show_send_to_review_modal] do %>
       <MydiaWeb.AdminDuplicatesLive.ReviewComponents.review_confirm_modal
         count={MapSet.size(@returning)}
         items={@returning_items}

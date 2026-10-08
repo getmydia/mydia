@@ -24,43 +24,59 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   @doc """
   Renders the Duplicates section of the page.
 
-  The Needs Attention section below it is
-  `MydiaWeb.AdminDuplicatesLive.ReviewComponents.needs_attention/1`. The page
-  template stacks the two inside one padded column, so this returns sibling
-  elements rather than a wrapper of its own.
+  Below the decisions come the Needs Attention section
+  (`MydiaWeb.AdminDuplicatesLive.ReviewComponents.needs_attention/1`, shown only
+  when something was refused) and the Misfiled live component.
   """
   attr :decisions, :list, required: true
   attr :refusals, :list, required: true
   attr :selected, :any, required: true
   attr :retention_days, :integer, required: true
+  attr :suspects, :map, required: true
+  attr :returning, :any, required: true
+  attr :overridden?, :boolean, required: true
+  attr :current_scope, :any, required: true
 
   def duplicates_tab(assigns) do
     ~H"""
-    <p class="text-sm text-base-content/60">
-      Items holding more than one file, where every copy is proven to be the same content.
-      Each file is set to either <span class="font-medium text-base-content">Keep</span>
-      or <span class="font-medium text-error">Trash</span>; the best copy is listed first and
-      kept, the rest are already marked for trash. Trash one item with its own button, or
-      every item with the button above. Every item always keeps at least one file. Trashed
-      files are held for {@retention_days} days before permanent deletion, and a run can be
-      undone until you leave this page.
-    </p>
+    <div class="p-4 sm:p-6 space-y-4">
+      <p class="text-sm text-base-content/60">
+        Items holding more than one file, where every copy is proven to be the same content.
+        Each file is set to either <span class="font-medium text-base-content">Keep</span>
+        or <span class="font-medium text-error">Trash</span>; the best copy is listed first and
+        kept, the rest are already marked for trash. Trash one item with its own button, or
+        every item with the button above. Every item always keeps at least one file. Trashed
+        files are held for {@retention_days} days before permanent deletion, and a run can be
+        undone until you leave this page.
+      </p>
 
-    <%= if @decisions == [] do %>
-      <div class="alert alert-info">
-        <.icon name="hero-information-circle" class="w-5 h-5" />
-        <span :if={@refusals == []}>
-          No item holds more than one file. There are no duplicates to review.
-        </span>
-        <span :if={@refusals != []}>
-          Nothing can be trashed safely right now. Every item below needs attention first.
-        </span>
-      </div>
-    <% else %>
-      <div class="bg-base-200 rounded-box divide-y divide-base-300">
-        <.decision_row :for={decision <- @decisions} decision={decision} selected={@selected} />
-      </div>
-    <% end %>
+      <.admin_list id="duplicates-groups" items={@decisions}>
+        <:row :let={decision}>
+          <.decision_row decision={decision} selected={@selected} />
+        </:row>
+        <:empty>
+          <%= if @refusals == [] do %>
+            No item holds more than one file. There are no duplicates to review.
+          <% else %>
+            Nothing can be trashed safely right now. Every item below needs attention first.
+          <% end %>
+        </:empty>
+      </.admin_list>
+
+      <MydiaWeb.AdminDuplicatesLive.ReviewComponents.needs_attention
+        :if={@refusals != []}
+        refusals={@refusals}
+        suspects={@suspects}
+        returning={@returning}
+        overridden?={@overridden?}
+      />
+
+      <.live_component
+        module={MydiaWeb.AdminDuplicatesLive.MisfiledComponent}
+        id="misfiled"
+        current_scope={@current_scope}
+      />
+    </div>
     """
   end
 
@@ -114,60 +130,49 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
       |> assign(:files, [assigns.decision.keeper | assigns.decision.losers])
 
     ~H"""
-    <div class="p-3 sm:p-4" id={"duplicates-group-#{@decision.group.subject_id}"}>
-      <div class="flex items-center gap-3">
-        <div class="flex-1 min-w-0">
-          <div class="font-medium truncate">{subject_label(@decision.group)}</div>
-          <div class="text-xs opacity-60 truncate">{@decision.reason}</div>
-        </div>
-
-        <span class="badge badge-sm badge-outline hidden sm:inline-flex">
-          {file_count(length(@files))}
-        </span>
+    <.admin_row id={"duplicates-group-#{@decision.group.subject_id}"}>
+      <:title>{subject_label(@decision.group)}</:title>
+      <:descriptor>{@decision.reason}</:descriptor>
+      <:badges>
+        <span class="badge badge-sm badge-outline">{file_count(length(@files))}</span>
         <span :if={@selected_count > 0} class="badge badge-sm badge-outline badge-error">
-          {@selected_count} to trash
+          {@selected_count} to trash · {format_file_size(@selected_bytes)}
         </span>
         <span :if={@selected_count == 0} class="badge badge-sm badge-outline">Keeping all</span>
-
-        <button
-          id={"duplicates-group-mark-#{@decision.group.subject_id}"}
-          type="button"
-          class="btn btn-sm btn-ghost ml-auto sm:ml-2"
-          aria-label={
-            if @selected_count > 0,
-              do: "Keep every file in #{subject_label(@decision.group)}",
-              else: "Mark every duplicate in #{subject_label(@decision.group)} for trash"
-          }
-          phx-click={if @selected_count > 0, do: "keep_group", else: "trash_group"}
-          phx-value-subject={@decision.group.subject_id}
-        >
-          {if @selected_count > 0, do: "Keep all", else: "Mark all for trash"}
-        </button>
-        <button
-          id={"duplicates-group-trash-#{@decision.group.subject_id}"}
-          type="button"
-          class="btn btn-sm btn-error"
-          disabled={@selected_count == 0}
-          aria-label={"Trash the marked duplicates in #{subject_label(@decision.group)}"}
-          phx-click="trash_group_now"
-          phx-value-subject={@decision.group.subject_id}
-          phx-disable-with="Trashing..."
-        >
-          <.icon name="hero-trash" class="w-4 h-4" />
-          Trash {file_count(@selected_count)} ({format_file_size(@selected_bytes)})
-        </button>
-      </div>
-
-      <div class="bg-base-100 rounded-box divide-y divide-base-300 mt-3">
-        <.file_row
-          :for={file <- @files}
-          file={file}
-          subject_id={@decision.group.subject_id}
-          trashing?={MapSet.member?(@selected, file.id)}
-          best?={file.id == @decision.keeper.id}
-        />
-      </div>
-    </div>
+      </:badges>
+      <:actions>
+        <.row_actions>
+          <.row_action
+            id={"duplicates-group-mark-#{@decision.group.subject_id}"}
+            icon="hero-check-circle"
+            title={if @selected_count > 0, do: "Keep all", else: "Mark all for trash"}
+            phx-click={if @selected_count > 0, do: "keep_group", else: "trash_group"}
+            phx-value-subject={@decision.group.subject_id}
+          />
+          <.row_action
+            id={"duplicates-group-trash-#{@decision.group.subject_id}"}
+            icon="hero-trash"
+            destructive
+            title={"Trash #{file_count(@selected_count)} (#{format_file_size(@selected_bytes)})"}
+            disabled={@selected_count == 0}
+            phx-click="trash_group_now"
+            phx-value-subject={@decision.group.subject_id}
+            phx-disable-with="Trashing..."
+          />
+        </.row_actions>
+      </:actions>
+      <:body>
+        <div class="bg-base-100 rounded-box divide-y divide-base-300">
+          <.file_row
+            :for={file <- @files}
+            file={file}
+            subject_id={@decision.group.subject_id}
+            trashing?={MapSet.member?(@selected, file.id)}
+            best?={file.id == @decision.keeper.id}
+          />
+        </div>
+      </:body>
+    </.admin_row>
     """
   end
 
@@ -278,48 +283,39 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
 
   def trash_confirm_modal(assigns) do
     ~H"""
-    <div id="duplicates-confirm-modal" class="modal modal-open">
-      <div class="modal-box">
-        <div class="flex items-center gap-3 mb-5">
-          <div class="w-10 h-10 rounded-xl bg-error/20 flex items-center justify-center">
-            <.icon name="hero-trash" class="w-5 h-5 text-error" />
-          </div>
-          <div>
-            <h3 class="font-bold text-lg">Trash {file_count(@count)}?</h3>
-            <p class="text-sm text-base-content/60">
-              Across {item_count(@items)}, reclaiming {format_file_size(@bytes)}.
-            </p>
-          </div>
-        </div>
-
-        <p class="py-2">
-          Every file marked for trash is a redundant copy of one set to Keep, so each item keeps
-          a playable file. Trashed files are held for {@retention_days} days before permanent
-          deletion.
-        </p>
-
-        <div class="modal-action mt-6 pt-4 border-t border-base-300">
-          <button
-            id="duplicates-cancel"
-            type="button"
-            class="btn btn-ghost"
-            phx-click="close_trash_modal"
-          >
-            Cancel
-          </button>
-          <button
-            id="duplicates-confirm"
-            type="button"
-            class="btn btn-error"
-            phx-click="confirm_trash"
-            phx-disable-with="Trashing..."
-          >
-            <.icon name="hero-trash" class="w-4 h-4" /> Move to trash
-          </button>
-        </div>
-      </div>
-      <div class="modal-backdrop bg-black/50" phx-click="close_trash_modal"></div>
-    </div>
+    <.admin_modal
+      id="duplicates-confirm-modal"
+      tone={:error}
+      icon="hero-trash"
+      title={"Trash #{file_count(@count)}?"}
+      subtitle={"Across #{item_count(@items)}, reclaiming #{format_file_size(@bytes)}."}
+      on_close="close_trash_modal"
+    >
+      <p class="py-2">
+        Every file marked for trash is a redundant copy of one set to Keep, so each item keeps
+        a playable file. Trashed files are held for {@retention_days} days before permanent
+        deletion.
+      </p>
+      <:actions>
+        <button
+          id="duplicates-cancel"
+          type="button"
+          class="btn btn-ghost"
+          phx-click="close_trash_modal"
+        >
+          Cancel
+        </button>
+        <button
+          id="duplicates-confirm"
+          type="button"
+          class="btn btn-error"
+          phx-click="confirm_trash"
+          phx-disable-with="Trashing..."
+        >
+          <.icon name="hero-trash" class="w-4 h-4" /> Move to trash
+        </button>
+      </:actions>
+    </.admin_modal>
     """
   end
 

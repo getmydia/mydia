@@ -793,5 +793,31 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       assert has_element?(view, "#duplicates-review-#{stray.id}[checked]")
       refute has_element?(view, "#duplicates-review-reset")
     end
+
+    test "groups are admin rows and the trash confirmation is error toned", %{conn: conn} do
+      {_show, episode, _files} = duplicated_episode()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
+
+      assert has_element?(view, "#duplicates-groups #duplicates-group-#{episode.id}")
+      assert has_element?(view, ~s(#duplicates-group-trash-#{episode.id}.text-error[title]))
+
+      view |> element("#duplicates-trash-selected") |> render_click()
+      assert has_element?(view, "#duplicates-confirm-modal .bg-error\\/20")
+    end
+
+    test "Needs Attention is a shared section with its actions beside the heading",
+         %{conn: conn} do
+      refused_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
+
+      assert has_element?(view, "#duplicates-needs-attention h2", "Needs Attention")
+
+      assert has_element?(
+               view,
+               "#duplicates-needs-attention-actions #duplicates-review-selected"
+             )
+    end
   end
 end
