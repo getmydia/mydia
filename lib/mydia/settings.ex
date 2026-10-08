@@ -600,7 +600,11 @@ defmodule Mydia.Settings do
   """
   @spec upsert_media_server_user_link(map(), keyword()) ::
           {:ok, MediaServerUserLink.t()}
-          | {:error, Ecto.Changeset.t() | :account_already_mapped | :link_exists}
+          | {:error,
+             Ecto.Changeset.t()
+             | :account_already_mapped
+             | :link_exists
+             | :runtime_media_server}
   defdelegate upsert_media_server_user_link(attrs, opts \\ []), to: Mydia.Settings.ServiceConfigs
 
   @doc """
@@ -616,7 +620,8 @@ defmodule Mydia.Settings do
   first; see `Mydia.Settings.ServiceConfigs.replace_media_server_user_links/2`.
   """
   @spec replace_media_server_user_links(binary(), [map()]) ::
-          {:ok, [MediaServerUserLink.t()]} | {:error, Ecto.Changeset.t()}
+          {:ok, [MediaServerUserLink.t()]}
+          | {:error, :runtime_media_server | Ecto.Changeset.t() | term()}
   defdelegate replace_media_server_user_links(media_server_config_id, entries),
     to: Mydia.Settings.ServiceConfigs
 

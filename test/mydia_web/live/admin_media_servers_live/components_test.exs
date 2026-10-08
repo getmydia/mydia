@@ -123,6 +123,21 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       assert LazyHTML.query(doc, "button[disabled][title=Delete]") |> Enum.count() == 1
     end
 
+    test "an env-configured server with watched sync shows Accounts disabled" do
+      s =
+        server(%{
+          id: "runtime::media_server::storage",
+          connection_settings: %{"sync_watched" => "true"}
+        })
+
+      doc =
+        [s]
+        |> render_tab(%{s.id => %{status: :unknown}})
+        |> LazyHTML.from_fragment()
+
+      assert LazyHTML.query(doc, "button[disabled][data-test=map-accounts]") |> Enum.count() == 1
+    end
+
     test "a normal server offers edit and delete and carries no env note" do
       s = server()
 

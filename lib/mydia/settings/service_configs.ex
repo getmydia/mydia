@@ -419,8 +419,13 @@ defmodule Mydia.Settings.ServiceConfigs do
   #     between two people and one account's watch history.
   def upsert_media_server_user_link(attrs, opts \\ []) do
     changeset = MediaServerUserLink.changeset(%MediaServerUserLink{}, attrs)
+    config_id = Ecto.Changeset.get_field(changeset, :media_server_config_id)
 
-    with :ok <- ensure_link_new(changeset, Keyword.get(opts, :only_new, false)),
+    # A non-UUID id is an env/YAML server, which the FK forbids from owning
+    # links; querying with it would raise CastError on PostgreSQL. A missing id
+    # is left to the changeset's own validation.
+    with :ok <- ensure_linkable(config_id),
+         :ok <- ensure_link_new(changeset, Keyword.get(opts, :only_new, false)),
          :ok <- ensure_account_unclaimed(changeset, Keyword.get(opts, :claim_check, true)) do
       Repo.insert(changeset,
         on_conflict:
@@ -434,6 +439,12 @@ defmodule Mydia.Settings.ServiceConfigs do
         conflict_target: [:media_server_config_id, :user_id]
       )
     end
+  end
+
+  defp ensure_linkable(nil), do: :ok
+
+  defp ensure_linkable(config_id) do
+    if linkable_config_id?(config_id), do: :ok, else: {:error, :runtime_media_server}
   end
 
   defp ensure_link_new(_changeset, false), do: :ok

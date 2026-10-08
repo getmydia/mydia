@@ -135,6 +135,23 @@ defmodule Mydia.Settings.MediaServerUserLinksTest do
     end
   end
 
+  describe "upsert_media_server_user_link/2 on a runtime id" do
+    test "refuses with :runtime_media_server, with and without only_new", ctx do
+      attrs = %{
+        media_server_config_id: "runtime::media_server::from-env",
+        user_id: ctx.alex.id,
+        remote_user_id: "guid-1",
+        remote_username: "alex",
+        enabled: true
+      }
+
+      assert {:error, :runtime_media_server} = Settings.upsert_media_server_user_link(attrs)
+
+      assert {:error, :runtime_media_server} =
+               Settings.upsert_media_server_user_link(attrs, only_new: true)
+    end
+  end
+
   describe "replace_media_server_user_links/2 on a runtime id" do
     test "refuses with :runtime_media_server instead of reporting an empty success", ctx do
       entries = [entry(ctx.config, ctx.alex, "guid-1")]
