@@ -24,7 +24,7 @@ defmodule MydiaWeb.JobsLive.Index do
      |> assign(:page, 0)
      |> assign(:has_more, true)
      |> assign(:selected_job, nil)
-     |> assign(:trigger_confirmation, nil)
+     |> assign(:trigger_job_worker, nil)
      |> load_cron_jobs()
      |> load_job_history(reset: true)}
   end
@@ -41,7 +41,7 @@ defmodule MydiaWeb.JobsLive.Index do
   end
 
   @impl true
-  def handle_event("filter", params, socket) do
+  def handle_event("filter_job_history", params, socket) do
     worker =
       case params["worker"] do
         "" -> nil
@@ -62,7 +62,7 @@ defmodule MydiaWeb.JobsLive.Index do
      |> load_job_history(reset: true)}
   end
 
-  def handle_event("load_more", _params, socket) do
+  def handle_event("load_more_job_history", _params, socket) do
     if socket.assigns.has_more do
       {:noreply,
        socket
@@ -85,17 +85,17 @@ defmodule MydiaWeb.JobsLive.Index do
     {:noreply, assign(socket, :selected_job, job)}
   end
 
-  def handle_event("close_job_details", _params, socket) do
+  def handle_event("close_job_details_modal", _params, socket) do
     {:noreply, assign(socket, :selected_job, nil)}
   end
 
-  def handle_event("show_trigger_confirmation", %{"worker" => worker}, socket) do
+  def handle_event("confirm_trigger_job", %{"worker" => worker}, socket) do
     worker_atom = String.to_existing_atom("Elixir." <> worker)
-    {:noreply, assign(socket, :trigger_confirmation, worker_atom)}
+    {:noreply, assign(socket, :trigger_job_worker, worker_atom)}
   end
 
-  def handle_event("close_trigger_confirmation", _params, socket) do
-    {:noreply, assign(socket, :trigger_confirmation, nil)}
+  def handle_event("close_trigger_job_modal", _params, socket) do
+    {:noreply, assign(socket, :trigger_job_worker, nil)}
   end
 
   def handle_event("trigger_job", %{"worker" => worker}, socket) do
@@ -105,14 +105,14 @@ defmodule MydiaWeb.JobsLive.Index do
       {:ok, _job} ->
         {:noreply,
          socket
-         |> assign(:trigger_confirmation, nil)
+         |> assign(:trigger_job_worker, nil)
          |> put_flash(:info, "Job triggered successfully and added to queue")
          |> load_job_history(reset: true)}
 
       {:error, _changeset} ->
         {:noreply,
          socket
-         |> assign(:trigger_confirmation, nil)
+         |> assign(:trigger_job_worker, nil)
          |> put_flash(:error, "Failed to trigger job")}
     end
   end
@@ -126,7 +126,7 @@ defmodule MydiaWeb.JobsLive.Index do
      |> load_job_history(reset: true)}
   end
 
-  def handle_event("refresh", _params, socket) do
+  def handle_event("refresh_jobs", _params, socket) do
     {:noreply,
      socket
      |> load_cron_jobs()
@@ -194,59 +194,5 @@ defmodule MydiaWeb.JobsLive.Index do
     socket
     |> assign(:job_history, job_history)
     |> assign(:has_more, has_more)
-    |> assign(:job_history_empty?, reset? and jobs == [])
-  end
-
-  # View helpers
-
-  defp format_relative_time(nil), do: "Never"
-
-  defp format_relative_time(%DateTime{} = dt) do
-    Timex.from_now(dt)
-  end
-
-  defp format_datetime(nil), do: "N/A"
-
-  defp format_datetime(%DateTime{} = dt) do
-    Timex.format!(dt, "{ISO:Extended}")
-  end
-
-  defp format_job_duration(nil, nil), do: "N/A"
-  defp format_job_duration(nil, _), do: "N/A"
-  defp format_job_duration(_, nil), do: "N/A"
-
-  defp format_job_duration(%DateTime{} = attempted_at, %DateTime{} = completed_at) do
-    duration = DateTime.diff(completed_at, attempted_at, :millisecond)
-    format_job_duration_ms(duration)
-  end
-
-  defp format_job_duration_ms(ms) when is_integer(ms) do
-    cond do
-      ms >= 60_000 -> "#{Float.round(ms / 60_000, 1)}m"
-      ms >= 1_000 -> "#{Float.round(ms / 1_000, 1)}s"
-      true -> "#{ms}ms"
-    end
-  end
-
-  defp format_job_duration_ms(_), do: "N/A"
-
-  defp state_badge_class(state) do
-    case state do
-      "completed" -> "badge-success"
-      "failed" -> "badge-error"
-      "discarded" -> "badge-error"
-      "cancelled" -> "badge-warning"
-      "retryable" -> "badge-warning"
-      "scheduled" -> "badge-info"
-      "executing" -> "badge-primary"
-      _ -> "badge-ghost"
-    end
-  end
-
-  defp get_route_for_job(worker) do
-    case worker do
-      Mydia.Jobs.LibraryScanner -> "/media"
-      _ -> nil
-    end
   end
 end
