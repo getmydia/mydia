@@ -166,7 +166,16 @@ defmodule Mydia.Library.ItemFolders do
           {:kept, folder.absolute, {:blocked, blockers}}
       end
     else
-      _ -> :absent
+      {:error, %Storage.Error{} = error} ->
+        Logger.warning("Could not list item folder; leaving it alone",
+          path: folder.absolute,
+          reason: error.message
+        )
+
+        :absent
+
+      _ ->
+        :absent
     end
   end
 

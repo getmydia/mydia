@@ -226,7 +226,11 @@ defmodule Mydia.Jobs.MediaRematch do
   defp cleanup_source(download, media_file, dest_path) do
     source_path = MediaFile.storage_path(media_file)
 
-    if source_path && source_path != dest_path && exists?(source_path) do
+    # On S3 the delete is idempotent (a missing object is :ok), so it is never
+    # gated on an existence check: an outage there would skip the delete
+    # without recording a pending one.
+    if source_path && source_path != dest_path &&
+         (Mydia.Storage.s3?(source_path) or File.exists?(source_path)) do
       case remove_source(source_path) do
         :ok ->
           :ok

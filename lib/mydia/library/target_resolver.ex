@@ -150,9 +150,6 @@ defmodule Mydia.Library.TargetResolver do
   # disabled paths would be a behaviour change, not a cleanup.
   defp acceptable?(%LibraryPath{}, _allowed, :no_validation), do: true
 
-  # S3 libraries are read-only, so no inferred step may pick one: the import
-  # would have nowhere to write. An explicit choice is kept and fails loudly
-  # in the import instead of silently landing on another disk.
   defp acceptable?(%LibraryPath{} = candidate, allowed, rules) do
     candidate.type in allowed and not disabled?(candidate) and
       (rules == :explicit_rules or candidate.monitored)

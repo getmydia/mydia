@@ -263,7 +263,7 @@ defmodule Mydia.Storage.S3 do
   end
 
   defp copy_object(b, from_key, to_key, what) do
-    case Req.request(Request.new(b),
+    case Req.request(Request.new(b, receive_timeout: Request.long_timeout()),
            method: :put,
            url: Request.object_url(b, to_key),
            headers: [{"x-amz-copy-source", Request.copy_source(b, from_key)}]

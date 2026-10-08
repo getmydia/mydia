@@ -157,7 +157,7 @@ defmodule Mydia.StorageContractCase do
       test "delete_prefix/2 refuses the whole location", ctx do
         put_fixture(ctx, "keep.mkv", "k")
 
-        for root <- ["", ".", "/"] do
+        for root <- ["", ".", "/", "./", "..", "a/.."] do
           assert {:error, %Error{kind: :misconfigured}} =
                    Storage.delete_prefix(ctx.location, root)
         end

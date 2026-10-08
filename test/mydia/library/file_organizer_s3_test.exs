@@ -45,6 +45,21 @@ defmodule Mydia.Library.FileOrganizerS3Test do
     refute Storage.exists?(old)
   end
 
+  test "place_file never replaces an existing object of a different size", ctx do
+    S3Helpers.put_object!(ctx.loc, "taken.mkv", "someone else")
+    local = Path.join(System.tmp_dir!(), "s3w-place-#{System.unique_integer([:positive])}.mkv")
+    File.write!(local, "new bytes")
+    on_exit(fn -> File.rm(local) end)
+
+    dest = ctx.lp.path <> "/taken.mkv"
+
+    assert {:error, {:destination_exists, ^dest}} =
+             FileOrganizer.place_file(local, dest, expected_size: 9)
+
+    {:ok, object} = Storage.source(ctx.loc, "taken.mkv")
+    assert {:ok, "someone else"} = Storage.read(object)
+  end
+
   test "reorganize_library dry run lists the move without touching the bucket", ctx do
     assert {:ok, %{total: 1}} = FileOrganizer.reorganize_library(ctx.lp, dry_run: true)
     {:ok, old} = Storage.source(ctx.loc, "loose/film.mkv")

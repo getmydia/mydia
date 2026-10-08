@@ -178,10 +178,15 @@ defmodule Mydia.Storage do
 
   @doc "Deletes everything under `rel_dir` inside `location`. Never the location itself."
   @spec delete_prefix(Location.t(), String.t()) :: :ok | {:error, Error.t()}
-  def delete_prefix(%Location{}, rel_dir) when rel_dir in ["", ".", "/"],
-    do: {:error, Error.new(:misconfigured, "refusing to delete a whole storage location")}
+  def delete_prefix(%Location{} = loc, rel_dir) do
+    segments = rel_dir |> String.trim("/") |> Path.split() |> Enum.reject(&(&1 == ""))
 
-  def delete_prefix(%Location{} = loc, rel_dir), do: impl(loc).delete_prefix(loc, rel_dir)
+    if segments == [] or Enum.any?(segments, &(&1 in [".", ".."])) do
+      {:error, Error.new(:misconfigured, "refusing to delete a whole storage location")}
+    else
+      impl(loc).delete_prefix(loc, rel_dir)
+    end
+  end
 
   @doc """
   Names directly inside the directory at `dir` (a stored path). A listing

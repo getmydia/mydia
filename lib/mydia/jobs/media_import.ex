@@ -1540,41 +1540,59 @@ defmodule Mydia.Jobs.MediaImport do
     dest_path = Path.join(dest_dir, final_filename)
 
     # Check if file already exists
-    if destination_exists?(dest_path) do
-      Logger.warning("File already exists at destination",
-        source: file.path,
-        dest: dest_path
-      )
+    case destination_exists?(dest_path) do
+      {:error, error} ->
+        Logger.error("Could not check the destination",
+          dest: dest_path,
+          reason: inspect(error)
+        )
 
-      # Try to find existing media_file record
-      case Library.get_media_file_by_path(dest_path) do
-        nil ->
-          # File exists but not in DB - this is a conflict
-          handle_file_conflict(file, dest_path, episode, download, library_path, args)
+        {:error, error}
 
-        existing_file ->
-          # File exists and is in DB - reuse it
-          Logger.info("Reusing existing media file", path: dest_path)
-          {:ok, existing_file}
-      end
-    else
-      # Copy or move file. `:expected_size` closes the window between the
-      # File.exists?/1 check above and the placement itself: a concurrent
-      # import that already wrote the right bytes is adopted rather than
-      # hardlinked-onto-EEXIST and re-copied.
-      case copy_or_move_file(file.path, dest_path, args, expected_size: file.size) do
-        :ok ->
-          create_media_file_record(dest_path, file.size, episode, download, library_path)
+      true ->
+        import_into_existing_destination(file, dest_path, episode, download, library_path, args)
 
-        {:error, reason} ->
-          Logger.error("Failed to copy/move file",
-            source: file.path,
-            dest: dest_path,
-            reason: inspect(reason)
-          )
+      false ->
+        import_into_free_destination(file, dest_path, episode, download, library_path, args)
+    end
+  end
 
-          {:error, reason}
-      end
+  defp import_into_existing_destination(file, dest_path, episode, download, library_path, args) do
+    Logger.warning("File already exists at destination",
+      source: file.path,
+      dest: dest_path
+    )
+
+    # Try to find existing media_file record
+    case Library.get_media_file_by_path(dest_path) do
+      nil ->
+        # File exists but not in DB - this is a conflict
+        handle_file_conflict(file, dest_path, episode, download, library_path, args)
+
+      existing_file ->
+        # File exists and is in DB - reuse it
+        Logger.info("Reusing existing media file", path: dest_path)
+        {:ok, existing_file}
+    end
+  end
+
+  defp import_into_free_destination(file, dest_path, episode, download, library_path, args) do
+    # Copy or move file. `:expected_size` closes the window between the
+    # existence check and the placement itself: a concurrent import that
+    # already wrote the right bytes is adopted rather than
+    # hardlinked-onto-EEXIST and re-copied.
+    case copy_or_move_file(file.path, dest_path, args, expected_size: file.size) do
+      :ok ->
+        create_media_file_record(dest_path, file.size, episode, download, library_path)
+
+      {:error, reason} ->
+        Logger.error("Failed to copy/move file",
+          source: file.path,
+          dest: dest_path,
+          reason: inspect(reason)
+        )
+
+        {:error, reason}
     end
   end
 
@@ -1635,10 +1653,10 @@ defmodule Mydia.Jobs.MediaImport do
     Enum.reduce_while(1..@max_conflict_suffixes, nil, fn n, _acc ->
       candidate = Path.join(dir, "#{base}.#{n}#{ext}")
 
-      cond do
-        not destination_exists?(candidate) -> {:halt, {:new, candidate}}
-        file_size(candidate) == size -> {:halt, {:existing, candidate}}
-        true -> {:cont, nil}
+      case destination_exists?(candidate) do
+        {:error, error} -> {:halt, {:error, error}}
+        false -> {:halt, {:new, candidate}}
+        true -> conflict_candidate(candidate, size)
       end
     end)
     |> case do
@@ -1647,13 +1665,27 @@ defmodule Mydia.Jobs.MediaImport do
     end
   end
 
+  defp conflict_candidate(candidate, size) do
+    if file_size(candidate) == size, do: {:halt, {:existing, candidate}}, else: {:cont, nil}
+  end
+
   # An S3 library has no directories to create, and its existence checks ask
-  # the bucket. An outage reads as "not there"; the placement that follows
-  # stats the object itself and surfaces the error.
+  # the bucket.
   defp ensure_destination_dir("s3://" <> _), do: :ok
   defp ensure_destination_dir(dir), do: File.mkdir_p(dir)
 
-  defp destination_exists?("s3://" <> _ = path), do: Storage.path_exists?(path)
+  # Tri-state: true, false, or {:error, error}. Only a not-found answer from
+  # the bucket means the name is free; an outage must never read as "free".
+  defp destination_exists?("s3://" <> _ = path) do
+    with {:ok, source} <- Storage.at(path) do
+      case Storage.stat(source) do
+        {:ok, _} -> true
+        {:error, %Storage.Error{kind: :not_found}} -> false
+        {:error, error} -> {:error, error}
+      end
+    end
+  end
+
   defp destination_exists?(path), do: File.exists?(path)
 
   defp file_size("s3://" <> _ = path) do

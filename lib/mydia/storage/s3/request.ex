@@ -9,6 +9,15 @@ defmodule Mydia.Storage.S3.Request do
 
   @presign_seconds 12 * 60 * 60
 
+  # A 512 MiB part, a part copy, a Complete or a single CopyObject on a huge
+  # object keeps the connection open well past the default 30s while the
+  # provider works.
+  @long_timeout 10 * 60_000
+
+  @doc "Receive timeout for requests the provider answers only once it has finished the work."
+  @spec long_timeout() :: pos_integer()
+  def long_timeout, do: @long_timeout
+
   @spec new(StorageBackend.t(), keyword()) :: Req.Request.t()
   def new(%StorageBackend{} = b, opts \\ []) do
     [

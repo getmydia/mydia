@@ -71,8 +71,10 @@ the file is really gone.
 - Renames and organizing, when Auto Rename and Auto Organize are on for the
   library.
 - NFO files and downloaded subtitles, next to the media file.
-- A trash folder named `.mydia-trash` inside the library prefix. Files you delete
-  or replace go there first and are removed after the usual trash retention.
+- A trash folder named `.mydia-trash` inside the library prefix. Files replaced
+  by an upgrade or pruned go there first and are removed after the usual trash
+  retention. Deleting a movie or show together with its files removes them from
+  the bucket right away.
 
 Imports upload the whole file, and some providers bill for requests and egress.
 

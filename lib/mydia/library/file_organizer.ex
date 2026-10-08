@@ -328,9 +328,17 @@ defmodule Mydia.Library.FileOrganizer do
   defp place_via_storage(source, dest, opts) do
     with {:ok, from} <- Storage.at(source),
          {:ok, to} <- Storage.at(dest) do
+      s3_dest? = Storage.s3?(dest)
+
       case {Keyword.fetch(opts, :expected_size), Storage.stat(to)} do
         {{:ok, size}, {:ok, %{size: size}}} ->
           {:ok, :exists}
+
+        # An S3 object only becomes visible once it is complete, so one of a
+        # different size is somebody else's real file, never a crashed partial.
+        # Never replace it.
+        {_, {:ok, _}} when s3_dest? ->
+          {:error, {:destination_exists, dest}}
 
         {{:ok, _}, {:ok, _}} ->
           if Storage.exists?(from),
@@ -525,8 +533,8 @@ defmodule Mydia.Library.FileOrganizer do
   defp ensure_dir("s3://" <> _), do: :ok
   defp ensure_dir(dir), do: File.mkdir_p(dir)
 
-  # Puts the file back after the row could not be updated. The result is
-  # logged by the caller's error path; nothing more can be done here.
+  # Puts the file back after the row could not be updated. Returns the move's
+  # result so the caller can log a failed rollback.
   defp rollback_move("s3://" <> _ = dest_path, source_path) do
     with {:ok, from} <- Storage.at(dest_path),
          {:ok, to} <- Storage.at(source_path),

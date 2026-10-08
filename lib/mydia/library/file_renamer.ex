@@ -130,9 +130,11 @@ defmodule Mydia.Library.FileRenamer do
     # Preload library_path to resolve absolute path
     file = Repo.preload(file, :library_path)
 
-    if Storage.s3?(file),
-      do: rename_object(file, new_path),
-      else: do_rename_file(file, new_path)
+    cond do
+      Storage.s3?(file) != Storage.s3?(new_path) -> {:error, :cross_storage_rename}
+      Storage.s3?(file) -> rename_object(file, new_path)
+      true -> do_rename_file(file, new_path)
+    end
   end
 
   defp rename_object(file, new_path) do
@@ -183,12 +185,22 @@ defmodule Mydia.Library.FileRenamer do
 
       {:error, changeset} ->
         # Rollback: put the file back
-        rollback.()
+        case rollback.() do
+          :ok ->
+            Logger.error("Failed to update database after rename, rolled back",
+              file_id: file.id,
+              errors: inspect(changeset.errors)
+            )
 
-        Logger.error("Failed to update database after rename, rolled back",
-          file_id: file.id,
-          errors: inspect(changeset.errors)
-        )
+          rollback_error ->
+            Logger.error("Failed to update database after rename and the rollback failed",
+              file_id: file.id,
+              current_path: new_path,
+              original_path: current_path,
+              errors: inspect(changeset.errors),
+              rollback_error: inspect(rollback_error)
+            )
+        end
 
         {:error, :database_update_failed}
     end

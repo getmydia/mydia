@@ -50,6 +50,13 @@ defmodule Mydia.Library.FileRenamerS3Test do
              FileRenamer.rename_file(file, Path.join(lp.path, "Invented Film (2031)/new.mkv"))
   end
 
+  test "refuses a rename to a different storage kind", %{mf: file} do
+    assert {:error, :cross_storage_rename} =
+             FileRenamer.rename_file(file, "/tmp/elsewhere/new.mkv")
+
+    refute File.exists?("/tmp/elsewhere/new.mkv")
+  end
+
   test "rename previews resolve S3 paths", %{lp: lp, mf: file} do
     preview = FileRenamer.generate_rename_preview(file)
 
