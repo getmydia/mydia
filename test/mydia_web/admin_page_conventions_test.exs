@@ -64,6 +64,25 @@ defmodule MydiaWeb.AdminPageConventionsTest do
       assert violations(long, "admin_x_live/components.ex") == []
     end
 
+    test "counts lines without the trailing newline" do
+      sixty = String.duplicate("<div></div>\n", @max_template_lines)
+      assert violations(sixty, "admin_x_live/index.html.heex") == []
+
+      assert ["template is 61" <> _] =
+               violations(sixty <> "<div></div>\n", "admin_x_live/index.html.heex")
+    end
+
+    test "reports every distinct bare event" do
+      content = ~S(<button phx-click="new"><form phx-submit="save"><a phx-click="new">)
+      assert [a, b] = violations(content, "x.ex")
+      assert a =~ ~s("new")
+      assert b =~ ~s("save")
+    end
+
+    test "does not flag components that merely start with button" do
+      assert violations(~S(<.button_group>x</.button_group>), "x.ex") == []
+    end
+
     test "flags text-gray and <.button" do
       assert ["raw grey" <> _] = violations(~S(<p class="text-gray-500">), "x.ex")
       assert ["<.button>" <> _] = violations(~S(<.button class="btn">Go</.button>), "x.ex")
@@ -74,25 +93,27 @@ defmodule MydiaWeb.AdminPageConventionsTest do
     [
       Regex.match?(~r/class="modal(-box)?[\s"]/, content) &&
         "hand-rolled modal; use <.admin_modal>",
-      bare_event(content),
       template_too_long(content, path),
       content =~ "text-gray-" && "raw grey; use text-base-content/<n>",
-      content =~ "<.button" && "<.button>; use a raw <button> or <.row_action>"
+      Regex.match?(~r/<\.button[\s>\/]/, content) &&
+        "<.button>; use a raw <button> or <.row_action>"
     ]
     |> Enum.filter(& &1)
+    |> Kernel.++(bare_events(content))
   end
 
-  defp bare_event(content) do
+  defp bare_events(content) do
     names = Enum.join(@bare_events, "|")
 
-    case Regex.run(~r/phx-(?:click|submit|change)="(#{names})"/, content) do
-      [_, name] -> "bare event \"#{name}\"; name it <verb>_<thing>"
-      nil -> nil
-    end
+    ~r/phx-(?:click|submit|change)="(#{names})"/
+    |> Regex.scan(content, capture: :all_but_first)
+    |> List.flatten()
+    |> Enum.uniq()
+    |> Enum.map(&"bare event \"#{&1}\"; name it <verb>_<thing>")
   end
 
   defp template_too_long(content, path) do
-    lines = content |> String.split("\n") |> length()
+    lines = content |> String.trim_trailing("\n") |> String.split("\n") |> length()
 
     (String.ends_with?(path, ".html.heex") and lines > @max_template_lines) &&
       "template is #{lines} lines (max #{@max_template_lines}); move markup to components.ex"
