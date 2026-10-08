@@ -51,7 +51,7 @@ defmodule Mydia.Streaming.FfmpegOutputRedactionTest do
         try do
           FfmpegHlsTranscoder.stop_transcoding(pid)
         catch
-          :exit, _ -> :ok
+          :exit, {reason, {GenServer, :stop, _}} when reason in [:noproc, :shutdown] -> :ok
         end
       end
     end)
