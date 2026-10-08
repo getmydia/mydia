@@ -29,6 +29,7 @@ defmodule Mydia.Media.LibraryListing do
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Media.AvailabilityStatus
   alias Mydia.Media.Episode
+  alias Mydia.Media.LibraryListing.Snapshot
   alias Mydia.Media.LibraryRow
   alias Mydia.Media.Restrictions
   alias Mydia.Media.MediaItem
@@ -55,40 +56,35 @@ defmodule Mydia.Media.LibraryListing do
   @never_aired ~D[1970-01-01]
   @no_upcoming_airing ~D[2999-12-31]
 
-  @type page :: %{
-          rows: [LibraryRow.t()],
-          has_more?: boolean(),
-          visible_ids: MapSet.t(binary()),
-          empty?: boolean(),
-          total_size: non_neg_integer(),
-          description_match_start_id: binary() | nil
-        }
+  # Every key sort/2 matches. The LiveView validates URL input against it.
+  @sort_keys ~w(title_asc title_desc year_asc year_desc added_asc added_desc
+                rating_asc rating_desc size_asc size_desc last_aired_asc
+                last_aired_desc next_aired_asc next_aired_desc
+                episode_count_asc episode_count_desc)
+
+  @doc "The sort keys `:sort_by` accepts. Anything else sorts by title, A to Z."
+  @spec sort_keys() :: [String.t()]
+  def sort_keys, do: @sort_keys
 
   @doc """
-  One page of a listing.
-
-  `rows` is the page, with `user_id`'s playback progress. `visible_ids` covers
-  every row the search and filters match, not only the page, so select-all can
-  use it. `limit: 0` skips the progress query when only `visible_ids` is needed.
-  `total_size` is the bytes on disk across every matching row, not only the
-  page, so a filtered listing can report what the filter actually costs.
-
-  While searching, rows whose title, original title or year match come first
-  and rows that match only through their overview follow, each group in
-  `:sort_by` order. `description_match_start_id` is the id of the first
-  overview-only row across the whole result, not only the page, or nil when
-  there is none, so the caller can mark where that group starts.
+  The whole listing, evaluated once.
 
   Filter options go to `Mydia.Media.media_items_query/2`, along with the
   scope's access restrictions: `:base_query`, `:exclude_categories`, `:type`,
   `:monitored`, `:library_path_id`. Applied in memory: `:search`, `:quality`,
-  `:progress`, `:sort_by`, then `:offset` (default 0) and `:limit`.
+  `:progress`, `:sort_by`. While searching, rows whose title, original title
+  or year match come first and overview-only matches follow, each group in
+  `:sort_by` order; `description_match_start_id` marks where that group
+  starts. `visible_ids` and `total_size` cover every match. `ids` is every
+  match in final order; `rows` holds the first `:limit` of them with
+  `user_id`'s playback progress. Build later rows with `rows/3` from a slice
+  of `ids`. `limit: 0` skips the progress query when only the figures are
+  needed.
   """
-  @spec page(Scope.t(), keyword()) :: page()
-  def page(%Scope{} = scope, opts) do
+  @spec snapshot(Scope.t(), keyword()) :: Snapshot.t()
+  def snapshot(%Scope{} = scope, opts) do
     user_id = Keyword.fetch!(opts, :user_id)
     limit = Keyword.fetch!(opts, :limit)
-    offset = Keyword.get(opts, :offset, 0)
     query = Keyword.get(opts, :search) || ""
 
     {title_rows, description_rows} =
@@ -104,17 +100,37 @@ defmodule Mydia.Media.LibraryListing do
     sort_by = Keyword.get(opts, :sort_by)
     title_rows = sort(title_rows, sort_by)
     description_rows = sort(description_rows, sort_by)
-
     rows = title_rows ++ description_rows
 
-    %{
-      rows: rows |> Enum.drop(offset) |> Enum.take(limit) |> put_progress(user_id),
-      has_more?: length(rows) > offset + limit,
+    %Snapshot{
+      ids: Enum.map(rows, & &1.id),
+      rows: rows |> Enum.take(limit) |> put_progress(user_id),
       visible_ids: MapSet.new(rows, & &1.id),
-      empty?: rows == [],
       total_size: rows |> Enum.map(& &1.total_size) |> Enum.sum(),
-      description_match_start_id: description_rows |> List.first() |> row_id()
+      description_match_start_id: description_rows |> List.first() |> row_id(),
+      empty?: rows == []
     }
+  end
+
+  @doc """
+  The rows for `ids`, in that order, with `user_id`'s playback progress. Ids
+  that no longer exist, or that `scope` cannot see, are dropped. Callers pass
+  bounded slices (a batch, or at most the URL's `shown` cap), because the ids
+  become one `IN` list.
+  """
+  @spec rows(Scope.t(), [binary()], binary()) :: [LibraryRow.t()]
+  def rows(_scope, [], _user_id), do: []
+
+  def rows(%Scope{} = scope, ids, user_id) do
+    by_id =
+      from(m in MediaItem, where: m.id in ^ids)
+      |> Restrictions.apply(scope)
+      |> build_rows()
+      |> Map.new(&{&1.id, &1})
+
+    ids
+    |> Enum.flat_map(&List.wrap(Map.get(by_id, &1)))
+    |> put_progress(user_id)
   end
 
   @doc """
@@ -124,11 +140,7 @@ defmodule Mydia.Media.LibraryListing do
   """
   @spec row(Scope.t(), binary(), binary()) :: LibraryRow.t() | nil
   def row(%Scope{} = scope, id, user_id) do
-    from(m in MediaItem, where: m.id == ^id)
-    |> Restrictions.apply(scope)
-    |> build_rows()
-    |> put_progress(user_id)
-    |> List.first()
+    scope |> rows([id], user_id) |> List.first()
   end
 
   # Loads the items, then scopes every aggregate to the same query, so a
@@ -439,8 +451,8 @@ defmodule Mydia.Media.LibraryListing do
   # preserve the incoming row order for ties. That incoming order comes from
   # Media.media_items_query/2, which has no ORDER BY, so it is whatever the
   # database happens to return for an unordered scan and it can change
-  # between two requests for the same page. page/2 re-sorts the whole list on
-  # every request, including each load_more, so an unstable tie group
+  # between two requests for the same page. Every snapshot re-sorts the whole list,
+  # and a reload keeps the rows already on screen, so an unstable tie group
   # reshuffles, duplicating or skipping rows across the page boundary. The
   # sort key below is total, breaking ties by title and then id so the same
   # rows always land in the same order regardless of scan order.
