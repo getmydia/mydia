@@ -1,11 +1,22 @@
 <Layouts.app {assigns}>
   <.admin_page page={:api_keys} count={length(@api_keys)}>
     <:actions>
-      <Components.header_actions />
+      <MydiaWeb.AdminApiKeysLive.Components.header_actions />
     </:actions>
-    <Components.api_keys_tab api_keys={@api_keys} env_key_set={@env_key_set} />
-    <Components.api_key_modal :if={@show_api_key_modal} form={@api_key_form} />
-    <Components.created_key_modal :if={@created_key} key={@created_key} />
-    <Components.confirm_modal :if={@confirm} confirm={@confirm} />
+
+    <MydiaWeb.AdminApiKeysLive.Components.api_keys_tab
+      api_keys={@api_keys}
+      env_key_set={@env_key_set}
+    />
+
+    <%= if assigns[:show_api_key_modal] do %>
+      <MydiaWeb.AdminApiKeysLive.Components.api_key_modal form={@api_key_form} />
+    <% end %>
+    <%= if @created_api_key do %>
+      <MydiaWeb.AdminApiKeysLive.Components.created_key_modal created_api_key={@created_api_key} />
+    <% end %>
+    <%= if @api_key_confirm do %>
+      <MydiaWeb.AdminApiKeysLive.Components.confirm_modal api_key_confirm={@api_key_confirm} />
+    <% end %>
   </.admin_page>
 </Layouts.app>

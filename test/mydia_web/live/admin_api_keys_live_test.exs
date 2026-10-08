@@ -138,4 +138,23 @@ defmodule MydiaWeb.AdminApiKeysLiveTest do
              "Set by LIBRARY_API_KEY. Remove the variable and restart to revoke."
            )
   end
+
+  test "modals use the shared shell", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
+    view |> element("#new-api-key") |> render_click()
+    assert has_element?(view, "#api-key-modal .modal-box.max-w-2xl .w-10.h-10.rounded-xl")
+    assert has_element?(view, "#api-key-modal .modal-backdrop[phx-click=close_api_key_modal]")
+  end
+
+  test "the one-time key modal cannot be dismissed by the backdrop", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
+    view |> element("#new-api-key") |> render_click()
+
+    view
+    |> form("#api-key-form", api_key: %{name: "Automation", expiry: "30", scope: "library"})
+    |> render_submit()
+
+    assert has_element?(view, "#created-api-key-modal .modal-backdrop")
+    refute has_element?(view, "#created-api-key-modal .modal-backdrop[phx-click]")
+  end
 end
