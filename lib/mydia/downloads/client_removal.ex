@@ -1,9 +1,15 @@
 defmodule Mydia.Downloads.ClientRemoval do
   @moduledoc """
-  Deferred Remove After Import cleanup.
+  Deferred Remove After Import cleanup, and which clients seed.
 
   Seed-aware torrent clients keep seeding until paused/completed/gone;
   other clients remove immediately when `remove_completed` is set.
+
+  `@seed_aware` answers "does removal wait for seeding to stop", which is
+  not the same as "does this client seed": rqbit seeds but has no ratio or
+  time limit, so waiting would never end. `@non_seeding` answers the second
+  question for import, and is an allowlist so blackhole (an unknown external
+  client) and any future type keep their source.
   """
 
   require Logger
@@ -21,6 +27,24 @@ defmodule Mydia.Downloads.ClientRemoval do
   @seed_aware ~w(qbittorrent transmission rtorrent)a
 
   def seed_aware_type?(type) when is_atom(type), do: type in @seed_aware
+
+  @non_seeding ~w(sabnzbd nzbget debrid)a
+
+  def non_seeding_type?(type) when is_atom(type), do: type in @non_seeding
+
+  @doc """
+  True when the download's client never seeds, so import may consume the
+  source. False when the client is unknown: keeping a file is the safe wrong
+  answer.
+  """
+  def import_consumes_source?(%Download{download_client: name}) when is_binary(name) do
+    case Enum.find(Settings.list_download_client_configs(), &(&1.name == name)) do
+      %{type: type} -> non_seeding_type?(type)
+      nil -> false
+    end
+  end
+
+  def import_consumes_source?(%Download{}), do: false
 
   def removable_state?(state) when state in [:paused, :completed], do: true
   def removable_state?(_), do: false

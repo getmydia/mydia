@@ -13,8 +13,11 @@ defmodule Mydia.Jobs.MediaImport do
 
   When importing files, the following priority is used:
   1. Hardlink (instant, no duplicate storage) - requires same filesystem
-  2. Move (when use_hardlinks=false and move_files=true)
-  3. Copy (default, safest option)
+  2. Copy, so a seeding torrent keeps its file
+
+  Sources of downloads from clients that never seed
+  (`ClientRemoval.non_seeding_type?/1`) are removed once the import has been
+  recorded, not at placement, so a retried import still finds them.
   """
 
   use Oban.Worker,
@@ -58,7 +61,7 @@ defmodule Mydia.Jobs.MediaImport do
       :save_path,
       snooze_count: 0,
       use_hardlinks: true,
-      move_files: false,
+      move_source: false,
       rename_files: false
     ]
 
@@ -68,7 +71,7 @@ defmodule Mydia.Jobs.MediaImport do
             save_path: String.t() | nil,
             snooze_count: integer(),
             use_hardlinks: boolean(),
-            move_files: boolean(),
+            move_source: boolean(),
             rename_files: boolean()
           }
 
@@ -79,7 +82,6 @@ defmodule Mydia.Jobs.MediaImport do
         save_path: parse_save_path(Map.get(raw, "save_path")),
         snooze_count: Map.get(raw, "snooze_count", 0),
         use_hardlinks: Map.get(raw, "use_hardlinks", true) != false,
-        move_files: Map.get(raw, "move_files", false) == true,
         rename_files: Map.get(raw, "rename_files", false) == true
       }
     end
@@ -158,6 +160,8 @@ defmodule Mydia.Jobs.MediaImport do
         handle_incomplete_download(download, args, attempt, raw_args)
 
       true ->
+        args = %{args | move_source: ClientRemoval.import_consumes_source?(download)}
+
         case import_download(download, args) do
           {:ok, result} ->
             # Success - clear any retry metadata
@@ -496,7 +500,7 @@ defmodule Mydia.Jobs.MediaImport do
 
   defp do_process_import(download, files, library_path, args) do
     case organize_and_import_files(download, files, library_path, args) do
-      {:ok, imported_files} ->
+      {:ok, imported_files, placed_sources} ->
         Logger.info("Successfully imported files",
           download_id: download.id,
           file_count: length(imported_files)
@@ -572,6 +576,8 @@ defmodule Mydia.Jobs.MediaImport do
 
         case Downloads.update_download(updated_download, import_update) do
           {:ok, _updated} ->
+            remove_consumed_sources(placed_sources, args, download)
+
             # A successful import means whatever this item grabbed was real,
             # so the consecutive-auto-rejection counter that
             # Mydia.Jobs.DownloadMonitor keeps must not carry over. Without
@@ -687,11 +693,18 @@ defmodule Mydia.Jobs.MediaImport do
         |> Map.delete("import_candidates")
         |> Map.delete("import_candidates_at")
 
-      Downloads.update_download(download, %{
-        imported_at: DateTime.utc_now(),
-        match_status: nil,
-        metadata: cleaned_metadata
-      })
+      case Downloads.update_download(download, %{
+             imported_at: DateTime.utc_now(),
+             match_status: nil,
+             metadata: cleaned_metadata
+           }) do
+        {:ok, _updated} ->
+          target_paths = Enum.map(target_files, & &1["path"])
+          remove_consumed_sources(placed_sources(target_paths, results), args, download)
+
+        {:error, _changeset} ->
+          :ok
+      end
 
       MediaServerNotifier.notify_all()
       {:ok, :imported}
@@ -980,15 +993,17 @@ defmodule Mydia.Jobs.MediaImport do
       imported = Enum.reverse(imported)
       unresolved = Enum.reverse(unresolved)
 
+      placed_sources = placed_sources(Enum.map(files_to_import, & &1.path), results)
+
       cond do
         # All files imported successfully
         unresolved == [] and errors == [] ->
-          {:ok, imported}
+          {:ok, imported, placed_sources}
 
         # Some files imported, some unresolved (partial import)
         unresolved != [] and imported != [] ->
           flag_unresolved_files(download, unresolved)
-          {:ok, imported}
+          {:ok, imported, placed_sources}
 
         # No files imported, all unresolved
         unresolved != [] and imported == [] ->
@@ -1764,22 +1779,11 @@ defmodule Mydia.Jobs.MediaImport do
   end
 
   defp copy_or_move_file(source, dest, %Args{} = args, opts) do
-    # Import keeps the source file (seeding) after a hardlink, so
-    # remove_source_after_hardlink stays false. Non-hardlink fallback is move
-    # only when move_files is set, otherwise copy.
-    #
     # `:expected_size` lets FileOrganizer treat an already-correct destination
     # as placed instead of hardlinking onto EEXIST and falling through to a
     # full copy — the difference between a retry being free and a retry
     # duplicating the file.
-    place_opts =
-      Keyword.merge(
-        [
-          use_hardlinks: args.use_hardlinks,
-          fallback: if(args.move_files, do: :move, else: :copy)
-        ],
-        opts
-      )
+    place_opts = Keyword.merge(placement_opts(args), opts)
 
     case FileOrganizer.place_file(source, dest, place_opts) do
       {:ok, action} ->
@@ -1790,6 +1794,49 @@ defmodule Mydia.Jobs.MediaImport do
         {:error, reason}
     end
   end
+
+  # Placement never removes the source: hardlink when possible, otherwise copy.
+  # Sources a client no longer needs go later, via `remove_consumed_sources/3`.
+  defp placement_opts(%Args{} = args),
+    do: [use_hardlinks: args.use_hardlinks, fallback: :copy]
+
+  # A source counts as placed only when its file got a media_file record
+  # (reusing an existing one on a retry included). The record's size goes
+  # along, so removal can tell the source's own copy from a different file
+  # that happened to own the destination name.
+  defp placed_sources(paths, results) do
+    for {path, {:ok, %{size: size}}} <- Enum.zip(paths, results), do: {path, size}
+  end
+
+  # Once the import is recorded, a client that never seeds has no use for the
+  # placed sources. A source whose size differs from its library record was
+  # matched to someone else's file and stays. A missing file is fine (the
+  # client may have cleaned up); any other failure is logged and never fails
+  # the job.
+  defp remove_consumed_sources(sources, %Args{move_source: true}, download) do
+    Enum.each(sources, fn {path, size} ->
+      result =
+        case File.stat(path) do
+          {:ok, %File.Stat{size: ^size}} -> File.rm(path)
+          {:ok, _} -> {:error, :differs_from_library_file}
+          {:error, _} = error -> error
+        end
+
+      case result do
+        result when result in [:ok, {:error, :enoent}] ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning("Kept consumed source",
+            path: path,
+            reason: inspect(reason),
+            download_id: download.id
+          )
+      end
+    end)
+  end
+
+  defp remove_consumed_sources(_paths, %Args{}, _download), do: :ok
 
   @doc false
   def generate_filename(download, episode, original_filename, rename_files?)

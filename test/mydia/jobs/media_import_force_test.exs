@@ -74,8 +74,7 @@ defmodule Mydia.Jobs.MediaImportForceTest do
              perform_job(MediaImport, %{
                "download_id" => download.id,
                "target_files" => [%{"path" => obfuscated, "episode_id" => episode.id}],
-               "use_hardlinks" => true,
-               "move_files" => false
+               "use_hardlinks" => true
              })
 
     assert Repo.reload!(download).imported_at

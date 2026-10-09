@@ -48,7 +48,6 @@ defmodule Mydia.Jobs.MediaImportTest do
           "save_path" => "/path",
           "snooze_count" => 5,
           "use_hardlinks" => false,
-          "move_files" => true,
           "rename_files" => true
         })
 
@@ -56,8 +55,13 @@ defmodule Mydia.Jobs.MediaImportTest do
       assert args.save_path == "/path"
       assert args.snooze_count == 5
       assert args.use_hardlinks == false
-      assert args.move_files == true
+      assert args.move_source == false
       assert args.rename_files == true
+    end
+
+    test "never reads move_source from raw args" do
+      args = MediaImport.Args.parse(%{"download_id" => "123", "move_source" => true})
+      assert args.move_source == false
     end
   end
 
@@ -1009,6 +1013,224 @@ defmodule Mydia.Jobs.MediaImportTest do
                  attempt: 3
                )
     end
+  end
+
+  describe "source handling by client type" do
+    @tag :tmp_dir
+    test "moves the source when the client never seeds", %{tmp_dir: tmp_dir} do
+      {download, video_file} = fallback_import!(tmp_dir, :sabnzbd)
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => Path.dirname(video_file)
+               })
+
+      refute File.exists?(video_file)
+      assert [_placed] = Path.wildcard(Path.join(tmp_dir, "library/**/*.mkv"))
+    end
+
+    @tag :tmp_dir
+    test "keeps a source matched to a different library file", %{tmp_dir: tmp_dir} do
+      {download, video_file} = fallback_import!(tmp_dir, :sabnzbd)
+      run = %{"download_id" => download.id, "save_path" => Path.dirname(video_file)}
+
+      assert {:ok, :imported} = perform_job(MediaImport, run)
+      refute File.exists?(video_file)
+
+      # A later release with the same name but different bytes lands on the
+      # destination the first one owns, and the import reuses that record.
+      File.write!(video_file, "a longer, different fake video")
+      {:ok, _} = Mydia.Downloads.update_download(Repo.reload!(download), %{imported_at: nil})
+
+      assert {:ok, :imported} = perform_job(MediaImport, run)
+      assert File.exists?(video_file)
+    end
+
+    @tag :tmp_dir
+    test "keeps the source for a torrent client", %{tmp_dir: tmp_dir} do
+      {download, video_file} = fallback_import!(tmp_dir, :qbittorrent)
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => Path.dirname(video_file)
+               })
+
+      assert File.exists?(video_file)
+    end
+
+    @tag :tmp_dir
+    test "keeps the source when the client config is gone", %{tmp_dir: tmp_dir} do
+      {download, video_file} = fallback_import!(tmp_dir, nil)
+
+      # No config means no client info, so the import refuses outright
+      # (`{:error, :no_client}`); the point is that the source survives.
+      assert {:error, :no_client} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => Path.dirname(video_file)
+               })
+
+      assert File.exists?(video_file)
+    end
+  end
+
+  describe "targeted import source handling" do
+    @tag :tmp_dir
+    test "removes every target source once the import succeeds", %{tmp_dir: tmp_dir} do
+      {download, [a, b]} = targeted_import!(tmp_dir, :sabnzbd)
+
+      assert {:ok, :imported} = perform_targeted(download, [a, b])
+
+      refute File.exists?(a.path)
+      refute File.exists?(b.path)
+      assert Mydia.Repo.reload!(download).imported_at
+    end
+
+    @tag :tmp_dir
+    test "keeps every source when one target fails, and a retry finishes cleanly",
+         %{tmp_dir: tmp_dir} do
+      {download, [a, b]} = targeted_import!(tmp_dir, :sabnzbd)
+
+      # Put the second target in season 2 and block its directory with a
+      # regular file, so only that placement fails.
+      b_episode = Mydia.Media.get_episode!(Mydia.Accounts.Scope.system(), b.episode_id)
+      {:ok, _} = Mydia.Media.update_episode(b_episode, %{season_number: 2})
+
+      [library_path] = Settings.list_library_paths()
+      media_item = Mydia.Repo.preload(download, :media_item).media_item
+
+      blocker =
+        Path.join(MediaImport.build_series_base_path(media_item, library_path), "Season 02")
+
+      File.mkdir_p!(Path.dirname(blocker))
+      File.write!(blocker, "not a directory")
+
+      result = perform_targeted(download, [a, b])
+
+      refute match?({:ok, _}, result)
+      assert is_nil(Mydia.Repo.reload!(download).imported_at)
+      assert File.exists?(a.path)
+      assert File.exists?(b.path)
+
+      File.rm!(blocker)
+
+      assert {:ok, :imported} = perform_targeted(download, [a, b])
+
+      refute File.exists?(a.path)
+      refute File.exists?(b.path)
+      assert Mydia.Repo.reload!(download).imported_at
+
+      files = Library.list_media_files()
+
+      for target <- [a, b] do
+        assert [_one] = Enum.filter(files, &(&1.episode_id == target.episode_id))
+      end
+    end
+
+    @tag :tmp_dir
+    test "a torrent client keeps its sources", %{tmp_dir: tmp_dir} do
+      {download, [a, b]} = targeted_import!(tmp_dir, :qbittorrent)
+
+      assert {:ok, :imported} = perform_targeted(download, [a, b])
+
+      assert File.exists?(a.path)
+      assert File.exists?(b.path)
+    end
+  end
+
+  defp perform_targeted(download, targets) do
+    perform_job(MediaImport, %{
+      "download_id" => download.id,
+      "target_files" => Enum.map(targets, &%{"path" => &1.path, "episode_id" => &1.episode_id}),
+      "use_hardlinks" => false
+    })
+  end
+
+  # A completed TV download with two hand-resolved episode files.
+  defp targeted_import!(tmp_dir, type) do
+    create_test_library_path(tmp_dir, :series)
+
+    download_dir = Path.join(tmp_dir, "downloads")
+    File.mkdir_p!(download_dir)
+
+    media_item = media_item_fixture(%{type: "tv_show", title: "Lanternfall Reach"})
+    name = "TargetClient-#{System.unique_integer([:positive])}"
+
+    {:ok, _} =
+      Settings.create_download_client_config(%{
+        name: name,
+        type: type,
+        host: "nonexistent.invalid",
+        port: 9999,
+        username: "test",
+        password: "test",
+        api_key: "test",
+        enabled: true,
+        priority: 1
+      })
+
+    targets =
+      for n <- 1..2 do
+        episode =
+          episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: n})
+
+        path = Path.join(download_dir, "Lanternfall.Reach.S01E0#{n}.1080p.mkv")
+        File.write!(path, "fake video content #{n}")
+        %{path: path, episode_id: episode.id}
+      end
+
+    download =
+      download_fixture(%{
+        media_item_id: media_item.id,
+        status: "completed",
+        completed_at: DateTime.utc_now(),
+        download_client: name,
+        download_client_id: "target-1"
+      })
+
+    {download, targets}
+  end
+
+  # A completed movie download whose client query fails, so the import uses
+  # save_path. `type: nil` names a client with no config.
+  defp fallback_import!(tmp_dir, type) do
+    create_test_library_path(tmp_dir, :movies)
+
+    download_dir = Path.join(tmp_dir, "downloads")
+    File.mkdir_p!(download_dir)
+    video_file = Path.join(download_dir, "Quietwater.Harbor.2031.1080p.mkv")
+    File.write!(video_file, "fake video content")
+
+    media_item = media_item_fixture(%{type: "movie", title: "Quietwater Harbor", year: 2031})
+    name = "SourceClient-#{System.unique_integer([:positive])}"
+
+    if type do
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: name,
+          type: type,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          api_key: "test",
+          enabled: true,
+          priority: 1
+        })
+    end
+
+    download =
+      download_fixture(%{
+        media_item_id: media_item.id,
+        status: "completed",
+        completed_at: DateTime.utc_now(),
+        download_client: name,
+        download_client_id: "src-1"
+      })
+
+    {download, video_file}
   end
 
   describe "auto_rename from library path" do

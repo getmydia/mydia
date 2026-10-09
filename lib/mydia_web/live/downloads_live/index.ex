@@ -340,8 +340,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
               "download_id" => updated.id,
               "save_path" => nil,
               "cleanup_client" => true,
-              "use_hardlinks" => true,
-              "move_files" => false
+              "use_hardlinks" => true
             }
             |> Mydia.Jobs.MediaImport.new()
             |> Oban.insert()
@@ -1068,8 +1067,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
             "download_id" => updated.id,
             "save_path" => nil,
             "cleanup_client" => true,
-            "use_hardlinks" => true,
-            "move_files" => false
+            "use_hardlinks" => true
           }
           |> Mydia.Jobs.MediaImport.new()
           |> Oban.insert()
@@ -1361,8 +1359,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
             "download_id" => updated.id,
             "save_path" => nil,
             "cleanup_client" => true,
-            "use_hardlinks" => true,
-            "move_files" => false
+            "use_hardlinks" => true
           }
           # MediaImport declares worker-level uniqueness keyed on download_id,
           # so an import already queued/running for this download is not

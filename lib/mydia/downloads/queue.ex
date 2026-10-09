@@ -677,8 +677,7 @@ defmodule Mydia.Downloads.Queue do
             "download_id" => updated.id,
             "save_path" => save_path,
             "cleanup_client" => true,
-            "use_hardlinks" => true,
-            "move_files" => false
+            "use_hardlinks" => true
           }
           |> Mydia.Jobs.MediaImport.new()
           |> Mydia.Jobs.insert()
@@ -748,8 +747,7 @@ defmodule Mydia.Downloads.Queue do
       "download_id" => download.id,
       "save_path" => save_path,
       "cleanup_client" => true,
-      "use_hardlinks" => true,
-      "move_files" => false
+      "use_hardlinks" => true
     }
     |> Mydia.Jobs.MediaImport.new()
     |> Mydia.Jobs.insert()
@@ -770,8 +768,7 @@ defmodule Mydia.Downloads.Queue do
     case %{
            "download_id" => download.id,
            "target_files" => target_files,
-           "use_hardlinks" => true,
-           "move_files" => false
+           "use_hardlinks" => true
          }
          |> Mydia.Jobs.MediaImport.new()
          |> Mydia.Jobs.insert() do

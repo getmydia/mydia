@@ -1395,8 +1395,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
         "download_id" => download.id,
         "save_path" => download_map.save_path,
         "cleanup_client" => true,
-        "use_hardlinks" => true,
-        "move_files" => false
+        "use_hardlinks" => true
       }
       |> Mydia.Jobs.MediaImport.new()
 
@@ -1415,8 +1414,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
       %{
         "download_id" => download.id,
         "cleanup_client" => true,
-        "use_hardlinks" => true,
-        "move_files" => false
+        "use_hardlinks" => true
       }
       |> Mydia.Jobs.MediaImport.new()
 

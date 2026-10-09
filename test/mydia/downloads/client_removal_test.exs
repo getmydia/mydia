@@ -69,6 +69,49 @@ defmodule Mydia.Downloads.ClientRemovalTest do
     refute ClientRemoval.seed_aware_type?(:debrid)
   end
 
+  test "non_seeding_type?/1" do
+    assert ClientRemoval.non_seeding_type?(:sabnzbd)
+    assert ClientRemoval.non_seeding_type?(:nzbget)
+    assert ClientRemoval.non_seeding_type?(:debrid)
+    refute ClientRemoval.non_seeding_type?(:qbittorrent)
+    refute ClientRemoval.non_seeding_type?(:transmission)
+    refute ClientRemoval.non_seeding_type?(:rtorrent)
+    refute ClientRemoval.non_seeding_type?(:rqbit)
+    refute ClientRemoval.non_seeding_type?(:blackhole)
+  end
+
+  describe "import_consumes_source?/1" do
+    test "is true for a download from a non-seeding client" do
+      client = client!(type: :sabnzbd)
+      download = download!(client, [])
+
+      assert ClientRemoval.import_consumes_source?(download)
+    end
+
+    test "is false for a download from a torrent client" do
+      client = client!(type: :qbittorrent)
+      download = download!(client, [])
+
+      refute ClientRemoval.import_consumes_source?(download)
+    end
+
+    test "is false when the client name matches no config" do
+      download =
+        download_fixture(%{
+          download_client: "does-not-exist-#{System.unique_integer([:positive])}",
+          download_client_id: "x"
+        })
+
+      refute ClientRemoval.import_consumes_source?(download)
+    end
+
+    test "is false when the download has no client" do
+      download = download_fixture(%{download_client: nil, download_client_id: nil})
+
+      refute ClientRemoval.import_consumes_source?(download)
+    end
+  end
+
   test "removable_state?/1" do
     assert ClientRemoval.removable_state?(:paused)
     assert ClientRemoval.removable_state?(:completed)
