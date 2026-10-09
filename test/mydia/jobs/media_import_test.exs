@@ -1059,6 +1059,119 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
   end
 
+  describe "targeted import retry after a move" do
+    @tag :tmp_dir
+    test "moves every target for a client that never seeds", %{tmp_dir: tmp_dir} do
+      {download, [a, b]} = targeted_import!(tmp_dir, :sabnzbd)
+
+      assert {:ok, :imported} = perform_targeted(download, [a, b])
+
+      refute File.exists?(a.path)
+      refute File.exists?(b.path)
+      assert Mydia.Repo.reload!(download).imported_at
+    end
+
+    @tag :tmp_dir
+    test "a retry adopts targets that an earlier attempt already moved", %{tmp_dir: tmp_dir} do
+      {download, [a, b]} = targeted_import!(tmp_dir, :sabnzbd)
+
+      # First attempt only gets A through; B stands in for the target that failed.
+      assert {:ok, :imported} = perform_targeted(download, [a])
+      refute File.exists?(a.path)
+
+      # imported_at from the first run would short-circuit the retry. Clearing
+      # it stands in for the partial failure that leaves it unset. Reload first:
+      # the in-memory struct already says nil, so the update would be a no-op.
+      {:ok, download} =
+        download |> Mydia.Repo.reload!() |> Mydia.Downloads.update_download(%{imported_at: nil})
+
+      assert {:ok, :imported} = perform_targeted(download, [a, b])
+
+      refute File.exists?(b.path)
+      assert Mydia.Repo.reload!(download).imported_at
+    end
+
+    @tag :tmp_dir
+    test "a missing source that was never placed still errors", %{tmp_dir: tmp_dir} do
+      {download, [a, _b]} = targeted_import!(tmp_dir, :sabnzbd)
+      File.rm!(a.path)
+
+      refute match?({:ok, :imported}, perform_targeted(download, [a]))
+      assert is_nil(Mydia.Repo.reload!(download).imported_at)
+    end
+
+    @tag :tmp_dir
+    test "a torrent client keeps the strict missing-source behaviour", %{tmp_dir: tmp_dir} do
+      {download, [a, _b]} = targeted_import!(tmp_dir, :qbittorrent)
+
+      assert {:ok, :imported} = perform_targeted(download, [a])
+      assert File.exists?(a.path)
+
+      # The destination exists, but a client that seeds never consumes sources,
+      # so a vanished source is still an error.
+      File.rm!(a.path)
+
+      {:ok, download} =
+        download |> Mydia.Repo.reload!() |> Mydia.Downloads.update_download(%{imported_at: nil})
+
+      assert {:error, _} = perform_targeted(download, [a])
+      assert is_nil(Mydia.Repo.reload!(download).imported_at)
+    end
+  end
+
+  defp perform_targeted(download, targets) do
+    perform_job(MediaImport, %{
+      "download_id" => download.id,
+      "target_files" => Enum.map(targets, &%{"path" => &1.path, "episode_id" => &1.episode_id}),
+      "use_hardlinks" => false
+    })
+  end
+
+  # A completed TV download with two hand-resolved episode files.
+  defp targeted_import!(tmp_dir, type) do
+    create_test_library_path(tmp_dir, :series)
+
+    download_dir = Path.join(tmp_dir, "downloads")
+    File.mkdir_p!(download_dir)
+
+    media_item = media_item_fixture(%{type: "tv_show", title: "Lanternfall Reach"})
+    name = "TargetClient-#{System.unique_integer([:positive])}"
+
+    {:ok, _} =
+      Settings.create_download_client_config(%{
+        name: name,
+        type: type,
+        host: "nonexistent.invalid",
+        port: 9999,
+        username: "test",
+        password: "test",
+        api_key: "test",
+        enabled: true,
+        priority: 1
+      })
+
+    targets =
+      for n <- 1..2 do
+        episode =
+          episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: n})
+
+        path = Path.join(download_dir, "Lanternfall.Reach.S01E0#{n}.1080p.mkv")
+        File.write!(path, "fake video content #{n}")
+        %{path: path, episode_id: episode.id}
+      end
+
+    download =
+      download_fixture(%{
+        media_item_id: media_item.id,
+        status: "completed",
+        completed_at: DateTime.utc_now(),
+        download_client: name,
+        download_client_id: "target-1"
+      })
+
+    {download, targets}
+  end
+
   # A completed movie download whose client query fails, so the import uses
   # save_path. `type: nil` names a client with no config.
   defp fallback_import!(tmp_dir, type) do

@@ -650,27 +650,20 @@ defmodule Mydia.Jobs.MediaImport do
         path = target["path"]
         episode_id = target["episode_id"]
 
-        if File.exists?(path) do
-          episode = if episode_id, do: Media.get_episode!(Scope.system(), episode_id), else: nil
-          file = %{path: path, name: Path.basename(path), size: File.stat!(path).size}
+        episode = if episode_id, do: Media.get_episode!(Scope.system(), episode_id), else: nil
+        dest_dir = targeted_dest_dir(download, episode, library_path)
 
-          # Build destination path for this episode
-          dest_dir =
-            if episode && download.media_item do
-              base_dir = build_series_base_path(download.media_item, library_path)
+        cond do
+          File.exists?(path) ->
+            file = %{path: path, name: Path.basename(path), size: File.stat!(path).size}
+            import_file_to_destination(file, episode, dest_dir, download, library_path, args)
 
-              Path.join(
-                base_dir,
-                "Season #{String.pad_leading("#{episode.season_number}", 2, "0")}"
-              )
-            else
-              build_destination_path(download, library_path)
-            end
+          moved_into_library?(path, episode, dest_dir, download, args) ->
+            {:ok, :already_placed}
 
-          import_file_to_destination(file, episode, dest_dir, download, library_path, args)
-        else
-          Logger.warning("Target file no longer exists", path: path, download_id: download.id)
-          {:error, :file_not_found}
+          true ->
+            Logger.warning("Target file no longer exists", path: path, download_id: download.id)
+            {:error, :file_not_found}
         end
       end)
 
@@ -709,6 +702,43 @@ defmodule Mydia.Jobs.MediaImport do
       {:error, {:partial_import, representative_error(errors)}}
     end
   end
+
+  defp targeted_dest_dir(download, episode, library_path) do
+    if episode && download.media_item do
+      base_dir = build_series_base_path(download.media_item, library_path)
+
+      Path.join(
+        base_dir,
+        "Season #{String.pad_leading("#{episode.season_number}", 2, "0")}"
+      )
+    else
+      build_destination_path(download, library_path)
+    end
+  end
+
+  # A retried job re-sends every target, including ones an earlier attempt moved
+  # out of the download directory. Only a client that never seeds has its
+  # sources consumed, so only then does a vanished source with a file already at
+  # its destination mean "placed". Anything else, including a failed existence
+  # check, stays an error.
+  defp moved_into_library?(path, episode, dest_dir, download, %Args{move_source: true} = args) do
+    final_filename = generate_filename(download, episode, Path.basename(path), args.rename_files)
+    dest_path = Path.join(dest_dir, final_filename)
+
+    if destination_exists?(dest_path) == true do
+      Logger.info("Target already moved into the library",
+        path: path,
+        dest: dest_path,
+        download_id: download.id
+      )
+
+      true
+    else
+      false
+    end
+  end
+
+  defp moved_into_library?(_path, _episode, _dest_dir, _download, _args), do: false
 
   defp get_client_info(download) do
     if download.download_client && download.download_client_id do
