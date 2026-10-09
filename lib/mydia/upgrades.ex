@@ -831,7 +831,7 @@ defmodule Mydia.Upgrades do
   defp blacklist_release(new_file) do
     with download_id when is_binary(download_id) <- download_id_for(new_file),
          %Download{} = download <- Repo.get(Download, download_id) do
-      maybe_blacklist_download(new_file, download)
+      maybe_blacklist_download(download, media_file_id: new_file.id)
     else
       _ ->
         Logger.error(
@@ -861,19 +861,40 @@ defmodule Mydia.Upgrades do
   # missing-episode season search. Skip it: a pack that really is bad
   # simply fails the gate again, which costs a re-download rather than
   # permanently burning a good release.
-  defp maybe_blacklist_download(new_file, %Download{} = download) do
+  defp maybe_blacklist_download(%Download{} = download, log_metadata) do
     if season_pack?(download) do
       Logger.info(
         "Not blacklisting a season pack whose per-episode copy lost the upgrade comparison: " <>
           "a pack can legitimately upgrade some episodes and not others",
-        media_file_id: new_file.id,
-        download_id: download.id
+        Keyword.put(log_metadata, :download_id, download.id)
       )
 
       false
     else
-      do_blacklist(new_file, download)
+      do_blacklist(download, log_metadata)
     end
+  end
+
+  @doc """
+  Blacklists the release behind an upgrade grab whose import landed on the
+  very file it was meant to replace: the release already on disk.
+
+  That import creates no new file, so `finalize_upgrade/1` never runs and
+  never rejects it. Without this, whatever made the release look like an
+  upgrade (a misread language tag, say) holds again at the next sweep, which
+  grabs it again, every night. Season packs are skipped for the reason
+  `maybe_blacklist_download/2` gives. Returns whether it blacklisted.
+  """
+  @spec blacklist_redundant_upgrade(Download.t(), MediaFile.t()) :: boolean()
+  def blacklist_redundant_upgrade(%Download{} = download, %MediaFile{} = target) do
+    Logger.warning(
+      "Upgrade grab imported onto the file it was meant to replace; blacklisting the release",
+      media_file_id: target.id,
+      download_id: download.id,
+      title: download.title
+    )
+
+    maybe_blacklist_download(download, media_file_id: target.id)
   end
 
   defp season_pack?(%Download{metadata: metadata}) when is_map(metadata),
@@ -881,7 +902,7 @@ defmodule Mydia.Upgrades do
 
   defp season_pack?(%Download{}), do: false
 
-  defp do_blacklist(new_file, %Download{} = download) do
+  defp do_blacklist(%Download{} = download, log_metadata) do
     with guid when is_binary(guid) and guid != "" <- get_in(download.metadata || %{}, ["guid"]),
          indexer when is_binary(indexer) and indexer != "" <- download.indexer do
       case Blacklists.add(indexer, guid, download.title || "Unknown release", "upgrade_rejected",
@@ -891,10 +912,9 @@ defmodule Mydia.Upgrades do
           true
 
         {:error, changeset} ->
-          Logger.error("Failed to blacklist rejected upgrade release",
-            media_file_id: new_file.id,
-            download_id: download.id,
-            errors: inspect(changeset.errors)
+          Logger.error(
+            "Failed to blacklist rejected upgrade release",
+            log_metadata ++ [download_id: download.id, errors: inspect(changeset.errors)]
           )
 
           false
@@ -904,7 +924,7 @@ defmodule Mydia.Upgrades do
         Logger.error(
           "Could not blacklist rejected upgrade release: no traceable (indexer, guid) " <>
             "for the originating download",
-          media_file_id: new_file.id
+          log_metadata
         )
 
         false

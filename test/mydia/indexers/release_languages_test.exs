@@ -38,7 +38,16 @@ defmodule Mydia.Indexers.ReleaseLanguagesTest do
     {"Paper.Lantern.Club.2024.1080p.WEB.x264-DUALiTY", "en", ["en"], true},
     # German abbreviations, not just the full word.
     {"Paper.Lantern.Club.2024.GER.DL.1080p.BluRay.x264", "en", ["de"], false},
-    {"Paper.Lantern.Club.2024.DEU.1080p.WEB.x264", "en", ["de"], false}
+    {"Paper.Lantern.Club.2024.DEU.1080p.WEB.x264", "en", ["de"], false},
+    # Polish scene tags. A bare PL left untagged read as the original
+    # language, so a Polish copy kept "upgrading" to itself.
+    {"Paper.Lantern.Club.2024.PL.1080p.WEB-DL.x264.AC3-R22", "en", ["pl"], false},
+    {"[SOME-TRACKER.PL] Paper.Lantern.Club.2024.PL.1080p.WEB-DL.x264", "fr", ["pl"], false},
+    {"Paper.Lantern.Club.2024.PLDUB.1080p.WEB.x264", "en", ["pl"], false},
+    {"Paper.Lantern.Club.2024.1080p.WEB.x264.Lektor.PL", "en", ["pl"], false},
+    {"Paper.Lantern.Club.2024.POLISH.1080p.BluRay.x264", "en", ["pl"], false},
+    # PL only as a token, never inside a word.
+    {"Paper.Lantern.Club.2024.1080p.WEB.x264-PLAYWEB", "en", ["en"], true}
   ]
 
   for {{title, original, languages, assumed?}, index} <- Enum.with_index(@cases) do

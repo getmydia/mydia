@@ -1569,10 +1569,52 @@ defmodule Mydia.Jobs.MediaImport do
         # File exists but not in DB - this is a conflict
         handle_file_conflict(file, dest_path, episode, download, library_path, args)
 
-      existing_file ->
-        # File exists and is in DB - reuse it
-        Logger.info("Reusing existing media file", path: dest_path)
-        {:ok, existing_file}
+      %{id: id} = existing_file ->
+        case download.metadata do
+          %{"upgrade_target_media_file_id" => ^id} ->
+            import_onto_upgrade_target(
+              file,
+              dest_path,
+              existing_file,
+              episode,
+              download,
+              library_path,
+              args
+            )
+
+          _ ->
+            reuse_existing_file(dest_path, existing_file)
+        end
+    end
+  end
+
+  defp reuse_existing_file(dest_path, existing_file) do
+    Logger.info("Reusing existing media file", path: dest_path)
+    {:ok, existing_file}
+  end
+
+  # An upgrade whose destination is the very file it targets is one of two
+  # things, told apart by size as handle_file_conflict/6 does. The same size is
+  # the release already on disk: blacklist it, or the sweep grabs it every
+  # night, since no new file means finalize never rejects it. A different size
+  # is another release that renaming mapped to the same name, a real
+  # candidate: place it beside the target so finalize compares the two.
+  defp import_onto_upgrade_target(file, dest_path, target, episode, download, library_path, args) do
+    case file_size(dest_path) do
+      {:ok, size} when size == file.size ->
+        Upgrades.blacklist_redundant_upgrade(download, target)
+        reuse_existing_file(dest_path, target)
+
+      {:ok, _other} ->
+        place_conflicting_file(file, dest_path, episode, download, library_path, args)
+
+      {:error, error} ->
+        Logger.error("Could not read the size of the existing destination",
+          dest: dest_path,
+          reason: inspect(error)
+        )
+
+        {:error, error}
     end
   end
 
