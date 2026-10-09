@@ -34,6 +34,9 @@
     %{patterns: ["korean", "kor"], languages: ["ko"]},
     %{patterns: ["chinese", "chi"], languages: ["zh"]},
     %{patterns: ["hindi"], languages: ["hi"]},
-    %{patterns: ["portuguese", "por"], languages: ["pt"]}
+    %{patterns: ["portuguese", "por"], languages: ["pt"]},
+    # Polish scene releases tag the language as a bare "PL", and "Lektor" is
+    # the Polish voice-over track.
+    %{patterns: ["polish", "pl[ ._-]?dub(?:bing)?", "pl", "lektor"], languages: ["pl"]}
   ]
 }

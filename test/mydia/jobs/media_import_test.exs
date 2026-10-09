@@ -2349,6 +2349,110 @@ defmodule Mydia.Jobs.MediaImportTest do
       assert new_file, "expected the regular movie file to import"
       assert is_nil(new_file.supersedes_media_file_id)
     end
+
+    # An upgrade grab of the release already on disk imports onto the file it
+    # was meant to replace. No new file means no finalize comparison and no
+    # rejection, so without a blacklist here the nightly sweep grabbed the same
+    # release forever (a title the language detector misread kept "winning").
+    @tag :tmp_dir
+    test "an upgrade that lands on its own target blacklists the release",
+         %{tmp_dir: tmp_dir} do
+      _library_path = create_test_library_path(tmp_dir, :movies)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "Same.Release.Movie.2024.1080p.mkv"), "content")
+
+      media_item = media_item_fixture(%{type: "movie", title: "Same Release Movie", year: 2024})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "SameReleaseClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download_attrs = %{
+        media_item_id: media_item.id,
+        status: "completed",
+        completed_at: DateTime.utc_now(),
+        download_client: "SameReleaseClient",
+        download_client_id: "same-release-1"
+      }
+
+      first = download_fixture(Map.put(download_attrs, :metadata, %{"guid" => "same-guid"}))
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{"download_id" => first.id, "save_path" => download_dir})
+
+      [existing_file] = Library.list_media_files()
+
+      # The queue deletes the stale row for the same torrent before the regrab.
+      Mydia.Repo.delete!(first)
+
+      regrab =
+        download_fixture(
+          Map.put(download_attrs, :metadata, %{
+            "guid" => "same-guid",
+            "upgrade_target_media_file_id" => existing_file.id
+          })
+        )
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{"download_id" => regrab.id, "save_path" => download_dir})
+
+      assert [%{id: id}] = Library.list_media_files()
+      assert id == existing_file.id
+      assert Mydia.Downloads.Blacklists.blacklisted?(regrab.indexer, "same-guid")
+    end
+
+    @tag :tmp_dir
+    test "a non-upgrade import onto an existing file blacklists nothing", %{tmp_dir: tmp_dir} do
+      _library_path = create_test_library_path(tmp_dir, :movies)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "Reimport.Movie.2024.1080p.mkv"), "content")
+
+      media_item = media_item_fixture(%{type: "movie", title: "Reimport Movie", year: 2024})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "ReimportClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      for attempt <- 1..2 do
+        download =
+          download_fixture(%{
+            media_item_id: media_item.id,
+            status: "completed",
+            completed_at: DateTime.utc_now(),
+            download_client: "ReimportClient",
+            download_client_id: "reimport-#{attempt}",
+            metadata: %{"guid" => "reimport-guid"}
+          })
+
+        assert {:ok, :imported} =
+                 perform_job(MediaImport, %{
+                   "download_id" => download.id,
+                   "save_path" => download_dir
+                 })
+      end
+
+      refute Mydia.Downloads.Blacklists.blacklisted?("test-indexer", "reimport-guid")
+    end
   end
 
   describe "import candidate snapshot" do

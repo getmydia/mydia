@@ -1572,9 +1572,19 @@ defmodule Mydia.Jobs.MediaImport do
       existing_file ->
         # File exists and is in DB - reuse it
         Logger.info("Reusing existing media file", path: dest_path)
+        maybe_blacklist_redundant_upgrade(download, existing_file)
         {:ok, existing_file}
     end
   end
+
+  # An upgrade that lands on its own target re-grabbed the release on disk.
+  defp maybe_blacklist_redundant_upgrade(
+         %{metadata: %{"upgrade_target_media_file_id" => target_id}} = download,
+         %{id: target_id} = existing_file
+       ),
+       do: Upgrades.blacklist_redundant_upgrade(download, existing_file)
+
+  defp maybe_blacklist_redundant_upgrade(_download, _existing_file), do: false
 
   defp import_into_free_destination(file, dest_path, episode, download, library_path, args) do
     # Copy or move file. `:expected_size` closes the window between the
