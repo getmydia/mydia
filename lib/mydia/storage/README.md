@@ -82,17 +82,20 @@ shape. Local code keeps its branch; S3 gets an explicit one for placement,
 rename, trash, delete and item folders.
 
 - `put_file/3` uploads a local file. Up to 64 MB it is a single PUT; above that
-  it is a multipart upload with 64 MB parts streamed from disk, one part in
-  memory at a time. A failure aborts the upload, and the object appears only
-  after `CompleteMultipartUpload`, so nothing partial is ever visible.
+  it is a multipart upload with 64 MB parts read from disk, `concurrency` parts
+  in flight at once (4 by default), so up to `concurrency × part_size` in
+  memory (256 MB by default). Every part reads from one open handle, so a file
+  replaced at its path mid-upload cannot mix into the object. A failed part
+  stops the others and aborts the upload, and the object appears only after
+  `CompleteMultipartUpload`, so nothing partial is ever visible.
 - `put_binary/3` replaces an object atomically. `exclusive: true` sends
   `If-None-Match: *` after a HEAD check and returns `:exists` when the target is
   taken. `mkdir:` is local only and off by default, so an unmounted share never
   gets a directory tree created on the root filesystem.
 - `copy/2` and `move/2` work across any backend pair: CopyObject within a
-  bucket, `UploadPartCopy` above 5 GB, and a temp file for S3 to S3 across
-  backends. A move is copy then delete; if the source delete fails, the copy is
-  deleted and the error returned.
+  bucket, `UploadPartCopy` above 5 GB (4 parts at a time), and a temp file for
+  S3 to S3 across backends. A move is copy then delete; if the source delete
+  fails, the copy is deleted and the error returned.
 - `delete/1` is idempotent. `delete_prefix/2` refuses the whole location; on S3
   it deletes in batches of 1000 with `Content-MD5`.
 - `ls/1` never turns an error into an empty listing.

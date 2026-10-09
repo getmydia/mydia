@@ -3,41 +3,59 @@ defmodule Mydia.Storage.S3.Multipart do
   # Multipart upload and multipart copy. An object becomes visible only on
   # CompleteMultipartUpload, so any failure aborts and leaves nothing behind.
   # Each part is one signed request with a binary body, which Req's
-  # `retry: :transient` can safely resend.
+  # `retry: :transient` can safely resend. Up to `concurrency` parts are in
+  # flight at once, so an upload holds up to that many parts in memory.
 
   alias Mydia.Storage.Error
   alias Mydia.Storage.S3.Request
 
-  @spec upload(struct(), String.t(), Path.t(), non_neg_integer(), pos_integer(), String.t()) ::
-          :ok | {:error, Error.t()}
-  def upload(b, key, local_path, size, part_size, what) do
-    with {:ok, upload_id} <- initiate(b, key, what) do
-      result =
-        case File.open(local_path, [:read, :binary, :raw]) do
-          {:ok, io} ->
-            try do
-              each_part(size, part_size, fn {n, offset, len} ->
+  @spec upload(
+          struct(),
+          String.t(),
+          Path.t(),
+          non_neg_integer(),
+          pos_integer(),
+          pos_integer(),
+          String.t()
+        ) :: :ok | {:error, Error.t()}
+  def upload(b, key, local_path, size, part_size, concurrency, what) do
+    # Not :raw: a raw handle works only in the process that opened it, and
+    # every part must read the same open file even if the path is replaced
+    # mid-upload. The file server's pid can be shared with the part tasks.
+    case File.open(local_path, [:read, :binary]) do
+      {:ok, io} ->
+        try do
+          with {:ok, upload_id} <- initiate(b, key, what) do
+            result =
+              each_part(size, part_size, concurrency, fn {n, offset, len} ->
                 with {:ok, data} <- pread(io, offset, len, local_path),
                      do: upload_part(b, key, upload_id, n, data, what)
               end)
-            after
-              File.close(io)
-            end
 
-          {:error, reason} ->
-            {:error, Error.from_posix(reason, local_path)}
+            finish(b, key, upload_id, result, what)
+          end
+        after
+          File.close(io)
         end
 
-      finish(b, key, upload_id, result, what)
+      {:error, reason} ->
+        {:error, Error.from_posix(reason, local_path)}
     end
   end
 
-  @spec copy(struct(), String.t(), String.t(), non_neg_integer(), pos_integer(), String.t()) ::
-          :ok | {:error, Error.t()}
-  def copy(b, from_key, to_key, size, part_size, what) do
+  @spec copy(
+          struct(),
+          String.t(),
+          String.t(),
+          non_neg_integer(),
+          pos_integer(),
+          pos_integer(),
+          String.t()
+        ) :: :ok | {:error, Error.t()}
+  def copy(b, from_key, to_key, size, part_size, concurrency, what) do
     with {:ok, upload_id} <- initiate(b, to_key, what) do
       result =
-        each_part(size, part_size, fn {n, offset, len} ->
+        each_part(size, part_size, concurrency, fn {n, offset, len} ->
           copy_part(b, from_key, to_key, upload_id, n, offset, len, what)
         end)
 
@@ -45,16 +63,27 @@ defmodule Mydia.Storage.S3.Multipart do
     end
   end
 
-  defp each_part(size, part_size, fun) do
+  # Halting on the first error shuts down the parts still in flight before
+  # this returns, so no request of ours is running when finish/5 aborts. A
+  # part the provider already received may still land after the abort; the
+  # provider discards it with the upload, or lifecycle rules reap it.
+  defp each_part(size, part_size, concurrency, fun) do
     0
     |> Stream.iterate(&(&1 + part_size))
     |> Stream.take_while(&(&1 < size))
     |> Stream.with_index(1)
-    |> Enum.reduce_while({:ok, []}, fn {offset, n}, {:ok, acc} ->
-      case fun.({n, offset, min(part_size, size - offset)}) do
-        {:ok, etag} -> {:cont, {:ok, [{n, etag} | acc]}}
-        {:error, _} = error -> {:halt, error}
-      end
+    |> Task.async_stream(
+      fn {offset, n} ->
+        with {:ok, etag} <- fun.({n, offset, min(part_size, size - offset)}),
+             do: {:ok, {n, etag}}
+      end,
+      max_concurrency: concurrency,
+      ordered: true,
+      timeout: :infinity
+    )
+    |> Enum.reduce_while({:ok, []}, fn
+      {:ok, {:ok, part}}, {:ok, acc} -> {:cont, {:ok, [part | acc]}}
+      {:ok, {:error, _} = error}, _ -> {:halt, error}
     end)
   end
 
@@ -161,6 +190,8 @@ defmodule Mydia.Storage.S3.Multipart do
     :ok
   end
 
+  # A raw handle works only in the process that opened it, so each part task
+  # opens its own.
   defp pread(io, offset, len, path) do
     case :file.pread(io, offset, len) do
       {:ok, data} when byte_size(data) == len -> {:ok, data}

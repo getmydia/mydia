@@ -8,9 +8,17 @@ defmodule Mydia.Storage.S3 do
   @part_size 64 * 1024 * 1024
   @copy_threshold 5 * 1024 * 1024 * 1024
   @copy_part_size 512 * 1024 * 1024
+  @concurrency 4
 
   defp setting(key, default),
     do: :mydia |> Application.get_env(__MODULE__, []) |> Keyword.get(key, default)
+
+  defp concurrency do
+    case setting(:concurrency, @concurrency) do
+      n when is_integer(n) and n > 0 -> n
+      _ -> @concurrency
+    end
+  end
 
   # Req raises on a URL it cannot parse (no scheme or host), so every entry
   # point checks the endpoint first and never reaches Req with a bad one.
@@ -133,7 +141,7 @@ defmodule Mydia.Storage.S3 do
       if size <= part_size do
         with {:ok, body} <- read_local(local_path), do: put_object(b, key, body, [], what)
       else
-        Multipart.upload(b, key, local_path, size, part_size, what)
+        Multipart.upload(b, key, local_path, size, part_size, concurrency(), what)
       end
     end
   end
@@ -166,6 +174,7 @@ defmodule Mydia.Storage.S3 do
             to_key,
             size,
             setting(:copy_part_size, @copy_part_size),
+            concurrency(),
             what
           ),
         else: copy_object(b, from_key, to_key, what)
