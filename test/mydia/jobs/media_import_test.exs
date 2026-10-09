@@ -1031,6 +1031,23 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
 
     @tag :tmp_dir
+    test "keeps a source matched to a different library file", %{tmp_dir: tmp_dir} do
+      {download, video_file} = fallback_import!(tmp_dir, :sabnzbd)
+      run = %{"download_id" => download.id, "save_path" => Path.dirname(video_file)}
+
+      assert {:ok, :imported} = perform_job(MediaImport, run)
+      refute File.exists?(video_file)
+
+      # A later release with the same name but different bytes lands on the
+      # destination the first one owns, and the import reuses that record.
+      File.write!(video_file, "a longer, different fake video")
+      {:ok, _} = Mydia.Downloads.update_download(Repo.reload!(download), %{imported_at: nil})
+
+      assert {:ok, :imported} = perform_job(MediaImport, run)
+      assert File.exists?(video_file)
+    end
+
+    @tag :tmp_dir
     test "keeps the source for a torrent client", %{tmp_dir: tmp_dir} do
       {download, video_file} = fallback_import!(tmp_dir, :qbittorrent)
 

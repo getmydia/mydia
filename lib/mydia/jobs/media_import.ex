@@ -699,7 +699,8 @@ defmodule Mydia.Jobs.MediaImport do
              metadata: cleaned_metadata
            }) do
         {:ok, _updated} ->
-          remove_consumed_sources(Enum.map(target_files, & &1["path"]), args, download)
+          target_paths = Enum.map(target_files, & &1["path"])
+          remove_consumed_sources(placed_sources(target_paths, results), args, download)
 
         {:error, _changeset} ->
           :ok
@@ -992,10 +993,7 @@ defmodule Mydia.Jobs.MediaImport do
       imported = Enum.reverse(imported)
       unresolved = Enum.reverse(unresolved)
 
-      # A source counts as placed only when its file got a media_file record
-      # (reusing an existing one on a retry included).
-      placed_sources =
-        for {file, {:ok, _media_file}} <- Enum.zip(files_to_import, results), do: file.path
+      placed_sources = placed_sources(Enum.map(files_to_import, & &1.path), results)
 
       cond do
         # All files imported successfully
@@ -1760,17 +1758,34 @@ defmodule Mydia.Jobs.MediaImport do
   defp placement_opts(%Args{} = args),
     do: [use_hardlinks: args.use_hardlinks, fallback: :copy]
 
+  # A source counts as placed only when its file got a media_file record
+  # (reusing an existing one on a retry included). The record's size goes
+  # along, so removal can tell the source's own copy from a different file
+  # that happened to own the destination name.
+  defp placed_sources(paths, results) do
+    for {path, {:ok, %{size: size}}} <- Enum.zip(paths, results), do: {path, size}
+  end
+
   # Once the import is recorded, a client that never seeds has no use for the
-  # placed sources. A missing file is fine (the client may have cleaned up);
-  # any other failure is logged and never fails the job.
-  defp remove_consumed_sources(paths, %Args{move_source: true}, download) do
-    Enum.each(paths, fn path ->
-      case File.rm(path) do
+  # placed sources. A source whose size differs from its library record was
+  # matched to someone else's file and stays. A missing file is fine (the
+  # client may have cleaned up); any other failure is logged and never fails
+  # the job.
+  defp remove_consumed_sources(sources, %Args{move_source: true}, download) do
+    Enum.each(sources, fn {path, size} ->
+      result =
+        case File.stat(path) do
+          {:ok, %File.Stat{size: ^size}} -> File.rm(path)
+          {:ok, _} -> {:error, :differs_from_library_file}
+          {:error, _} = error -> error
+        end
+
+      case result do
         result when result in [:ok, {:error, :enoent}] ->
           :ok
 
         {:error, reason} ->
-          Logger.warning("Could not remove consumed source",
+          Logger.warning("Kept consumed source",
             path: path,
             reason: inspect(reason),
             download_id: download.id
