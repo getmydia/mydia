@@ -2411,6 +2411,80 @@ defmodule Mydia.Jobs.MediaImportTest do
       assert Mydia.Downloads.Blacklists.blacklisted?(regrab.indexer, "same-guid")
     end
 
+    # Renaming can map a genuinely different release onto the target's name.
+    # Those bytes are a real candidate, so they must reach finalize, not the
+    # blacklist.
+    @tag :tmp_dir
+    test "an upgrade with different content at its target's path is placed beside it",
+         %{tmp_dir: tmp_dir} do
+      _library_path = create_test_library_path(tmp_dir, :movies)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      source = Path.join(download_dir, "Renamed.Movie.2024.1080p.mkv")
+      File.write!(source, "content")
+
+      media_item = media_item_fixture(%{type: "movie", title: "Renamed Movie", year: 2024})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "RenamedClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download_attrs = %{
+        media_item_id: media_item.id,
+        status: "completed",
+        completed_at: DateTime.utc_now(),
+        download_client: "RenamedClient"
+      }
+
+      first =
+        download_fixture(
+          Map.merge(download_attrs, %{
+            download_client_id: "renamed-1",
+            metadata: %{"guid" => "first-guid"}
+          })
+        )
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{"download_id" => first.id, "save_path" => download_dir})
+
+      [existing_file] = Library.list_media_files()
+      # A fresh inode: the first import may have hardlinked the source.
+      File.rm!(source)
+      File.write!(source, "different, larger content")
+
+      upgrade =
+        download_fixture(
+          Map.merge(download_attrs, %{
+            download_client_id: "renamed-2",
+            metadata: %{
+              "guid" => "upgrade-guid",
+              "upgrade_target_media_file_id" => existing_file.id
+            }
+          })
+        )
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => upgrade.id,
+                 "save_path" => download_dir
+               })
+
+      new_file = Library.list_media_files() |> Enum.find(&(&1.id != existing_file.id))
+
+      assert new_file, "expected the different release to import as its own file"
+      assert new_file.supersedes_media_file_id == existing_file.id
+      refute Mydia.Downloads.Blacklists.blacklisted?(upgrade.indexer, "upgrade-guid")
+    end
+
     @tag :tmp_dir
     test "a non-upgrade import onto an existing file blacklists nothing", %{tmp_dir: tmp_dir} do
       _library_path = create_test_library_path(tmp_dir, :movies)
