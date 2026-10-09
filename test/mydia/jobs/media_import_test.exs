@@ -1059,9 +1059,9 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
   end
 
-  describe "targeted import retry after a move" do
+  describe "targeted import source handling" do
     @tag :tmp_dir
-    test "moves every target for a client that never seeds", %{tmp_dir: tmp_dir} do
+    test "removes every target source once the import succeeds", %{tmp_dir: tmp_dir} do
       {download, [a, b]} = targeted_import!(tmp_dir, :sabnzbd)
 
       assert {:ok, :imported} = perform_targeted(download, [a, b])
@@ -1072,50 +1072,54 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
 
     @tag :tmp_dir
-    test "a retry adopts targets that an earlier attempt already moved", %{tmp_dir: tmp_dir} do
+    test "keeps every source when one target fails, and a retry finishes cleanly",
+         %{tmp_dir: tmp_dir} do
       {download, [a, b]} = targeted_import!(tmp_dir, :sabnzbd)
 
-      # First attempt only gets A through; B stands in for the target that failed.
-      assert {:ok, :imported} = perform_targeted(download, [a])
-      refute File.exists?(a.path)
+      # Put the second target in season 2 and block its directory with a
+      # regular file, so only that placement fails.
+      b_episode = Mydia.Media.get_episode!(Mydia.Accounts.Scope.system(), b.episode_id)
+      {:ok, _} = Mydia.Media.update_episode(b_episode, %{season_number: 2})
 
-      # imported_at from the first run would short-circuit the retry. Clearing
-      # it stands in for the partial failure that leaves it unset. Reload first:
-      # the in-memory struct already says nil, so the update would be a no-op.
-      {:ok, download} =
-        download |> Mydia.Repo.reload!() |> Mydia.Downloads.update_download(%{imported_at: nil})
+      [library_path] = Settings.list_library_paths()
+      media_item = Mydia.Repo.preload(download, :media_item).media_item
 
-      assert {:ok, :imported} = perform_targeted(download, [a, b])
+      blocker =
+        Path.join(MediaImport.build_series_base_path(media_item, library_path), "Season 02")
 
-      refute File.exists?(b.path)
-      assert Mydia.Repo.reload!(download).imported_at
-    end
+      File.mkdir_p!(Path.dirname(blocker))
+      File.write!(blocker, "not a directory")
 
-    @tag :tmp_dir
-    test "a missing source that was never placed still errors", %{tmp_dir: tmp_dir} do
-      {download, [a, _b]} = targeted_import!(tmp_dir, :sabnzbd)
-      File.rm!(a.path)
+      result = perform_targeted(download, [a, b])
 
-      refute match?({:ok, :imported}, perform_targeted(download, [a]))
+      refute match?({:ok, _}, result)
       assert is_nil(Mydia.Repo.reload!(download).imported_at)
-    end
-
-    @tag :tmp_dir
-    test "a torrent client keeps the strict missing-source behaviour", %{tmp_dir: tmp_dir} do
-      {download, [a, _b]} = targeted_import!(tmp_dir, :qbittorrent)
-
-      assert {:ok, :imported} = perform_targeted(download, [a])
       assert File.exists?(a.path)
+      assert File.exists?(b.path)
 
-      # The destination exists, but a client that seeds never consumes sources,
-      # so a vanished source is still an error.
-      File.rm!(a.path)
+      File.rm!(blocker)
 
-      {:ok, download} =
-        download |> Mydia.Repo.reload!() |> Mydia.Downloads.update_download(%{imported_at: nil})
+      assert {:ok, :imported} = perform_targeted(download, [a, b])
 
-      assert {:error, _} = perform_targeted(download, [a])
-      assert is_nil(Mydia.Repo.reload!(download).imported_at)
+      refute File.exists?(a.path)
+      refute File.exists?(b.path)
+      assert Mydia.Repo.reload!(download).imported_at
+
+      files = Library.list_media_files()
+
+      for target <- [a, b] do
+        assert [_one] = Enum.filter(files, &(&1.episode_id == target.episode_id))
+      end
+    end
+
+    @tag :tmp_dir
+    test "a torrent client keeps its sources", %{tmp_dir: tmp_dir} do
+      {download, [a, b]} = targeted_import!(tmp_dir, :qbittorrent)
+
+      assert {:ok, :imported} = perform_targeted(download, [a, b])
+
+      assert File.exists?(a.path)
+      assert File.exists?(b.path)
     end
   end
 

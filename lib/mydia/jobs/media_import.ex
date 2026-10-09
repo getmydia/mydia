@@ -15,8 +15,9 @@ defmodule Mydia.Jobs.MediaImport do
   1. Hardlink (instant, no duplicate storage) - requires same filesystem
   2. Copy, so a seeding torrent keeps its file
 
-  Downloads from clients that never seed (`ClientRemoval.non_seeding_type?/1`)
-  are moved instead: the source is removed once the library copy exists.
+  Sources of downloads from clients that never seed
+  (`ClientRemoval.non_seeding_type?/1`) are removed once the import has been
+  recorded, not at placement, so a retried import still finds them.
   """
 
   use Oban.Worker,
@@ -499,7 +500,7 @@ defmodule Mydia.Jobs.MediaImport do
 
   defp do_process_import(download, files, library_path, args) do
     case organize_and_import_files(download, files, library_path, args) do
-      {:ok, imported_files} ->
+      {:ok, imported_files, placed_sources} ->
         Logger.info("Successfully imported files",
           download_id: download.id,
           file_count: length(imported_files)
@@ -575,6 +576,8 @@ defmodule Mydia.Jobs.MediaImport do
 
         case Downloads.update_download(updated_download, import_update) do
           {:ok, _updated} ->
+            remove_consumed_sources(placed_sources, args, download)
+
             # A successful import means whatever this item grabbed was real,
             # so the consecutive-auto-rejection counter that
             # Mydia.Jobs.DownloadMonitor keeps must not carry over. Without
@@ -650,20 +653,27 @@ defmodule Mydia.Jobs.MediaImport do
         path = target["path"]
         episode_id = target["episode_id"]
 
-        episode = if episode_id, do: Media.get_episode!(Scope.system(), episode_id), else: nil
-        dest_dir = targeted_dest_dir(download, episode, library_path)
+        if File.exists?(path) do
+          episode = if episode_id, do: Media.get_episode!(Scope.system(), episode_id), else: nil
+          file = %{path: path, name: Path.basename(path), size: File.stat!(path).size}
 
-        cond do
-          File.exists?(path) ->
-            file = %{path: path, name: Path.basename(path), size: File.stat!(path).size}
-            import_file_to_destination(file, episode, dest_dir, download, library_path, args)
+          # Build destination path for this episode
+          dest_dir =
+            if episode && download.media_item do
+              base_dir = build_series_base_path(download.media_item, library_path)
 
-          moved_into_library?(path, episode, dest_dir, download, args) ->
-            {:ok, :already_placed}
+              Path.join(
+                base_dir,
+                "Season #{String.pad_leading("#{episode.season_number}", 2, "0")}"
+              )
+            else
+              build_destination_path(download, library_path)
+            end
 
-          true ->
-            Logger.warning("Target file no longer exists", path: path, download_id: download.id)
-            {:error, :file_not_found}
+          import_file_to_destination(file, episode, dest_dir, download, library_path, args)
+        else
+          Logger.warning("Target file no longer exists", path: path, download_id: download.id)
+          {:error, :file_not_found}
         end
       end)
 
@@ -683,11 +693,17 @@ defmodule Mydia.Jobs.MediaImport do
         |> Map.delete("import_candidates")
         |> Map.delete("import_candidates_at")
 
-      Downloads.update_download(download, %{
-        imported_at: DateTime.utc_now(),
-        match_status: nil,
-        metadata: cleaned_metadata
-      })
+      case Downloads.update_download(download, %{
+             imported_at: DateTime.utc_now(),
+             match_status: nil,
+             metadata: cleaned_metadata
+           }) do
+        {:ok, _updated} ->
+          remove_consumed_sources(Enum.map(target_files, & &1["path"]), args, download)
+
+        {:error, _changeset} ->
+          :ok
+      end
 
       MediaServerNotifier.notify_all()
       {:ok, :imported}
@@ -702,43 +718,6 @@ defmodule Mydia.Jobs.MediaImport do
       {:error, {:partial_import, representative_error(errors)}}
     end
   end
-
-  defp targeted_dest_dir(download, episode, library_path) do
-    if episode && download.media_item do
-      base_dir = build_series_base_path(download.media_item, library_path)
-
-      Path.join(
-        base_dir,
-        "Season #{String.pad_leading("#{episode.season_number}", 2, "0")}"
-      )
-    else
-      build_destination_path(download, library_path)
-    end
-  end
-
-  # A retried job re-sends every target, including ones an earlier attempt moved
-  # out of the download directory. Only a client that never seeds has its
-  # sources consumed, so only then does a vanished source with a file already at
-  # its destination mean "placed". Anything else, including a failed existence
-  # check, stays an error.
-  defp moved_into_library?(path, episode, dest_dir, download, %Args{move_source: true} = args) do
-    final_filename = generate_filename(download, episode, Path.basename(path), args.rename_files)
-    dest_path = Path.join(dest_dir, final_filename)
-
-    if destination_exists?(dest_path) == true do
-      Logger.info("Target already moved into the library",
-        path: path,
-        dest: dest_path,
-        download_id: download.id
-      )
-
-      true
-    else
-      false
-    end
-  end
-
-  defp moved_into_library?(_path, _episode, _dest_dir, _download, _args), do: false
 
   defp get_client_info(download) do
     if download.download_client && download.download_client_id do
@@ -1013,15 +992,20 @@ defmodule Mydia.Jobs.MediaImport do
       imported = Enum.reverse(imported)
       unresolved = Enum.reverse(unresolved)
 
+      # A source counts as placed only when its file got a media_file record
+      # (reusing an existing one on a retry included).
+      placed_sources =
+        for {file, {:ok, _media_file}} <- Enum.zip(files_to_import, results), do: file.path
+
       cond do
         # All files imported successfully
         unresolved == [] and errors == [] ->
-          {:ok, imported}
+          {:ok, imported, placed_sources}
 
         # Some files imported, some unresolved (partial import)
         unresolved != [] and imported != [] ->
           flag_unresolved_files(download, unresolved)
-          {:ok, imported}
+          {:ok, imported, placed_sources}
 
         # No files imported, all unresolved
         unresolved != [] and imported == [] ->
@@ -1771,14 +1755,31 @@ defmodule Mydia.Jobs.MediaImport do
     end
   end
 
-  # A client that never seeds has no further use for the source, so it is
-  # moved (a hardlink plus removal on the same filesystem). Anything else may
-  # be seeding from it, so it stays: hardlink when possible, otherwise copy.
-  defp placement_opts(%Args{move_source: true} = args),
-    do: [use_hardlinks: args.use_hardlinks, fallback: :move, remove_source_after_hardlink: true]
-
+  # Placement never removes the source: hardlink when possible, otherwise copy.
+  # Sources a client no longer needs go later, via `remove_consumed_sources/3`.
   defp placement_opts(%Args{} = args),
     do: [use_hardlinks: args.use_hardlinks, fallback: :copy]
+
+  # Once the import is recorded, a client that never seeds has no use for the
+  # placed sources. A missing file is fine (the client may have cleaned up);
+  # any other failure is logged and never fails the job.
+  defp remove_consumed_sources(paths, %Args{move_source: true}, download) do
+    Enum.each(paths, fn path ->
+      case File.rm(path) do
+        result when result in [:ok, {:error, :enoent}] ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning("Could not remove consumed source",
+            path: path,
+            reason: inspect(reason),
+            download_id: download.id
+          )
+      end
+    end)
+  end
+
+  defp remove_consumed_sources(_paths, %Args{}, _download), do: :ok
 
   @doc false
   def generate_filename(download, episode, original_filename, rename_files?)
