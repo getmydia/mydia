@@ -51,7 +51,9 @@ defmodule Mydia.Storage.S3.Multipart do
   end
 
   # Halting on the first error shuts down the parts still in flight before
-  # this returns, so the abort in finish/5 never races a running part.
+  # this returns, so no request of ours is running when finish/5 aborts. A
+  # part the provider already received may still land after the abort; the
+  # provider discards it with the upload, or lifecycle rules reap it.
   defp each_part(size, part_size, concurrency, fun) do
     0
     |> Stream.iterate(&(&1 + part_size))

@@ -13,7 +13,7 @@ defmodule Mydia.Storage.S3 do
   defp setting(key, default),
     do: :mydia |> Application.get_env(__MODULE__, []) |> Keyword.get(key, default)
 
-  defp concurrency, do: setting(:concurrency, @concurrency)
+  defp concurrency, do: max(1, setting(:concurrency, @concurrency))
 
   # Req raises on a URL it cannot parse (no scheme or host), so every entry
   # point checks the endpoint first and never reaches Req with a bad one.

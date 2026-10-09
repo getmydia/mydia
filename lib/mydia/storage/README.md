@@ -91,9 +91,9 @@ rename, trash, delete and item folders.
   taken. `mkdir:` is local only and off by default, so an unmounted share never
   gets a directory tree created on the root filesystem.
 - `copy/2` and `move/2` work across any backend pair: CopyObject within a
-  bucket, `UploadPartCopy` above 5 GB (4 parts at a time), and a temp file for S3 to S3 across
-  backends. A move is copy then delete; if the source delete fails, the copy is
-  deleted and the error returned.
+  bucket, `UploadPartCopy` above 5 GB (4 parts at a time), and a temp file for
+  S3 to S3 across backends. A move is copy then delete; if the source delete
+  fails, the copy is deleted and the error returned.
 - `delete/1` is idempotent. `delete_prefix/2` refuses the whole location; on S3
   it deletes in batches of 1000 with `Content-MD5`.
 - `ls/1` never turns an error into an empty listing.
