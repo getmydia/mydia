@@ -82,9 +82,11 @@ shape. Local code keeps its branch; S3 gets an explicit one for placement,
 rename, trash, delete and item folders.
 
 - `put_file/3` uploads a local file. Up to 64 MB it is a single PUT; above that
-  it is a multipart upload with 64 MB parts read from disk, 4 parts in flight
-  at once, so up to 4 parts (256 MB) in memory. A failed part stops the others
-  and aborts the upload, and the object appears only after
+  it is a multipart upload with 64 MB parts read from disk, `concurrency` parts
+  in flight at once (4 by default), so up to `concurrency × part_size` in
+  memory (256 MB by default). Every part reads from one open handle, so a file
+  replaced at its path mid-upload cannot mix into the object. A failed part
+  stops the others and aborts the upload, and the object appears only after
   `CompleteMultipartUpload`, so nothing partial is ever visible.
 - `put_binary/3` replaces an object atomically. `exclusive: true` sends
   `If-None-Match: *` after a HEAD check and returns `:exists` when the target is

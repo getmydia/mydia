@@ -19,14 +19,27 @@ defmodule Mydia.Storage.S3.Multipart do
           String.t()
         ) :: :ok | {:error, Error.t()}
   def upload(b, key, local_path, size, part_size, concurrency, what) do
-    with {:ok, upload_id} <- initiate(b, key, what) do
-      result =
-        each_part(size, part_size, concurrency, fn {n, offset, len} ->
-          with {:ok, data} <- read_part(local_path, offset, len),
-               do: upload_part(b, key, upload_id, n, data, what)
-        end)
+    # Not :raw: a raw handle works only in the process that opened it, and
+    # every part must read the same open file even if the path is replaced
+    # mid-upload. The file server's pid can be shared with the part tasks.
+    case File.open(local_path, [:read, :binary]) do
+      {:ok, io} ->
+        try do
+          with {:ok, upload_id} <- initiate(b, key, what) do
+            result =
+              each_part(size, part_size, concurrency, fn {n, offset, len} ->
+                with {:ok, data} <- pread(io, offset, len, local_path),
+                     do: upload_part(b, key, upload_id, n, data, what)
+              end)
 
-      finish(b, key, upload_id, result, what)
+            finish(b, key, upload_id, result, what)
+          end
+        after
+          File.close(io)
+        end
+
+      {:error, reason} ->
+        {:error, Error.from_posix(reason, local_path)}
     end
   end
 
@@ -179,22 +192,12 @@ defmodule Mydia.Storage.S3.Multipart do
 
   # A raw handle works only in the process that opened it, so each part task
   # opens its own.
-  defp read_part(path, offset, len) do
-    case File.open(path, [:read, :binary, :raw]) do
-      {:ok, io} ->
-        try do
-          case :file.pread(io, offset, len) do
-            {:ok, data} when byte_size(data) == len -> {:ok, data}
-            {:ok, _short} -> {:error, Error.new(:provider, "#{path} changed size during upload")}
-            :eof -> {:error, Error.new(:provider, "#{path} changed size during upload")}
-            {:error, reason} -> {:error, Error.from_posix(reason, path)}
-          end
-        after
-          File.close(io)
-        end
-
-      {:error, reason} ->
-        {:error, Error.from_posix(reason, path)}
+  defp pread(io, offset, len, path) do
+    case :file.pread(io, offset, len) do
+      {:ok, data} when byte_size(data) == len -> {:ok, data}
+      {:ok, _short} -> {:error, Error.new(:provider, "#{path} changed size during upload")}
+      :eof -> {:error, Error.new(:provider, "#{path} changed size during upload")}
+      {:error, reason} -> {:error, Error.from_posix(reason, path)}
     end
   end
 end
