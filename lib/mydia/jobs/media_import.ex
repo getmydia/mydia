@@ -13,8 +13,10 @@ defmodule Mydia.Jobs.MediaImport do
 
   When importing files, the following priority is used:
   1. Hardlink (instant, no duplicate storage) - requires same filesystem
-  2. Move (when use_hardlinks=false and move_files=true)
-  3. Copy (default, safest option)
+  2. Copy, so a seeding torrent keeps its file
+
+  Downloads from clients that never seed (`ClientRemoval.non_seeding_type?/1`)
+  are moved instead: the source is removed once the library copy exists.
   """
 
   use Oban.Worker,
@@ -58,7 +60,7 @@ defmodule Mydia.Jobs.MediaImport do
       :save_path,
       snooze_count: 0,
       use_hardlinks: true,
-      move_files: false,
+      move_source: false,
       rename_files: false
     ]
 
@@ -68,7 +70,7 @@ defmodule Mydia.Jobs.MediaImport do
             save_path: String.t() | nil,
             snooze_count: integer(),
             use_hardlinks: boolean(),
-            move_files: boolean(),
+            move_source: boolean(),
             rename_files: boolean()
           }
 
@@ -79,7 +81,6 @@ defmodule Mydia.Jobs.MediaImport do
         save_path: parse_save_path(Map.get(raw, "save_path")),
         snooze_count: Map.get(raw, "snooze_count", 0),
         use_hardlinks: Map.get(raw, "use_hardlinks", true) != false,
-        move_files: Map.get(raw, "move_files", false) == true,
         rename_files: Map.get(raw, "rename_files", false) == true
       }
     end
@@ -158,6 +159,8 @@ defmodule Mydia.Jobs.MediaImport do
         handle_incomplete_download(download, args, attempt, raw_args)
 
       true ->
+        args = %{args | move_source: ClientRemoval.import_consumes_source?(download)}
+
         case import_download(download, args) do
           {:ok, result} ->
             # Success - clear any retry metadata
@@ -1722,22 +1725,11 @@ defmodule Mydia.Jobs.MediaImport do
   end
 
   defp copy_or_move_file(source, dest, %Args{} = args, opts) do
-    # Import keeps the source file (seeding) after a hardlink, so
-    # remove_source_after_hardlink stays false. Non-hardlink fallback is move
-    # only when move_files is set, otherwise copy.
-    #
     # `:expected_size` lets FileOrganizer treat an already-correct destination
     # as placed instead of hardlinking onto EEXIST and falling through to a
     # full copy — the difference between a retry being free and a retry
     # duplicating the file.
-    place_opts =
-      Keyword.merge(
-        [
-          use_hardlinks: args.use_hardlinks,
-          fallback: if(args.move_files, do: :move, else: :copy)
-        ],
-        opts
-      )
+    place_opts = Keyword.merge(placement_opts(args), opts)
 
     case FileOrganizer.place_file(source, dest, place_opts) do
       {:ok, action} ->
@@ -1748,6 +1740,15 @@ defmodule Mydia.Jobs.MediaImport do
         {:error, reason}
     end
   end
+
+  # A client that never seeds has no further use for the source, so it is
+  # moved (a hardlink plus removal on the same filesystem). Anything else may
+  # be seeding from it, so it stays: hardlink when possible, otherwise copy.
+  defp placement_opts(%Args{move_source: true} = args),
+    do: [use_hardlinks: args.use_hardlinks, fallback: :move, remove_source_after_hardlink: true]
+
+  defp placement_opts(%Args{} = args),
+    do: [use_hardlinks: args.use_hardlinks, fallback: :copy]
 
   @doc false
   def generate_filename(download, episode, original_filename, rename_files?)

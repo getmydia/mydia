@@ -78,6 +78,35 @@ defmodule Mydia.Jobs.MediaImportS3Test do
     refute File.exists?("s3:")
   end
 
+  test "a non-seeding download is moved into the bucket", ctx do
+    {:ok, _} =
+      Settings.create_download_client_config(%{
+        name: "S3UsenetClient",
+        type: :sabnzbd,
+        host: "nonexistent.invalid",
+        port: 9999,
+        api_key: "test",
+        enabled: true,
+        priority: 1
+      })
+
+    source = Path.join(ctx.download_dir, "Invented.Film.2031.mkv")
+    File.write!(source, :binary.copy("v", 4096))
+
+    download =
+      download_for(ctx.movie, %{
+        library_path_id: ctx.library_path.id,
+        download_client: "S3UsenetClient"
+      })
+
+    assert {:ok, :imported} = run(download, ctx.download_dir)
+
+    assert [%MediaFile{relative_path: rel, size: 4096}] = files_in(ctx.library_path)
+    {:ok, object} = Storage.source(ctx.loc, rel)
+    assert {:ok, %{size: 4096}} = Storage.stat(object)
+    refute File.exists?(source)
+  end
+
   test "an inferred import can land in an S3 library", ctx do
     File.write!(Path.join(ctx.download_dir, "Invented.Film.2031.mkv"), "abc")
     download = download_for(ctx.movie)

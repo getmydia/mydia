@@ -48,7 +48,6 @@ defmodule Mydia.Jobs.MediaImportTest do
           "save_path" => "/path",
           "snooze_count" => 5,
           "use_hardlinks" => false,
-          "move_files" => true,
           "rename_files" => true
         })
 
@@ -56,8 +55,13 @@ defmodule Mydia.Jobs.MediaImportTest do
       assert args.save_path == "/path"
       assert args.snooze_count == 5
       assert args.use_hardlinks == false
-      assert args.move_files == true
+      assert args.move_source == false
       assert args.rename_files == true
+    end
+
+    test "never reads move_source from raw args" do
+      args = MediaImport.Args.parse(%{"download_id" => "123", "move_source" => true})
+      assert args.move_source == false
     end
   end
 
@@ -1009,6 +1013,90 @@ defmodule Mydia.Jobs.MediaImportTest do
                  attempt: 3
                )
     end
+  end
+
+  describe "source handling by client type" do
+    @tag :tmp_dir
+    test "moves the source when the client never seeds", %{tmp_dir: tmp_dir} do
+      {download, video_file} = fallback_import!(tmp_dir, :sabnzbd)
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => Path.dirname(video_file)
+               })
+
+      refute File.exists?(video_file)
+      assert [_placed] = Path.wildcard(Path.join(tmp_dir, "library/**/*.mkv"))
+    end
+
+    @tag :tmp_dir
+    test "keeps the source for a torrent client", %{tmp_dir: tmp_dir} do
+      {download, video_file} = fallback_import!(tmp_dir, :qbittorrent)
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => Path.dirname(video_file)
+               })
+
+      assert File.exists?(video_file)
+    end
+
+    @tag :tmp_dir
+    test "keeps the source when the client config is gone", %{tmp_dir: tmp_dir} do
+      {download, video_file} = fallback_import!(tmp_dir, nil)
+
+      # No config means no client info, so the import refuses outright
+      # (`{:error, :no_client}`); the point is that the source survives.
+      assert {:error, :no_client} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => Path.dirname(video_file)
+               })
+
+      assert File.exists?(video_file)
+    end
+  end
+
+  # A completed movie download whose client query fails, so the import uses
+  # save_path. `type: nil` names a client with no config.
+  defp fallback_import!(tmp_dir, type) do
+    create_test_library_path(tmp_dir, :movies)
+
+    download_dir = Path.join(tmp_dir, "downloads")
+    File.mkdir_p!(download_dir)
+    video_file = Path.join(download_dir, "Quietwater.Harbor.2031.1080p.mkv")
+    File.write!(video_file, "fake video content")
+
+    media_item = media_item_fixture(%{type: "movie", title: "Quietwater Harbor", year: 2031})
+    name = "SourceClient-#{System.unique_integer([:positive])}"
+
+    if type do
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: name,
+          type: type,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          api_key: "test",
+          enabled: true,
+          priority: 1
+        })
+    end
+
+    download =
+      download_fixture(%{
+        media_item_id: media_item.id,
+        status: "completed",
+        completed_at: DateTime.utc_now(),
+        download_client: name,
+        download_client_id: "src-1"
+      })
+
+    {download, video_file}
   end
 
   describe "auto_rename from library path" do
