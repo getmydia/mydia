@@ -350,6 +350,56 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
       assert socket.assigns.has_more == true
       assert socket.assigns.loading_more == false
     end
+
+    test "stops at the first failed page instead of re-requesting it up to the cap" do
+      owned_id = unique_provider_id()
+
+      seed_curated_page(1, 5, [curated_result(owned_id, "Marooned Aurora")])
+
+      # Page 2 is not seeded, so it goes to the relay. 404 rather than 5xx:
+      # the HTTP client retries transient statuses, which would turn one
+      # request into four.
+      bypass = Bypass.open()
+      previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        case previous_metadata_relay_url do
+          nil -> Application.delete_env(:mydia, :metadata_relay_url)
+          value -> Application.put_env(:mydia, :metadata_relay_url, value)
+        end
+
+        Cache.delete("curated:trending:movie:2")
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/tmdb/movies/trending", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(404, Jason.encode!(%{"error" => "not found"}))
+      end)
+
+      library_status_map = %{
+        {:movie, :tmdb, owned_id} => %{
+          in_library: true,
+          monitored: true,
+          type: "movie",
+          id: "owned"
+        }
+      }
+
+      socket = curated_socket(%{library_status_map: library_status_map})
+
+      {:noreply, socket} = Index.handle_info(:load_data, socket)
+      assert_received {:load_page, 2, 1, 20}
+
+      {:noreply, socket} = Index.handle_info({:load_page, 2, 1, 20}, socket)
+
+      refute_received {:load_page, _page, _advances, _target}
+      assert socket.assigns.load_error != nil
+      assert socket.assigns.loading_more == false
+      assert socket.assigns.has_more == true
+      assert socket.assigns.page == 1
+    end
   end
 
   defp curated_socket(overrides) do
@@ -368,7 +418,8 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
       hide_owned: true,
       library_status_map: %{},
       request_status_map: %{},
-      loading_more: false
+      loading_more: false,
+      load_error: nil
     }
 
     %Phoenix.LiveView.Socket{assigns: Map.merge(base, overrides)}
