@@ -19,7 +19,9 @@ defmodule MydiaWeb.MediaLive.Index do
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.PosterFields, as: PosterFieldsPref
   alias MydiaWeb.MediaLive.DiskRemovalFlash
+  alias MydiaWeb.MediaLive.Index.LibraryActions
   alias MydiaWeb.MediaLive.Index.ListingParams
+  alias MydiaWeb.MediaLive.Index.ReclassifyFlash
 
   import MydiaWeb.Formatters, only: [format_file_size: 1]
   import MydiaWeb.GridDensityComponents
@@ -373,70 +375,15 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("batch_monitor", _params, socket) do
-    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
-
-    case Media.update_media_items_monitored(socket.assigns.current_scope, selected_ids, true) do
-      {:ok, count} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "#{count} #{pluralize_items(count)} set to monitored")
-         |> assign(:selection_mode, false)
-         |> assign(:selected_ids, MapSet.new())
-         |> load_media_items()}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to update items")}
-    end
+    with_media_permission(socket, :update, &batch_set_monitored(&1, true))
   end
 
   def handle_event("batch_unmonitor", _params, socket) do
-    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
-
-    case Media.update_media_items_monitored(socket.assigns.current_scope, selected_ids, false) do
-      {:ok, count} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "#{count} #{pluralize_items(count)} set to unmonitored")
-         |> assign(:selection_mode, false)
-         |> assign(:selected_ids, MapSet.new())
-         |> load_media_items()}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to update items")}
-    end
+    with_media_permission(socket, :update, &batch_set_monitored(&1, false))
   end
 
   def handle_event("toggle_item_monitored", %{"id" => id}, socket) do
-    media_item = Media.get_media_item!(socket.assigns.current_scope, id)
-    new_monitored_status = !media_item.monitored
-
-    case Media.update_media_item(
-           socket.assigns.current_scope,
-           media_item,
-           %{monitored: new_monitored_status},
-           reason: if(new_monitored_status, do: "Monitoring enabled", else: "Monitoring disabled")
-         ) do
-      {:ok, _updated_item} ->
-        socket =
-          case LibraryListing.row(
-                 socket.assigns.current_scope,
-                 id,
-                 socket.assigns.current_user.id
-               ) do
-            nil -> socket
-            row -> stream_insert(socket, :media_items, row)
-          end
-
-        {:noreply,
-         put_flash(
-           socket,
-           :info,
-           "Monitoring #{if new_monitored_status, do: "enabled", else: "disabled"}"
-         )}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update monitoring status")}
-    end
+    with_media_permission(socket, :update, &LibraryActions.toggle_monitored(&1, id))
   end
 
   def handle_event("batch_auto_search", _params, socket) do
@@ -467,31 +414,7 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("batch_reclassify", _params, socket) do
-    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
-
-    {:ok, summary} = Media.reclassify_media_items(selected_ids)
-
-    message =
-      cond do
-        summary.updated > 0 && summary.skipped > 0 ->
-          "Reclassified #{summary.updated} #{pluralize_items(summary.updated)}, #{summary.skipped} skipped (category override)"
-
-        summary.updated > 0 ->
-          "Reclassified #{summary.updated} #{pluralize_items(summary.updated)}"
-
-        summary.skipped > 0 ->
-          "No changes - #{summary.skipped} #{pluralize_items(summary.skipped)} have category override"
-
-        true ->
-          "No category changes detected"
-      end
-
-    {:noreply,
-     socket
-     |> put_flash(:info, message)
-     |> assign(:selection_mode, false)
-     |> assign(:selected_ids, MapSet.new())
-     |> load_media_items()}
+    with_media_permission(socket, :update, &batch_reclassify/1)
   end
 
   def handle_event("show_delete_confirmation", _params, socket) do
@@ -517,31 +440,7 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("batch_delete_confirmed", _params, socket) do
-    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
-    delete_files = socket.assigns.delete_files
-
-    case Media.delete_media_items(socket.assigns.current_scope, selected_ids,
-           delete_files: delete_files
-         ) do
-      {:ok, count, %DiskRemoval{} = removal} ->
-        {kind, message} = DiskRemovalFlash.for_items(count, delete_files, removal)
-
-        {:noreply,
-         socket
-         |> put_flash(kind, message)
-         |> assign(:selection_mode, false)
-         |> assign(:selected_ids, MapSet.new())
-         |> assign(:show_delete_modal, false)
-         |> assign(:delete_files, false)
-         |> load_media_items()}
-
-      {:error, _reason} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "Failed to delete items")
-         |> assign(:show_delete_modal, false)
-         |> assign(:delete_files, false)}
-    end
+    with_media_permission(socket, :delete, &batch_delete_selected/1)
   end
 
   def handle_event("show_batch_edit", _params, socket) do
@@ -559,30 +458,7 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("batch_edit_submit", %{"batch_edit" => params}, socket) do
-    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
-
-    # Build attrs map with only non-empty values
-    attrs =
-      %{}
-      |> maybe_add_attr(:quality_profile_id, params["quality_profile_id"])
-      |> maybe_add_attr(:monitored, params["monitored"])
-
-    case Media.update_media_items_batch(socket.assigns.current_scope, selected_ids, attrs) do
-      {:ok, count} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "#{count} #{pluralize_items(count)} updated successfully")
-         |> assign(:selection_mode, false)
-         |> assign(:selected_ids, MapSet.new())
-         |> assign(:show_batch_edit_modal, false)
-         |> load_media_items()}
-
-      {:error, _reason} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "Failed to update items")
-         |> assign(:show_batch_edit_modal, false)}
-    end
+    with_media_permission(socket, :update, &batch_edit_selected(&1, params))
   end
 
   def handle_event("show_add_to_collection", _params, socket) do
@@ -640,27 +516,7 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("trigger_rescan", _params, socket) do
-    alias Mydia.Library
-
-    case Library.trigger_full_library_scan() do
-      # The scan job is unique, so this insert can be deduped into a scan that is
-      # already queued (the boot-time repair scan waits out a jitter delay before
-      # it runs). Don't claim a scan started, and don't switch the UI into a
-      # scanning state that no broadcast will ever clear.
-      {:ok, %Oban.Job{conflict?: true}} ->
-        {:noreply, put_flash(socket, :info, "A library scan is already queued")}
-
-      {:ok, _job} ->
-        {:noreply,
-         socket
-         |> assign(:scanning, true)
-         |> assign(:scan_result, nil)
-         |> assign(:scan_progress, nil)
-         |> put_flash(:info, "Library scan started...")}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start library scan")}
-    end
+    with_media_permission(socket, :update, &LibraryActions.start_scan/1)
   end
 
   def handle_event("open_section_settings", _params, socket) do
@@ -852,6 +708,105 @@ defmodule MydiaWeb.MediaLive.Index do
 
     Logger.warning("Unhandled message in MediaLive.Index: #{inspect(msg)}")
     {:noreply, socket}
+  end
+
+  # Library write events arrive over the socket from any authenticated role,
+  # including guests and readonly users, so each one checks the role itself.
+  defp with_media_permission(socket, permission, fun) do
+    with :ok <- authorize_media(permission, socket) do
+      fun.(socket)
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  defp authorize_media(:update, socket), do: Authorization.authorize_update_media(socket)
+  defp authorize_media(:delete, socket), do: Authorization.authorize_delete_media(socket)
+
+  defp batch_set_monitored(socket, monitored) do
+    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
+    label = if monitored, do: "monitored", else: "unmonitored"
+
+    case Media.update_media_items_monitored(socket.assigns.current_scope, selected_ids, monitored) do
+      {:ok, count} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{count} #{pluralize_items(count)} set to #{label}")
+         |> assign(:selection_mode, false)
+         |> assign(:selected_ids, MapSet.new())
+         |> load_media_items()}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to update items")}
+    end
+  end
+
+  defp batch_reclassify(socket) do
+    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
+
+    {:ok, summary} = Media.reclassify_media_items(selected_ids)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, ReclassifyFlash.message(summary))
+     |> assign(:selection_mode, false)
+     |> assign(:selected_ids, MapSet.new())
+     |> load_media_items()}
+  end
+
+  defp batch_delete_selected(socket) do
+    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
+    delete_files = socket.assigns.delete_files
+
+    case Media.delete_media_items(socket.assigns.current_scope, selected_ids,
+           delete_files: delete_files
+         ) do
+      {:ok, count, %DiskRemoval{} = removal} ->
+        {kind, message} = DiskRemovalFlash.for_items(count, delete_files, removal)
+
+        {:noreply,
+         socket
+         |> put_flash(kind, message)
+         |> assign(:selection_mode, false)
+         |> assign(:selected_ids, MapSet.new())
+         |> assign(:show_delete_modal, false)
+         |> assign(:delete_files, false)
+         |> load_media_items()}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Failed to delete items")
+         |> assign(:show_delete_modal, false)
+         |> assign(:delete_files, false)}
+    end
+  end
+
+  defp batch_edit_selected(socket, params) do
+    selected_ids = MapSet.to_list(socket.assigns.selected_ids)
+
+    # Build attrs map with only non-empty values
+    attrs =
+      %{}
+      |> maybe_add_attr(:quality_profile_id, params["quality_profile_id"])
+      |> maybe_add_attr(:monitored, params["monitored"])
+
+    case Media.update_media_items_batch(socket.assigns.current_scope, selected_ids, attrs) do
+      {:ok, count} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{count} #{pluralize_items(count)} updated successfully")
+         |> assign(:selection_mode, false)
+         |> assign(:selected_ids, MapSet.new())
+         |> assign(:show_batch_edit_modal, false)
+         |> load_media_items()}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Failed to update items")
+         |> assign(:show_batch_edit_modal, false)}
+    end
   end
 
   # Guards event handlers that only make sense on a section page. A
