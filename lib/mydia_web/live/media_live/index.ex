@@ -744,7 +744,12 @@ defmodule MydiaWeb.MediaLive.Index do
   defp batch_reclassify(socket) do
     selected_ids = MapSet.to_list(socket.assigns.selected_ids)
 
-    {:ok, summary} = Media.reclassify_media_items(selected_ids)
+    visible_ids =
+      socket.assigns.current_scope
+      |> Media.list_media_items(ids: selected_ids)
+      |> Enum.map(& &1.id)
+
+    {:ok, summary} = Media.reclassify_media_items(visible_ids)
 
     {:noreply,
      socket

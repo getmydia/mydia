@@ -80,6 +80,25 @@ defmodule MydiaWeb.MediaLive.IndexAuthorizationTest do
     end
   end
 
+  describe "as a user with access restrictions" do
+    test "batch_reclassify leaves items outside the scope alone", %{conn: conn} do
+      user = restricted_user_fixture(%{role: "user", allowed_categories: ["cartoon_movie"]})
+      visible = media_item_fixture(%{title: "Lantern Harbor", type: "movie"})
+      hidden = media_item_fixture(%{title: "Ember Tide", type: "movie"})
+
+      for {item, category} <- [{visible, "cartoon_movie"}, {hidden, "anime_movie"}] do
+        Repo.update_all(from(m in MediaItem, where: m.id == ^item.id), set: [category: category])
+      end
+
+      view = open_library(conn, user, hidden)
+      render_click(view, "start_selection", %{"id" => visible.id})
+      render_click(view, "batch_reclassify", %{})
+
+      assert Repo.get!(MediaItem, hidden.id).category == "anime_movie"
+      refute Repo.get!(MediaItem, visible.id).category == "cartoon_movie"
+    end
+  end
+
   describe "as a user" do
     setup %{conn: conn, item: item} do
       %{view: open_library(conn, user_fixture(%{role: "user"}), item)}
