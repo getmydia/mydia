@@ -43,6 +43,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          # mix mydia.ratchet compares against the merge base with origin/master.
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Install Nix
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
@@ -290,6 +294,9 @@ jobs:
             exit 1
           fi
           mix credo --strict
+          # Blocks new complexity, nesting and module-size debt relative to the
+          # merge base. See "Ratchets" in CONTRIBUTING.md.
+          mix mydia.ratchet --from-git-merge-base origin/master
           # Advisory dead-code report (non-blocking; see CONTRIBUTING.md "Quality gates").
           #
           # This recompiles all 765 files a second time and cost 199s of every
