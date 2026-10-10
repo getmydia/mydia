@@ -11,7 +11,12 @@ defmodule Mydia.Indexers.CardigannHealthTest do
   alias Mydia.Indexers.CardigannSearchEngine
 
   describe "CardigannSearchEngine.execute_search/3 options contract" do
-    test "a map of options never matches, whatever the definition's fields are" do
+    # The map arrives through the test context, which the type checker treats as
+    # dynamic(); a literal map in the call would be rejected at compile time.
+    @tag bad_opts: %{query: "q", categories: [], search_path: nil}
+    test "a map of options never matches, whatever the definition's fields are", %{
+      bad_opts: bad_opts
+    } do
       # execute_search/4's only clause is guarded `when is_list(opts)`. The
       # guard is checked before the body runs, so this raises purely because
       # opts is a map -- not because some nil field on an empty %Parsed{} got
@@ -21,11 +26,7 @@ defmodule Mydia.Indexers.CardigannHealthTest do
       # printed verbatim in the "no matching clause" argument dump, never
       # touched by any code that would raise a different error first.
       assert_raise FunctionClauseError, fn ->
-        CardigannSearchEngine.execute_search(
-          %Parsed{},
-          %{query: "q", categories: [], search_path: nil},
-          %{}
-        )
+        CardigannSearchEngine.execute_search(%Parsed{}, bad_opts, %{})
       end
     end
   end

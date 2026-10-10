@@ -44,11 +44,11 @@ defmodule Mydia.Indexers.CardigannLiveSearchTest do
         # Build minimal search options
         base_url = List.first(parsed.links) || ""
 
-        search_opts = %{
+        search_opts = [
           query: query,
           categories: [],
           search_path: List.first(parsed.search.paths)
-        }
+        ]
 
         # Execute search
         case CardigannSearchEngine.execute_search(parsed, search_opts, %{}) do

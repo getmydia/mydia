@@ -297,7 +297,7 @@ defmodule Mydia.MixProject do
         "deps.unlock --unused",
         "format --check-formatted",
         "credo --strict",
-        "test"
+        "test --warnings-as-errors"
       ]
     ]
   end

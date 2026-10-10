@@ -52,7 +52,7 @@ defmodule Mydia.Subtitles.CandidateTest do
     token = Candidate.sign(@media_file_id, @result)
 
     middle = div(byte_size(token), 2)
-    <<head::binary-size(middle), original::binary-size(1), tail::binary>> = token
+    <<head::binary-size(^middle), original::binary-size(1), tail::binary>> = token
     replacement = if original == "A", do: "B", else: "A"
     tampered = head <> replacement <> tail
 

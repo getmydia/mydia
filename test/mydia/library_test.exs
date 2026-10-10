@@ -622,7 +622,7 @@ defmodule Mydia.LibraryTest do
     end
 
     test "second concurrent writer returns :already_analyzed and does not overwrite",
-         %{media_file: media_file, result: result} do
+         %{media_file: media_file, result: %FileAnalysisResult{} = result} do
       assert :ok = Library.apply_analysis(media_file, {:ok, result})
       reloaded = Repo.get!(MediaFile, media_file.id)
       analyzed_at = reloaded.analyzed_at
@@ -671,7 +671,7 @@ defmodule Mydia.LibraryTest do
     end
 
     test "success path leaves existing size untouched when result.size is nil",
-         %{media_file: media_file, result: result} do
+         %{media_file: media_file, result: %FileAnalysisResult{} = result} do
       no_size_result = %FileAnalysisResult{result | size: nil}
 
       assert :ok = Library.apply_analysis(media_file, {:ok, no_size_result})
@@ -705,7 +705,7 @@ defmodule Mydia.LibraryTest do
     end
 
     test "writes hdr_format, dolby_vision_profile, and dolby_vision_bl_compat_id from result.hdr",
-         %{media_file: media_file, result: result} do
+         %{media_file: media_file, result: %FileAnalysisResult{} = result} do
       dv_result = %FileAnalysisResult{
         result
         | hdr: %Hdr{base: :hdr10, dv_profile: 8, bl_compat_id: 1}

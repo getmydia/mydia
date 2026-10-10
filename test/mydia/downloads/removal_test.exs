@@ -155,14 +155,13 @@ defmodule Mydia.Downloads.RemovalTest do
       # Oban's engine is off in test, and uniqueness lives in the engine. Start
       # a real one under the default name, the one Removal inserts through, the
       # same way file_analysis_unique_test.exs does.
-      engine =
-        case Repo.__adapter__() do
-          Ecto.Adapters.Postgres -> Oban.Engines.Basic
-          _ -> Oban.Engines.Lite
-        end
-
       start_supervised!(
-        {Oban, repo: Repo, engine: engine, testing: :manual, queues: false, plugins: false}
+        {Oban,
+         repo: Repo,
+         engine: Mydia.AdapterHelpers.oban_engine(),
+         testing: :manual,
+         queues: false,
+         plugins: false}
       )
 
       download =

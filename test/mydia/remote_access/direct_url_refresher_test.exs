@@ -234,21 +234,23 @@ defmodule Mydia.RemoteAccess.DirectUrlRefresherTest do
       assert persisted_config.cert_fingerprint == cert_fingerprint
     end
 
-    test "requires list of URLs" do
+    @tag bad_urls: "not-a-list"
+    test "requires list of URLs", %{bad_urls: bad_urls} do
       {:ok, _config} = RemoteAccess.initialize_config()
 
       # Should raise FunctionClauseError for non-list
       assert_raise FunctionClauseError, fn ->
-        RemoteAccess.update_direct_urls("not-a-list", "fingerprint", false)
+        RemoteAccess.update_direct_urls(bad_urls, "fingerprint", false)
       end
     end
 
-    test "requires binary fingerprint" do
+    @tag bad_fingerprint: :not_a_binary
+    test "requires binary fingerprint", %{bad_fingerprint: bad_fingerprint} do
       {:ok, _config} = RemoteAccess.initialize_config()
 
       # Should raise FunctionClauseError for non-binary
       assert_raise FunctionClauseError, fn ->
-        RemoteAccess.update_direct_urls([], :not_a_binary, false)
+        RemoteAccess.update_direct_urls([], bad_fingerprint, false)
       end
     end
   end

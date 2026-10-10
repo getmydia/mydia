@@ -11,8 +11,8 @@ defmodule Mydia.Events.PresentationTest do
   describe "known_types/0" do
     test "is non-empty and covers every namespace" do
       types = Presentation.known_types()
-      refute types == []
 
+      # Every namespace must have a type, which also rules out an empty list.
       for namespace <- ~w(media_item media_file download job search plugin playback) do
         assert Enum.any?(types, &String.starts_with?(&1, "#{namespace}.")),
                "no registered type starts with #{namespace}."

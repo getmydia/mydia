@@ -387,12 +387,21 @@ defmodule Mydia.Indexers.SearchResultTest do
 
       assert SearchResult.info_page_url(result) == nil
     end
+  end
 
-    test "still resolves for a struct carrying the stream_position key" do
-      streamed =
-        search_result(info_url: "https://tracker.example/details/42")
-        |> Map.put(:stream_position, 3)
+  describe "info_page_url/1 with a stream_position key" do
+    # The struct comes from setup so it reaches the test as dynamic(): a
+    # Map.put/3 result is typed as an open map, which the checker will not
+    # accept where a %SearchResult{} is expected.
+    setup do
+      %{
+        streamed:
+          search_result(info_url: "https://tracker.example/details/42")
+          |> Map.put(:stream_position, 3)
+      }
+    end
 
+    test "still resolves for a struct carrying the stream_position key", %{streamed: streamed} do
       assert SearchResult.info_page_url(streamed) == "https://tracker.example/details/42"
     end
   end

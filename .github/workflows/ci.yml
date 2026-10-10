@@ -306,7 +306,7 @@ jobs:
           fi
           mix ecto.create
           mix ecto.migrate
-          mix test --cover
+          mix test --cover --warnings-as-errors
           DEVENV
 
   rust:
@@ -492,7 +492,7 @@ jobs:
           mix ecto.create
           mix ecto.migrate
           mix ecto.migrations
-          mix test --cover
+          mix test --cover --warnings-as-errors
           DEVENV
 
   test-e2e:

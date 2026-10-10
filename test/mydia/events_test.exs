@@ -1174,7 +1174,7 @@ defmodule Mydia.EventsTest do
           metadata: %{"title" => "Arrival"}
         })
 
-      refute is_struct(formatted)
+      # Exactly four keys also rules out a struct, whose __struct__ would make five.
       assert %{icon: _, color: _, title: _, description: _} = formatted
       assert map_size(formatted) == 4
     end

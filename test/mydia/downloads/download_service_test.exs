@@ -27,7 +27,6 @@ defmodule Mydia.Downloads.DownloadServiceTest do
                DownloadService.get_options(Scope.unrestricted(), "movie", media_item.id)
 
       assert is_list(options)
-      assert options != []
 
       # Should include original
       original = Enum.find(options, &(&1.resolution == "original"))
@@ -81,7 +80,7 @@ defmodule Mydia.Downloads.DownloadServiceTest do
                DownloadService.get_options(Scope.unrestricted(), "episode", episode.id)
 
       assert is_list(options)
-      assert options != []
+      assert Enum.any?(options, &(&1.resolution == "original"))
     end
 
     test "returns error for non-existent episode" do

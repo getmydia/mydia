@@ -16,15 +16,14 @@ defmodule Mydia.Jobs.DownloadMonitorFastFollowupTest do
   # conflicts with the SQL Sandbox — so this needs its own real-engine Oban
   # instance, adapter-selected the same way config/config.exs is.
   setup do
-    engine =
-      case Repo.__adapter__() do
-        Ecto.Adapters.Postgres -> Oban.Engines.Basic
-        _ -> Oban.Engines.Lite
-      end
-
     start_supervised!(
       {Oban,
-       name: @name, repo: Repo, engine: engine, testing: :manual, queues: false, plugins: false}
+       name: @name,
+       repo: Repo,
+       engine: Mydia.AdapterHelpers.oban_engine(),
+       testing: :manual,
+       queues: false,
+       plugins: false}
     )
 
     :ok

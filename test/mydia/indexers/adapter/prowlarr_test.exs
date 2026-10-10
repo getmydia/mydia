@@ -514,8 +514,8 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
             "publishDate" => "2024-11-25T10:30:00Z",
             "indexer" => "TestIndexer"
           }
-          |> Map.merge(if protocol, do: %{"downloadProtocol" => protocol}, else: %{})
-          |> Map.merge(if magnet, do: %{"magnetUrl" => magnet}, else: %{})
+          |> put_present("downloadProtocol", protocol)
+          |> put_present("magnetUrl", magnet)
 
         body = Jason.encode!([item])
 
@@ -713,6 +713,12 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
     assert %{"id" => 1, "name" => "Amber Tracker", "disabled_till" => "2030-01-01T00:00:00Z"} =
              paused |> Jason.encode!() |> Jason.decode!()
   end
+
+  # The table rows are literals, so a bare `if protocol, do: ...` is a
+  # compile-time constant per generated test. Branching in a function head keeps
+  # the optional-key logic out of the type checker's reach.
+  defp put_present(map, _key, nil), do: map
+  defp put_present(map, key, value), do: Map.put(map, key, value)
 
   defp stub_json(bypass, path, body) do
     Bypass.stub(bypass, "GET", path, fn conn ->

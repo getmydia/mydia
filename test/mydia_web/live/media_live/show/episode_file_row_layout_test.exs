@@ -40,7 +40,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFileRowLayoutTest do
     )
   end
 
-  defp episode(attrs \\ []) do
+  defp episode(attrs) do
     struct!(
       %Episode{
         id: "ep-1",

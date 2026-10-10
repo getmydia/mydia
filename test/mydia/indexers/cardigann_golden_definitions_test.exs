@@ -19,28 +19,19 @@ defmodule Mydia.Indexers.CardigannGoldenDefinitionsTest do
 
   # Popular public trackers we want to ensure work
   @golden_definitions [
-    {"1337x.yml", "1337x",
-     %{type: "public", language: "en-US", has_download: true, min_fields: 5}},
-    {"thepiratebay.yml", "thepiratebay",
-     %{type: "public", language: "en-US", has_download: true, min_fields: 4}},
-    {"nyaasi.yml", "nyaasi",
-     %{type: "public", language: "en-US", has_download: true, min_fields: 4}},
-    {"eztv.yml", "eztv", %{type: "public", language: "en-US", has_download: true, min_fields: 4}},
-    {"limetorrents.yml", "limetorrents",
-     %{type: "public", language: "en-US", has_download: true, min_fields: 4}},
-    {"yts.yml", "yts", %{type: "public", language: "en-US", has_download: true, min_fields: 4}},
-    {"torrentgalaxy.yml", "torrentgalaxy",
-     %{type: "public", language: "en-US", has_download: true, min_fields: 5}},
+    {"1337x.yml", "1337x", %{type: "public", language: "en-US", min_fields: 5}},
+    {"thepiratebay.yml", "thepiratebay", %{type: "public", language: "en-US", min_fields: 4}},
+    {"nyaasi.yml", "nyaasi", %{type: "public", language: "en-US", min_fields: 4}},
+    {"eztv.yml", "eztv", %{type: "public", language: "en-US", min_fields: 4}},
+    {"limetorrents.yml", "limetorrents", %{type: "public", language: "en-US", min_fields: 4}},
+    {"yts.yml", "yts", %{type: "public", language: "en-US", min_fields: 4}},
+    {"torrentgalaxy.yml", "torrentgalaxy", %{type: "public", language: "en-US", min_fields: 5}},
     {"kickasstorrents-ws.yml", "kickasstorrents-ws",
-     %{type: "public", language: "en-US", has_download: true, min_fields: 4}},
-    {"solidtorrents.yml", "solidtorrents",
-     %{type: "public", language: "en-US", has_download: true, min_fields: 4}},
-    {"glodls.yml", "glodls",
-     %{type: "public", language: "en-US", has_download: true, min_fields: 4}},
-    {"anidex.yml", "anidex",
-     %{type: "public", language: "en-US", has_download: true, min_fields: 4}},
-    {"bitsearch.yml", "bitsearch",
-     %{type: "public", language: "en-US", has_download: true, min_fields: 4}}
+     %{type: "public", language: "en-US", min_fields: 4}},
+    {"solidtorrents.yml", "solidtorrents", %{type: "public", language: "en-US", min_fields: 4}},
+    {"glodls.yml", "glodls", %{type: "public", language: "en-US", min_fields: 4}},
+    {"anidex.yml", "anidex", %{type: "public", language: "en-US", min_fields: 4}},
+    {"bitsearch.yml", "bitsearch", %{type: "public", language: "en-US", min_fields: 4}}
   ]
 
   for {filename, id, expectations} <- @golden_definitions do
@@ -92,15 +83,12 @@ defmodule Mydia.Indexers.CardigannGoldenDefinitionsTest do
               assert Map.has_key?(parsed.search.rows, :selector),
                      "Rows selector missing :selector"
 
-              # Verify download config if expected
-              if expectations.has_download do
-                assert parsed.download != nil or
-                         Map.has_key?(parsed.search.fields, :download),
-                       "Expected download configuration"
-              end
+              # Verify download config
+              assert parsed.download != nil or
+                       Map.has_key?(parsed.search.fields, :download),
+                     "Expected download configuration"
 
               # Verify capabilities
-              assert parsed.capabilities != nil, "Missing capabilities"
               assert Map.has_key?(parsed.capabilities, :modes), "Missing capabilities modes"
 
             {:error, reason} ->

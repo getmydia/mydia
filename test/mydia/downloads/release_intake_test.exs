@@ -65,7 +65,7 @@ defmodule Mydia.Downloads.ReleaseIntakeTest do
       # A short bare title parses as :unknown (no year/quality, title <= 3 chars)
       # but carries a usable title, so the matcher can still produce a suggestion.
       assert {:ok, %ParsedFileInfo{type: :unknown} = info} = ReleaseIntake.parse_release("ab")
-      assert is_binary(info.title) and info.title != ""
+      assert info.title != ""
     end
   end
 

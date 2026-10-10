@@ -308,8 +308,8 @@ defmodule Mydia.Downloads.ClientTest do
       assert is_atom(config.type)
       assert is_binary(config.host)
       assert is_integer(config.port)
-      assert is_binary(config.username) or is_nil(config.username)
-      assert is_binary(config.password) or is_nil(config.password)
+      assert is_binary(config.username)
+      assert is_binary(config.password)
       assert is_boolean(config.use_ssl)
       assert is_map(config.options)
     end

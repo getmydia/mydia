@@ -8,7 +8,7 @@ defmodule Mydia.Accounts.PasskeyTest do
 
   @cose_key %{1 => 2, 3 => -7, -1 => 1, -2 => <<1::256>>, -3 => <<2::256>>}
 
-  defp attrs(overrides \\ %{}) do
+  defp attrs(overrides) do
     Map.merge(
       %{
         credential_id: "cred-#{System.unique_integer([:positive])}",
