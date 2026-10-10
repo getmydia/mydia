@@ -606,6 +606,46 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
     end
   end
 
+  @doc """
+  Asks Prowlarr to test one indexer, exactly as its own Test button does.
+
+  Prowlarr records the outcome: a pass clears the indexer's pause, a fail
+  escalates it. Only ever called from a user action.
+  """
+  @spec retest_indexer(map(), integer()) :: :ok | {:error, Error.t()}
+  def retest_indexer(config, prowlarr_id) when is_integer(prowlarr_id) do
+    with {:ok, resource} <- fetch_indexer_resource(config, prowlarr_id) do
+      timeout = get_in(config, [:options, :timeout]) || Mydia.Indexers.default_search_timeout_ms()
+
+      case Req.post(build_url(config, "/api/v1/indexer/test"),
+             headers: build_headers(config),
+             params: [forceTest: true],
+             json: resource,
+             receive_timeout: timeout,
+             connect_options: [timeout: @connect_timeout],
+             retry: false
+           ) do
+        {:ok, %Req.Response{status: status}} when status in 200..299 ->
+          :ok
+
+        {:ok, %Req.Response{status: 400, body: body}} ->
+          {:error, Error.search_failed(validation_message(body))}
+
+        {:ok, %Req.Response{status: 401}} ->
+          {:error, Error.connection_failed("Authentication failed - invalid API key")}
+
+        {:ok, %Req.Response{status: status}} ->
+          {:error, Error.connection_failed("HTTP #{status}")}
+
+        {:error, %Req.TransportError{reason: :timeout}} ->
+          {:error, Error.connection_failed("Request timeout")}
+
+        {:error, reason} ->
+          {:error, Error.connection_failed("Request failed: #{inspect(reason)}")}
+      end
+    end
+  end
+
   defp get_json_list(config, path) do
     case Req.get(build_url(config, path),
            headers: build_headers(config),
@@ -674,4 +714,34 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
     end)
     |> Enum.sort_by(& &1.name)
   end
+
+  defp fetch_indexer_resource(config, prowlarr_id) do
+    case Req.get(build_url(config, "/api/v1/indexer/#{prowlarr_id}"),
+           headers: build_headers(config),
+           receive_timeout: 10_000,
+           connect_options: [timeout: @connect_timeout],
+           retry: false
+         ) do
+      {:ok, %Req.Response{status: 200, body: %{} = resource}} ->
+        {:ok, resource}
+
+      {:ok, %Req.Response{status: 404}} ->
+        {:error, Error.not_found("Indexer not found in Prowlarr")}
+
+      {:ok, %Req.Response{status: 401}} ->
+        {:error, Error.connection_failed("Authentication failed - invalid API key")}
+
+      {:ok, %Req.Response{status: status}} ->
+        {:error, Error.connection_failed("HTTP #{status}")}
+
+      {:error, reason} ->
+        {:error, Error.connection_failed("Request failed: #{inspect(reason)}")}
+    end
+  end
+
+  # A failed test answers 400 with a list of validation failures.
+  defp validation_message([%{"errorMessage" => message} | _]) when is_binary(message),
+    do: message
+
+  defp validation_message(body), do: extract_error_message(body)
 end

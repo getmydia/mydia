@@ -728,4 +728,64 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
     |> DateTime.truncate(:second)
     |> DateTime.to_iso8601()
   end
+
+  describe "retest_indexer/2" do
+    setup do
+      bypass = Bypass.open()
+      %{bypass: bypass, config: build_config(bypass)}
+    end
+
+    @resource %{
+      "id" => 7,
+      "name" => "Amber Tracker",
+      "fields" => [%{"name" => "baseUrl", "value" => "https://tracker.invalid"}]
+    }
+
+    test "posts the fetched resource to /indexer/test with forceTest", %{
+      bypass: bypass,
+      config: config
+    } do
+      parent = self()
+      stub_json(bypass, "/api/v1/indexer/7", @resource)
+
+      Bypass.expect_once(bypass, "POST", "/api/v1/indexer/test", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        send(parent, {:posted, conn.query_string, Jason.decode!(body)})
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      assert :ok = Prowlarr.retest_indexer(config, 7)
+      assert_received {:posted, "forceTest=true", @resource}
+    end
+
+    test "surfaces Prowlarr's first validation failure on 400", %{
+      bypass: bypass,
+      config: config
+    } do
+      stub_json(bypass, "/api/v1/indexer/7", @resource)
+
+      Bypass.expect_once(bypass, "POST", "/api/v1/indexer/test", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          400,
+          Jason.encode!([
+            %{"propertyName" => "", "errorMessage" => "Unable to connect to indexer"},
+            %{"propertyName" => "", "errorMessage" => "second failure"}
+          ])
+        )
+      end)
+
+      assert {:error, %Error{message: "Unable to connect to indexer"}} =
+               Prowlarr.retest_indexer(config, 7)
+    end
+
+    test "reports an indexer Prowlarr no longer has", %{bypass: bypass, config: config} do
+      Bypass.expect_once(bypass, "GET", "/api/v1/indexer/7", fn conn ->
+        Plug.Conn.resp(conn, 404, "")
+      end)
+
+      assert {:error, %Error{type: :not_found}} = Prowlarr.retest_indexer(config, 7)
+    end
+  end
 end
