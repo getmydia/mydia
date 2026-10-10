@@ -36,7 +36,12 @@ defmodule MydiaWeb.IndexerComponents do
   attr :retest_paused_event, :string, default: nil
 
   def indexer_search_status(assigns) do
-    rows = sort_rows(assigns.progress)
+    now = DateTime.utc_now()
+
+    rows =
+      assigns.progress
+      |> sort_rows()
+      |> Enum.map(&%{&1 | paused: active_paused(&1.paused, now)})
 
     total_results =
       rows
@@ -181,6 +186,14 @@ defmodule MydiaWeb.IndexerComponents do
       seconds < 86_400 -> "#{div(seconds, 3_600)}h"
       true -> "#{div(seconds, 86_400)}d"
     end
+  end
+
+  @doc """
+  Drops pauses that have already lapsed. Health details are cached for minutes,
+  so the list can name an indexer whose pause is over by render time.
+  """
+  def active_paused(paused, now \\ DateTime.utc_now()) do
+    Enum.filter(paused, &(DateTime.compare(&1.disabled_till, now) == :gt))
   end
 
   @doc "\"Amber Tracker (12m left), Birch Tracker (3h left)\""

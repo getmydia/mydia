@@ -316,6 +316,16 @@ defmodule MydiaWeb.IndexerComponentsTest do
       assert IndexerComponents.paused_remaining(~U[2030-01-02 01:00:00Z], now) == "1d"
     end
 
+    test "active_paused/2 drops pauses that have already lapsed" do
+      now = ~U[2030-01-01 00:00:00Z]
+
+      live = %PausedIndexer{id: 1, name: "Live", disabled_till: ~U[2030-01-01 00:10:00Z]}
+      over = %PausedIndexer{id: 2, name: "Over", disabled_till: ~U[2029-12-31 23:59:00Z]}
+      edge = %PausedIndexer{id: 3, name: "Edge", disabled_till: now}
+
+      assert IndexerComponents.active_paused([live, over, edge], now) == [live]
+    end
+
     test "paused_heading/1 pluralizes" do
       assert IndexerComponents.paused_heading(1) == "1 indexer paused by Prowlarr"
       assert IndexerComponents.paused_heading(2) == "2 indexers paused by Prowlarr"

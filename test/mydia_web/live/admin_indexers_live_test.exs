@@ -496,6 +496,61 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
 
       assert has_element?(view, "#flash-info", "Fictional Tracker recovered")
     end
+
+    test "a modal opened while a retest runs stays open when it finishes", %{conn: conn} do
+      bypass = Bypass.open()
+      test_pid = self()
+      till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
+
+      Mydia.IndexerMock.mock_prowlarr_status(bypass,
+        indexer_status: [%{"indexerId" => 1, "disabledTill" => till}]
+      )
+
+      Mydia.IndexerMock.mock_prowlarr_indexers(bypass)
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/indexer/1", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"id" => 1}))
+      end)
+
+      # Held until the test releases it, so the retest cannot finish before
+      # the modal is open.
+      Bypass.expect_once(bypass, "POST", "/api/v1/indexer/test", fn conn ->
+        send(test_pid, {:retest_started, self()})
+
+        receive do
+          :release -> :ok
+        after
+          5_000 -> :ok
+        end
+
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      {:ok, indexer} =
+        Settings.create_indexer_config(%{
+          name: "Paused Prowlarr",
+          type: :prowlarr,
+          base_url: "http://localhost:#{bypass.port}",
+          api_key: "key",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      view |> element("#indexer-retest-paused-#{indexer.id}") |> render_click()
+      assert_receive {:retest_started, handler}, 5_000
+
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+      assert has_element?(view, "#indexer-form")
+
+      send(handler, :release)
+      render_async(view)
+
+      assert has_element?(view, "#flash-info", "Fictional Tracker recovered")
+      assert has_element?(view, "#indexer-form")
+    end
   end
 
   describe "Runtime Config Protection" do

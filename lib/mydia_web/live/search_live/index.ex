@@ -515,8 +515,14 @@ defmodule MydiaWeb.SearchLive.Index do
   # Retest asks Prowlarr to test the indexers it has paused for this config,
   # then re-runs this config's search through the same retry path, so newly
   # recovered indexers' results merge in exactly as a retry's do.
-  def handle_event("retest_paused", %{"id" => indexer_id}, socket),
-    do: {:noreply, start_indexer_retry(socket, indexer_id, true)}
+  # Authorized like the media page: it makes Mydia ask Prowlarr to test
+  # indexers, which can escalate Prowlarr's backoff.
+  def handle_event("retest_paused", %{"id" => indexer_id}, socket) do
+    case MydiaWeb.Live.Authorization.authorize_manage_downloads(socket) do
+      :ok -> {:noreply, start_indexer_retry(socket, indexer_id, true)}
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
 
   @impl true
   def handle_info({:download_updated, _download_id}, socket) do

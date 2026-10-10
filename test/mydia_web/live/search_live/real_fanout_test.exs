@@ -99,4 +99,40 @@ defmodule MydiaWeb.SearchLive.RealFanoutTest do
     eventually(view, fn _html -> has_element?(view, "#flash-info") end)
     assert has_element?(view, "#flash-info", "Fictional Tracker recovered")
   end
+
+  test "a user without manage-downloads permission cannot retest paused indexers", %{conn: conn} do
+    bypass = Bypass.open()
+    till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
+
+    Bypass.stub(bypass, "GET", "/api/v1/search", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!([real_result_item("Fictional.Feature.2031.1080p")]))
+    end)
+
+    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass, [
+      %{"indexerId" => 1, "disabledTill" => till}
+    ])
+
+    Mydia.IndexerMock.mock_prowlarr_indexers(bypass)
+
+    # No expectation for POST /api/v1/indexer/test: Bypass fails the test if
+    # the retest reaches Prowlarr.
+    config =
+      indexer_config_fixture(%{
+        name: "paused-reporting-indexer",
+        type: :prowlarr,
+        base_url: "http://localhost:#{bypass.port}"
+      })
+
+    guest = create_test_user(%{role: "guest"})
+    {:ok, view, _html} = live(log_in_user(build_conn(), guest), ~p"/search")
+    render_patch(view, ~p"/search?q=Fictional+Feature")
+
+    eventually(view, fn _html -> has_element?(view, "#indexer-paused-#{config.id}") end)
+
+    view |> element("#indexer-retest-paused-#{config.id}") |> render_click()
+
+    assert has_element?(view, "#flash-error", "permission")
+  end
 end

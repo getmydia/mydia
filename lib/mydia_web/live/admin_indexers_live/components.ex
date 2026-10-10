@@ -382,7 +382,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
 
   defp paused_indexers(health) do
     details = Map.get(health, :details) || %{}
-    Map.get(details, :paused_indexers, [])
+    details |> Map.get(:paused_indexers, []) |> IndexerComponents.active_paused()
   end
 
   defp health_status_badge_class(:healthy), do: "badge-success"

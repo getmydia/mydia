@@ -536,15 +536,8 @@ defmodule Mydia.Indexers do
            }}
           | {:error, String.t()}
   def retest_paused_prowlarr_indexers(id) when is_binary(id) do
-    case Settings.get_indexer_config!(id) do
-      nil -> {:error, "Indexer not found"}
-      config -> retest_paused_prowlarr_indexers(config)
-    end
-  rescue
-    # A database id raises Ecto.NoResultsError; a "runtime::" id for an env
-    # indexer that no longer exists raises a plain RuntimeError
-    # (Settings.ServiceConfigs.get_indexer_config!/2).
-    _ in [Ecto.NoResultsError, RuntimeError] -> {:error, "Indexer not found"}
+    with {:ok, config} <- fetch_indexer_config(id),
+         do: retest_paused_prowlarr_indexers(config)
   end
 
   def retest_paused_prowlarr_indexers(%Settings.IndexerConfig{type: :prowlarr} = config) do
@@ -567,6 +560,19 @@ defmodule Mydia.Indexers do
     do: {:ok, %{outcomes: [], paused: []}}
 
   ## Private Functions
+
+  # Only the lookup is rescued, so a failure during the retest itself is not
+  # reported as a missing indexer. A database id raises Ecto.NoResultsError; a
+  # "runtime::" id for an env indexer that no longer exists raises a plain
+  # RuntimeError (Settings.ServiceConfigs.get_indexer_config!/2).
+  defp fetch_indexer_config(id) do
+    case Settings.get_indexer_config!(id) do
+      nil -> {:error, "Indexer not found"}
+      config -> {:ok, config}
+    end
+  rescue
+    _ in [Ecto.NoResultsError, RuntimeError] -> {:error, "Indexer not found"}
+  end
 
   # Fetches enabled Cardigann definitions and converts them to adapter config format
   defp get_enabled_cardigann_configs do

@@ -105,7 +105,9 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   defp finish_retest(socket, id) do
     socket
     |> update(:retesting_paused, &MapSet.delete(&1, id))
-    |> load_data()
+    # Only the list and health: a retest can run for many seconds, and a full
+    # load_data/1 would close any modal the user opened meanwhile.
+    |> assign_indexers_and_health()
   end
 
   ## Indexer Events
@@ -888,9 +890,16 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   ## Private Helpers
 
-  defp load_data(socket) do
+  defp assign_indexers_and_health(socket) do
     indexers = Settings.list_indexer_configs()
-    indexer_health = get_indexer_health_status(indexers)
+
+    socket
+    |> assign(:indexers, indexers)
+    |> assign(:indexer_health, get_indexer_health_status(indexers))
+  end
+
+  defp load_data(socket) do
+    socket = assign_indexers_and_health(socket)
     cardigann_enabled = CardigannFeatureFlags.enabled?()
 
     library_indexers =
@@ -904,8 +913,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         else: %{total: 0, enabled: 0, disabled: 0}
 
     socket
-    |> assign(:indexers, indexers)
-    |> assign(:indexer_health, indexer_health)
     |> assign(:library_indexers, library_indexers)
     |> assign(:library_indexer_stats, library_indexer_stats)
     |> assign(:show_indexer_modal, false)
