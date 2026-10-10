@@ -2,38 +2,31 @@
 // movie, show and episode detail screens all use: the hero art runs to the
 // window's true top edge (behind the traffic lights / Linux buttons), and
 // the back button plus cast button sit in the title-bar band drawn on top of
-// it. `_detailScreenLike` reproduces the `CustomScrollView` + pinned
-// `SliverAppBar` shape each real screen builds via `detailHeroAppBar`, but
-// pumps that shared function directly rather than mounting a screen: the
-// screens need a provider graph, a GraphQL client and a router location this
-// suite does not construct, while the header layout contract is the same
-// function call in each of them.
+// it. `_detailScreenLike` mirrors the loaded-hero shape of those screens (a
+// `CustomScrollView` with a pinned `detailHeroAppBar`) and pumps that shared
+// function directly rather than mounting a screen, since the screens need a
+// provider graph, a GraphQL client and a router location this suite does not
+// construct. The loading/error group instead pumps the shared
+// `DetailLoadingState` and `DetailErrorState` widgets directly.
 
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
-import 'package:player/domain/detail/detail_target.dart';
-import 'package:player/domain/sources/item.dart';
-import 'package:player/presentation/screens/episode/episode_detail_screen.dart';
-import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
-import 'package:player/presentation/screens/show/show_detail_screen.dart';
+import 'package:player/presentation/screens/detail/detail_states.dart';
 import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../helpers/cast_test_overrides.dart';
-import 'sources/fake_media_source.dart' show fakeSourceId;
 
 const Key _backKey = Key('detail-back');
 const Key _heroKey = Key('detail-hero');
 
-/// The structure every detail screen shares: a `CustomScrollView` whose first
-/// sliver is `detailHeroAppBar`, pinned, carrying the back button in its
-/// title row and the hero art in its flexible space. Mirrors
-/// `movie_detail_screen.dart`, `show_detail_screen.dart` and
-/// `episode_detail_screen.dart`, none of which can be mounted here without
-/// their provider graphs.
+/// The loaded-hero shape of the detail screens: a `CustomScrollView` whose
+/// first sliver is `detailHeroAppBar`, pinned, carrying the back button in its
+/// title row and the hero art in its flexible space. The movie, show and
+/// episode screens cannot be mounted here without their provider graphs.
 Widget _detailScreenLike({
   required WindowChromeInsets insets,
   double statusBar = 0,
@@ -164,36 +157,17 @@ void main() {
     // too, so the flat `Padding(8)` leading landed the back icon squarely
     // under the lights (measured: (8,8)-(48,48), inside the lights' own
     // (12,13)-(71,26)). Routing these states through `detailHeroAppBar`,
-    // like the loaded hero, is the fix; this pins the contract for every
-    // screen's loading and error branches via each screen's
-    // `@visibleForTesting` seam, rather than mirroring the shape (a plain
-    // `Object error` stands in for a real GraphQL failure since only the
-    // header, not the error message body, is under test).
-    const movie = MovieDetailScreen.target(
-      target: SourceTarget(ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm1')),
-    );
-    const show = ShowDetailScreen.target(
-      target: SourceTarget(ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.show, externalId: 's1')),
-    );
-    const episode = EpisodeDetailScreen.target(
-      target: SourceTarget(ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.episode, externalId: 'e1')),
-    );
-    final cases = <String, Widget Function(BuildContext, WidgetRef)>{
-      'MovieDetailScreen loading': (context, ref) =>
-          movie.loadingStateForTest(context),
-      'MovieDetailScreen error': (context, ref) =>
-          movie.errorStateForTest(context, ref, 'boom'),
-      'ShowDetailScreen loading': (context, ref) =>
-          show.loadingStateForTest(context),
-      'ShowDetailScreen error': (context, ref) =>
-          show.errorStateForTest(context, ref, 'boom'),
-      'EpisodeDetailScreen loading': (context, ref) =>
-          episode.loadingStateForTest(context),
-      'EpisodeDetailScreen error': (context, ref) =>
-          episode.errorStateForTest(context, ref, 'boom'),
+    // like the loaded hero, is the fix; this pins the contract on the
+    // shared `DetailLoadingState` and `DetailErrorState` every screen renders
+    // (a plain `Object error` stands in for a real GraphQL failure since only
+    // the header, not the error message body, is under test).
+    final cases = <String, WidgetBuilder>{
+      'DetailLoadingState': (context) => const DetailLoadingState(),
+      'DetailErrorState': (context) => DetailErrorState(
+            noun: 'movie',
+            error: 'boom',
+            onRetry: () {},
+          ),
     };
 
     for (final MapEntry(key: name, value: builder) in cases.entries) {
@@ -214,10 +188,7 @@ void main() {
                 insets: _mac,
                 child: MaterialApp(
                   home: WindowChromeInsets.removeBand(
-                    child: Consumer(
-                      builder: (context, ref, _) =>
-                          Scaffold(body: builder(context, ref)),
-                    ),
+                    child: Scaffold(body: Builder(builder: builder)),
                   ),
                 ),
               ),
