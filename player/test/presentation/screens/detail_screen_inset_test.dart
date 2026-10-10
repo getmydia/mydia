@@ -2,12 +2,12 @@
 // movie, show and episode detail screens all use: the hero art runs to the
 // window's true top edge (behind the traffic lights / Linux buttons), and
 // the back button plus cast button sit in the title-bar band drawn on top of
-// it. `_detailScreenLike` reproduces the `CustomScrollView` + pinned
-// `SliverAppBar` shape each real screen builds via `detailHeroAppBar`, but
-// pumps that shared function directly rather than mounting a screen: the
-// screens need a provider graph, a GraphQL client and a router location this
-// suite does not construct, while the header layout contract is the same
-// function call in each of them.
+// it. `_detailScreenLike` mirrors the loaded-hero shape of those screens (a
+// `CustomScrollView` with a pinned `detailHeroAppBar`) and pumps that shared
+// function directly rather than mounting a screen, since the screens need a
+// provider graph, a GraphQL client and a router location this suite does not
+// construct. The loading/error group instead pumps the shared
+// `DetailLoadingState` and `DetailErrorState` widgets directly.
 
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
@@ -23,12 +23,10 @@ import '../../helpers/cast_test_overrides.dart';
 const Key _backKey = Key('detail-back');
 const Key _heroKey = Key('detail-hero');
 
-/// The structure every detail screen shares: a `CustomScrollView` whose first
-/// sliver is `detailHeroAppBar`, pinned, carrying the back button in its
-/// title row and the hero art in its flexible space. Mirrors
-/// `movie_detail_screen.dart`, `show_detail_screen.dart` and
-/// `episode_detail_screen.dart`, none of which can be mounted here without
-/// their provider graphs.
+/// The loaded-hero shape of the detail screens: a `CustomScrollView` whose
+/// first sliver is `detailHeroAppBar`, pinned, carrying the back button in its
+/// title row and the hero art in its flexible space. The movie, show and
+/// episode screens cannot be mounted here without their provider graphs.
 Widget _detailScreenLike({
   required WindowChromeInsets insets,
   double statusBar = 0,
@@ -163,9 +161,9 @@ void main() {
     // shared `DetailLoadingState` and `DetailErrorState` every screen renders
     // (a plain `Object error` stands in for a real GraphQL failure since only
     // the header, not the error message body, is under test).
-    final cases = <String, Widget Function(BuildContext, WidgetRef)>{
-      'DetailLoadingState': (context, ref) => const DetailLoadingState(),
-      'DetailErrorState': (context, ref) => DetailErrorState(
+    final cases = <String, WidgetBuilder>{
+      'DetailLoadingState': (context) => const DetailLoadingState(),
+      'DetailErrorState': (context) => DetailErrorState(
             noun: 'movie',
             error: 'boom',
             onRetry: () {},
@@ -190,10 +188,7 @@ void main() {
                 insets: _mac,
                 child: MaterialApp(
                   home: WindowChromeInsets.removeBand(
-                    child: Consumer(
-                      builder: (context, ref, _) =>
-                          Scaffold(body: builder(context, ref)),
-                    ),
+                    child: Scaffold(body: Builder(builder: builder)),
                   ),
                 ),
               ),
