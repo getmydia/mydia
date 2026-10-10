@@ -69,6 +69,12 @@ defmodule Mydia.Indexers.CardigannAuth do
   # Default session expiration (7 days)
   @default_session_ttl 7 * 24 * 60 * 60
 
+  # Req's own `:max_redirects`. The original request plus this many hops may
+  # run; a further redirect response is an error, not a page to validate.
+  @max_login_redirects 10
+  @login_receive_timeout 30_000
+  @login_redirect_statuses [301, 302, 303, 307, 308]
+
   @doc """
   Authenticates with an indexer and returns session information.
 
@@ -291,6 +297,12 @@ defmodule Mydia.Indexers.CardigannAuth do
   # the credential scope, so comparing them is circular: trusted_origins/2
   # includes an absolute login.path's own origin by construction. An adversary
   # who can set login.path can set links too.
+  #
+  # Redirects are not an exception. execute_login_request/3 calls this before
+  # every hop, including the first. A 307 from an accepted URL can name
+  # http://tracker.example, and Req would replay the POST body there if
+  # redirects stayed automatic. A different origin is still allowed when the
+  # target is https or loopback.
   defp check_login_transport(login_url) do
     if CredentialScope.cleartext?(login_url) do
       {:error,
@@ -416,6 +428,26 @@ defmodule Mydia.Indexers.CardigannAuth do
     {:ok, params}
   end
 
+  # Req follows redirects itself when `redirect: true`, and its redirect step
+  # replays a 307/308 body onto the Location target. It drops Authorization on
+  # an untrusted host; it does not drop a form body. A tracker that answers the
+  # login POST with `307 Location: http://tracker.example/...` would therefore
+  # receive the password in the clear after check_login_transport/1 had already
+  # accepted the original URL.
+  #
+  # Hops are taken one at a time with `redirect: false`. Each Location is merged
+  # onto the current URL and has to be an http(s) URL with a host, then
+  # check_login_transport/1 runs before anything is sent. 301/302/303 switch
+  # POST to GET and drop the form, matching Req and browsers, and the fields are
+  # not copied onto the query string. 307/308 keep the method and the form. A
+  # hop that is already a GET stays a GET, so a later 307 cannot bring the POST
+  # body back.
+  #
+  # Set-Cookie from an intermediate response is not forwarded. Req has no cookie
+  # jar, and this loop does not add one. extract_cookies/1 reads only the final
+  # non-redirect response. `definition.follow_redirect` is the search and
+  # download flag; login always walks its own hops because the success selector
+  # often sits on the page the tracker redirects to.
   defp execute_login_request(definition, url, params) do
     Logger.debug("Executing login request to #{url}")
 
@@ -426,27 +458,156 @@ defmodule Mydia.Indexers.CardigannAuth do
         _ -> :post
       end
 
-    req_opts = [
-      headers: [{"Content-Type", "application/x-www-form-urlencoded"}],
-      form: params,
-      redirect: true,
-      receive_timeout: 30_000
-    ]
+    follow_login_redirects(method, url, params, @max_login_redirects)
+  end
 
-    case method do
-      :post ->
-        Req.post(url, req_opts)
-
-      :get ->
-        Req.get(url, Keyword.put(req_opts, :params, params))
+  defp follow_login_redirects(method, url, params, redirects_remaining) do
+    with :ok <- check_login_transport(url),
+         {:ok, response} <- dispatch_login_request(method, url, params) do
+      handle_login_response(response, method, url, params, redirects_remaining)
     end
-    |> case do
-      {:ok, %Req.Response{} = response} ->
-        {:ok, response}
+  end
 
-      {:error, reason} ->
-        {:error, Error.connection_failed("Login request failed: #{inspect(reason)}")}
+  defp dispatch_login_request(method, url, params) do
+    opts = login_request_options(method, params)
+
+    result =
+      case method do
+        :post -> Req.post(url, opts)
+        :get -> Req.get(url, opts)
+      end
+
+    case result do
+      {:ok, %Req.Response{} = response} -> {:ok, response}
+      {:ok, other} -> login_request_failed(inspect(other))
+      {:error, reason} -> login_request_failed(inspect(reason))
     end
+  end
+
+  # `params == nil` is a hop that must not carry the credential form or query.
+  # The initial GET still sends both, which is what the single-request path did
+  # when Req followed redirects itself.
+  defp login_request_options(method, params) do
+    [redirect: false, receive_timeout: @login_receive_timeout]
+    |> attach_login_credentials(method, params)
+  end
+
+  defp attach_login_credentials(opts, :post, params) when is_map(params) do
+    opts
+    |> Keyword.put(:headers, [{"Content-Type", "application/x-www-form-urlencoded"}])
+    |> Keyword.put(:form, params)
+  end
+
+  defp attach_login_credentials(opts, :get, params) when is_map(params) do
+    opts
+    |> Keyword.put(:headers, [{"Content-Type", "application/x-www-form-urlencoded"}])
+    |> Keyword.put(:form, params)
+    |> Keyword.put(:params, params)
+  end
+
+  defp attach_login_credentials(opts, _method, nil), do: opts
+
+  defp handle_login_response(%Req.Response{status: status}, _method, _url, _params, 0)
+       when status in @login_redirect_statuses do
+    login_request_failed("too many redirects (max #{@max_login_redirects})")
+  end
+
+  defp handle_login_response(
+         %Req.Response{status: status} = response,
+         method,
+         url,
+         params,
+         redirects_remaining
+       )
+       when status in @login_redirect_statuses do
+    follow_one_login_redirect(response, method, url, params, redirects_remaining)
+  end
+
+  defp handle_login_response(%Req.Response{} = response, _method, _url, _params, _remaining) do
+    {:ok, response}
+  end
+
+  defp follow_one_login_redirect(response, method, url, params, redirects_remaining) do
+    with {:ok, location} <- login_location_header(response),
+         {:ok, next_url} <- resolve_login_redirect(url, location) do
+      {next_method, next_params} = login_redirect_request(method, response.status, params)
+      follow_login_redirects(next_method, next_url, next_params, redirects_remaining - 1)
+    end
+  end
+
+  # 301/302/303: Req and browsers change POST to GET and discard the body.
+  # Dropping `:params` as well stops those fields being reattached as a query
+  # string. 307/308 keep POST and the form. GET stays GET and does not gain the
+  # original credential query on the next hop.
+  defp login_redirect_request(:post, status, _params) when status in [301, 302, 303] do
+    {:get, nil}
+  end
+
+  defp login_redirect_request(:post, status, params) when status in [307, 308] do
+    {:post, params}
+  end
+
+  defp login_redirect_request(:get, _status, _params) do
+    {:get, nil}
+  end
+
+  defp login_location_header(response) do
+    case Req.Response.get_header(response, "location") do
+      [location | _] when is_binary(location) ->
+        {:ok, location}
+
+      [_location | _] ->
+        login_request_failed("redirect Location is malformed")
+
+      [] ->
+        login_request_failed("redirect is missing a Location header")
+    end
+  end
+
+  defp resolve_login_redirect(current_url, location) do
+    trimmed = String.trim(location)
+
+    if trimmed == "" do
+      login_request_failed("redirect Location is empty")
+    else
+      current_url
+      |> URI.parse()
+      |> URI.merge(trimmed)
+      |> accept_login_redirect(trimmed)
+    end
+  rescue
+    ArgumentError ->
+      login_request_failed("redirect Location #{inspect(location)} is malformed")
+  end
+
+  defp accept_login_redirect(%URI{scheme: scheme, host: host} = merged, location)
+       when scheme in ["http", "https"] and is_binary(host) and host != "" do
+    next_url = URI.to_string(merged)
+
+    case URI.new(next_url) do
+      {:ok, _uri} ->
+        {:ok, next_url}
+
+      {:error, _reason} ->
+        login_request_failed("redirect Location #{inspect(location)} is malformed")
+    end
+  rescue
+    ArgumentError ->
+      login_request_failed("redirect Location #{inspect(location)} is malformed")
+  end
+
+  defp accept_login_redirect(%URI{scheme: scheme}, location) when scheme in ["http", "https"] do
+    login_request_failed("redirect Location #{inspect(location)} has no host")
+  end
+
+  defp accept_login_redirect(%URI{scheme: scheme}, location) do
+    login_request_failed(
+      "redirect Location #{inspect(location)} uses unsupported scheme #{scheme || "(none)"}"
+    )
+  end
+
+  defp login_request_failed(message) when is_binary(message) do
+    {:error, Error.connection_failed("Login request failed: #{message}")}
   end
 
   defp extract_cookies(%Req.Response{headers: headers}) do
