@@ -4,7 +4,8 @@
 
 Mydia enforces a small set of automated quality gates in CI: the compiler's
 set-theoretic type checker (`mix compile --warnings-as-errors`), Credo
-(`mix credo --strict`), and an advisory dead-code report (`mix_unused`). A
+(`mix credo --strict`), a ratchet on complexity, nesting and module size
+(`mix mydia.ratchet`), and an advisory dead-code report (`mix_unused`). A
 second, more precise dead-code detector, `mix mydia.dead_code`, is available
 for manual use; see "A note on `mix mydia.dead_code`" below.
 
@@ -35,6 +36,20 @@ Every finding from a gate gets exactly one of these:
    and cannot be made precise with a rule. Disable it with `false` and a
    one-line rationale, and rely on a precise tool instead. Example:
    `StructBracketAccess` was retired in favour of the compiler's type checker.
+
+### Ratchets
+
+`mix mydia.ratchet` (run by `mix precommit` and CI) judges a branch against its
+merge base with `origin/master` rather than judging the whole tree. It fails when
+the branch adds a cyclomatic-complexity or nesting finding, makes an existing one
+worse, adds a module over 800 lines, or grows a module that is already over 800
+lines.
+
+This is not grandfathering. Nothing lists the findings that already exist, and the
+gate only ever tightens: once a function is simplified or a module shrinks, the
+lower number becomes the new baseline. Findings are matched by check, function name
+and message, ignoring file and module, so moving an unchanged function into a new
+module is free. Splitting a large module is exactly what the gate wants.
 
 ### What is forbidden
 
