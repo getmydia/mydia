@@ -521,7 +521,7 @@ defmodule Mydia.Library.TrashStore do
       to: destination
     )
 
-    case File.cp(source, destination) do
+    case Storage.Local.copy_file(source, destination) do
       :ok ->
         remove_source_after_copy(source, destination)
 
