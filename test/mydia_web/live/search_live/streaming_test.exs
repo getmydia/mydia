@@ -42,6 +42,7 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
   # the test's lifetime removes that completion race entirely.
   defp pending_indexer_fixture(name) do
     bypass = Bypass.open()
+    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
 
     Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
       # Bypass.pass/1 first: the test ends (and its connection is torn down)
@@ -67,6 +68,7 @@ defmodule MydiaWeb.SearchLive.StreamingTest do
   # the search provably cannot finish while the gate is shut.
   defp gated_indexer_fixture(name) do
     bypass = Bypass.open()
+    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
 
     {:ok, gate} =
       Agent.start_link(fn ->

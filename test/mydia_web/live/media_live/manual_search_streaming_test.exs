@@ -89,6 +89,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   # race entirely rather than narrowing it.
   defp pending_indexer_fixture(name) do
     bypass = Bypass.open()
+    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
 
     Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
       Bypass.pass(bypass)
@@ -110,6 +111,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   # the search provably cannot finish while the gate is shut.
   defp gated_indexer_fixture(name) do
     bypass = Bypass.open()
+    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
 
     {:ok, gate} =
       Agent.start_link(fn ->
@@ -1076,6 +1078,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   test "a real search_all fan-out renders a result in the manual search modal", %{conn: conn} do
     media_item = media_item_fixture(%{title: "Dune", type: "movie"})
     bypass = Bypass.open()
+    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
 
     Bypass.expect(bypass, "GET", "/api/v1/search", fn conn ->
       conn
@@ -1098,5 +1101,41 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     wait_until_result_renders(view, row)
 
     assert has_element?(view, row)
+  end
+
+  test "a Prowlarr row with paused indexers offers Retest & search again", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Fictional Feature", type: "movie"})
+    indexer = pending_indexer_fixture("paused-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %IndexerProgress{
+         indexer: "paused-indexer",
+         indexer_id: indexer.id,
+         status: :ok,
+         results: [],
+         result_count: 0,
+         duration_ms: 50,
+         completed: 1,
+         total: 1,
+         paused: [
+           %Mydia.Indexers.Structs.PausedIndexer{
+             id: 1,
+             name: "Amber Tracker",
+             disabled_till: DateTime.add(DateTime.utc_now(), 600, :second)
+           }
+         ]
+       }}
+    )
+
+    render(view)
+
+    assert has_element?(view, "#indexer-paused-#{indexer.id}", "Amber Tracker")
+    assert has_element?(view, "#indexer-retest-paused-#{indexer.id}")
   end
 end

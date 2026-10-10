@@ -908,4 +908,179 @@ defmodule Mydia.IndexersTest do
       assert Indexers.default_search_timeout_ms() < 120_000
     end
   end
+
+  describe "Prowlarr paused indexers" do
+    setup do
+      bypass = Bypass.open()
+
+      config =
+        indexer_config_fixture(%{
+          name: "paused-prowlarr",
+          type: :prowlarr,
+          base_url: "http://localhost:#{bypass.port}"
+        })
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "prowlarr_paused_indexers/1 lists paused indexers", %{bypass: bypass, config: config} do
+      stub_paused(bypass, [{1, "Amber Tracker"}])
+
+      assert {:ok, [%{id: 1, name: "Amber Tracker"}]} = Indexers.prowlarr_paused_indexers(config)
+    end
+
+    test "prowlarr_paused_indexers/1 is empty for non-Prowlarr configs" do
+      assert {:ok, []} = Indexers.prowlarr_paused_indexers(%{type: :cardigann, name: "x"})
+    end
+
+    test "paused_indexer_list/1 swallows errors", %{bypass: bypass, config: config} do
+      Bypass.down(bypass)
+      assert Indexers.paused_indexer_list(config) == []
+    end
+
+    test "retest_paused_prowlarr_indexers/1 retests each paused indexer once and re-reads", %{
+      bypass: bypass,
+      config: config
+    } do
+      {:ok, still_paused} = Agent.start_link(fn -> MapSet.new([1, 2]) end)
+      till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
+
+      Bypass.stub(bypass, "GET", "/api/v1/indexerstatus", fn conn ->
+        statuses =
+          for id <- Agent.get(still_paused, & &1),
+              do: %{"indexerId" => id, "disabledTill" => till}
+
+        json_resp(conn, 200, statuses)
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v1/indexer", fn conn ->
+        json_resp(conn, 200, [
+          %{"id" => 1, "name" => "Amber Tracker", "enable" => true},
+          %{"id" => 2, "name" => "Birch Tracker", "enable" => true}
+        ])
+      end)
+
+      for id <- [1, 2] do
+        Bypass.expect_once(bypass, "GET", "/api/v1/indexer/#{id}", fn conn ->
+          json_resp(conn, 200, %{"id" => id})
+        end)
+      end
+
+      Bypass.expect(bypass, "POST", "/api/v1/indexer/test", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+        case Jason.decode!(body) do
+          %{"id" => 1} ->
+            Agent.update(still_paused, &MapSet.delete(&1, 1))
+            Plug.Conn.resp(conn, 200, "")
+
+          %{"id" => 2} ->
+            json_resp(conn, 400, [%{"errorMessage" => "Unable to connect to indexer"}])
+        end
+      end)
+
+      assert {:ok, %{outcomes: outcomes, paused: paused}} =
+               Indexers.retest_paused_prowlarr_indexers(config.id)
+
+      assert [{%{id: 1}, :ok}, {%{id: 2}, {:error, "Unable to connect to indexer"}}] = outcomes
+      assert Enum.map(paused, & &1.id) == [2]
+    end
+
+    test "retest_paused_prowlarr_indexers/1 errors when the re-read after the tests fails", %{
+      bypass: bypass,
+      config: config
+    } do
+      {:ok, reads} = Agent.start_link(fn -> 0 end)
+      till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
+
+      # First read lists the paused indexer; the re-read after the test fails.
+      Bypass.stub(bypass, "GET", "/api/v1/indexerstatus", fn conn ->
+        case Agent.get_and_update(reads, &{&1, &1 + 1}) do
+          0 -> json_resp(conn, 200, [%{"indexerId" => 1, "disabledTill" => till}])
+          _ -> Plug.Conn.resp(conn, 500, "boom")
+        end
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v1/indexer", fn conn ->
+        json_resp(conn, 200, [%{"id" => 1, "name" => "Amber Tracker", "enable" => true}])
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/indexer/1", fn conn ->
+        json_resp(conn, 200, %{"id" => 1})
+      end)
+
+      Bypass.expect_once(bypass, "POST", "/api/v1/indexer/test", fn conn ->
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      assert {:error, "tests ran, but re-reading Prowlarr's status failed: HTTP 500"} =
+               Indexers.retest_paused_prowlarr_indexers(config.id)
+    end
+
+    test "retest_paused_prowlarr_indexers/1 reports an unknown config id" do
+      assert {:error, "Indexer not found"} =
+               Indexers.retest_paused_prowlarr_indexers(Ecto.UUID.generate())
+    end
+  end
+
+  describe "search_all/2 report_paused" do
+    setup do
+      disable_persisted_indexer_configs()
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/api/v1/search", fn conn -> json_resp(conn, 200, []) end)
+
+      config =
+        indexer_config_fixture(%{
+          name: "reporting-prowlarr",
+          type: :prowlarr,
+          base_url: "http://localhost:#{bypass.port}"
+        })
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "carries the paused list on the Prowlarr row", %{bypass: bypass, config: config} do
+      stub_paused(bypass, [{1, "Amber Tracker"}])
+      parent = self()
+
+      Indexers.search_all("Fictional Feature 2031",
+        report_paused: true,
+        on_indexer_result: fn progress -> send(parent, {:progress, progress}) end
+      )
+
+      assert_received {:progress, %{indexer_id: id, paused: [%{name: "Amber Tracker"}]}}
+      assert id == config.id
+    end
+
+    test "does not read indexer status without the option" do
+      # No indexerstatus stub on this Bypass: a request would fail the test.
+      parent = self()
+
+      Indexers.search_all("Fictional Feature 2031",
+        on_indexer_result: fn progress -> send(parent, {:progress, progress}) end
+      )
+
+      assert_received {:progress, %{paused: []}}
+    end
+  end
+
+  defp stub_paused(bypass, entries) do
+    till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
+
+    Mydia.IndexerMock.stub_prowlarr_indexer_status(
+      bypass,
+      for({id, _} <- entries, do: %{"indexerId" => id, "disabledTill" => till})
+    )
+
+    Mydia.IndexerMock.mock_prowlarr_indexers(bypass,
+      indexers: for({id, name} <- entries, do: %{"id" => id, "name" => name, "enable" => true})
+    )
+  end
+
+  defp json_resp(conn, status, body) do
+    conn
+    |> Plug.Conn.put_resp_content_type("application/json")
+    |> Plug.Conn.resp(status, Jason.encode!(body))
+  end
 end

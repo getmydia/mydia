@@ -48,6 +48,7 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
 
   alias Mydia.Indexers.{SearchResult, QualityParser}
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Structs.PausedIndexer
 
   require Logger
 
@@ -575,4 +576,172 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
         {:error, Error.connection_failed("Request failed: #{inspect(reason)}")}
     end
   end
+
+  @doc """
+  Lists the indexers Prowlarr has paused after failures and that this config
+  would otherwise search.
+
+  Reads `GET /api/v1/indexerstatus` and keeps entries whose `disabledTill` is in
+  the future. Only when something is paused does it also read
+  `GET /api/v1/indexer` for names and the enable flag. Scope: enabled indexers,
+  narrowed to `options.indexer_ids` when that is set.
+
+  Read-only. Never asks Prowlarr to retest anything.
+  """
+  @spec list_paused_indexers(map()) :: {:ok, [PausedIndexer.t()]} | {:error, Error.t()}
+  def list_paused_indexers(config) do
+    now = DateTime.utc_now()
+
+    with {:ok, statuses} <- get_json_list(config, "/api/v1/indexerstatus") do
+      case paused_until(statuses, now) do
+        paused when map_size(paused) == 0 ->
+          {:ok, []}
+
+        paused ->
+          with {:ok, indexers} <- get_json_list(config, "/api/v1/indexer") do
+            scope = validate_and_convert_indexer_ids(scope_ids(config), config.name)
+            {:ok, build_paused(indexers, paused, scope)}
+          end
+      end
+    end
+  end
+
+  @doc """
+  Asks Prowlarr to test one indexer, exactly as its own Test button does.
+
+  Prowlarr records the outcome: a pass clears the indexer's pause, a fail
+  escalates it. Only ever called from a user action.
+  """
+  @spec retest_indexer(map(), integer()) :: :ok | {:error, Error.t()}
+  def retest_indexer(config, prowlarr_id) when is_integer(prowlarr_id) do
+    with {:ok, resource} <- fetch_indexer_resource(config, prowlarr_id) do
+      timeout = get_in(config, [:options, :timeout]) || Mydia.Indexers.default_search_timeout_ms()
+
+      case Req.post(build_url(config, "/api/v1/indexer/test"),
+             headers: build_headers(config),
+             params: [forceTest: true],
+             json: resource,
+             receive_timeout: timeout,
+             connect_options: [timeout: @connect_timeout],
+             retry: false
+           ) do
+        {:ok, %Req.Response{status: status}} when status in 200..299 ->
+          :ok
+
+        {:ok, %Req.Response{status: 400, body: body}} ->
+          {:error, Error.search_failed(validation_message(body))}
+
+        {:ok, %Req.Response{status: 401}} ->
+          {:error, Error.connection_failed("Authentication failed - invalid API key")}
+
+        {:ok, %Req.Response{status: status}} ->
+          {:error, Error.connection_failed("HTTP #{status}")}
+
+        {:error, %Req.TransportError{reason: :timeout}} ->
+          {:error, Error.connection_failed("Request timeout")}
+
+        {:error, reason} ->
+          {:error, Error.connection_failed("Request failed: #{inspect(reason)}")}
+      end
+    end
+  end
+
+  defp get_json_list(config, path) do
+    case Req.get(build_url(config, path),
+           headers: build_headers(config),
+           receive_timeout: 10_000,
+           connect_options: [timeout: @connect_timeout],
+           retry: false
+         ) do
+      {:ok, %Req.Response{status: 200, body: body}} when is_list(body) ->
+        {:ok, body}
+
+      {:ok, %Req.Response{status: 200}} ->
+        {:error, Error.parse_error("Unexpected response from Prowlarr at #{path}")}
+
+      {:ok, %Req.Response{status: 401}} ->
+        {:error, Error.connection_failed("Authentication failed - invalid API key")}
+
+      {:ok, %Req.Response{status: status}} ->
+        {:error, Error.connection_failed("HTTP #{status}")}
+
+      {:error, %Req.TransportError{reason: :timeout}} ->
+        {:error, Error.connection_failed("Request timeout")}
+
+      {:error, reason} ->
+        {:error, Error.connection_failed("Request failed: #{inspect(reason)}")}
+    end
+  end
+
+  defp scope_ids(config), do: get_in(config, [:options, :indexer_ids]) || []
+
+  # Prowlarr indexer id => disabledTill, for entries still paused at `now`.
+  defp paused_until(statuses, now) do
+    for %{"indexerId" => id, "disabledTill" => till} when is_integer(id) and is_binary(till) <-
+          statuses,
+        {:ok, till} <- [parse_utc(till)],
+        DateTime.compare(till, now) == :gt,
+        into: %{},
+        do: {id, till}
+  end
+
+  # .NET serializes UTC DateTimes with a trailing Z, but a value read back
+  # without a Kind comes out with no offset. Both mean UTC.
+  defp parse_utc(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, datetime, _offset} ->
+        {:ok, datetime}
+
+      {:error, _} ->
+        with {:ok, naive} <- NaiveDateTime.from_iso8601(value) do
+          DateTime.from_naive(naive, "Etc/UTC")
+        end
+    end
+  end
+
+  defp build_paused(indexers, paused, scope) do
+    indexers
+    |> Enum.filter(fn indexer ->
+      Map.has_key?(paused, indexer["id"]) and indexer["enable"] == true and
+        (scope == [] or indexer["id"] in scope)
+    end)
+    |> Enum.map(fn indexer ->
+      %PausedIndexer{
+        id: indexer["id"],
+        name: indexer["name"],
+        disabled_till: Map.fetch!(paused, indexer["id"])
+      }
+    end)
+    |> Enum.sort_by(& &1.name)
+  end
+
+  defp fetch_indexer_resource(config, prowlarr_id) do
+    case Req.get(build_url(config, "/api/v1/indexer/#{prowlarr_id}"),
+           headers: build_headers(config),
+           receive_timeout: 10_000,
+           connect_options: [timeout: @connect_timeout],
+           retry: false
+         ) do
+      {:ok, %Req.Response{status: 200, body: %{} = resource}} ->
+        {:ok, resource}
+
+      {:ok, %Req.Response{status: 404}} ->
+        {:error, Error.not_found("Indexer not found in Prowlarr")}
+
+      {:ok, %Req.Response{status: 401}} ->
+        {:error, Error.connection_failed("Authentication failed - invalid API key")}
+
+      {:ok, %Req.Response{status: status}} ->
+        {:error, Error.connection_failed("HTTP #{status}")}
+
+      {:error, reason} ->
+        {:error, Error.connection_failed("Request failed: #{inspect(reason)}")}
+    end
+  end
+
+  # A failed test answers 400 with a list of validation failures.
+  defp validation_message([%{"errorMessage" => message} | _]) when is_binary(message),
+    do: message
+
+  defp validation_message(body), do: extract_error_message(body)
 end

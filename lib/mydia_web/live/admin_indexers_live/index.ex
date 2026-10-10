@@ -10,6 +10,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
+  alias MydiaWeb.IndexerComponents
 
   @impl true
   def mount(_params, _session, socket) do
@@ -22,6 +23,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> assign(:flaresolverr_sources, %{})
      |> assign(:flaresolverr_form, to_form(flaresolverr_changeset(%{}), as: :flaresolverr))
      |> init_library_assigns()
+     |> assign(:retesting_paused, MapSet.new())
      |> load_data()
      |> maybe_load_flaresolverr_status()}
   end
@@ -87,6 +89,25 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   @impl true
   def handle_info({:flaresolverr_status, status}, socket) do
     {:noreply, assign(socket, :flaresolverr_status, status)}
+  end
+
+  @impl true
+  def handle_async({:retest_paused, id}, {:ok, result}, socket) do
+    {kind, message} = IndexerComponents.retest_flash(result)
+    {:noreply, finish_retest(socket, id) |> put_flash(kind, message)}
+  end
+
+  def handle_async({:retest_paused, id}, {:exit, reason}, socket) do
+    Logger.error("Paused indexer retest crashed: #{inspect(reason)}")
+    {:noreply, finish_retest(socket, id) |> put_flash(:error, "Retest failed unexpectedly")}
+  end
+
+  defp finish_retest(socket, id) do
+    socket
+    |> update(:retesting_paused, &MapSet.delete(&1, id))
+    # Only the list and health: a retest can run for many seconds, and a full
+    # load_data/1 would close any modal the user opened meanwhile.
+    |> assign_indexers_and_health()
   end
 
   ## Indexer Events
@@ -409,6 +430,23 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "Indexer not found")}
+    end
+  end
+
+  @impl true
+  def handle_event("retest_paused", %{"id" => id}, socket) do
+    if MapSet.member?(socket.assigns.retesting_paused, id) do
+      {:noreply, socket}
+    else
+      {:noreply,
+       socket
+       |> update(:retesting_paused, &MapSet.put(&1, id))
+       |> start_async({:retest_paused, id}, fn ->
+         result = Indexers.retest_paused_prowlarr_indexers(id)
+         # Re-read Prowlarr so the card shows what is still paused.
+         _ = IndexerHealth.check_health(id, force: true)
+         result
+       end)}
     end
   end
 
@@ -852,9 +890,16 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   ## Private Helpers
 
-  defp load_data(socket) do
+  defp assign_indexers_and_health(socket) do
     indexers = Settings.list_indexer_configs()
-    indexer_health = get_indexer_health_status(indexers)
+
+    socket
+    |> assign(:indexers, indexers)
+    |> assign(:indexer_health, get_indexer_health_status(indexers))
+  end
+
+  defp load_data(socket) do
+    socket = assign_indexers_and_health(socket)
     cardigann_enabled = CardigannFeatureFlags.enabled?()
 
     library_indexers =
@@ -868,8 +913,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         else: %{total: 0, enabled: 0, disabled: 0}
 
     socket
-    |> assign(:indexers, indexers)
-    |> assign(:indexer_health, indexer_health)
     |> assign(:library_indexers, library_indexers)
     |> assign(:library_indexer_stats, library_indexer_stats)
     |> assign(:show_indexer_modal, false)

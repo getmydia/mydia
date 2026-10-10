@@ -11,6 +11,7 @@ defmodule Mydia.Indexers.Health do
   - Health check results are cached for 5 minutes (configurable)
   - Background checks run every 3 minutes for all enabled indexers
   - Manual checks bypass the cache and force a fresh test
+  - Prowlarr results also carry `details.paused_indexers`, read-only from Prowlarr's indexer status
 
   ## Failure Tracking
 
@@ -221,7 +222,14 @@ defmodule Mydia.Indexers.Health do
           # Success - reset failure counter
           :ets.delete(@failure_table, config.id)
 
-          healthy_result(Map.merge(info, %{capabilities: capabilities}))
+          healthy_result(
+            Map.merge(info, %{
+              capabilities: capabilities,
+              # Prowlarr reachable says nothing about its indexers: it silently
+              # drops the ones it has paused from every search.
+              paused_indexers: Indexers.paused_indexer_list(config)
+            })
+          )
 
         {:error, error} ->
           error_message =

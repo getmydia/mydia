@@ -1,6 +1,6 @@
 defmodule MydiaWeb.IndexerComponents do
   @moduledoc """
-  Per-indexer progress display for manual search.
+  Per-indexer progress display for manual search, plus the paused-indexer formatting shared with the admin Indexers page.
 
   Used by `MydiaWeb.SearchLive.Index` and the manual-search modal in
   `MydiaWeb.MediaLive.Show`. Imported explicitly by both rather than added to
@@ -26,12 +26,22 @@ defmodule MydiaWeb.IndexerComponents do
   `progress` is a map of `indexer_id => %IndexerProgress{}`. Pass `retry_event`
   to render a retry button on failed and timed-out indexers; the button sends
   that event with `phx-value-id` set to the indexer id.
+
+  Pass `retest_paused_event` to render a "Retest & search again" button on rows
+  Prowlarr reported paused indexers for; it sends that event with `phx-value-id`
+  set to the indexer id.
   """
   attr :progress, :map, required: true
   attr :retry_event, :string, default: nil
+  attr :retest_paused_event, :string, default: nil
 
   def indexer_search_status(assigns) do
-    rows = sort_rows(assigns.progress)
+    now = DateTime.utc_now()
+
+    rows =
+      assigns.progress
+      |> sort_rows()
+      |> Enum.map(&%{&1 | paused: active_paused(&1.paused, now)})
 
     total_results =
       rows
@@ -41,6 +51,7 @@ defmodule MydiaWeb.IndexerComponents do
     done = Enum.count(rows, &(&1.status in [:ok, :error, :timeout]))
     total = length(rows)
     failed = Enum.count(rows, &(&1.status in [:error, :timeout]))
+    paused = rows |> Enum.flat_map(& &1.paused) |> length()
 
     assigns =
       assigns
@@ -49,6 +60,7 @@ defmodule MydiaWeb.IndexerComponents do
       |> assign(:done, done)
       |> assign(:total, total)
       |> assign(:failed, failed)
+      |> assign(:paused, paused)
       # Derived rather than passed in: a row is :pending until it settles, and
       # a retry puts a settled row back to :pending, so this tracks a retry's
       # in-flight window too.
@@ -71,6 +83,13 @@ defmodule MydiaWeb.IndexerComponents do
           <span :if={@searching} class="sr-only">Searching indexers</span>
           <span>{@total_results} results · {@done}/{@total} indexers</span>
           <span :if={@failed > 0} class="badge badge-sm badge-error">{@failed} failed</span>
+          <span
+            :if={@paused > 0}
+            id="indexer-search-paused-count"
+            class="badge badge-sm badge-warning"
+          >
+            {@paused} paused
+          </span>
           <progress
             :if={@searching}
             class="progress progress-primary w-full h-1"
@@ -83,7 +102,7 @@ defmodule MydiaWeb.IndexerComponents do
             <li
               :for={row <- @rows}
               id={"indexer-status-#{row.indexer_id}"}
-              class="flex items-center gap-2"
+              class="flex flex-wrap items-center gap-2"
             >
               <span :if={row.status == :pending} class="loading loading-spinner loading-xs"></span>
               <.icon
@@ -114,6 +133,25 @@ defmodule MydiaWeb.IndexerComponents do
               >
                 Retry
               </.button>
+
+              <div
+                :if={row.paused != []}
+                id={"indexer-paused-#{row.indexer_id}"}
+                class="basis-full flex flex-wrap items-center gap-2 pl-6 text-xs text-warning"
+              >
+                <.icon name="hero-pause-circle" class="w-4 h-4 shrink-0" />
+                <span>Skipped by Prowlarr (paused after failures): {paused_list(row.paused)}</span>
+                <.button
+                  :if={@retest_paused_event}
+                  type="button"
+                  id={"indexer-retest-paused-#{row.indexer_id}"}
+                  class="btn btn-ghost btn-xs"
+                  phx-click={@retest_paused_event}
+                  phx-value-id={row.indexer_id}
+                >
+                  Retest &amp; search again
+                </.button>
+              </div>
             </li>
           </ul>
         </div>
@@ -137,4 +175,63 @@ defmodule MydiaWeb.IndexerComponents do
 
   defp status_label(%IndexerProgress{status: :timeout}), do: "timed out"
   defp status_label(%IndexerProgress{status: :error} = row), do: row.error || "failed"
+
+  @doc ~S(Time left on a Prowlarr pause, coarsest unit: "<1m", "12m", "3h", "1d".)
+  def paused_remaining(%DateTime{} = till, now \\ DateTime.utc_now()) do
+    seconds = DateTime.diff(till, now, :second)
+
+    cond do
+      seconds < 60 -> "<1m"
+      seconds < 3_600 -> "#{div(seconds, 60)}m"
+      seconds < 86_400 -> "#{div(seconds, 3_600)}h"
+      true -> "#{div(seconds, 86_400)}d"
+    end
+  end
+
+  @doc """
+  Drops pauses that have already lapsed. Health details are cached for minutes,
+  so the list can name an indexer whose pause is over by render time.
+  """
+  def active_paused(paused, now \\ DateTime.utc_now()) do
+    Enum.filter(paused, &(DateTime.compare(&1.disabled_till, now) == :gt))
+  end
+
+  @doc "\"Amber Tracker (12m left), Birch Tracker (3h left)\""
+  def paused_list(paused) do
+    Enum.map_join(paused, ", ", &"#{&1.name} (#{paused_remaining(&1.disabled_till)} left)")
+  end
+
+  def paused_heading(1), do: "1 indexer paused by Prowlarr"
+  def paused_heading(count), do: "#{count} indexers paused by Prowlarr"
+
+  @doc """
+  Flash kind and text for the result of
+  `Mydia.Indexers.retest_paused_prowlarr_indexers/1`.
+
+  "Recovered" is claimed only when the re-read after the tests no longer lists
+  the indexer as paused, so the flash never contradicts the status beside it.
+  """
+  def retest_flash({:ok, %{outcomes: []}}), do: {:info, "No paused indexers to retest"}
+
+  def retest_flash({:ok, %{outcomes: outcomes} = result}) do
+    still_paused = result |> Map.get(:paused, []) |> MapSet.new(& &1.id)
+    texts = Enum.map(outcomes, &retest_outcome_text(&1, still_paused))
+
+    kind =
+      if Enum.all?(texts, &match?({:recovered, _}, &1)), do: :info, else: :error
+
+    {kind, Enum.map_join(texts, ". ", &elem(&1, 1))}
+  end
+
+  def retest_flash({:error, reason}), do: {:error, "Retest failed: #{reason}"}
+
+  defp retest_outcome_text({indexer, :ok}, still_paused) do
+    if MapSet.member?(still_paused, indexer.id),
+      do:
+        {:still_paused, "#{indexer.name} passed its test but Prowlarr still lists it as paused"},
+      else: {:recovered, "#{indexer.name} recovered"}
+  end
+
+  defp retest_outcome_text({indexer, {:error, message}}, _still_paused),
+    do: {:failing, "#{indexer.name} still failing: #{message}"}
 end

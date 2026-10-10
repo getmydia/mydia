@@ -467,6 +467,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("retry_indexer", %{"id" => indexer_id}, socket),
     do: SearchEvents.handle_retry_indexer(indexer_id, socket)
 
+  def handle_event("retest_paused", %{"id" => indexer_id}, socket),
+    do: SearchEvents.handle_retry_indexer(indexer_id, socket, retest_paused: true)
+
   # Subtitle events
 
   def handle_event("open_subtitle_search", params, socket),
@@ -887,6 +890,9 @@ defmodule MydiaWeb.MediaLive.Show do
       {:noreply, socket}
     end
   end
+
+  def handle_info({:paused_retest, search_id, result}, socket),
+    do: SearchEvents.handle_paused_retest(search_id, result, socket)
 
   def handle_info({:fetch_detail_metadata, _tmdb_id, media_type}, socket) do
     # `selected_item` was just found and assigned by the show_details handler

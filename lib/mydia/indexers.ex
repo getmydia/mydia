@@ -33,6 +33,7 @@ defmodule Mydia.Indexers do
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Structs.IndexerProgress
+  alias Mydia.Indexers.Structs.PausedIndexer
   alias Mydia.Settings
   alias Mydia.Repo
   import Ecto.Query
@@ -160,6 +161,9 @@ defmodule Mydia.Indexers do
         for a library type (e.g., `:movies`, `:series`, `:mixed`)
       - `:indexer_ids` - List of indexer config IDs to search (default: all enabled)
         When provided, only the specified indexers will be searched.
+      - `:report_paused` - Fill `IndexerProgress.paused` for Prowlarr configs
+        by reading Prowlarr's indexer status after each search (default: false).
+        Manual search only; automatic search never pays for the extra request.
       - `:max_concurrency` - Maximum indexers searched at once (default: every
         selected indexer, capped at 16). Falls back to the `:indexer_search`
         application config, then the default.
@@ -267,6 +271,7 @@ defmodule Mydia.Indexers do
               result_count: length(results),
               error: metrics.error,
               duration_ms: metrics.duration_ms,
+              paused: metrics.paused,
               completed: completed,
               total: total
             })
@@ -488,7 +493,94 @@ defmodule Mydia.Indexers do
     {:error, "Invalid config - requires base_url and api_key"}
   end
 
+  @doc """
+  Lists the Prowlarr indexers Prowlarr has paused after failures, within the
+  scope this config searches. `{:ok, []}` for every non-Prowlarr config.
+  """
+  @spec prowlarr_paused_indexers(Settings.IndexerConfig.t() | map()) ::
+          {:ok, [PausedIndexer.t()]} | {:error, String.t()}
+  def prowlarr_paused_indexers(%Settings.IndexerConfig{type: :prowlarr} = config) do
+    config
+    |> indexer_config_to_adapter_config()
+    |> Adapter.Prowlarr.list_paused_indexers()
+    |> case do
+      {:ok, paused} -> {:ok, paused}
+      {:error, error} -> {:error, format_indexer_error(error)}
+    end
+  end
+
+  def prowlarr_paused_indexers(_config), do: {:ok, []}
+
+  @doc """
+  `prowlarr_paused_indexers/1` for display: `[]` when Prowlarr can't be read.
+  A missing hint is better than a failed page or search.
+  """
+  @spec paused_indexer_list(Settings.IndexerConfig.t() | map()) :: [PausedIndexer.t()]
+  def paused_indexer_list(config) do
+    case prowlarr_paused_indexers(config) do
+      {:ok, paused} -> paused
+      {:error, _} -> []
+    end
+  end
+
+  @doc """
+  Asks Prowlarr to test each paused indexer in this config's scope, one at a
+  time, then re-reads what is still paused. User-triggered only: Mydia never
+  retests on its own, the backoff is Prowlarr's.
+  """
+  @spec retest_paused_prowlarr_indexers(Settings.IndexerConfig.t() | String.t()) ::
+          {:ok,
+           %{
+             outcomes: [{PausedIndexer.t(), :ok | {:error, String.t()}}],
+             paused: [PausedIndexer.t()]
+           }}
+          | {:error, String.t()}
+  def retest_paused_prowlarr_indexers(id) when is_binary(id) do
+    with {:ok, config} <- fetch_indexer_config(id),
+         do: retest_paused_prowlarr_indexers(config)
+  end
+
+  def retest_paused_prowlarr_indexers(%Settings.IndexerConfig{type: :prowlarr} = config) do
+    adapter_config = indexer_config_to_adapter_config(config)
+
+    with {:ok, paused} <- prowlarr_paused_indexers(config) do
+      outcomes =
+        Enum.map(paused, fn indexer ->
+          case Adapter.Prowlarr.retest_indexer(adapter_config, indexer.id) do
+            :ok -> {indexer, :ok}
+            {:error, error} -> {indexer, {:error, format_indexer_error(error)}}
+          end
+        end)
+
+      # Not paused_indexer_list/1: its [] on error would read as "nothing is
+      # paused any more" and let the flash claim a recovery nobody confirmed.
+      case prowlarr_paused_indexers(config) do
+        {:ok, still_paused} ->
+          {:ok, %{outcomes: outcomes, paused: still_paused}}
+
+        {:error, reason} ->
+          {:error, "tests ran, but re-reading Prowlarr's status failed: #{reason}"}
+      end
+    end
+  end
+
+  def retest_paused_prowlarr_indexers(%Settings.IndexerConfig{}),
+    do: {:ok, %{outcomes: [], paused: []}}
+
   ## Private Functions
+
+  # Only the lookup is rescued, so a failure during the retest itself is not
+  # reported as a missing indexer. A database id raises Ecto.NoResultsError; a
+  # "runtime::" id for an env indexer that no longer exists raises a plain
+  # RuntimeError (Settings.ServiceConfigs.get_indexer_config!/2).
+  defp fetch_indexer_config(id) do
+    case Settings.get_indexer_config!(id) do
+      nil -> {:error, "Indexer not found"}
+      config -> {:ok, config}
+    end
+  rescue
+    _ in [Ecto.NoResultsError, RuntimeError] -> {:error, "Indexer not found"}
+  end
 
   # Fetches enabled Cardigann definitions and converts them to adapter config format
   defp get_enabled_cardigann_configs do
@@ -572,9 +664,15 @@ defmodule Mydia.Indexers do
     end_time = System.monotonic_time(:millisecond)
     duration = end_time - start_time
 
+    # After the search, not before: an indexer that failed during this very
+    # search has just been paused, and the user should see that too.
+    paused =
+      if Keyword.get(opts, :report_paused, false), do: paused_indexer_list(config), else: []
+
     {success, results, error_message} = result
 
     metrics = %{
+      paused: paused,
       indexer: config.name,
       indexer_id: Map.get(config, :id),
       success: success,
