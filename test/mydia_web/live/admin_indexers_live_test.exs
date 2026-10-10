@@ -457,6 +457,45 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
              "Expected flash 'Connection failed' after test connection. " <>
                "HTML snippet: #{String.slice(html, 0..500)}"
     end
+
+    test "shows indexers Prowlarr has paused and retests them on demand", %{conn: conn} do
+      bypass = Bypass.open()
+      till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
+
+      Mydia.IndexerMock.mock_prowlarr_status(bypass,
+        indexer_status: [%{"indexerId" => 1, "disabledTill" => till}]
+      )
+
+      Mydia.IndexerMock.mock_prowlarr_indexers(bypass)
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/indexer/1", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"id" => 1}))
+      end)
+
+      Bypass.expect_once(bypass, "POST", "/api/v1/indexer/test", fn conn ->
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      {:ok, indexer} =
+        Settings.create_indexer_config(%{
+          name: "Paused Prowlarr",
+          type: :prowlarr,
+          base_url: "http://localhost:#{bypass.port}",
+          api_key: "key",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      assert has_element?(view, "#indexer-paused-#{indexer.id}", "Fictional Tracker")
+
+      view |> element("#indexer-retest-paused-#{indexer.id}") |> render_click()
+      render_async(view)
+
+      assert has_element?(view, "#flash-info", "Fictional Tracker recovered")
+    end
   end
 
   describe "Runtime Config Protection" do

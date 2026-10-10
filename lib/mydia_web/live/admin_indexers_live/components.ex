@@ -4,6 +4,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
 
   alias Mydia.Settings
   alias MydiaWeb.AdminIndexersLive.FlareSolverrComponents
+  alias MydiaWeb.IndexerComponents
 
   @doc """
   Renders the Indexers tab content.
@@ -17,6 +18,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :recently_disabled_indexer, :any, default: nil
   attr :flaresolverr, :map, default: %{enabled: false, url: nil, configured: false, env?: false}
   attr :flaresolverr_status, :map, default: %{configured: false, status: :loading}
+  attr :retesting_paused, :any, default: MapSet.new()
 
   def indexers_tab(assigns) do
     ~H"""
@@ -46,6 +48,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
               <.indexer_row
                 indexer={indexer}
                 health={Map.get(@indexer_health, indexer.id, %{status: :unknown})}
+                retesting={MapSet.member?(@retesting_paused, indexer.id)}
               />
             </:row>
             <:empty>No indexer connections.</:empty>
@@ -109,9 +112,13 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
 
   attr :indexer, :any, required: true
   attr :health, :map, required: true
+  attr :retesting, :boolean, default: false
 
   defp indexer_row(assigns) do
-    assigns = assign(assigns, :runtime?, Settings.runtime_config?(assigns.indexer))
+    assigns =
+      assigns
+      |> assign(:runtime?, Settings.runtime_config?(assigns.indexer))
+      |> assign(:paused, paused_indexers(assigns.health))
 
     ~H"""
     <.admin_row id={"indexer-#{@indexer.id}"}>
@@ -120,6 +127,29 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
         <.env_lock_badge :if={@runtime?} />
       </:title>
       <:descriptor><span class="font-mono">{@indexer.base_url}</span></:descriptor>
+      <:details :if={@paused != []}>
+        <div
+          id={"indexer-paused-#{@indexer.id}"}
+          class="flex flex-wrap items-center gap-2 text-warning"
+        >
+          <.icon name="hero-pause-circle" class="w-4 h-4 shrink-0" />
+          <span>
+            {IndexerComponents.paused_heading(length(@paused))}: {IndexerComponents.paused_list(
+              @paused
+            )}
+          </span>
+          <.button
+            type="button"
+            id={"indexer-retest-paused-#{@indexer.id}"}
+            class="btn btn-ghost btn-xs"
+            phx-click="retest_paused"
+            phx-value-id={@indexer.id}
+            disabled={@retesting}
+          >
+            <span :if={@retesting} class="loading loading-spinner loading-xs"></span> Retest
+          </.button>
+        </div>
+      </:details>
       <:badges>
         <span class="badge badge-sm badge-outline">{format_indexer_type(@indexer.type)}</span>
         <span class={[
@@ -349,6 +379,11 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
       do: true
 
   def needs_library_config?(_), do: false
+
+  defp paused_indexers(health) do
+    details = Map.get(health, :details) || %{}
+    Map.get(details, :paused_indexers, [])
+  end
 
   defp health_status_badge_class(:healthy), do: "badge-success"
   defp health_status_badge_class(:unhealthy), do: "badge-error"

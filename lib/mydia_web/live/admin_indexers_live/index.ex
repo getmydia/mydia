@@ -10,6 +10,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
+  alias MydiaWeb.IndexerComponents
 
   @impl true
   def mount(_params, _session, socket) do
@@ -22,6 +23,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> assign(:flaresolverr_sources, %{})
      |> assign(:flaresolverr_form, to_form(flaresolverr_changeset(%{}), as: :flaresolverr))
      |> init_library_assigns()
+     |> assign(:retesting_paused, MapSet.new())
      |> load_data()
      |> maybe_load_flaresolverr_status()}
   end
@@ -87,6 +89,23 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   @impl true
   def handle_info({:flaresolverr_status, status}, socket) do
     {:noreply, assign(socket, :flaresolverr_status, status)}
+  end
+
+  @impl true
+  def handle_async({:retest_paused, id}, {:ok, result}, socket) do
+    {kind, message} = IndexerComponents.retest_flash(result)
+    {:noreply, finish_retest(socket, id) |> put_flash(kind, message)}
+  end
+
+  def handle_async({:retest_paused, id}, {:exit, reason}, socket) do
+    Logger.error("Paused indexer retest crashed: #{inspect(reason)}")
+    {:noreply, finish_retest(socket, id) |> put_flash(:error, "Retest failed unexpectedly")}
+  end
+
+  defp finish_retest(socket, id) do
+    socket
+    |> update(:retesting_paused, &MapSet.delete(&1, id))
+    |> load_data()
   end
 
   ## Indexer Events
@@ -409,6 +428,23 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "Indexer not found")}
+    end
+  end
+
+  @impl true
+  def handle_event("retest_paused", %{"id" => id}, socket) do
+    if MapSet.member?(socket.assigns.retesting_paused, id) do
+      {:noreply, socket}
+    else
+      {:noreply,
+       socket
+       |> update(:retesting_paused, &MapSet.put(&1, id))
+       |> start_async({:retest_paused, id}, fn ->
+         result = Indexers.retest_paused_prowlarr_indexers(id)
+         # Re-read Prowlarr so the card shows what is still paused.
+         _ = IndexerHealth.check_health(id, force: true)
+         result
+       end)}
     end
   end
 
