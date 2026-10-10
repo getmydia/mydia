@@ -354,6 +354,13 @@ defmodule MydiaWeb.IndexerComponentsTest do
                IndexerComponents.retest_flash({:error, "Indexer not found"})
     end
 
+    test "retest_flash/1 does not claim recovery while the re-read still lists it" do
+      amber = paused("Amber Tracker", 600)
+
+      assert {:error, "Amber Tracker passed its test but Prowlarr still lists it as paused"} =
+               IndexerComponents.retest_flash({:ok, %{outcomes: [{amber, :ok}], paused: [amber]}})
+    end
+
     test "a settled row with paused indexers shows the hint, count and retest button" do
       progress = %{
         "p" => %IndexerProgress{

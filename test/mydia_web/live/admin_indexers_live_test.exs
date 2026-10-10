@@ -462,9 +462,12 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       bypass = Bypass.open()
       till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
 
-      Mydia.IndexerMock.mock_prowlarr_status(bypass,
-        indexer_status: [%{"indexerId" => 1, "disabledTill" => till}]
-      )
+      Mydia.IndexerMock.mock_prowlarr_status(bypass)
+
+      statuses =
+        Mydia.IndexerMock.stub_prowlarr_indexer_status_agent(bypass, [
+          %{"indexerId" => 1, "disabledTill" => till}
+        ])
 
       Mydia.IndexerMock.mock_prowlarr_indexers(bypass)
 
@@ -474,7 +477,9 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
         |> Plug.Conn.resp(200, Jason.encode!(%{"id" => 1}))
       end)
 
+      # A passing test clears the pause, as Prowlarr's RecordSuccess does.
       Bypass.expect_once(bypass, "POST", "/api/v1/indexer/test", fn conn ->
+        Agent.update(statuses, fn _ -> [] end)
         Plug.Conn.resp(conn, 200, "")
       end)
 
@@ -502,9 +507,12 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       test_pid = self()
       till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
 
-      Mydia.IndexerMock.mock_prowlarr_status(bypass,
-        indexer_status: [%{"indexerId" => 1, "disabledTill" => till}]
-      )
+      Mydia.IndexerMock.mock_prowlarr_status(bypass)
+
+      statuses =
+        Mydia.IndexerMock.stub_prowlarr_indexer_status_agent(bypass, [
+          %{"indexerId" => 1, "disabledTill" => till}
+        ])
 
       Mydia.IndexerMock.mock_prowlarr_indexers(bypass)
 
@@ -525,6 +533,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
           5_000 -> :ok
         end
 
+        Agent.update(statuses, fn _ -> [] end)
         Plug.Conn.resp(conn, 200, "")
       end)
 

@@ -65,9 +65,10 @@ defmodule MydiaWeb.SearchLive.RealFanoutTest do
       |> Plug.Conn.resp(200, Jason.encode!([real_result_item("Fictional.Feature.2031.1080p")]))
     end)
 
-    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass, [
-      %{"indexerId" => 1, "disabledTill" => till}
-    ])
+    statuses =
+      Mydia.IndexerMock.stub_prowlarr_indexer_status_agent(bypass, [
+        %{"indexerId" => 1, "disabledTill" => till}
+      ])
 
     Mydia.IndexerMock.mock_prowlarr_indexers(bypass)
 
@@ -77,7 +78,9 @@ defmodule MydiaWeb.SearchLive.RealFanoutTest do
       |> Plug.Conn.resp(200, Jason.encode!(%{"id" => 1}))
     end)
 
+    # A passing test clears the pause, as Prowlarr's RecordSuccess does.
     Bypass.expect_once(bypass, "POST", "/api/v1/indexer/test", fn conn ->
+      Agent.update(statuses, fn _ -> [] end)
       Plug.Conn.resp(conn, 200, "")
     end)
 
@@ -100,7 +103,7 @@ defmodule MydiaWeb.SearchLive.RealFanoutTest do
     assert has_element?(view, "#flash-info", "Fictional Tracker recovered")
   end
 
-  test "a user without manage-downloads permission cannot retest paused indexers", %{conn: conn} do
+  test "a user without manage-downloads permission cannot retest paused indexers", %{conn: _conn} do
     bypass = Bypass.open()
     till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
 

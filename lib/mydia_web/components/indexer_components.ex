@@ -207,18 +207,31 @@ defmodule MydiaWeb.IndexerComponents do
   @doc """
   Flash kind and text for the result of
   `Mydia.Indexers.retest_paused_prowlarr_indexers/1`.
+
+  "Recovered" is claimed only when the re-read after the tests no longer lists
+  the indexer as paused, so the flash never contradicts the status beside it.
   """
   def retest_flash({:ok, %{outcomes: []}}), do: {:info, "No paused indexers to retest"}
 
-  def retest_flash({:ok, %{outcomes: outcomes}}) do
-    kind = if Enum.all?(outcomes, &match?({_, :ok}, &1)), do: :info, else: :error
-    {kind, Enum.map_join(outcomes, ". ", &retest_outcome_text/1)}
+  def retest_flash({:ok, %{outcomes: outcomes} = result}) do
+    still_paused = result |> Map.get(:paused, []) |> MapSet.new(& &1.id)
+    texts = Enum.map(outcomes, &retest_outcome_text(&1, still_paused))
+
+    kind =
+      if Enum.all?(texts, &match?({:recovered, _}, &1)), do: :info, else: :error
+
+    {kind, Enum.map_join(texts, ". ", &elem(&1, 1))}
   end
 
   def retest_flash({:error, reason}), do: {:error, "Retest failed: #{reason}"}
 
-  defp retest_outcome_text({indexer, :ok}), do: "#{indexer.name} recovered"
+  defp retest_outcome_text({indexer, :ok}, still_paused) do
+    if MapSet.member?(still_paused, indexer.id),
+      do:
+        {:still_paused, "#{indexer.name} passed its test but Prowlarr still lists it as paused"},
+      else: {:recovered, "#{indexer.name} recovered"}
+  end
 
-  defp retest_outcome_text({indexer, {:error, message}}),
-    do: "#{indexer.name} still failing: #{message}"
+  defp retest_outcome_text({indexer, {:error, message}}, _still_paused),
+    do: {:failing, "#{indexer.name} still failing: #{message}"}
 end
