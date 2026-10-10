@@ -44,4 +44,32 @@ defmodule Mydia.Storage.LocalTest do
     assert {:error, %Mydia.Storage.Error{kind: :not_found}} =
              Mydia.Storage.validate(Location.local("/definitely/not/here"))
   end
+
+  describe "copy_file/2" do
+    test "copies the bytes and the source's mode", %{tmp_dir: dir} do
+      src = Path.join(dir, "src.mkv")
+      dest = Path.join(dir, "dest.mkv")
+      File.write!(src, "bytes")
+      File.chmod!(src, 0o640)
+
+      assert :ok = Mydia.Storage.Local.copy_file(src, dest)
+      assert File.read!(dest) == "bytes"
+      assert Bitwise.band(File.stat!(dest).mode, 0o777) == 0o640
+    end
+
+    test "overwrites an existing destination", %{tmp_dir: dir} do
+      src = Path.join(dir, "src.mkv")
+      dest = Path.join(dir, "dest.mkv")
+      File.write!(src, "new")
+      File.write!(dest, "old and longer")
+
+      assert :ok = Mydia.Storage.Local.copy_file(src, dest)
+      assert File.read!(dest) == "new"
+    end
+
+    test "returns the posix error when the source is missing", %{tmp_dir: dir} do
+      assert {:error, :enoent} =
+               Mydia.Storage.Local.copy_file(Path.join(dir, "absent"), Path.join(dir, "dest"))
+    end
+  end
 end
