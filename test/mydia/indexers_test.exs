@@ -992,6 +992,48 @@ defmodule Mydia.IndexersTest do
     end
   end
 
+  describe "search_all/2 report_paused" do
+    setup do
+      disable_persisted_indexer_configs()
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/api/v1/search", fn conn -> json_resp(conn, 200, []) end)
+
+      config =
+        indexer_config_fixture(%{
+          name: "reporting-prowlarr",
+          type: :prowlarr,
+          base_url: "http://localhost:#{bypass.port}"
+        })
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "carries the paused list on the Prowlarr row", %{bypass: bypass, config: config} do
+      stub_paused(bypass, [{1, "Amber Tracker"}])
+      parent = self()
+
+      Indexers.search_all("Fictional Feature 2031",
+        report_paused: true,
+        on_indexer_result: fn progress -> send(parent, {:progress, progress}) end
+      )
+
+      assert_received {:progress, %{indexer_id: id, paused: [%{name: "Amber Tracker"}]}}
+      assert id == config.id
+    end
+
+    test "does not read indexer status without the option" do
+      # No indexerstatus stub on this Bypass: a request would fail the test.
+      parent = self()
+
+      Indexers.search_all("Fictional Feature 2031",
+        on_indexer_result: fn progress -> send(parent, {:progress, progress}) end
+      )
+
+      assert_received {:progress, %{paused: []}}
+    end
+  end
+
   defp stub_paused(bypass, entries) do
     till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
 

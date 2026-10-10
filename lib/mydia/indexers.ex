@@ -161,6 +161,9 @@ defmodule Mydia.Indexers do
         for a library type (e.g., `:movies`, `:series`, `:mixed`)
       - `:indexer_ids` - List of indexer config IDs to search (default: all enabled)
         When provided, only the specified indexers will be searched.
+      - `:report_paused` - Fill `IndexerProgress.paused` for Prowlarr configs
+        by reading Prowlarr's indexer status after each search (default: false).
+        Manual search only; automatic search never pays for the extra request.
       - `:max_concurrency` - Maximum indexers searched at once (default: every
         selected indexer, capped at 16). Falls back to the `:indexer_search`
         application config, then the default.
@@ -268,6 +271,7 @@ defmodule Mydia.Indexers do
               result_count: length(results),
               error: metrics.error,
               duration_ms: metrics.duration_ms,
+              paused: metrics.paused,
               completed: completed,
               total: total
             })
@@ -646,9 +650,15 @@ defmodule Mydia.Indexers do
     end_time = System.monotonic_time(:millisecond)
     duration = end_time - start_time
 
+    # After the search, not before: an indexer that failed during this very
+    # search has just been paused, and the user should see that too.
+    paused =
+      if Keyword.get(opts, :report_paused, false), do: paused_indexer_list(config), else: []
+
     {success, results, error_message} = result
 
     metrics = %{
+      paused: paused,
       indexer: config.name,
       indexer_id: Map.get(config, :id),
       success: success,

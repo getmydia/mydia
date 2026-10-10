@@ -13,9 +13,14 @@ defmodule Mydia.Indexers.Structs.IndexerProgress do
   `results` carries the actual releases and can be large. Consumers that keep
   these structs in LiveView assigns should clear `results` after folding them
   into their own accumulator and rely on `result_count` for display.
+
+  `paused` lists the indexers Prowlarr skipped because it has them paused
+  after failures. Filled only for Prowlarr configs, and only when the caller
+  passed `report_paused: true` to `search_all/2`.
   """
 
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Indexers.Structs.PausedIndexer
 
   @type status :: :pending | :ok | :error | :timeout
 
@@ -28,7 +33,8 @@ defmodule Mydia.Indexers.Structs.IndexerProgress do
           error: String.t() | nil,
           duration_ms: non_neg_integer() | nil,
           completed: non_neg_integer() | nil,
-          total: pos_integer() | nil
+          total: pos_integer() | nil,
+          paused: [PausedIndexer.t()]
         }
 
   defstruct [
@@ -40,6 +46,7 @@ defmodule Mydia.Indexers.Structs.IndexerProgress do
     :completed,
     :total,
     status: :pending,
-    results: []
+    results: [],
+    paused: []
   ]
 end
