@@ -6,7 +6,7 @@ defmodule Mydia.Media.BulkWrites do
   import Ecto.Query, warn: false
   alias Mydia.Repo
   alias Mydia.Accounts.Scope
-  alias Mydia.Media.MediaItem
+  alias Mydia.Media.{MediaItem, Restrictions}
   alias Mydia.Events
 
   @doc """
@@ -21,19 +21,16 @@ defmodule Mydia.Media.BulkWrites do
   """
   @spec update_media_items_monitored(Scope.t(), [binary()], boolean(), keyword()) ::
           {:ok, non_neg_integer()} | {:error, term()}
-  def update_media_items_monitored(%Scope{} = _scope, ids, monitored, opts \\ [])
+  def update_media_items_monitored(%Scope{} = scope, ids, monitored, opts \\ [])
       when is_list(ids) do
     Repo.transaction(fn ->
       # Fetch media items before update to track events
-      media_items =
-        MediaItem
-        |> where([m], m.id in ^ids)
-        |> Repo.all()
+      media_items = scope |> scoped_items(ids) |> Repo.all()
 
       # Perform the update
       {count, _} =
-        MediaItem
-        |> where([m], m.id in ^ids)
+        scope
+        |> scoped_items(ids)
         |> Repo.update_all(set: [monitored: monitored, updated_at: DateTime.utc_now()])
 
       # Track events for each media item
@@ -68,15 +65,25 @@ defmodule Mydia.Media.BulkWrites do
     - `:actor_id` - The ID of the actor (user_id, job name, etc.)
   """
   @spec update_media_items_batch(Scope.t(), [binary()], map(), keyword()) ::
-          {:ok, non_neg_integer()} | {:error, :not_found | term()}
-  def update_media_items_batch(%Scope{} = _scope, ids, attrs, opts \\ [])
+          {:ok, non_neg_integer()} | {:error, :not_found | :invalid_monitored | term()}
+  def update_media_items_batch(%Scope{} = scope, ids, attrs, opts \\ [])
       when is_list(ids) and is_map(attrs) do
-    if referenced_foreign_keys_exist?(attrs) do
-      do_update_media_items_batch(ids, attrs, opts)
-    else
-      {:error, :not_found}
+    cond do
+      not valid_monitored?(attrs[:monitored]) -> {:error, :invalid_monitored}
+      not referenced_foreign_keys_exist?(attrs) -> {:error, :not_found}
+      true -> do_update_media_items_batch(scope, ids, attrs, opts)
     end
   end
+
+  # Only items the scope can see are touched; the rest of `ids` is skipped
+  # without an error, so a restricted account cannot probe for hidden ids.
+  defp scoped_items(%Scope{} = scope, ids) do
+    MediaItem
+    |> where([m], m.id in ^ids)
+    |> Restrictions.apply(scope)
+  end
+
+  defp valid_monitored?(value), do: value in [nil, true, false, "true", "false"]
 
   # Repo.update_all/3 takes no changeset, so Mydia.Repo.ForeignKeyGuard cannot
   # turn a foreign key violation below into a changeset error: it raises on
@@ -97,7 +104,7 @@ defmodule Mydia.Media.BulkWrites do
     Ecto.Query.CastError -> false
   end
 
-  defp do_update_media_items_batch(ids, attrs, opts) do
+  defp do_update_media_items_batch(scope, ids, attrs, opts) do
     Repo.transaction(fn ->
       # Build the update list, only including non-nil values
       updates =
@@ -114,16 +121,14 @@ defmodule Mydia.Media.BulkWrites do
         # record and should pay no extra query.
         media_items =
           if Map.has_key?(updates, :monitored) do
-            MediaItem
-            |> where([m], m.id in ^ids)
-            |> Repo.all()
+            scope |> scoped_items(ids) |> Repo.all()
           else
             []
           end
 
         {count, _} =
-          MediaItem
-          |> where([m], m.id in ^ids)
+          scope
+          |> scoped_items(ids)
           |> Repo.update_all(set: Map.to_list(updates))
 
         unless media_items == [] do
