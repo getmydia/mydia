@@ -19,6 +19,7 @@ defmodule Mydia.Media do
     ProviderKey
   }
 
+  alias Mydia.Media.{ItemWrites, Queries}
   alias Mydia.Media.ContentRating
   alias Mydia.Media.Restrictions
   alias Mydia.Media.Structs.CalendarEntry
@@ -76,7 +77,7 @@ defmodule Mydia.Media do
   def media_items_query(%Scope{} = scope, opts \\ []) do
     (opts[:base_query] || MediaItem)
     |> Restrictions.apply(scope)
-    |> apply_media_item_filters(opts)
+    |> Queries.apply_media_item_filters(opts)
   end
 
   @doc """
@@ -375,11 +376,6 @@ defmodule Mydia.Media do
     Restrictions.visible?(candidate, scope)
   end
 
-  # Callers want a tagged tuple to thread through `with`.
-  defp authorize_write(scope, attrs) do
-    if writable?(scope, attrs), do: :ok, else: {:error, :restricted}
-  end
-
   @doc """
   The message a restricted account sees when `writable?/2` refuses a write.
 
@@ -401,16 +397,6 @@ defmodule Mydia.Media do
 
   defp content_rating_of(%{content_rating: rating}), do: rating
   defp content_rating_of(_metadata), do: nil
-
-  # An update that does not mention metadata leaves the stored metadata in
-  # place, so judging the attrs alone would classify the item as though it had
-  # none and wrongly refuse an in-bounds edit.
-  defp merged_write_attrs(%MediaItem{} = item, attrs) do
-    %{
-      type: Map.get(attrs, :type) || Map.get(attrs, "type") || item.type,
-      metadata: Map.get(attrs, :metadata) || Map.get(attrs, "metadata") || item.metadata
-    }
-  end
 
   @doc """
   Creates a media item.
@@ -436,7 +422,7 @@ defmodule Mydia.Media do
       |> maybe_put_monitored_from_opts(opts)
       |> maybe_apply_default_monitor_new_seasons(opts)
 
-    with :ok <- authorize_write(scope, attrs),
+    with :ok <- ItemWrites.authorize_write(scope, attrs),
          {:ok, media_item} <-
            %MediaItem{}
            |> MediaItem.changeset(attrs)
@@ -593,178 +579,16 @@ defmodule Mydia.Media do
   @spec update_media_item(Scope.t(), MediaItem.t(), map(), keyword()) ::
           {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t() | :restricted}
   def update_media_item(%Scope{} = scope, %MediaItem{} = media_item, attrs, opts \\ []) do
-    with :ok <- authorize_write(scope, merged_write_attrs(media_item, attrs)) do
+    with :ok <-
+           ItemWrites.authorize_write(scope, ItemWrites.merged_write_attrs(media_item, attrs)) do
       changeset = MediaItem.changeset(media_item, attrs)
-      persist_and_audit_media_item(changeset, media_item, opts)
+      ItemWrites.persist_and_audit_media_item(changeset, media_item, opts)
     end
   end
 
-  @doc false
-  defp persist_and_audit_media_item(changeset, original, opts) do
-    case Repo.update(changeset) do
-      {:ok, updated} ->
-        actor_type = Keyword.get(opts, :actor_type, :system)
-        actor_id = Keyword.get(opts, :actor_id, "media_context")
-        reason = Keyword.get(opts, :reason, "Updated")
-        changes = extract_meaningful_changes(changeset, original)
+  ## Item writes
 
-        if changes != %{} do
-          Events.media_item_updated(updated, actor_type, actor_id, reason, changes)
-        end
-
-        {:ok, updated}
-
-      error ->
-        error
-    end
-  end
-
-  # :monitored and :monitor_new_seasons are operator settings, not metadata.
-  # They are here so that a write of either lands in the item's history with
-  # its old and new value, whichever caller made it. Without that, the
-  # enricher's silent re-enable in getmydia/mydia#653 was indistinguishable
-  # from an ordinary "Metadata enriched" update for three weeks.
-  #
-  # Every field here must render in the activity feed; presentation_test.exs
-  # enforces it, because an audited field the feed cannot show reads as a
-  # refresh that changed nothing.
-  @audited_media_item_fields [
-    :title,
-    :original_title,
-    :year,
-    :monitored,
-    :monitor_new_seasons,
-    :category,
-    :category_override,
-    :tmdb_id,
-    :tvdb_id
-  ]
-
-  @doc false
-  def audited_media_item_fields, do: @audited_media_item_fields
-
-  @doc false
-  defp extract_meaningful_changes(changeset, original) do
-    changes = changeset.changes
-
-    simple_changes =
-      changes
-      |> Map.take(@audited_media_item_fields)
-      |> Enum.map(fn {field, new_value} ->
-        old_value = Map.get(original, field)
-        {field, %{old: old_value, new: new_value}}
-      end)
-      |> Map.new()
-
-    # Extract meaningful changes from nested metadata
-    metadata_changes =
-      if Map.has_key?(changes, :metadata) do
-        extract_metadata_changes(original.metadata, changes.metadata)
-      else
-        %{}
-      end
-
-    Map.merge(simple_changes, metadata_changes)
-  end
-
-  defp extract_metadata_changes(nil, _new), do: %{metadata: %{old: nil, new: "added"}}
-  defp extract_metadata_changes(_old, nil), do: %{}
-
-  defp extract_metadata_changes(old_metadata, new_metadata) do
-    # Compare interesting metadata fields
-    fields_to_compare = [
-      {:overview, "overview"},
-      {:poster_path, "poster"},
-      {:backdrop_path, "backdrop"},
-      {:tagline, "tagline"},
-      {:vote_average, "rating"},
-      {:runtime, "runtime"},
-      {:genres, "genres"}
-    ]
-
-    changes =
-      Enum.reduce(fields_to_compare, [], fn {field, label}, acc ->
-        old_val = MetadataAccess.get(old_metadata, field)
-        new_val = MetadataAccess.get(new_metadata, field)
-
-        if metadata_value_changed?(field, old_val, new_val) do
-          [{label, format_metadata_change(field, old_val, new_val)} | acc]
-        else
-          acc
-        end
-      end)
-
-    # Check cast/crew count changes
-    changes = maybe_add_count_change(changes, old_metadata, new_metadata, :cast, "cast")
-    changes = maybe_add_count_change(changes, old_metadata, new_metadata, :crew, "crew")
-
-    if changes == [] do
-      %{}
-    else
-      %{metadata_fields: Enum.reverse(changes)}
-    end
-  end
-
-  # A rating is shown to one decimal, so it only counts as changed at that
-  # precision. Comparing raw floats recorded provider vote drift (7.81 to 7.84)
-  # as "Rating 7.8 → 7.8" on every weekly refresh.
-  defp metadata_value_changed?(:vote_average, old, new),
-    do: format_rating(old) != format_rating(new)
-
-  defp metadata_value_changed?(_field, old, new), do: values_differ?(old, new)
-
-  defp values_differ?(nil, nil), do: false
-  defp values_differ?(nil, ""), do: false
-  defp values_differ?("", nil), do: false
-  defp values_differ?(old, new), do: old != new
-
-  defp format_metadata_change(:vote_average, old, new) do
-    %{old: format_rating(old), new: format_rating(new)}
-  end
-
-  defp format_metadata_change(:runtime, old, new) do
-    %{old: format_runtime(old), new: format_runtime(new)}
-  end
-
-  defp format_metadata_change(:genres, old, new) do
-    %{old: format_genres(old), new: format_genres(new)}
-  end
-
-  defp format_metadata_change(_field, old, new) do
-    %{old: present?(old), new: present?(new)}
-  end
-
-  defp format_rating(nil), do: nil
-  defp format_rating(val) when is_number(val), do: Float.round(val / 1, 1)
-  defp format_rating(val), do: val
-
-  defp format_runtime(nil), do: nil
-  defp format_runtime(minutes) when is_integer(minutes), do: "#{minutes}m"
-  defp format_runtime(val), do: val
-
-  defp format_genres(nil), do: nil
-  defp format_genres([]), do: nil
-  defp format_genres(genres) when is_list(genres), do: Enum.count(genres)
-  defp format_genres(val), do: val
-
-  defp present?(nil), do: nil
-  defp present?(""), do: nil
-  defp present?(_), do: true
-
-  defp maybe_add_count_change(changes, old_metadata, new_metadata, field, label) do
-    old_count = count_list(MetadataAccess.get(old_metadata, field))
-    new_count = count_list(MetadataAccess.get(new_metadata, field))
-
-    if old_count != new_count do
-      [{label, %{old: old_count, new: new_count}} | changes]
-    else
-      changes
-    end
-  end
-
-  defp count_list(nil), do: 0
-  defp count_list(list) when is_list(list), do: length(list)
-  defp count_list(_), do: 0
+  defdelegate audited_media_item_fields(), to: Mydia.Media.ItemWrites
 
   @doc """
   True when something other than `user_id`'s own bookkeeping depends on the item:
@@ -1124,7 +948,7 @@ defmodule Mydia.Media do
   def count_media_items(%Scope{} = scope, opts \\ []) do
     (opts[:base_query] || MediaItem)
     |> Restrictions.apply(scope)
-    |> apply_media_item_filters(opts)
+    |> Queries.apply_media_item_filters(opts)
     |> Repo.aggregate(:count)
   end
 
@@ -2674,167 +2498,6 @@ defmodule Mydia.Media do
     end
   end
 
-  defp apply_media_item_filters(query, opts) do
-    Enum.reduce(opts, query, fn
-      {:type, type}, query ->
-        where(query, [m], m.type == ^type)
-
-      {:monitored, monitored}, query ->
-        where(query, [m], m.monitored == ^monitored)
-
-      {:ids, ids}, query when is_list(ids) ->
-        where(query, [m], m.id in ^ids)
-
-      {:category, category}, query when is_atom(category) ->
-        where(query, [m], m.category == ^to_string(category))
-
-      {:category, category}, query when is_binary(category) ->
-        where(query, [m], m.category == ^category)
-
-      {:exclude_categories, []}, query ->
-        query
-
-      {:exclude_categories, categories}, query when is_list(categories) ->
-        names = Enum.map(categories, &to_string/1)
-        # `category` is nullable and SQL evaluates NULL NOT IN (...) to NULL,
-        # which drops the row. An item that has not been classified yet must
-        # stay on the page it is already on, so keep NULLs explicitly.
-        where(query, [m], is_nil(m.category) or m.category not in ^names)
-
-      {:library_path_type, library_type}, query ->
-        filter_by_library_path_type(query, library_type)
-
-      {:library_path_id, library_path_id}, query ->
-        filter_by_library_path(query, library_path_id)
-
-      {:search, search_term}, query when is_binary(search_term) ->
-        search_pattern = "%#{String.downcase(search_term)}%"
-        where(query, [m], like(fragment("lower(?)", m.title), ^search_pattern))
-
-      {:added_since, datetime}, query ->
-        where(query, [m], m.inserted_at >= ^datetime)
-
-      {:limit, limit}, query when is_integer(limit) and limit > 0 ->
-        limit(query, ^limit)
-
-      {:order_by, field}, query when field in [:title, :year, :inserted_at] ->
-        order_by(query, [m], asc: ^field)
-
-      {:has_files, true}, query ->
-        filter_by_has_files(query)
-
-      {:category_in, []}, query ->
-        query
-
-      {:category_in, categories}, query when is_list(categories) ->
-        names = Enum.map(categories, &to_string/1)
-        where(query, [m], m.category in ^names)
-
-      _other, query ->
-        query
-    end)
-  end
-
-  # Filter media items to only those that have at least one media file.
-  # Movies: direct media_file association via media_item_id
-  # TV Shows: indirect via episodes that have media files
-  defp filter_by_has_files(query) do
-    movie_subquery =
-      from mf in Mydia.Library.MediaFile,
-        where: not is_nil(mf.media_item_id),
-        select: mf.media_item_id,
-        distinct: true
-
-    episode_subquery =
-      from mf in Mydia.Library.MediaFile,
-        join: e in Episode,
-        on: mf.episode_id == e.id,
-        select: e.media_item_id,
-        distinct: true
-
-    where(
-      query,
-      [m],
-      m.id in subquery(movie_subquery) or m.id in subquery(episode_subquery)
-    )
-  end
-
-  # Filter media items by library path type using a subquery
-  # This is more efficient than client-side filtering
-  defp filter_by_library_path_type(query, library_type) do
-    # Subquery to get media_item_ids from media_files in library paths of this type
-    media_item_subquery =
-      from mf in Mydia.Library.MediaFile,
-        join: lp in Mydia.Settings.LibraryPath,
-        on: mf.library_path_id == lp.id,
-        where: lp.type == ^library_type and not is_nil(mf.media_item_id),
-        select: mf.media_item_id,
-        distinct: true
-
-    # Subquery to get media_item_ids from episodes that have media files in library paths of this type
-    episode_subquery =
-      from mf in Mydia.Library.MediaFile,
-        join: lp in Mydia.Settings.LibraryPath,
-        on: mf.library_path_id == lp.id,
-        join: e in Mydia.Media.Episode,
-        on: mf.episode_id == e.id,
-        where: lp.type == ^library_type,
-        select: e.media_item_id,
-        distinct: true
-
-    # Combine both: direct media files and episode media files
-    where(
-      query,
-      [m],
-      m.id in subquery(media_item_subquery) or m.id in subquery(episode_subquery)
-    )
-  end
-
-  # An item is in a library when one of its current files is, reached either
-  # directly or through an episode (episode files carry a NULL media_item_id).
-  # An item with no current files falls back to its target library, so wanted
-  # items still show up under the library they will download into.
-  defp filter_by_library_path(query, library_path_id) do
-    direct =
-      from mf in Mydia.Library.MediaFile.versions(),
-        where: mf.library_path_id == ^library_path_id and not is_nil(mf.media_item_id),
-        select: mf.media_item_id
-
-    via_episode =
-      from mf in Mydia.Library.MediaFile.versions(),
-        join: mfe in Mydia.Library.MediaFileEpisode,
-        on: mfe.media_file_id == mf.id,
-        join: e in Mydia.Media.Episode,
-        on: e.id == mfe.episode_id,
-        where: mf.library_path_id == ^library_path_id,
-        select: e.media_item_id
-
-    # NOT IN over a subquery that yields a NULL drops every row, so both
-    # has-files subqueries exclude NULLs explicitly.
-    has_direct_files =
-      from mf in Mydia.Library.MediaFile.versions(),
-        where: not is_nil(mf.media_item_id),
-        select: mf.media_item_id
-
-    has_episode_files =
-      from mf in Mydia.Library.MediaFile.versions(),
-        join: mfe in Mydia.Library.MediaFileEpisode,
-        on: mfe.media_file_id == mf.id,
-        join: e in Mydia.Media.Episode,
-        on: e.id == mfe.episode_id,
-        where: not is_nil(e.media_item_id),
-        select: e.media_item_id
-
-    where(
-      query,
-      [m],
-      m.id in subquery(direct) or m.id in subquery(via_episode) or
-        (m.library_path_id == ^library_path_id and
-           m.id not in subquery(has_direct_files) and
-           m.id not in subquery(has_episode_files))
-    )
-  end
-
   defp apply_episode_filters(query, opts) do
     Enum.reduce(opts, query, fn
       {:season, season}, query ->
@@ -2880,12 +2543,12 @@ defmodule Mydia.Media do
   @spec update_category(Scope.t(), MediaItem.t(), atom() | String.t(), keyword()) ::
           {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t() | :restricted}
   def update_category(%Scope{} = scope, %MediaItem{} = media_item, category, opts \\ []) do
-    with :ok <- authorize_write(scope, merged_write_attrs(media_item, %{})) do
+    with :ok <- ItemWrites.authorize_write(scope, ItemWrites.merged_write_attrs(media_item, %{})) do
       override = Keyword.get(opts, :override, false)
       audit_opts = Keyword.take(opts, [:reason, :actor_type, :actor_id])
 
       changeset = MediaItem.category_changeset(media_item, category, override: override)
-      persist_and_audit_media_item(changeset, media_item, audit_opts)
+      ItemWrites.persist_and_audit_media_item(changeset, media_item, audit_opts)
     end
   end
 
