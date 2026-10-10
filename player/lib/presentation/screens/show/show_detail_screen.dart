@@ -8,6 +8,7 @@ import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../detail/detail_actions.dart';
 import '../detail/detail_links.dart';
+import '../detail/detail_hero.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_screen_frame.dart';
 import '../detail/detail_similar_rail.dart';
@@ -186,91 +187,19 @@ class ShowDetailScreen extends ConsumerWidget {
       context: context,
       expandedHeight: 380,
       back: const DetailHeroBackButton(),
-      background: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Background image
-          DetailArtImage(
-            art: show.backdrop,
-            slot: ArtSlot.backdrop,
-            placeholder: (_) => Container(color: AppColors.surface),
-            errorWidget: (_) => Container(color: AppColors.surface),
-          ),
-
-          // Gradient overlay
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  AppColors.background.withValues(alpha: 0.5),
-                  AppColors.background.withValues(alpha: 0.95),
-                  AppColors.background,
-                ],
-                stops: const [0.0, 0.5, 0.8, 1.0],
-              ),
-            ),
-          ),
-
-          // Content overlay
-          Positioned(
-            left: 20,
-            right: 20,
-            bottom: 20,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        show.title,
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withValues(alpha: 0.8),
-                              blurRadius: 8,
-                            ),
-                          ],
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (show.yearDisplay.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          show.yearDisplay,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: AppColors.textSecondary),
-                        ),
-                      ],
-                      if (selectedEpisode != null) ...[
-                        const SizedBox(height: 8),
-                        _buildEpisodeContextPill(show, selectedEpisode),
-                      ],
-                    ],
-                  ),
-                ),
-                // Gap and control are emitted together so a null episode
-                // leaves no dangling spacer.
-                if (selectedEpisode != null) ...[
-                  const SizedBox(width: 16),
-                  _buildHeroPlayControl(context, ref, show, selectedEpisode),
-                ],
-              ],
-            ),
-          ),
-        ],
+      background: DetailHeroBackground(
+        art: show.backdrop,
+        slot: ArtSlot.backdrop,
+        overlay: DetailHeroTitle(
+          title: show.title,
+          subtitle: show.yearDisplay,
+          below: selectedEpisode == null
+              ? null
+              : _buildEpisodeContextPill(show, selectedEpisode),
+          action: selectedEpisode == null
+              ? null
+              : _buildHeroPlayControl(context, ref, show, selectedEpisode),
+        ),
       ),
     );
   }
@@ -299,10 +228,7 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  /// The hero's Play affordance, extracted (like the other `_buildX` helpers
-  /// in this file) for readability: the overlay `Row` it lives in is already
-  /// deeply nested inside the `background` `Stack` passed to
-  /// `detailHeroAppBar`.
+  /// The hero's Play affordance.
   Widget _buildHeroPlayControl(
     BuildContext context,
     WidgetRef ref,

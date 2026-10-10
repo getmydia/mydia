@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../widgets/detail_art_image.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../detail/detail_links.dart';
+import '../detail/detail_hero.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_screen_frame.dart';
 import '../detail/download_metadata.dart';
@@ -100,78 +101,28 @@ class EpisodeDetailScreen extends ConsumerWidget {
     WidgetRef ref,
     EpisodeView episode,
   ) {
-    // Use episode thumbnail if available, otherwise fall back to show backdrop
-    final art = episode.still ?? episode.showBackdrop;
-
+    final progress = episode.progress;
     return detailHeroAppBar(
       context: context,
+      // Shorter than the movie and show heroes: a still is shorter than a
+      // backdrop.
       expandedHeight: 300,
       back: const DetailHeroBackButton(),
-      background: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Background image
-          if (art != null)
-            DetailArtImage(
-              art: art,
-              slot: ArtSlot.still,
-              placeholder: (context) => Container(
-                color: AppColors.surface,
-              ),
-              errorWidget: (context) => Container(
-                color: AppColors.surface,
-                child: const Icon(
-                  Icons.movie_rounded,
-                  size: 64,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            )
-          else
-            Container(
-              color: AppColors.surface,
-              child: const Icon(
-                Icons.movie_rounded,
-                size: 64,
-                color: AppColors.textSecondary,
-              ),
-            ),
-
-          // Gradient overlay
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  AppColors.background.withValues(alpha: 0.5),
-                  AppColors.background.withValues(alpha: 0.95),
-                  AppColors.background,
-                ],
-                stops: const [0.0, 0.5, 0.8, 1.0],
-              ),
-            ),
-          ),
-
-          // Progress indicator at bottom
-          if (episode.progress != null && episode.progress!.percentage > 0)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: LinearProgressIndicator(
-                value: episode.progress!.percentage / 100,
+      background: DetailHeroBackground(
+        // The episode still, or the show's backdrop when there is none.
+        art: episode.still ?? episode.showBackdrop,
+        slot: ArtSlot.still,
+        fallbackIcon: Icons.movie_rounded,
+        bottom: progress != null && progress.percentage > 0
+            ? LinearProgressIndicator(
+                value: progress.percentage / 100,
                 backgroundColor: Colors.transparent,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  episode.progress!.watched
-                      ? AppColors.success
-                      : AppColors.primary,
+                  progress.watched ? AppColors.success : AppColors.primary,
                 ),
                 minHeight: 3,
-              ),
-            ),
-        ],
+              )
+            : null,
       ),
     );
   }
