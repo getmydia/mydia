@@ -7,7 +7,7 @@ defmodule Mydia.Library.MediaFiles do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
-  alias Mydia.Library.MediaFile
+  alias Mydia.Library.{EpisodeLinks, MediaFile}
 
   @doc """
   Returns the total storage used by all media files in bytes.
@@ -268,7 +268,7 @@ defmodule Mydia.Library.MediaFiles do
   # Keeps media_file_episodes in step with whatever a write left in
   # `episode_id`. See `ensure_episode_link/1`.
   defp tap_episode_link({:ok, %MediaFile{} = media_file} = result) do
-    {:ok, _} = Mydia.Library.ensure_episode_link(media_file)
+    {:ok, _} = EpisodeLinks.ensure_episode_link(media_file)
     result
   end
 
