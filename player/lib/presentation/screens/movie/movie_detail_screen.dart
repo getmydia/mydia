@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../widgets/detail_art_image.dart';
 import '../../../core/layout/dock_insets.dart';
-import '../../../core/layout/window_chrome_inset.dart';
 import '../../widgets/detail_hero_app_bar.dart';
-import '../../widgets/freshness_header.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/theme/colors.dart';
@@ -12,6 +10,7 @@ import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../detail/detail_links.dart';
 import '../detail/detail_providers.dart';
+import '../detail/detail_screen_frame.dart';
 import '../detail/detail_similar_rail.dart';
 import '../detail/download_metadata.dart';
 import '../detail/start_download.dart';
@@ -34,31 +33,12 @@ class MovieDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final movieAsync = ref.watch(movieViewProvider(target));
-
-    // This is a full-window route (pushed outside the shell), and so the sole
-    // owner of the title-bar band here: the body has to sit under
-    // `removeBand`, or the ambient `MediaQuery.padding.top` still carries the
-    // band on top of the hero's own title row a second time.
-    return WindowChromeInsets.removeBand(
-      child: Scaffold(
-        extendBodyBehindAppBar: true,
-        body: Column(
-          children: [
-            FreshnessHeader(
-              queryKeys: freshnessKeys(target),
-              topInset: freshnessTopInset(context, appBarHeight: 0),
-            ),
-            Expanded(
-              child: movieAsync.when(
-                data: (movie) => _buildContent(context, ref, movie),
-                loading: () => _buildLoadingState(context),
-                error: (error, stack) => _buildErrorState(context, ref, error),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return DetailScreenFrame<MovieView>(
+      target: target,
+      value: ref.watch(movieViewProvider(target)),
+      noun: 'movie',
+      onRetry: () => ref.read(movieActionsProvider(target)).refresh(),
+      builder: (context, movie) => _buildContent(context, ref, movie),
     );
   }
 
@@ -80,151 +60,6 @@ class MovieDetailScreen extends ConsumerWidget {
         );
       }
     }
-  }
-
-  /// Exposes [_buildLoadingState] for
-  /// `detail_screen_inset_test.dart`: that test proves the back button
-  /// clears the window chrome in this transient state too, not only in the
-  /// loaded hero, without needing the source's item stream to reach the
-  /// loading branch.
-  @visibleForTesting
-  Widget loadingStateForTest(BuildContext context) =>
-      _buildLoadingState(context);
-
-  /// Exposes [_buildErrorState] for the same reason as
-  /// [loadingStateForTest]. Needs a real [WidgetRef] because the "Try Again"
-  /// button reads `movieActionsProvider(target)` from it, even though nothing
-  /// is watched during build.
-  @visibleForTesting
-  Widget errorStateForTest(BuildContext context, WidgetRef ref, Object error) =>
-      _buildErrorState(context, ref, error);
-
-  Widget _buildLoadingState(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        // The same title row as the loaded hero, so the back button (and the
-        // cast button) clear the traffic lights / Linux buttons here too:
-        // this state sits under the same `WindowChromeInsets.removeBand` as
-        // the rest of the screen, so a plain `leading` slot with its own flat
-        // padding has nothing left to push it clear of the band with.
-        // `topScrim: false` because the spinner background never had a top
-        // darkening gradient and this state does not need one added.
-        detailHeroAppBar(
-          context: context,
-          expandedHeight: 350,
-          back: const DetailHeroBackButton(),
-          topScrim: false,
-          background: Container(
-            color: AppColors.surface,
-            child: const Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: AppColors.shimmerBase,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Container(
-                  height: 24,
-                  width: 200,
-                  decoration: BoxDecoration(
-                    color: AppColors.shimmerBase,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: AppColors.shimmerBase,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildErrorState(BuildContext context, WidgetRef ref, Object error) {
-    return CustomScrollView(
-      slivers: [
-        // See the loading state's header above: the same title row as the
-        // loaded hero, so the back button clears the window chrome here too.
-        detailHeroAppBar(
-          context: context,
-          expandedHeight: 200,
-          back: const DetailHeroBackButton(),
-          topScrim: false,
-          background: Container(color: AppColors.background),
-        ),
-        SliverFillRemaining(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.error_outline_rounded,
-                      size: 48,
-                      color: AppColors.error,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Failed to load movie',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    error.toString(),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
-                  FilledButton.icon(
-                    onPressed: () =>
-                        ref.read(movieActionsProvider(target)).refresh(),
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Try Again'),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildContent(BuildContext context, WidgetRef ref, MovieView movie) {

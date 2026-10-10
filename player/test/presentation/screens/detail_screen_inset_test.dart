@@ -14,16 +14,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
-import 'package:player/domain/detail/detail_target.dart';
-import 'package:player/domain/sources/item.dart';
-import 'package:player/presentation/screens/episode/episode_detail_screen.dart';
-import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
-import 'package:player/presentation/screens/show/show_detail_screen.dart';
+import 'package:player/presentation/screens/detail/detail_states.dart';
 import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../helpers/cast_test_overrides.dart';
-import 'sources/fake_media_source.dart' show fakeSourceId;
 
 const Key _backKey = Key('detail-back');
 const Key _heroKey = Key('detail-hero');
@@ -164,36 +159,17 @@ void main() {
     // too, so the flat `Padding(8)` leading landed the back icon squarely
     // under the lights (measured: (8,8)-(48,48), inside the lights' own
     // (12,13)-(71,26)). Routing these states through `detailHeroAppBar`,
-    // like the loaded hero, is the fix; this pins the contract for every
-    // screen's loading and error branches via each screen's
-    // `@visibleForTesting` seam, rather than mirroring the shape (a plain
-    // `Object error` stands in for a real GraphQL failure since only the
-    // header, not the error message body, is under test).
-    const movie = MovieDetailScreen.target(
-      target: SourceTarget(ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm1')),
-    );
-    const show = ShowDetailScreen.target(
-      target: SourceTarget(ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.show, externalId: 's1')),
-    );
-    const episode = EpisodeDetailScreen.target(
-      target: SourceTarget(ItemRef(
-          sourceId: fakeSourceId, kind: ItemKind.episode, externalId: 'e1')),
-    );
+    // like the loaded hero, is the fix; this pins the contract on the
+    // shared `DetailLoadingState` and `DetailErrorState` every screen renders
+    // (a plain `Object error` stands in for a real GraphQL failure since only
+    // the header, not the error message body, is under test).
     final cases = <String, Widget Function(BuildContext, WidgetRef)>{
-      'MovieDetailScreen loading': (context, ref) =>
-          movie.loadingStateForTest(context),
-      'MovieDetailScreen error': (context, ref) =>
-          movie.errorStateForTest(context, ref, 'boom'),
-      'ShowDetailScreen loading': (context, ref) =>
-          show.loadingStateForTest(context),
-      'ShowDetailScreen error': (context, ref) =>
-          show.errorStateForTest(context, ref, 'boom'),
-      'EpisodeDetailScreen loading': (context, ref) =>
-          episode.loadingStateForTest(context),
-      'EpisodeDetailScreen error': (context, ref) =>
-          episode.errorStateForTest(context, ref, 'boom'),
+      'DetailLoadingState': (context, ref) => const DetailLoadingState(),
+      'DetailErrorState': (context, ref) => DetailErrorState(
+            noun: 'movie',
+            error: 'boom',
+            onRetry: () {},
+          ),
     };
 
     for (final MapEntry(key: name, value: builder) in cases.entries) {
