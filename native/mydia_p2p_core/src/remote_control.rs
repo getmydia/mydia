@@ -70,7 +70,7 @@ pub enum RemoteControlResponse {
         protocol_version: u32,
         capabilities: TargetCapabilities,
     },
-    State(PlaybackSnapshot),
+    State(Box<PlaybackSnapshot>),
     /// The command was applied. The controller re-reads state immediately
     /// rather than trusting this to describe the result.
     Accepted,
