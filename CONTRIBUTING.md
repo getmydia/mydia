@@ -4,7 +4,8 @@
 
 Mydia enforces a small set of automated quality gates in CI: the compiler's
 set-theoretic type checker (`mix compile --warnings-as-errors`), Credo
-(`mix credo --strict`), compile warnings in test files
+(`mix credo --strict`), a ratchet on complexity, nesting and module size
+(`mix mydia.ratchet`), compile warnings in test files
 (`mix test --warnings-as-errors`), LiveViewTest warnings
 (`config :phoenix_live_view, :test_warnings, :raise` in `config/test.exs`),
 `cargo fmt` and `cargo clippy -D warnings` for every native crate and wasm
@@ -45,6 +46,24 @@ Every finding from a gate gets exactly one of these:
    and cannot be made precise with a rule. Disable it with `false` and a
    one-line rationale, and rely on a precise tool instead. Example:
    `StructBracketAccess` was retired in favour of the compiler's type checker.
+
+### Ratchets
+
+`mix mydia.ratchet` (run by `mix precommit` and CI) judges a branch against its
+merge base with `origin/master` rather than judging the whole tree. It fails when
+the branch adds a cyclomatic-complexity or nesting finding, makes an existing one
+worse, adds a file over 800 lines under `lib/`, or grows a file that is already over 800
+lines.
+
+The comparison uses your local `origin/master`, so run `git fetch origin` first if
+it is stale. Otherwise findings already fixed or added on master can be attributed
+to your branch.
+
+This is not grandfathering. Nothing lists the findings that already exist, and the
+gate only ever tightens: once a function is simplified or a file shrinks, the
+lower number becomes the new baseline. Findings are matched by check, function name
+and message, ignoring file and module, so moving an unchanged function into a new
+module is free. Splitting a large file is exactly what the gate wants.
 
 ### What is forbidden
 

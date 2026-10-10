@@ -76,8 +76,8 @@
           # nil). The type checker is the authoritative gate here.
           {Credo.Check.Refactor.Apply, false},
           {Credo.Check.Refactor.CondStatements, []},
-          # Disabled: cyclomatic-complexity threshold is a subjective heuristic
-          # the team has never enforced; clearing ~189 findings is low-value churn.
+          # Disabled here: judged against the merge base instead, so the ~550
+          # existing findings never need a list. See .credo.ratchet.exs.
           {Credo.Check.Refactor.CyclomaticComplexity, false},
           {Credo.Check.Refactor.FilterCount, []},
           {Credo.Check.Refactor.FilterFilter, []},
@@ -88,8 +88,8 @@
           {Credo.Check.Refactor.MatchInCondition, []},
           {Credo.Check.Refactor.NegatedConditionsInUnless, []},
           {Credo.Check.Refactor.NegatedConditionsWithElse, []},
-          # Disabled: nesting-depth threshold is a subjective heuristic the team
-          # has never enforced (~224 findings).
+          # Disabled here: judged against the merge base instead. See
+          # .credo.ratchet.exs.
           {Credo.Check.Refactor.Nesting, false},
           {Credo.Check.Refactor.RedundantWithClauseResult, []},
           {Credo.Check.Refactor.RejectReject, []},

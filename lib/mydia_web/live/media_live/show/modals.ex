@@ -17,6 +17,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   alias Mydia.Library.Hdr
   alias Mydia.Media.DiskRemoval.Preview
   alias Mydia.Settings.LibraryPath
+  alias MydiaWeb.MediaLive.Show.ManualSearchFilters
 
   @doc """
   Delete confirmation modal for removing a media item.
@@ -1030,85 +1031,15 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
              `!@searching` as a floor also keeps the "Close after grabbing"
              preference reachable after a search that found nothing. --%>
         <%= if !@raw_results_empty? or !@searching do %>
-          <div class="bg-base-200/50 border-b border-base-300 px-4 py-3">
-            <div class="flex flex-wrap items-center gap-3">
-              <form
-                id="manual-search-filter-form"
-                phx-change="filter_search"
-                class="flex flex-wrap items-center gap-3"
-              >
-                <select name="quality" class="select select-bordered select-sm w-auto">
-                  <option value="" selected={is_nil(@quality_filter)}>All Quality</option>
-                  <option value="720p" selected={@quality_filter == "720p"}>720p</option>
-                  <option value="1080p" selected={@quality_filter == "1080p"}>1080p</option>
-                  <option value="2160p" selected={@quality_filter in ["2160p", "4k"]}>4K</option>
-                </select>
-                <select
-                  id="manual-search-source-filter"
-                  name="source"
-                  class="select select-bordered select-sm w-auto"
-                >
-                  <option value="" selected={is_nil(@source_filter)}>All Sources</option>
-                  <option
-                    :for={source <- @filter_options.sources}
-                    value={source}
-                    selected={@source_filter == source}
-                  >
-                    {source}
-                  </option>
-                </select>
-                <select
-                  id="manual-search-codec-filter"
-                  name="codec"
-                  class="select select-bordered select-sm w-auto"
-                >
-                  <option value="" selected={is_nil(@codec_filter)}>All Codecs</option>
-                  <option
-                    :for={codec <- @filter_options.codecs}
-                    value={codec}
-                    selected={@codec_filter == codec}
-                  >
-                    {codec}
-                  </option>
-                </select>
-                <div class="join">
-                  <span class="join-item btn btn-sm btn-ghost no-animation pointer-events-none">
-                    Min Seeds
-                  </span>
-                  <input
-                    type="number"
-                    name="min_seeders"
-                    value={@min_seeders}
-                    min="0"
-                    class="input input-bordered input-sm w-16 join-item"
-                    placeholder="0"
-                  />
-                </div>
-              </form>
-              <div class="flex-1"></div>
-              <label
-                class="label cursor-pointer gap-2"
-                id="close-after-grab-toggle"
-                title="Close this dialog as soon as a release is grabbed"
-              >
-                <span class="label-text text-xs">Close after grabbing</span>
-                <input
-                  type="checkbox"
-                  class="toggle toggle-sm toggle-primary"
-                  checked={@close_after_grab}
-                  phx-click="toggle_close_after_grab"
-                />
-              </label>
-              <form id="manual-search-sort-form" phx-change="sort_search">
-                <select name="sort_by" class="select select-bordered select-sm">
-                  <option value="quality" selected={@sort_by == :quality}>Best Score</option>
-                  <option value="seeders" selected={@sort_by == :seeders}>Most Seeds</option>
-                  <option value="size" selected={@sort_by == :size}>Largest</option>
-                  <option value="date" selected={@sort_by == :date}>Newest</option>
-                </select>
-              </form>
-            </div>
-          </div>
+          <ManualSearchFilters.filters_bar
+            quality_filter={@quality_filter}
+            source_filter={@source_filter}
+            codec_filter={@codec_filter}
+            filter_options={@filter_options}
+            min_seeders={@min_seeders}
+            close_after_grab={@close_after_grab}
+            sort_by={@sort_by}
+          />
         <% end %>
         <%!-- Modal Body --%>
         <div class="flex-1 overflow-y-auto">

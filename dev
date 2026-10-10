@@ -215,7 +215,7 @@ print_test_rerun_hints() {
 }
 
 run_precommit() {
-    # Run all seven steps inside a SINGLE devenv shell so the environment (and the
+    # Run all eight steps inside a SINGLE devenv shell so the environment (and the
     # enterShell setup-task guards) load once and _build/test stays warm across
     # steps — no per-step shell re-entry, no recompilation between steps. Runs
     # against the active adapter (SQLite by default; DATABASE_TYPE=postgres keeps
@@ -258,6 +258,7 @@ run_step "Compile"      "mix compile --warnings-as-errors"
 run_step "Unused deps"  "mix deps.unlock --unused"
 run_step "Format"       "mix format --check-formatted"
 run_step "Credo"        "mix credo --strict"
+run_step "Ratchet"      "mix mydia.ratchet"
 run_step "Database"     "mix ecto.create --quiet && mix ecto.migrate --quiet"
 run_step "Tests"        "mix test --warnings-as-errors --color"
 
