@@ -406,7 +406,7 @@ defmodule Mydia.Library.FileOrganizer do
   defp do_fallback(source, dest, :move), do: do_move_file(source, dest)
 
   defp do_fallback(source, dest, :copy) do
-    case File.cp(source, dest) do
+    case Storage.Local.copy_file(source, dest) do
       :ok -> {:ok, :copy}
       {:error, reason} -> {:error, {:copy_failed, reason}}
     end
@@ -560,7 +560,7 @@ defmodule Mydia.Library.FileOrganizer do
 
       {:error, :exdev} ->
         # Cross-device move: copy then delete
-        with :ok <- File.cp(source, dest),
+        with :ok <- Storage.Local.copy_file(source, dest),
              :ok <- File.rm(source) do
           {:ok, :move}
         else

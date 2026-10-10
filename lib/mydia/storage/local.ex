@@ -4,6 +4,8 @@ defmodule Mydia.Storage.Local do
 
   alias Mydia.Storage.{Entry, Error, Location}
 
+  require Logger
+
   @chunk_size 256 * 1024
 
   @impl true
@@ -77,7 +79,7 @@ defmodule Mydia.Storage.Local do
     dest = Path.join(root, rel)
 
     with :ok <- mkdir_parent(dest) do
-      case File.cp(local_path, dest) do
+      case copy_file(local_path, dest) do
         :ok -> :ok
         {:error, reason} -> {:error, Error.from_posix(reason, dest)}
       end
@@ -101,7 +103,7 @@ defmodule Mydia.Storage.Local do
     to = Path.join(to_root, to_rel)
 
     with :ok <- mkdir_parent(to) do
-      case File.cp(from, to) do
+      case copy_file(from, to) do
         :ok -> :ok
         {:error, reason} -> {:error, Error.from_posix(reason, from)}
       end
@@ -138,6 +140,42 @@ defmodule Mydia.Storage.Local do
         {:error, reason} ->
           {:error, Error.from_posix(reason, from)}
       end
+    end
+  end
+
+  @doc """
+  Copies `source` to `dest`, overwriting `dest`, then gives `dest` the
+  source's mode when the filesystem allows it.
+
+  `File.cp/2` reports a refused chmod as a failed copy although every byte
+  has landed. SMB/CIFS, some NFS exports and FUSE mounts refuse it with
+  `:eperm`, and there the mount options decide the mode anyway, so only the
+  byte copy can fail here.
+  """
+  @spec copy_file(Path.t(), Path.t()) :: :ok | {:error, File.posix()}
+  def copy_file(source, dest) do
+    case :file.copy(source, dest) do
+      {:ok, _bytes} ->
+        copy_mode(source, dest)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp copy_mode(source, dest) do
+    with {:ok, %{mode: mode}} <- File.stat(source),
+         {:ok, dest_stat} <- File.stat(dest),
+         :ok <- File.write_stat(dest, %{dest_stat | mode: mode}) do
+      :ok
+    else
+      {:error, reason} ->
+        Logger.debug("Copied file but could not copy its mode",
+          reason: reason,
+          from: source,
+          to: dest
+        )
     end
   end
 
