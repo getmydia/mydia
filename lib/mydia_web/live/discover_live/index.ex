@@ -1162,6 +1162,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
       advances >= advance_cap(socket) ->
         socket
 
+      # A failed page leaves has_more and page as they were, so advancing
+      # would only re-request the page that just failed. Wait for Retry.
+      socket.assigns.load_error != nil ->
+        socket
+
       length(socket.assigns.visible_items) >= target ->
         socket
 
