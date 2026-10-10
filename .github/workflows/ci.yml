@@ -46,6 +46,7 @@ jobs:
         with:
           # mix mydia.ratchet compares against the merge base with origin/master.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install Nix
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31

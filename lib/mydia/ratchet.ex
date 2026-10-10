@@ -49,7 +49,7 @@ defmodule Mydia.Ratchet do
   @spec parse_credo_json(binary()) :: [map()]
   def parse_credo_json(output) do
     lines = String.split(output, "\n")
-    json_lines = Enum.drop_while(lines, &(&1 != "{"))
+    json_lines = Enum.drop_while(lines, &(not String.starts_with?(&1, "{")))
 
     if json_lines == [] do
       raise ArgumentError, "no credo JSON object in output:\n" <> output

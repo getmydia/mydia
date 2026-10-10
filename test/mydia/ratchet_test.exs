@@ -117,6 +117,12 @@ defmodule Mydia.RatchetTest do
       assert [%{"check" => "C"}] = Ratchet.parse_credo_json(output)
     end
 
+    test "parses compact single-line JSON after a banner line" do
+      output = "banner\n{\"issues\": [{\"check\": \"C\"}]}\n"
+
+      assert [%{"check" => "C"}] = Ratchet.parse_credo_json(output)
+    end
+
     test "raises when no JSON object is present" do
       assert_raise ArgumentError, fn -> Ratchet.parse_credo_json("boom\n") end
     end

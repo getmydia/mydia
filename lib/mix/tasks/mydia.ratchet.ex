@@ -102,7 +102,7 @@ defmodule Mix.Tasks.Mydia.Ratchet do
       "json"
     ]
 
-    {output, _status} = System.cmd("mix", args)
+    {output, _status} = System.cmd("mix", args, env: [{"MIX_ENV", to_string(Mix.env())}])
     Ratchet.parse_credo_json(output)
   end
 
