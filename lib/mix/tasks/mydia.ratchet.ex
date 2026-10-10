@@ -66,8 +66,13 @@ defmodule Mix.Tasks.Mydia.Ratchet do
 
   defp merge_base!(ref) do
     case System.cmd("git", ["merge-base", "HEAD", ref], stderr_to_stdout: true) do
-      {sha, 0} -> String.trim(sha)
-      {output, _status} -> Mix.raise("ratchet: cannot find the merge base with #{ref}: #{output}")
+      {sha, 0} ->
+        String.trim(sha)
+
+      {output, _status} ->
+        Mix.raise(
+          "ratchet: cannot find the merge base with #{ref}: #{output}\nRun `git fetch origin master` and try again."
+        )
     end
   end
 

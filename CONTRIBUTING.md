@@ -42,14 +42,18 @@ Every finding from a gate gets exactly one of these:
 `mix mydia.ratchet` (run by `mix precommit` and CI) judges a branch against its
 merge base with `origin/master` rather than judging the whole tree. It fails when
 the branch adds a cyclomatic-complexity or nesting finding, makes an existing one
-worse, adds a module over 800 lines, or grows a module that is already over 800
+worse, adds a file over 800 lines under `lib/`, or grows a file that is already over 800
 lines.
 
+The comparison uses your local `origin/master`, so run `git fetch origin` first if
+it is stale. Otherwise findings already fixed or added on master can be attributed
+to your branch.
+
 This is not grandfathering. Nothing lists the findings that already exist, and the
-gate only ever tightens: once a function is simplified or a module shrinks, the
+gate only ever tightens: once a function is simplified or a file shrinks, the
 lower number becomes the new baseline. Findings are matched by check, function name
 and message, ignoring file and module, so moving an unchanged function into a new
-module is free. Splitting a large module is exactly what the gate wants.
+module is free. Splitting a large file is exactly what the gate wants.
 
 ### What is forbidden
 
