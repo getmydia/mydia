@@ -332,7 +332,7 @@ impl From<tracing::Level> for LogLevel {
 }
 
 /// Connection type for a peer (relay vs direct)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PeerConnectionType {
     /// Direct peer-to-peer connection
     Direct,
@@ -341,6 +341,7 @@ pub enum PeerConnectionType {
     /// Using both relay and direct paths
     Mixed,
     /// No active connection
+    #[default]
     None,
 }
 
@@ -480,12 +481,6 @@ pub struct NetworkStats {
     pub relay_url: Option<String>,
     /// Connection type for the first connected peer (for UI display)
     pub peer_connection_type: PeerConnectionType,
-}
-
-impl Default for PeerConnectionType {
-    fn default() -> Self {
-        PeerConnectionType::None
-    }
 }
 
 /// Configuration for the Host
@@ -1257,6 +1252,17 @@ async fn run_event_loop(
 
     let mut running = true;
 
+    let ctx = LoopCtx {
+        endpoint: &endpoint,
+        address_hints: &address_hints,
+        shared_state: &shared_state,
+        event_tx: &event_tx,
+        disconnect_tx: &disconnect_tx,
+        internal_tx: &internal_tx,
+        #[cfg(feature = "host")]
+        hls_registry: &hls_registry,
+    };
+
     while running {
         // A host both accepts inbound connections and serves commands; a
         // client only serves commands. `tokio::select!` takes no `#[cfg]` on
@@ -1325,15 +1331,11 @@ async fn run_event_loop(
                                 &mut shutdown_rx,
                                 handle_command(
                                     cmd,
-                                    &endpoint,
                                     &mut connected_peers,
                                     &mut dials,
                                     &mut dials_started,
-                                    &address_hints,
-                                    &shared_state,
                                     relay_connected,
-                                    &internal_tx,
-                                    &hls_registry,
+                                    &ctx,
                                 ),
                             )
                             .await
@@ -1356,10 +1358,7 @@ async fn run_event_loop(
                             result,
                             &mut connected_peers,
                             &mut dials,
-                            &event_tx,
-                            &shared_state,
-                            &disconnect_tx,
-                            &hls_registry,
+                            &ctx,
                         ),
                     )
                     .await
@@ -1399,14 +1398,11 @@ async fn run_event_loop(
                                 &mut shutdown_rx,
                                 handle_command(
                                     cmd,
-                                    &endpoint,
                                     &mut connected_peers,
                                     &mut dials,
                                     &mut dials_started,
-                                    &address_hints,
-                                    &shared_state,
                                     relay_connected,
-                                    &internal_tx,
+                                    &ctx,
                                 ),
                             )
                             .await
@@ -1429,9 +1425,7 @@ async fn run_event_loop(
                             result,
                             &mut connected_peers,
                             &mut dials,
-                            &event_tx,
-                            &shared_state,
-                            &disconnect_tx,
+                            &ctx,
                         ),
                     )
                     .await
@@ -1615,6 +1609,21 @@ async fn prune_disconnected_peer(
         .await;
 }
 
+/// Borrows `run_event_loop` holds for its whole life and lends to every
+/// handler. The mutable per-loop state (`connected_peers`, `dials`,
+/// `dials_started`) stays a separate argument so the borrow checker sees each
+/// `&mut` on its own.
+struct LoopCtx<'a> {
+    endpoint: &'a Endpoint,
+    address_hints: &'a MemoryLookup,
+    shared_state: &'a Arc<Mutex<SharedState>>,
+    event_tx: &'a mpsc::Sender<Event>,
+    disconnect_tx: &'a mpsc::Sender<(String, ConnectionId)>,
+    internal_tx: &'a mpsc::Sender<InternalMessage>,
+    #[cfg(feature = "host")]
+    hls_registry: &'a HlsStreamRegistry,
+}
+
 /// Record a newly established connection, announce its arrival, and spawn its stream handler and type monitor.
 /// Answer everything waiting on one peer's connect: `Dial` callers and
 /// queued requests alike. A dial that did not land fails `Dial` callers with
@@ -1637,10 +1646,7 @@ async fn handle_dial_finished(
     result: Result<Connection, String>,
     connected_peers: &mut HashMap<String, PeerConnections>,
     dials: &mut InFlightDials,
-    event_tx: &mpsc::Sender<Event>,
-    shared_state: &Arc<Mutex<SharedState>>,
-    disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
-    #[cfg(feature = "host")] hls_registry: &HlsStreamRegistry,
+    ctx: &LoopCtx<'_>,
 ) {
     match result {
         Ok(conn) => {
@@ -1648,11 +1654,11 @@ async fn handle_dial_finished(
                 conn.clone(),
                 node_id.clone(),
                 connected_peers,
-                event_tx,
-                shared_state,
-                disconnect_tx,
+                ctx.event_tx,
+                ctx.shared_state,
+                ctx.disconnect_tx,
                 #[cfg(feature = "host")]
-                hls_registry,
+                ctx.hls_registry,
             )
             .await;
 
@@ -1858,15 +1864,11 @@ async fn dispatch_stream_cmd(hls_registry: &HlsStreamRegistry, stream_id: &str, 
 /// Dispatch a single command from a `Host` handle.
 async fn handle_command(
     cmd: Command,
-    endpoint: &Endpoint,
     connected_peers: &mut HashMap<String, PeerConnections>,
     dials: &mut InFlightDials,
     dials_started: &mut u64,
-    address_hints: &MemoryLookup,
-    shared_state: &Arc<Mutex<SharedState>>,
     relay_connected: bool,
-    internal_tx: &mpsc::Sender<InternalMessage>,
-    #[cfg(feature = "host")] hls_registry: &HlsStreamRegistry,
+    ctx: &LoopCtx<'_>,
 ) {
     match cmd {
         Command::Dial {
@@ -1884,7 +1886,7 @@ async fn handle_command(
 
             // Seeded so a later on-demand dial by bare node ID resolves this
             // address without a discovery lookup.
-            address_hints.add_endpoint_info(endpoint_addr.clone());
+            ctx.address_hints.add_endpoint_info(endpoint_addr.clone());
 
             if current_connection(connected_peers, &node_id).is_some() {
                 let _ = reply.send(Ok(()));
@@ -1904,11 +1906,11 @@ async fn handle_command(
                         entry.attempt = *dials_started;
                         entry.with_addrs = true;
                         spawn_dial(
-                            endpoint,
+                            ctx.endpoint,
                             endpoint_addr,
                             None,
                             entry.attempt,
-                            internal_tx.clone(),
+                            ctx.internal_tx.clone(),
                         );
                     }
                     entry.dial_replies.push(reply);
@@ -1922,7 +1924,13 @@ async fn handle_command(
                         attempt,
                         ..Default::default()
                     });
-                    spawn_dial(endpoint, endpoint_addr, None, attempt, internal_tx.clone());
+                    spawn_dial(
+                        ctx.endpoint,
+                        endpoint_addr,
+                        None,
+                        attempt,
+                        ctx.internal_tx.clone(),
+                    );
                 }
             }
         }
@@ -1931,7 +1939,7 @@ async fn handle_command(
             reply,
         } => {
             let result = endpoint_addr_from_json(&endpoint_addr_json).map(|addr| {
-                address_hints.add_endpoint_info(addr);
+                ctx.address_hints.add_endpoint_info(addr);
             });
             let _ = reply.send(result);
         }
@@ -1965,7 +1973,10 @@ async fn handle_command(
                     }
                     match actual_node_id.parse::<EndpointId>() {
                         Ok(id) => {
-                            tracing::info!("Dialing {} on demand for a queued request", actual_node_id);
+                            tracing::info!(
+                                "Dialing {} on demand for a queued request",
+                                actual_node_id
+                            );
                             *dials_started += 1;
                             let attempt = *dials_started;
                             dials.insert(
@@ -1978,11 +1989,11 @@ async fn handle_command(
                                 },
                             );
                             spawn_dial(
-                                endpoint,
+                                ctx.endpoint,
                                 EndpointAddr::new(id),
                                 Some(ON_DEMAND_DIAL_TIMEOUT),
                                 attempt,
-                                internal_tx.clone(),
+                                ctx.internal_tx.clone(),
                             );
                         }
                         Err(e) => {
@@ -1996,19 +2007,19 @@ async fn handle_command(
             request_id,
             response,
         } => {
-            let mut state = shared_state.lock().await;
+            let mut state = ctx.shared_state.lock().await;
             if let Some(tx) = state.pending_responses.remove(&request_id) {
                 let _ = tx.send(response);
             }
         }
         Command::GetNodeAddr { reply } => {
-            let addr = endpoint.addr();
+            let addr = ctx.endpoint.addr();
             let addr_json = endpoint_addr_to_json(&addr);
             let _ = reply.send(addr_json);
         }
         Command::GetNetworkStats { reply } => {
             // Get the actual relay URL from the endpoint address
-            let addr = endpoint.addr();
+            let addr = ctx.endpoint.addr();
             let relay_url = addr.relay_urls().next().map(|u| u.to_string());
 
             // Get connection type for the first connected peer
@@ -2061,7 +2072,7 @@ async fn handle_command(
         }
         #[cfg(test)]
         Command::DebugPendingResponseCount { reply } => {
-            let state = shared_state.lock().await;
+            let state = ctx.shared_state.lock().await;
             let _ = reply.send(state.pending_responses.len());
         }
         #[cfg(test)]
@@ -2096,7 +2107,7 @@ async fn handle_command(
             reply,
         } => {
             dispatch_stream_cmd(
-                hls_registry,
+                ctx.hls_registry,
                 &stream_id,
                 StreamCmd::Header { header, reply },
             )
@@ -2108,11 +2119,16 @@ async fn handle_command(
             data,
             reply,
         } => {
-            dispatch_stream_cmd(hls_registry, &stream_id, StreamCmd::Chunk { data, reply }).await;
+            dispatch_stream_cmd(
+                ctx.hls_registry,
+                &stream_id,
+                StreamCmd::Chunk { data, reply },
+            )
+            .await;
         }
         #[cfg(feature = "host")]
         Command::FinishHlsStream { stream_id, reply } => {
-            dispatch_stream_cmd(hls_registry, &stream_id, StreamCmd::Finish { reply }).await;
+            dispatch_stream_cmd(ctx.hls_registry, &stream_id, StreamCmd::Finish { reply }).await;
         }
         #[cfg(feature = "host")]
         Command::StreamFileRange {
@@ -2123,7 +2139,7 @@ async fn handle_command(
             reply,
         } => {
             dispatch_stream_cmd(
-                hls_registry,
+                ctx.hls_registry,
                 &stream_id,
                 StreamCmd::StreamFileRange {
                     file_path,

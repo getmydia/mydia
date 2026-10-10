@@ -5,7 +5,7 @@ defmodule Mydia.Metadata.NfoWriterTest do
   alias Mydia.Metadata.Structs.{MediaMetadata, CastMember, CrewMember, SeasonInfo}
 
   # Helper to build a MediaItem-like struct for testing
-  defp build_media_item(attrs \\ %{}) do
+  defp build_media_item(attrs) do
     defaults = %{
       id: "test-id",
       title: "Test Title",
@@ -50,7 +50,7 @@ defmodule Mydia.Metadata.NfoWriterTest do
     struct(MediaMetadata, Map.merge(defaults, attrs))
   end
 
-  defp build_episode(attrs \\ %{}) do
+  defp build_episode(attrs) do
     defaults = %{
       id: "ep-1",
       season_number: 1,
@@ -70,7 +70,7 @@ defmodule Mydia.Metadata.NfoWriterTest do
     struct(Mydia.Media.Episode, Map.merge(defaults, attrs))
   end
 
-  defp build_media_file(attrs \\ %{}) do
+  defp build_media_file(attrs) do
     library_path = Map.get(attrs, :library_path, build_library_path())
 
     defaults = %{

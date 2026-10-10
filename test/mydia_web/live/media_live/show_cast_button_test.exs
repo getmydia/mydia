@@ -2,7 +2,6 @@ defmodule MydiaWeb.MediaLive.ShowCastButtonTest do
   use MydiaWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-  import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
 
   alias Mydia.Metadata.Structs.{CastMember, MediaMetadata}

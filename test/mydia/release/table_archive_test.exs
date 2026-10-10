@@ -18,17 +18,11 @@ defmodule Mydia.Release.TableArchiveTest do
   # calls `repo()`, which is only valid inside a running migration and raises
   # here.
   defp binary_column_type do
-    case Mydia.Repo.__adapter__() do
-      Ecto.Adapters.Postgres -> "bytea"
-      _ -> "BLOB"
-    end
+    if Mydia.AdapterHelpers.postgres?(), do: "bytea", else: "BLOB"
   end
 
   defp binary_literal(hex) do
-    case Mydia.Repo.__adapter__() do
-      Ecto.Adapters.Postgres -> "'\\x#{hex}'"
-      _ -> "X'#{hex}'"
-    end
+    if Mydia.AdapterHelpers.postgres?(), do: "'\\x#{hex}'", else: "X'#{hex}'"
   end
 
   test "writes one NDJSON line per row and reports the count", %{tmp_dir: tmp_dir} do

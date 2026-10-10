@@ -260,7 +260,7 @@ run_step "Format"       "mix format --check-formatted"
 run_step "Credo"        "mix credo --strict"
 run_step "Ratchet"      "mix mydia.ratchet"
 run_step "Database"     "mix ecto.create --quiet && mix ecto.migrate --quiet"
-run_step "Tests"        "mix test --color"
+run_step "Tests"        "mix test --warnings-as-errors --color"
 
 echo ""
 if [ ${#FAILED_OUTPUTS[@]} -gt 0 ]; then

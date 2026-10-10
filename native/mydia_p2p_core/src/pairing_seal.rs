@@ -178,10 +178,10 @@ pub fn seal_claim(code: &str, payload: &ClaimPayload) -> Result<SealedClaim, Pai
     let mut nonce_bytes = [0u8; NONCE_LEN];
     getrandom::fill(&mut nonce_bytes).map_err(|_| PairingSealError::Derivation)?;
 
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(&keys.seal_key));
+    let cipher = ChaCha20Poly1305::new(&Key::from(keys.seal_key));
     let ciphertext = cipher
         .encrypt(
-            Nonce::from_slice(&nonce_bytes),
+            &Nonce::from(nonce_bytes),
             Payload {
                 msg: &plaintext,
                 // Defence in depth. The seal key is already code-specific, so a
@@ -219,11 +219,12 @@ pub fn open_claim(code: &str, sealed: &str) -> Result<ClaimPayload, PairingSealE
     }
 
     let (nonce_bytes, ciphertext) = blob.split_at(NONCE_LEN);
+    let nonce = Nonce::try_from(nonce_bytes).map_err(|_| PairingSealError::Decode)?;
 
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(&keys.seal_key));
+    let cipher = ChaCha20Poly1305::new(&Key::from(keys.seal_key));
     let plaintext = cipher
         .decrypt(
-            Nonce::from_slice(nonce_bytes),
+            &nonce,
             Payload {
                 msg: ciphertext,
                 aad: lookup_key.as_bytes(),

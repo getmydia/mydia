@@ -28,6 +28,14 @@ database, tests), but the sync is manual and one-directional: a step added to th
 `run_precommit()` by hand. Add it to both in the same commit, or CI will catch
 what local runs miss.
 
+CI and `mix precommit` run the tests with `mix test --warnings-as-errors`, so a
+compile warning in a test file (an unused variable, an unused alias) fails the
+run. LiveViewTest warnings raise as well, through
+`config :phoenix_live_view, :test_warnings, :raise` in `config/test.exs`. Test
+branches that depend on the database adapter go through `Mydia.AdapterHelpers`
+(`postgres?/0`, `oban_engine/0`) so the type checker does not flag one adapter's
+branch as dead under `--warnings-as-errors`.
+
 `mix test` silently drops a nonexistent path argument as long as at least one
 other argument resolves, erroring only when all of them fail
 (`Mix.Tasks.Test.extract_files/2`). A typo'd path therefore produces a

@@ -416,6 +416,21 @@ Four gotchas around it:
   when a local dev-env compile is clean. Reproduce with
   `MIX_ENV=test mix compile --warnings-as-errors --force`.
 
+### Rust lint and test-warning gates
+
+The `rust` job runs two lint steps before its tests: "Lint native crates (fmt +
+clippy)" (`scripts/check-rust.sh`) and "Lint wasm plugins (fmt + clippy)"
+(`scripts/check-plugins.sh`). Both run `cargo fmt --check` and
+`cargo clippy -D warnings`. The crate list is written once, in
+`scripts/check-rust.sh`; the `native-rust` pre-commit hook calls the same script,
+so a crate added there is gated locally and in CI at the same time. `server/` has
+its own workflow, `ci-server.yml`.
+
+Both Elixir test jobs run `mix test --warnings-as-errors`, which aborts the run
+after the tests finish when a test file emitted a compile warning. LiveViewTest
+warnings raise through `config :phoenix_live_view, :test_warnings, :raise` in
+`config/test.exs`, so they fail the individual test instead.
+
 ### Watching test-suite speed
 
 The regression signal is already free on every run: ExUnit's

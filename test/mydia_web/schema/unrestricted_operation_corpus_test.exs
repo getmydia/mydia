@@ -8,7 +8,7 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
   `variables/1`) or listed in `@skipped` with a reason; an operation in
   neither fails the test, so a new player operation cannot slip past.
 
-  Any GraphQL error fails the run unless `@expected_errors` lists that
+  Any GraphQL error fails the run unless `expected_error/1` lists that
   operation with the exact message and a reason unrelated to scope. Budget:
   under 5 seconds, one seed, one test.
   """
@@ -38,7 +38,10 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
   }
 
   # operation name => exact error message expected with seeded data, and why.
-  @expected_errors %{}
+  # A clause per operation, e.g. `defp expected_error("SomeOp"), do: "message"`.
+  # It is a function rather than an empty map because the type checker sees a
+  # lookup in an empty map as statically nil and flags it.
+  defp expected_error(_name), do: nil
 
   # `<Op>NoIds` documents are the same operation minus the external-id fields,
   # so they take exactly the variables of `<Op>`.
@@ -210,7 +213,7 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
       })
 
     body = json_response(conn, 200)
-    expected = Map.get(@expected_errors, name)
+    expected = expected_error(name)
 
     errors =
       body

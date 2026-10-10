@@ -1,6 +1,7 @@
 defmodule Mydia.RepoRuntimeConfigTest do
   use ExUnit.Case, async: false
 
+  alias Mydia.AdapterHelpers
   alias Mydia.Repo
   alias Mydia.Config.Schema
 
@@ -39,7 +40,7 @@ defmodule Mydia.RepoRuntimeConfigTest do
     {:ok, config} =
       Repo.init(:supervisor, database: "default.db", pool: DBConnection.ConnectionPool)
 
-    if Repo.__adapter__() == Ecto.Adapters.SQLite3 do
+    unless AdapterHelpers.postgres?() do
       assert config[:database] == "/tmp/custom_mydia.db"
     end
   end
@@ -89,7 +90,7 @@ defmodule Mydia.RepoRuntimeConfigTest do
     {:ok, config} =
       Repo.init(:supervisor, database: "mydia_test.db", pool: Ecto.Adapters.SQL.Sandbox)
 
-    if Repo.__adapter__() == Ecto.Adapters.SQLite3 do
+    unless AdapterHelpers.postgres?() do
       assert config[:database] == "/tmp/forced_mydia.db"
     end
   end

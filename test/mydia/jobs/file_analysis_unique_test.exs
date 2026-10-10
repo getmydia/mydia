@@ -13,15 +13,14 @@ defmodule Mydia.Jobs.FileAnalysisUniqueTest do
   # selecting the engine the same way config/config.exs does, so this test
   # exercises actual uniqueness enforcement on both SQLite and PostgreSQL.
   setup do
-    engine =
-      case Repo.__adapter__() do
-        Ecto.Adapters.Postgres -> Oban.Engines.Basic
-        _ -> Oban.Engines.Lite
-      end
-
     start_supervised!(
       {Oban,
-       name: @name, repo: Repo, engine: engine, testing: :manual, queues: false, plugins: false}
+       name: @name,
+       repo: Repo,
+       engine: Mydia.AdapterHelpers.oban_engine(),
+       testing: :manual,
+       queues: false,
+       plugins: false}
     )
 
     :ok

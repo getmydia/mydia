@@ -65,6 +65,10 @@ defmodule Mydia.MixProject do
       # plain `mix compile` exited 0 with warnings while CI, which passes
       # --warnings-as-errors explicitly, went red.
       elixirc_options: [warnings_as_errors: Mix.env() != :prod],
+      # test/fixtures/**/*.exs are data (corpora the tests load with
+      # Code.eval_file/1), not test modules. Without this, `mix test` warns
+      # that they match no load filter, and --warnings-as-errors aborts.
+      test_ignore_filters: [&String.starts_with?(&1, "test/fixtures/")],
       # Disable coverage threshold for now - will improve coverage later
       test_coverage: [summary: false]
     ]
@@ -298,7 +302,7 @@ defmodule Mydia.MixProject do
         "format --check-formatted",
         "credo --strict",
         "mydia.ratchet",
-        "test"
+        "test --warnings-as-errors"
       ]
     ]
   end

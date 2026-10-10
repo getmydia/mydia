@@ -5,9 +5,19 @@
 Mydia enforces a small set of automated quality gates in CI: the compiler's
 set-theoretic type checker (`mix compile --warnings-as-errors`), Credo
 (`mix credo --strict`), a ratchet on complexity, nesting and module size
-(`mix mydia.ratchet`), and an advisory dead-code report (`mix_unused`). A
-second, more precise dead-code detector, `mix mydia.dead_code`, is available
-for manual use; see "A note on `mix mydia.dead_code`" below.
+(`mix mydia.ratchet`), compile warnings in test files
+(`mix test --warnings-as-errors`), LiveViewTest warnings
+(`config :phoenix_live_view, :test_warnings, :raise` in `config/test.exs`),
+`cargo fmt` and `cargo clippy -D warnings` for every native crate and wasm
+plugin, and an advisory dead-code report (`mix_unused`). A second, more precise
+dead-code detector, `mix mydia.dead_code`, is available for manual use; see
+"A note on `mix mydia.dead_code`" below.
+
+Run the Rust gates with `scripts/check-rust.sh` (native crates) and
+`scripts/check-plugins.sh` (wasm plugins); `--fix` rewrites formatting.
+Clippy findings need a code fix. The crate list lives in
+`scripts/check-rust.sh` and nowhere else: the pre-commit hook and CI both
+call it.
 
 These gates follow one rule, and it is the rule that keeps them honest:
 

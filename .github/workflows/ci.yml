@@ -313,7 +313,7 @@ jobs:
           fi
           mix ecto.create
           mix ecto.migrate
-          mix test --cover
+          mix test --cover --warnings-as-errors
           DEVENV
 
   rust:
@@ -350,6 +350,14 @@ jobs:
           done
           echo "::error::devenv environment failed to materialize after 3 attempts"
           exit 1
+
+      # Same script as the native-rust pre-commit hook, so a commit made
+      # outside devenv (which skips the hook) is still gated here.
+      - name: Lint native crates (fmt + clippy)
+        run: devenv shell -- scripts/check-rust.sh
+
+      - name: Lint wasm plugins (fmt + clippy)
+        run: devenv shell -- scripts/check-plugins.sh
 
       # `test-introspection` is off in every real build and exposes only a
       # counter. Without it here, `two_sends_to_one_unconnected_peer_share_a_dial`
@@ -491,7 +499,7 @@ jobs:
           mix ecto.create
           mix ecto.migrate
           mix ecto.migrations
-          mix test --cover
+          mix test --cover --warnings-as-errors
           DEVENV
 
   test-e2e:

@@ -2638,14 +2638,6 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
     struct!(Mydia.Config.Schema.DownloadClient, Map.merge(defaults, overrides))
   end
 
-  defp stub_qbit_login(bypass) do
-    Bypass.stub(bypass, "POST", "/api/v2/auth/login", fn conn ->
-      conn
-      |> Plug.Conn.put_resp_header("set-cookie", "SID=test-sid; HttpOnly")
-      |> Plug.Conn.resp(200, "Ok.")
-    end)
-  end
-
   defp json_resp(conn, status, body) do
     conn
     |> Plug.Conn.put_resp_content_type("application/json")

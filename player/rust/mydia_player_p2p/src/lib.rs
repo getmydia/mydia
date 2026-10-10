@@ -614,7 +614,7 @@ impl From<FlutterRemoteControlResponse> for RemoteControlResponse {
                 capabilities: capabilities.into(),
             },
             FlutterRemoteControlResponse::State(snapshot) => {
-                RemoteControlResponse::State(snapshot.into())
+                RemoteControlResponse::State(Box::new(snapshot.into()))
             }
             FlutterRemoteControlResponse::Accepted => RemoteControlResponse::Accepted,
             FlutterRemoteControlResponse::NotAuthorized => RemoteControlResponse::NotAuthorized,
@@ -638,7 +638,7 @@ impl From<RemoteControlResponse> for FlutterRemoteControlResponse {
                 capabilities: capabilities.into(),
             },
             RemoteControlResponse::State(snapshot) => {
-                FlutterRemoteControlResponse::State(snapshot.into())
+                FlutterRemoteControlResponse::State((*snapshot).into())
             }
             RemoteControlResponse::Accepted => FlutterRemoteControlResponse::Accepted,
             RemoteControlResponse::NotAuthorized => FlutterRemoteControlResponse::NotAuthorized,

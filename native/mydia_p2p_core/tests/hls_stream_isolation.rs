@@ -74,9 +74,8 @@ async fn hls_stream_does_not_block_concurrent_requests() {
 
     let client_for_hls = client.clone();
     let sid = server_id.clone();
-    let client_hls_handle = tokio::spawn(async move {
-        client_for_hls.send_hls_request(sid, hls_req).await
-    });
+    let client_hls_handle =
+        tokio::spawn(async move { client_for_hls.send_hls_request(sid, hls_req).await });
 
     let stream_id = hls_stream_id_rx.await.expect("did not get stream_id");
 
@@ -104,7 +103,9 @@ async fn hls_stream_does_not_block_concurrent_requests() {
     let stream_id_clone = stream_id.clone();
     let chunk_handle = tokio::spawn(async move {
         let big_chunk = vec![7u8; 150 * 1024 * 1024];
-        server_for_chunk.send_hls_chunk(stream_id_clone, big_chunk).await
+        server_for_chunk
+            .send_hls_chunk(stream_id_clone, big_chunk)
+            .await
     });
 
     // Wait a brief moment for write_all to enter backpressure
@@ -128,9 +129,8 @@ async fn hls_stream_does_not_block_concurrent_requests() {
     );
 
     // Now client drains chunks so chunk_handle can complete
-    let drain_handle = tokio::spawn(async move {
-        while let Some(_) = stream_resp.chunk_rx.recv().await {}
-    });
+    let drain_handle =
+        tokio::spawn(async move { while stream_resp.chunk_rx.recv().await.is_some() {} });
 
     chunk_handle.await.unwrap().expect("chunk send failed");
     server

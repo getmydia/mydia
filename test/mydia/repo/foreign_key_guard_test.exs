@@ -53,15 +53,13 @@ defmodule Mydia.Repo.ForeignKeyGuardTest do
       # ForeignKeyGuard.run/3's `rescue error in Ecto.ConstraintError` clause
       # ever sees it, so this guard neither causes nor papers over it; it is
       # pre-existing Ecto/Postgrex behaviour.
-      case Repo.__adapter__() do
-        Ecto.Adapters.Postgres ->
-          assert_raise Ecto.ChangeError, fn ->
-            Repo.insert(track_setting_changeset("garbage"))
-          end
-
-        _ ->
-          assert {:error, changeset} = Repo.insert(track_setting_changeset("garbage"))
-          assert %{media_file_id: [_ | _]} = errors_on(changeset)
+      if Mydia.AdapterHelpers.postgres?() do
+        assert_raise Ecto.ChangeError, fn ->
+          Repo.insert(track_setting_changeset("garbage"))
+        end
+      else
+        assert {:error, changeset} = Repo.insert(track_setting_changeset("garbage"))
+        assert %{media_file_id: [_ | _]} = errors_on(changeset)
       end
     end
   end

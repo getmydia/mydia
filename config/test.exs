@@ -211,3 +211,8 @@ config :mydia, :library_api_key, nil
 
 # Tests that need Peep or the flusher start their own.
 config :mydia, Mydia.Perf, enabled: false
+
+# LiveViewTest's checks (a form without an id, which breaks form recovery; a
+# duplicate DOM id; a LiveComponent rendered twice under one id) fail the test
+# instead of printing a warning nobody reads.
+config :phoenix_live_view, :test_warnings, :raise

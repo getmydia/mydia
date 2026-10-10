@@ -764,8 +764,7 @@ defmodule Mydia.ImportCandidatesTest do
     end
 
     test "a \"queued\"-status scope reports nothing queued instead of a false success", %{
-      lp: lp,
-      matched: matched
+      lp: lp
     } do
       pending_scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{})
       {:ok, %{queued: 1}} = ImportCandidates.queue_accept(pending_scope)

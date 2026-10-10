@@ -17,13 +17,10 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
     # resolved from the LiveView process. Start an isolated, manual-mode Oban
     # for these tests so the fan-out re-enqueue works and assert_enqueued can
     # observe it. Engine is derived from the repo adapter (SQLite or Postgres).
-    engine =
-      case Mydia.Repo.__adapter__() do
-        Ecto.Adapters.Postgres -> Oban.Engines.Basic
-        _ -> Oban.Engines.Lite
-      end
+    start_supervised!(
+      {Oban, repo: Mydia.Repo, engine: Mydia.AdapterHelpers.oban_engine(), testing: :manual}
+    )
 
-    start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
     :ok
   end
 

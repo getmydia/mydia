@@ -23,10 +23,10 @@ wit_bindgen::generate!({
 // Re-export the generated host-capability bindings and shared types so plugin
 // authors reach them through a stable `mydia_plugin_sdk::...` path rather than a
 // generated module name.
-pub use mydia::plugin::host;
-pub use mydia::plugin::types;
 pub use exports::mydia::plugin::handler::Guest;
 pub use exports::mydia::plugin::page::Guest as PageGuest;
+pub use mydia::plugin::host;
+pub use mydia::plugin::types;
 
 /// The `#[mydia_plugin_sdk::plugin]` attribute macro: write a plain typed handler, get a
 /// component. See `mydia-plugin-macros`.

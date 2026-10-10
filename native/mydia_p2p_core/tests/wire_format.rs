@@ -120,7 +120,7 @@ fn every_response_variant_name_is_frozen() {
     // `State` is the one response variant that carries a payload, so it is
     // worth covering separately from the unit-like `NotAuthorized` case.
     let state = serde_cbor::to_vec(&MydiaResponse::RemoteControl(RemoteControlResponse::State(
-        PlaybackSnapshot {
+        Box::new(PlaybackSnapshot {
             state: PlaybackState::Playing,
             media_item_id: Some("item-1".into()),
             episode_id: None,
@@ -141,7 +141,7 @@ fn every_response_variant_name_is_frozen() {
                 next_previous: true,
             },
             sequence: 1,
-        },
+        }),
     )))
     .unwrap();
     let as_text = String::from_utf8_lossy(&state);

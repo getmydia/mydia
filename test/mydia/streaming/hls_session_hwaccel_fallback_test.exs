@@ -3,7 +3,6 @@ defmodule Mydia.Streaming.HlsSessionHwaccelFallbackTest do
 
   alias Mydia.Library.MediaFile
   alias Mydia.Settings.LibraryPath
-  alias Mydia.Streaming.HardwareAccel.Capabilities
   alias Mydia.Streaming.{HlsSession, SegmentPlan, TranscodeWindow}
 
   describe "hwaccel_fallback/2" do

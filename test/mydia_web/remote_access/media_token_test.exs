@@ -24,7 +24,7 @@ defmodule Mydia.RemoteAccess.MediaTokenTest do
     end
 
     test "creates token with custom TTL", %{device: device} do
-      assert {:ok, token, claims} = MediaToken.create_token(device, ttl: {1, :hour})
+      assert {:ok, token, _claims} = MediaToken.create_token(device, ttl: {1, :hour})
 
       assert is_binary(token)
       # Verify expiration is roughly 1 hour from now
@@ -36,14 +36,14 @@ defmodule Mydia.RemoteAccess.MediaTokenTest do
     end
 
     test "creates token with custom permissions", %{device: device} do
-      assert {:ok, token, claims} = MediaToken.create_token(device, permissions: ["stream"])
+      assert {:ok, _token, claims} = MediaToken.create_token(device, permissions: ["stream"])
 
       assert claims["permissions"] == ["stream"]
     end
 
     test "creates token with multiple custom permissions", %{device: device} do
       permissions = ["stream", "download"]
-      assert {:ok, token, claims} = MediaToken.create_token(device, permissions: permissions)
+      assert {:ok, _token, claims} = MediaToken.create_token(device, permissions: permissions)
 
       assert claims["permissions"] == permissions
     end
