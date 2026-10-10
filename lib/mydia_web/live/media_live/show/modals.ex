@@ -1117,7 +1117,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <% end %>
           <%!-- Per-indexer search progress --%>
           <div class="px-4">
-            <.indexer_search_status progress={@indexer_progress} retry_event="retry_indexer" />
+            <.indexer_search_status
+              progress={@indexer_progress}
+              retry_event="retry_indexer"
+              retest_paused_event="retest_paused"
+            />
           </div>
           <%!-- Loading State --%>
           <%= if @searching && @results_empty? do %>

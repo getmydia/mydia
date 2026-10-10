@@ -194,7 +194,11 @@
     <% end %>
 
     <%!-- Per-indexer search progress --%>
-    <.indexer_search_status progress={@indexer_progress} retry_event="retry_indexer" />
+    <.indexer_search_status
+      progress={@indexer_progress}
+      retry_event="retry_indexer"
+      retest_paused_event="retest_paused"
+    />
     <%!-- Empty State (no results) --%>
     <%= if @results_empty? && @search_query != "" && !@searching do %>
       <div class="card bg-base-100 shadow-lg">

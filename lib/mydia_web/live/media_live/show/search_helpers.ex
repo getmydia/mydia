@@ -90,6 +90,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
       min_seeders: min_seeders,
       deduplicate: true,
       indexer_ids: indexer_ids,
+      report_paused: true,
       on_start: fn pending -> send(lv, {:indexer_search_started, search_id, pending}) end,
       on_indexer_result: fn progress -> send(lv, {:indexer_progress, search_id, progress}) end
     ]

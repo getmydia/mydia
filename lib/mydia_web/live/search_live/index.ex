@@ -509,31 +509,14 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:selected_result, nil)}
   end
 
-  def handle_event("retry_indexer", %{"id" => indexer_id}, socket) do
-    query = socket.assigns.search_query
-    min_seeders = socket.assigns.min_seeders
-    lv = self()
-    search_id = socket.assigns.search_id
+  def handle_event("retry_indexer", %{"id" => indexer_id}, socket),
+    do: {:noreply, start_indexer_retry(socket, indexer_id, false)}
 
-    # Map.replace_lazy/3 no-ops when indexer_id isn't a key in the map, rather
-    # than inserting `indexer_id => nil` (as Map.update/4's default would),
-    # which would otherwise flow a nil straight into the status chip
-    # component. Not reachable through the shipped UI today (the Retry
-    # button only renders for rows already present in the map), but an
-    # unknown or forged id should be a clean no-op, not a crash landmine.
-    indexer_progress =
-      Map.replace_lazy(socket.assigns.indexer_progress, indexer_id, fn entry ->
-        %{entry | status: :pending, error: nil, result_count: nil, duration_ms: nil}
-      end)
-
-    {:noreply,
-     socket
-     |> assign(:indexer_progress, indexer_progress)
-     # A distinct key so a retry never cancels an in-flight full search.
-     |> start_async({:retry, indexer_id}, fn ->
-       perform_search(query, min_seeders, [indexer_id], lv, search_id)
-     end)}
-  end
+  # Retest asks Prowlarr to test the indexers it has paused for this config,
+  # then re-runs this config's search through the same retry path, so newly
+  # recovered indexers' results merge in exactly as a retry's do.
+  def handle_event("retest_paused", %{"id" => indexer_id}, socket),
+    do: {:noreply, start_indexer_retry(socket, indexer_id, true)}
 
   @impl true
   def handle_info({:download_updated, _download_id}, socket) do
@@ -642,6 +625,15 @@ defmodule MydiaWeb.SearchLive.Index do
   def handle_info({:indexer_progress, search_id, %IndexerProgress{} = progress}, socket) do
     if search_id == socket.assigns.search_id do
       {:noreply, apply_indexer_progress(socket, progress)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:paused_retest, search_id, result}, socket) do
+    if search_id == socket.assigns.search_id do
+      {kind, message} = MydiaWeb.IndexerComponents.retest_flash(result)
+      {:noreply, put_flash(socket, kind, message)}
     else
       {:noreply, socket}
     end
@@ -982,11 +974,42 @@ defmodule MydiaWeb.SearchLive.Index do
     end)
   end
 
+  defp start_indexer_retry(socket, indexer_id, retest_paused?) do
+    query = socket.assigns.search_query
+    min_seeders = socket.assigns.min_seeders
+    lv = self()
+    search_id = socket.assigns.search_id
+
+    # Map.replace_lazy/3 no-ops when indexer_id isn't a key in the map, rather
+    # than inserting `indexer_id => nil` (as Map.update/4's default would),
+    # which would otherwise flow a nil straight into the status chip
+    # component. Not reachable through the shipped UI today (the Retry
+    # button only renders for rows already present in the map), but an
+    # unknown or forged id should be a clean no-op, not a crash landmine.
+    indexer_progress =
+      Map.replace_lazy(socket.assigns.indexer_progress, indexer_id, fn entry ->
+        %{entry | status: :pending, error: nil, result_count: nil, duration_ms: nil, paused: []}
+      end)
+
+    socket
+    |> assign(:indexer_progress, indexer_progress)
+    # A distinct key so a retry never cancels an in-flight full search.
+    |> start_async({:retry, indexer_id}, fn ->
+      if retest_paused? do
+        result = Indexers.retest_paused_prowlarr_indexers(indexer_id)
+        send(lv, {:paused_retest, search_id, result})
+      end
+
+      perform_search(query, min_seeders, [indexer_id], lv, search_id)
+    end)
+  end
+
   defp perform_search(query, min_seeders, indexer_ids, lv, search_id) do
     opts = [
       min_seeders: min_seeders,
       deduplicate: true,
       indexer_ids: indexer_ids,
+      report_paused: true,
       on_start: fn pending -> send(lv, {:indexer_search_started, search_id, pending}) end,
       on_indexer_result: fn progress -> send(lv, {:indexer_progress, search_id, progress}) end
     ]

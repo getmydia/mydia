@@ -24,6 +24,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchQualityGateTest do
     |> Enum.each(&Settings.update_indexer_config(&1, %{enabled: false}))
 
     bypass = Bypass.open()
+    Mydia.IndexerMock.stub_prowlarr_indexer_status(bypass)
 
     IndexerMock.mock_prowlarr_all(bypass,
       results: [

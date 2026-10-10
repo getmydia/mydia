@@ -6,6 +6,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
 
   alias Mydia.Media
   alias Mydia.Downloads
+  alias Mydia.Indexers
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Quality.Sources
@@ -261,8 +262,12 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   # search (manual_search/2, auto_search_download/2, download_from_search/2):
   # Retry hits the same indexers with the same query, so it must sit behind
   # the same permission check rather than being a side door around it.
-  def handle_retry_indexer(indexer_id, socket) do
+  #
+  # With `retest_paused: true` it first asks Prowlarr to retest the indexers it
+  # paused for this config; same authorization, since it also hits the indexers.
+  def handle_retry_indexer(indexer_id, socket, opts \\ []) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
+      retest_paused? = Keyword.get(opts, :retest_paused, false)
       query = socket.assigns.manual_search_query
       min_seeders = socket.assigns.min_seeders
       lv = self()
@@ -276,17 +281,32 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
       # unknown or forged id should be a clean no-op, not a crash landmine.
       indexer_progress =
         Map.replace_lazy(socket.assigns.indexer_progress, indexer_id, fn entry ->
-          %{entry | status: :pending, error: nil, result_count: nil, duration_ms: nil}
+          %{entry | status: :pending, error: nil, result_count: nil, duration_ms: nil, paused: []}
         end)
 
       {:noreply,
        socket
        |> assign(:indexer_progress, indexer_progress)
        |> start_async({:retry, indexer_id}, fn ->
+         if retest_paused? do
+           result = Indexers.retest_paused_prowlarr_indexers(indexer_id)
+           send(lv, {:paused_retest, search_id, result})
+         end
+
          perform_search(query, min_seeders, lv, search_id, [indexer_id])
        end)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  @doc "Flashes the outcome of a paused-indexer retest started by handle_retry_indexer/3."
+  def handle_paused_retest(search_id, result, socket) do
+    if search_id == socket.assigns.search_id do
+      {kind, message} = MydiaWeb.IndexerComponents.retest_flash(result)
+      {:noreply, Phoenix.LiveView.put_flash(socket, kind, message)}
+    else
+      {:noreply, socket}
     end
   end
 
