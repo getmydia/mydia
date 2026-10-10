@@ -7,7 +7,7 @@ defmodule Mydia.Media.Deletion do
   require Logger
   alias Mydia.Repo
   alias Mydia.Accounts.Scope
-  alias Mydia.Media.{DiskRemoval, Episode, MediaItem}
+  alias Mydia.Media.{DiskRemoval, Episode, MediaItem, Restrictions}
   alias Mydia.Events
   alias Mydia.Library.{MediaFile, MediaFileEpisode}
 
@@ -149,8 +149,17 @@ defmodule Mydia.Media.Deletion do
   """
   @spec delete_media_items(Scope.t(), [binary()], keyword()) ::
           {:ok, non_neg_integer(), DiskRemoval.t()} | {:error, term()}
-  def delete_media_items(%Scope{} = _scope, ids, opts \\ []) when is_list(ids) do
+  def delete_media_items(%Scope{} = scope, ids, opts \\ []) when is_list(ids) do
     delete_files = Keyword.get(opts, :delete_files, false)
+
+    # Narrow to what the caller may see before anything else: the disk plan
+    # below is built from these ids, so a hidden item's files must never reach it.
+    ids =
+      MediaItem
+      |> where([m], m.id in ^ids)
+      |> Restrictions.apply(scope)
+      |> select([m], m.id)
+      |> Repo.all()
 
     # One plan for every item, run once after the commit. Finishing folders
     # item by item would let a second item's not-yet-deleted files keep a
