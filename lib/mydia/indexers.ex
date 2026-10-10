@@ -33,6 +33,7 @@ defmodule Mydia.Indexers do
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Structs.IndexerProgress
+  alias Mydia.Indexers.Structs.PausedIndexer
   alias Mydia.Settings
   alias Mydia.Repo
   import Ecto.Query
@@ -487,6 +488,79 @@ defmodule Mydia.Indexers do
   def list_prowlarr_indexers(_config) do
     {:error, "Invalid config - requires base_url and api_key"}
   end
+
+  @doc """
+  Lists the Prowlarr indexers Prowlarr has paused after failures, within the
+  scope this config searches. `{:ok, []}` for every non-Prowlarr config.
+  """
+  @spec prowlarr_paused_indexers(Settings.IndexerConfig.t() | map()) ::
+          {:ok, [PausedIndexer.t()]} | {:error, String.t()}
+  def prowlarr_paused_indexers(%Settings.IndexerConfig{type: :prowlarr} = config) do
+    config
+    |> indexer_config_to_adapter_config()
+    |> Adapter.Prowlarr.list_paused_indexers()
+    |> case do
+      {:ok, paused} -> {:ok, paused}
+      {:error, error} -> {:error, format_indexer_error(error)}
+    end
+  end
+
+  def prowlarr_paused_indexers(_config), do: {:ok, []}
+
+  @doc """
+  `prowlarr_paused_indexers/1` for display: `[]` when Prowlarr can't be read.
+  A missing hint is better than a failed page or search.
+  """
+  @spec paused_indexer_list(Settings.IndexerConfig.t() | map()) :: [PausedIndexer.t()]
+  def paused_indexer_list(config) do
+    case prowlarr_paused_indexers(config) do
+      {:ok, paused} -> paused
+      {:error, _} -> []
+    end
+  end
+
+  @doc """
+  Asks Prowlarr to test each paused indexer in this config's scope, one at a
+  time, then re-reads what is still paused. User-triggered only: Mydia never
+  retests on its own, the backoff is Prowlarr's.
+  """
+  @spec retest_paused_prowlarr_indexers(Settings.IndexerConfig.t() | String.t()) ::
+          {:ok,
+           %{
+             outcomes: [{PausedIndexer.t(), :ok | {:error, String.t()}}],
+             paused: [PausedIndexer.t()]
+           }}
+          | {:error, String.t()}
+  def retest_paused_prowlarr_indexers(id) when is_binary(id) do
+    case Settings.get_indexer_config!(id) do
+      nil -> {:error, "Indexer not found"}
+      config -> retest_paused_prowlarr_indexers(config)
+    end
+  rescue
+    # A database id raises Ecto.NoResultsError; a "runtime::" id for an env
+    # indexer that no longer exists raises a plain RuntimeError
+    # (Settings.ServiceConfigs.get_indexer_config!/2).
+    _ in [Ecto.NoResultsError, RuntimeError] -> {:error, "Indexer not found"}
+  end
+
+  def retest_paused_prowlarr_indexers(%Settings.IndexerConfig{type: :prowlarr} = config) do
+    adapter_config = indexer_config_to_adapter_config(config)
+
+    with {:ok, paused} <- prowlarr_paused_indexers(config) do
+      outcomes =
+        Enum.map(paused, fn indexer ->
+          case Adapter.Prowlarr.retest_indexer(adapter_config, indexer.id) do
+            :ok -> {indexer, :ok}
+            {:error, error} -> {indexer, {:error, format_indexer_error(error)}}
+          end
+        end)
+
+      {:ok, %{outcomes: outcomes, paused: paused_indexer_list(config)}}
+    end
+  end
+
+  def retest_paused_prowlarr_indexers(%Settings.IndexerConfig{}),
+    do: {:ok, %{outcomes: [], paused: []}}
 
   ## Private Functions
 
