@@ -5,6 +5,7 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
 
   alias Mydia.Indexers.Adapter.Prowlarr
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Structs.PausedIndexer
 
   # Previously the whole module was tagged :external, which excluded every
   # test by default (including the Bypass-driven, fully offline ones). The
@@ -613,5 +614,118 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
       assert Agent.get(counter, & &1) == 1,
              "expected exactly one attempt, Req retried a transient failure"
     end
+  end
+
+  describe "list_paused_indexers/1" do
+    setup do
+      bypass = Bypass.open()
+      %{bypass: bypass, config: build_config(bypass)}
+    end
+
+    test "returns enabled indexers paused into the future, sorted by name", %{
+      bypass: bypass,
+      config: config
+    } do
+      stub_json(bypass, "/api/v1/indexerstatus", [
+        %{"indexerId" => 1, "disabledTill" => iso_in(600)},
+        %{"indexerId" => 2, "disabledTill" => iso_in(-600)},
+        %{"indexerId" => 3, "disabledTill" => nil},
+        %{"indexerId" => 4, "disabledTill" => iso_in(3_600)},
+        %{"indexerId" => 5, "disabledTill" => iso_in(3_600)}
+      ])
+
+      stub_json(bypass, "/api/v1/indexer", [
+        %{"id" => 1, "name" => "Zephyr Tracker", "enable" => true},
+        %{"id" => 2, "name" => "Lapsed Tracker", "enable" => true},
+        %{"id" => 3, "name" => "Steady Tracker", "enable" => true},
+        %{"id" => 4, "name" => "Amber Tracker", "enable" => true},
+        %{"id" => 5, "name" => "Switched Off Tracker", "enable" => false}
+      ])
+
+      assert {:ok, paused} = Prowlarr.list_paused_indexers(config)
+      assert Enum.map(paused, & &1.name) == ["Amber Tracker", "Zephyr Tracker"]
+      assert [%PausedIndexer{id: 4, disabled_till: %DateTime{}}, %PausedIndexer{id: 1}] = paused
+    end
+
+    test "scopes to options.indexer_ids when set", %{bypass: bypass, config: config} do
+      stub_json(bypass, "/api/v1/indexerstatus", [
+        %{"indexerId" => 1, "disabledTill" => iso_in(600)},
+        %{"indexerId" => 4, "disabledTill" => iso_in(600)}
+      ])
+
+      stub_json(bypass, "/api/v1/indexer", [
+        %{"id" => 1, "name" => "Zephyr Tracker", "enable" => true},
+        %{"id" => 4, "name" => "Amber Tracker", "enable" => true}
+      ])
+
+      config = put_in(config, [:options, :indexer_ids], ["1"])
+
+      assert {:ok, [%PausedIndexer{id: 1}]} = Prowlarr.list_paused_indexers(config)
+    end
+
+    test "skips the indexer list request when nothing is paused", %{
+      bypass: bypass,
+      config: config
+    } do
+      # No /api/v1/indexer stub: Bypass fails the test if it is requested.
+      stub_json(bypass, "/api/v1/indexerstatus", [
+        %{"indexerId" => 1, "disabledTill" => iso_in(-60)}
+      ])
+
+      assert {:ok, []} = Prowlarr.list_paused_indexers(config)
+    end
+
+    test "reads a disabledTill without an offset as UTC", %{bypass: bypass, config: config} do
+      naive =
+        NaiveDateTime.utc_now()
+        |> NaiveDateTime.add(600, :second)
+        |> NaiveDateTime.truncate(:second)
+        |> NaiveDateTime.to_iso8601()
+
+      stub_json(bypass, "/api/v1/indexerstatus", [%{"indexerId" => 1, "disabledTill" => naive}])
+
+      stub_json(bypass, "/api/v1/indexer", [
+        %{"id" => 1, "name" => "Amber Tracker", "enable" => true}
+      ])
+
+      assert {:ok, [%PausedIndexer{disabled_till: till}]} = Prowlarr.list_paused_indexers(config)
+      assert till.time_zone == "Etc/UTC"
+    end
+
+    test "returns an error for a non-JSON 200 page", %{bypass: bypass, config: config} do
+      Bypass.stub(bypass, "GET", "/api/v1/indexerstatus", &Mydia.IndexerMock.prowlarr_web_ui/1)
+
+      assert {:error, %Error{type: :parse_error}} = Prowlarr.list_paused_indexers(config)
+    end
+
+    test "returns an error on HTTP failure", %{bypass: bypass, config: config} do
+      Bypass.stub(bypass, "GET", "/api/v1/indexerstatus", fn conn ->
+        Plug.Conn.resp(conn, 500, "boom")
+      end)
+
+      assert {:error, %Error{type: :connection_failed}} = Prowlarr.list_paused_indexers(config)
+    end
+  end
+
+  test "PausedIndexer encodes to JSON (health details are served by the REST API)" do
+    paused = %PausedIndexer{id: 1, name: "Amber Tracker", disabled_till: ~U[2030-01-01 00:00:00Z]}
+
+    assert %{"id" => 1, "name" => "Amber Tracker", "disabled_till" => "2030-01-01T00:00:00Z"} =
+             paused |> Jason.encode!() |> Jason.decode!()
+  end
+
+  defp stub_json(bypass, path, body) do
+    Bypass.stub(bypass, "GET", path, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+  end
+
+  defp iso_in(seconds) do
+    DateTime.utc_now()
+    |> DateTime.add(seconds, :second)
+    |> DateTime.truncate(:second)
+    |> DateTime.to_iso8601()
   end
 end

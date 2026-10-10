@@ -31,6 +31,8 @@ defmodule Mydia.IndexerMock do
       }
   """
   def mock_prowlarr_search(bypass, opts \\ []) do
+    stub_prowlarr_indexer_status(bypass)
+
     results = Keyword.get(opts, :results, [])
     status = Keyword.get(opts, :status, 200)
 
@@ -54,8 +56,11 @@ defmodule Mydia.IndexerMock do
     - `:status` - HTTP status code for the JSON response (default: 200)
     - `:version` - version string in the JSON body (default: "1.0.0")
     - `:base_path` - URL base Prowlarr runs under, e.g. "/prowlarr" (default: "")
+    - `:indexer_status` - raw Prowlarr indexerstatus entries (default: [])
   """
   def mock_prowlarr_status(bypass, opts \\ []) do
+    stub_prowlarr_indexer_status(bypass, Keyword.get(opts, :indexer_status, []))
+
     status = Keyword.get(opts, :status, 200)
     version = Keyword.get(opts, :version, "1.0.0")
     path = Keyword.get(opts, :base_path, "") <> "/api/v1/system/status"
@@ -63,6 +68,25 @@ defmodule Mydia.IndexerMock do
 
     BypassHelpers.stub_exact_json(bypass, "GET", path, body,
       status: status,
+      fallback: &prowlarr_web_ui/1
+    )
+  end
+
+  @doc """
+  Stubs Prowlarr's indexer status endpoint. Every health check and every
+  manual-search Prowlarr row reads it, and Bypass fails a test on any request
+  to an unstubbed route, so any Bypass standing in for Prowlarr needs it.
+
+  `statuses` are raw Prowlarr maps, e.g.
+  `%{"indexerId" => 1, "disabledTill" => "2030-01-01T00:00:00Z"}`. Default `[]`
+  (nothing paused).
+  """
+  def stub_prowlarr_indexer_status(bypass, statuses \\ []) do
+    BypassHelpers.stub_exact_json(
+      bypass,
+      "GET",
+      "/api/v1/indexerstatus",
+      Jason.encode!(statuses),
       fallback: &prowlarr_web_ui/1
     )
   end
