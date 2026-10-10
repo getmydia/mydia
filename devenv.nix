@@ -459,17 +459,10 @@ in
   # `nix develop .#rust -c …` subshell needed. Patterns mirror the retired
   # .pre-commit-config.yaml.
   git-hooks.hooks = {
-    cargo-fmt = {
+    native-rust = {
       enable = true;
-      name = "cargo fmt";
-      entry = "cargo fmt --manifest-path native/mydia_p2p/Cargo.toml -- --check";
-      files = "^native/.*\\.rs$";
-      pass_filenames = false;
-    };
-    cargo-clippy = {
-      enable = true;
-      name = "cargo clippy";
-      entry = "cargo clippy --manifest-path native/mydia_p2p/Cargo.toml -- -D warnings";
+      name = "cargo fmt + clippy (native crates)";
+      entry = "scripts/check-rust.sh";
       files = "^native/.*\\.rs$";
       pass_filenames = false;
     };
@@ -485,20 +478,6 @@ in
       name = "cargo clippy (server)";
       entry = "cargo clippy --manifest-path server/Cargo.toml --all-targets -- -D warnings";
       files = "^server/.*\\.rs$";
-      pass_filenames = false;
-    };
-    subsync-fmt = {
-      enable = true;
-      name = "cargo fmt (subsync)";
-      entry = "cargo fmt --manifest-path native/mydia_subsync/Cargo.toml -- --check";
-      files = "^native/mydia_subsync/.*\\.rs$";
-      pass_filenames = false;
-    };
-    subsync-clippy = {
-      enable = true;
-      name = "cargo clippy (subsync)";
-      entry = "cargo clippy --manifest-path native/mydia_subsync/Cargo.toml --all-targets -- -D warnings";
-      files = "^native/mydia_subsync/.*\\.rs$";
       pass_filenames = false;
     };
     plugins-check = {

@@ -40,12 +40,10 @@ impl Parse for PluginArgs {
                 "setup" => &mut args.setup,
                 "check_health" => &mut args.check_health,
                 "fill_shelf" => &mut args.fill_shelf,
-                _ => {
-                    return Err(syn::Error::new(
-                        key.span(),
-                        "expected `on_schedule`, `on_http`, `setup`, `check_health` or `fill_shelf`",
-                    ))
-                }
+                _ => return Err(syn::Error::new(
+                    key.span(),
+                    "expected `on_schedule`, `on_http`, `setup`, `check_health` or `fill_shelf`",
+                )),
             };
 
             if slot.is_some() {
