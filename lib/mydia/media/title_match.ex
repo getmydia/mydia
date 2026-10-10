@@ -5,7 +5,7 @@ defmodule Mydia.Media.TitleMatch do
 
   require Logger
   alias Mydia.Accounts.Scope
-  alias Mydia.Media.MediaItem
+  alias Mydia.Media.{Items, MediaItem}
 
   @doc """
   Recover TMDB ID by searching for the media item by title.
@@ -101,7 +101,7 @@ defmodule Mydia.Media.TitleMatch do
             )
 
             # Update the media item with the recovered ID
-            case Mydia.Media.update_media_item(Scope.system(), media_item, update_attrs,
+            case Items.update_media_item(Scope.system(), media_item, update_attrs,
                    reason: "Provider ID recovered"
                  ) do
               {:ok, updated_item} ->

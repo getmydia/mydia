@@ -2,14 +2,14 @@ defmodule Mydia.Media.ItemWrites do
   @moduledoc false
 
   alias Mydia.Repo
-  alias Mydia.Media.MediaItem
+  alias Mydia.Media.{Items, MediaItem}
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Events
 
   # Callers want a tagged tuple to thread through `with`.
   @doc false
   def authorize_write(scope, attrs) do
-    if Mydia.Media.writable?(scope, attrs), do: :ok, else: {:error, :restricted}
+    if Items.writable?(scope, attrs), do: :ok, else: {:error, :restricted}
   end
 
   # An update that does not mention metadata leaves the stored metadata in

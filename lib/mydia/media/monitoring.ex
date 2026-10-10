@@ -7,7 +7,7 @@ defmodule Mydia.Media.Monitoring do
   import Ecto.Query, warn: false
   alias Mydia.Repo
   alias Mydia.Accounts.Scope
-  alias Mydia.Media.{Episode, Episodes, MediaItem}
+  alias Mydia.Media.{Episode, Episodes, Items, MediaItem}
   alias Mydia.Events
 
   @doc """
@@ -177,7 +177,7 @@ defmodule Mydia.Media.Monitoring do
     |> where([m], m.id == ^media_item.id)
     |> Repo.update_all(set: [monitor_new_seasons: mode, updated_at: DateTime.utc_now()])
 
-    updated = Mydia.Media.get_media_item!(Scope.system(), media_item.id)
+    updated = Items.get_media_item!(Scope.system(), media_item.id)
 
     Events.media_item_updated(
       updated,
