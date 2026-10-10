@@ -4,6 +4,8 @@ defmodule MydiaWeb.IndexerComponentsTest do
   import Phoenix.LiveViewTest
 
   alias Mydia.Indexers.Structs.IndexerProgress
+  alias Mydia.Indexers.Structs.PausedIndexer
+  alias MydiaWeb.IndexerComponents
 
   defp progress_map(entries) do
     Map.new(entries, fn entry -> {entry.indexer_id, entry} end)
@@ -295,5 +297,106 @@ defmodule MydiaWeb.IndexerComponentsTest do
     document = LazyHTML.from_fragment(html)
 
     assert LazyHTML.query(document, "#indexer-search-status button") |> Enum.empty?()
+  end
+
+  defp paused(name, seconds) do
+    %PausedIndexer{
+      id: :erlang.phash2(name),
+      name: name,
+      disabled_till: DateTime.add(DateTime.utc_now(), seconds, :second)
+    }
+  end
+
+  describe "paused Prowlarr indexers" do
+    test "paused_remaining/2 rounds down to the largest unit" do
+      now = ~U[2030-01-01 00:00:00Z]
+      assert IndexerComponents.paused_remaining(~U[2030-01-01 00:00:30Z], now) == "<1m"
+      assert IndexerComponents.paused_remaining(~U[2030-01-01 00:12:59Z], now) == "12m"
+      assert IndexerComponents.paused_remaining(~U[2030-01-01 03:30:00Z], now) == "3h"
+      assert IndexerComponents.paused_remaining(~U[2030-01-02 01:00:00Z], now) == "1d"
+    end
+
+    test "paused_heading/1 pluralizes" do
+      assert IndexerComponents.paused_heading(1) == "1 indexer paused by Prowlarr"
+      assert IndexerComponents.paused_heading(2) == "2 indexers paused by Prowlarr"
+    end
+
+    test "retest_flash/1 summarizes outcomes" do
+      amber = paused("Amber Tracker", 600)
+      birch = paused("Birch Tracker", 600)
+
+      assert {:info, "Amber Tracker recovered"} =
+               IndexerComponents.retest_flash({:ok, %{outcomes: [{amber, :ok}], paused: []}})
+
+      assert {:error, "Amber Tracker recovered. Birch Tracker still failing: Unable to connect"} =
+               IndexerComponents.retest_flash(
+                 {:ok,
+                  %{
+                    outcomes: [{amber, :ok}, {birch, {:error, "Unable to connect"}}],
+                    paused: [birch]
+                  }}
+               )
+
+      assert {:info, "No paused indexers to retest"} =
+               IndexerComponents.retest_flash({:ok, %{outcomes: [], paused: []}})
+
+      assert {:error, "Retest failed: Indexer not found"} =
+               IndexerComponents.retest_flash({:error, "Indexer not found"})
+    end
+
+    test "a settled row with paused indexers shows the hint, count and retest button" do
+      progress = %{
+        "p" => %IndexerProgress{
+          indexer_id: "p",
+          indexer: "Prowlarr",
+          status: :ok,
+          result_count: 3,
+          duration_ms: 200,
+          paused: [paused("Amber Tracker", 600), paused("Birch Tracker", 7_200)]
+        }
+      }
+
+      html =
+        render_component(&IndexerComponents.indexer_search_status/1,
+          progress: progress,
+          retest_paused_event: "retest_paused"
+        )
+
+      document = LazyHTML.from_fragment(html)
+
+      hint = LazyHTML.query(document, "#indexer-paused-p")
+      refute Enum.empty?(hint)
+      assert LazyHTML.text(hint) =~ "Amber Tracker"
+      assert LazyHTML.text(hint) =~ "Birch Tracker"
+
+      assert LazyHTML.text(LazyHTML.query(document, "#indexer-search-paused-count")) =~
+               "2 paused"
+
+      button = LazyHTML.query(document, "#indexer-retest-paused-p")
+      assert LazyHTML.attribute(button, "phx-click") == ["retest_paused"]
+      assert LazyHTML.attribute(button, "phx-value-id") == ["p"]
+    end
+
+    test "no hint, count or button when nothing is paused" do
+      progress = %{
+        "p" => %IndexerProgress{
+          indexer_id: "p",
+          indexer: "Prowlarr",
+          status: :ok,
+          result_count: 3
+        }
+      }
+
+      html =
+        render_component(&IndexerComponents.indexer_search_status/1,
+          progress: progress,
+          retest_paused_event: "retest_paused"
+        )
+
+      document = LazyHTML.from_fragment(html)
+      assert Enum.empty?(LazyHTML.query(document, "#indexer-paused-p"))
+      assert Enum.empty?(LazyHTML.query(document, "#indexer-search-paused-count"))
+      assert Enum.empty?(LazyHTML.query(document, "#indexer-retest-paused-p"))
+    end
   end
 end
