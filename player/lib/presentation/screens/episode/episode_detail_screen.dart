@@ -7,6 +7,7 @@ import '../detail/detail_links.dart';
 import '../detail/detail_hero.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_screen_frame.dart';
+import '../detail/detail_sections.dart';
 import '../detail/download_metadata.dart';
 import '../detail/start_download.dart';
 import '../../../domain/detail/detail_target.dart';
@@ -75,10 +76,11 @@ class EpisodeDetailScreen extends ConsumerWidget {
                 _buildActionRow(context, ref, episode),
                 const SizedBox(height: 20),
               ],
-              _buildMetadata(context, episode),
-              if (episode.overview != null && episode.overview!.isNotEmpty) ...[
+              _buildMetadata(episode),
+              if (episode.overview case final overview?
+                  when overview.isNotEmpty) ...[
                 const SizedBox(height: 24),
-                _buildOverview(context, episode),
+                DetailOverview(overview: overview),
               ],
               const DockGap(),
             ],
@@ -260,125 +262,31 @@ class EpisodeDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMetadata(BuildContext context, EpisodeView episode) {
-    final items = <Widget>[];
-
-    // Runtime
-    if (episode.runtimeDisplay.isNotEmpty) {
-      items.add(_buildMetadataChip(
-        context,
-        Icons.schedule_rounded,
-        episode.runtimeDisplay,
-      ));
-    }
-
-    // Air date
-    if (episode.airDate != null) {
-      items.add(_buildMetadataChip(
-        context,
-        Icons.calendar_today_rounded,
-        episode.airDate!,
-      ));
-    }
-
-    // Watched status
-    if (episode.progress?.watched == true) {
-      items.add(_buildMetadataChip(
-        context,
-        Icons.check_circle_rounded,
-        'Watched',
-        color: AppColors.success,
-      ));
-    } else if (episode.progress != null && episode.progress!.percentage > 0) {
-      items.add(_buildMetadataChip(
-        context,
-        Icons.play_circle_outline_rounded,
-        '${episode.progress!.percentage.round()}%',
-        color: AppColors.primary,
-      ));
-    }
-
-    if (items.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: items,
-      ),
-    );
-  }
-
-  Widget _buildMetadataChip(
-    BuildContext context,
-    IconData icon,
-    String label, {
-    Color? color,
-  }) {
-    final chipColor = color ?? AppColors.textSecondary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: chipColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: chipColor.withValues(alpha: 0.2),
+  Widget _buildMetadata(EpisodeView episode) {
+    final progress = episode.progress;
+    return DetailMetadataWrap(chips: [
+      if (episode.runtimeDisplay.isNotEmpty)
+        DetailMetadataChip(
+          icon: Icons.schedule_rounded,
+          label: episode.runtimeDisplay,
         ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: chipColor),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: chipColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOverview(BuildContext context, EpisodeView episode) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'Overview',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            episode.overview!,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.6,
-                ),
-          ),
-        ],
-      ),
-    );
+      if (episode.airDate case final airDate?)
+        DetailMetadataChip(
+          icon: Icons.calendar_today_rounded,
+          label: airDate,
+        ),
+      if (progress != null && progress.watched)
+        const DetailMetadataChip(
+          icon: Icons.check_circle_rounded,
+          label: 'Watched',
+          color: AppColors.success,
+        )
+      else if (progress != null && progress.percentage > 0)
+        DetailMetadataChip(
+          icon: Icons.play_circle_outline_rounded,
+          label: '${progress.percentage.round()}%',
+          color: AppColors.primary,
+        ),
+    ]);
   }
 }

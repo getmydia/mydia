@@ -12,6 +12,7 @@ import '../detail/detail_links.dart';
 import '../detail/detail_hero.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_screen_frame.dart';
+import '../detail/detail_sections.dart';
 import '../detail/detail_similar_rail.dart';
 import '../detail/download_metadata.dart';
 import '../detail/start_download.dart';
@@ -21,11 +22,6 @@ import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/movie_watched_controls.dart';
 import '../../widgets/hero_play_control.dart';
 import '../../widgets/toast/toaster.dart';
-
-/// Below this width the hero's action column and tag column stack instead
-/// of sitting side by side. Matches the wide-layout mockup's tablet/desktop
-/// target — see docs/superpowers/specs/2026-08-05-player-detail-page-infuse-redesign-design.md.
-const double _kHeroBreakpoint = 700;
 
 class MovieDetailScreen extends ConsumerWidget {
   const MovieDetailScreen.target({super.key, required this.target});
@@ -68,37 +64,10 @@ class MovieDetailScreen extends ConsumerWidget {
       slivers: [
         _buildHeroSection(context, ref, movie),
         SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 24),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = constraints.maxWidth >= _kHeroBreakpoint;
-                final actionColumn =
-                    _buildActionColumn(context, ref, movie, compact: wide);
-                final tagColumn = _buildTagColumn(context, movie);
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: wide
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            actionColumn,
-                            const SizedBox(width: 40),
-                            Expanded(child: tagColumn),
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            actionColumn,
-                            const SizedBox(height: 20),
-                            tagColumn,
-                          ],
-                        ),
-                );
-              },
-            ),
+          child: DetailHeroBody(
+            actionColumn: (compact) =>
+                _buildActionColumn(context, ref, movie, compact: compact),
+            tagColumn: _buildTagColumn(context, movie),
           ),
         ),
         SliverToBoxAdapter(
@@ -148,81 +117,21 @@ class MovieDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildTagColumn(BuildContext context, MovieView movie) {
-    final tags = <String>[
-      if (movie.runtimeDisplay.isNotEmpty) movie.runtimeDisplay,
-      if (movie.files.isNotEmpty && movie.files.first.resolution != null)
-        movie.files.first.resolution!,
-      if (movie.contentRating != null) movie.contentRating!,
-      ...movie.genres,
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (movie.isWatched) ...[
-          MovieWatchedLine(dateLabel: movie.watchedAtDisplay),
-          const SizedBox(height: 18),
-        ] else if (movie.hasResumableProgress) ...[
-          _buildProgressBar(context, movie),
-          const SizedBox(height: 18),
-        ],
-        if (tags.isNotEmpty) ...[
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: tags.map((tag) => _buildTagChip(context, tag)).toList(),
-          ),
-          const SizedBox(height: 18),
-        ],
-        if (movie.overview != null) ...[
-          Text(
-            movie.overview!,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.6,
-                ),
-          ),
-          const SizedBox(height: 14),
-        ],
-        if (movie.ratingDisplay.isNotEmpty)
-          _buildRatingLine(movie.ratingDisplay),
+    return DetailTagColumn(
+      leading: movie.isWatched
+          ? MovieWatchedLine(dateLabel: movie.watchedAtDisplay)
+          : movie.hasResumableProgress
+              ? _buildProgressBar(context, movie)
+              : null,
+      tags: [
+        if (movie.runtimeDisplay.isNotEmpty) movie.runtimeDisplay,
+        if (movie.files.firstOrNull?.resolution case final resolution?)
+          resolution,
+        if (movie.contentRating case final rating?) rating,
+        ...movie.genres,
       ],
-    );
-  }
-
-  Widget _buildTagChip(BuildContext context, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRatingLine(String ratingDisplay) {
-    return Row(
-      children: [
-        const Icon(Icons.star_rounded, size: 16, color: AppColors.primary),
-        const SizedBox(width: 6),
-        Text(
-          ratingDisplay,
-          style: const TextStyle(
-              fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-        ),
-        const SizedBox(width: 6),
-        const Text('TMDB',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-      ],
+      overview: movie.overview,
+      rating: movie.ratingDisplay,
     );
   }
 

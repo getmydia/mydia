@@ -11,6 +11,7 @@ import '../detail/detail_links.dart';
 import '../detail/detail_hero.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_screen_frame.dart';
+import '../detail/detail_sections.dart';
 import '../detail/detail_similar_rail.dart';
 import '../detail/download_metadata.dart';
 import '../detail/start_download.dart';
@@ -24,11 +25,6 @@ import '../../widgets/cast_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/hero_play_control.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
-
-/// Below this width the hero's action column and tag column stack instead
-/// of sitting side by side. Matches the movie detail hero's breakpoint — see
-/// docs/superpowers/specs/2026-08-05-player-detail-page-infuse-redesign-design.md.
-const double _kHeroBreakpoint = 700;
 
 /// The position a hero Play tap resumes from, or null when playback should
 /// start from the beginning.
@@ -160,10 +156,20 @@ class ShowDetailScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
-              _buildMetadata(context, show),
+              // Status chip only. Content rating and genres live in the
+              // hero's tag row; repeating them here rendered each twice.
+              DetailMetadataWrap(chips: [
+                if (show.status case final status? when status.isNotEmpty)
+                  DetailMetadataChip(
+                    label: status,
+                    color: status == 'Ended'
+                        ? AppColors.textSecondary
+                        : AppColors.success,
+                  ),
+              ]),
               const SizedBox(height: 24),
-              if (show.overview != null) ...[
-                _buildOverview(context, show),
+              if (show.overview case final overview?) ...[
+                DetailOverview(overview: overview),
                 const SizedBox(height: 24),
               ],
               if (show.seasons.isNotEmpty) ShowSeasonSection(show: show),
@@ -266,42 +272,15 @@ class ShowDetailScreen extends ConsumerWidget {
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= _kHeroBreakpoint;
-          final actionColumn = _buildActionColumn(
-            context,
-            ref,
-            show,
-            selectedEpisode,
-            compact: wide,
-          );
-          final tagColumn = _buildTagColumn(context, show, selectedEpisode);
-
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: wide
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      actionColumn,
-                      const SizedBox(width: 40),
-                      Expanded(child: tagColumn),
-                    ],
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      actionColumn,
-                      const SizedBox(height: 20),
-                      tagColumn,
-                    ],
-                  ),
-          );
-        },
+    return DetailHeroBody(
+      actionColumn: (compact) => _buildActionColumn(
+        context,
+        ref,
+        show,
+        selectedEpisode,
+        compact: compact,
       ),
+      tagColumn: _buildTagColumn(show, selectedEpisode),
     );
   }
 
@@ -349,157 +328,17 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTagColumn(
-      BuildContext context, ShowView show, EpisodeView episode) {
-    final tags = <String>[
-      if (episode.runtimeDisplay.isNotEmpty) episode.runtimeDisplay,
-      if (episode.files.isNotEmpty && episode.files.first.resolution != null)
-        episode.files.first.resolution!,
-      if (show.contentRating != null) show.contentRating!,
-      ...show.genres,
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (tags.isNotEmpty) ...[
-          Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: tags.map(_buildTagChip).toList()),
-          const SizedBox(height: 18),
-        ],
-        if (episode.overview != null) ...[
-          Text(
-            episode.overview!,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.6,
-                ),
-          ),
-          const SizedBox(height: 14),
-        ],
-        if (show.ratingDisplay.isNotEmpty) _buildRatingLine(show.ratingDisplay),
+  Widget _buildTagColumn(ShowView show, EpisodeView episode) {
+    return DetailTagColumn(
+      tags: [
+        if (episode.runtimeDisplay.isNotEmpty) episode.runtimeDisplay,
+        if (episode.files.firstOrNull?.resolution case final resolution?)
+          resolution,
+        if (show.contentRating case final rating?) rating,
+        ...show.genres,
       ],
-    );
-  }
-
-  Widget _buildTagChip(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRatingLine(String ratingDisplay) {
-    return Row(
-      children: [
-        const Icon(Icons.star_rounded, size: 16, color: AppColors.primary),
-        const SizedBox(width: 6),
-        Text(
-          ratingDisplay,
-          style: const TextStyle(
-              fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-        ),
-        const SizedBox(width: 6),
-        const Text('TMDB',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-      ],
-    );
-  }
-
-  /// Status chip only. Content rating and genres live in the hero's tag row
-  /// now — repeating them here rendered each one twice on the page.
-  Widget _buildMetadata(BuildContext context, ShowView show) {
-    final items = <Widget>[];
-    final status = show.status;
-
-    if (status != null && status.isNotEmpty) {
-      items.add(_buildMetadataChip(
-        context,
-        status,
-        status == 'Ended' ? AppColors.textSecondary : AppColors.success,
-      ));
-    }
-
-    if (items.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: items,
-      ),
-    );
-  }
-
-  Widget _buildMetadataChip(BuildContext context, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOverview(BuildContext context, ShowView show) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'Overview',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            show.overview!,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.6,
-                ),
-          ),
-        ],
-      ),
+      overview: episode.overview,
+      rating: show.ratingDisplay,
     );
   }
 }
