@@ -11,9 +11,12 @@ defmodule MydiaWeb.MediaLive.Index.ReclassifyFlash do
     do: "Reclassified #{updated} #{items(updated)}"
 
   def message(%{skipped: skipped}) when skipped > 0,
-    do: "No changes - #{skipped} #{items(skipped)} have category override"
+    do: "No changes - #{skipped} #{items(skipped)} #{verb(skipped)} category override"
 
   def message(_summary), do: "No category changes detected"
+
+  defp verb(1), do: "has"
+  defp verb(_), do: "have"
 
   defp items(1), do: "item"
   defp items(_), do: "items"

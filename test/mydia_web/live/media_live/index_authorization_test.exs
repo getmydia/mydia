@@ -80,6 +80,27 @@ defmodule MydiaWeb.MediaLive.IndexAuthorizationTest do
     end
   end
 
+  describe "toggle_item_monitored with an item the caller cannot reach" do
+    test "an out-of-scope id gets the error flash and the view survives", %{conn: conn} do
+      user = restricted_user_fixture(%{role: "user", allowed_categories: ["cartoon_movie"]})
+      hidden = media_item_fixture(%{title: "Ember Tide", type: "movie"})
+      Repo.update_all(from(m in MediaItem, where: m.id == ^hidden.id), set: [category: "movie"])
+
+      view = open_library(conn, user, hidden)
+      render_click(view, "toggle_item_monitored", %{"id" => hidden.id})
+
+      assert has_element?(view, @denied_flash)
+      assert monitored?(hidden)
+    end
+
+    test "an unknown id gets the error flash", %{conn: conn, item: item} do
+      view = open_library(conn, user_fixture(%{role: "user"}), item)
+      render_click(view, "toggle_item_monitored", %{"id" => Ecto.UUID.generate()})
+
+      assert has_element?(view, @denied_flash)
+    end
+  end
+
   describe "as a user with access restrictions" do
     test "batch_reclassify leaves items outside the scope alone", %{conn: conn} do
       user = restricted_user_fixture(%{role: "user", allowed_categories: ["cartoon_movie"]})

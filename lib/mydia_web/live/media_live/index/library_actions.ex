@@ -14,7 +14,14 @@ defmodule MydiaWeb.MediaLive.Index.LibraryActions do
   @spec toggle_monitored(Phoenix.LiveView.Socket.t(), String.t()) ::
           {:noreply, Phoenix.LiveView.Socket.t()}
   def toggle_monitored(socket, id) do
-    media_item = Media.get_media_item!(socket.assigns.current_scope, id)
+    case Media.list_media_items(socket.assigns.current_scope, ids: [id]) do
+      [media_item] -> toggle_item(socket, media_item)
+      [] -> {:noreply, put_flash(socket, :error, "Failed to update monitoring status")}
+    end
+  end
+
+  defp toggle_item(socket, media_item) do
+    id = media_item.id
     new_monitored_status = !media_item.monitored
 
     case Media.update_media_item(
