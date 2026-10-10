@@ -552,7 +552,15 @@ defmodule Mydia.Indexers do
           end
         end)
 
-      {:ok, %{outcomes: outcomes, paused: paused_indexer_list(config)}}
+      # Not paused_indexer_list/1: its [] on error would read as "nothing is
+      # paused any more" and let the flash claim a recovery nobody confirmed.
+      case prowlarr_paused_indexers(config) do
+        {:ok, still_paused} ->
+          {:ok, %{outcomes: outcomes, paused: still_paused}}
+
+        {:error, reason} ->
+          {:error, "tests ran, but re-reading Prowlarr's status failed: #{reason}"}
+      end
     end
   end
 

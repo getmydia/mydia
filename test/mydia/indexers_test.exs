@@ -986,6 +986,37 @@ defmodule Mydia.IndexersTest do
       assert Enum.map(paused, & &1.id) == [2]
     end
 
+    test "retest_paused_prowlarr_indexers/1 errors when the re-read after the tests fails", %{
+      bypass: bypass,
+      config: config
+    } do
+      {:ok, reads} = Agent.start_link(fn -> 0 end)
+      till = DateTime.utc_now() |> DateTime.add(600, :second) |> DateTime.to_iso8601()
+
+      # First read lists the paused indexer; the re-read after the test fails.
+      Bypass.stub(bypass, "GET", "/api/v1/indexerstatus", fn conn ->
+        case Agent.get_and_update(reads, &{&1, &1 + 1}) do
+          0 -> json_resp(conn, 200, [%{"indexerId" => 1, "disabledTill" => till}])
+          _ -> Plug.Conn.resp(conn, 500, "boom")
+        end
+      end)
+
+      Bypass.stub(bypass, "GET", "/api/v1/indexer", fn conn ->
+        json_resp(conn, 200, [%{"id" => 1, "name" => "Amber Tracker", "enable" => true}])
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/indexer/1", fn conn ->
+        json_resp(conn, 200, %{"id" => 1})
+      end)
+
+      Bypass.expect_once(bypass, "POST", "/api/v1/indexer/test", fn conn ->
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      assert {:error, "tests ran, but re-reading Prowlarr's status failed: HTTP 500"} =
+               Indexers.retest_paused_prowlarr_indexers(config.id)
+    end
+
     test "retest_paused_prowlarr_indexers/1 reports an unknown config id" do
       assert {:error, "Indexer not found"} =
                Indexers.retest_paused_prowlarr_indexers(Ecto.UUID.generate())
