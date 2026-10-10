@@ -171,7 +171,7 @@ defmodule MydiaWeb.IndexerComponents do
   defp status_label(%IndexerProgress{status: :timeout}), do: "timed out"
   defp status_label(%IndexerProgress{status: :error} = row), do: row.error || "failed"
 
-  @doc "Time left on a Prowlarr pause, coarsest unit: \"<1m\", \"12m\", \"3h\", \"1d\"."
+  @doc ~S(Time left on a Prowlarr pause, coarsest unit: "<1m", "12m", "3h", "1d".)
   def paused_remaining(%DateTime{} = till, now \\ DateTime.utc_now()) do
     seconds = DateTime.diff(till, now, :second)
 

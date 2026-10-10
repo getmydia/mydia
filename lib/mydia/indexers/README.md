@@ -135,3 +135,20 @@ carry `bypass_delay` and never wait; that includes search on add, request
 approvals and plugin page adds. Cron, the upgrade sweep, failed-download
 replacement searches and the re-check itself never set it. Manual search
 ignores the delay entirely.
+
+## Prowlarr pauses indexers; Mydia only reports it
+
+Prowlarr puts a failing indexer on an escalating backoff (1m, 5m, 15m, 30m,
+1h, 3h, 6h, 12h, 24h) and drops it from every search until `disabledTill`,
+even when the search names it in `indexerIds`. Prowlarr never retests a
+paused indexer on its own. Mydia caches nothing here: every search is a live
+`GET /api/v1/search`, so a "missing" indexer is Prowlarr's backoff, not stale
+Mydia state.
+
+Mydia reads `GET /api/v1/indexerstatus` to show what is paused
+(`Adapter.Prowlarr.list_paused_indexers/1`): in Prowlarr health details on the
+admin Indexers page, and on the Prowlarr row of manual search
+(`search_all/2` with `report_paused: true`). A user may click Retest, which
+calls Prowlarr's per-indexer `POST /api/v1/indexer/test?forceTest=true`, one
+indexer at a time. Never call that from a background job or `testall`: a
+failed test escalates the backoff, and the backoff exists to protect trackers.

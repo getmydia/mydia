@@ -138,7 +138,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
               @paused
             )}
           </span>
-          <.button
+          <button
             type="button"
             id={"indexer-retest-paused-#{@indexer.id}"}
             class="btn btn-ghost btn-xs"
@@ -147,7 +147,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             disabled={@retesting}
           >
             <span :if={@retesting} class="loading loading-spinner loading-xs"></span> Retest
-          </.button>
+          </button>
         </div>
       </:details>
       <:badges>
