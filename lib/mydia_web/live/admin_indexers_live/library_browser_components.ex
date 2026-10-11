@@ -208,7 +208,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
       </:title>
       <:descriptor :if={@definition.description}>{@definition.description}</:descriptor>
       <:badges>
-        <%= if Components.needs_library_config?(@definition) and @definition.enabled do %>
+        <%= if Components.needs_library_config?(@definition) and @definition.in_library do %>
           <div class="tooltip" data-tip="This indexer requires configuration">
             <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-warning" />
           </div>

@@ -189,6 +189,23 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
       assert updated.enabled
     end
 
+    test "keeps the config warning on an added but disabled private indexer", %{conn: conn} do
+      {:ok, definition} =
+        cardigann_definition_fixture(%{type: "private", enabled: true})
+        |> Indexers.disable_cardigann_definition()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      view
+      |> element("button.flex.items-start[phx-click='show_indexer_library']")
+      |> render_click()
+
+      assert has_element?(
+               view,
+               "#library-definition-#{definition.id} .tooltip[data-tip='This indexer requires configuration']"
+             )
+    end
+
     test "removes an added indexer, even a disabled one", %{conn: conn} do
       {:ok, definition} =
         cardigann_definition_fixture(%{enabled: true})
