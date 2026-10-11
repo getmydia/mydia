@@ -71,14 +71,23 @@ defmodule Mydia.Ratchet do
 
   @doc """
   The measured value in a credo message: the complexity ("cyclomatic complexity is
-  14, max is 9") or the depth ("max depth is 2, was 3"). Messages with neither
-  count as 0.
+  14, max is 9") or the depth ("max depth is 2, was 3").
+
+  Raises when the message has neither. Defaulting to 0 would make a reworded credo
+  message read as "improved" and let a worse function through silently; raising
+  stops the gate and names the issue, so the parser gets updated instead.
   """
   @spec issue_value(map()) :: non_neg_integer()
   def issue_value(issue) do
     case Regex.run(~r/(?:complexity is|was) (\d+)/, issue["message"] || "") do
-      [_, value] -> String.to_integer(value)
-      nil -> 0
+      [_, value] ->
+        String.to_integer(value)
+
+      nil ->
+        raise ArgumentError,
+              "ratchet cannot read a value from the credo message for " <>
+                "#{inspect(issue["scope"])}: #{inspect(issue["message"])}. " <>
+                "Update Mydia.Ratchet.issue_value/1 for the new wording."
     end
   end
 

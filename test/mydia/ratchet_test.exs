@@ -82,6 +82,16 @@ defmodule Mydia.RatchetTest do
     test "reads the depth from a nesting message" do
       assert Ratchet.issue_value(issue("Nesting", "M.f", @nest3)) == 3
     end
+
+    test "raises, naming the issue, when the message has no parseable value" do
+      error =
+        assert_raise ArgumentError, fn ->
+          Ratchet.issue_value(issue("Nesting", "Mydia.Media.rescan", "Too nested."))
+        end
+
+      assert error.message =~ "Mydia.Media.rescan"
+      assert error.message =~ "Too nested."
+    end
   end
 
   describe "complexity_regressions/2" do
@@ -129,6 +139,36 @@ defmodule Mydia.RatchetTest do
       assert Ratchet.complexity_regressions([issue("Nesting", "M.f", deeper)], [
                issue("Nesting", "M.f", @nest3)
              ]) == []
+    end
+
+    test "an unparseable head message is not silently accepted" do
+      base = [issue("CyclomaticComplexity", "M.f", @cc15)]
+      head = [issue("CyclomaticComplexity", "M.f", "Too complex.")]
+      assert_raise ArgumentError, fn -> Ratchet.complexity_regressions(base, head) end
+    end
+
+    test "mixed duplicates flag only the one that rose" do
+      cc12 = "Function is too complex (cyclomatic complexity is 12, max is 9)."
+      cc13 = "Function is too complex (cyclomatic complexity is 13, max is 9)."
+      cyclo = &issue("CyclomaticComplexity", "M.f", &1)
+
+      assert [%{"message" => ^cc13}] =
+               Ratchet.complexity_regressions([cyclo.(@cc16), cyclo.(cc12)], [
+                 cyclo.(@cc15),
+                 cyclo.(cc13)
+               ])
+    end
+
+    test "a differing count flags the extra issue, and a rise among the paired ones" do
+      cyclo = &issue("CyclomaticComplexity", "M.f", &1)
+
+      # one fewer in head, remaining one lower: fine
+      assert Ratchet.complexity_regressions([cyclo.(@cc16), cyclo.(@cc15)], [cyclo.(@cc15)]) ==
+               []
+
+      # one extra in head: the lowest-valued head issue has no partner
+      assert [%{"message" => @cc15}] =
+               Ratchet.complexity_regressions([cyclo.(@cc16)], [cyclo.(@cc16), cyclo.(@cc15)])
     end
 
     test "duplicates pair largest to largest" do
