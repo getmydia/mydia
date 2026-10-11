@@ -158,7 +158,7 @@ bonus content reads as owned:
 - `Mydia.Downloads.Queue` skips the grab and logs "media files already exist for
   movie", which reads like success.
 - `Mydia.Library.episode_has_media_file?/1`, consumed only by
-  `MediaImport.skip_already_filed_episode?/2`, makes a season-pack import skip
+  `MediaImport.FileImport.skip_already_filed_episode?/2`, makes a season-pack import skip
   the episode's real file. Combined with the fixed search path this sustains
   itself: searched and grabbed forever, imported never.
 

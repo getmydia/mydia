@@ -31,7 +31,7 @@ defmodule Mydia.Downloads.ImportCandidates do
   Turns the importer's file list into persistable candidates.
 
   `library_type` is the resolved library's type, matching the branches in
-  `MediaImport.filter_files_for_library_type/2`. `parser_opts` is the same
+  `MediaImport.Discovery.filter_files_for_library_type/2`. `parser_opts` is the same
   keyword list the importer passes to `ReleaseParser.parse/2`, so the season and
   episode guesses here match the ones the importer would have made.
   """
@@ -210,7 +210,7 @@ defmodule Mydia.Downloads.ImportCandidates do
   # `MediaImport.snapshot_candidates_on_failure/4` on every import failure).
   # Downloads flagged `unresolved_files` before that snapshot existed only
   # carry `metadata["unresolved_files"]` (written by
-  # `MediaImport.flag_unresolved_files/2`), and in a self-hosted deployment
+  # `MediaImport.FileImport.flag_unresolved_files/2`), and in a self-hosted deployment
   # those rows persist indefinitely until an operator resolves them. Falling
   # back to normalizing that list keeps the modal usable for them instead of
   # reporting "unavailable" and stranding an operator who relied on the
@@ -417,7 +417,7 @@ defmodule Mydia.Downloads.ImportCandidates do
   # with `parser_opts: []` (no `TargetContext`), while the snapshot was built
   # by `MediaImport.snapshot_candidates_on_failure/4` with the real parser
   # opts for the download's bound media item (see `parser_opts_for/1` and
-  # `target_context_for/1` in `Mydia.Jobs.MediaImport`). Without this, the
+  # `target_context_for/1` in `Mydia.Jobs.MediaImport.FileImport`). Without this, the
   # same file can show a different prefilled episode target depending on
   # whether the modal happened to get a live listing or fell back to the
   # snapshot, with nothing telling the operator why.
@@ -438,7 +438,7 @@ defmodule Mydia.Downloads.ImportCandidates do
   end
 
   # Prefers the download's actually-resolved `library_path.type` — the type
-  # `MediaImport.organize_and_import_files/4` really filtered against — over
+  # `MediaImport.FileImport.organize_and_import_files/4` really filtered against — over
   # the movie/series guess below. A failed download was routed through
   # `determine_library_path/1` at least once, so when the caller preloaded
   # `:library_path` this is the real answer rather than a reconstruction.
