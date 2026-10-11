@@ -4,7 +4,7 @@ defmodule Mydia.Indexers.Cardigann.LoginHttpTest do
   import Mydia.CardigannLoginFixtures
 
   alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Indexers.Cardigann.Login.Http
+  alias Mydia.Indexers.Cardigann.Login.{Http, Inputs}
 
   setup do
     bypass = Bypass.open()
@@ -33,6 +33,30 @@ defmodule Mydia.Indexers.Cardigann.LoginHttpTest do
              Http.request(ctx, :post, base <> "/login.php", form: %{})
 
     assert Enum.sort(Http.cookies(ctx)) == ["a=1", "b=2"]
+  end
+
+  test "resolves a relative Location against the request URL", %{bypass: bypass, base: base} do
+    Bypass.expect_once(bypass, "POST", "/sub/login.php", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_header("location", "home.php")
+      |> Plug.Conn.resp(302, "")
+    end)
+
+    Bypass.expect_once(bypass, "GET", "/sub/home.php", fn conn ->
+      Plug.Conn.resp(conn, 200, "sub home")
+    end)
+
+    ctx = Http.new_ctx(parsed(base, %{}), %{}, [])
+
+    assert {:ok, %{status: 200, body: "sub home"}, _ctx} =
+             Http.request(ctx, :post, base <> "/sub/login.php", form: %{})
+  end
+
+  test "resolve_page keeps the page path and drops its query string" do
+    assert Inputs.resolve_page("http://h/sub/login.php?a=1", "home.php?b=2") ==
+             "http://h/sub/home.php?b=2"
+
+    assert Inputs.resolve_page("http://h/sub/login.php?a=1", "/x") == "http://h/x"
   end
 
   test "refuses a redirect to a host outside the definition", %{bypass: bypass, base: base} do

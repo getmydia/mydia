@@ -58,6 +58,11 @@ defmodule Mydia.Indexers.Cardigann.Login.Inputs do
     end
   end
 
+  @doc "Joins a site base URL and a definition path. Not for references found on a fetched page."
   @spec resolve(String.t(), String.t()) :: String.t()
   def resolve(base, path), do: base |> Kernel.<>("/") |> URI.merge(path) |> URI.to_string()
+
+  @doc "Resolves a reference found on or returned by a fetched page (redirect, form action, image src)."
+  @spec resolve_page(String.t(), String.t()) :: String.t()
+  def resolve_page(page_url, ref), do: page_url |> URI.merge(ref) |> URI.to_string()
 end

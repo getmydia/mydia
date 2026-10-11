@@ -44,7 +44,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Http do
       case {resp.status, location(resp)} do
         {status, loc} when status in 300..399 and is_binary(loc) ->
           # A redirect after a POST becomes a GET, as browsers do.
-          hop(ctx, :get, Inputs.resolve(url, loc), [], hops_left - 1)
+          hop(ctx, :get, Inputs.resolve_page(url, loc), [], hops_left - 1)
 
         _ ->
           {:ok, %{status: resp.status, body: body(resp), headers: resp.headers, url: url}, ctx}
