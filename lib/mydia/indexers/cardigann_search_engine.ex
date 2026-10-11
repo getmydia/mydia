@@ -877,14 +877,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   # Render a template string using the CardigannTemplate engine
   defp render_template(template, definition, opts) do
-    context = build_template_context(definition, opts)
-    CardigannTemplate.render(template, context)
+    with {:error, reason} <-
+           CardigannTemplate.render(template, build_template_context(definition, opts)) do
+      {:error, Error.search_failed("Search path failed to render: #{inspect(reason)}")}
+    end
   end
 
-  # Build template context from definition and search options
-  defp build_template_context(definition, opts) do
-    Mydia.Indexers.Cardigann.TemplateContext.build(definition, opts)
-  end
+  defp build_template_context(definition, opts),
+    do: Mydia.Indexers.Cardigann.TemplateContext.build(definition, opts)
 
   @doc """
   Joins a rendered path onto a base URL, honouring an absolute path.

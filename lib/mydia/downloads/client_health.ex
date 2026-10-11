@@ -155,12 +155,19 @@ defmodule Mydia.Downloads.ClientHealth do
   ## Private Functions
 
   defp perform_health_check(client_id) do
-    client_id
-    |> Settings.get_download_client_config!()
-    |> do_health_check()
+    case fetch_config(client_id) do
+      {:ok, config} -> do_health_check(config)
+      :error -> {:error, :not_found}
+    end
+  end
+
+  # The getter raises Ecto.NoResultsError for a missing database row and a
+  # RuntimeError for a runtime-form id that names nothing configured. Only the
+  # lookup is guarded, so a failure inside the health check itself still surfaces.
+  defp fetch_config(client_id) do
+    {:ok, Settings.get_download_client_config!(client_id)}
   rescue
-    Ecto.NoResultsError ->
-      {:error, :not_found}
+    _ in [Ecto.NoResultsError, RuntimeError] -> :error
   end
 
   defp do_health_check(config) do

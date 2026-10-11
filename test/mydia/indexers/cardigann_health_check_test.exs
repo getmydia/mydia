@@ -538,6 +538,21 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
     end
   end
 
+  describe "probe_search/3 with a search path that fails to render" do
+    test "returns a handled error outcome instead of raising" do
+      url = "http://localhost:1"
+      parsed = parsed_for(url)
+
+      parsed = %{
+        parsed
+        | search: %{parsed.search | paths: [%{path: "/search/{{ .Keywords "}]}
+      }
+
+      assert {:error, message} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      assert is_binary(message)
+    end
+  end
+
   describe "probe_search/3" do
     test "reports the row count when the search returns results" do
       bypass = Bypass.open()
