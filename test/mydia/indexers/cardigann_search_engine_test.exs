@@ -47,7 +47,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         links: ["https://example.invalid"],
         capabilities: %{modes: %{}},
         search: %{
-          paths: [%{path: "search/node/{{ .Keywords }} type:story"}],
+          paths: [%{path: "search/node/{{ .Keywords }} type:story%2Fx"}],
           inputs: %{},
           keywordsfilters: [],
           rows: %{selector: "tr"},
@@ -55,8 +55,27 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         }
       }
 
-      assert {:ok, "https://example.invalid/search/node/a%20b%20type:story"} =
+      assert {:ok, "https://example.invalid/search/node/a%20b%20type:story%2Fx"} =
                CardigannSearchEngine.build_search_url(definition, query: "a b")
+    end
+
+    test "characters Mint rejects in a request target are percent-encoded in static text" do
+      definition = %Parsed{
+        id: "path-unsafe-test",
+        name: "path",
+        links: ["https://example.invalid"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "s/\"{{ .Keywords }}\"<x>|y?q=1&r=2"}],
+          inputs: %{},
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, "https://example.invalid/s/%22ab%22%3Cx%3E%7Cy?q=1&r=2"} =
+               CardigannSearchEngine.build_search_url(definition, query: "ab")
     end
 
     test "query inputs carry the definition's charset bytes" do

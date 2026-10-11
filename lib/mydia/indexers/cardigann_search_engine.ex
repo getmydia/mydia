@@ -386,9 +386,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   # Rendered keywords are already percent-encoded; static text in the template
   # is not. Encode only what a request target cannot carry (space, controls,
-  # non-ASCII bytes), leaving '%' and reserved characters alone so existing
-  # escapes and query strings survive.
-  defp encode_path_text(path), do: URI.encode(path, &(&1 > 32 and &1 < 127))
+  # non-ASCII bytes, and characters like '"', '<', '>', '{', '}', '|', '\\', '^'
+  # and the backtick, which Mint's request target validation rejects). Reserved
+  # and unreserved characters and '%' are left alone so existing escapes and
+  # query strings survive.
+  defp encode_path_text(path), do: URI.encode(path, &(URI.char_unescaped?(&1) or &1 == ?%))
 
   @doc """
   Builds request parameters including query params, headers, and method.
