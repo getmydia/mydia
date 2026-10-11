@@ -114,8 +114,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
       is_nil(body) ->
         {:error, Error.search_failed("Empty response body")}
 
-      is_map(body) ->
-        # Req auto-decoded JSON response - parse directly
+      is_map(body) or is_list(body) ->
+        # Req auto-decoded JSON. apibay.org (The Pirate Bay) answers with a
+        # top-level array, which decodes to a list, not a map.
         parse_json_results_from_map(
           definition,
           body,
@@ -261,6 +262,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
         category_mappings \\ []
       ) do
     with {:ok, json} <- Jason.decode(json_body),
+         false <- json_reports_no_results?(json, definition.search),
          {:ok, rows} <- extract_json_rows(json, definition.search, template_context) do
       Logger.info("[#{indexer_name}] Extracted #{length(rows)} rows from JSON")
 
@@ -276,6 +278,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
       Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
       {:ok, results}
     else
+      true ->
+        {:ok, []}
+
       {:error, %Jason.DecodeError{} = error} ->
         {:error, Error.search_failed("Invalid JSON: #{inspect(error)}")}
 
@@ -305,8 +310,14 @@ defmodule Mydia.Indexers.CardigannResultParser do
   - `{:ok, results}` - List of SearchResult structs
   - `{:error, reason}` - Parsing error
   """
-  @spec parse_json_results_from_map(Parsed.t(), map(), String.t(), map(), String.t(), list()) ::
-          parse_result()
+  @spec parse_json_results_from_map(
+          Parsed.t(),
+          map() | list(),
+          String.t(),
+          map(),
+          String.t(),
+          list()
+        ) :: parse_result()
   def parse_json_results_from_map(
         %Parsed{} = definition,
         json,
@@ -315,13 +326,18 @@ defmodule Mydia.Indexers.CardigannResultParser do
         base_url \\ "",
         category_mappings \\ []
       )
-      when is_map(json) do
-    with {:ok, rows} <- extract_json_rows(json, definition.search, template_context),
-         {:ok, parsed_rows} <- parse_json_row_fields(rows, definition.search, template_context) do
-      results =
-        transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
+      when is_map(json) or is_list(json) do
+    if json_reports_no_results?(json, definition.search) do
+      {:ok, []}
+    else
+      with {:ok, rows} <- extract_json_rows(json, definition.search, template_context),
+           {:ok, parsed_rows} <-
+             parse_json_row_fields(rows, definition.search, template_context) do
+        results =
+          transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
 
-      {:ok, results}
+        {:ok, results}
+      end
     end
   rescue
     error ->
@@ -1104,6 +1120,47 @@ defmodule Mydia.Indexers.CardigannResultParser do
   defp extract_json_rows(json, search_config, template_context) do
     do_extract_json_rows(json, search_config, template_context)
   end
+
+  # Cardigann's JSON `rows.count` is a selector for the number of results, not a
+  # row limit (the HTML and XML paths read an integer `count` as a limit, which
+  # is a different key shape and stays untouched). Prowlarr returns no releases
+  # when it evaluates below 1. apibay.org relies on this: a search with no hits
+  # answers `[{"id":"0","name":"No results returned",...}]`, and without the
+  # check that placeholder becomes a result with an all-zero info hash.
+  defp json_reports_no_results?(json, %{rows: row_config}) when is_map(row_config) do
+    case Map.get(row_config, :count) do
+      %{} = count ->
+        selector = Map.get(count, "selector") || Map.get(count, :selector)
+        is_binary(selector) and count_below_one?(json_count_value(json, selector))
+
+      _ ->
+        false
+    end
+  end
+
+  defp json_reports_no_results?(_json, _search_config), do: false
+
+  # navigate_json_path/2 reads "$.0.id" but not "$[0].id", the form
+  # definitions use for a leading array index.
+  defp json_count_value(json, selector) do
+    path = Regex.replace(~r/^\$\[(\d+)\]/, selector, "$.\\1")
+
+    case navigate_json_path(json, path) do
+      {:ok, value} -> value
+      _ -> nil
+    end
+  end
+
+  defp count_below_one?(value) when is_integer(value), do: value < 1
+
+  defp count_below_one?(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {n, ""} -> n < 1
+      _ -> false
+    end
+  end
+
+  defp count_below_one?(_value), do: false
 
   defp do_extract_json_rows(json, %{rows: row_config}, template_context) do
     raw_selector = Map.get(row_config, :selector) || Map.get(row_config, "selector")

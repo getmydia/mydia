@@ -352,6 +352,94 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
   end
 
   describe "parse_results/3 with JSON" do
+    # apibay.org (The Pirate Bay) answers with a top-level JSON array, which Req
+    # decodes to a list rather than a map.
+    defp apibay_definition do
+      %Parsed{
+        id: "thepiratebay",
+        name: "The Pirate Bay",
+        search: %{
+          rows: %{selector: "$", count: %{"selector" => "$[0].id"}},
+          fields: %{
+            :title => %{selector: "name", filters: []},
+            :infohash => %{selector: "info_hash", filters: []},
+            :download => %{selector: "info_hash", filters: []},
+            :seeders => %{selector: "seeders", filters: []},
+            :leechers => %{selector: "leechers", filters: []}
+          }
+        }
+      }
+    end
+
+    test "parses a pre-decoded top-level JSON array" do
+      body = [
+        %{
+          "id" => "101",
+          "name" => "Glass Orchard 2019 1080p WEB",
+          "info_hash" => "E9F759B6A26113F3745311DAD4BD332B4612EB60",
+          "seeders" => "572",
+          "leechers" => "98"
+        },
+        %{
+          "id" => "102",
+          "name" => "Glass Orchard 2019 720p WEB",
+          "info_hash" => "0BBCA7584749D4E741747E32E6EB588AEA03E40F",
+          "seeders" => "99",
+          "leechers" => "32"
+        }
+      ]
+
+      assert {:ok, [first, second]} =
+               CardigannResultParser.parse_results(
+                 apibay_definition(),
+                 %{status: 200, body: body},
+                 "The Pirate Bay"
+               )
+
+      assert first.title == "Glass Orchard 2019 1080p WEB"
+      assert second.title == "Glass Orchard 2019 720p WEB"
+    end
+
+    test "rows.count of 0 means no results, not one placeholder row" do
+      # apibay's answer to a search with no hits.
+      body = [
+        %{
+          "id" => "0",
+          "name" => "No results returned",
+          "info_hash" => "0000000000000000000000000000000000000000",
+          "seeders" => "0",
+          "leechers" => "0"
+        }
+      ]
+
+      assert {:ok, []} =
+               CardigannResultParser.parse_results(
+                 apibay_definition(),
+                 %{status: 200, body: body},
+                 "The Pirate Bay"
+               )
+    end
+
+    test "rows.count of 0 also applies to an undecoded JSON string body" do
+      body =
+        Jason.encode!([
+          %{
+            "id" => "0",
+            "name" => "No results returned",
+            "info_hash" => "0",
+            "seeders" => "0",
+            "leechers" => "0"
+          }
+        ])
+
+      assert {:ok, []} =
+               CardigannResultParser.parse_json_results(
+                 apibay_definition(),
+                 body,
+                 "The Pirate Bay"
+               )
+    end
+
     test "parses simple JSON results" do
       definition = %Parsed{
         id: "test",
