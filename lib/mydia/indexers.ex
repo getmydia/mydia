@@ -885,6 +885,7 @@ defmodule Mydia.Indexers do
     - `:type` - Filter by indexer type ("public", "private", "semi-private")
     - `:language` - Filter by language code (e.g., "en-US")
     - `:enabled` - Filter by enabled status (true/false)
+    - `:in_library` - Filter by library membership (true/false)
     - `:search` - Search by name or description (case-insensitive)
 
   ## Examples
@@ -1071,6 +1072,32 @@ defmodule Mydia.Indexers do
   end
 
   def cardigann_download_credential_allowed?(_indexer_name, _download_url), do: false
+
+  @doc """
+  Adds a Cardigann definition to the library and enables it. Config from an
+  earlier membership is kept, so re-adding restores credentials.
+  """
+  @spec add_cardigann_definition(CardigannDefinition.t()) ::
+          {:ok, CardigannDefinition.t()} | {:error, Ecto.Changeset.t()}
+  def add_cardigann_definition(%CardigannDefinition{} = definition) do
+    set_cardigann_membership(definition, true)
+  end
+
+  @doc """
+  Removes a Cardigann definition from the library, disabling it. Its config is
+  kept in case it is added again.
+  """
+  @spec remove_cardigann_definition(CardigannDefinition.t()) ::
+          {:ok, CardigannDefinition.t()} | {:error, Ecto.Changeset.t()}
+  def remove_cardigann_definition(%CardigannDefinition{} = definition) do
+    set_cardigann_membership(definition, false)
+  end
+
+  defp set_cardigann_membership(definition, member?) do
+    definition
+    |> CardigannDefinition.membership_changeset(%{in_library: member?, enabled: member?})
+    |> Repo.update()
+  end
 
   @doc """
   Enables a Cardigann indexer definition.
@@ -1269,6 +1296,13 @@ defmodule Mydia.Indexers do
   defp apply_cardigann_filters(query, [{:enabled, enabled} | rest]) when is_boolean(enabled) do
     query
     |> where([d], d.enabled == ^enabled)
+    |> apply_cardigann_filters(rest)
+  end
+
+  defp apply_cardigann_filters(query, [{:in_library, in_library} | rest])
+       when is_boolean(in_library) do
+    query
+    |> where([d], d.in_library == ^in_library)
     |> apply_cardigann_filters(rest)
   end
 
