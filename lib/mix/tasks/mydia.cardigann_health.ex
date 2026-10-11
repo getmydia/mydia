@@ -114,7 +114,7 @@ defmodule Mix.Tasks.Mydia.CardigannHealth do
            categories: [],
            search_path: List.first(parsed.search.paths)
          ],
-         {:ok, response} <- CardigannSearchEngine.execute_search(parsed, search_opts, %{}),
+         {:ok, response} <- run_search(parsed, search_opts),
          {:ok, results} <-
            CardigannResultParser.parse_results(parsed, response, definition.name,
              base_url: base_url
@@ -131,6 +131,15 @@ defmodule Mix.Tasks.Mydia.CardigannHealth do
           result_count: 0,
           error: format_error(reason)
         }
+    end
+  end
+
+  # A solved Cloudflare challenge returns a third element carrying markers for
+  # the adapter; this task has no use for them.
+  defp run_search(parsed, search_opts) do
+    case CardigannSearchEngine.execute_search(parsed, search_opts, %{}) do
+      {:ok, response, _markers} -> {:ok, response}
+      other -> other
     end
   end
 

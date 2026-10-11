@@ -152,6 +152,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineFlareSolverrTest do
                )
 
       assert response.body =~ "rendered"
+      assert Mydia.Indexers.FlareSolverr.ClearanceCache.lookup(base <> "/") == :none
     end
 
     test "a flagged indexer with a cached clearance goes direct without FlareSolverr",

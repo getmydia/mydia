@@ -342,9 +342,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   # returned zero rows for 1337x, EZTV and kickass while Prowlarr returned
   # plenty. The rendered DOM is kept only as a fallback for a site whose
   # clearance does not carry over to a plain HTTP client.
+  #
+  # No explicit rate limit here: execute_http_request/5 applies the definition's
+  # request_delay before the repeat, and the direct attempt that preceded a
+  # solve applied it before the challenge, so the site is not paced three times.
   defp solve_and_repeat(definition, url, request_params, user_config, config) do
-    apply_rate_limit(definition)
-
     case solve(url, request_params) do
       {:ok, %FlareSolverrResponse{} = solved} ->
         ClearanceCache.put(
@@ -368,6 +370,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
             "Cardigann: #{definition.id} still challenged after FlareSolverr; " <>
               "using the rendered page"
           )
+
+          # The clearance did not carry over, so caching it only makes every
+          # later search pay a doomed direct request first.
+          ClearanceCache.delete(url)
 
           rendered = %{
             status: FlareSolverrResponse.http_status(solved) || 200,
