@@ -48,6 +48,7 @@ defmodule Mydia.Indexers.CardigannTemplate do
   require Logger
 
   alias Mydia.Indexers.Cardigann.Charset
+  alias Mydia.Indexers.Cardigann.TemplateFunctions
 
   @type context :: %{
           optional(:keywords) => String.t() | nil,
@@ -840,23 +841,8 @@ defmodule Mydia.Indexers.CardigannTemplate do
 
   defp call_function("print", args, _ctx), do: Enum.map_join(args, " ", &to_string/1)
 
-  defp call_function("printf", [fmt | args], _ctx) when is_binary(fmt) do
-    # Convert Go-style format specifiers to Erlang style
-    # %s -> ~s (strings), %d -> ~B (integers), %v -> ~p (any value)
-    erlang_fmt =
-      fmt
-      |> String.replace("%s", "~s")
-      |> String.replace("%d", "~B")
-      |> String.replace("%v", "~p")
-      |> String.replace("%f", "~f")
-      |> String.replace("%%", "~%")
-
-    :io_lib.format(to_charlist(erlang_fmt), args) |> IO.iodata_to_binary()
-  rescue
-    e ->
-      Logger.debug("printf error: #{inspect(e)}, fmt=#{fmt}, args=#{inspect(args)}")
-      ""
-  end
+  defp call_function("printf", [fmt | args], _ctx) when is_binary(fmt),
+    do: TemplateFunctions.printf(fmt, args)
 
   defp call_function("println", args, _ctx), do: Enum.map_join(args, " ", &to_string/1) <> "\n"
 
@@ -874,18 +860,10 @@ defmodule Mydia.Indexers.CardigannTemplate do
 
   defp call_function("join", [value, _], _ctx), do: to_string(value || "")
 
-  # slice - substring extraction: slice(str, start, end)
-  defp call_function("slice", [str, start, stop], _ctx) when is_binary(str) do
-    s = if is_binary(start), do: String.to_integer(start), else: start
-    e = if is_binary(stop), do: String.to_integer(stop), else: stop
-    String.slice(str, s..(e - 1)//1)
-  end
+  defp call_function("slice", [str, start, stop], _ctx),
+    do: TemplateFunctions.slice(str, start, stop)
 
-  defp call_function("slice", [str, start], _ctx) when is_binary(str) do
-    s = if is_binary(start), do: String.to_integer(start), else: start
-    String.slice(str, s..-1//1)
-  end
-
+  defp call_function("slice", [str, start], _ctx), do: TemplateFunctions.slice(str, start)
   defp call_function("slice", _, _ctx), do: ""
 
   defp call_function(name, args, _ctx) do

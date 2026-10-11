@@ -13,6 +13,7 @@ defmodule Mydia.Indexers.Cardigann.BlockPage do
   FlareSolverr.
   """
 
+  alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.Selector
   alias Mydia.Indexers.CardigannDefinition.Parsed
 
@@ -48,6 +49,23 @@ defmodule Mydia.Indexers.Cardigann.BlockPage do
   end
 
   def blocked?(_definition, _response), do: false
+
+  @doc """
+  Turns a blocked search response into an error, so mirror failover moves on
+  instead of reporting "search worked, no results". Anything else passes through.
+  """
+  @spec reject(Parsed.t(), term()) :: term()
+  def reject(definition, {:ok, response} = ok), do: reject(definition, ok, response)
+  def reject(definition, {:ok, response, _markers} = ok), do: reject(definition, ok, response)
+  def reject(_definition, other), do: other
+
+  defp reject(definition, ok, response) do
+    if blocked?(definition, response) do
+      {:error, Error.search_failed("Blocked page: #{fingerprint(response.body)}")}
+    else
+      ok
+    end
+  end
 
   defp no_rows?(definition, body) do
     case get_in(definition.search || %{}, [:rows, :selector]) do

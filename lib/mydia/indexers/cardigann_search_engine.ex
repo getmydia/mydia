@@ -55,10 +55,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   """
 
   alias Mydia.Indexers.Cardigann.BlockPage
-  alias Mydia.Indexers.Cardigann.Charset
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
   alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.Cardigann.LoggedOut
   alias Mydia.Indexers.Cardigann.RequestHeaders
   alias Mydia.Indexers.CardigannDefinition.Parsed
@@ -208,7 +208,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           )
         end
 
-      result = reject_block_page(definition, result)
+      result = BlockPage.reject(definition, result)
 
       cond do
         elem(result, 0) == :ok ->
@@ -231,19 +231,6 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       end
     end
   end
-
-  # A seized or parked mirror answers 200 with a notice page. Turning it into an
-  # error lets failover move on instead of reporting "search worked, no results".
-  defp reject_block_page(definition, {:ok, response} = ok),
-    do: if(BlockPage.blocked?(definition, response), do: blocked_error(response), else: ok)
-
-  defp reject_block_page(definition, {:ok, response, _markers} = ok),
-    do: if(BlockPage.blocked?(definition, response), do: blocked_error(response), else: ok)
-
-  defp reject_block_page(_definition, other), do: other
-
-  defp blocked_error(response),
-    do: {:error, Error.search_failed("Blocked page: #{BlockPage.fingerprint(response.body)}")}
 
   defp promote(opts, candidate) do
     case Keyword.get(opts, :on_promote) do
@@ -397,18 +384,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     with {:ok, base_url} <- get_base_url(definition, opts),
          {:ok, path_config} <- select_search_path(definition, opts),
          {:ok, path} <- render_template(path_config.path, definition, opts) do
-      url = build_full_url(base_url, encode_path_text(path))
+      url = build_full_url(base_url, Links.encode_path_text(path))
       {:ok, url}
     end
   end
-
-  # Rendered keywords are already percent-encoded; static text in the template
-  # is not. Encode only what a request target cannot carry (space, controls,
-  # non-ASCII bytes, and characters like '"', '<', '>', '{', '}', '|', '\\', '^'
-  # and the backtick, which Mint's request target validation rejects). Reserved
-  # and unreserved characters and '%' are left alone so existing escapes and
-  # query strings survive.
-  defp encode_path_text(path), do: URI.encode(path, &(URI.char_unescaped?(&1) or &1 == ?%))
 
   @doc """
   Builds request parameters including query params, headers, and method.
@@ -804,7 +783,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     # Substitute template variables in input values
     # For query params, don't URL-encode (Req will do it)
     Enum.reduce(base_params, %{}, fn {key, value}, acc ->
-      case render_input_value(value, context) do
+      case TemplateContext.render_input(value, context, definition.encoding) do
         :render_failed ->
           Logger.warning(
             "Cardigann #{definition.id}: input #{key} did not render and was omitted"
@@ -812,36 +791,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
           acc
 
-        rendered ->
-          # Query strings and form bodies carry the site's charset bytes; Req
-          # percent-encodes them later. GET and POST share these params.
-          encoded =
-            if is_binary(rendered),
-              do: Charset.encode(rendered, definition.encoding),
-              else: rendered
+        "" when not allow_empty ->
+          acc
 
-          if encoded == "" and not allow_empty do
-            acc
-          else
-            Map.put(acc, key, encoded)
-          end
+        rendered ->
+          Map.put(acc, key, rendered)
       end
     end)
   end
-
-  # Renders one input value. A template that fails to render yields
-  # :render_failed so the caller omits the input instead of sending its source.
-  defp render_input_value(v, context) when is_binary(v) do
-    # "$raw:" is an explicit marker with the same behaviour as a plain template.
-    template = String.replace_prefix(v, "$raw:", "")
-
-    case CardigannTemplate.render(template, context, url_encode: false) do
-      {:ok, rendered} -> rendered
-      {:error, _} -> :render_failed
-    end
-  end
-
-  defp render_input_value(v, _context), do: v
 
   defp build_headers(%Parsed{search: search}) do
     case Map.get(search, :headers) do

@@ -127,12 +127,14 @@ defmodule Mix.Tasks.Mydia.CardigannHealth do
 
       true ->
         CardigannDefinition
-        |> then(fn q ->
-          if opts[:all] || opts[:indexer], do: q, else: where(q, [d], d.enabled == true)
-        end)
+        |> restrict_to_enabled(opts)
         |> Repo.all()
         |> Enum.map(&{&1.definition, &1.config || %{}})
     end
+  end
+
+  defp restrict_to_enabled(query, opts) do
+    if opts[:all] || opts[:indexer], do: query, else: where(query, [d], d.enabled == true)
   end
 
   defp filter_type(sources, "all"), do: sources

@@ -530,45 +530,41 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   defp test_homepage(nil, _user_config), do: {:error, "No base URL configured"}
 
   defp test_homepage(base_url, user_config) do
-    req_opts = [
-      receive_timeout: 30_000,
-      redirect: true,
-      retry: false
-    ]
+    base_url
+    |> Req.get(homepage_request_opts(user_config))
+    |> classify_homepage()
+  end
+
+  defp homepage_request_opts(user_config) do
+    opts = [receive_timeout: 30_000, redirect: true, retry: false]
 
     # Add cookies if present in user config
-    req_opts =
-      case Map.get(user_config, "cookie") do
-        nil ->
-          req_opts
+    case Map.get(user_config, "cookie") do
+      cookie when is_binary(cookie) and cookie != "" ->
+        Keyword.put(opts, :headers, [{"Cookie", cookie}])
 
-        cookie when is_binary(cookie) and cookie != "" ->
-          Keyword.put(req_opts, :headers, [{"Cookie", cookie}])
-
-        _ ->
-          req_opts
-      end
-
-    case Req.get(base_url, req_opts) do
-      {:ok, %Req.Response{status: status, body: body}} when status in 200..399 ->
-        case BlockPage.fingerprint(body) do
-          nil -> {:ok, status}
-          title -> {:error, "Blocked page: #{title}"}
-        end
-
-      {:ok, %Req.Response{status: status}} ->
-        {:error, "HTTP #{status}"}
-
-      {:error, %Req.TransportError{reason: :timeout}} ->
-        {:error, "Request timeout"}
-
-      {:error, %Req.TransportError{reason: reason}} ->
-        {:error, "Connection failed: #{inspect(reason)}"}
-
-      {:error, reason} ->
-        {:error, "Request failed: #{inspect(reason)}"}
+      _ ->
+        opts
     end
   end
+
+  defp classify_homepage({:ok, %Req.Response{status: status, body: body}})
+       when status in 200..399 do
+    case BlockPage.fingerprint(body) do
+      nil -> {:ok, status}
+      title -> {:error, "Blocked page: #{title}"}
+    end
+  end
+
+  defp classify_homepage({:ok, %Req.Response{status: status}}), do: {:error, "HTTP #{status}"}
+
+  defp classify_homepage({:error, %Req.TransportError{reason: :timeout}}),
+    do: {:error, "Request timeout"}
+
+  defp classify_homepage({:error, %Req.TransportError{reason: reason}}),
+    do: {:error, "Connection failed: #{inspect(reason)}"}
+
+  defp classify_homepage({:error, reason}), do: {:error, "Request failed: #{inspect(reason)}"}
 
   defp determine_health_status(definition, success, response_time) do
     cond do
