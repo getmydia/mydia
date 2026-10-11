@@ -379,10 +379,16 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     with {:ok, base_url} <- get_base_url(definition, opts),
          {:ok, path_config} <- select_search_path(definition, opts),
          {:ok, path} <- render_template(path_config.path, definition, opts) do
-      url = build_full_url(base_url, path)
+      url = build_full_url(base_url, encode_path_text(path))
       {:ok, url}
     end
   end
+
+  # Rendered keywords are already percent-encoded; static text in the template
+  # is not. Encode only what a request target cannot carry (space, controls,
+  # non-ASCII bytes), leaving '%' and reserved characters alone so existing
+  # escapes and query strings survive.
+  defp encode_path_text(path), do: URI.encode(path, &(&1 > 32 and &1 < 127))
 
   @doc """
   Builds request parameters including query params, headers, and method.

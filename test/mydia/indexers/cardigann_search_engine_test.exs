@@ -40,6 +40,25 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                CardigannSearchEngine.build_search_url(definition, query: "Привет")
     end
 
+    test "literal spaces in a path template are percent-encoded, existing escapes are kept" do
+      definition = %Parsed{
+        id: "path-test",
+        name: "path",
+        links: ["https://example.invalid"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "search/node/{{ .Keywords }} type:story"}],
+          inputs: %{},
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, "https://example.invalid/search/node/a%20b%20type:story"} =
+               CardigannSearchEngine.build_search_url(definition, query: "a b")
+    end
+
     test "query inputs carry the definition's charset bytes" do
       definition = %Parsed{
         id: "cp1251-inputs",
