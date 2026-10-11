@@ -303,7 +303,10 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
       {{result, _definition}, _log} =
         ExUnit.CaptureLog.with_log(fn -> load_and_parse("showrss") end)
 
-      assert {:ok, _results} = result
+      # The feed names its title element `tv:raw_title`; the definition selects
+      # it as `raw_title`, as a CSS type selector matches by local name.
+      assert {:ok, [_ | _] = results} = result
+      assert Enum.all?(results, &(is_binary(&1.title) and &1.title != ""))
     end
   end
 
@@ -455,16 +458,12 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
   # which builds no implied <tbody>, mis-evaluates nested :has()/:not(:has()) and
   # has no :scope. Each fixture is a reduction of a live capture.
   describe "HTML5 tree and modern CSS" do
-    # Rows now match for both skipped ids; the remaining cause is outside the
+    # Rows match for the skipped id too; the remaining cause is outside the
     # selector engine:
-    # - world-torrent: `title` is a text field that reads {{ .Result.title_phase2 }},
-    #   but text fields are computed in map-key order rather than definition order,
-    #   so title_phase2 is still nil and the row is dropped.
     # - ebookbay: the live page puts the title in div.poststuff and the download
     #   link in the sibling div.entry, but each row selector alternative matches only
     #   one of them, so no row has both (definition/site drift).
     @skipped %{
-      "world-torrent" => "text fields computed out of definition order",
       "ebookbay" => "title and download live in sibling elements; definition drift"
     }
 

@@ -896,7 +896,98 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
     end
   end
 
+  describe "relative links" do
+    @relative_definition %Parsed{
+      id: "test",
+      name: "Test",
+      capabilities: %{modes: %{"search" => ["q"]}, categorymappings: []},
+      search: %{
+        rows: %{selector: "tr.item"},
+        fields: %{
+          :title => %{selector: "td.t"},
+          :download => %{selector: "a.d", attribute: "href"},
+          :details => %{selector: "a.i", attribute: "href"}
+        }
+      }
+    }
+
+    @relative_page """
+    <table><tr class="item"><td class="t">Copper Lantern S01E02</td>
+    <td><a class="d" href="download.php?id=7">d</a><a class="i" href="/view/7">i</a></td></tr></table>
+    """
+
+    defp parse_relative(opts) do
+      {:ok, [result]} =
+        CardigannResultParser.parse_results(
+          @relative_definition,
+          %{status: 200, body: @relative_page},
+          "Test",
+          opts
+        )
+
+      result
+    end
+
+    test "resolve against the search page when the search path is known" do
+      result =
+        parse_relative(
+          base_url: "https://example.invalid",
+          search_path: %{path: "forum/tracker.php"},
+          template_context: %{keywords: "x", config: %{}}
+        )
+
+      assert result.download_url == "https://example.invalid/forum/download.php?id=7"
+      assert result.info_url == "https://example.invalid/view/7"
+    end
+
+    test "join onto the base URL without a search path" do
+      result = parse_relative(base_url: "https://example.invalid")
+
+      assert result.download_url == "https://example.invalid/download.php?id=7"
+    end
+  end
+
   describe "HTML field extraction" do
+    test "renders a template in a field selector before evaluating it" do
+      definition = %Parsed{
+        id: "test",
+        name: "Test",
+        capabilities: %{modes: %{"search" => ["q"]}, categorymappings: []},
+        search: %{
+          rows: %{selector: "tr.item"},
+          fields: %{
+            :title => %{selector: "td:nth-child(1)"},
+            :download => %{selector: "a", attribute: "href"},
+            :size => %{
+              selector: "{{ if .Keywords }}td:nth-child(3){{ else }}td:nth-child(2){{ end }}"
+            }
+          }
+        }
+      }
+
+      html_body = """
+      <table><tr class="item">
+        <td>Copper Lantern S01E02</td><td>1 GB</td><td>2 GB</td>
+        <td><a href="magnet:?xt=urn:btih:1111111111111111111111111111111111111111">x</a></td>
+      </tr></table>
+      """
+
+      parse = fn keywords ->
+        {:ok, [result]} =
+          CardigannResultParser.parse_results(
+            definition,
+            %{status: 200, body: html_body},
+            "Test",
+            template_context: %{config: %{}, keywords: keywords}
+          )
+
+        result
+      end
+
+      assert parse.("copper").size == 2 * 1024 * 1024 * 1024
+      assert parse.("").size == 1024 * 1024 * 1024
+    end
+
     test "extracts text content from elements" do
       definition = %Parsed{
         id: "test",
@@ -1042,6 +1133,81 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
   end
 
   describe "text field type with templates" do
+    @chained_text_fields %{
+      # Alphabetical order puts :title first, so a map-order pass would render it
+      # before the fields it reads.
+      :title => %{text: "{{ .Result.title_b }}"},
+      :title_b => %{text: "{{ .Result.title_a }} [b]"},
+      :title_a => %{text: "{{ .Result.name }} [a]"}
+    }
+
+    test "computes text fields after the text fields they read (HTML)" do
+      definition = %Parsed{
+        id: "test",
+        name: "Test",
+        capabilities: %{modes: %{"search" => ["q"]}, categorymappings: []},
+        search: %{
+          rows: %{selector: "div.item"},
+          fields:
+            Map.merge(@chained_text_fields, %{
+              :name => %{selector: "div.title"},
+              :download => %{selector: "a.download", attribute: "href"}
+            })
+        }
+      }
+
+      html_body = """
+      <div class="item">
+        <div class="title">Copper Lantern S01E02</div>
+        <a class="download" href="magnet:?xt=urn:btih:1111111111111111111111111111111111111111">x</a>
+      </div>
+      """
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: html_body},
+                 "Test"
+               )
+
+      assert result.title == "Copper Lantern S01E02 [a] [b]"
+    end
+
+    test "computes text fields after the text fields they read (JSON)" do
+      definition = %Parsed{
+        id: "test",
+        name: "Test",
+        capabilities: %{modes: %{"search" => ["q"]}, categorymappings: []},
+        search: %{
+          rows: %{selector: "results"},
+          fields:
+            Map.merge(@chained_text_fields, %{
+              :name => %{selector: "name"},
+              :download => %{selector: "magnet"}
+            })
+        }
+      }
+
+      body =
+        Jason.encode!(%{
+          "results" => [
+            %{
+              "name" => "Paper Harbor 2031",
+              "magnet" => "magnet:?xt=urn:btih:2222222222222222222222222222222222222222"
+            }
+          ]
+        })
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: body},
+                 "Test"
+               )
+
+      assert result.title == "Paper Harbor 2031 [a] [b]"
+    end
+
     test "extracts category using text field referencing extracted values" do
       definition = %Parsed{
         id: "test",

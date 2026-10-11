@@ -127,7 +127,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
           {:ok, [SearchResult.t()], ParseStats.t()} | {:error, Error.t()}
   def parse_results_with_stats(%Parsed{} = definition, response, indexer_name, opts \\ []) do
     template_context = Keyword.get(opts, :template_context, %{})
-    base_url = Keyword.get(opts, :base_url, "")
+    base_url = link_base(Keyword.get(opts, :base_url, ""), opts, template_context)
 
     # Extract category mappings from definition capabilities
     category_mappings = get_in(definition.capabilities, [:categorymappings]) || []
@@ -135,6 +135,23 @@ defmodule Mydia.Indexers.CardigannResultParser do
     ctx = {indexer_name, template_context, base_url, category_mappings}
     parse_body(response.body, definition, ctx, opts)
   end
+
+  # Cardigann resolves a relative link (`download.php?id=1`) against the URL of
+  # the search page, not the site root: nnmclub searches `forum/tracker.php` and
+  # links to `forum/download.php`. When the caller passes the search path,
+  # relative links are merged against that page's URL. Without it they keep
+  # joining onto the base URL.
+  defp link_base(base_url, opts, template_context)
+       when is_binary(base_url) and base_url != "" do
+    with %{path: path} when is_binary(path) <- Keyword.get(opts, :search_path),
+         {:ok, rendered} <- CardigannTemplate.render(path, template_context) do
+      {:page, CardigannSearchEngine.build_full_url(String.trim_trailing(base_url, "/"), rendered)}
+    else
+      _ -> base_url
+    end
+  end
+
+  defp link_base(base_url, _opts, _template_context), do: base_url
 
   # Guard against nil or non-string bodies
   defp parse_body(nil, _definition, _ctx, _opts) do
@@ -725,7 +742,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
     # Second pass: Compute text-based fields using templates
     # These can reference previously extracted values via {{ .Result.fieldname }}
     field_values =
-      Enum.reduce(text_fields, field_values, fn {field_name, field_config}, acc ->
+      Enum.reduce(order_text_fields(text_fields), field_values, fn {field_name, field_config},
+                                                                   acc ->
         # Skip non-map configs
         if is_map(field_config) do
           case compute_text_field(field_config, acc, template_context) do
@@ -785,6 +803,49 @@ defmodule Mydia.Indexers.CardigannResultParser do
     Logger.warning(
       "[#{indexer_name}] #{stats.matched} rows matched, #{stats.dropped} dropped (first missing: #{stats.first_missing || "unknown"})"
     )
+  end
+
+  # Parsed definitions keep `fields` in a map, so definition order is gone by the
+  # time rows are parsed. A text field may reference another text field
+  # (`{{ .Result.title_phase1 }}`), so order them by what they reference: a field
+  # is computed after every text field its template names. A reference cycle falls
+  # back to name order for whatever is left.
+  defp order_text_fields(text_fields) do
+    names = MapSet.new(text_fields, fn {name, _} -> to_string(name) end)
+
+    pending =
+      Enum.map(text_fields, fn {name, config} ->
+        template = if is_map(config), do: Map.get(config, :text) || Map.get(config, "text")
+
+        refs =
+          Regex.scan(~r/\.Result\.([A-Za-z0-9_]+)/, to_string(template), capture: :all_but_first)
+
+        deps =
+          refs
+          |> List.flatten()
+          |> Enum.filter(&(MapSet.member?(names, &1) and &1 != to_string(name)))
+
+        {to_string(name), deps, {name, config}}
+      end)
+      |> Enum.sort_by(&elem(&1, 0))
+
+    do_order_text_fields(pending, MapSet.new(), [])
+  end
+
+  defp do_order_text_fields([], _done, acc), do: Enum.reverse(acc)
+
+  defp do_order_text_fields(pending, done, acc) do
+    {ready, blocked} =
+      Enum.split_with(pending, fn {_n, deps, _f} -> Enum.all?(deps, &MapSet.member?(done, &1)) end)
+
+    case ready do
+      [] ->
+        Enum.reverse(acc) ++ Enum.map(blocked, &elem(&1, 2))
+
+      _ ->
+        done = Enum.reduce(ready, done, fn {n, _, _}, d -> MapSet.put(d, n) end)
+        do_order_text_fields(blocked, done, Enum.reverse(Enum.map(ready, &elem(&1, 2))) ++ acc)
+    end
   end
 
   # Computes a text-based field value using template rendering
@@ -912,7 +973,15 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   defp extract_field_value(document, row, field_config, template_context)
        when is_map(field_config) do
-    selector = Map.get(field_config, :selector) || Map.get(field_config, "selector")
+    # Selectors may hold templates (torrent9 picks a column with
+    # `{{ if .Keywords }}`), rendered the same way declared_selectors/2 renders
+    # them for Selector.parse/2.
+    selector =
+      case Map.get(field_config, :selector) || Map.get(field_config, "selector") do
+        sel when is_binary(sel) -> render_selector_template(sel, template_context)
+        other -> other
+      end
+
     attribute = Map.get(field_config, :attribute) || Map.get(field_config, "attribute")
     filters = Map.get(field_config, :filters) || Map.get(field_config, "filters", [])
     remove = Map.get(field_config, :remove) || Map.get(field_config, "remove")
@@ -920,12 +989,27 @@ defmodule Mydia.Indexers.CardigannResultParser do
     # If remove is configured, strip matching child elements before extraction
     effective_row =
       if remove do
-        Selector.without(document, row, remove |> List.wrap() |> Enum.map(&to_string/1))
+        Selector.without(
+          document,
+          row,
+          remove
+          |> List.wrap()
+          |> Enum.map(&render_selector_template(to_string(&1), template_context))
+        )
       else
         row
       end
 
-    case_map = Map.get(field_config, :case) || Map.get(field_config, "case")
+    case_map =
+      case Map.get(field_config, :case) || Map.get(field_config, "case") do
+        map when is_map(map) ->
+          Map.new(map, fn {k, v} ->
+            {render_selector_template(to_string(k), template_context), v}
+          end)
+
+        other ->
+          other
+      end
 
     raw_result =
       if is_map(case_map) and map_size(case_map) > 0 do
@@ -1201,9 +1285,24 @@ defmodule Mydia.Indexers.CardigannResultParser do
     full_context = Map.put(template_context, :result, result_context)
 
     # Second pass: apply filters with the full template context
+    {text_fields, selector_fields} =
+      Enum.split_with(fields, fn {_name, config} -> json_text_field?(config) end)
+
     field_values =
-      Enum.reduce(fields, %{}, fn {field_name, field_config}, acc ->
-        case extract_json_field_value(row, field_config, full_context) do
+      Enum.reduce(selector_fields ++ order_text_fields(text_fields), %{}, fn {field_name,
+                                                                              field_config},
+                                                                             acc ->
+        # A text field also sees the text fields computed before it.
+        computed =
+          for {key, _} <- text_fields,
+              Map.has_key?(acc, key),
+              into: %{},
+              do: {to_string(key), Map.fetch!(acc, key)}
+
+        context =
+          Map.put(full_context, :result, Map.merge(result_context, computed))
+
+        case extract_json_field_value(row, field_config, context) do
           {:ok, value} ->
             Map.put(acc, field_name, value)
 
@@ -1218,11 +1317,23 @@ defmodule Mydia.Indexers.CardigannResultParser do
     |> require_title_and_download()
   end
 
+  defp json_text_field?(config) when is_map(config) do
+    text = Map.get(config, :text) || Map.get(config, "text")
+    is_binary(text) and text != ""
+  end
+
+  defp json_text_field?(_), do: false
+
   defp extract_json_raw_value(row, field_config) when is_map(field_config) do
     selector = Map.get(field_config, :selector) || Map.get(field_config, "selector")
 
-    with {:ok, raw_value} <- get_json_value_by_selector(row, selector) do
-      ensure_string(raw_value)
+    # A text field has no selector; it is computed from the other fields.
+    if is_binary(selector) do
+      with {:ok, raw_value} <- get_json_value_by_selector(row, selector) do
+        ensure_string(raw_value)
+      end
+    else
+      {:error, :no_selector}
     end
   end
 
@@ -1350,7 +1461,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
       end)
 
     field_values =
-      Enum.reduce(text_fields, field_values, fn {field_name, field_config}, acc ->
+      Enum.reduce(order_text_fields(text_fields), field_values, fn {field_name, field_config},
+                                                                   acc ->
         if is_map(field_config) do
           case compute_text_field(field_config, acc, template_context) do
             {:ok, value} ->
@@ -1449,12 +1561,33 @@ defmodule Mydia.Indexers.CardigannResultParser do
     spec = xml_field_spec(selector, attribute)
     value = xpath(row, spec)
 
+    value =
+      if value in [nil, ""], do: xpath_ignoring_namespace(row, selector, attribute), else: value
+
     case value do
       nil -> {:error, :not_found}
       "" -> {:error, :not_found}
       value when is_binary(value) -> {:ok, String.trim(value)}
       value when is_list(value) -> {:ok, value |> List.first() |> to_string() |> String.trim()}
       value -> {:ok, to_string(value) |> String.trim()}
+    end
+  end
+
+  # A CSS type selector (`raw_title`) matches an element by its local name, so
+  # it finds `<tv:raw_title>` in a feed that declares an `xmlns:tv`. XPath's
+  # `./raw_title` does not. This is the fallback for a plain element name, tried
+  # only when the exact step found nothing, so an unprefixed element still wins.
+  defp xpath_ignoring_namespace(row, selector, attribute)
+       when is_binary(selector) do
+    if Regex.match?(~r/^[A-Za-z_][\w.-]*$/, selector) do
+      step = "./*[local-name()='#{selector}']"
+
+      path =
+        if is_binary(attribute) and attribute != "",
+          do: "#{step}/@#{attribute}",
+          else: "#{step}/text()"
+
+      xpath(row, xml_string_spec(path))
     end
   end
 
@@ -1609,6 +1742,16 @@ defmodule Mydia.Indexers.CardigannResultParser do
   # Resolve a URL relative to a base URL
   defp resolve_url(nil, _base_url), do: nil
   defp resolve_url("", _base_url), do: nil
+
+  defp resolve_url(url, {:page, page_url}) when is_binary(url) do
+    if String.match?(url, ~r/^[a-zA-Z][a-zA-Z0-9+.-]*:/) or String.starts_with?(url, "//") do
+      resolve_url(url, page_url)
+    else
+      page_url |> URI.merge(url) |> to_string()
+    end
+  rescue
+    _ -> resolve_url(url, page_url)
+  end
 
   defp resolve_url(url, base_url) when is_binary(url) do
     cond do
