@@ -285,6 +285,10 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("open_fix_match", params, socket), do: FixMatchEvents.open(params, socket)
   def handle_event("close_fix_match", params, socket), do: FixMatchEvents.close(params, socket)
   def handle_event("fix_match_search", params, socket), do: FixMatchEvents.search(params, socket)
+
+  def handle_event("fix_match_provider", params, socket),
+    do: FixMatchEvents.provider(params, socket)
+
   def handle_event("fix_match_pick", params, socket), do: FixMatchEvents.pick(params, socket)
   def handle_event("fix_match_back", params, socket), do: FixMatchEvents.back(params, socket)
 

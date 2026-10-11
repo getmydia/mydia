@@ -254,7 +254,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   def fix_match_modal(assigns) do
     assigns =
       assigns
-      |> assign(:provider, Mydia.Media.FixMatch.provider_for(assigns.media_item))
+      |> assign(:provider, assigns.fix_match.provider)
       |> assign(:current_id, Mydia.Media.FixMatch.current_provider_id(assigns.media_item))
 
     ~H"""
@@ -266,6 +266,24 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <p class="text-sm opacity-75 mb-4">
             Search {provider_label(@provider)} for the title this really is.
           </p>
+          <div
+            :if={@media_item.type == "tv_show"}
+            id="fix-match-provider-toggle"
+            class="join mb-3"
+          >
+            <input
+              :for={{value, label} <- [{"tvdb", "TVDB"}, {"tmdb", "TMDB"}]}
+              type="radio"
+              name="fix_match_provider"
+              id={"fix-match-provider-#{value}"}
+              class="join-item btn btn-sm"
+              aria-label={label}
+              value={value}
+              checked={to_string(@provider) == value}
+              phx-click="fix_match_provider"
+              phx-value-provider={value}
+            />
+          </div>
           <.form
             for={@fix_match.form}
             id="fix-match-search-form"
