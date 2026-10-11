@@ -94,12 +94,17 @@ logged.
 `SessionManager` is what searches and health checks call. There is one stored
 session row per definition (`CardigannAuth.store_session/3` upserts) and no
 fixed TTL: a session lives until the tracker stops honoring it. Stored cookies
-are used as they are. With none stored, the manager logs in.
+are used as they are. With none stored, the manager logs in. Saving a changed
+config (a pasted cookie is the credential) or removing the definition from the
+library deletes the stored session, via `Indexers.configure_cardigann_definition/2`
+and `Indexers.remove_cardigann_definition/1`.
 
 When a search that sent our cookies comes back logged out, `with_session/3`
 invalidates the session, logs in once and retries once. `LoggedOut.check/3`
 follows Prowlarr's CheckIfLoginIsNeeded and recognizes three signs: a redirect,
 a 401 or 403, and an HTML page missing the definition's `login.test.selector`.
+The selector test is skipped when every search path declares a json or xml
+`response.type`, whatever content-type the tracker sent.
 It only looks at requests that carried our cookies, and any redirect counts
 because the search engine never follows a cookie-bearing redirect, so a 3xx can
 only be the tracker sending us to its login page. If the retry is still logged
@@ -111,9 +116,12 @@ out, the error says so rather than looping.
 is when `Login.begin/2` returns a `Challenge`. While it is set,
 `SessionManager.user_config/2` returns a `:login_required` error, so searches
 skip the indexer and the health check reports "Needs login" without writing
-anything or counting a failure. Only a stored session clears it:
-`SessionManager.store/2` moves the definition back to `healthy`. Do not clear it
-from a health check or a timer. A check that passes while the tracker still
+anything or counting a failure. Two things clear it: a stored session
+(`SessionManager.store/2` moves the definition back to `healthy`) and saving a
+changed config, which resets it to `unknown` so new credentials get a fresh
+attempt. Do not clear it from a health check or a timer; the health check's
+status write skips rows that are `needs_login`, so a probe that was running when
+a search parked the row cannot overwrite it. A check that passes while the tracker still
 needs a captcha would hide the problem until the next search failed.
 Status changes broadcast on `SessionManager.topic/0` for the admin page.
 
