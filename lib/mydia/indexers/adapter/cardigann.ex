@@ -56,11 +56,8 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   alias Mydia.Indexers.{CardigannParser, CardigannSearchEngine, CardigannResultParser}
   alias Mydia.Indexers.{CardigannDefinition, CardigannAuth, CardigannFeatureFlags}
   alias Mydia.Indexers.CardigannHealthCheck
-  alias Mydia.Indexers.CardigannSearchSession
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Repo
-
-  import Ecto.Query
 
   require Logger
 
@@ -97,8 +94,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
                parsed,
                search_opts,
                user_config,
-               flaresolverr_opts,
-               definition
+               flaresolverr_opts
              ) do
         # Build template context for filter rendering
         template_context = build_template_context_for_parsing(parsed, user_config, search_opts)
@@ -116,7 +112,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
                  base_url: base_url,
                  search_path: search_path
                ) do
-          # Handle FlareSolverr result (store cookies, update flags)
+          # Handle FlareSolverr result (update flags)
           handle_flaresolverr_result(definition, flaresolverr_result)
 
           # Apply filters from opts if present
@@ -138,24 +134,19 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   end
 
   # Execute search and normalize the result to always include flaresolverr_result
-  defp execute_search_with_flaresolverr(
-         parsed,
-         search_opts,
-         user_config,
-         flaresolverr_opts,
-         definition
-       ) do
-    # Merge FlareSolverr cookies into user_config if available
-    user_config_with_fs_cookies = maybe_add_flaresolverr_cookies(user_config, definition)
-
+  defp execute_search_with_flaresolverr(parsed, search_opts, user_config, flaresolverr_opts) do
+    # FlareSolverr clearance lives in FlareSolverr.ClearanceCache, keyed by
+    # host. It used to be written to cardigann_search_sessions, the table and
+    # "latest row per definition" query CardigannAuth uses for tracker logins,
+    # so a solve could replace a login session.
     case CardigannSearchEngine.execute_search(
            parsed,
            search_opts,
-           user_config_with_fs_cookies,
+           user_config,
            flaresolverr_opts
          ) do
-      {:ok, response, cookies} ->
-        {:ok, response, {:flaresolverr_cookies, cookies}}
+      {:ok, response, markers} ->
+        {:ok, response, {:flaresolverr_markers, markers}}
 
       {:ok, response} ->
         {:ok, response, :no_flaresolverr}
@@ -165,65 +156,6 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     end
   end
 
-  # Add FlareSolverr cookies from stored session if available
-  defp maybe_add_flaresolverr_cookies(user_config, definition) do
-    case get_flaresolverr_session(definition.id) do
-      {:ok, session} ->
-        # Merge cookies with existing user_config cookies
-        existing_cookies = Map.get(user_config, :cookies, [])
-
-        # session.cookies should be a list of cookie maps
-        # Handle different formats defensively
-        fs_cookies =
-          session.cookies
-          |> normalize_cookies()
-          |> Enum.flat_map(fn
-            cookie when is_map(cookie) ->
-              name = cookie["name"] || Map.get(cookie, :name)
-              value = cookie["value"] || Map.get(cookie, :value)
-
-              if name && value do
-                ["#{name}=#{value}"]
-              else
-                []
-              end
-
-            _ ->
-              []
-          end)
-
-        Map.put(user_config, :cookies, existing_cookies ++ fs_cookies)
-
-      {:error, _} ->
-        user_config
-    end
-  end
-
-  # Normalize cookies from various storage formats to a list of maps
-  # Handles: list of maps, map with numeric keys, map with "cookies" key, etc.
-  defp normalize_cookies(cookies) when is_list(cookies), do: cookies
-
-  defp normalize_cookies(%{"cookies" => cookies}) when is_list(cookies), do: cookies
-
-  defp normalize_cookies(cookies) when is_map(cookies) do
-    # If map values are cookie maps (have "name" key), extract them
-    values = Map.values(cookies)
-
-    case values do
-      [first | _] when is_map(first) and is_map_key(first, "name") ->
-        values
-
-      [first | _] when is_list(first) ->
-        # Nested list - flatten one level
-        List.flatten(values)
-
-      _ ->
-        []
-    end
-  end
-
-  defp normalize_cookies(_), do: []
-
   # Build FlareSolverr options from definition
   defp build_flaresolverr_opts(%CardigannDefinition{} = definition) do
     %{
@@ -232,30 +164,10 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     }
   end
 
-  # Handle FlareSolverr result - store cookies and update flags
-  defp handle_flaresolverr_result(definition, {:flaresolverr_cookies, cookies}) do
-    # Check if FlareSolverr was auto-detected as required
-    flaresolverr_required =
-      Enum.find(cookies, fn
-        {:flaresolverr_required, true} -> true
-        _ -> false
-      end)
-
-    # Extract actual cookies (filter out metadata)
-    actual_cookies =
-      Enum.reject(cookies, fn
-        {:flaresolverr_required, _} -> true
-        _ -> false
-      end)
-
-    # Update definition if FlareSolverr was auto-detected
-    if flaresolverr_required do
+  # Flag the definition when a challenge was solved for it
+  defp handle_flaresolverr_result(definition, {:flaresolverr_markers, markers}) do
+    if {:flaresolverr_required, true} in markers do
       mark_flaresolverr_required(definition)
-    end
-
-    # Store cookies for future requests
-    if actual_cookies != [] do
-      store_flaresolverr_cookies(definition, actual_cookies)
     end
 
     :ok
@@ -281,103 +193,6 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
 
       {:error, changeset} ->
         Logger.error("Failed to update FlareSolverr settings: #{inspect(changeset.errors)}")
-    end
-  end
-
-  # Store FlareSolverr cookies in the database
-  defp store_flaresolverr_cookies(%CardigannDefinition{} = definition, cookies) do
-    # Convert cookies to JSON-serializable format
-    cookie_data =
-      Enum.map(cookies, fn cookie ->
-        %{
-          "name" => cookie.name,
-          "value" => cookie.value,
-          "domain" => cookie.domain,
-          "path" => cookie.path || "/",
-          "expires" => cookie.expires,
-          "secure" => cookie.secure || false,
-          "httpOnly" => cookie.http_only || false
-        }
-      end)
-
-    # Calculate expiration from cookies (use earliest expiration, default 1 hour)
-    expires_at = calculate_cookie_expiration(cookies)
-
-    # Upsert the session
-    case get_flaresolverr_session(definition.id) do
-      {:ok, session} ->
-        # Update existing session
-        session
-        |> CardigannSearchSession.changeset(%{
-          cookies: cookie_data,
-          expires_at: expires_at
-        })
-        |> Repo.update()
-
-      {:error, :not_found} ->
-        # Create new session
-        %CardigannSearchSession{}
-        |> CardigannSearchSession.changeset(%{
-          cardigann_definition_id: definition.id,
-          cookies: cookie_data,
-          expires_at: expires_at
-        })
-        |> Repo.insert()
-    end
-    |> case do
-      {:ok, _} ->
-        Logger.debug(
-          "Stored #{length(cookies)} FlareSolverr cookies for #{definition.indexer_id}"
-        )
-
-      {:error, changeset} ->
-        Logger.error("Failed to store FlareSolverr cookies: #{inspect(changeset.errors)}")
-    end
-  end
-
-  # Calculate expiration time from cookies
-  defp calculate_cookie_expiration(cookies) do
-    # Find the earliest expiration time from cookies
-    min_expiration =
-      cookies
-      |> Enum.map(fn cookie -> cookie.expires end)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.min(fn -> nil end)
-
-    case min_expiration do
-      nil ->
-        # Default to 1 hour if no expiration set
-        DateTime.utc_now() |> DateTime.add(3600, :second) |> DateTime.truncate(:second)
-
-      timestamp when is_number(timestamp) ->
-        # Convert Unix timestamp to DateTime
-        DateTime.from_unix!(trunc(timestamp)) |> DateTime.truncate(:second)
-    end
-  end
-
-  # Get stored FlareSolverr session
-  defp get_flaresolverr_session(definition_id) do
-    query =
-      from s in CardigannSearchSession,
-        where: s.cardigann_definition_id == ^definition_id,
-        order_by: [desc: s.updated_at],
-        limit: 1
-
-    case Repo.one(query) do
-      nil ->
-        {:error, :not_found}
-
-      session ->
-        # Check if session is expired
-        if CardigannSearchSession.expired?(session) do
-          # Delete the stale row and treat it as absent. Callers only need to
-          # distinguish "usable session" from "no usable session", so expired
-          # collapses into :not_found rather than exposing a third return value.
-          Repo.delete(session)
-          {:error, :not_found}
-        else
-          {:ok, session}
-        end
     end
   end
 

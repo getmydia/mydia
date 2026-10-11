@@ -5,8 +5,6 @@ defmodule Mydia.Indexers.CardigannSearchEngineFlareSolverrTest do
   # tests reading the runtime config.
   use ExUnit.Case, async: false
 
-  import ExUnit.CaptureLog
-
   alias Mydia.Indexers.CardigannSearchEngine
   alias Mydia.Indexers.CardigannDefinition.Parsed
 
@@ -32,7 +30,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineFlareSolverrTest do
       name: "Scoped FlareSolverr",
       description: "",
       language: "en-US",
-      type: "private",
+      type: "public",
       encoding: "UTF-8",
       links: links,
       capabilities: %{modes: %{}},
@@ -45,11 +43,10 @@ defmodule Mydia.Indexers.CardigannSearchEngineFlareSolverrTest do
     }
   end
 
-  # FlareSolverr never dials `url` itself in these tests; it is a headless
-  # browser proxy, so only the JSON body posted to the mocked FlareSolverr
-  # endpoint is observed here. The solution's `response` field stands in for
-  # whatever the real target site would have returned.
-  defp flaresolverr_ok_response(conn, decoded) do
+  # FlareSolverr never dials the target itself in these tests; only the JSON
+  # body posted to the mocked FlareSolverr endpoint is observed. The solution's
+  # `response` field stands in for Chrome's rendered DOM.
+  defp solution(conn, decoded, opts \\ []) do
     conn
     |> Plug.Conn.put_resp_content_type("application/json")
     |> Plug.Conn.resp(
@@ -59,133 +56,186 @@ defmodule Mydia.Indexers.CardigannSearchEngineFlareSolverrTest do
         "solution" => %{
           "url" => decoded["url"],
           "status" => 200,
-          "response" => "<html></html>",
-          "cookies" => [],
-          "userAgent" => "test-agent"
-        },
-        "startTimestamp" => 1000,
-        "endTimestamp" => 1001
+          "response" => Keyword.get(opts, :rendered, "<html><body>rendered</body></html>"),
+          "cookies" => [
+            %{
+              "name" => "cf_clearance",
+              "value" => "solved",
+              "domain" => "localhost",
+              "path" => "/",
+              "expires" => -1
+            }
+          ],
+          "userAgent" => "SolverAgent/9"
+        }
       })
     )
   end
 
-  describe "execute_search/4 through FlareSolverr (should_use_flaresolverr? path)" do
-    test "a request to an out-of-scope origin does not carry the session cookie, and still goes out" do
+  defp challenge(conn),
+    do: Plug.Conn.resp(conn, 403, "<html><head><title>Just a moment...</title></head></html>")
+
+  describe "challenge, solve, repeat directly" do
+    setup do
       site = Bypass.open()
-      evil = Bypass.open()
       fs = Bypass.open()
-      test_pid = self()
 
-      put_flaresolverr_config(enabled: true, url: "http://localhost:#{fs.port}")
+      put_flaresolverr_config(
+        enabled: true,
+        url: "http://localhost:#{fs.port}",
+        max_concurrent_requests: 1
+      )
 
-      Bypass.expect_once(fs, "POST", "/v1", fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        decoded = Jason.decode!(body)
-        send(test_pid, {:flaresolverr_body, decoded})
-        flaresolverr_ok_response(conn, decoded)
-      end)
-
-      definition = scoped_definition(["http://localhost:#{site.port}"], [%{path: "/search"}])
-
-      opts = [query: "test", base_url: "http://localhost:#{evil.port}"]
-      flaresolverr_opts = %{enabled: true, definition_id: "test-uuid"}
-      user_config = %{cookies: ["session=secret"]}
-
-      log =
-        capture_log(fn ->
-          assert {:ok, _response} =
-                   CardigannSearchEngine.execute_search(
-                     definition,
-                     opts,
-                     user_config,
-                     flaresolverr_opts
-                   )
-        end)
-
-      assert_receive {:flaresolverr_body, decoded}
-      assert decoded["url"] =~ "localhost:#{evil.port}"
-      refute Map.has_key?(decoded, "cookies")
-      assert log =~ "withholding session cookies"
+      base = "http://localhost:#{site.port}"
+      on_exit(fn -> Mydia.Indexers.FlareSolverr.ClearanceCache.delete(base <> "/") end)
+      %{site: site, fs: fs, base: base}
     end
 
-    test "a request to an in-scope origin does carry the session cookie" do
-      site = Bypass.open()
-      fs = Bypass.open()
+    test "FlareSolverr gets no cookies; the repeat carries the solution's cookies and user-agent and is what gets parsed",
+         %{site: site, fs: fs, base: base} do
       test_pid = self()
+      hits = :counters.new(1, [])
 
-      put_flaresolverr_config(enabled: true, url: "http://localhost:#{fs.port}")
+      Bypass.expect(site, "GET", "/search", fn conn ->
+        :counters.add(hits, 1, 1)
+
+        if :counters.get(hits, 1) == 1 do
+          challenge(conn)
+        else
+          send(test_pid, {:repeat_headers, conn.req_headers})
+          Plug.Conn.resp(conn, 200, "<html><body>direct</body></html>")
+        end
+      end)
 
       Bypass.expect_once(fs, "POST", "/v1", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
         send(test_pid, {:flaresolverr_body, decoded})
-        flaresolverr_ok_response(conn, decoded)
+        solution(conn, decoded)
       end)
 
-      definition = scoped_definition(["http://localhost:#{site.port}"], [%{path: "/search"}])
+      definition = scoped_definition([base], [%{path: "/search"}])
 
-      opts = [query: "test"]
-      flaresolverr_opts = %{enabled: true, definition_id: "test-uuid"}
-      user_config = %{cookies: ["session=secret"]}
-
-      assert {:ok, _response} =
+      assert {:ok, response, [{:flaresolverr_required, true}]} =
                CardigannSearchEngine.execute_search(
                  definition,
-                 opts,
-                 user_config,
-                 flaresolverr_opts
+                 [query: "x"],
+                 %{cookies: ["session=secret"]},
+                 %{enabled: false, definition_id: "d"}
                )
 
+      assert response.body =~ "direct"
       assert_receive {:flaresolverr_body, decoded}
-      assert decoded["url"] =~ "localhost:#{site.port}"
-      assert decoded["cookies"] == [%{"name" => "session", "value" => "secret"}]
+      refute Map.has_key?(decoded, "cookies")
+      assert_receive {:repeat_headers, headers}
+      assert {"user-agent", "SolverAgent/9"} in headers
+      assert Enum.any?(headers, fn {k, v} -> k == "cookie" and v =~ "cf_clearance=solved" end)
     end
-  end
 
-  describe "execute_search/4 through the Cloudflare-challenge FlareSolverr retry" do
-    test "the retry withholds the session for the same out-of-scope url the direct request stripped it from" do
-      site = Bypass.open()
-      evil = Bypass.open()
-      fs = Bypass.open()
-      test_pid = self()
-
-      put_flaresolverr_config(enabled: true, url: "http://localhost:#{fs.port}")
-
-      Bypass.expect_once(evil, "GET", "/search", fn conn ->
-        Plug.Conn.resp(conn, 403, "<html><body>cf-browser-verification</body></html>")
-      end)
+    test "a repeat that is still challenged falls back to the rendered page",
+         %{site: site, fs: fs, base: base} do
+      Bypass.expect(site, "GET", "/search", &challenge/1)
 
       Bypass.expect_once(fs, "POST", "/v1", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
-        decoded = Jason.decode!(body)
-        send(test_pid, {:flaresolverr_body, decoded})
-        flaresolverr_ok_response(conn, decoded)
+        solution(conn, Jason.decode!(body), rendered: "<html><body>rendered</body></html>")
       end)
 
-      definition = scoped_definition(["http://localhost:#{site.port}"], [%{path: "/search"}])
+      definition = scoped_definition([base], [%{path: "/search"}])
 
-      opts = [query: "test", base_url: "http://localhost:#{evil.port}"]
-      # FlareSolverr disabled per-indexer so the direct Req path runs first and
-      # hits the Cloudflare challenge branch, which is the second, previously
-      # unguarded, call site.
-      flaresolverr_opts = %{enabled: false, definition_id: "test-uuid"}
-      user_config = %{cookies: ["session=secret"]}
+      assert {:ok, response, _} =
+               CardigannSearchEngine.execute_search(
+                 definition,
+                 [query: "x"],
+                 %{},
+                 %{enabled: false}
+               )
 
-      log =
-        capture_log(fn ->
-          assert {:ok, _response, _fs_meta} =
-                   CardigannSearchEngine.execute_search(
-                     definition,
-                     opts,
-                     user_config,
-                     flaresolverr_opts
-                   )
-        end)
+      assert response.body =~ "rendered"
+    end
 
-      assert_receive {:flaresolverr_body, decoded}
-      assert decoded["url"] =~ "localhost:#{evil.port}"
-      refute Map.has_key?(decoded, "cookies")
-      assert log =~ "withholding session cookies"
+    test "a flagged indexer with a cached clearance goes direct without FlareSolverr",
+         %{site: site, fs: fs, base: base} do
+      :ok =
+        Mydia.Indexers.FlareSolverr.ClearanceCache.put(
+          base <> "/",
+          [
+            %{
+              name: "cf_clearance",
+              value: "cached",
+              domain: "localhost",
+              path: "/",
+              expires: -1,
+              http_only: true,
+              secure: false,
+              same_site: nil
+            }
+          ],
+          "CachedAgent/1"
+        )
+
+      Bypass.expect_once(site, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, "<html>ok</html>")
+      end)
+
+      Bypass.down(fs)
+
+      definition = scoped_definition([base], [%{path: "/search"}])
+
+      assert {:ok, %{body: "<html>ok</html>"}} =
+               CardigannSearchEngine.execute_search(
+                 definition,
+                 [query: "x"],
+                 %{},
+                 %{enabled: true}
+               )
+    end
+
+    test "a flagged indexer without a clearance solves first", %{site: site, fs: fs, base: base} do
+      Bypass.expect_once(fs, "POST", "/v1", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        solution(conn, Jason.decode!(body))
+      end)
+
+      Bypass.expect_once(site, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, "<html>after solve</html>")
+      end)
+
+      definition = scoped_definition([base], [%{path: "/search"}])
+
+      assert {:ok, %{body: "<html>after solve</html>"}} =
+               CardigannSearchEngine.execute_search(
+                 definition,
+                 [query: "x"],
+                 %{},
+                 %{enabled: true}
+               )
+    end
+
+    test "a FlareSolverr failure surfaces its readable message", %{site: site, fs: fs, base: base} do
+      Bypass.expect(site, "GET", "/search", &challenge/1)
+
+      Bypass.expect(fs, "POST", "/v1", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          500,
+          Jason.encode!(%{
+            "status" => "error",
+            "message" => "Error: Error solving the challenge. Message: tab crashed\n"
+          })
+        )
+      end)
+
+      definition = scoped_definition([base], [%{path: "/search"}])
+
+      assert {:error, %{message: "FlareSolverr: browser tab crashed" <> _}} =
+               CardigannSearchEngine.execute_search(
+                 definition,
+                 [query: "x"],
+                 %{},
+                 %{enabled: false}
+               )
     end
   end
 

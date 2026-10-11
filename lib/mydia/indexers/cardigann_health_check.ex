@@ -235,7 +235,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   end
 
   defp normalize_search_result({:ok, response}), do: {:ok, response}
-  defp normalize_search_result({:ok, response, _flaresolverr_cookies}), do: {:ok, response}
+  defp normalize_search_result({:ok, response, _flaresolverr_markers}), do: {:ok, response}
   defp normalize_search_result(other), do: other
 
   # execute_search/4 calls opts[:on_promote] with the winning candidate URL

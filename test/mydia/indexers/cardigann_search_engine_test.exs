@@ -890,8 +890,8 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
     end
 
     test "FlareSolverr map-shaped cookies are sent as name=value", %{definition: definition} do
-      # store_flaresolverr_cookies/2 writes maps into the same session row
-      # CardigannAuth.get_stored_session/1 reads back, so map entries reach here.
+      # Older versions wrote FlareSolverr's cookie maps into the same session row
+      # CardigannAuth.get_stored_session/1 reads back, so map entries can reach here.
       bypass = Bypass.open()
       test_pid = self()
 

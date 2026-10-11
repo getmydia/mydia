@@ -459,12 +459,10 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       assert is_list(results)
     end
 
-    # Regression for #192: an expired FlareSolverr session row used to make
-    # get_flaresolverr_session/1 return {:error, :expired}, a value the cookie
-    # store call site had no clause for (CaseClauseError). The session lookup now
-    # collapses expired into :not_found, so an expired row is silently purged and
-    # the search proceeds instead of crashing.
-    test "search purges an expired FlareSolverr session and does not crash", %{
+    # FlareSolverr clearance is cached in memory now, so search neither reads
+    # nor purges FlareSolverr cookies in cardigann_search_sessions. A row left
+    # behind by an older version must not crash the search, and is left alone.
+    test "search ignores a leftover expired FlareSolverr session row and does not crash", %{
       definition: definition
     } do
       {:ok, expired_session} =
@@ -486,8 +484,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       assert {:ok, results} = Cardigann.search(config, "test query")
       assert is_list(results)
 
-      # The expired row was deleted by the session lookup during the search.
-      refute Repo.get(CardigannSearchSession, expired_session.id)
+      assert Repo.get(CardigannSearchSession, expired_session.id)
     end
   end
 

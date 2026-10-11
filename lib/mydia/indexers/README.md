@@ -152,3 +152,34 @@ admin Indexers page, and on the Prowlarr row of manual search
 calls Prowlarr's per-indexer `POST /api/v1/indexer/test?forceTest=true`, one
 indexer at a time. Never call that from a background job or `testall`: a
 failed test escalates the backoff, and the backoff exists to protect trackers.
+
+## FlareSolverr earns a clearance; the request is repeated directly
+
+Cardigann follows Prowlarr's FlareSolverr model
+(`src/NzbDrone.Core/IndexerProxies/FlareSolverr/FlareSolverr.cs`).
+
+- A request goes direct first.
+- On a Cloudflare challenge, FlareSolverr gets the bare URL. It never gets
+  cookies: FlareSolverr 3.x adds them to a browser that has already
+  navigated, and Chrome rejects any whose domain does not match ("invalid
+  cookie domain").
+- The solution's cookies and `userAgent` go into
+  `Mydia.Indexers.FlareSolverr.ClearanceCache`, keyed by host and port.
+- The request is repeated directly, and that response is what gets parsed.
+
+`cf_clearance` is bound to the user-agent that earned it, so the two are only
+sent together.
+
+Parsing `solution.response`, Chrome's rendered DOM, is a fallback for a site
+whose clearance does not carry over. Parsing it routinely is what made 1337x,
+EZTV and kickass return zero rows: that path dropped the definition's own
+headers, EZTV's `layout=def_wlinks` cookie among them.
+
+Every FlareSolverr request opens a Chrome tab. They queue on
+`Mydia.Indexers.FlareSolverr.Gate`, sized by
+`flaresolverr.max_concurrent_requests` (`FLARESOLVERR_MAX_CONCURRENT_REQUESTS`,
+default 1). Without it, `search_all/2` asked for one tab per protected indexer
+at once and FlareSolverr crashed them.
+
+No sessions (`sessions.create`): each keeps a Chrome instance resident, which
+is the resource the gate exists to protect.
