@@ -218,6 +218,25 @@ defmodule Mydia.Indexers.CardigannDefinitionTest do
   end
 
   describe "changeset/2" do
+    test "refuses an enabled definition outside the library" do
+      attrs = %{
+        indexer_id: "outside-test",
+        name: "Outside Test",
+        type: "public",
+        links: %{"0" => "https://a.example.com"},
+        capabilities: %{},
+        definition: "id: outside-test",
+        schema_version: "v11",
+        enabled: true,
+        in_library: false
+      }
+
+      changeset = CardigannDefinition.changeset(%CardigannDefinition{}, attrs)
+
+      refute changeset.valid?
+      assert {"add the indexer before enabling it", _} = changeset.errors[:enabled]
+    end
+
     test "casts active_link and link_status" do
       attrs = %{
         indexer_id: "link-test",
@@ -254,6 +273,71 @@ defmodule Mydia.Indexers.CardigannDefinitionTest do
 
       changeset = CardigannDefinition.changeset(%CardigannDefinition{}, attrs)
       assert changeset.valid?
+    end
+  end
+
+  describe "toggle_changeset/2 and in_library" do
+    test "refuses to enable a definition outside the library" do
+      changeset =
+        CardigannDefinition.toggle_changeset(%CardigannDefinition{in_library: false}, %{
+          enabled: true
+        })
+
+      refute changeset.valid?
+      assert {"add the indexer before enabling it", _} = changeset.errors[:enabled]
+    end
+
+    test "enables a definition in the library" do
+      changeset =
+        CardigannDefinition.toggle_changeset(%CardigannDefinition{in_library: true}, %{
+          enabled: true
+        })
+
+      assert changeset.valid?
+    end
+  end
+
+  describe "nil flags" do
+    test "toggle_changeset returns an invalid changeset for enabled: nil" do
+      changeset =
+        CardigannDefinition.toggle_changeset(%CardigannDefinition{in_library: true}, %{
+          enabled: nil
+        })
+
+      refute changeset.valid?
+    end
+
+    test "membership_changeset returns an invalid changeset for in_library: nil" do
+      changeset =
+        CardigannDefinition.membership_changeset(%CardigannDefinition{}, %{
+          in_library: nil,
+          enabled: true
+        })
+
+      refute changeset.valid?
+    end
+  end
+
+  describe "membership_changeset/2" do
+    test "sets both flags" do
+      changeset =
+        CardigannDefinition.membership_changeset(%CardigannDefinition{}, %{
+          in_library: true,
+          enabled: true
+        })
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_change(changeset, :in_library) == true
+    end
+
+    test "refuses enabled without in_library" do
+      changeset =
+        CardigannDefinition.membership_changeset(%CardigannDefinition{}, %{
+          in_library: false,
+          enabled: true
+        })
+
+      refute changeset.valid?
     end
   end
 

@@ -42,7 +42,7 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
 
       # Modal should be visible with the Indexer Library title
       assert html =~ "Indexer Library"
-      assert html =~ "Browse and enable indexers from the definition library"
+      assert html =~ "Browse and add indexers from the definition library"
     end
 
     test "displays stats correctly in modal", %{conn: conn} do
@@ -84,7 +84,7 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
         |> render_click()
 
       # Modal should be closed
-      refute html =~ "Browse and enable indexers from the definition library"
+      refute html =~ "Browse and add indexers from the definition library"
     end
   end
 
@@ -116,27 +116,23 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
       refute html =~ private_def.name
     end
 
-    test "filters by enabled status", %{conn: conn} do
-      enabled_def = cardigann_definition_fixture(%{name: "Enabled Indexer", enabled: true})
-
-      disabled_def =
-        cardigann_definition_fixture(%{name: "Disabled Indexer", enabled: false})
+    test "filters by whether an indexer is added", %{conn: conn} do
+      added_def = cardigann_definition_fixture(%{name: "Added Indexer", enabled: true})
+      other_def = cardigann_definition_fixture(%{name: "Other Indexer", enabled: false})
 
       {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
-      # Open the modal using dropdown button
       view
       |> element("button.flex.items-start[phx-click='show_indexer_library']")
       |> render_click()
 
-      # Filter by enabled
       html =
         view
         |> element("form#indexer-library-filter-form")
-        |> render_change(%{"enabled" => "enabled"})
+        |> render_change(%{"added" => "added"})
 
-      assert html =~ enabled_def.name
-      refute html =~ disabled_def.name
+      assert html =~ added_def.name
+      refute html =~ other_def.name
     end
 
     test "searches by name", %{conn: conn} do
@@ -166,12 +162,11 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
     setup :enable_cardigann_feature_flag
     setup :start_indexers_health
 
-    test "enables a disabled indexer", %{conn: conn} do
+    test "adds an indexer from the library", %{conn: conn} do
       definition = cardigann_definition_fixture(%{enabled: false})
 
       {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
-      # Open the modal using dropdown button
       view
       |> element("button.flex.items-start[phx-click='show_indexer_library']")
       |> render_click()
@@ -184,23 +179,48 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
 
       assert has_element?(
                view,
-               "input[phx-click='toggle_library_definition'][aria-label='Disable #{definition.name}']"
+               "input[phx-click='toggle_library_definition'][aria-label='Remove #{definition.name}']"
              )
 
-      # Verify the indexer is now enabled
-      updated_definition = Indexers.get_cardigann_definition!(definition.id)
-      assert updated_definition.enabled
+      assert has_element?(view, "#library-indexer-#{definition.id}")
+
+      updated = Indexers.get_cardigann_definition!(definition.id)
+      assert updated.in_library
+      assert updated.enabled
     end
 
-    test "disables an enabled indexer", %{conn: conn} do
-      definition = cardigann_definition_fixture(%{enabled: true})
+    test "keeps the config warning on an added but disabled private indexer", %{conn: conn} do
+      {:ok, definition} =
+        cardigann_definition_fixture(%{type: "private", enabled: true})
+        |> Indexers.disable_cardigann_definition()
 
       {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
-      # Open the modal using dropdown button
       view
       |> element("button.flex.items-start[phx-click='show_indexer_library']")
       |> render_click()
+
+      assert has_element?(
+               view,
+               "#library-definition-#{definition.id} .tooltip[data-tip='This indexer requires configuration']"
+             )
+    end
+
+    test "removes an added indexer, even a disabled one", %{conn: conn} do
+      {:ok, definition} =
+        cardigann_definition_fixture(%{enabled: true})
+        |> Indexers.disable_cardigann_definition()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      view
+      |> element("button.flex.items-start[phx-click='show_indexer_library']")
+      |> render_click()
+
+      assert has_element?(
+               view,
+               "input[phx-click='toggle_library_definition'][aria-label='Remove #{definition.name}']"
+             )
 
       view
       |> element(
@@ -208,9 +228,8 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
       )
       |> render_click()
 
-      # Verify the indexer is now disabled
-      updated_definition = Indexers.get_cardigann_definition!(definition.id)
-      refute updated_definition.enabled
+      refute Indexers.get_cardigann_definition!(definition.id).in_library
+      refute has_element?(view, "#library-indexer-#{definition.id}")
     end
   end
 
@@ -329,16 +348,56 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
       assert html =~ "Enabled Library Indexer"
     end
 
-    test "does not show library indexers section when no enabled indexers exist", %{conn: conn} do
+    test "does not list definitions that were never added", %{conn: conn} do
+      set_cardigann_feature_flag(true)
+      definition = cardigann_definition_fixture(%{enabled: false})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      refute has_element?(view, "#library-indexer-#{definition.id}")
+    end
+
+    test "switching an indexer off keeps it listed", %{conn: conn} do
+      set_cardigann_feature_flag(true)
+      definition = cardigann_definition_fixture(%{name: "Stays Listed", enabled: true})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      view
+      |> element("input[phx-click='toggle_library_indexer'][phx-value-id='#{definition.id}']")
+      |> render_click()
+
+      assert has_element?(view, "#library-indexer-#{definition.id}")
+      assert has_element?(view, "input[aria-label='Enable Stays Listed']")
+      refute Indexers.get_cardigann_definition!(definition.id).enabled
+    end
+
+    test "switching a disabled indexer back on enables it", %{conn: conn} do
       set_cardigann_feature_flag(true)
 
-      # Create a disabled library indexer only
-      cardigann_definition_fixture(%{name: "Disabled Library Indexer", enabled: false})
+      {:ok, definition} =
+        cardigann_definition_fixture(%{enabled: true})
+        |> Indexers.disable_cardigann_definition()
 
-      {:ok, _view, html} = live(conn, ~p"/admin/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
-      # Should NOT show the Library Indexers section (since no enabled ones exist)
-      refute html =~ "Disabled Library Indexer"
+      view
+      |> element("input[phx-click='toggle_library_indexer'][phx-value-id='#{definition.id}']")
+      |> render_click()
+
+      assert Indexers.get_cardigann_definition!(definition.id).enabled
+    end
+
+    test "Remove takes an indexer off the page", %{conn: conn} do
+      set_cardigann_feature_flag(true)
+      definition = cardigann_definition_fixture(%{enabled: true})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      view |> element("#remove-library-indexer-#{definition.id}") |> render_click()
+
+      refute has_element?(view, "#library-indexer-#{definition.id}")
+      refute Indexers.get_cardigann_definition!(definition.id).in_library
     end
 
     test "library indexer rows use the shared row actions", %{conn: conn} do
@@ -349,6 +408,7 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
 
       assert has_element?(view, "#library-indexers .join .join-item[title=Configure]")
       assert has_element?(view, "#library-indexers .join .join-item[title=Test]")
+      assert has_element?(view, "#library-indexers .join .join-item[title=Remove]")
     end
 
     test "library indexer enable toggle has an accessible name", %{conn: conn} do

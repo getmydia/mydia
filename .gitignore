@@ -104,6 +104,9 @@ docs/.venv/
 # Compiled Rust NIFs (built by Rustler during compilation)
 /priv/native/
 
+# Dialyzer PLTs (mix.exs dialyzer: plt_core_path / plt_local_path)
+/priv/plts/
+
 # Compiled WASM plugin guests (built by the :plugins mix compiler during
 # compilation). The manifests (priv/plugins/*.json) stay tracked; only the
 # build-produced .wasm is ignored — source under plugins/*/ is the truth.

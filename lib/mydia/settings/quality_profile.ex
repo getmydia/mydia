@@ -746,7 +746,7 @@ defmodule Mydia.Settings.QualityProfile do
        when is_number(size) and media_type in [:movie, :episode] do
     {min_size, max_size} = size_bounds(standards, media_type)
 
-    score_from_range(size, min_size, max_size, nil)
+    score_from_range(size, min_size, max_size)
   end
 
   defp score_file_size(_standards, _media_attrs), do: 50.0
@@ -889,16 +889,8 @@ defmodule Mydia.Settings.QualityProfile do
   end
 
   # Scores a value based on its position within a range
-  defp score_from_range(value, min_val, max_val, preferred_val) do
+  defp score_from_range(value, min_val, max_val) do
     cond do
-      # If we have a preferred value and match it, perfect score
-      preferred_val && value == preferred_val ->
-        100.0
-
-      # If we have a preferred value and are close to it (within 10%), high score
-      preferred_val && abs(value - preferred_val) / preferred_val <= 0.10 ->
-        95.0
-
       # If within min/max range, decent score
       min_val && max_val && value >= min_val && value <= max_val ->
         75.0

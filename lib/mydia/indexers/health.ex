@@ -196,16 +196,19 @@ defmodule Mydia.Indexers.Health do
   ## Private Functions
 
   defp perform_health_check(indexer_id) do
-    case Settings.get_indexer_config!(indexer_id) do
-      nil ->
-        {:error, :not_found}
-
-      config ->
-        do_health_check(config)
+    case fetch_config(indexer_id) do
+      {:ok, config} -> do_health_check(config)
+      :error -> {:error, :not_found}
     end
+  end
+
+  # The getter raises Ecto.NoResultsError for a missing database row and a
+  # RuntimeError for a runtime-form id that names nothing configured. Only the
+  # lookup is guarded, so a failure inside the health check itself still surfaces.
+  defp fetch_config(indexer_id) do
+    {:ok, Settings.get_indexer_config!(indexer_id)}
   rescue
-    Ecto.NoResultsError ->
-      {:error, :not_found}
+    _ in [Ecto.NoResultsError, RuntimeError] -> :error
   end
 
   defp do_health_check(config) do
@@ -232,16 +235,10 @@ defmodule Mydia.Indexers.Health do
           )
 
         {:error, error} ->
-          error_message =
-            case error do
-              %{message: msg} -> msg
-              _ -> inspect(error)
-            end
-
           # Track failure
           track_failure(config)
 
-          unhealthy_result(error_message)
+          unhealthy_result(error.message)
       end
 
     # Cache the result

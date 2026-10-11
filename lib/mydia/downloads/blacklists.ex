@@ -325,6 +325,7 @@ defmodule Mydia.Downloads.Blacklists do
     |> Enum.map(&elem(&1, 0))
   end
 
+  @spec batch_blacklisted([{String.t(), String.t()} | nil]) :: MapSet.t({String.t(), String.t()})
   defp batch_blacklisted(keys) do
     pairs =
       keys
@@ -358,12 +359,14 @@ defmodule Mydia.Downloads.Blacklists do
 
         candidate = MapSet.new(normalized_pairs)
 
-        Repo.all(query)
+        query
+        |> Repo.all()
+        |> Enum.filter(&MapSet.member?(candidate, &1))
         |> MapSet.new()
-        |> MapSet.intersection(candidate)
     end
   end
 
+  @spec active_info_hashes([String.t() | nil]) :: MapSet.t(String.t())
   defp active_info_hashes(hashes) do
     case hashes |> Enum.reject(&is_nil/1) |> Enum.uniq() do
       [] ->

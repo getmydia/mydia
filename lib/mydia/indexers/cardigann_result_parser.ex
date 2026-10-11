@@ -72,7 +72,11 @@ defmodule Mydia.Indexers.CardigannResultParser do
   require Logger
 
   @type parse_result :: {:ok, [SearchResult.t()]} | {:error, Error.t()}
-  @type http_response :: %{status: integer(), body: String.t()}
+  @type http_response :: %{
+          required(:status) => integer(),
+          required(:body) => String.t(),
+          optional(:headers) => [{term(), term()}]
+        }
 
   @doc """
   Parses search results from an HTTP response using Cardigann definition.
@@ -1160,8 +1164,11 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
         {:ok, []}
 
-      error ->
-        error
+      {:error, reason} ->
+        {:error,
+         Error.search_failed(
+           "JSON row selector #{inspect(selector)} does not apply to the response: #{inspect(reason)}"
+         )}
     end
   end
 
@@ -1483,18 +1490,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
   end
 
   defp xml_case_selector_matches?(row, selector, case_key) do
-    spec =
-      case selector do
-        nil -> xml_string_spec(".//#{case_key}")
-        "" -> xml_string_spec(".//#{case_key}")
-        sel -> xml_string_spec("./#{sel}/#{case_key}")
-      end
+    path = if selector == "", do: ".//#{case_key}", else: "./#{selector}/#{case_key}"
 
-    case xpath(row, spec) do
-      nil -> false
-      "" -> false
-      _ -> true
-    end
+    xpath(row, xml_string_spec(path)) not in [nil, ""]
   end
 
   defp extract_xml_raw_value(row, selector, attribute) do
@@ -1980,8 +1978,6 @@ defmodule Mydia.Indexers.CardigannResultParser do
         :html
     end
   end
-
-  defp detect_response_type(_), do: :html
 
   # Encoding conversion - handles non-UTF-8 responses from some indexers
   defp maybe_convert_encoding(body, encoding) when is_binary(body) and is_binary(encoding) do

@@ -5,6 +5,20 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.Adapter.Error
 
+  describe "build_search_url/2 with a search path that fails to render" do
+    test "returns an Adapter.Error rather than the renderer's raw reason" do
+      definition = %Parsed{
+        id: "broken-path",
+        name: "Broken Path",
+        links: ["https://example.com"],
+        capabilities: %{modes: %{}},
+        search: %{paths: [%{path: "/search/{{ .Keywords "}], inputs: %{}}
+      }
+
+      assert {:error, %Error{}} = CardigannSearchEngine.build_search_url(definition, query: "x")
+    end
+  end
+
   describe "build_search_url/2" do
     test "builds URL with simple keyword substitution" do
       definition = %Parsed{

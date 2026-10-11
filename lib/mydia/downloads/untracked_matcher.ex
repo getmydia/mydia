@@ -269,7 +269,6 @@ defmodule Mydia.Downloads.UntrackedMatcher do
   # ParsedFileInfo nests quality in a %Quality{} struct; pull a scalar field
   # (resolution/source/codec) for flat metadata storage.
   defp quality_field(%{quality: %Quality{} = quality}, field), do: Map.get(quality, field)
-  defp quality_field(_parsed_info, _field), do: nil
 
   defp create_download_record(torrent, match, parsed_info) do
     attrs = %{

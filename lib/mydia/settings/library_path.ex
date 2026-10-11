@@ -11,7 +11,7 @@ defmodule Mydia.Settings.LibraryPath do
   @foreign_key_type :binary_id
 
   @type t :: %__MODULE__{
-          id: binary(),
+          id: binary() | nil,
           path: String.t() | nil,
           name: String.t() | nil,
           type: atom() | nil,
@@ -35,8 +35,8 @@ defmodule Mydia.Settings.LibraryPath do
           quality_profile_id: binary() | nil,
           updated_by: Mydia.Accounts.User.t() | nil | Ecto.Association.NotLoaded.t(),
           updated_by_id: binary() | nil,
-          inserted_at: DateTime.t(),
-          updated_at: DateTime.t()
+          inserted_at: DateTime.t() | nil,
+          updated_at: DateTime.t() | nil
         }
 
   @path_types [:movies, :series, :mixed]

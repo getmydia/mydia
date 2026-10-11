@@ -32,6 +32,7 @@ defmodule Mydia.Indexers.CardigannOverrides do
   @type patch_entry :: %{
           description: String.t(),
           issue_url: String.t() | nil,
+          added_date: String.t(),
           patch: (map() -> map())
         }
 

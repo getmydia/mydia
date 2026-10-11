@@ -37,6 +37,13 @@ defmodule Mydia.Downloads.ClientHealthTest do
       assert {:error, :not_found} = ClientHealth.check_health(Ecto.UUID.generate())
     end
 
+    test "returns :not_found for a runtime-form id that is not configured" do
+      id = "runtime::download_client::no-such-client"
+
+      assert {:error, :not_found} = ClientHealth.check_health(id)
+      assert {:error, :not_found} = ClientHealth.check_health(id, force: true)
+    end
+
     test "forces fresh check when force option is true" do
       {:ok, client} =
         Settings.create_download_client_config(%{

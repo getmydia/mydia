@@ -59,6 +59,13 @@ defmodule Mydia.MixProject do
       licenses: ["AGPL-3.0-or-later"],
       compilers: compilers(),
       unused: [ignore: unused_ignore()],
+      # No ignore list: findings are fixed, not listed. See "Dialyzer" in
+      # CONTRIBUTING.md.
+      dialyzer: [
+        plt_add_apps: [:mix, :ex_unit],
+        plt_core_path: "priv/plts",
+        plt_local_path: "priv/plts"
+      ],
       listeners: [Phoenix.CodeReloader],
       # Mix reads warnings_as_errors from :elixirc_options, not from the top
       # level of project/0. Set at the top level it silently did nothing, so a
@@ -150,7 +157,9 @@ defmodule Mydia.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test]
+      # dialyzer runs in test so local runs and CI see the same compile-time
+      # Mix.env() branches and share CI's _build/test cache.
+      preferred_envs: [precommit: :test, dialyzer: :test]
     ]
   end
 
@@ -261,6 +270,7 @@ defmodule Mydia.MixProject do
       {:bypass, "~> 2.1", only: :test},
       {:wallaby, "~> 0.30", only: :test, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:mix_unused, "~> 0.4", only: [:dev, :test], runtime: false}
     ]
   end

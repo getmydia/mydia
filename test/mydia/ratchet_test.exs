@@ -60,14 +60,37 @@ defmodule Mydia.RatchetTest do
   @nest3 "Function body is nested too deep (max depth is 2, was 3)."
 
   describe "issue_key/1" do
-    test "uses the check, the last scope segment and the message" do
+    test "uses the check and the last scope segment, not the measured value" do
       assert Ratchet.issue_key(issue("Nesting", "Mydia.Media.Items.rescan", @nest3)) ==
-               {"Credo.Check.Refactor.Nesting", "rescan", @nest3}
+               {"Credo.Check.Refactor.Nesting", "rescan"}
+
+      assert Ratchet.issue_key(issue("CyclomaticComplexity", "M.f", @cc15)) ==
+               Ratchet.issue_key(issue("CyclomaticComplexity", "M.f", @cc16))
     end
 
     test "tolerates a nil scope" do
-      assert {"Credo.Check.Refactor.Nesting", "", @nest3} =
+      assert {"Credo.Check.Refactor.Nesting", ""} =
                Ratchet.issue_key(issue("Nesting", nil, @nest3))
+    end
+  end
+
+  describe "issue_value/1" do
+    test "reads the complexity from a cyclomatic complexity message" do
+      assert Ratchet.issue_value(issue("CyclomaticComplexity", "M.f", @cc15)) == 15
+    end
+
+    test "reads the depth from a nesting message" do
+      assert Ratchet.issue_value(issue("Nesting", "M.f", @nest3)) == 3
+    end
+
+    test "raises, naming the issue, when the message has no parseable value" do
+      error =
+        assert_raise ArgumentError, fn ->
+          Ratchet.issue_value(issue("Nesting", "Mydia.Media.rescan", "Too nested."))
+        end
+
+      assert error.message =~ "Mydia.Media.rescan"
+      assert error.message =~ "Too nested."
     end
   end
 
@@ -102,6 +125,70 @@ defmodule Mydia.RatchetTest do
       base = [issue("Nesting", "M.f", @nest3)]
       head = [issue("Nesting", "M.f", @nest3), issue("Nesting", "M.f", @nest3)]
       assert [_one] = Ratchet.complexity_regressions(base, head)
+    end
+
+    test "a function that got less complex is not a regression" do
+      base = [issue("CyclomaticComplexity", "M.f", @cc16)]
+      head = [issue("CyclomaticComplexity", "M.f", @cc15)]
+      assert Ratchet.complexity_regressions(base, head) == []
+    end
+
+    test "a function that got less nested is not a regression" do
+      deeper = "Function body is nested too deep (max depth is 2, was 4)."
+
+      assert Ratchet.complexity_regressions([issue("Nesting", "M.f", deeper)], [
+               issue("Nesting", "M.f", @nest3)
+             ]) == []
+    end
+
+    test "an unparseable head message is not silently accepted" do
+      base = [issue("CyclomaticComplexity", "M.f", @cc15)]
+      head = [issue("CyclomaticComplexity", "M.f", "Too complex.")]
+      assert_raise ArgumentError, fn -> Ratchet.complexity_regressions(base, head) end
+    end
+
+    test "mixed duplicates flag only the one that rose" do
+      cc12 = "Function is too complex (cyclomatic complexity is 12, max is 9)."
+      cc13 = "Function is too complex (cyclomatic complexity is 13, max is 9)."
+      cyclo = &issue("CyclomaticComplexity", "M.f", &1)
+
+      assert [%{"message" => ^cc13}] =
+               Ratchet.complexity_regressions([cyclo.(@cc16), cyclo.(cc12)], [
+                 cyclo.(@cc15),
+                 cyclo.(cc13)
+               ])
+    end
+
+    test "a differing count flags the extra issue, and a rise among the paired ones" do
+      cyclo = &issue("CyclomaticComplexity", "M.f", &1)
+
+      # one fewer in head, remaining one lower: fine
+      assert Ratchet.complexity_regressions([cyclo.(@cc16), cyclo.(@cc15)], [cyclo.(@cc15)]) ==
+               []
+
+      # one extra in head: the lowest-valued head issue has no partner
+      assert [%{"message" => @cc15}] =
+               Ratchet.complexity_regressions([cyclo.(@cc16)], [cyclo.(@cc16), cyclo.(@cc15)])
+    end
+
+    test "duplicates pair largest to largest" do
+      base = [
+        issue("CyclomaticComplexity", "M.f", @cc16),
+        issue("CyclomaticComplexity", "M.f", @cc15)
+      ]
+
+      same = [
+        issue("CyclomaticComplexity", "M.f", @cc15),
+        issue("CyclomaticComplexity", "M.f", @cc15)
+      ]
+
+      worse = [
+        issue("CyclomaticComplexity", "M.f", @cc16),
+        issue("CyclomaticComplexity", "M.f", @cc16)
+      ]
+
+      assert Ratchet.complexity_regressions(base, same) == []
+      assert [%{"message" => @cc16}] = Ratchet.complexity_regressions(base, worse)
     end
 
     test "fixed issues are never regressions" do

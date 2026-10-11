@@ -106,7 +106,7 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
     @type t :: %__MODULE__{
             input_path: String.t(),
             output_path: String.t(),
-            resolution: FfmpegMp4Transcoder.resolution(),
+            resolution: Mydia.Downloads.FfmpegMp4Transcoder.resolution(),
             ffmpeg_pid: integer() | nil,
             ffmpeg_port: port() | nil,
             on_progress: (map() -> any()) | nil,

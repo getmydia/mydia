@@ -40,6 +40,19 @@ defmodule Mydia.Indexers.HealthTest do
     end
   end
 
+  describe "check_health/2 for unknown indexers" do
+    test "returns :not_found for a missing database id" do
+      assert {:error, :not_found} = Health.check_health(Ecto.UUID.generate(), force: true)
+    end
+
+    test "returns :not_found for a runtime-form id that is not configured" do
+      id = "runtime::indexer::no-such-indexer"
+
+      assert {:error, :not_found} = Health.check_health(id)
+      assert {:error, :not_found} = Health.check_health(id, force: true)
+    end
+  end
+
   describe "paused Prowlarr indexers" do
     test "a healthy Prowlarr check carries the paused list in details" do
       start_supervised!(Health)

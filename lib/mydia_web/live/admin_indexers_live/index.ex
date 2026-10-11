@@ -507,16 +507,12 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
     case result do
       {:ok, updated_definition} ->
-        socket =
-          if updated_definition.enabled do
-            socket
-            |> put_flash(:info, "#{definition.name} enabled")
-            |> assign(:recently_disabled_indexer, nil)
-          else
-            assign(socket, :recently_disabled_indexer, updated_definition)
-          end
+        action = if updated_definition.enabled, do: "enabled", else: "disabled"
 
-        {:noreply, load_data(socket)}
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{definition.name} #{action}")
+         |> reload_library_indexers()}
 
       {:error, changeset} ->
         MydiaLogger.log_error(:liveview, "Failed to toggle library indexer",
@@ -532,29 +528,27 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   end
 
   @impl true
-  def handle_event("undo_disable_library_indexer", _params, socket) do
-    case socket.assigns.recently_disabled_indexer do
-      nil ->
-        {:noreply, socket}
+  def handle_event("remove_library_indexer", %{"id" => id}, socket) do
+    definition = Indexers.get_cardigann_definition!(id)
 
-      definition ->
-        case Indexers.enable_cardigann_definition(definition) do
-          {:ok, _updated} ->
-            {:noreply,
-             socket
-             |> assign(:recently_disabled_indexer, nil)
-             |> put_flash(:info, "#{definition.name} re-enabled")
-             |> load_data()}
+    case Indexers.remove_cardigann_definition(definition) do
+      {:ok, _removed} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{definition.name} removed")
+         |> reload_library_indexers()}
 
-          {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Failed to re-enable indexer")}
-        end
+      {:error, changeset} ->
+        MydiaLogger.log_error(:liveview, "Failed to remove library indexer",
+          error: changeset,
+          operation: :remove_library_indexer,
+          definition_id: id,
+          user_id: socket.assigns.current_user.id
+        )
+
+        error_msg = MydiaLogger.user_error_message(:remove_library_indexer, changeset)
+        {:noreply, put_flash(socket, :error, error_msg)}
     end
-  end
-
-  @impl true
-  def handle_event("dismiss_undo_banner", _params, socket) do
-    {:noreply, assign(socket, :recently_disabled_indexer, nil)}
   end
 
   @impl true
@@ -773,8 +767,8 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
        params["language"] || socket.assigns.library_filter_language
      )
      |> assign(
-       :library_filter_enabled,
-       params["enabled"] || socket.assigns.library_filter_enabled
+       :library_filter_added,
+       params["added"] || socket.assigns.library_filter_added
      )
      |> load_library_definitions()}
   end
@@ -792,10 +786,10 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     definition = Indexers.get_cardigann_definition!(id)
 
     result =
-      if definition.enabled do
-        Indexers.disable_cardigann_definition(definition)
+      if definition.in_library do
+        Indexers.remove_cardigann_definition(definition)
       else
-        Indexers.enable_cardigann_definition(definition)
+        Indexers.add_cardigann_definition(definition)
       end
 
     case result do
@@ -904,7 +898,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
     library_indexers =
       if cardigann_enabled,
-        do: Indexers.list_cardigann_definitions(enabled: true),
+        do: Indexers.list_cardigann_definitions(in_library: true),
         else: []
 
     library_indexer_stats =
@@ -922,7 +916,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     |> assign(:library_indexer_settings, [])
     |> assign(:library_config_testing, false)
     |> assign(:library_config_test_result, nil)
-    |> assign_new(:recently_disabled_indexer, fn -> nil end)
     |> assign_flaresolverr()
   end
 
@@ -931,7 +924,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
     library_indexers =
       if cardigann_enabled,
-        do: Indexers.list_cardigann_definitions(enabled: true),
+        do: Indexers.list_cardigann_definitions(in_library: true),
         else: []
 
     library_indexer_stats =
@@ -1219,7 +1212,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     |> assign(:library_available_languages, [])
     |> assign(:library_filter_type, "all")
     |> assign(:library_filter_language, "all")
-    |> assign(:library_filter_enabled, "all")
+    |> assign(:library_filter_added, "all")
     |> assign(:library_search_query, "")
     |> assign(:library_syncing, false)
     |> assign(:library_configuring_definition, nil)
@@ -1262,9 +1255,9 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
       end
 
     filters =
-      case assigns.library_filter_enabled do
-        "enabled" -> [{:enabled, true} | filters]
-        "disabled" -> [{:enabled, false} | filters]
+      case assigns.library_filter_added do
+        "added" -> [{:in_library, true} | filters]
+        "not_added" -> [{:in_library, false} | filters]
         _ -> filters
       end
 

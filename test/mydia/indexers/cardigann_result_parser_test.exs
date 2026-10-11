@@ -5,6 +5,41 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.SearchResult
 
+  describe "parse_results/4 with a JSON row selector the response cannot satisfy" do
+    defp json_definition(selector) do
+      %Parsed{
+        id: "json-bad-path",
+        name: "JSON Bad Path",
+        search: %{
+          paths: [%{path: "/search", response: %{type: "json"}}],
+          rows: %{selector: selector},
+          fields: %{
+            "title" => %{selector: "name"},
+            "download" => %{selector: "url"}
+          }
+        }
+      }
+    end
+
+    test "returns an Adapter.Error when the selector hits a list with a non-integer key (string body)" do
+      assert {:error, %Mydia.Indexers.Adapter.Error{}} =
+               CardigannResultParser.parse_results(
+                 json_definition("data.items"),
+                 %{status: 200, body: ~s({"data": []}), headers: []},
+                 "bad-path"
+               )
+    end
+
+    test "returns an Adapter.Error when the selector hits a scalar with remaining parts (decoded body)" do
+      assert {:error, %Mydia.Indexers.Adapter.Error{}} =
+               CardigannResultParser.parse_results(
+                 json_definition("data.items"),
+                 %{status: 200, body: %{"data" => "x"}, headers: []},
+                 "bad-path"
+               )
+    end
+  end
+
   describe "parse_results/3 with HTML" do
     test "parses simple HTML table results" do
       definition = %Parsed{
