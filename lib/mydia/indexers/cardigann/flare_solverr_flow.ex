@@ -51,6 +51,27 @@ defmodule Mydia.Indexers.Cardigann.FlareSolverrFlow do
   @spec solve_and_repeat(struct(), String.t(), map(), map(), map()) ::
           {:ok, map()} | {:error, Error.t()}
   def solve_and_repeat(definition, url, request_params, user_config, config) do
+    case earn_clearance(definition.id, url, request_params) do
+      {:ok, solved} ->
+        repeat_after_solve(definition, url, request_params, user_config, config, solved)
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  @doc """
+  Solves the challenge for `url` and caches the clearance, without repeating the
+  request.
+
+  For callers that perform the repeat themselves (the WASM engine's HTTP host
+  import, which has no parsed definition to hand back to the search engine).
+  `request_params` is `%{method: :get | :post, query_params: map | binary}`;
+  a binary `query_params` on a POST is sent as the form body verbatim.
+  """
+  @spec earn_clearance(String.t(), String.t(), map()) ::
+          {:ok, FlareSolverrResponse.t()} | {:error, Error.t()}
+  def earn_clearance(definition_id, url, request_params) do
     case solve(url, request_params) do
       {:ok, %FlareSolverrResponse{} = solved} ->
         ClearanceCache.put(
@@ -59,10 +80,10 @@ defmodule Mydia.Indexers.Cardigann.FlareSolverrFlow do
           FlareSolverrResponse.user_agent(solved)
         )
 
-        repeat_after_solve(definition, url, request_params, user_config, config, solved)
+        {:ok, solved}
 
       {:error, reason} ->
-        {:error, flaresolverr_error(definition.id, reason)}
+        {:error, flaresolverr_error(definition_id, reason)}
     end
   end
 
@@ -102,7 +123,11 @@ defmodule Mydia.Indexers.Cardigann.FlareSolverrFlow do
     with :ok <- CardigannSearchEngine.validate_response(response), do: {:ok, response}
   end
 
-  defp rendered_response(solved) do
+  @doc """
+  The page FlareSolverr's Chrome rendered, shaped like a direct response.
+  """
+  @spec rendered_response(FlareSolverrResponse.t()) :: map()
+  def rendered_response(solved) do
     %{
       status: FlareSolverrResponse.http_status(solved) || 200,
       body: FlareSolverrResponse.body(solved) || "",
@@ -112,6 +137,9 @@ defmodule Mydia.Indexers.Cardigann.FlareSolverrFlow do
 
   defp solve(url, %{method: :get, query_params: params}),
     do: FlareSolverr.get(append_query_params(url, params))
+
+  defp solve(url, %{method: :post, query_params: params}) when is_binary(params),
+    do: FlareSolverr.post(url, post_data: params)
 
   defp solve(url, %{method: :post, query_params: params}),
     do: FlareSolverr.post(url, post_data: URI.encode_query(params))

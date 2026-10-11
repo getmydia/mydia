@@ -102,6 +102,47 @@ defmodule Mydia.Indexers.RateLimiter do
   end
 
   @doc """
+  Blocks until `delay_ms` has passed since the previous call for `indexer_id`.
+
+  Slots are reserved atomically in ETS, so concurrent callers for one indexer
+  queue up `delay_ms` apart instead of all sleeping the same interval. The first
+  call (and any call after the delay has already elapsed) returns immediately.
+  """
+  @spec throttle(String.t(), non_neg_integer()) :: :ok
+  def throttle(_indexer_id, delay_ms) when delay_ms <= 0, do: :ok
+
+  def throttle(indexer_id, delay_ms) when is_integer(delay_ms) do
+    key = {:throttle, indexer_id, :next}
+    now = System.monotonic_time(:millisecond)
+
+    if :ets.insert_new(@table_name, {key, now + delay_ms}) do
+      :ok
+    else
+      reserve_slot(key, delay_ms)
+    end
+  end
+
+  defp reserve_slot(key, delay_ms) do
+    now = System.monotonic_time(:millisecond)
+
+    case :ets.lookup(@table_name, key) do
+      [{^key, next}] ->
+        slot = max(next, now)
+        spec = [{{key, next}, [], [{{{:const, key}, slot + delay_ms}}]}]
+
+        if :ets.select_replace(@table_name, spec) == 1 do
+          if slot > now, do: Process.sleep(slot - now)
+          :ok
+        else
+          reserve_slot(key, delay_ms)
+        end
+
+      [] ->
+        throttle(elem(key, 1), delay_ms)
+    end
+  end
+
+  @doc """
   Gets statistics for rate limit usage.
 
   Returns the number of requests made in the last minute for the given indexer.
