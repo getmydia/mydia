@@ -24,13 +24,30 @@ defmodule Mydia.Indexers.Cardigann.LoggedOut do
       ),
       do: :logged_out
 
-  def check(%Parsed{login: %{test: %{selector: selector}}}, {:ok, %{body: body} = resp}, true)
+  def check(
+        %Parsed{login: %{test: %{selector: selector}}} = parsed,
+        {:ok, %{body: body} = resp},
+        true
+      )
       when is_binary(selector) and is_binary(body) do
-    if html?(resp) and missing?(body, selector), do: :logged_out, else: :ok
+    if not data_paths?(parsed) and html?(resp) and missing?(body, selector),
+      do: :logged_out,
+      else: :ok
   end
 
   def check(parsed, {:ok, response, _extra}, sent), do: check(parsed, {:ok, response}, sent)
   def check(_parsed, _result, _sent), do: :ok
+
+  # The selector describes an HTML page, so it means nothing for a search whose
+  # paths all declare a json or xml response, whatever content-type the server sent.
+  defp data_paths?(%Parsed{search: %{paths: [_ | _] = paths}}) do
+    Enum.all?(paths, fn path ->
+      type = get_in(path, [:response, :type]) || get_in(path, ["response", "type"])
+      type in ["json", "xml"]
+    end)
+  end
+
+  defp data_paths?(_), do: false
 
   defp html?(%{headers: headers}) when is_map(headers) do
     content_type =

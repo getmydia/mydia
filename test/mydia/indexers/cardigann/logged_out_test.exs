@@ -49,6 +49,16 @@ defmodule Mydia.Indexers.Cardigann.LoggedOutTest do
     assert LoggedOut.check(@parsed, {:ok, %{status: 200, body: "{}", headers: json}}, true) == :ok
   end
 
+  test "a json or xml declared search path skips the selector test whatever the content-type" do
+    parsed = %{@parsed | search: %{paths: [%{path: "/api", response: %{type: "json"}}]}}
+    resp = {:ok, %{status: 200, body: ~s({"results": []}), headers: %{}}}
+    assert LoggedOut.check(parsed, resp, true) == :ok
+
+    xml = %{@parsed | search: %{paths: [%{"path" => "/rss", "response" => %{"type" => "xml"}}]}}
+    html = %{"content-type" => ["text/html"]}
+    assert LoggedOut.check(xml, {:ok, %{status: 200, body: "<rss/>", headers: html}}, true) == :ok
+  end
+
   test "nothing is logged out when no cookies were sent" do
     err =
       {:error,
