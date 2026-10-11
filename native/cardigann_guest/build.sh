@@ -39,9 +39,10 @@ case "${1:-}" in
       mkdir -p deny/gen
       wit-bindgen rust --stubs --generate-all --world deny --out-dir deny/gen deny/wit
       mv deny/gen/deny.rs deny/gen/stubs.rs
-      cargo build --release --target wasm32-wasip2 --manifest-path deny/Cargo.toml
+      cargo build --locked --release --target wasm32-wasip2 --manifest-path deny/Cargo.toml
       wac plug --plug deny/target/wasm32-wasip2/release/cardigann_deny.wasm out/cardigann-raw.wasm -o out/cardigann.wasm
-      if wasm-tools component wit out/cardigann.wasm | grep -E "import wasi:(http|sockets)"; then
+      wit="$(wasm-tools component wit out/cardigann.wasm)"
+      if grep -E "import wasi:(http|sockets)" <<<"$wit"; then
         echo "build.sh: composed component still imports wasi:http or wasi:sockets" >&2
         exit 1
       fi'

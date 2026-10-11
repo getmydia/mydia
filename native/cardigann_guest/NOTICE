@@ -11,3 +11,12 @@ AngleSharp, AngleSharp.Xml, Microsoft.AspNetCore.WebUtilities, MonoTorrent,
 Newtonsoft.Json, System.Text.Json, YamlDotNet (MIT);
 FluentValidation (Apache-2.0);
 NLog, Polly (BSD-3-Clause).
+
+deny/wit/deps contains WIT definitions from the WebAssembly WASI proposals
+(https://github.com/WebAssembly/wasi-io, wasi-clocks, wasi-sockets, wasi-http),
+Copyright the WebAssembly contributors, licensed under Apache-2.0 WITH LLVM-exception.
+io, clocks and sockets are the v0.2.0 files as vendored in wit-bindgen-cli 0.62.0
+(https://github.com/bytecodealliance/wit-bindgen, commit
+c604ee01c03f50d7301984a3c920a650752cd136, tests/codegen/wasi-http/wit/deps) with only
+the version rewrite described in deny/wit/deps/README.md. http is the wasi-http 0.2.0
+interface as printed by wasm-tools from the guest component's imports.
