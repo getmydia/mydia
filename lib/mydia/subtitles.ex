@@ -109,7 +109,8 @@ defmodule Mydia.Subtitles do
   which providers answered.
   """
   @spec search_candidates(binary(), String.t()) ::
-          {:ok, %{results: [map()], providers: [map()]}} | {:error, term()}
+          {:ok, %{results: [map()], providers: [map()]}}
+          | {:error, :media_file_not_found | :insufficient_search_criteria}
   def search_candidates(media_file_id, languages) do
     with {:ok, media_file} <- fetch_media_file_with_associations(media_file_id),
          {:ok, search_params} <- build_search_params(media_file, languages),

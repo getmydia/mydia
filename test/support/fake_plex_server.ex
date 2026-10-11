@@ -19,7 +19,11 @@ defmodule Mydia.FakePlexServer do
   @spec open() :: t()
   def open do
     {:ok, routes} = Agent.start_link(fn -> %{} end)
-    {:ok, pid} = Bandit.start_link(plug: {__MODULE__, routes}, port: 0, startup_log: false)
+
+    # Plug.opts() has no pid, so the Agent travels inside a map.
+    {:ok, pid} =
+      Bandit.start_link(plug: {__MODULE__, %{routes: routes}}, port: 0, startup_log: false)
+
     {:ok, {_ip, port}} = ThousandIsland.listener_info(pid)
     %__MODULE__{pid: pid, port: port, routes: routes}
   end
@@ -37,7 +41,7 @@ defmodule Mydia.FakePlexServer do
   def init(routes), do: routes
 
   @impl Plug
-  def call(conn, routes) do
+  def call(conn, %{routes: routes}) do
     conn = Plug.Conn.fetch_query_params(conn)
 
     case Agent.get(routes, &Map.get(&1, {conn.method, conn.request_path})) do

@@ -71,7 +71,7 @@ defmodule Mydia.Library.MediaFiles do
 
   Raises `Ecto.NoResultsError` if the media file does not exist.
   """
-  @spec get_media_file!(binary(), keyword()) :: MediaFile.t()
+  @spec get_media_file!(binary() | integer(), keyword()) :: MediaFile.t()
   def get_media_file!(id, opts \\ []) do
     MediaFile
     |> maybe_preload(opts[:preload])

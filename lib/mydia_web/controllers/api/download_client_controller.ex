@@ -52,32 +52,25 @@ defmodule MydiaWeb.Api.DownloadClientController do
     - 404: Client not found
   """
   def show(conn, %{"id" => id}) do
-    case Settings.get_download_client_config!(id) do
-      nil ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Download client not found"})
+    client = Settings.get_download_client_config!(id)
+    {:ok, health} = ClientHealth.check_health(id)
 
-      client ->
-        {:ok, health} = ClientHealth.check_health(id)
+    client_with_health = %{
+      id: client.id,
+      name: client.name,
+      type: client.type,
+      enabled: client.enabled,
+      priority: client.priority,
+      host: client.host,
+      port: client.port,
+      use_ssl: client.use_ssl,
+      url_base: client.url_base,
+      category: client.category,
+      download_directory: client.download_directory,
+      health: health
+    }
 
-        client_with_health = %{
-          id: client.id,
-          name: client.name,
-          type: client.type,
-          enabled: client.enabled,
-          priority: client.priority,
-          host: client.host,
-          port: client.port,
-          use_ssl: client.use_ssl,
-          url_base: client.url_base,
-          category: client.category,
-          download_directory: client.download_directory,
-          health: health
-        }
-
-        json(conn, %{data: client_with_health})
-    end
+    json(conn, %{data: client_with_health})
   rescue
     Ecto.NoResultsError ->
       conn

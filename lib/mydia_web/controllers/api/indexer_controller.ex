@@ -57,36 +57,29 @@ defmodule MydiaWeb.Api.IndexerController do
     - 404: Indexer not found
   """
   def show(conn, %{"id" => id}) do
-    case Settings.get_indexer_config!(id) do
-      nil ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Indexer not found"})
+    indexer = Settings.get_indexer_config!(id)
+    {:ok, health} = Health.check_health(id)
+    rate_limit_stats = RateLimiter.get_stats(id)
+    failure_count = Health.get_failure_count(id)
 
-      indexer ->
-        {:ok, health} = Health.check_health(id)
-        rate_limit_stats = RateLimiter.get_stats(id)
-        failure_count = Health.get_failure_count(id)
+    indexer_with_health = %{
+      id: indexer.id,
+      name: indexer.name,
+      type: indexer.type,
+      enabled: indexer.enabled,
+      priority: indexer.priority,
+      base_url: indexer.base_url,
+      api_key: if(indexer.api_key, do: "***", else: nil),
+      indexer_ids: indexer.indexer_ids,
+      categories: indexer.categories,
+      rate_limit: indexer.rate_limit,
+      connection_settings: indexer.connection_settings,
+      health: health,
+      rate_limit_stats: rate_limit_stats,
+      consecutive_failures: failure_count
+    }
 
-        indexer_with_health = %{
-          id: indexer.id,
-          name: indexer.name,
-          type: indexer.type,
-          enabled: indexer.enabled,
-          priority: indexer.priority,
-          base_url: indexer.base_url,
-          api_key: if(indexer.api_key, do: "***", else: nil),
-          indexer_ids: indexer.indexer_ids,
-          categories: indexer.categories,
-          rate_limit: indexer.rate_limit,
-          connection_settings: indexer.connection_settings,
-          health: health,
-          rate_limit_stats: rate_limit_stats,
-          consecutive_failures: failure_count
-        }
-
-        json(conn, %{data: indexer_with_health})
-    end
+    json(conn, %{data: indexer_with_health})
   rescue
     Ecto.NoResultsError ->
       conn
@@ -141,17 +134,10 @@ defmodule MydiaWeb.Api.IndexerController do
     - 404: Indexer not found
   """
   def reset_failures(conn, %{"id" => id}) do
-    case Settings.get_indexer_config!(id) do
-      nil ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Indexer not found"})
+    _indexer = Settings.get_indexer_config!(id)
+    Health.reset_failures(id)
 
-      _indexer ->
-        Health.reset_failures(id)
-
-        json(conn, %{message: "Failure counter reset successfully"})
-    end
+    json(conn, %{message: "Failure counter reset successfully"})
   rescue
     Ecto.NoResultsError ->
       conn

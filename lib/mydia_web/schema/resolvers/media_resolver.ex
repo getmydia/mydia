@@ -299,7 +299,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   end
 
   @spec resolve_season_count(map(), map(), Absinthe.Resolution.t()) ::
-          {:ok, term()} | {:error, term()}
+          {:middleware, module(), term()}
   def resolve_season_count(%{id: media_item_id}, _args, %{context: context}) do
     user_id = context[:current_user] && context[:current_user].id
 
@@ -317,7 +317,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   end
 
   @spec resolve_episode_count(map(), map(), Absinthe.Resolution.t()) ::
-          {:ok, term()} | {:error, term()}
+          {:middleware, module(), term()}
   def resolve_episode_count(%{id: media_item_id}, _args, %{context: context}) do
     user_id = context[:current_user] && context[:current_user].id
 

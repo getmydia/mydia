@@ -62,7 +62,7 @@ defmodule Mydia.MixProject do
       # No ignore list: findings are fixed, not listed. See "Dialyzer" in
       # CONTRIBUTING.md.
       dialyzer: [
-        plt_add_apps: [:mix, :ex_unit],
+        plt_add_apps: [:mix, :ex_unit, :wallaby],
         plt_core_path: "priv/plts",
         plt_local_path: "priv/plts"
       ],

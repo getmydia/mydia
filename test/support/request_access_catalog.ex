@@ -299,7 +299,14 @@ defmodule Mydia.RequestAccessCatalog do
   def wait_until(_fun, 0), do: false
 
   def wait_until(fun, retries) do
-    fun.() || (Process.sleep(10) && wait_until(fun, retries - 1))
+    case fun.() do
+      falsy when falsy in [nil, false] ->
+        Process.sleep(10)
+        wait_until(fun, retries - 1)
+
+      result ->
+        result
+    end
   end
 
   defp request_button(%Title{} = t),

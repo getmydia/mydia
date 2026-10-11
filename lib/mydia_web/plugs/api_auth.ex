@@ -84,7 +84,6 @@ defmodule MydiaWeb.Plugs.ApiAuth do
     case conn.remote_ip do
       {a, b, c, d} -> "#{a}.#{b}.#{c}.#{d}"
       {a, b, c, d, e, f, g, h} -> "#{a}:#{b}:#{c}:#{d}:#{e}:#{f}:#{g}:#{h}"
-      _ -> "unknown"
     end
   end
 end
