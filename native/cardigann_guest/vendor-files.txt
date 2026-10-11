@@ -24,6 +24,7 @@ src/NzbDrone.Common/Http/HttpHeader.cs
 src/NzbDrone.Common/Http/HttpRequestBuilder.cs
 src/NzbDrone.Common/Http/HttpFormData.cs
 src/NzbDrone.Common/Http/HttpAccept.cs
+src/NzbDrone.Common/Http/BasicNetworkCredential.cs
 src/NzbDrone.Common/Http/HttpException.cs
 src/NzbDrone.Common/Http/CookieUtil.cs
 src/NzbDrone.Common/Http/TooManyRequestsException.cs

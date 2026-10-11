@@ -10,10 +10,13 @@ here="$(cd "$(dirname "$0")" && pwd)"
 image="mcr.microsoft.com/dotnet/sdk:10.0"
 cache="${NUGET_CACHE:-$HOME/.cache/mydia-cardigann-nuget}"
 mkdir -p "$cache"
+# Run as the invoking user so bin/, obj/ and out/ are not root-owned.
 run() {
   docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -e HOME=/tmp -e DOTNET_CLI_HOME=/tmp -e NUGET_PACKAGES=/nuget \
     -v "$here:/src" -w /src \
-    -v "$cache:/root/.nuget/packages" \
+    -v "$cache:/nuget" \
     "$image" bash -c "$1"
 }
 
