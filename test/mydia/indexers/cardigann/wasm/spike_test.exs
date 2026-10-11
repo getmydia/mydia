@@ -67,17 +67,15 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SpikeTest do
     }
   end
 
-  # SANDBOX DEVIATION. allow_http is true only because Wasmex links wasi:http
-  # (which the component imports) solely when it is true, and it then also
-  # inherits the host network and DNS. The guest does not use them, but nothing
-  # enforces that. Do NOT copy this as the standard sandbox for the Engine; see
-  # "Linking under Wasmex" in native/cardigann_guest/SPIKE.md for mitigations.
+  # Same lockdown as Mydia.Plugins.Host. The component imports no wasi:http or
+  # wasi:sockets (build.sh composes trapping stand-ins under it), so it links
+  # without allow_http; see "Sandbox lock" in native/cardigann_guest/SPIKE.md.
   defp wasi,
     do: %WasiP2Options{
       inherit_stdin: false,
       inherit_stdout: false,
       inherit_stderr: false,
-      allow_http: true
+      allow_http: false
     }
 
   defp start(bytes) do

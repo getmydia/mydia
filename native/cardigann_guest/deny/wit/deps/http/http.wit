@@ -1,0 +1,142 @@
+package wasi:http@0.2.0;
+
+interface types {
+  use wasi:io/poll@0.2.6.{pollable};
+  use wasi:io/streams@0.2.6.{input-stream, output-stream};
+
+  resource outgoing-request {
+    constructor(headers: headers);
+    body: func() -> result<outgoing-body>;
+    set-method: func(method: method) -> result;
+    set-path-with-query: func(path-with-query: option<string>) -> result;
+    set-scheme: func(scheme: option<scheme>) -> result;
+    set-authority: func(authority: option<string>) -> result;
+  }
+
+  resource request-options;
+
+  resource future-incoming-response {
+    subscribe: func() -> pollable;
+    get: func() -> option<result<result<incoming-response, error-code>>>;
+  }
+
+  record DNS-error-payload {
+    rcode: option<string>,
+    info-code: option<u16>,
+  }
+
+  record TLS-alert-received-payload {
+    alert-id: option<u8>,
+    alert-message: option<string>,
+  }
+
+  record field-size-payload {
+    field-name: option<string>,
+    field-size: option<u32>,
+  }
+
+  variant error-code {
+    DNS-timeout,
+    DNS-error(DNS-error-payload),
+    destination-not-found,
+    destination-unavailable,
+    destination-IP-prohibited,
+    destination-IP-unroutable,
+    connection-refused,
+    connection-terminated,
+    connection-timeout,
+    connection-read-timeout,
+    connection-write-timeout,
+    connection-limit-reached,
+    TLS-protocol-error,
+    TLS-certificate-error,
+    TLS-alert-received(TLS-alert-received-payload),
+    HTTP-request-denied,
+    HTTP-request-length-required,
+    HTTP-request-body-size(option<u64>),
+    HTTP-request-method-invalid,
+    HTTP-request-URI-invalid,
+    HTTP-request-URI-too-long,
+    HTTP-request-header-section-size(option<u32>),
+    HTTP-request-header-size(option<field-size-payload>),
+    HTTP-request-trailer-section-size(option<u32>),
+    HTTP-request-trailer-size(field-size-payload),
+    HTTP-response-incomplete,
+    HTTP-response-header-section-size(option<u32>),
+    HTTP-response-header-size(field-size-payload),
+    HTTP-response-body-size(option<u64>),
+    HTTP-response-trailer-section-size(option<u32>),
+    HTTP-response-trailer-size(field-size-payload),
+    HTTP-response-transfer-coding(option<string>),
+    HTTP-response-content-coding(option<string>),
+    HTTP-response-timeout,
+    HTTP-upgrade-failed,
+    HTTP-protocol-error,
+    loop-detected,
+    configuration-error,
+    internal-error(option<string>),
+  }
+
+  resource fields {
+    from-list: static func(entries: list<tuple<field-key, field-value>>) -> result<fields, header-error>;
+    entries: func() -> list<tuple<field-key, field-value>>;
+  }
+
+  type headers = fields;
+
+  type field-key = string;
+
+  type field-value = list<u8>;
+
+  resource incoming-response {
+    status: func() -> status-code;
+    headers: func() -> headers;
+    consume: func() -> result<incoming-body>;
+  }
+
+  resource incoming-body {
+    %stream: func() -> result<input-stream>;
+    finish: static func(this: incoming-body) -> future-trailers;
+  }
+
+  type status-code = u16;
+
+  resource outgoing-body {
+    write: func() -> result<output-stream>;
+    finish: static func(this: outgoing-body, trailers: option<trailers>) -> result<_, error-code>;
+  }
+
+  variant method {
+    get,
+    head,
+    post,
+    put,
+    delete,
+    connect,
+    options,
+    trace,
+    patch,
+    other(string),
+  }
+
+  variant scheme {
+    HTTP,
+    HTTPS,
+    other(string),
+  }
+
+  resource future-trailers;
+
+  variant header-error {
+    invalid-syntax,
+    forbidden,
+    immutable,
+  }
+
+  type trailers = fields;
+}
+interface outgoing-handler {
+  use types.{outgoing-request, request-options, future-incoming-response, error-code};
+
+  handle: func(request: outgoing-request, options: option<request-options>) -> result<future-incoming-response, error-code>;
+}

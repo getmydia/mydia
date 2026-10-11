@@ -1,6 +1,6 @@
 # Cardigann wasm spike
 
-Verdict: **GO, with an open sandbox concern** (the component only links with `allow_http: true`, which also grants ambient network and DNS; see the verdict section).
+Verdict: **GO**. The component runs under `allow_http: false`, the plugin host's lockdown, because `build.sh wasm` composes trapping stand-ins for `wasi:http` and `wasi:sockets` under it (see "Sandbox lock").
 
 ## Toolchain
 
@@ -126,10 +126,62 @@ import (wasi:io, clocks, cli incl. terminal-*, filesystem, sockets, random, all 
 component's `wasi:http` import also gives the guest ambient TCP/UDP and DNS, which is weaker than
 the plugin host's `allow_http: false` stance. The guest never uses them (its only egress is
 `mydia:cardigann/host.http-request`, which the host controls), but the sandbox does not enforce
-that. Options to close it, none tried here: stub the `wasi:http` and `wasi:sockets` imports in
-the component (`wasm-tools component` composition with a trapping adapter), build the guest
-without the imports the .NET runtime drags in, or ask Wasmex for an option that links wasi:http
-without `inherit_network`. This test runs with `allow_http: true`.
+that. This is closed by composing the imports out (see "Sandbox lock"). The raw component,
+`out/cardigann-raw.wasm`, still links only with `allow_http: true`; the shipped
+`out/cardigann.wasm` links with `allow_http: false`.
+
+## Sandbox lock
+
+Goal: the guest instantiates under the plugin host's exact options (`allow_http: false`) and
+has no ambient network, with no Wasmex change.
+
+**Stubbed interfaces.** The raw component (`out/cardigann-raw.wasm`) imports these, read with
+`wasm-tools component wit`:
+
+| Interface | Resources |
+|---|---|
+| `wasi:http/types@0.2.0` | `outgoing-request`, `request-options`, `future-incoming-response`, `fields`, `incoming-response`, `incoming-body`, `outgoing-body`, `future-trailers` |
+| `wasi:http/outgoing-handler@0.2.0` | none (one function, `handle`) |
+| `wasi:sockets/network@0.2.6` | `network` |
+| `wasi:sockets/instance-network@0.2.6` | none |
+| `wasi:sockets/udp@0.2.6` | `udp-socket`, `incoming-datagram-stream`, `outgoing-datagram-stream` |
+| `wasi:sockets/udp-create-socket@0.2.6` | none |
+| `wasi:sockets/tcp@0.2.6` | `tcp-socket` |
+| `wasi:sockets/tcp-create-socket@0.2.6` | none |
+| `wasi:sockets/ip-name-lookup@0.2.6` | `resolve-address-stream` |
+
+**Sockets did not need stubbing to link.** With `allow_http: false` Wasmex still links every
+other wasi p2 interface, `wasi:sockets` included, and `store.rs` then does not call
+`inherit_network`, so wasmtime would deny the calls anyway. Only `wasi:http` blocked linking.
+Both are composed out regardless, so the guarantee does not depend on Wasmex's internals: the
+final component has no way to name a socket or an HTTP request.
+
+**Mechanism.** `deny/` is a `wasm32-wasip2` Rust crate whose world exports exactly the
+interfaces above, at the versions the guest imports. `build.sh wasm` runs, in the pinned
+`rust:1.96` container (`scripts/rust-tools.sh`, tool versions pinned there: wit-bindgen-cli
+0.62.0, wac-cli 0.12.0, wasm-tools 1.258.0):
+
+1. `wit-bindgen rust --stubs --generate-all` writes `deny/gen/stubs.rs` (git-ignored): the
+   bindings plus an `impl` of every exported trait on one `Stub` type. Generating it keeps the
+   stand-ins in step with the WIT. Every body is `unreachable!()`, so a call traps; none
+   returns an error value (the brief's "return the error variant where there is one" was not
+   done: a trap is stricter and nothing is meant to call these).
+2. `cargo build --release --target wasm32-wasip2` builds `cardigann_deny.wasm` (about 107 kB).
+3. `wac plug --plug cardigann_deny.wasm out/cardigann-raw.wasm -o out/cardigann.wasm` satisfies
+   the guest's wasi:http and wasi:sockets imports from the deny component's exports.
+4. `wasm-tools component wit out/cardigann.wasm | grep -E 'import wasi:(http|sockets)'` must
+   print nothing, or the build fails.
+
+`deny/wit/deps/{io,clocks,sockets}` are the full upstream WIT (from wit-bindgen's wasi test
+tree, version strings rewritten to 0.2.6). The pruned view printed from the guest is not
+enough: rustc's bundled preview1 adapter merges its own full copy of `wasi:io`, `wasi:sockets`
+and fails on a pruned one ("expected function to-debug-string to be present"). `deny/wit/deps/http`
+is the guest's own pruned view of `wasi:http@0.2.0`, which is sufficient because nothing
+merges against it. The deny component imports only `wasi:io`, `wasi:clocks` and `wasi:cli`
+interfaces that Rust std links, all of which the guest already imports at 0.2.6.
+
+**Verification.** The composed component has no `wasi:http` or `wasi:sockets` import, and the
+three spike tests pass with `WasiP2Options{allow_http: false}` and no stand-in trapped.
 
 ## Measurements
 
@@ -138,13 +190,13 @@ Real runs, one Linux machine, median as stated. The test is
 
 | Measurement | Result |
 |---|---|
-| `.wasm` size, unstripped | 75,612,093 bytes (72.1 MiB) |
+| `.wasm` size, unstripped | 75,726,879 bytes (72.2 MiB) composed; 75,612,093 raw (the deny component adds 114,786) |
 | `.wasm` size, `wasm-tools strip` | 39,148,384 bytes (37.3 MiB) |
-| Compile (`Component.new`), median of 3 | 3,269 ms (the three samples of the final run: 3585, 3269, 3269; an earlier run of the same test gave 3718, 3605, 3642, median 3642) |
+| Compile (`Component.new`), median of 3 | 3,280 ms composed (samples 3276, 3280, 3293; the pre-composition build measured 3,269 ms, an earlier run 3,642 ms) |
 | Instantiate with a reused compiled component, median of 20 | 0 ms (sub-millisecond, `Instance.new` alone reads 3 ms median incl. store) |
 | Fresh store + compile, median of 20 | 3,320 ms |
 | Fresh store + `Instance.new` of an already compiled component | 3 ms median |
-| Full `Components.start_link`, median of 5 | 3,302 ms (3304, 3302, 3297, 3348, 3293) |
+| Full `Components.start_link`, median of 5 | 3,332 ms composed (3353, 3302, 3345, 3332, 3291) |
 | First search call after `start_link` | 43 to 79 ms |
 | Steady-state search call against Bypass, median of 20 | 2 ms (min 2, max 5) |
 | VmRSS before / after 20 sequential calls | 1,441,560 kB / 1,441,712 kB (+152 kB) |
@@ -191,12 +243,8 @@ Observed on Wasmex 0.15.1. `Wasmex.Components.call_function/4` wraps the call in
 
 ## Verdict
 
-**GO, with an open sandbox concern.**
-
-**Sandbox deviation, not met yet:** the component links only with `allow_http: true`, and `store.rs` then also calls
-`inherit_network()` and `allow_ip_name_lookup(true)`. The constraint "the guest's only egress is `http-request`" is therefore
-NOT enforced today. Mitigations are listed under Linking under Wasmex. Phase 2 must not ship this as the standard sandbox
-until one of them lands.
+**GO.** The earlier sandbox concern (the component linked only with `allow_http: true`, which also grants ambient network
+and DNS) is resolved by the build-time composition described in "Sandbox lock".
 
 | Rule | Result |
 |---|---|
@@ -206,12 +254,10 @@ until one of them lands.
 
 What GO does not cover, to settle before or during Phase 2:
 
-1. `wasi:http` links only with `allow_http: true`, which also grants the guest ambient network
-   and DNS (see Linking under Wasmex).
-2. Compile costs 3.3 s and the component is 38 to 76 MB; compile once per node and share the
+1. Compile costs 3.3 s and the component is 38 to 76 MB; compile once per node and share the
    engine and compiled component. Plugin-host style `start_link` per call is not viable.
-3. The AOT build needed three fixes found only by running it (obstacles 7 to 9); more reflection
+2. The AOT build needed three fixes found only by running it (obstacles 7 to 9); more reflection
    or platform gaps may surface in definitions other than the two fixtures.
-4. `publish-unix` is `:none` for dated rows. This is a wasm-only defect: the native `RunnerTests` assert the parsed
+3. `publish-unix` is `:none` for dated rows. This is a wasm-only defect: the native `RunnerTests` assert the parsed
    date (`2031-04-02`) for this same fixture and pass on plain .NET, so the fixture and `ToRelease` are not at fault.
    `spike_test.exs` has a `:known_wasm_defect` test asserting the date, excluded by default, so a fix turns it green.
