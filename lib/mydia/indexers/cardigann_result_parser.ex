@@ -1096,7 +1096,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
     # Text-based field: render template with .Result context
     if is_binary(text_template) and text_template != "" do
-      compute_text_field(field_config, %{}, template_context)
+      compute_text_field(field_config, Map.get(template_context, :result, %{}), template_context)
     else
       # Selector-based field: extract value then apply filters
       with {:ok, raw_value} <- get_json_value_by_selector(row, selector),

@@ -402,6 +402,39 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
     end
   end
 
+  describe "InternetArchive snapshot" do
+    @tag :snapshot
+    test "internetarchive: JSON text fields render .Result values" do
+      run_snapshot("test/fixtures/cardigann/internetarchive",
+        min_results: 2,
+        assertions: fn [first, second | _] ->
+          # With the infohash rendered, the magnet is preferred over the .torrent path.
+          assert first.download_url =~ "magnet:?xt=urn:btih:" <> String.duplicate("1", 40)
+          assert second.download_url =~ "magnet:?xt=urn:btih:" <> String.duplicate("2", 40)
+          assert first.info_url =~ "/details/copper-lantern-1931"
+        end
+      )
+    end
+
+    @tag :snapshot
+    test "internetarchive: noMagnet builds the .torrent URL from .Result values" do
+      run_snapshot("test/fixtures/cardigann/internetarchive",
+        min_results: 2,
+        template_context: %{
+          keywords: "Copper Lantern",
+          config: %{"noMagnet" => true, "titleOnly" => true},
+          categories: [],
+          settings: [],
+          query: %{}
+        },
+        assertions: fn [first | _] ->
+          assert first.download_url =~
+                   "/download/copper-lantern-1931/copper-lantern-1931_archive.torrent"
+        end
+      )
+    end
+  end
+
   # These trackers returned zero or wrong rows while the HTML path ran on Floki,
   # which builds no implied <tbody>, mis-evaluates nested :has()/:not(:has()) and
   # has no :scope. Each fixture is a reduction of a live capture.
