@@ -127,7 +127,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
   defp summarize(nil), do: nil
 
   defp summarize({:ok, results, _winner, _response, stats}),
-    do: {:ok, length(results), stats.dropped}
+    do: {:ok, length(results), stats.dropped, stats.filtered}
 
   defp summarize(other), do: other
 
@@ -207,13 +207,18 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
   @spec classify(map()) :: Outcome.bucket()
   def classify(%{search: {:cloudflare, _}}), do: :cloudflare
   def classify(%{search: {:error, message}}), do: classify_error(message)
-  def classify(%{search: {:ok, n, _dropped}, grab: grab}) when n > 0, do: with_grab(:ok, grab)
 
-  def classify(%{search: {:ok, 0, _dropped}, empty: {:ok, n, _}, grab: grab}) when n > 0,
-    do: with_grab(:ok_empty_query, grab)
+  def classify(%{search: {:ok, n, _dropped, _filtered}, grab: grab}) when n > 0,
+    do: with_grab(:ok, grab)
 
-  def classify(%{search: {:ok, 0, dropped}}) when dropped > 0, do: :rows_dropped
-  def classify(%{search: {:ok, 0, _dropped}}), do: :no_rows
+  def classify(%{search: {:ok, 0, _dropped, _filtered}, empty: {:ok, n, _, _}, grab: grab})
+      when n > 0,
+      do: with_grab(:ok_empty_query, grab)
+
+  # Only when the drops alone explain the empty result; rows removed on purpose
+  # by andmatch mean the search simply had nothing relevant.
+  def classify(%{search: {:ok, 0, dropped, 0}}) when dropped > 0, do: :rows_dropped
+  def classify(%{search: {:ok, 0, _dropped, _filtered}}), do: :no_rows
 
   defp with_grab(bucket, {:magnet, _}), do: bucket
   defp with_grab(bucket, {:torrent, _}), do: bucket

@@ -659,10 +659,38 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
 
       url = "http://localhost:#{bypass.port}"
 
-      assert {:error, message} = CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
-      assert message =~ "none usable"
-      assert message =~ "2 rows matched"
-      assert message =~ "missing download"
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:error, message} =
+                   CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
+
+          assert message =~ "none usable"
+          assert message =~ "2 rows matched"
+          assert message =~ "missing download"
+        end)
+
+      assert log =~ "2 rows matched, 2 dropped"
+    end
+
+    test "is not degraded when andmatch filtered rows and one other row lacked a download" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<table><tr><td>Copper Lantern</td></tr><tr><td>Paper Harbor<a href=\"/d/2\">d</a></td></tr></table>"
+        )
+      end)
+
+      url = "http://localhost:#{bypass.port}"
+      parsed = parsed_for(url)
+      fields = %{parsed.search.fields | title: %{selector: "td", filters: [%{name: "andmatch"}]}}
+      parsed = %{parsed | search: %{parsed.search | fields: fields}}
+
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:ok, 0, ^url} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      end)
     end
 
     test "reports an error when the search 404s even though the homepage is fine" do

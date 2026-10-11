@@ -709,7 +709,10 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
 
       config = %{type: :cardigann, name: "Legacy Promo", indexer_id: "legacy-promo"}
 
-      assert {:ok, _results} = Cardigann.search(config, "query")
+      {searched, _log} =
+        ExUnit.CaptureLog.with_log(fn -> Cardigann.search(config, "query") end)
+
+      assert {:ok, _results} = searched
 
       reloaded = Repo.reload!(definition)
       refute reloaded.active_link == legacy_url

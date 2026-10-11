@@ -284,7 +284,14 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   # Rows the selector matched but that were all discarded for a missing title or
   # download are a broken definition, not an empty search. Report them as an
   # error so the definition is marked degraded instead of healthy with zero.
-  defp ensure_usable([], %{dropped: dropped, matched: matched, first_missing: missing})
+  # Only when the drops alone explain the empty result: rows removed on purpose
+  # by `andmatch` mean the search simply had nothing relevant.
+  defp ensure_usable([], %{
+         dropped: dropped,
+         filtered: 0,
+         matched: matched,
+         first_missing: missing
+       })
        when dropped > 0 do
     {:error,
      Error.search_failed("#{matched} rows matched, none usable (missing #{missing || "unknown"})")}

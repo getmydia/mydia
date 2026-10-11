@@ -6,7 +6,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheckTest do
   describe "classify/1" do
     test "rows on the probe query and a magnet grab is ok" do
       assert LiveCheck.classify(%{
-               search: {:ok, 3, 0},
+               search: {:ok, 3, 0, 0},
                empty: nil,
                grab: {:magnet, "magnet:?xt=urn:btih:1"}
              }) == :ok
@@ -14,8 +14,8 @@ defmodule Mydia.Indexers.Cardigann.LiveCheckTest do
 
     test "rows only on the empty query is ok_empty_query" do
       assert LiveCheck.classify(%{
-               search: {:ok, 0, 0},
-               empty: {:ok, 5, 0},
+               search: {:ok, 0, 0, 0},
+               empty: {:ok, 5, 0, 0},
                grab: {:torrent, 512}
              }) ==
                :ok_empty_query
@@ -23,7 +23,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheckTest do
 
     test "rows with a failed grab is grab_failed" do
       assert LiveCheck.classify(%{
-               search: {:ok, 3, 0},
+               search: {:ok, 3, 0, 0},
                empty: nil,
                grab: {:error, "no selector"}
              }) ==
@@ -31,13 +31,18 @@ defmodule Mydia.Indexers.Cardigann.LiveCheckTest do
     end
 
     test "zero rows on both queries is no_rows" do
-      assert LiveCheck.classify(%{search: {:ok, 0, 0}, empty: {:ok, 0, 0}, grab: nil}) ==
+      assert LiveCheck.classify(%{search: {:ok, 0, 0, 0}, empty: {:ok, 0, 0, 0}, grab: nil}) ==
                :no_rows
     end
 
     test "matched rows that were all dropped is rows_dropped" do
-      assert LiveCheck.classify(%{search: {:ok, 0, 4}, empty: {:ok, 0, 0}, grab: nil}) ==
+      assert LiveCheck.classify(%{search: {:ok, 0, 4, 0}, empty: {:ok, 0, 0, 0}, grab: nil}) ==
                :rows_dropped
+    end
+
+    test "drops alongside andmatch filtering is no_rows, not rows_dropped" do
+      assert LiveCheck.classify(%{search: {:ok, 0, 1, 19}, empty: {:ok, 0, 0, 0}, grab: nil}) ==
+               :no_rows
     end
 
     test "a cloudflare probe is cloudflare" do
@@ -135,7 +140,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheckTest do
         """)
       end)
 
-      outcome = LiveCheck.check(yaml)
+      {outcome, _log} = ExUnit.CaptureLog.with_log(fn -> LiveCheck.check(yaml) end)
       assert outcome.bucket == :rows_dropped
       assert outcome.rows == 0
       assert outcome.dropped == 2

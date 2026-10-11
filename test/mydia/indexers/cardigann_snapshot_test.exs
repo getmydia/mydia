@@ -300,7 +300,9 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
   describe "showRSS snapshot" do
     @tag :snapshot
     test "parses captured XML RSS feed without error" do
-      {result, _definition} = load_and_parse("showrss")
+      {{result, _definition}, _log} =
+        ExUnit.CaptureLog.with_log(fn -> load_and_parse("showrss") end)
+
       assert {:ok, _results} = result
     end
   end

@@ -186,9 +186,15 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       response = %{status: 200, body: html_body}
 
-      assert {:ok, results} = CardigannResultParser.parse_results(definition, response, "Test")
+      {parsed, log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          CardigannResultParser.parse_results(definition, response, "Test")
+        end)
+
+      assert {:ok, results} = parsed
       assert length(results) == 1
       assert hd(results).title == "Complete Release"
+      assert log =~ "[Test] 3 rows matched, 2 dropped"
     end
   end
 
@@ -1858,35 +1864,99 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       }
     end
 
+    defp parse_with_log(definition, body) do
+      ExUnit.CaptureLog.with_log(fn ->
+        CardigannResultParser.parse_results_with_stats(
+          definition,
+          %{status: 200, body: body},
+          "Stats",
+          base_url: "https://example.invalid"
+        )
+      end)
+    end
+
     test "counts rows dropped for a missing download and names the field" do
       html = """
       <table><tr><td class="t">Copper Lantern</td></tr><tr><td class="t">Paper Harbor</td><td><a class="d" href="/1">d</a></td></tr></table>
       """
+
+      {result, log} = parse_with_log(stats_definition(), html)
 
       assert {:ok, [_one],
               %Mydia.Indexers.Cardigann.ParseStats{
                 matched: 2,
                 dropped: 1,
                 first_missing: "download"
-              }} =
-               CardigannResultParser.parse_results_with_stats(
-                 stats_definition(),
-                 %{status: 200, body: html},
-                 "Stats",
-                 base_url: "https://example.invalid"
-               )
+              }} = result
+
+      assert log =~ "[Stats] 2 rows matched, 1 dropped (first missing: download)"
     end
 
     test "names title when the title is missing" do
       html = ~s(<table><tr><td><a class="d" href="/1">d</a></td></tr></table>)
 
-      assert {:ok, [], %{matched: 1, dropped: 1, first_missing: "title"}} =
-               CardigannResultParser.parse_results_with_stats(
-                 stats_definition(),
-                 %{status: 200, body: html},
-                 "Stats",
-                 base_url: "https://example.invalid"
-               )
+      {result, _log} = parse_with_log(stats_definition(), html)
+      assert {:ok, [], %{matched: 1, dropped: 1, first_missing: "title"}} = result
+    end
+
+    test "does not log when nothing was dropped" do
+      html =
+        ~s(<table><tr><td class="t">Copper Lantern</td><td><a class="d" href="/1">d</a></td></tr></table>)
+
+      {result, log} = parse_with_log(stats_definition(), html)
+      assert {:ok, [_one], %{matched: 1, dropped: 0}} = result
+      refute log =~ "rows matched"
+    end
+
+    test "andmatch removals are counted as filtered, not dropped" do
+      definition =
+        put_in(stats_definition().search.fields["title"], %{
+          selector: "td.t",
+          filters: [%{name: "andmatch"}]
+        })
+
+      html =
+        ~s(<table>) <>
+          ~s(<tr><td class="t">Copper Lantern</td><td><a class="d" href="/1">d</a></td></tr>) <>
+          ~s(<tr><td class="t">Paper Harbor</td><td><a class="d" href="/2">d</a></td></tr>) <>
+          ~s(<tr><td class="t">Paper Harbor Two</td></tr>) <>
+          ~s(</table>)
+
+      {result, _log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          CardigannResultParser.parse_results_with_stats(
+            definition,
+            %{status: 200, body: html},
+            "Stats",
+            template_context: %{keywords: "Copper Lantern"},
+            base_url: "https://example.invalid"
+          )
+        end)
+
+      assert {:ok, [_one], %{matched: 3, filtered: 1, dropped: 1, first_missing: "download"}} =
+               result
+    end
+
+    test "counts dropped XML rows" do
+      xml = """
+      <?xml version="1.0"?>
+      <rss><channel>
+        <item><title>Copper Lantern</title></item>
+        <item><title>Paper Harbor</title><link>magnet:?xt=urn:btih:1111111111111111111111111111111111111111</link></item>
+      </channel></rss>
+      """
+
+      definition = %{
+        stats_definition()
+        | search: %{
+            paths: [%{path: "/rss", response: %{type: "xml"}}],
+            rows: %{selector: "rss/channel/item"},
+            fields: %{"title" => %{selector: "title"}, "download" => %{selector: "link"}}
+          }
+      }
+
+      {result, _log} = parse_with_log(definition, xml)
+      assert {:ok, [_one], %{matched: 2, dropped: 1, first_missing: "download"}} = result
     end
 
     test "counts dropped JSON rows" do
@@ -1901,13 +1971,8 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       body = ~s({"items": [{"name": "Copper Lantern"}, {"name": "Paper Harbor", "url": "/1"}]})
 
-      assert {:ok, [_one], %{matched: 2, dropped: 1, first_missing: "download"}} =
-               CardigannResultParser.parse_results_with_stats(
-                 definition,
-                 %{status: 200, body: body},
-                 "Stats",
-                 base_url: "https://example.invalid"
-               )
+      {result, _log} = parse_with_log(definition, body)
+      assert {:ok, [_one], %{matched: 2, dropped: 1, first_missing: "download"}} = result
     end
 
     test "an empty body yields empty stats" do

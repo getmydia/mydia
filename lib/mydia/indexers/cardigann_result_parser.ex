@@ -287,7 +287,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
       Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
 
-      stats = build_stats(rows, parsed_rows, filtered_rows, drops, results, indexer_name)
+      stats = build_stats(rows, parsed_rows, filtered_rows, drops, results)
+      log_dropped(stats, indexer_name)
       {:ok, results, stats}
     end
   rescue
@@ -371,7 +372,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
       Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
 
-      stats = build_stats(rows, parsed_rows, parsed_rows, drops, results, indexer_name)
+      stats = build_stats(rows, parsed_rows, parsed_rows, drops, results)
+      log_dropped(stats, indexer_name)
       {:ok, results, stats}
     else
       true ->
@@ -453,7 +455,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
         results =
           transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
 
-        stats = build_stats(rows, parsed_rows, parsed_rows, drops, results, indexer_name)
+        stats = build_stats(rows, parsed_rows, parsed_rows, drops, results)
+        log_dropped(stats, indexer_name)
         {:ok, results, stats}
       end
     end
@@ -512,7 +515,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
       Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
 
-      stats = build_stats(rows, parsed_rows, parsed_rows, drops, results, indexer_name)
+      stats = build_stats(rows, parsed_rows, parsed_rows, drops, results)
+      log_dropped(stats, indexer_name)
       {:ok, results, stats}
     end
   rescue
@@ -745,7 +749,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   # A row is kept only when it has a title and a download/infohash. Otherwise it
   # is reported as dropped with the missing field's name (title wins when both
-  # are missing). `build_stats/6` logs one summary instead of a line per row.
+  # are missing). `log_dropped/2` logs one summary instead of a line per row.
   defp require_title_and_download(field_values) do
     has_title = Map.has_key?(field_values, "title") || Map.has_key?(field_values, :title)
 
@@ -766,21 +770,21 @@ defmodule Mydia.Indexers.CardigannResultParser do
     {rows, Enum.map(drops, fn {:dropped, reason} -> reason end)}
   end
 
-  defp build_stats(rows, parsed_rows, filtered_rows, drops, results, indexer_name) do
-    stats = %ParseStats{
+  defp build_stats(rows, parsed_rows, filtered_rows, drops, results) do
+    %ParseStats{
       matched: length(rows),
       filtered: length(parsed_rows) - length(filtered_rows),
       dropped: length(drops) + (length(filtered_rows) - length(results)),
       first_missing: List.first(drops)
     }
+  end
 
-    if stats.dropped > 0 do
-      Logger.warning(
-        "[#{indexer_name}] #{stats.matched} rows matched, #{stats.dropped} dropped (first missing: #{stats.first_missing || "unknown"})"
-      )
-    end
+  defp log_dropped(%ParseStats{dropped: dropped}, _indexer_name) when dropped == 0, do: :ok
 
-    stats
+  defp log_dropped(%ParseStats{} = stats, indexer_name) do
+    Logger.warning(
+      "[#{indexer_name}] #{stats.matched} rows matched, #{stats.dropped} dropped (first missing: #{stats.first_missing || "unknown"})"
+    )
   end
 
   # Computes a text-based field value using template rendering
