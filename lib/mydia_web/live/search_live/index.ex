@@ -265,6 +265,7 @@ defmodule MydiaWeb.SearchLive.Index do
   def handle_event("close_disambiguation_modal", _params, socket) do
     {:noreply,
      socket
+     |> cancel_async(:finalize_add_to_library)
      |> assign(:show_disambiguation_modal, false)
      |> assign(:metadata_matches, [])
      |> assign(:pending_parsed, nil)
@@ -291,6 +292,7 @@ defmodule MydiaWeb.SearchLive.Index do
   def handle_event("close_manual_search_modal", _params, socket) do
     {:noreply,
      socket
+     |> cancel_async(:finalize_manual_add)
      |> assign(:show_manual_search_modal, false)
      |> assign(:failed_release_title, nil)
      |> assign(:manual_search_query, "")
@@ -803,6 +805,10 @@ defmodule MydiaWeb.SearchLive.Index do
      |> put_flash(:error, add_to_library_error_message(reason))}
   end
 
+  # Closing the modal cancels the task; the pending state is already cleared.
+  def handle_async(:finalize_add_to_library, {:exit, {:shutdown, :cancel}}, socket),
+    do: {:noreply, socket}
+
   def handle_async(:finalize_add_to_library, {:exit, reason}, socket) do
     Logger.error("Finalize add to library task crashed: #{inspect(reason)}")
 
@@ -848,6 +854,9 @@ defmodule MydiaWeb.SearchLive.Index do
      |> clear_spinner()
      |> put_flash(:error, add_to_library_error_message(reason))}
   end
+
+  def handle_async(:finalize_manual_add, {:exit, {:shutdown, :cancel}}, socket),
+    do: {:noreply, socket}
 
   def handle_async(:finalize_manual_add, {:exit, reason}, socket) do
     Logger.error("Finalize manual add task crashed: #{inspect(reason)}")
@@ -1126,7 +1135,12 @@ defmodule MydiaWeb.SearchLive.Index do
 
     results_map = Map.new(ranked, fn result -> {result.download_url, result} end)
 
-    result_types = Map.new(ranked, &{&1.download_url, ResultType.detect(&1)})
+    cached = socket.assigns.result_types
+
+    result_types =
+      Map.new(ranked, fn r ->
+        {r.download_url, Map.get_lazy(cached, r.download_url, fn -> ResultType.detect(r) end)}
+      end)
 
     sorted =
       ranked

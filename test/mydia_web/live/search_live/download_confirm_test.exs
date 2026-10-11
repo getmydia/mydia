@@ -45,6 +45,27 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest.BlockingProvider do
   defdelegate fetch_by_ref(config, ref, opts), to: MetadataStubProvider
 end
 
+defmodule MydiaWeb.SearchLive.DownloadConfirmTest.BlockingFetchProvider do
+  @moduledoc false
+  # Two hits so the add reaches disambiguation, then the metadata fetch of the
+  # picked match holds the finalize task in flight until the test releases it.
+
+  alias Mydia.MetadataStubProvider
+  alias MydiaWeb.SearchLive.DownloadConfirmTest.TwoHitProvider
+
+  defdelegate search(config, query, opts), to: TwoHitProvider
+
+  def fetch_by_ref(config, ref, opts) do
+    send(:persistent_term.get({__MODULE__, :test_pid}), {:fetch_blocked, self()})
+
+    receive do
+      :release -> MetadataStubProvider.fetch_by_ref(config, ref, opts)
+    after
+      10_000 -> {:error, :blocked_too_long}
+    end
+  end
+end
+
 defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
   # The metadata stub registry is global.
   use MydiaWeb.ConnCase, async: false
@@ -63,6 +84,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
   alias Mydia.Repo
   alias Mydia.Settings
   alias MydiaWeb.SearchLive.ReleaseAdd
+  alias MydiaWeb.SearchLive.DownloadConfirmTest.BlockingFetchProvider
   alias MydiaWeb.SearchLive.DownloadConfirmTest.BlockingProvider
   alias MydiaWeb.SearchLive.DownloadConfirmTest.TwoHitProvider
 
@@ -238,6 +260,36 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
 
     assert Repo.aggregate(MediaItem, :count) == 1
     assert Repo.one!(MediaItem).library_path_id == movies.id
+    assert :sys.get_state(view.pid).socket.assigns.downloading_urls == MapSet.new()
+  end
+
+  test "closing the disambiguation modal cancels an in-flight finalize",
+       %{conn: conn, movies: movies} do
+    :persistent_term.put({BlockingFetchProvider, :test_pid}, self())
+    on_exit(fn -> :persistent_term.erase({BlockingFetchProvider, :test_pid}) end)
+    Registry.register(:metadata_relay, BlockingFetchProvider)
+
+    r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
+    view = page_with(conn, [r])
+
+    open_and_submit(view, r, %{
+      "media_type" => "movie",
+      "config" => %{"library_path_id" => movies.id}
+    })
+
+    render_async(view, 5_000)
+    assert has_element?(view, "#disambiguation-dialog")
+
+    [match | _] = :sys.get_state(view.pid).socket.assigns.metadata_matches
+    render_click(view, "select_metadata_match", %{"match_id" => to_string(match.provider_id)})
+    assert_receive {:fetch_blocked, task_pid}, 5_000
+
+    render_click(view, "close_disambiguation_modal", %{})
+    send(task_pid, :release)
+    html = render_async(view, 5_000)
+
+    refute html =~ "Failed to add to library"
+    assert Repo.aggregate(MediaItem, :count) == 0
     assert :sys.get_state(view.pid).socket.assigns.downloading_urls == MapSet.new()
   end
 

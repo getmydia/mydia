@@ -21,8 +21,7 @@ defmodule MydiaWeb.SearchLive.ReleaseAdd do
   def add_release_to_library(scope, title, media_type, defaults) do
     Logger.info("Adding release to library as #{media_type}: #{title}")
 
-    with {:ok, parsed} <- parse_release_title(title),
-         parsed = %{parsed | type: media_type},
+    with {:ok, parsed} <- parse_release_title(title, media_type),
          {:ok, metadata_or_matches} <- search_and_fetch_metadata(scope, parsed) do
       case metadata_or_matches do
         {:multiple_matches, matches, matched_type} ->
@@ -36,8 +35,10 @@ defmodule MydiaWeb.SearchLive.ReleaseAdd do
     end
   end
 
-  defp parse_release_title(title) do
-    parsed = FileParser.parse(title)
+  # The chosen type is applied before the unknown check, so a release the
+  # parser cannot classify still adds once the user picked Movie or TV.
+  defp parse_release_title(title, media_type) do
+    parsed = %{FileParser.parse(title) | type: media_type}
 
     Logger.debug(
       "Parsed release: type=#{parsed.type}, title=#{parsed.title}, " <>
@@ -46,7 +47,7 @@ defmodule MydiaWeb.SearchLive.ReleaseAdd do
     )
 
     cond do
-      parsed.type == :unknown ->
+      parsed.type in [:unknown, nil] or blank?(parsed.title) ->
         {:error, :parse_failed}
 
       parsed.confidence < 0.5 ->
@@ -57,6 +58,8 @@ defmodule MydiaWeb.SearchLive.ReleaseAdd do
         {:ok, parsed}
     end
   end
+
+  defp blank?(value), do: not is_binary(value) or String.trim(value) == ""
 
   @doc false
   # Public only so the restricted auto-match branches can be pinned in tests.
