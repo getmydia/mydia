@@ -1,6 +1,6 @@
 defmodule MydiaWeb.SearchLive.RestrictedWriteTest do
   @moduledoc """
-  `create_media_item_from_metadata/3` used to call `changeset.errors` on
+  `create_media_item_from_metadata/4` used to call `changeset.errors` on
   whatever `Media.create_media_item/2` returned as its error, which crashed
   with `BadMapError` the moment that error became the bare atom `:restricted`
   instead of an `Ecto.Changeset`. It runs inside a `start_async` task, so the
@@ -43,7 +43,7 @@ defmodule MydiaWeb.SearchLive.RestrictedWriteTest do
   end
 
   test "an in-bounds release still creates normally" do
-    assert {:ok, item} =
+    assert {:ok, item, :created} =
              SearchLive.create_media_item_from_metadata(
                cartoon_only_scope(),
                parsed(title: "Animated Feature", year: 2024),
@@ -54,7 +54,7 @@ defmodule MydiaWeb.SearchLive.RestrictedWriteTest do
   end
 
   test "an unrestricted scope is unaffected" do
-    assert {:ok, _item} =
+    assert {:ok, _item, :created} =
              SearchLive.create_media_item_from_metadata(
                Scope.unrestricted(),
                parsed(title: "Anything At All", year: 2024),

@@ -83,6 +83,8 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:pending_parsed, nil)
      |> assign(:pending_release_title, nil)
      |> assign(:pending_search_result, nil)
+     |> assign(:pending_media_type, nil)
+     |> assign(:pending_add_defaults, nil)
      |> assign(:should_download_after_add, false)
      |> assign(:show_manual_search_modal, false)
      |> assign(:manual_search_query, "")
@@ -223,34 +225,6 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply, assign(socket, :selected_indexer_ids, MapSet.new())}
   end
 
-  def handle_event("add_to_library", %{"title" => title} = params, socket) do
-    # Store search result if provided for later use (for download)
-    download_url = Map.get(params, "download_url")
-    should_download = Map.get(params, "download", "false") == "true"
-
-    # Find the full search result from our map
-    search_result =
-      if download_url do
-        Map.get(socket.assigns.search_results_map, download_url)
-      end
-
-    if search_result do
-      Logger.info(
-        "Retrieved search_result from map, download_protocol: #{inspect(search_result.download_protocol)}"
-      )
-    end
-
-    # Start async task to add media to library
-    scope = socket.assigns.current_scope
-
-    {:noreply,
-     socket
-     |> assign(:pending_release_title, title)
-     |> assign(:pending_search_result, search_result)
-     |> assign(:should_download_after_add, should_download)
-     |> start_async(:add_to_library, fn -> add_release_to_library(scope, title) end)}
-  end
-
   def handle_event("select_metadata_match", %{"match_id" => match_id}, socket) do
     # Find the selected match
     selected_match =
@@ -260,6 +234,7 @@ defmodule MydiaWeb.SearchLive.Index do
       # Fetch full metadata and create media item
       media_type = socket.assigns.metadata_media_type
       parsed = socket.assigns.pending_parsed
+      defaults = socket.assigns.pending_add_defaults
       scope = socket.assigns.current_scope
 
       {:noreply,
@@ -271,7 +246,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
          case fetch_full_metadata(config, selected_match, media_type) do
            {:ok, metadata} ->
-             create_media_item_from_metadata(scope, parsed, metadata)
+             create_media_item_from_metadata(scope, parsed, metadata, defaults: defaults)
 
            error ->
              error
@@ -287,7 +262,8 @@ defmodule MydiaWeb.SearchLive.Index do
      socket
      |> assign(:show_disambiguation_modal, false)
      |> assign(:metadata_matches, [])
-     |> assign(:pending_parsed, nil)}
+     |> assign(:pending_parsed, nil)
+     |> finish_pending()}
   end
 
   def handle_event("manual_search_submit", %{"search_query" => query}, socket) do
@@ -310,7 +286,8 @@ defmodule MydiaWeb.SearchLive.Index do
      socket
      |> assign(:show_manual_search_modal, false)
      |> assign(:failed_release_title, nil)
-     |> assign(:manual_search_query, "")}
+     |> assign(:manual_search_query, "")
+     |> finish_pending()}
   end
 
   def handle_event(
@@ -324,6 +301,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
     if selected_match do
       media_type_atom = String.to_existing_atom(media_type)
+      defaults = socket.assigns.pending_add_defaults
       scope = socket.assigns.current_scope
 
       {:noreply,
@@ -337,12 +315,15 @@ defmodule MydiaWeb.SearchLive.Index do
            {:ok, metadata} ->
              # Create media item without parsed data (since parsing failed)
              # Episodes are automatically fetched for TV shows via create_media_item
-             attrs =
-               Mydia.Media.AttrsFromMetadata.from_metadata(metadata, media_type_atom,
-                 user: scope.user
-               )
+             attr_opts = [user: scope.user] ++ if(defaults, do: [defaults: defaults], else: [])
 
-             Media.create_media_item(scope, attrs)
+             attrs =
+               Mydia.Media.AttrsFromMetadata.from_metadata(metadata, media_type_atom, attr_opts)
+
+             case Media.create_media_item(scope, attrs) do
+               {:ok, item} -> {:ok, item, :created}
+               other -> other
+             end
 
            error ->
              error
@@ -356,19 +337,25 @@ defmodule MydiaWeb.SearchLive.Index do
   def handle_event("retry_add_to_library", _params, socket) do
     # Retry adding to library with the same parameters
     release_title = socket.assigns.pending_release_title
+    media_type = socket.assigns.pending_media_type
+    defaults = socket.assigns.pending_add_defaults
 
-    if release_title do
+    if release_title && media_type do
       Logger.info("Retrying add to library for: #{release_title}")
       scope = socket.assigns.current_scope
 
       {:noreply,
        socket
        |> assign(:show_retry_modal, false)
-       |> start_async(:add_to_library, fn -> add_release_to_library(scope, release_title) end)}
+       |> mark_downloading()
+       |> start_async(:add_to_library, fn ->
+         add_release_to_library(scope, release_title, media_type, defaults)
+       end)}
     else
       {:noreply,
        socket
        |> assign(:show_retry_modal, false)
+       |> finish_pending()
        |> put_flash(:error, "Cannot retry: missing release information")}
     end
   end
@@ -377,7 +364,8 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> assign(:show_retry_modal, false)
-     |> assign(:retry_error_message, nil)}
+     |> assign(:retry_error_message, nil)
+     |> finish_pending()}
   end
 
   # Always opens, even when the type is known: the destination library is a
@@ -420,8 +408,45 @@ defmodule MydiaWeb.SearchLive.Index do
     end
   end
 
-  def handle_event("confirm_download", _params, socket) do
-    {:noreply, close_download_modal(socket)}
+  # The modal closes before the async add starts, so a follow-up modal
+  # ("Multiple matches", manual search, retry) is never stacked under it
+  # (#1104). The row spinner carries the in-flight state.
+  def handle_event("confirm_download", params, socket) do
+    user = socket.assigns.current_user
+
+    with :ok <- MydiaWeb.Live.Authorization.authorize_create_media(socket),
+         %{result: %SearchResult{} = result} <- socket.assigns.download_config,
+         {:ok, media_type} <- parse_media_type(params["media_type"]),
+         {:ok, defaults} <-
+           MediaAddHelpers.resolve_add_defaults(params["config"] || %{}, media_type, user) do
+      defaults = %{defaults | search_on_add: false}
+      scope = socket.assigns.current_scope
+
+      {:noreply,
+       socket
+       |> close_download_modal()
+       |> assign(:pending_release_title, result.title)
+       |> assign(:pending_search_result, result)
+       |> assign(:pending_media_type, media_type)
+       |> assign(:pending_add_defaults, defaults)
+       |> assign(:should_download_after_add, true)
+       |> mark_downloading()
+       |> start_async(:add_to_library, fn ->
+         add_release_to_library(scope, result.title, media_type, defaults)
+       end)}
+    else
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      {:error, :unknown_library} ->
+        {:noreply,
+         socket
+         |> close_download_modal()
+         |> put_flash(:error, MediaAddHelpers.unknown_library_message())}
+
+      _ ->
+        {:noreply, socket}
+    end
   end
 
   def handle_event("show_detail", %{"download_url" => download_url}, socket) do
@@ -463,11 +488,11 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply, socket}
   end
 
-  def handle_info({:trigger_download, search_result, media_item_id, title}, socket) do
+  def handle_info({:trigger_download, search_result, title, opts}, socket) do
     # This will be called after adding to library if download was requested
     Logger.info("Initiating download for: #{title}")
 
-    case Downloads.initiate_download(search_result, media_item_id: media_item_id) do
+    case Downloads.initiate_download(search_result, opts) do
       {:ok, download} ->
         Logger.info("Download initiated successfully: #{download.title}")
 
@@ -677,37 +702,15 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:pending_parsed, parsed)}
   end
 
-  def handle_async(:add_to_library, {:ok, {:ok, media_item}}, socket) do
+  def handle_async(:add_to_library, {:ok, {:ok, media_item, status}}, socket) do
     Logger.info("Successfully added #{media_item.title} to library")
 
-    socket =
-      socket
-      |> close_download_modal()
-      |> then(fn socket ->
-        if socket.assigns.should_download_after_add && socket.assigns.pending_search_result do
-          Logger.info("Triggering download for #{media_item.title}")
-          # Trigger download - this will be handled by the download handler
-          send(
-            self(),
-            {:trigger_download, socket.assigns.pending_search_result, media_item.id,
-             media_item.title}
-          )
-
-          socket
-        else
-          put_flash(socket, :info, "#{media_item.title} added to library")
-        end
-      end)
-
     # Stay on search page so user can download more items
-    {:noreply, socket}
+    {:noreply, complete_add(socket, media_item, status)}
   end
 
   def handle_async(:add_to_library, {:ok, {:error, reason}}, socket) do
     Logger.error("Failed to add to library: #{inspect(reason)}")
-
-    # Close download modal first
-    socket = close_download_modal(socket)
 
     case reason do
       :parse_failed ->
@@ -716,7 +719,9 @@ defmodule MydiaWeb.SearchLive.Index do
 
         {:noreply,
          socket
+         |> clear_spinner()
          |> assign(:show_manual_search_modal, true)
+         |> assign(:manual_search_media_type, socket.assigns.pending_media_type || :movie)
          |> assign(:failed_release_title, release_title)
          |> assign(:manual_search_query, extract_search_hint(release_title))}
 
@@ -726,7 +731,9 @@ defmodule MydiaWeb.SearchLive.Index do
 
         {:noreply,
          socket
+         |> clear_spinner()
          |> assign(:show_manual_search_modal, true)
+         |> assign(:manual_search_media_type, socket.assigns.pending_media_type || :movie)
          |> assign(:failed_release_title, release_title)
          |> assign(:manual_search_query, extract_search_hint(release_title))
          |> put_flash(:error, "Could not find matching media automatically")}
@@ -735,11 +742,15 @@ defmodule MydiaWeb.SearchLive.Index do
         # Show retry modal for metadata errors
         {:noreply,
          socket
+         |> clear_spinner()
          |> assign(:show_retry_modal, true)
          |> assign(:retry_error_message, "Metadata provider error: #{msg}")}
 
       _ ->
-        {:noreply, put_flash(socket, :error, add_to_library_error_message(reason))}
+        {:noreply,
+         socket
+         |> finish_pending()
+         |> put_flash(:error, add_to_library_error_message(reason))}
     end
   end
 
@@ -748,36 +759,18 @@ defmodule MydiaWeb.SearchLive.Index do
 
     {:noreply,
      socket
-     |> close_download_modal()
+     |> finish_pending()
      |> put_flash(:error, "Failed to add to library unexpectedly")}
   end
 
-  def handle_async(:finalize_add_to_library, {:ok, {:ok, media_item}}, socket) do
+  def handle_async(:finalize_add_to_library, {:ok, {:ok, media_item, status}}, socket) do
     Logger.info("Successfully added #{media_item.title} to library after disambiguation")
 
-    socket =
-      socket
-      |> assign(:show_disambiguation_modal, false)
-      |> assign(:selecting_match_id, nil)
-      |> close_download_modal()
-      |> then(fn socket ->
-        if socket.assigns.should_download_after_add && socket.assigns.pending_search_result do
-          Logger.info("Triggering download for #{media_item.title}")
-
-          send(
-            self(),
-            {:trigger_download, socket.assigns.pending_search_result, media_item.id,
-             media_item.title}
-          )
-
-          socket
-        else
-          put_flash(socket, :info, "#{media_item.title} added to library")
-        end
-      end)
-
-    # Stay on search page so user can download more items
-    {:noreply, socket}
+    {:noreply,
+     socket
+     |> assign(:show_disambiguation_modal, false)
+     |> assign(:selecting_match_id, nil)
+     |> complete_add(media_item, status)}
   end
 
   def handle_async(:finalize_add_to_library, {:ok, {:error, reason}}, socket) do
@@ -812,7 +805,8 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply, put_flash(socket, :error, "Search failed: #{inspect(reason)}")}
   end
 
-  def handle_async(:finalize_manual_add, {:ok, {:ok, media_item}}, socket) do
+  # The manual path used to add the item and never grab the release.
+  def handle_async(:finalize_manual_add, {:ok, {:ok, media_item, status}}, socket) do
     Logger.info("Successfully added #{media_item.title} to library via manual search")
 
     # Stay on search page so user can download more items
@@ -820,8 +814,7 @@ defmodule MydiaWeb.SearchLive.Index do
      socket
      |> assign(:show_manual_search_modal, false)
      |> assign(:selecting_match_id, nil)
-     |> close_download_modal()
-     |> put_flash(:info, "#{media_item.title} added to library")}
+     |> complete_add(media_item, status)}
   end
 
   def handle_async(:finalize_manual_add, {:ok, {:error, reason}}, socket) do
@@ -856,6 +849,65 @@ defmodule MydiaWeb.SearchLive.Index do
   end
 
   defp close_download_modal(socket), do: assign(socket, :download_config, nil)
+
+  @doc false
+  # Public for tests. A newly created item downloads into the library the
+  # user chose; an item already in the library keeps its own.
+  def download_opts(media_item_id, :created, %AddDefaults{library_path_id: lib})
+      when is_binary(lib),
+      do: [media_item_id: media_item_id, library_path_id: lib]
+
+  def download_opts(media_item_id, _status, _defaults), do: [media_item_id: media_item_id]
+
+  # Shared by every successful add: clear the row spinner and the pending
+  # state, then hand off to the download when one was requested.
+  defp complete_add(socket, media_item, status) do
+    pending = socket.assigns.pending_search_result
+    download? = socket.assigns.should_download_after_add && pending
+
+    if download? do
+      send(
+        self(),
+        {:trigger_download, pending, media_item.title,
+         download_opts(media_item.id, status, socket.assigns.pending_add_defaults)}
+      )
+    end
+
+    socket = finish_pending(socket)
+
+    if download?,
+      do: socket,
+      else: put_flash(socket, :info, "#{media_item.title} added to library")
+  end
+
+  defp finish_pending(socket) do
+    socket
+    |> clear_spinner()
+    |> assign(:pending_search_result, nil)
+    |> assign(:pending_media_type, nil)
+    |> assign(:pending_add_defaults, nil)
+    |> assign(:should_download_after_add, false)
+  end
+
+  defp mark_downloading(socket), do: set_spinner(socket, &MapSet.put/2)
+  defp clear_spinner(socket), do: set_spinner(socket, &MapSet.delete/2)
+
+  # The row spinner follows `downloading_urls`; re-inserting the pending
+  # result makes the stream re-render its row.
+  defp set_spinner(socket, update) do
+    case socket.assigns.pending_search_result do
+      %SearchResult{} = result ->
+        socket
+        |> assign(
+          :downloading_urls,
+          update.(socket.assigns.downloading_urls, result.download_url)
+        )
+        |> stream_insert(:search_results, result)
+
+      _ ->
+        socket
+    end
+  end
 
   @media_types [:movie, :tv_show]
 
@@ -1260,22 +1312,24 @@ defmodule MydiaWeb.SearchLive.Index do
 
   ## Add to Library Functions
 
-  defp add_release_to_library(scope, title) do
-    Logger.info("Adding release to library: #{title}")
+  # `media_type` is the user's choice in the download modal and overrides the
+  # parser's guess, which is what the metadata search and the created item's
+  # type both follow. Before #1104 the choice was collected and dropped.
+  defp add_release_to_library(scope, title, media_type, defaults) do
+    Logger.info("Adding release to library as #{media_type}: #{title}")
 
     with {:ok, parsed} <- parse_release_title(title),
+         parsed = %{parsed | type: media_type},
          {:ok, metadata_or_matches} <- search_and_fetch_metadata(scope, parsed) do
       case metadata_or_matches do
-        {:multiple_matches, matches, media_type} ->
+        {:multiple_matches, matches, matched_type} ->
           # Return the matches to trigger disambiguation in the UI
-          {:ok, {:needs_disambiguation, parsed, matches, media_type}}
+          {:ok, {:needs_disambiguation, parsed, matches, matched_type}}
 
         metadata ->
           # Single match, create media item directly
-          create_media_item_from_metadata(scope, parsed, metadata)
+          create_media_item_from_metadata(scope, parsed, metadata, defaults: defaults)
       end
-    else
-      {:error, _reason} = error -> error
     end
   end
 
@@ -1372,8 +1426,12 @@ defmodule MydiaWeb.SearchLive.Index do
   Public, like `MediaLive.Show.FranchiseEvents.perform_add/5`, so it can be
   exercised directly in tests without driving a real metadata fetch through
   `start_async/3`.
+
+  `opts` takes `defaults: %AddDefaults{}`, the settings chosen in the download
+  modal; without it the user's own defaults apply. Returns whether the item was
+  `:created` or was `:existing` in the library already.
   """
-  def create_media_item_from_metadata(scope, parsed, metadata) do
+  def create_media_item_from_metadata(scope, parsed, metadata, opts \\ []) do
     # Check if media already exists by provider ID, scoped by type: TMDB numbers
     # movies and series independently, so a movie's tmdb_id is not this show's.
     # For TV shows from TVDB, check tvdb_id; otherwise check tmdb_id.
@@ -1392,12 +1450,17 @@ defmodule MydiaWeb.SearchLive.Index do
     case existing do
       nil ->
         # Create new media item
-        attrs = Mydia.Media.AttrsFromMetadata.from_parsed(parsed, metadata, user: scope.user)
+        # `from_parsed` reads :defaults with Keyword.get_lazy, so a nil value
+        # would be used as-is; leave the key out instead.
+        attr_opts =
+          [user: scope.user] ++ if(opts[:defaults], do: [defaults: opts[:defaults]], else: [])
+
+        attrs = Mydia.Media.AttrsFromMetadata.from_parsed(parsed, metadata, attr_opts)
 
         # Episodes are automatically fetched for TV shows via create_media_item
         case Media.create_media_item(scope, attrs) do
           {:ok, media_item} ->
-            {:ok, media_item}
+            {:ok, media_item, :created}
 
           {:error, :restricted} ->
             {:error, :restricted}
@@ -1409,7 +1472,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
       existing_item ->
         Logger.info("Media already exists in library: #{existing_item.title}")
-        {:ok, existing_item}
+        {:ok, existing_item, :existing}
     end
   end
 
