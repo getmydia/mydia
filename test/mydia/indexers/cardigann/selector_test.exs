@@ -1,0 +1,119 @@
+defmodule Mydia.Indexers.Cardigann.SelectorTest do
+  use ExUnit.Case, async: true
+
+  alias Mydia.Indexers.Cardigann.Selector
+
+  defp count(html, selector) do
+    doc = Selector.parse(html, [selector])
+    doc |> Selector.find(:root, selector) |> length()
+  end
+
+  describe "HTML5 tree construction" do
+    test "a table without tbody matches a tbody selector" do
+      html = "<table id=t><tr><td>a</td></tr><tr><td>b</td></tr></table>"
+      assert count(html, "table#t > tbody > tr") == 2
+    end
+  end
+
+  describe "standard CSS lexbor evaluates natively" do
+    test "nested :has" do
+      html =
+        ~s(<table><tr><td><a href="magnet:?xt=1">m</a></td></tr><tr><td>none</td></tr></table>)
+
+      assert count(html, ~S|tr:has(td:has(a[href^="magnet:?xt="]))|) == 1
+    end
+
+    test ":not(:has())" do
+      html = ~s(<div class=c><p>x</p></div><div class=c><span class=e>y</span></div>)
+      assert count(html, "div.c:not(:has(span.e))") == 1
+    end
+
+    test "nth-child inside :has" do
+      html =
+        ~s(<a class=r><div><span>1</span><span>2</span></div></a><a class=r><div><span>1</span></div></a>)
+
+      assert count(html, "a.r:has(div span:nth-child(2))") == 1
+    end
+
+    test "general sibling combinator inside :has" do
+      html = ~s(<div id=c><div class=p></div><div class=e><a class=d>x</a></div></div>)
+      assert count(html, "div#c > div.p:has(~ div.e a.d)") == 1
+    end
+  end
+
+  describe ":contains" do
+    test "top level" do
+      html = "<ul><li>alpha one</li><li>beta two</li></ul>"
+      assert count(html, ~S|li:contains("beta")|) == 1
+    end
+
+    test "inside :not, as 0magnet uses it" do
+      html =
+        "<table><tbody><tr><td>row</td></tr><tr><td>We couldn't find anything for x</td></tr></tbody></table>"
+
+      assert count(
+               html,
+               ~S|table > tbody > tr:has(td):not(:contains("We couldn't find anything for"))|
+             ) == 1
+    end
+
+    test "inside :not(:has()), as pctorrent uses it" do
+      html =
+        ~s(<div class=d><div class=r>Soon!</div></div><div class=d><div class=r>Ready</div></div>)
+
+      assert count(html, ~S|div.d:has(div.r):not(:has(div.r:contains("Soon!")))|) == 1
+    end
+
+    test "single quotes and unquoted" do
+      html = "<p>one</p><p>two</p>"
+      assert count(html, "p:contains('two')") == 1
+      assert count(html, "p:contains(two)") == 1
+    end
+
+    test "in a selector list" do
+      html = "<p>one</p><p>two</p><i>three</i>"
+      assert count(html, ~S|p:contains("one"), i|) == 2
+    end
+
+    test "an undeclared needle raises" do
+      doc = Selector.parse("<p>x</p>", [])
+
+      assert_raise ArgumentError, ~r/not declared/, fn ->
+        Selector.find(doc, :root, ~S|p:contains("x")|)
+      end
+    end
+  end
+
+  describe "scoped find, text, attribute" do
+    test "find inside a row" do
+      html =
+        ~s(<table><tr><td class=t> Copper Lantern </td><td><a href="/d/1">d</a></td></tr></table>)
+
+      doc = Selector.parse(html, ["tr", "td.t", "a"])
+      [row] = Selector.find(doc, :root, "tr")
+      assert doc |> Selector.find(row, "td.t") |> Selector.text() == " Copper Lantern "
+      assert doc |> Selector.find(row, "a") |> Selector.attribute("href") == "/d/1"
+    end
+
+    test "nil selector is the scope itself" do
+      doc = Selector.parse("<p>x</p>", ["p"])
+      [p] = Selector.find(doc, :root, "p")
+      assert Selector.find(doc, p, nil) == [p]
+    end
+
+    test "invalid CSS raises naming the selector" do
+      doc = Selector.parse("<p>x</p>", [])
+      assert_raise ArgumentError, ~r/p\[\[/, fn -> Selector.find(doc, :root, "p[[") end
+    end
+  end
+
+  describe "without/3" do
+    test "removes matching descendants before reading text" do
+      html = ~s(<table><tr><td class=t>Paper Harbor<span class=x> [junk]</span></td></tr></table>)
+      doc = Selector.parse(html, ["td.t", "span.x"])
+      [cell] = Selector.find(doc, :root, "td.t")
+      stripped = Selector.without(doc, cell, ["span.x"])
+      assert Selector.text([stripped]) == "Paper Harbor"
+    end
+  end
+end
