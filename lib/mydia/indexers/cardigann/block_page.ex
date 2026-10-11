@@ -19,7 +19,7 @@ defmodule Mydia.Indexers.Cardigann.BlockPage do
   @markers [
     ~r/website is blocked/i,
     ~r/site (has been|is) blocked/i,
-    ~r/for sale/i,
+    ~r/(domain|website|site) (is )?for sale/i,
     ~r/domain (is )?parked/i,
     ~r/buy this domain/i
   ]

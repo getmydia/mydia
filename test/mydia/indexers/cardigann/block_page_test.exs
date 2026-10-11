@@ -18,6 +18,12 @@ defmodule Mydia.Indexers.Cardigann.BlockPageTest do
            )
   end
 
+  test "a tracker title that merely contains the words for sale is not" do
+    refute BlockPage.fingerprint(
+             "<html><head><title>Copper Lantern guitars for sale - Latest Torrents</title></head></html>"
+           )
+  end
+
   test "an ordinary results page is not" do
     refute BlockPage.fingerprint("<html><head><title>Latest Torrents</title></head></html>")
   end

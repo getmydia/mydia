@@ -227,6 +227,30 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert chosen == live_url
     end
 
+    test "records a blocked page and moves on to the next mirror", %{
+      live_url: live_url,
+      live: live
+    } do
+      blocked = Bypass.open()
+      blocked_url = "http://localhost:#{blocked.port}"
+
+      Bypass.expect(blocked, "GET", "/", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><head><title>This website is blocked</title></head></html>"
+        )
+      end)
+
+      Bypass.expect(live, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "ok") end)
+      parsed = %Parsed{links: [blocked_url, live_url], legacylinks: []}
+
+      assert {:ok, chosen, status} = CardigannHealthCheck.probe_candidates(parsed, %{})
+      assert chosen == live_url
+      assert status[blocked_url]["ok"] == false
+      assert status[blocked_url]["error"] =~ "Blocked page:"
+    end
+
     test "returns an error when every candidate fails", %{dead_url: dead_url} do
       parsed = %Parsed{links: [dead_url], legacylinks: []}
 
