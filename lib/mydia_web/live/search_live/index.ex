@@ -10,6 +10,7 @@ defmodule MydiaWeb.SearchLive.Index do
   alias Mydia.Media
   alias Mydia.Downloads
   alias Mydia.Settings
+  alias MydiaWeb.SearchLive.ResultType
 
   import MydiaWeb.IndexerComponents
 
@@ -91,6 +92,7 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:retry_error_message, nil)
      |> assign(:search_results_map, %{})
      |> assign(:raw_search_results_map, %{})
+     |> assign(:result_types, %{})
      |> assign(:show_detail_modal, false)
      |> assign(:selected_result, nil)
      |> assign(:show_download_modal, false)
@@ -966,6 +968,7 @@ defmodule MydiaWeb.SearchLive.Index do
     |> assign(:indexer_errors, [])
     |> assign(:search_results_map, %{})
     |> assign(:raw_search_results_map, %{})
+    |> assign(:result_types, %{})
     # TRUE, not false: the display set is genuinely empty until the first
     # indexer reports. The loading gate is `@searching && @results_empty?`
     # and the results gate is `!@results_empty?`, so starting at false
@@ -1087,15 +1090,18 @@ defmodule MydiaWeb.SearchLive.Index do
 
     results_map = Map.new(ranked, fn result -> {result.download_url, result} end)
 
+    result_types = Map.new(ranked, &{&1.download_url, ResultType.detect(&1)})
+
     sorted =
       ranked
-      |> filter_results(socket.assigns)
+      |> filter_results(socket.assigns, result_types)
       |> sort_results(socket.assigns.sort_by)
 
     socket
     |> assign(:indexer_progress, indexer_progress)
     |> assign(:raw_search_results_map, raw_results)
     |> assign(:search_results_map, results_map)
+    |> assign(:result_types, result_types)
     |> assign(:results_empty?, sorted == [])
     |> stream(:search_results, sorted, reset: true)
   end
@@ -1109,11 +1115,13 @@ defmodule MydiaWeb.SearchLive.Index do
     |> stream(:search_results, sorted_results, reset: true)
   end
 
-  defp filter_results(results, assigns) do
+  defp filter_results(results, assigns, result_types \\ nil) do
+    result_types = result_types || assigns.result_types
+
     results
     |> filter_by_seeders(assigns.min_seeders)
     |> filter_by_quality(assigns.quality_filter)
-    |> filter_by_library_type(assigns.library_type_filter)
+    |> filter_by_library_type(assigns.library_type_filter, result_types)
     |> filter_by_size(assigns.min_size_gb, assigns.max_size_gb)
   end
 
@@ -1140,18 +1148,15 @@ defmodule MydiaWeb.SearchLive.Index do
     end)
   end
 
-  defp filter_by_library_type(results, :all), do: results
+  defp filter_by_library_type(results, :all, _result_types), do: results
 
-  defp filter_by_library_type(results, library_type) do
-    # Get the categories for this library type
-    category_ids = CategoryMapping.categories_for_type(library_type)
-
+  # Classified by ResultType, so a release with no indexer category is kept
+  # when its title parses as the requested type (#1104). Only releases that
+  # cannot be classified at all drop out of a type filter.
+  defp filter_by_library_type(results, library_type, result_types) do
     Enum.filter(results, fn result ->
-      case result.category do
-        nil -> false
-        category_id when is_integer(category_id) -> category_id in category_ids
-        _ -> false
-      end
+      {kind, _source} = result_type(result_types, result)
+      kind == library_type
     end)
   end
 
@@ -1487,7 +1492,11 @@ defmodule MydiaWeb.SearchLive.Index do
   defp library_type_label(:movies), do: "Movies"
   defp library_type_label(:series), do: "TV Series"
   defp library_type_label(:other), do: "Other"
-  defp library_type_label(:unknown), do: "Select"
+  defp library_type_label(:unknown), do: "Unknown"
+
+  defp type_source_hint(:title), do: "Guessed from release title"
+  defp type_source_hint(:category), do: "From indexer category"
+  defp type_source_hint(:none), do: "Type could not be detected"
 
   # Helper to get library type icon
   defp library_type_icon(:movies), do: "hero-film"
@@ -1495,23 +1504,11 @@ defmodule MydiaWeb.SearchLive.Index do
   defp library_type_icon(:unknown), do: "hero-question-mark-circle"
   defp library_type_icon(_), do: "hero-question-mark-circle"
 
-  # Helper to get the detected library type for a search result
-  # Returns {:ok, type} if detected, :unknown if category is nil/missing
-  defp detected_library_type(%SearchResult{category: nil}), do: :unknown
-
-  defp detected_library_type(%SearchResult{category: category}) when is_integer(category) do
-    CategoryMapping.type_for_category(category)
+  # Reads the per-search cache, classifying on a miss so a result that reached
+  # a modal by another path still gets a type.
+  defp result_type(result_types, %SearchResult{} = result) do
+    Map.get_lazy(result_types, result.download_url, fn -> ResultType.detect(result) end)
   end
-
-  defp detected_library_type(%SearchResult{category: category}) when is_binary(category) do
-    # Try to parse string category to integer
-    case Integer.parse(category) do
-      {id, _} -> CategoryMapping.type_for_category(id)
-      :error -> :unknown
-    end
-  end
-
-  defp detected_library_type(_), do: :unknown
 
   # Badge color for library type
   defp library_type_badge_class(:movies), do: "badge-primary"

@@ -271,13 +271,17 @@
                     </div>
                     <%!-- Mobile-only compact info --%>
                     <div class="flex gap-2 mt-1 md:hidden flex-wrap">
-                      <% mobile_lib_type = detected_library_type(result) %>
-                      <span class={[
-                        "badge badge-xs gap-0.5",
-                        library_type_badge_class(mobile_lib_type)
-                      ]}>
+                      <% {mobile_lib_type, mobile_source} = result_type(@result_types, result) %>
+                      <span
+                        class={[
+                          "badge badge-xs gap-0.5",
+                          library_type_badge_class(mobile_lib_type)
+                        ]}
+                        data-type-source={mobile_source}
+                        title={type_source_hint(mobile_source)}
+                      >
                         <.icon name={library_type_icon(mobile_lib_type)} class="w-3 h-3" />
-                        {library_type_label(mobile_lib_type)}
+                        {library_type_label(mobile_lib_type)}<span :if={mobile_source == :title}>?</span>
                       </span>
                       <%= if result.download_protocol == :nzb do %>
                         <span class="badge badge-info badge-xs">Usenet</span>
@@ -332,9 +336,13 @@
                 <td class="hidden lg:table-cell">
                   <div class="flex flex-col gap-1">
                     <div class="flex flex-wrap gap-1">
-                      <% lib_type = detected_library_type(result) %>
-                      <span class={["badge badge-sm", library_type_badge_class(lib_type)]}>
-                        {library_type_label(lib_type)}
+                      <% {lib_type, lib_source} = result_type(@result_types, result) %>
+                      <span
+                        class={["badge badge-sm", library_type_badge_class(lib_type)]}
+                        data-type-source={lib_source}
+                        title={type_source_hint(lib_source)}
+                      >
+                        {library_type_label(lib_type)}<span :if={lib_source == :title}>?</span>
                       </span>
                       <% info_page_url = SearchResult.info_page_url(result) %>
                       <%= if info_page_url do %>
@@ -459,8 +467,8 @@
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div class="stat bg-base-200 rounded-lg p-4">
               <div class="stat-title text-xs">Quality</div>
-              <div class="stat-value text-lg">
-                <span class="badge badge-primary">
+              <div class="stat-value text-base whitespace-normal">
+                <span class="badge badge-primary h-auto min-h-5 whitespace-normal break-all text-left leading-snug py-0.5">
                   {get_quality_badge(@selected_result)}
                 </span>
               </div>
@@ -535,14 +543,17 @@
           <%!-- Additional Info --%>
           <div class="space-y-3 mb-6">
             <%!-- Library type indicator - prominent placement --%>
-            <% detail_lib_type = detected_library_type(@selected_result) %>
+            <% {detail_lib_type, detail_source} = result_type(@result_types, @selected_result) %>
             <div class="flex items-center gap-2 text-sm">
               <.icon
                 name={library_type_icon(detail_lib_type)}
                 class="w-5 h-5 text-base-content/50"
               />
               <span class="text-base-content/70">Downloads to:</span>
-              <span class={["badge gap-1", library_type_badge_class(detail_lib_type)]}>
+              <span
+                class={["badge gap-1", library_type_badge_class(detail_lib_type)]}
+                title={type_source_hint(detail_source)}
+              >
                 <.icon name={library_type_icon(detail_lib_type)} class="w-4 h-4" />
                 {library_type_label(detail_lib_type)}
               </span>
