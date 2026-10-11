@@ -17,6 +17,9 @@ defmodule Mydia.Indexers.Adapter.Error do
     * `:api_error` - Generic API error from the indexer
     * `:network_error` - Network-related error
     * `:not_found` - Resource not found
+    * `:captcha_required` - The indexer needs a captcha answered before it will log in
+    * `:engine_error` - The Cardigann engine failed in a way no other type describes
+    * `:engine_unavailable` - The Cardigann engine is not loaded (artifact missing or still compiling)
     * `:unknown` - Unknown or unexpected error
 
   ## Examples
@@ -42,6 +45,9 @@ defmodule Mydia.Indexers.Adapter.Error do
           | :api_error
           | :network_error
           | :not_found
+          | :captcha_required
+          | :engine_error
+          | :engine_unavailable
           | :unknown
 
   @type t :: %__MODULE__{
@@ -200,6 +206,45 @@ defmodule Mydia.Indexers.Adapter.Error do
   @spec not_found(String.t(), map() | nil) :: t()
   def not_found(message, details \\ nil) do
     new(:not_found, message, details)
+  end
+
+  @doc """
+  Creates a captcha required error.
+
+  ## Examples
+
+      iex> Error.captcha_required("Solve the captcha to log in")
+      %Error{type: :captcha_required, message: "Solve the captcha to log in", details: nil}
+  """
+  @spec captcha_required(String.t(), map() | nil) :: t()
+  def captcha_required(message, details \\ nil) do
+    new(:captcha_required, message, details)
+  end
+
+  @doc """
+  Creates an engine error.
+
+  ## Examples
+
+      iex> Error.engine_error("Unexpected engine failure")
+      %Error{type: :engine_error, message: "Unexpected engine failure", details: nil}
+  """
+  @spec engine_error(String.t(), map() | nil) :: t()
+  def engine_error(message, details \\ nil) do
+    new(:engine_error, message, details)
+  end
+
+  @doc """
+  Creates an engine unavailable error.
+
+  ## Examples
+
+      iex> Error.engine_unavailable("Cardigann engine is not loaded")
+      %Error{type: :engine_unavailable, message: "Cardigann engine is not loaded", details: nil}
+  """
+  @spec engine_unavailable(String.t(), map() | nil) :: t()
+  def engine_unavailable(message, details \\ nil) do
+    new(:engine_unavailable, message, details)
   end
 
   @doc """
