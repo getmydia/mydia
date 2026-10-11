@@ -7,6 +7,7 @@ defmodule Mydia.Indexers.CardigannLibrary do
   and disabled, but never enabled outside it.
   """
 
+  alias Mydia.Indexers.CardigannAuth
   alias Mydia.Indexers.CardigannDefinition
   alias Mydia.Repo
 
@@ -24,7 +25,35 @@ defmodule Mydia.Indexers.CardigannLibrary do
   case it is added again.
   """
   @spec remove(CardigannDefinition.t()) :: result()
-  def remove(%CardigannDefinition{} = definition), do: set_membership(definition, false)
+  def remove(%CardigannDefinition{} = definition) do
+    with {:ok, removed} <- set_membership(definition, false) do
+      CardigannAuth.invalidate_session(removed.id)
+      {:ok, removed}
+    end
+  end
+
+  @doc """
+  Saves a definition's user config (credentials, settings).
+
+  New credentials make the stored login session stale (a pasted cookie IS the
+  credential), so a changed config deletes it. A definition parked as
+  needs_login goes back to unknown, which gives the new credentials a fresh try.
+  """
+  @spec configure(CardigannDefinition.t(), map()) :: result()
+  def configure(%CardigannDefinition{} = definition, config) do
+    changeset = CardigannDefinition.config_changeset(definition, %{config: config})
+    config_changed? = Map.has_key?(changeset.changes, :config)
+
+    changeset =
+      if config_changed? and definition.health_status == "needs_login",
+        do: Ecto.Changeset.put_change(changeset, :health_status, "unknown"),
+        else: changeset
+
+    with {:ok, saved} <- Repo.update(changeset) do
+      if config_changed?, do: CardigannAuth.invalidate_session(saved.id)
+      {:ok, saved}
+    end
+  end
 
   @doc """
   Enables a definition that is in the library.

@@ -1070,17 +1070,9 @@ defmodule Mydia.Indexers do
 
   defdelegate add_cardigann_definition(definition), to: Mydia.Indexers.CardigannLibrary, as: :add
 
-  @doc """
-  Takes a definition out of the library and drops its stored login session.
-  """
-  @spec remove_cardigann_definition(CardigannDefinition.t()) ::
-          {:ok, CardigannDefinition.t()} | {:error, Ecto.Changeset.t()}
-  def remove_cardigann_definition(%CardigannDefinition{} = definition) do
-    with {:ok, removed} <- Mydia.Indexers.CardigannLibrary.remove(definition) do
-      CardigannAuth.invalidate_session(removed.id)
-      {:ok, removed}
-    end
-  end
+  defdelegate remove_cardigann_definition(definition),
+    to: Mydia.Indexers.CardigannLibrary,
+    as: :remove
 
   defdelegate enable_cardigann_definition(definition),
     to: Mydia.Indexers.CardigannLibrary,
@@ -1100,22 +1092,9 @@ defmodule Mydia.Indexers do
   """
   @spec configure_cardigann_definition(CardigannDefinition.t(), map()) ::
           {:ok, CardigannDefinition.t()} | {:error, Ecto.Changeset.t()}
-  def configure_cardigann_definition(%CardigannDefinition{} = definition, config) do
-    changeset = CardigannDefinition.config_changeset(definition, %{config: config})
-    config_changed? = Map.has_key?(changeset.changes, :config)
-
-    # New credentials make the stored session stale (a pasted cookie IS the
-    # credential), and a definition parked as needs_login deserves a fresh try.
-    changeset =
-      if config_changed? and definition.health_status == "needs_login",
-        do: Ecto.Changeset.put_change(changeset, :health_status, "unknown"),
-        else: changeset
-
-    with {:ok, saved} <- Repo.update(changeset) do
-      if config_changed?, do: CardigannAuth.invalidate_session(saved.id)
-      {:ok, saved}
-    end
-  end
+  defdelegate configure_cardigann_definition(definition, config),
+    to: Mydia.Indexers.CardigannLibrary,
+    as: :configure
 
   @doc """
   Tests the connection to a Cardigann indexer definition.
