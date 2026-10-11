@@ -58,11 +58,27 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.FlareSolverr
+  alias Mydia.Indexers.FlareSolverr.ClearanceCache
   alias Mydia.Indexers.FlareSolverr.Response, as: FlareSolverrResponse
 
   require Logger
 
   @max_search_candidates 3
+
+  # Req's own "req/x.y" user-agent is refused or served a different page by
+  # some public trackers. Prowlarr sends a desktop browser's string by default,
+  # and a definition's own user-agent header still takes precedence.
+  @default_user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " <>
+                        "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+
+  # Interstitial titles are matched at any status: some challenges are served
+  # with a 200, and a 403 page can omit the word "Cloudflare" entirely.
+  @challenge_titles [
+    "<title>Just a moment...</title>",
+    "<title>Attention Required! | Cloudflare</title>",
+    "<title>Please Wait... | Cloudflare</title>",
+    "<title>DDoS-Guard</title>"
+  ]
 
   @type search_opts :: [
           query: String.t(),
@@ -316,7 +332,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   #
   # FlareSolverr used to receive user_config's cookies unconditionally, whatever
   # host url named, while the direct Req path gated every request through
-  # attach_cookies/4. The two paths carry the same session credential, so they
+  # session_cookie_pairs/4. The two paths carry the same session credential, so they
   # now consult the same cookie_disposition/2 decision before it is forwarded.
   defp execute_with_flaresolverr(definition, url, request_params, user_config, config) do
     Logger.debug("Executing request through FlareSolverr: #{url}")
@@ -492,7 +508,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   defp convert_flaresolverr_headers(_), do: []
 
   # Detect Cloudflare challenge response
-  defp cloudflare_challenge?(%{status: 403, body: body}) when is_binary(body) do
+  @doc false
+  def cloudflare_challenge?(%{status: 403, body: body}) when is_binary(body) do
     cloudflare_indicators = [
       "cf-browser-verification",
       "cf_clearance",
@@ -505,14 +522,19 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       "DDoS-Guard"
     ]
 
-    Enum.any?(cloudflare_indicators, &String.contains?(body, &1))
+    Enum.any?(cloudflare_indicators, &String.contains?(body, &1)) or challenge_title?(body)
   end
 
-  defp cloudflare_challenge?(%{status: 503, body: body}) when is_binary(body) do
-    String.contains?(body, "Cloudflare") || String.contains?(body, "cloudflare")
+  def cloudflare_challenge?(%{status: 503, body: body}) when is_binary(body) do
+    String.contains?(body, "Cloudflare") || String.contains?(body, "cloudflare") ||
+      challenge_title?(body)
   end
 
-  defp cloudflare_challenge?(_), do: false
+  def cloudflare_challenge?(%{body: body}) when is_binary(body), do: challenge_title?(body)
+
+  def cloudflare_challenge?(_), do: false
+
+  defp challenge_title?(body), do: Enum.any?(@challenge_titles, &String.contains?(body, &1))
 
   @doc """
   Builds the search URL from the definition's path template and search options.
@@ -654,7 +676,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   Redirects are therefore followed one hop at a time with `redirect: false`.
   Each hop rebuilds its options through `build_request_options/5`, so
-  `attach_cookies/4` re-runs `cookie_disposition/2` against the new URL. That
+  `session_cookie_pairs/4` re-runs `cookie_disposition/2` against the new URL. That
   is the per-hop origin check left out of the branch that first enabled
   redirect following: a session cookie is re-authorised for every hop instead
   of being carried across one blindly.
@@ -1012,12 +1034,42 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   defp build_request_options(definition, url, request_params, user_config, config) do
-    # Base options
+    clearance =
+      case ClearanceCache.lookup(url) do
+        {:ok, clearance} -> clearance
+        :none -> nil
+      end
+
+    {defined_ua, defined_cookie, other_headers} = split_headers(request_params.headers)
+
+    # A solved clearance is bound to the user-agent that solved it, so it wins.
+    user_agent = (clearance && clearance.user_agent) || defined_ua || @default_user_agent
+
+    {session_pairs, session_attached?} =
+      session_cookie_pairs(Map.get(user_config, :cookies), url, definition, config)
+
+    clearance_pairs =
+      if clearance, do: Enum.map(clearance.cookies, fn {n, v} -> "#{n}=#{v}" end), else: []
+
+    # One cookie header only: a second one beside the definition's own is
+    # dropped or mangled by some servers.
+    cookie_header =
+      [defined_cookie | session_pairs ++ clearance_pairs]
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.join("; ")
+
+    headers =
+      [{"user-agent", user_agent} | other_headers] ++
+        if(cookie_header == "", do: [], else: [{"cookie", cookie_header}])
+
     base_opts = [
-      headers: request_params.headers,
+      headers: headers,
       receive_timeout: 30_000,
       connect_options: [timeout: 10_000],
-      redirect: definition.follow_redirect,
+      # A session cookie must not ride a redirect to another host (see the
+      # note on session_cookie_pairs/4). Clearance and definition cookies are
+      # not credentials, so they alone do not disable redirects.
+      redirect: definition.follow_redirect == true and not session_attached?,
       retry: false
     ]
 
@@ -1032,28 +1084,25 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       end
 
     # Add query params for GET, body for POST
-    opts_with_params =
-      case request_params.method do
-        :get ->
-          Keyword.put(base_opts, :params, request_params.query_params)
+    case request_params.method do
+      :get ->
+        Keyword.put(base_opts, :params, request_params.query_params)
 
-        :post ->
-          Keyword.put(base_opts, :form, request_params.query_params)
-      end
-
-    # Add cookies if present in user config
-    case Map.get(user_config, :cookies) do
-      cookies when is_list(cookies) and cookies != [] ->
-        attach_cookies(
-          opts_with_params,
-          url,
-          cookies,
-          CredentialScope.trusted_origins(definition, config)
-        )
-
-      _ ->
-        opts_with_params
+      :post ->
+        Keyword.put(base_opts, :form, request_params.query_params)
     end
+  end
+
+  defp split_headers(headers) do
+    Enum.reduce(headers || [], {nil, nil, []}, fn {name, value}, {ua, cookie, rest} ->
+      value = if is_list(value), do: Enum.join(value, "; "), else: to_string(value)
+
+      case String.downcase(to_string(name)) do
+        "user-agent" -> {value, cookie, rest}
+        "cookie" -> {ua, value, rest}
+        _ -> {ua, cookie, rest ++ [{name, value}]}
+      end
+    end)
   end
 
   # A session cookie is a bearer credential for the tracker account. Base URL
@@ -1078,33 +1127,23 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   # of a result row, can both name an origin the operator never trusted, and a
   # download link is remote content rather than shipped YAML. Withhold and
   # continue, because an anonymous result beats a leaked login.
-  defp attach_cookies(opts, url, cookies, trusted_origins) do
-    case cookie_disposition(url, trusted_origins) do
+  defp session_cookie_pairs(cookies, url, definition, config)
+       when is_list(cookies) and cookies != [] do
+    case cookie_disposition(url, CredentialScope.trusted_origins(definition, config)) do
       {:withhold, reason} ->
         Logger.warning("Cardigann: withholding session cookies from #{reason}")
-        opts
+        {[], false}
 
       :ok ->
-        cookie_header =
-          cookies
-          |> Enum.map(&normalize_cookie/1)
-          |> Enum.reject(&is_nil/1)
-          |> Enum.join("; ")
-
-        if cookie_header == "" do
-          opts
-        else
-          existing_headers = Keyword.get(opts, :headers, [])
-
-          opts
-          |> Keyword.put(:headers, [{"Cookie", cookie_header} | existing_headers])
-          |> Keyword.put(:redirect, false)
-        end
+        pairs = cookies |> Enum.map(&normalize_cookie/1) |> Enum.reject(&is_nil/1)
+        {pairs, pairs != []}
     end
   end
 
+  defp session_cookie_pairs(_cookies, _url, _definition, _config), do: {[], false}
+
   # The one place that decides whether a URL may receive the definition's
-  # session. Both the direct Req path (attach_cookies/4) and the FlareSolverr
+  # session. Both the direct Req path (session_cookie_pairs/4) and the FlareSolverr
   # path (withhold_flaresolverr_cookies/4) consult it, so the policy cannot
   # drift between them. It drifted once: FlareSolverr forwarded cookies to any
   # host at all while the direct path was gated.

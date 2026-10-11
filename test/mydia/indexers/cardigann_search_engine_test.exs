@@ -1431,6 +1431,147 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
     end
   end
 
+  describe "direct request headers" do
+    setup do
+      site = Bypass.open()
+      %{site: site, base: "http://localhost:#{site.port}"}
+    end
+
+    defp capture_headers(site) do
+      test_pid = self()
+
+      Bypass.expect_once(site, "GET", "/search", fn conn ->
+        send(test_pid, {:headers, conn.req_headers})
+        Plug.Conn.resp(conn, 200, "<html><body></body></html>")
+      end)
+    end
+
+    defp header_values(headers, name), do: for({^name, v} <- headers, do: v)
+
+    defp definition_with(links, paths, headers) do
+      %Parsed{
+        id: "header-test",
+        name: "Header Test",
+        description: "",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: links,
+        legacylinks: [],
+        capabilities: %{modes: %{}},
+        follow_redirect: false,
+        settings: [],
+        search: %{
+          paths: paths,
+          headers: headers,
+          inputs: %{},
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        },
+        login: nil,
+        download: nil
+      }
+    end
+
+    test "sends a browser user-agent, not Req's default", %{site: site, base: base} do
+      capture_headers(site)
+      definition = definition_with([base], [%{path: "/search"}], %{})
+      assert {:ok, _} = CardigannSearchEngine.execute_search(definition, [query: "x"], %{}, %{})
+      assert_receive {:headers, headers}
+      assert [ua] = header_values(headers, "user-agent")
+      assert ua =~ "Mozilla/5.0"
+      refute ua =~ "req/"
+    end
+
+    test "the definition's own user-agent wins over the default", %{site: site, base: base} do
+      capture_headers(site)
+
+      definition =
+        definition_with([base], [%{path: "/search"}], %{"User-Agent" => "DefinitionAgent/2"})
+
+      assert {:ok, _} = CardigannSearchEngine.execute_search(definition, [query: "x"], %{}, %{})
+      assert_receive {:headers, headers}
+      assert header_values(headers, "user-agent") == ["DefinitionAgent/2"]
+    end
+
+    test "a cached clearance wins and its cookies merge into the one cookie header",
+         %{site: site, base: base} do
+      capture_headers(site)
+
+      :ok =
+        Mydia.Indexers.FlareSolverr.ClearanceCache.put(
+          base <> "/",
+          [
+            %{
+              name: "cf_clearance",
+              value: "solved",
+              domain: "localhost",
+              path: "/",
+              expires: -1,
+              http_only: true,
+              secure: false,
+              same_site: nil
+            }
+          ],
+          "SolverAgent/3"
+        )
+
+      on_exit(fn -> Mydia.Indexers.FlareSolverr.ClearanceCache.delete(base <> "/") end)
+
+      definition =
+        definition_with([base], [%{path: "/search"}], %{
+          "User-Agent" => "DefinitionAgent/2",
+          "cookie" => "layout=def_wlinks"
+        })
+
+      assert {:ok, _} =
+               CardigannSearchEngine.execute_search(
+                 definition,
+                 [query: "x"],
+                 %{cookies: ["session=s1"]},
+                 %{}
+               )
+
+      assert_receive {:headers, headers}
+      assert header_values(headers, "user-agent") == ["SolverAgent/3"]
+      assert [cookie] = header_values(headers, "cookie")
+      assert cookie =~ "layout=def_wlinks"
+      assert cookie =~ "session=s1"
+      assert cookie =~ "cf_clearance=solved"
+    end
+
+    test "a list-valued cookie header is joined", %{site: site, base: base} do
+      capture_headers(site)
+
+      definition =
+        definition_with([base], [%{path: "/search"}], %{"cookie" => ["a=1", "b=2"]})
+
+      assert {:ok, _} = CardigannSearchEngine.execute_search(definition, [query: "x"], %{}, %{})
+      assert_receive {:headers, headers}
+      assert header_values(headers, "cookie") == ["a=1; b=2"]
+    end
+  end
+
+  describe "cloudflare_challenge?/1" do
+    test "a 200 interstitial is a challenge" do
+      body = "<html><head><title>Just a moment...</title></head></html>"
+      assert CardigannSearchEngine.cloudflare_challenge?(%{status: 200, body: body})
+    end
+
+    test "a 403 interstitial without the word Cloudflare is a challenge" do
+      body = "<html><head><title>Just a moment...</title></head></html>"
+      assert CardigannSearchEngine.cloudflare_challenge?(%{status: 403, body: body})
+    end
+
+    test "an ordinary page carrying Cloudflare's challenge-platform script is not" do
+      body =
+        ~s(<html><head><title>Results</title><script src="/cdn-cgi/challenge-platform/x.js"></script></head></html>)
+
+      refute CardigannSearchEngine.cloudflare_challenge?(%{status: 200, body: body})
+    end
+  end
+
   describe "redirect handling" do
     test "follows a redirect by default" do
       bypass = Bypass.open()
