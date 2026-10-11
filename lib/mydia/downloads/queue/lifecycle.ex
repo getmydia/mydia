@@ -20,8 +20,8 @@ defmodule Mydia.Downloads.Queue.Lifecycle do
 
   A season-pack download carries `media_item_id` plus `metadata.season_pack`
   and **no** `episode_id`, so any query that excludes on `episode_id` alone
-  cannot see it - including the `check_for_active_download/4` episode arm
-  below, which is why an individual grab for an episode inside an in-flight
+  cannot see it - including the `Queue.Duplicates.check_for_active_download/4`
+  episode arm, which is why an individual grab for an episode inside an in-flight
   pack succeeds. Both the missing-file search path
   (`Mydia.Jobs.TVShowSearch`) and the upgrade eligibility query
   (`Mydia.Upgrades.eligible_episodes/1`) filter through here so the two cannot

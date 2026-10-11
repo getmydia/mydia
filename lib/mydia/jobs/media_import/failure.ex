@@ -368,7 +368,8 @@ defmodule Mydia.Jobs.MediaImport.Failure do
     # inside perform/1), so the unique states are narrowed to drop :executing
     # here — otherwise Oban would see this insert as colliding with its own
     # still-running parent and silently discard the snooze. See the `unique`
-    # comment on `use Oban.Worker` above for the full policy this overrides.
+    # comment on `use Oban.Worker` in `Mydia.Jobs.MediaImport` for the full
+    # policy this overrides.
     changeset =
       MediaImport.new(new_args,
         scheduled_at: scheduled_at,

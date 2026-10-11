@@ -23,7 +23,7 @@ defmodule Mydia.Jobs.MediaImport do
   use Oban.Worker,
     queue: :default,
     max_attempts: 1000,
-    # Full incomplete-state set: every normal caller (queue.ex, DownloadMonitor,
+    # Full incomplete-state set: every normal caller (Downloads.Queue, DownloadMonitor,
     # the downloads LiveView) gets full duplicate protection, including against
     # a MediaImport job that's already :executing for the same download_id.
     # `Failure.schedule_snooze_retry/2` is the one exception — it overrides
