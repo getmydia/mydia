@@ -95,7 +95,8 @@ native type signatures replace typespecs, it goes away with them.
 Because each of these is a list of deferred findings, not a rule:
 
 - Dialyzer ignores: `ignore_warnings` in `mix.exs`, a `.dialyzer_ignore.exs`
-  file, or `@dialyzer` attributes in `lib/` or `test/support/`.
+  file (Dialyxir loads it by default, so the file alone is enough), or `@dialyzer`
+  attributes in `lib/` or `test/support/`. CI checks for each.
 - `exit_status: 0` on an otherwise-enabled Credo check. CI greps `.credo.exs`
   for this and fails the build if it reappears.
 - `mix credo --mute-exit-status` in CI.

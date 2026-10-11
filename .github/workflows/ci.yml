@@ -292,6 +292,12 @@ jobs:
             echo "::error::ignore_warnings found in mix.exs - fix the Dialyzer finding instead (see CONTRIBUTING.md)"
             exit 1
           fi
+          # Dialyxir reads .dialyzer_ignore.exs by default when it exists, even
+          # without ignore_warnings in mix.exs.
+          if [ -e .dialyzer_ignore.exs ]; then
+            echo "::error::.dialyzer_ignore.exs exists - fix the Dialyzer finding instead (see CONTRIBUTING.md)"
+            exit 1
+          fi
           if grep -rn "@dialyzer" lib test/support --include='*.ex'; then
             echo "::error::@dialyzer attributes are not allowed in lib/ or test/support - fix the finding instead (see CONTRIBUTING.md)"
             exit 1
