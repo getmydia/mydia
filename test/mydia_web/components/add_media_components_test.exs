@@ -182,4 +182,27 @@ defmodule MydiaWeb.AddMediaComponentsTest do
              |> LazyHTML.attribute("phx-submit") == ["submit_add_config"]
     end
   end
+
+  describe "add_config_fields/1 search-on-add toggle" do
+    test "renders the toggle by default" do
+      html =
+        render_component(&AddMediaComponents.add_config_fields/1, config: config())
+
+      refute document(html)
+             |> LazyHTML.query(~s(input[name="config[search_on_add]"]))
+             |> Enum.empty?()
+    end
+
+    test "omits the toggle when the host opts out" do
+      html =
+        render_component(&AddMediaComponents.add_config_fields/1,
+          config: config(),
+          show_search_on_add: false
+        )
+
+      assert document(html)
+             |> LazyHTML.query(~s(input[name="config[search_on_add]"]))
+             |> Enum.empty?()
+    end
+  end
 end

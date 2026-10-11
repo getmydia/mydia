@@ -37,6 +37,11 @@ defmodule MydiaWeb.AddMediaComponents do
   attr :config, :map, required: true
   attr :quality_profiles, :list, default: []
 
+  attr :show_search_on_add, :boolean,
+    default: true,
+    doc:
+      "False on hosts that grab a specific release, where an add-time search would grab a second one."
+
   def add_config_fields(assigns) do
     assigns =
       assign(assigns, :library_labels, LibraryPath.display_names(assigns.config.libraries))
@@ -121,25 +126,27 @@ defmodule MydiaWeb.AddMediaComponents do
         </select>
       </div>
     <% end %>
-    <%!-- Search on Add --%>
-    <div class="form-control mb-6">
-      <label class="label cursor-pointer justify-start gap-4">
-        <input type="hidden" name="config[search_on_add]" value="false" />
-        <input
-          type="checkbox"
-          name="config[search_on_add]"
-          value="true"
-          class="toggle toggle-primary"
-          checked={@config.defaults.search_on_add}
-        />
-        <div>
-          <span class="label-text font-semibold">Search on Add</span>
-          <p class="text-xs text-base-content/60">
-            Trigger an immediate search for this media after adding
-          </p>
-        </div>
-      </label>
-    </div>
+    <%= if @show_search_on_add do %>
+      <%!-- Search on Add --%>
+      <div class="form-control mb-6">
+        <label class="label cursor-pointer justify-start gap-4">
+          <input type="hidden" name="config[search_on_add]" value="false" />
+          <input
+            type="checkbox"
+            name="config[search_on_add]"
+            value="true"
+            class="toggle toggle-primary"
+            checked={@config.defaults.search_on_add}
+          />
+          <div>
+            <span class="label-text font-semibold">Search on Add</span>
+            <p class="text-xs text-base-content/60">
+              Trigger an immediate search for this media after adding
+            </p>
+          </div>
+        </label>
+      </div>
+    <% end %>
     """
   end
 

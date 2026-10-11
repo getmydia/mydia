@@ -1,6 +1,6 @@
 defmodule MydiaWeb.SearchLive.RestrictedWriteTest do
   @moduledoc """
-  `create_media_item_from_metadata/3` used to call `changeset.errors` on
+  `create_media_item_from_metadata/4` used to call `changeset.errors` on
   whatever `Media.create_media_item/2` returned as its error, which crashed
   with `BadMapError` the moment that error became the bare atom `:restricted`
   instead of an `Ecto.Changeset`. It runs inside a `start_async` task, so the
@@ -19,7 +19,7 @@ defmodule MydiaWeb.SearchLive.RestrictedWriteTest do
   alias Mydia.Accounts.Scope
   alias Mydia.Library.Structs.ParsedFileInfo
   alias Mydia.Metadata.Structs.MediaMetadata
-  alias MydiaWeb.SearchLive.Index, as: SearchLive
+  alias MydiaWeb.SearchLive.ReleaseAdd
 
   defp cartoon_only_scope do
     Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
@@ -35,7 +35,7 @@ defmodule MydiaWeb.SearchLive.RestrictedWriteTest do
 
   test "an out-of-bounds release refuses cleanly instead of raising" do
     assert {:error, :restricted} =
-             SearchLive.create_media_item_from_metadata(
+             ReleaseAdd.create_media_item_from_metadata(
                cartoon_only_scope(),
                parsed(title: "Live Action Thriller", year: 2024),
                metadata(title: "Live Action Thriller", genres: ["Thriller"], content_rating: "R")
@@ -43,8 +43,8 @@ defmodule MydiaWeb.SearchLive.RestrictedWriteTest do
   end
 
   test "an in-bounds release still creates normally" do
-    assert {:ok, item} =
-             SearchLive.create_media_item_from_metadata(
+    assert {:ok, item, :created} =
+             ReleaseAdd.create_media_item_from_metadata(
                cartoon_only_scope(),
                parsed(title: "Animated Feature", year: 2024),
                metadata(title: "Animated Feature", genres: ["Animation"], content_rating: "G")
@@ -54,8 +54,8 @@ defmodule MydiaWeb.SearchLive.RestrictedWriteTest do
   end
 
   test "an unrestricted scope is unaffected" do
-    assert {:ok, _item} =
-             SearchLive.create_media_item_from_metadata(
+    assert {:ok, _item, :created} =
+             ReleaseAdd.create_media_item_from_metadata(
                Scope.unrestricted(),
                parsed(title: "Anything At All", year: 2024),
                metadata(title: "Anything At All", genres: ["Thriller"], content_rating: "R")

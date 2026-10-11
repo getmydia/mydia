@@ -20,6 +20,9 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
   @unknown_library_flash "That library is no longer available. Nothing was added."
 
+  @doc "Flash shown when a submitted library id is not a candidate for the chosen type."
+  def unknown_library_message, do: @unknown_library_flash
+
   @doc """
   Libraries a caller may pick as the add-time target for `media_type`.
 

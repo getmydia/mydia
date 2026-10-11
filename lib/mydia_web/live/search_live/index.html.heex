@@ -271,13 +271,17 @@
                     </div>
                     <%!-- Mobile-only compact info --%>
                     <div class="flex gap-2 mt-1 md:hidden flex-wrap">
-                      <% mobile_lib_type = detected_library_type(result) %>
-                      <span class={[
-                        "badge badge-xs gap-0.5",
-                        library_type_badge_class(mobile_lib_type)
-                      ]}>
+                      <% {mobile_lib_type, mobile_source} = result_type(@result_types, result) %>
+                      <span
+                        class={[
+                          "badge badge-xs gap-0.5",
+                          library_type_badge_class(mobile_lib_type)
+                        ]}
+                        data-type-source={mobile_source}
+                        title={type_source_hint(mobile_source)}
+                      >
                         <.icon name={library_type_icon(mobile_lib_type)} class="w-3 h-3" />
-                        {library_type_label(mobile_lib_type)}
+                        {library_type_label(mobile_lib_type)}<span :if={mobile_source == :title}>?</span>
                       </span>
                       <%= if result.download_protocol == :nzb do %>
                         <span class="badge badge-info badge-xs">Usenet</span>
@@ -332,9 +336,13 @@
                 <td class="hidden lg:table-cell">
                   <div class="flex flex-col gap-1">
                     <div class="flex flex-wrap gap-1">
-                      <% lib_type = detected_library_type(result) %>
-                      <span class={["badge badge-sm", library_type_badge_class(lib_type)]}>
-                        {library_type_label(lib_type)}
+                      <% {lib_type, lib_source} = result_type(@result_types, result) %>
+                      <span
+                        class={["badge badge-sm", library_type_badge_class(lib_type)]}
+                        data-type-source={lib_source}
+                        title={type_source_hint(lib_source)}
+                      >
+                        {library_type_label(lib_type)}<span :if={lib_source == :title}>?</span>
                       </span>
                       <% info_page_url = SearchResult.info_page_url(result) %>
                       <%= if info_page_url do %>
@@ -452,15 +460,15 @@
           >
             <.icon name="hero-x-mark" class="w-5 h-5" />
           </button>
-          <h3 class="font-bold text-xl mb-4 pr-8">
+          <h3 class="font-bold text-xl mb-4 pr-8 break-all">
             {@selected_result.title}
           </h3>
           <%!-- Quality and Size Info --%>
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div class="stat bg-base-200 rounded-lg p-4">
               <div class="stat-title text-xs">Quality</div>
-              <div class="stat-value text-lg">
-                <span class="badge badge-primary">
+              <div class="stat-value text-base whitespace-normal">
+                <span class="badge badge-primary h-auto min-h-5 whitespace-normal break-words rounded-lg text-left leading-snug py-0.5">
                   {get_quality_badge(@selected_result)}
                 </span>
               </div>
@@ -535,14 +543,17 @@
           <%!-- Additional Info --%>
           <div class="space-y-3 mb-6">
             <%!-- Library type indicator - prominent placement --%>
-            <% detail_lib_type = detected_library_type(@selected_result) %>
+            <% {detail_lib_type, detail_source} = result_type(@result_types, @selected_result) %>
             <div class="flex items-center gap-2 text-sm">
               <.icon
                 name={library_type_icon(detail_lib_type)}
                 class="w-5 h-5 text-base-content/50"
               />
               <span class="text-base-content/70">Downloads to:</span>
-              <span class={["badge gap-1", library_type_badge_class(detail_lib_type)]}>
+              <span
+                class={["badge gap-1", library_type_badge_class(detail_lib_type)]}
+                title={type_source_hint(detail_source)}
+              >
                 <.icon name={library_type_icon(detail_lib_type)} class="w-4 h-4" />
                 {library_type_label(detail_lib_type)}
               </span>
@@ -595,128 +606,106 @@
       </div>
     <% end %>
 
-    <%!-- Download Modal - Library Type Selection --%>
-    <%= if @show_download_modal && @download_modal_result do %>
-      <div class="modal modal-open">
+    <%!-- Download Modal: type, library and add settings --%>
+    <%= if @download_config do %>
+      <div
+        id="download-modal"
+        class="modal modal-open"
+        phx-window-keydown="close_download_modal"
+        phx-key="Escape"
+      >
         <div class="modal-box max-w-lg">
           <button
+            type="button"
             class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
             phx-click="close_download_modal"
+            aria-label="Close"
           >
             <.icon name="hero-x-mark" class="w-5 h-5" />
           </button>
-          <h3 class="font-bold text-xl mb-4">
-            <.icon name="hero-arrow-down-tray" class="w-6 h-6 inline text-primary" /> Download
+          <h3 class="font-bold text-xl mb-4 flex items-center gap-2">
+            <.icon name="hero-arrow-down-tray" class="w-6 h-6 text-primary" /> Download
           </h3>
 
-          <%!-- Release info --%>
-          <div class="bg-base-200 rounded-lg p-4 mb-4">
-            <div class="font-semibold text-sm truncate" title={@download_modal_result.title}>
-              {@download_modal_result.title}
+          <div class="bg-base-200 rounded-lg p-4 mb-4 min-w-0">
+            <div class="font-semibold text-sm break-all" title={@download_config.result.title}>
+              {@download_config.result.title}
             </div>
-            <div class="text-sm text-base-content/70 mt-1">
-              {format_size(@download_modal_result)}
-              <%= if @download_modal_result.category do %>
-                <span class="mx-2">•</span>
+            <div class="text-sm text-base-content/70 mt-1 flex flex-wrap items-center gap-2">
+              <span>{format_size(@download_config.result)}</span>
+              <%= if is_integer(@download_config.result.category) do %>
                 <span class="badge badge-ghost badge-sm">
-                  {Mydia.Indexers.CategoryMapping.category_name(@download_modal_result.category)}
+                  {CategoryMapping.category_name(@download_config.result.category)}
                 </span>
               <% end %>
             </div>
           </div>
 
-          <%!-- Category detection warning --%>
-          <%= if is_nil(@download_target_type) do %>
-            <div role="alert" class="alert alert-info mb-4">
-              <.icon name="hero-information-circle" class="w-5 h-5" />
-              <span class="text-sm">
-                Category not detected from indexer. Please select the library type manually.
-              </span>
-            </div>
-          <% end %>
-
-          <%!-- Library type selector - only show types with configured libraries --%>
-          <div class="form-control mb-4">
-            <label class="label">
-              <span class="label-text font-semibold">Download to library type</span>
-            </label>
-            <% available_types =
-              [
-                {:movies, "Movies"},
-                {:series, "TV Series"}
-              ]
-              |> Enum.filter(fn {type, _label} ->
-                MapSet.member?(@configured_library_types, type)
-              end) %>
-            <%= if available_types == [] do %>
-              <div role="alert" class="alert alert-warning">
+          <.form
+            for={%{}}
+            id="download-config-form"
+            phx-change="download_config_change"
+            phx-submit="confirm_download"
+          >
+            <%= if @download_config.available_types == [] do %>
+              <div role="alert" class="alert alert-warning mb-4">
                 <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
                 <span class="text-sm">
                   No library paths configured.
-                  <a href={~p"/admin/library-paths"} class="link">Configure library paths</a>
+                  <.link navigate={~p"/admin/library-paths"} class="link">
+                    Configure library paths
+                  </.link>
                   to enable downloads.
                 </span>
               </div>
             <% else %>
-              <div class="grid grid-cols-2 gap-2">
-                <%= for {type, label} <- available_types do %>
-                  <button
-                    type="button"
-                    class={[
-                      "btn btn-outline gap-2",
-                      @download_target_type == type && "btn-active btn-primary"
-                    ]}
-                    phx-click="set_download_target_type"
-                    phx-value-type={type}
-                  >
-                    <.icon name={library_type_icon(type)} class="w-4 h-4" />
-                    {label}
-                  </button>
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text font-semibold">Type</span>
+                </label>
+                <div class="join w-full">
+                  <%= for type <- @download_config.available_types do %>
+                    <input
+                      type="radio"
+                      name="media_type"
+                      value={type}
+                      class="join-item btn btn-outline flex-1"
+                      aria-label={download_type_label(type)}
+                      checked={@download_config.media_type == type}
+                    />
+                  <% end %>
+                </div>
+                <%= if is_nil(@download_config.media_type) do %>
+                  <span class="label-text-alt text-base-content/60 mt-1">
+                    Choose a type to continue.
+                  </span>
                 <% end %>
               </div>
-              <label class="label">
-                <span class="label-text-alt text-base-content/60">
-                  <%= cond do %>
-                    <% @download_target_type in [:movies, :series] -> %>
-                      Will search metadata providers to match title
-                    <% true -> %>
-                      Select a library type to continue
-                  <% end %>
-                </span>
-              </label>
-            <% end %>
-          </div>
 
-          <%!-- Actions --%>
-          <div class="modal-action">
-            <button
-              class="btn btn-ghost"
-              phx-click="close_download_modal"
-              disabled={@confirming_download}
-            >
-              Cancel
-            </button>
-            <button
-              class={[
-                "btn btn-primary",
-                (@confirming_download || is_nil(@download_target_type)) && "btn-disabled"
-              ]}
-              phx-click="confirm_download"
-              disabled={@confirming_download || is_nil(@download_target_type)}
-            >
-              <%= if @confirming_download do %>
-                <span class="loading loading-spinner loading-sm"></span> Adding...
-              <% else %>
-                <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> Download
+              <%= if @download_config.media_type do %>
+                <.add_config_fields
+                  config={@download_config}
+                  quality_profiles={@quality_profiles}
+                  show_search_on_add={false}
+                />
               <% end %>
-            </button>
-          </div>
+            <% end %>
+
+            <div class="modal-action">
+              <button type="button" class="btn btn-ghost" phx-click="close_download_modal">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="btn btn-primary"
+                disabled={is_nil(@download_config.media_type)}
+              >
+                <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> Download
+              </button>
+            </div>
+          </.form>
         </div>
-        <div
-          class="modal-backdrop"
-          phx-click={unless @confirming_download, do: "close_download_modal"}
-        >
-        </div>
+        <div class="modal-backdrop" phx-click="close_download_modal"></div>
       </div>
     <% end %>
   </div>

@@ -30,7 +30,7 @@ defmodule MydiaWeb.Live.Components.DisambiguationModalComponent do
     ~H"""
     <div>
       <%= if @show do %>
-        <div class="modal modal-open">
+        <div id="disambiguation-dialog" class="modal modal-open">
           <div class="modal-box max-w-4xl">
             <h3 class="font-bold text-lg mb-4">
               Multiple Matches Found

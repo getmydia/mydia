@@ -3,15 +3,18 @@ defmodule MydiaWeb.SearchLive.Index do
   alias Mydia.Indexers
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.CategoryMapping
-  alias Mydia.Library.ReleaseParser, as: FileParser
   alias Mydia.Metadata
-  alias Mydia.Metadata.Ref
   alias Mydia.Media.RemoteFilter
   alias Mydia.Media
   alias Mydia.Downloads
   alias Mydia.Settings
+  alias Mydia.Media.AddDefaults
+  alias MydiaWeb.Live.Helpers.MediaAddHelpers
+  alias MydiaWeb.SearchLive.ReleaseAdd
+  alias MydiaWeb.SearchLive.ResultType
 
   import MydiaWeb.IndexerComponents
+  import MydiaWeb.AddMediaComponents, only: [add_config_fields: 1]
 
   alias Mydia.Indexers.Structs.IndexerProgress
   alias Mydia.Library.Structs.Quality
@@ -57,9 +60,6 @@ defmodule MydiaWeb.SearchLive.Index do
       |> Enum.map(& &1.id)
       |> MapSet.new()
 
-    # Load library paths for download target selector (exclude disabled paths)
-    library_paths = Settings.list_library_paths() |> Enum.reject(& &1.disabled)
-
     {:ok,
      socket
      |> assign(:page_title, "Search Media")
@@ -82,6 +82,8 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:pending_parsed, nil)
      |> assign(:pending_release_title, nil)
      |> assign(:pending_search_result, nil)
+     |> assign(:pending_media_type, nil)
+     |> assign(:pending_add_defaults, nil)
      |> assign(:should_download_after_add, false)
      |> assign(:show_manual_search_modal, false)
      |> assign(:manual_search_query, "")
@@ -91,14 +93,12 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:retry_error_message, nil)
      |> assign(:search_results_map, %{})
      |> assign(:raw_search_results_map, %{})
+     |> assign(:result_types, %{})
      |> assign(:show_detail_modal, false)
      |> assign(:selected_result, nil)
-     |> assign(:show_download_modal, false)
-     |> assign(:download_modal_result, nil)
-     |> assign(:download_target_type, nil)
-     |> assign(:confirming_download, false)
+     |> assign(:download_config, nil)
+     |> assign(:quality_profiles, Settings.list_quality_profiles())
      |> assign(:downloading_urls, MapSet.new())
-     |> assign(:library_paths, library_paths)
      |> assign(:available_indexers, available_indexers)
      |> assign(:selected_indexer_ids, selected_indexer_ids)
      |> stream_configure(:search_results, dom_id: &generate_result_id/1)
@@ -224,94 +224,79 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply, assign(socket, :selected_indexer_ids, MapSet.new())}
   end
 
-  def handle_event("add_to_library", %{"title" => title} = params, socket) do
-    # Store search result if provided for later use (for download)
-    download_url = Map.get(params, "download_url")
-    should_download = Map.get(params, "download", "false") == "true"
-
-    # Find the full search result from our map
-    search_result =
-      if download_url do
-        Map.get(socket.assigns.search_results_map, download_url)
-      end
-
-    if search_result do
-      Logger.info(
-        "Retrieved search_result from map, download_protocol: #{inspect(search_result.download_protocol)}"
-      )
-    end
-
-    # Start async task to add media to library
-    scope = socket.assigns.current_scope
-
-    {:noreply,
-     socket
-     |> assign(:pending_release_title, title)
-     |> assign(:pending_search_result, search_result)
-     |> assign(:should_download_after_add, should_download)
-     |> start_async(:add_to_library, fn -> add_release_to_library(scope, title) end)}
-  end
-
   def handle_event("select_metadata_match", %{"match_id" => match_id}, socket) do
-    # Find the selected match
-    selected_match =
-      Enum.find(socket.assigns.metadata_matches, fn m -> to_string(m.provider_id) == match_id end)
+    with_create_access(socket, fn ->
+      # Find the selected match
+      selected_match =
+        Enum.find(socket.assigns.metadata_matches, fn m ->
+          to_string(m.provider_id) == match_id
+        end)
 
-    if selected_match do
-      # Fetch full metadata and create media item
-      media_type = socket.assigns.metadata_media_type
-      parsed = socket.assigns.pending_parsed
-      scope = socket.assigns.current_scope
+      if selected_match do
+        # Fetch full metadata and create media item
+        media_type = socket.assigns.metadata_media_type
+        parsed = socket.assigns.pending_parsed
+        defaults = socket.assigns.pending_add_defaults
+        scope = socket.assigns.current_scope
 
-      {:noreply,
-       socket
-       # Keep modal open but show loading state on selected match
-       |> assign(:selecting_match_id, match_id)
-       |> start_async(:finalize_add_to_library, fn ->
-         config = Metadata.default_relay_config()
+        {:noreply,
+         socket
+         # Keep modal open but show loading state on selected match
+         |> assign(:selecting_match_id, match_id)
+         |> start_async(:finalize_add_to_library, fn ->
+           config = Metadata.default_relay_config()
 
-         case fetch_full_metadata(config, selected_match, media_type) do
-           {:ok, metadata} ->
-             create_media_item_from_metadata(scope, parsed, metadata)
+           case ReleaseAdd.fetch_full_metadata(config, selected_match, media_type) do
+             {:ok, metadata} ->
+               ReleaseAdd.create_media_item_from_metadata(scope, parsed, metadata,
+                 defaults: defaults
+               )
 
-           error ->
-             error
-         end
-       end)}
-    else
-      {:noreply, socket}
-    end
+             error ->
+               error
+           end
+         end)}
+      else
+        {:noreply, socket}
+      end
+    end)
   end
 
   def handle_event("close_disambiguation_modal", _params, socket) do
     {:noreply,
      socket
+     |> cancel_async(:finalize_add_to_library)
      |> assign(:show_disambiguation_modal, false)
      |> assign(:metadata_matches, [])
-     |> assign(:pending_parsed, nil)}
+     |> assign(:pending_parsed, nil)
+     |> finish_pending()}
   end
 
   def handle_event("manual_search_submit", %{"search_query" => query}, socket) do
-    media_type = Map.get(socket.assigns, :manual_search_media_type, :movie)
-    scope = socket.assigns.current_scope
+    with_create_access(socket, fn ->
+      media_type = Map.get(socket.assigns, :manual_search_media_type, :movie)
+      scope = socket.assigns.current_scope
 
-    {:noreply,
-     socket
-     |> start_async(:manual_metadata_search, fn ->
-       config = Metadata.default_relay_config()
+      {:noreply,
+       socket
+       |> start_async(:manual_metadata_search, fn ->
+         config = Metadata.default_relay_config()
 
-       with {:ok, results} <- Metadata.search(config, query, media_type: media_type) do
-         {:ok, RemoteFilter.filter(results, scope)}
-       end
-     end)}
+         with {:ok, results} <- Metadata.search(config, query, media_type: media_type) do
+           {:ok, RemoteFilter.filter(results, scope)}
+         end
+       end)}
+    end)
   end
 
   def handle_event("close_manual_search_modal", _params, socket) do
     {:noreply,
      socket
+     |> cancel_async(:finalize_manual_add)
      |> assign(:show_manual_search_modal, false)
      |> assign(:failed_release_title, nil)
-     |> assign(:manual_search_query, "")}
+     |> assign(:manual_search_query, "")
+     |> finish_pending()}
   end
 
   def handle_event(
@@ -319,125 +304,104 @@ defmodule MydiaWeb.SearchLive.Index do
         %{"match_id" => match_id, "media_type" => media_type},
         socket
       ) do
-    # Find the selected match from manual search
-    selected_match =
-      Enum.find(socket.assigns.metadata_matches, fn m -> to_string(m.provider_id) == match_id end)
+    with_create_access(socket, fn ->
+      # Find the selected match from manual search
+      selected_match =
+        Enum.find(socket.assigns.metadata_matches, fn m ->
+          to_string(m.provider_id) == match_id
+        end)
 
-    if selected_match do
-      media_type_atom = String.to_existing_atom(media_type)
-      scope = socket.assigns.current_scope
+      if selected_match do
+        media_type_atom = String.to_existing_atom(media_type)
+        defaults = socket.assigns.pending_add_defaults
+        scope = socket.assigns.current_scope
 
-      {:noreply,
-       socket
-       # Keep modal open but show loading state on selected match
-       |> assign(:selecting_match_id, match_id)
-       |> start_async(:finalize_manual_add, fn ->
-         config = Metadata.default_relay_config()
+        {:noreply,
+         socket
+         # Keep modal open but show loading state on selected match
+         |> assign(:selecting_match_id, match_id)
+         |> start_async(:finalize_manual_add, fn ->
+           config = Metadata.default_relay_config()
 
-         case fetch_full_metadata(config, selected_match, media_type_atom) do
-           {:ok, metadata} ->
-             # Create media item without parsed data (since parsing failed)
-             # Episodes are automatically fetched for TV shows via create_media_item
-             attrs =
-               Mydia.Media.AttrsFromMetadata.from_metadata(metadata, media_type_atom,
-                 user: scope.user
-               )
+           case ReleaseAdd.fetch_full_metadata(config, selected_match, media_type_atom) do
+             {:ok, metadata} ->
+               # Create media item without parsed data (since parsing failed)
+               # Episodes are automatically fetched for TV shows via create_media_item
+               attr_opts = [user: scope.user] ++ if(defaults, do: [defaults: defaults], else: [])
 
-             Media.create_media_item(scope, attrs)
+               attrs =
+                 Mydia.Media.AttrsFromMetadata.from_metadata(metadata, media_type_atom, attr_opts)
 
-           error ->
-             error
-         end
-       end)}
-    else
-      {:noreply, socket}
-    end
+               case Media.create_media_item(scope, attrs) do
+                 {:ok, item} -> {:ok, item, :created}
+                 other -> other
+               end
+
+             error ->
+               error
+           end
+         end)}
+      else
+        {:noreply, socket}
+      end
+    end)
   end
 
   def handle_event("retry_add_to_library", _params, socket) do
-    # Retry adding to library with the same parameters
-    release_title = socket.assigns.pending_release_title
+    with_create_access(socket, fn ->
+      # Retry adding to library with the same parameters
+      release_title = socket.assigns.pending_release_title
+      media_type = socket.assigns.pending_media_type
+      defaults = socket.assigns.pending_add_defaults
 
-    if release_title do
-      Logger.info("Retrying add to library for: #{release_title}")
-      scope = socket.assigns.current_scope
+      if release_title && media_type do
+        Logger.info("Retrying add to library for: #{release_title}")
+        scope = socket.assigns.current_scope
 
-      {:noreply,
-       socket
-       |> assign(:show_retry_modal, false)
-       |> start_async(:add_to_library, fn -> add_release_to_library(scope, release_title) end)}
-    else
-      {:noreply,
-       socket
-       |> assign(:show_retry_modal, false)
-       |> put_flash(:error, "Cannot retry: missing release information")}
-    end
+        {:noreply,
+         socket
+         |> assign(:show_retry_modal, false)
+         |> mark_downloading()
+         |> start_async(:add_to_library, fn ->
+           ReleaseAdd.add_release_to_library(scope, release_title, media_type, defaults)
+         end)}
+      else
+        {:noreply,
+         socket
+         |> assign(:show_retry_modal, false)
+         |> finish_pending()
+         |> put_flash(:error, "Cannot retry: missing release information")}
+      end
+    end)
   end
 
   def handle_event("close_retry_modal", _params, socket) do
     {:noreply,
      socket
      |> assign(:show_retry_modal, false)
-     |> assign(:retry_error_message, nil)}
+     |> assign(:retry_error_message, nil)
+     |> finish_pending()}
   end
 
+  # Always opens, even when the type is known: the destination library is a
+  # choice the user makes here, and skipping the modal would make it for them
+  # (#1104).
   def handle_event("show_download_modal", %{"download_url" => download_url}, socket) do
-    # Find the search result by download URL
-    search_result = Map.get(socket.assigns.search_results_map, download_url)
+    case Map.get(socket.assigns.search_results_map, download_url) do
+      nil ->
+        {:noreply, socket}
 
-    # Detect the library type from category - nil if unknown
-    detected_type =
-      if search_result && is_integer(search_result.category) do
-        type = CategoryMapping.type_for_category(search_result.category)
-        # Return nil for :other so user must select
-        if type == :other, do: nil, else: type
-      else
-        # No category detected - require manual selection
-        nil
-      end
+      %SearchResult{} = result ->
+        {kind, _source} = result_type(socket.assigns.result_types, result)
 
-    # If type is detected, skip the modal and proceed directly to download
-    if detected_type do
-      Logger.info(
-        "Auto-detected type #{detected_type}, skipping modal for: #{search_result.title}"
-      )
-
-      # Track this URL as downloading (for loading indicator)
-      downloading_urls = MapSet.put(socket.assigns.downloading_urls, download_url)
-
-      socket =
-        socket
-        |> assign(:show_detail_modal, false)
-        |> assign(:selected_result, nil)
-        |> assign(:download_modal_result, search_result)
-        |> assign(:download_target_type, detected_type)
-        |> assign(:confirming_download, true)
-        |> assign(:downloading_urls, downloading_urls)
-        |> assign(:pending_release_title, search_result.title)
-        |> assign(:pending_search_result, search_result)
-        |> assign(:should_download_after_add, true)
-        # Re-insert result into stream to trigger UI update for loading state
-        |> stream_insert(:search_results, search_result)
-
-      # Use appropriate download flow based on type
-      scope = socket.assigns.current_scope
-
-      socket =
-        start_async(socket, :add_to_library, fn ->
-          add_release_to_library(scope, search_result.title)
-        end)
-
-      {:noreply, socket}
-    else
-      {:noreply,
-       socket
-       # Close detail modal if it's open
-       |> assign(:show_detail_modal, false)
-       |> assign(:selected_result, nil)
-       # Open download modal
-       |> assign(:show_download_modal, true)
-       |> assign(:download_modal_result, search_result)
-       |> assign(:download_target_type, detected_type)}
+        {:noreply,
+         socket
+         |> assign(:show_detail_modal, false)
+         |> assign(:selected_result, nil)
+         |> assign(
+           :download_config,
+           build_download_config(socket, result, ResultType.media_type(kind))
+         )}
     end
   end
 
@@ -445,50 +409,65 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply, close_download_modal(socket)}
   end
 
-  def handle_event("set_download_target_type", %{"type" => type}, socket) do
-    target_type = String.to_existing_atom(type)
-
-    {:noreply, assign(socket, :download_target_type, target_type)}
+  # A type switch resolves fresh defaults for the new type: the old type's
+  # library id is not a candidate for the new one. Other field changes need no
+  # server state; the form holds them until submit.
+  def handle_event("download_config_change", params, socket) do
+    with %{} = config <- socket.assigns.download_config,
+         {:ok, media_type} <- parse_media_type(params["media_type"]),
+         true <- media_type != config.media_type do
+      {:noreply,
+       assign(socket, :download_config, build_download_config(socket, config.result, media_type))}
+    else
+      _ -> {:noreply, socket}
+    end
   end
 
-  def handle_event("confirm_download", _params, socket) do
-    search_result = socket.assigns.download_modal_result
-    target_type = socket.assigns.download_target_type
+  # The modal closes before the async add starts, so a follow-up modal
+  # ("Multiple matches", manual search, retry) is never stacked under it
+  # (#1104). The row spinner carries the in-flight state.
+  def handle_event("confirm_download", params, socket) do
+    user = socket.assigns.current_user
 
-    if search_result do
-      Logger.info("Confirming download for: #{search_result.title}, target type: #{target_type}")
+    with :ok <- MydiaWeb.Live.Authorization.authorize_create_media(socket),
+         :ok <- ensure_no_add_pending(socket),
+         %{result: %SearchResult{} = result} <- socket.assigns.download_config,
+         {:ok, media_type} <- parse_media_type(params["media_type"]),
+         {:ok, defaults} <-
+           MediaAddHelpers.resolve_add_defaults(params["config"] || %{}, media_type, user) do
+      defaults = %{defaults | search_on_add: false}
+      scope = socket.assigns.current_scope
 
-      # Track this URL as downloading and set loading state
-      downloading_urls = MapSet.put(socket.assigns.downloading_urls, search_result.download_url)
-
-      socket =
-        socket
-        |> assign(:confirming_download, true)
-        |> assign(:downloading_urls, downloading_urls)
-        # Re-insert result into stream to trigger UI update for loading state
-        |> stream_insert(:search_results, search_result)
-
-      # Use the target type to determine the download flow
-      case target_type do
-        type when type in [:movies, :series] ->
-          # For movies/series, use the existing metadata lookup flow
-          scope = socket.assigns.current_scope
-
-          {:noreply,
-           socket
-           |> assign(:pending_release_title, search_result.title)
-           |> assign(:pending_search_result, search_result)
-           |> assign(:should_download_after_add, true)
-           |> start_async(:add_to_library, fn ->
-             add_release_to_library(scope, search_result.title)
-           end)}
-
-        _ ->
-          {:noreply,
-           close_download_modal(put_flash(socket, :error, "Unknown library type: #{target_type}"))}
-      end
+      {:noreply,
+       socket
+       |> close_download_modal()
+       |> assign(:pending_release_title, result.title)
+       |> assign(:pending_search_result, result)
+       |> assign(:pending_media_type, media_type)
+       |> assign(:pending_add_defaults, defaults)
+       |> assign(:should_download_after_add, true)
+       |> mark_downloading()
+       |> start_async(:add_to_library, fn ->
+         ReleaseAdd.add_release_to_library(scope, result.title, media_type, defaults)
+       end)}
     else
-      {:noreply, close_download_modal(put_flash(socket, :error, "No search result selected"))}
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      :add_pending ->
+        {:noreply,
+         socket
+         |> close_download_modal()
+         |> put_flash(:error, "Another release is still being added. Try again when it finishes.")}
+
+      {:error, :unknown_library} ->
+        {:noreply,
+         socket
+         |> close_download_modal()
+         |> put_flash(:error, MediaAddHelpers.unknown_library_message())}
+
+      _ ->
+        {:noreply, socket}
     end
   end
 
@@ -531,11 +510,11 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply, socket}
   end
 
-  def handle_info({:trigger_download, search_result, media_item_id, title}, socket) do
+  def handle_info({:trigger_download, search_result, title, opts}, socket) do
     # This will be called after adding to library if download was requested
     Logger.info("Initiating download for: #{title}")
 
-    case Downloads.initiate_download(search_result, media_item_id: media_item_id) do
+    case Downloads.initiate_download(search_result, opts) do
       {:ok, download} ->
         Logger.info("Download initiated successfully: #{download.title}")
 
@@ -745,37 +724,15 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:pending_parsed, parsed)}
   end
 
-  def handle_async(:add_to_library, {:ok, {:ok, media_item}}, socket) do
+  def handle_async(:add_to_library, {:ok, {:ok, media_item, status}}, socket) do
     Logger.info("Successfully added #{media_item.title} to library")
 
-    socket =
-      socket
-      |> close_download_modal()
-      |> then(fn socket ->
-        if socket.assigns.should_download_after_add && socket.assigns.pending_search_result do
-          Logger.info("Triggering download for #{media_item.title}")
-          # Trigger download - this will be handled by the download handler
-          send(
-            self(),
-            {:trigger_download, socket.assigns.pending_search_result, media_item.id,
-             media_item.title}
-          )
-
-          socket
-        else
-          put_flash(socket, :info, "#{media_item.title} added to library")
-        end
-      end)
-
     # Stay on search page so user can download more items
-    {:noreply, socket}
+    {:noreply, complete_add(socket, media_item, status)}
   end
 
   def handle_async(:add_to_library, {:ok, {:error, reason}}, socket) do
     Logger.error("Failed to add to library: #{inspect(reason)}")
-
-    # Close download modal first
-    socket = close_download_modal(socket)
 
     case reason do
       :parse_failed ->
@@ -784,9 +741,11 @@ defmodule MydiaWeb.SearchLive.Index do
 
         {:noreply,
          socket
+         |> clear_spinner()
          |> assign(:show_manual_search_modal, true)
+         |> assign(:manual_search_media_type, socket.assigns.pending_media_type || :movie)
          |> assign(:failed_release_title, release_title)
-         |> assign(:manual_search_query, extract_search_hint(release_title))}
+         |> assign(:manual_search_query, ReleaseAdd.extract_search_hint(release_title))}
 
       :no_metadata_match ->
         # Also show manual search modal for no matches
@@ -794,20 +753,26 @@ defmodule MydiaWeb.SearchLive.Index do
 
         {:noreply,
          socket
+         |> clear_spinner()
          |> assign(:show_manual_search_modal, true)
+         |> assign(:manual_search_media_type, socket.assigns.pending_media_type || :movie)
          |> assign(:failed_release_title, release_title)
-         |> assign(:manual_search_query, extract_search_hint(release_title))
+         |> assign(:manual_search_query, ReleaseAdd.extract_search_hint(release_title))
          |> put_flash(:error, "Could not find matching media automatically")}
 
       {:metadata_error, msg} ->
         # Show retry modal for metadata errors
         {:noreply,
          socket
+         |> clear_spinner()
          |> assign(:show_retry_modal, true)
          |> assign(:retry_error_message, "Metadata provider error: #{msg}")}
 
       _ ->
-        {:noreply, put_flash(socket, :error, add_to_library_error_message(reason))}
+        {:noreply,
+         socket
+         |> finish_pending()
+         |> put_flash(:error, add_to_library_error_message(reason))}
     end
   end
 
@@ -816,36 +781,18 @@ defmodule MydiaWeb.SearchLive.Index do
 
     {:noreply,
      socket
-     |> close_download_modal()
+     |> finish_pending()
      |> put_flash(:error, "Failed to add to library unexpectedly")}
   end
 
-  def handle_async(:finalize_add_to_library, {:ok, {:ok, media_item}}, socket) do
+  def handle_async(:finalize_add_to_library, {:ok, {:ok, media_item, status}}, socket) do
     Logger.info("Successfully added #{media_item.title} to library after disambiguation")
 
-    socket =
-      socket
-      |> assign(:show_disambiguation_modal, false)
-      |> assign(:selecting_match_id, nil)
-      |> close_download_modal()
-      |> then(fn socket ->
-        if socket.assigns.should_download_after_add && socket.assigns.pending_search_result do
-          Logger.info("Triggering download for #{media_item.title}")
-
-          send(
-            self(),
-            {:trigger_download, socket.assigns.pending_search_result, media_item.id,
-             media_item.title}
-          )
-
-          socket
-        else
-          put_flash(socket, :info, "#{media_item.title} added to library")
-        end
-      end)
-
-    # Stay on search page so user can download more items
-    {:noreply, socket}
+    {:noreply,
+     socket
+     |> assign(:show_disambiguation_modal, false)
+     |> assign(:selecting_match_id, nil)
+     |> complete_add(media_item, status)}
   end
 
   def handle_async(:finalize_add_to_library, {:ok, {:error, reason}}, socket) do
@@ -854,8 +801,13 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> assign(:selecting_match_id, nil)
+     |> clear_spinner()
      |> put_flash(:error, add_to_library_error_message(reason))}
   end
+
+  # Closing the modal cancels the task; the pending state is already cleared.
+  def handle_async(:finalize_add_to_library, {:exit, {:shutdown, :cancel}}, socket),
+    do: {:noreply, socket}
 
   def handle_async(:finalize_add_to_library, {:exit, reason}, socket) do
     Logger.error("Finalize add to library task crashed: #{inspect(reason)}")
@@ -863,6 +815,7 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> assign(:selecting_match_id, nil)
+     |> clear_spinner()
      |> put_flash(:error, "Failed to add to library unexpectedly")}
   end
 
@@ -880,7 +833,8 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply, put_flash(socket, :error, "Search failed: #{inspect(reason)}")}
   end
 
-  def handle_async(:finalize_manual_add, {:ok, {:ok, media_item}}, socket) do
+  # The manual path used to add the item and never grab the release.
+  def handle_async(:finalize_manual_add, {:ok, {:ok, media_item, status}}, socket) do
     Logger.info("Successfully added #{media_item.title} to library via manual search")
 
     # Stay on search page so user can download more items
@@ -888,8 +842,7 @@ defmodule MydiaWeb.SearchLive.Index do
      socket
      |> assign(:show_manual_search_modal, false)
      |> assign(:selecting_match_id, nil)
-     |> close_download_modal()
-     |> put_flash(:info, "#{media_item.title} added to library")}
+     |> complete_add(media_item, status)}
   end
 
   def handle_async(:finalize_manual_add, {:ok, {:error, reason}}, socket) do
@@ -898,10 +851,40 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> assign(:selecting_match_id, nil)
+     |> clear_spinner()
      |> put_flash(:error, add_to_library_error_message(reason))}
   end
 
+  def handle_async(:finalize_manual_add, {:exit, {:shutdown, :cancel}}, socket),
+    do: {:noreply, socket}
+
+  def handle_async(:finalize_manual_add, {:exit, reason}, socket) do
+    Logger.error("Finalize manual add task crashed: #{inspect(reason)}")
+
+    {:noreply,
+     socket
+     |> assign(:selecting_match_id, nil)
+     |> finish_pending()
+     |> put_flash(:error, "Failed to add to library unexpectedly")}
+  end
+
   ## Private Functions
+
+  # Runs `fun` (which returns the `{:noreply, socket}` tuple) only for a user
+  # who may create media. Every write path on this page goes through it or
+  # through the same check in `confirm_download`.
+  defp with_create_access(socket, fun) do
+    case MydiaWeb.Live.Authorization.authorize_create_media(socket) do
+      :ok -> fun.()
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # One add runs at a time: a second `start_async` under the same name would
+  # replace the first task and overwrite its pending state.
+  defp ensure_no_add_pending(socket) do
+    if socket.assigns.pending_search_result, do: :add_pending, else: :ok
+  end
 
   # Shared by every `handle_async` clause above that falls back to showing
   # `reason` verbatim. `:restricted` gets Media's own generic wording instead
@@ -923,25 +906,89 @@ defmodule MydiaWeb.SearchLive.Index do
     assign(socket, :indexer_progress, indexer_progress)
   end
 
-  defp close_download_modal(socket) do
-    # Clear the downloading URL if there was one and re-insert result to update UI
-    {downloading_urls, socket} =
-      if socket.assigns.pending_search_result do
-        search_result = socket.assigns.pending_search_result
-        urls = MapSet.delete(socket.assigns.downloading_urls, search_result.download_url)
-        # Re-insert result into stream to trigger UI update (clear loading state)
-        socket = stream_insert(socket, :search_results, search_result)
-        {urls, socket}
-      else
-        {socket.assigns.downloading_urls, socket}
+  defp close_download_modal(socket), do: assign(socket, :download_config, nil)
+
+  # Shared by every successful add: clear the row spinner and the pending
+  # state, then hand off to the download when one was requested.
+  defp complete_add(socket, media_item, status) do
+    pending = socket.assigns.pending_search_result
+    download? = socket.assigns.should_download_after_add && pending
+
+    if download? do
+      send(
+        self(),
+        {:trigger_download, pending, media_item.title,
+         ReleaseAdd.download_opts(media_item.id, status, socket.assigns.pending_add_defaults)}
+      )
+    end
+
+    socket = finish_pending(socket)
+
+    if download?,
+      do: socket,
+      else: put_flash(socket, :info, "#{media_item.title} added to library")
+  end
+
+  defp finish_pending(socket) do
+    socket
+    |> clear_spinner()
+    |> assign(:pending_search_result, nil)
+    |> assign(:pending_media_type, nil)
+    |> assign(:pending_add_defaults, nil)
+    |> assign(:should_download_after_add, false)
+  end
+
+  defp mark_downloading(socket), do: set_spinner(socket, &MapSet.put/2)
+  defp clear_spinner(socket), do: set_spinner(socket, &MapSet.delete/2)
+
+  # The row spinner follows `downloading_urls`; re-inserting the pending
+  # result makes the stream re-render its row.
+  defp set_spinner(socket, update) do
+    case socket.assigns.pending_search_result do
+      %SearchResult{} = result ->
+        socket
+        |> assign(
+          :downloading_urls,
+          update.(socket.assigns.downloading_urls, result.download_url)
+        )
+        |> stream_insert(:search_results, result)
+
+      _ ->
+        socket
+    end
+  end
+
+  @media_types [:movie, :tv_show]
+
+  defp parse_media_type("movie"), do: {:ok, :movie}
+  defp parse_media_type("tv_show"), do: {:ok, :tv_show}
+  defp parse_media_type(_value), do: :error
+
+  defp download_type_label(:movie), do: "Movies"
+  defp download_type_label(:tv_show), do: "TV Series"
+
+  # Only types with a library to land in are offered. With no detected type
+  # and exactly one type available, that one is chosen for the user. A
+  # detected type with no library is left unchosen instead: swapping it for
+  # the other type would send a movie through TV matching.
+  defp build_download_config(socket, %SearchResult{} = result, preferred) do
+    available =
+      for type <- @media_types, MediaAddHelpers.candidate_libraries(type) != [], do: type
+
+    media_type =
+      cond do
+        preferred in available -> preferred
+        is_nil(preferred) and match?([_only], available) -> hd(available)
+        true -> nil
       end
 
-    socket
-    |> assign(:show_download_modal, false)
-    |> assign(:download_modal_result, nil)
-    |> assign(:download_target_type, nil)
-    |> assign(:confirming_download, false)
-    |> assign(:downloading_urls, downloading_urls)
+    %{
+      result: result,
+      available_types: available,
+      media_type: media_type,
+      libraries: if(media_type, do: MediaAddHelpers.candidate_libraries(media_type), else: []),
+      defaults: media_type && AddDefaults.resolve(socket.assigns.current_user, media_type)
+    }
   end
 
   defp generate_result_id(%SearchResult{} = result) do
@@ -966,6 +1013,7 @@ defmodule MydiaWeb.SearchLive.Index do
     |> assign(:indexer_errors, [])
     |> assign(:search_results_map, %{})
     |> assign(:raw_search_results_map, %{})
+    |> assign(:result_types, %{})
     # TRUE, not false: the display set is genuinely empty until the first
     # indexer reports. The loading gate is `@searching && @results_empty?`
     # and the results gate is `!@results_empty?`, so starting at false
@@ -1087,15 +1135,23 @@ defmodule MydiaWeb.SearchLive.Index do
 
     results_map = Map.new(ranked, fn result -> {result.download_url, result} end)
 
+    cached = socket.assigns.result_types
+
+    result_types =
+      Map.new(ranked, fn r ->
+        {r.download_url, classify(cached, r)}
+      end)
+
     sorted =
       ranked
-      |> filter_results(socket.assigns)
+      |> filter_results(socket.assigns, result_types)
       |> sort_results(socket.assigns.sort_by)
 
     socket
     |> assign(:indexer_progress, indexer_progress)
     |> assign(:raw_search_results_map, raw_results)
     |> assign(:search_results_map, results_map)
+    |> assign(:result_types, result_types)
     |> assign(:results_empty?, sorted == [])
     |> stream(:search_results, sorted, reset: true)
   end
@@ -1109,11 +1165,13 @@ defmodule MydiaWeb.SearchLive.Index do
     |> stream(:search_results, sorted_results, reset: true)
   end
 
-  defp filter_results(results, assigns) do
+  defp filter_results(results, assigns, result_types \\ nil) do
+    result_types = result_types || assigns.result_types
+
     results
     |> filter_by_seeders(assigns.min_seeders)
     |> filter_by_quality(assigns.quality_filter)
-    |> filter_by_library_type(assigns.library_type_filter)
+    |> filter_by_library_type(assigns.library_type_filter, result_types)
     |> filter_by_size(assigns.min_size_gb, assigns.max_size_gb)
   end
 
@@ -1140,18 +1198,15 @@ defmodule MydiaWeb.SearchLive.Index do
     end)
   end
 
-  defp filter_by_library_type(results, :all), do: results
+  defp filter_by_library_type(results, :all, _result_types), do: results
 
-  defp filter_by_library_type(results, library_type) do
-    # Get the categories for this library type
-    category_ids = CategoryMapping.categories_for_type(library_type)
-
+  # Classified by ResultType, so a release with no indexer category is kept
+  # when its title parses as the requested type (#1104). Only releases that
+  # cannot be classified at all drop out of a type filter.
+  defp filter_by_library_type(results, library_type, result_types) do
     Enum.filter(results, fn result ->
-      case result.category do
-        nil -> false
-        category_id when is_integer(category_id) -> category_id in category_ids
-        _ -> false
-      end
+      {kind, _source} = result_type(result_types, result)
+      kind == library_type
     end)
   end
 
@@ -1310,184 +1365,17 @@ defmodule MydiaWeb.SearchLive.Index do
   defp indexer_type_label(:public), do: "Public"
   defp indexer_type_label(type), do: to_string(type)
 
-  ## Add to Library Functions
-
-  defp add_release_to_library(scope, title) do
-    Logger.info("Adding release to library: #{title}")
-
-    with {:ok, parsed} <- parse_release_title(title),
-         {:ok, metadata_or_matches} <- search_and_fetch_metadata(scope, parsed) do
-      case metadata_or_matches do
-        {:multiple_matches, matches, media_type} ->
-          # Return the matches to trigger disambiguation in the UI
-          {:ok, {:needs_disambiguation, parsed, matches, media_type}}
-
-        metadata ->
-          # Single match, create media item directly
-          create_media_item_from_metadata(scope, parsed, metadata)
-      end
-    else
-      {:error, _reason} = error -> error
-    end
-  end
-
-  defp parse_release_title(title) do
-    parsed = FileParser.parse(title)
-
-    Logger.debug(
-      "Parsed release: type=#{parsed.type}, title=#{parsed.title}, " <>
-        "year=#{parsed.year}, season=#{parsed.season}, " <>
-        "episodes=#{inspect(parsed.episodes)}, confidence=#{parsed.confidence}"
-    )
-
-    cond do
-      parsed.type == :unknown ->
-        {:error, :parse_failed}
-
-      parsed.confidence < 0.5 ->
-        Logger.warning("Low confidence parse (#{parsed.confidence}), may not be accurate")
-        {:ok, parsed}
-
-      true ->
-        {:ok, parsed}
-    end
-  end
-
-  @doc false
-  # Public only so the restricted auto-match branches can be pinned in tests.
-  def search_and_fetch_metadata(scope, parsed) do
-    # Use the default metadata relay configuration
-    config = Metadata.default_relay_config()
-
-    # Determine media type for the search
-    media_type =
-      case parsed.type do
-        :movie -> :movie
-        :tv_show -> :tv_show
-        _ -> :movie
-      end
-
-    # Search for the media
-    search_opts = [media_type: media_type]
-    search_opts = if parsed.year, do: [{:year, parsed.year} | search_opts], else: search_opts
-
-    # A restricted account must not match a release to a title outside its
-    # limits. The branch is chosen on the raw hit count, though: a release
-    # that was ambiguous stays ambiguous, so the account confirms the pick
-    # instead of having the one survivor linked automatically.
-    search_result =
-      with {:ok, matches} <- Metadata.search(config, parsed.title, search_opts) do
-        {:ok, length(matches), RemoteFilter.filter(matches, scope)}
-      end
-
-    case search_result do
-      {:ok, _raw_count, []} ->
-        Logger.warning("No metadata matches found for: #{parsed.title}")
-        {:error, :no_metadata_match}
-
-      {:ok, 1, [single_match]} ->
-        # Only one match, fetch it directly
-        Logger.info("Found single metadata match: #{single_match.title || single_match.name}")
-
-        fetch_full_metadata(config, single_match, media_type)
-
-      {:ok, _raw_count, matches} ->
-        # Multiple matches, return them for disambiguation
-        Logger.info("Found #{length(matches)} metadata matches, requires disambiguation")
-        {:ok, {:multiple_matches, matches, media_type}}
-
-      {:error, reason} ->
-        Logger.error("Metadata search failed: #{inspect(reason)}")
-        {:error, {:metadata_error, "Search failed"}}
-    end
-  end
-
-  defp fetch_full_metadata(config, match, media_type) do
-    # `match` is the search result the id came from, so its own provenance
-    # (`:tmdb` or `:tvdb`) names the provider, rather than guessing from
-    # media_type.
-    ref = Ref.from_search_result(match)
-
-    case Metadata.fetch_by_ref(config, ref, media_type: media_type) do
-      {:ok, metadata} ->
-        {:ok, metadata}
-
-      {:error, reason} ->
-        Logger.error("Failed to fetch full metadata: #{inspect(reason)}")
-        {:error, {:metadata_error, "Failed to fetch details"}}
-    end
-  end
-
-  @doc """
-  Creates (or finds the existing) media item for already-fetched metadata.
-
-  Public, like `MediaLive.Show.FranchiseEvents.perform_add/5`, so it can be
-  exercised directly in tests without driving a real metadata fetch through
-  `start_async/3`.
-  """
-  def create_media_item_from_metadata(scope, parsed, metadata) do
-    # Check if media already exists by provider ID, scoped by type: TMDB numbers
-    # movies and series independently, so a movie's tmdb_id is not this show's.
-    # For TV shows from TVDB, check tvdb_id; otherwise check tmdb_id.
-    provider_key =
-      if parsed.type == :tv_show and Map.get(metadata, :provider) == :tvdb do
-        :tvdb
-      else
-        :tmdb
-      end
-
-    existing =
-      Media.find_by_external_ids(scope, %{provider_key => metadata.provider_id},
-        type: to_string(parsed.type)
-      )
-
-    case existing do
-      nil ->
-        # Create new media item
-        attrs = Mydia.Media.AttrsFromMetadata.from_parsed(parsed, metadata, user: scope.user)
-
-        # Episodes are automatically fetched for TV shows via create_media_item
-        case Media.create_media_item(scope, attrs) do
-          {:ok, media_item} ->
-            {:ok, media_item}
-
-          {:error, :restricted} ->
-            {:error, :restricted}
-
-          {:error, changeset} ->
-            Logger.error("Failed to create media item: #{inspect(changeset.errors)}")
-            {:error, {:create_failed, changeset.errors}}
-        end
-
-      existing_item ->
-        Logger.info("Media already exists in library: #{existing_item.title}")
-        {:ok, existing_item}
-    end
-  end
-
-  defp extract_search_hint(release_title) do
-    # Try to extract a reasonable search query from the release title
-    # Remove common release tags and patterns
-    release_title
-    |> String.replace(
-      ~r/\b(720p|1080p|2160p|4k|WEB-?DL|BluRay|HDTV|x264|x265|HEVC|AAC|DTS)\b/i,
-      ""
-    )
-    |> String.replace(~r/\b(S\d{1,2}E\d{1,2})\b/i, "")
-    |> String.replace(~r/\b(\d{4})\b/, "")
-    |> String.replace(~r/[\.\-_]+/, " ")
-    |> String.replace(~r/\s+/, " ")
-    |> String.trim()
-  end
-
   defp format_client_error(error) when is_binary(error), do: error
   defp format_client_error(error), do: inspect(error)
 
   # Helper to get library type label for display
   defp library_type_label(:movies), do: "Movies"
   defp library_type_label(:series), do: "TV Series"
-  defp library_type_label(:other), do: "Other"
-  defp library_type_label(:unknown), do: "Select"
+  defp library_type_label(:unknown), do: "Unknown"
+
+  defp type_source_hint(:title), do: "Guessed from release title"
+  defp type_source_hint(:category), do: "From indexer category"
+  defp type_source_hint(:none), do: "Type could not be detected"
 
   # Helper to get library type icon
   defp library_type_icon(:movies), do: "hero-film"
@@ -1495,23 +1383,24 @@ defmodule MydiaWeb.SearchLive.Index do
   defp library_type_icon(:unknown), do: "hero-question-mark-circle"
   defp library_type_icon(_), do: "hero-question-mark-circle"
 
-  # Helper to get the detected library type for a search result
-  # Returns {:ok, type} if detected, :unknown if category is nil/missing
-  defp detected_library_type(%SearchResult{category: nil}), do: :unknown
-
-  defp detected_library_type(%SearchResult{category: category}) when is_integer(category) do
-    CategoryMapping.type_for_category(category)
+  # Reads the per-search cache, classifying on a miss so a result that reached
+  # a modal by another path still gets a type.
+  defp result_type(result_types, %SearchResult{} = result) do
+    {_inputs, classification} = classify(result_types, result)
+    classification
   end
 
-  defp detected_library_type(%SearchResult{category: category}) when is_binary(category) do
-    # Try to parse string category to integer
-    case Integer.parse(category) do
-      {id, _} -> CategoryMapping.type_for_category(id)
-      :error -> :unknown
+  # Cache entries are `{inputs, {kind, source}}`. Two indexers can return the
+  # same download_url with a different title or category, so an entry is reused
+  # only while the inputs `ResultType.detect/1` reads are unchanged.
+  defp classify(result_types, %SearchResult{} = result) do
+    inputs = {result.title, result.category}
+
+    case Map.get(result_types, result.download_url) do
+      {^inputs, _classification} = entry -> entry
+      _ -> {inputs, ResultType.detect(result)}
     end
   end
-
-  defp detected_library_type(_), do: :unknown
 
   # Badge color for library type
   defp library_type_badge_class(:movies), do: "badge-primary"
