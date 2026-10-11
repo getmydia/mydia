@@ -195,6 +195,41 @@ defmodule Mydia.Plugins.Net.GateTest do
     end
   end
 
+  describe "audit option" do
+    @secret_url "https://user:pw@evil.test/path?apikey=SECRETKEY#frag"
+
+    defp audit_events(slug) do
+      Mydia.Events.list_events(category: "plugin", type: "plugin.http_request")
+      |> Enum.filter(&(&1.actor_id == slug))
+    end
+
+    defp denied_request(slug, extra) do
+      Gate.request(
+        @secret_url,
+        [allowed_hosts: ["discord.com"], slug: slug, resolver: resolver({1, 1, 1, 1})] ++ extra
+      )
+    end
+
+    test "the default still records the full URL" do
+      denied_request("audit-default", [])
+      assert [event] = audit_events("audit-default")
+      assert event.metadata["url"] == @secret_url
+    end
+
+    test ":redacted strips query string, fragment and userinfo" do
+      denied_request("audit-redacted", audit: :redacted)
+      assert [event] = audit_events("audit-redacted")
+      assert event.metadata["url"] == "https://evil.test/path"
+      assert event.metadata["host"] == "evil.test"
+      refute inspect(event.metadata) =~ "SECRETKEY"
+    end
+
+    test "false writes no event" do
+      denied_request("audit-off", audit: false)
+      assert audit_events("audit-off") == []
+    end
+  end
+
   describe "approved endpoints (operator-confirmed private egress)" do
     setup do
       {:ok, bypass: Bypass.open()}

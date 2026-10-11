@@ -153,6 +153,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
       [
         allowed_hosts: if(host, do: [host], else: []),
         slug: "cardigann",
+        # High volume, and query strings carry tracker apikeys and passkeys.
+        audit: false,
         method: req.method,
         headers: header_map(req.headers),
         timeout: Application.get_env(:mydia, :cardigann_http_timeout_ms, @default_timeout_ms),
@@ -179,8 +181,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
     headers
     |> Enum.reject(&(String.downcase(&1.name) == "host"))
     |> Enum.reduce(%{}, fn %{name: name, value: value}, acc ->
-      Map.update(acc, name, value, &(&1 <> separator(name) <> value))
+      key = String.downcase(name)
+
+      Map.update(acc, key, {name, value}, fn {first_name, existing} ->
+        {first_name, existing <> separator(key) <> value}
+      end)
     end)
+    |> Map.new(fn {_key, {name, value}} -> {name, value} end)
   end
 
   defp separator(name), do: if(String.downcase(name) == "cookie", do: "; ", else: ", ")
@@ -197,6 +204,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   defp map_error(%GateError{type: :timeout, message: m}), do: {:timeout, m}
   defp map_error(%GateError{type: :blocked, message: m}), do: {:blocked, m}
   defp map_error(%GateError{type: :capability_denied, message: m}), do: {:blocked, m}
+  # A malformed, non-http(s), userinfo or numeric-host URL is a policy refusal.
+  defp map_error(%GateError{type: :invalid_url, message: m}), do: {:blocked, m}
 
   defp map_error(%GateError{type: :network_error, message: m}) do
     if String.contains?(m, @connect_reasons) or String.contains?(m, "could not resolve"),
@@ -211,9 +220,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   # A clearance cached for the host rides every request the definition makes to
   # it: its user-agent replaces the guest's (the clearance is bound to it) and
   # its cookies join the guest's Cookie header.
-  defp apply_clearance(%{flaresolverr: fs}, req) when fs in [nil, %{}], do: req
-
-  defp apply_clearance(_ctx, req) do
+  defp apply_clearance(%{flaresolverr: %{enabled: true}}, req) do
     case ClearanceCache.lookup(req.url) do
       {:ok, clearance} ->
         pairs = Enum.map(clearance.cookies, fn {n, v} -> "#{n}=#{v}" end)
@@ -227,6 +234,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
         req
     end
   end
+
+  defp apply_clearance(_ctx, req), do: req
 
   defp put_user_agent(headers, nil), do: headers
 

@@ -77,6 +77,9 @@ defmodule Mydia.Plugins.Net.Gate do
     * `:resolver` — `(host -> {:ok, [ip_tuple]} | {:error, term})`, injected in tests
     * `:allow_private` — test seam (see moduledoc)
     * `:approved_endpoints` - exact `%{"scheme", "host", "port"}` entries the operator approved
+    * `:audit` - `:full` (default, the whole URL), `:redacted` (URL without query
+      string, fragment or userinfo) or `false` (no event). For high-volume callers
+      whose URLs carry credentials in the query string.
   """
   @spec request(String.t(), keyword()) :: {:ok, result()} | {:error, Error.t()}
   def request(url, opts) when is_binary(url) do
@@ -484,6 +487,24 @@ defmodule Mydia.Plugins.Net.Gate do
   # Auditing must never break egress: a failure to record the event (e.g. no DB
   # connection in the caller's context) is logged and swallowed.
   defp audit(url, outcome, duration_ms, opts) do
+    case Keyword.get(opts, :audit, :full) do
+      false -> :ok
+      :redacted -> write_audit(redact_url(url), outcome, duration_ms, opts)
+      _full -> write_audit(url, outcome, duration_ms, opts)
+    end
+  end
+
+  defp redact_url(url) do
+    case URI.parse(url) do
+      %URI{host: host} = uri when is_binary(host) ->
+        URI.to_string(%{uri | query: nil, fragment: nil, userinfo: nil, authority: nil})
+
+      _ ->
+        "[unparseable url]"
+    end
+  end
+
+  defp write_audit(url, outcome, duration_ms, opts) do
     slug = Keyword.get(opts, :slug, "unknown")
     method = opts |> Keyword.get(:method, "GET") |> to_string() |> String.upcase()
     {status, severity, bytes} = audit_fields(outcome)

@@ -115,12 +115,39 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpFlareSolverrTest do
            end)
   end
 
-  test "a repeat that is still challenged returns the rendered page as 200", %{
+  test "a cached clearance is not injected when FlareSolverr is disabled for the definition", %{
     site: site,
-    fs: fs,
     base: base,
     ctx: ctx
   } do
+    ClearanceCache.put(
+      base <> "/",
+      [%{name: "cf_clearance", value: "cached", domain: "localhost", path: "/", expires: -1}],
+      "CachedAgent/1"
+    )
+
+    test_pid = self()
+
+    Bypass.expect_once(site, "GET", "/search", fn conn ->
+      send(test_pid, {:headers, conn.req_headers})
+      Plug.Conn.resp(conn, 200, "")
+    end)
+
+    ctx = %{ctx | flaresolverr: %{enabled: false}}
+    assert {:ok, %{status: 200}} = HostHttp.exchange(ctx, req(base <> "/search"))
+
+    assert_receive {:headers, headers}
+    refute {"user-agent", "CachedAgent/1"} in headers
+    refute Enum.any?(headers, fn {k, _} -> k == "cookie" end)
+  end
+
+  test "a repeat that is still challenged returns the rendered page as 200",
+       %{
+         site: site,
+         fs: fs,
+         base: base,
+         ctx: ctx
+       } do
     Bypass.expect(site, "GET", "/search", &challenge/1)
 
     Bypass.expect_once(fs, "POST", "/v1", fn conn ->

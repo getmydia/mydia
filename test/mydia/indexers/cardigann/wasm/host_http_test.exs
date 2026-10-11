@@ -1,5 +1,6 @@
 defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
-  use ExUnit.Case, async: true
+  # DataCase: one test asserts that no audit event reaches the database.
+  use Mydia.DataCase, async: true
 
   alias Mydia.Indexers.Cardigann.Wasm.HostHttp
 
@@ -109,6 +110,50 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
                  Map.delete(ctx, :gate_opts),
                  req("GET", "http://127.0.0.1:9/x")
                )
+    end
+
+    test "folds duplicate request header names case-insensitively", %{
+      bypass: bypass,
+      ctx: ctx,
+      base: base
+    } do
+      Bypass.expect_once(bypass, "GET", "/h", fn conn ->
+        assert Plug.Conn.get_req_header(conn, "cookie") == ["a=1; b=2"]
+        assert Plug.Conn.get_req_header(conn, "accept") == ["text/html, application/json"]
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
+      assert {:ok, %{status: 200}} =
+               HostHttp.exchange(
+                 ctx,
+                 req("GET", base <> "/h", [
+                   {"Cookie", "a=1"},
+                   {"cookie", "b=2"},
+                   {"Accept", "text/html"},
+                   {"accept", "application/json"}
+                 ])
+               )
+    end
+
+    test "maps a URL the gate rejects as malformed to :blocked", %{ctx: ctx} do
+      assert {:error, {:blocked, _}} = HostHttp.exchange(ctx, req("GET", "ftp://example.test/x"))
+
+      assert {:error, {:blocked, _}} =
+               HostHttp.exchange(ctx, req("GET", "http://user:pw@example.test/x"))
+    end
+
+    test "writes no audit event, so a query-string apikey never reaches the database", %{
+      bypass: bypass,
+      ctx: ctx,
+      base: base
+    } do
+      Bypass.expect_once(bypass, "GET", "/q", fn conn -> Plug.Conn.resp(conn, 200, "") end)
+
+      assert {:ok, _} = HostHttp.exchange(ctx, req("GET", base <> "/q?apikey=SECRETKEY"))
+
+      events = Mydia.Events.list_events(category: "plugin", type: "plugin.http_request")
+      refute Enum.any?(events, &(&1.actor_id == "cardigann"))
+      refute Enum.any?(events, &(inspect(&1.metadata) =~ "SECRETKEY"))
     end
 
     test "maps a refused connection to :connect", %{bypass: bypass, ctx: ctx, base: base} do
