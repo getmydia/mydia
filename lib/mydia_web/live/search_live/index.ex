@@ -10,9 +10,12 @@ defmodule MydiaWeb.SearchLive.Index do
   alias Mydia.Media
   alias Mydia.Downloads
   alias Mydia.Settings
+  alias Mydia.Media.AddDefaults
+  alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.SearchLive.ResultType
 
   import MydiaWeb.IndexerComponents
+  import MydiaWeb.AddMediaComponents, only: [add_config_fields: 1]
 
   alias Mydia.Indexers.Structs.IndexerProgress
   alias Mydia.Library.Structs.Quality
@@ -58,9 +61,6 @@ defmodule MydiaWeb.SearchLive.Index do
       |> Enum.map(& &1.id)
       |> MapSet.new()
 
-    # Load library paths for download target selector (exclude disabled paths)
-    library_paths = Settings.list_library_paths() |> Enum.reject(& &1.disabled)
-
     {:ok,
      socket
      |> assign(:page_title, "Search Media")
@@ -95,12 +95,9 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:result_types, %{})
      |> assign(:show_detail_modal, false)
      |> assign(:selected_result, nil)
-     |> assign(:show_download_modal, false)
-     |> assign(:download_modal_result, nil)
-     |> assign(:download_target_type, nil)
-     |> assign(:confirming_download, false)
+     |> assign(:download_config, nil)
+     |> assign(:quality_profiles, Settings.list_quality_profiles())
      |> assign(:downloading_urls, MapSet.new())
-     |> assign(:library_paths, library_paths)
      |> assign(:available_indexers, available_indexers)
      |> assign(:selected_indexer_ids, selected_indexer_ids)
      |> stream_configure(:search_results, dom_id: &generate_result_id/1)
@@ -383,63 +380,25 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:retry_error_message, nil)}
   end
 
+  # Always opens, even when the type is known: the destination library is a
+  # choice the user makes here, and skipping the modal would make it for them
+  # (#1104).
   def handle_event("show_download_modal", %{"download_url" => download_url}, socket) do
-    # Find the search result by download URL
-    search_result = Map.get(socket.assigns.search_results_map, download_url)
+    case Map.get(socket.assigns.search_results_map, download_url) do
+      nil ->
+        {:noreply, socket}
 
-    # Detect the library type from category - nil if unknown
-    detected_type =
-      if search_result && is_integer(search_result.category) do
-        type = CategoryMapping.type_for_category(search_result.category)
-        # Return nil for :other so user must select
-        if type == :other, do: nil, else: type
-      else
-        # No category detected - require manual selection
-        nil
-      end
+      %SearchResult{} = result ->
+        {kind, _source} = result_type(socket.assigns.result_types, result)
 
-    # If type is detected, skip the modal and proceed directly to download
-    if detected_type do
-      Logger.info(
-        "Auto-detected type #{detected_type}, skipping modal for: #{search_result.title}"
-      )
-
-      # Track this URL as downloading (for loading indicator)
-      downloading_urls = MapSet.put(socket.assigns.downloading_urls, download_url)
-
-      socket =
-        socket
-        |> assign(:show_detail_modal, false)
-        |> assign(:selected_result, nil)
-        |> assign(:download_modal_result, search_result)
-        |> assign(:download_target_type, detected_type)
-        |> assign(:confirming_download, true)
-        |> assign(:downloading_urls, downloading_urls)
-        |> assign(:pending_release_title, search_result.title)
-        |> assign(:pending_search_result, search_result)
-        |> assign(:should_download_after_add, true)
-        # Re-insert result into stream to trigger UI update for loading state
-        |> stream_insert(:search_results, search_result)
-
-      # Use appropriate download flow based on type
-      scope = socket.assigns.current_scope
-
-      socket =
-        start_async(socket, :add_to_library, fn ->
-          add_release_to_library(scope, search_result.title)
-        end)
-
-      {:noreply, socket}
-    else
-      {:noreply,
-       socket
-       # Close detail modal if it's open
-       |> assign(:show_detail_modal, false)
-       |> assign(:selected_result, nil)
-       # Open download modal
-       |> assign(:show_download_modal, true)
-       |> assign(:download_modal_result, search_result)
-       |> assign(:download_target_type, detected_type)}
+        {:noreply,
+         socket
+         |> assign(:show_detail_modal, false)
+         |> assign(:selected_result, nil)
+         |> assign(
+           :download_config,
+           build_download_config(socket, result, ResultType.media_type(kind))
+         )}
     end
   end
 
@@ -447,51 +406,22 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply, close_download_modal(socket)}
   end
 
-  def handle_event("set_download_target_type", %{"type" => type}, socket) do
-    target_type = String.to_existing_atom(type)
-
-    {:noreply, assign(socket, :download_target_type, target_type)}
+  # A type switch resolves fresh defaults for the new type: the old type's
+  # library id is not a candidate for the new one. Other field changes need no
+  # server state; the form holds them until submit.
+  def handle_event("download_config_change", params, socket) do
+    with %{} = config <- socket.assigns.download_config,
+         {:ok, media_type} <- parse_media_type(params["media_type"]),
+         true <- media_type != config.media_type do
+      {:noreply,
+       assign(socket, :download_config, build_download_config(socket, config.result, media_type))}
+    else
+      _ -> {:noreply, socket}
+    end
   end
 
   def handle_event("confirm_download", _params, socket) do
-    search_result = socket.assigns.download_modal_result
-    target_type = socket.assigns.download_target_type
-
-    if search_result do
-      Logger.info("Confirming download for: #{search_result.title}, target type: #{target_type}")
-
-      # Track this URL as downloading and set loading state
-      downloading_urls = MapSet.put(socket.assigns.downloading_urls, search_result.download_url)
-
-      socket =
-        socket
-        |> assign(:confirming_download, true)
-        |> assign(:downloading_urls, downloading_urls)
-        # Re-insert result into stream to trigger UI update for loading state
-        |> stream_insert(:search_results, search_result)
-
-      # Use the target type to determine the download flow
-      case target_type do
-        type when type in [:movies, :series] ->
-          # For movies/series, use the existing metadata lookup flow
-          scope = socket.assigns.current_scope
-
-          {:noreply,
-           socket
-           |> assign(:pending_release_title, search_result.title)
-           |> assign(:pending_search_result, search_result)
-           |> assign(:should_download_after_add, true)
-           |> start_async(:add_to_library, fn ->
-             add_release_to_library(scope, search_result.title)
-           end)}
-
-        _ ->
-          {:noreply,
-           close_download_modal(put_flash(socket, :error, "Unknown library type: #{target_type}"))}
-      end
-    else
-      {:noreply, close_download_modal(put_flash(socket, :error, "No search result selected"))}
-    end
+    {:noreply, close_download_modal(socket)}
   end
 
   def handle_event("show_detail", %{"download_url" => download_url}, socket) do
@@ -925,25 +855,38 @@ defmodule MydiaWeb.SearchLive.Index do
     assign(socket, :indexer_progress, indexer_progress)
   end
 
-  defp close_download_modal(socket) do
-    # Clear the downloading URL if there was one and re-insert result to update UI
-    {downloading_urls, socket} =
-      if socket.assigns.pending_search_result do
-        search_result = socket.assigns.pending_search_result
-        urls = MapSet.delete(socket.assigns.downloading_urls, search_result.download_url)
-        # Re-insert result into stream to trigger UI update (clear loading state)
-        socket = stream_insert(socket, :search_results, search_result)
-        {urls, socket}
-      else
-        {socket.assigns.downloading_urls, socket}
+  defp close_download_modal(socket), do: assign(socket, :download_config, nil)
+
+  @media_types [:movie, :tv_show]
+
+  defp parse_media_type("movie"), do: {:ok, :movie}
+  defp parse_media_type("tv_show"), do: {:ok, :tv_show}
+  defp parse_media_type(_value), do: :error
+
+  defp download_type_label(:movie), do: "Movies"
+  defp download_type_label(:tv_show), do: "TV Series"
+
+  # Only types with a library to land in are offered. A preferred type that
+  # has none is dropped rather than shown with an empty picker; with exactly
+  # one type available it is chosen for the user.
+  defp build_download_config(socket, %SearchResult{} = result, preferred) do
+    available =
+      for type <- @media_types, MediaAddHelpers.candidate_libraries(type) != [], do: type
+
+    media_type =
+      cond do
+        preferred in available -> preferred
+        match?([_only], available) -> hd(available)
+        true -> nil
       end
 
-    socket
-    |> assign(:show_download_modal, false)
-    |> assign(:download_modal_result, nil)
-    |> assign(:download_target_type, nil)
-    |> assign(:confirming_download, false)
-    |> assign(:downloading_urls, downloading_urls)
+    %{
+      result: result,
+      available_types: available,
+      media_type: media_type,
+      libraries: if(media_type, do: MediaAddHelpers.candidate_libraries(media_type), else: []),
+      defaults: media_type && AddDefaults.resolve(socket.assigns.current_user, media_type)
+    }
   end
 
   defp generate_result_id(%SearchResult{} = result) do
