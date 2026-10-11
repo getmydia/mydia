@@ -53,29 +53,18 @@ defmodule MydiaWeb.Api.DownloadClientController do
   """
   def show(conn, %{"id" => id}) do
     client = Settings.get_download_client_config!(id)
-    {:ok, health} = ClientHealth.check_health(id)
 
-    client_with_health = %{
-      id: client.id,
-      name: client.name,
-      type: client.type,
-      enabled: client.enabled,
-      priority: client.priority,
-      host: client.host,
-      port: client.port,
-      use_ssl: client.use_ssl,
-      url_base: client.url_base,
-      category: client.category,
-      download_directory: client.download_directory,
-      health: health
-    }
+    # check_health/2 looks the config up again, so a client deleted since the
+    # lookup above comes back as {:error, :not_found} rather than raising.
+    case ClientHealth.check_health(id) do
+      {:ok, health} ->
+        json(conn, %{data: client_with_health(client, health)})
 
-    json(conn, %{data: client_with_health})
+      {:error, :not_found} ->
+        not_found(conn)
+    end
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{error: "Download client not found"})
+    Ecto.NoResultsError -> not_found(conn)
   end
 
   @doc """
@@ -93,9 +82,7 @@ defmodule MydiaWeb.Api.DownloadClientController do
         json(conn, %{data: health})
 
       {:error, :not_found} ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Download client not found"})
+        not_found(conn)
     end
   end
 
@@ -113,5 +100,28 @@ defmodule MydiaWeb.Api.DownloadClientController do
     conn
     |> put_status(:accepted)
     |> json(%{message: "Health check refresh initiated"})
+  end
+
+  defp not_found(conn) do
+    conn
+    |> put_status(:not_found)
+    |> json(%{error: "Download client not found"})
+  end
+
+  defp client_with_health(client, health) do
+    %{
+      id: client.id,
+      name: client.name,
+      type: client.type,
+      enabled: client.enabled,
+      priority: client.priority,
+      host: client.host,
+      port: client.port,
+      use_ssl: client.use_ssl,
+      url_base: client.url_base,
+      category: client.category,
+      download_directory: client.download_directory,
+      health: health
+    }
   end
 end

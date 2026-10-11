@@ -58,33 +58,15 @@ defmodule MydiaWeb.Api.IndexerController do
   """
   def show(conn, %{"id" => id}) do
     indexer = Settings.get_indexer_config!(id)
-    {:ok, health} = Health.check_health(id)
-    rate_limit_stats = RateLimiter.get_stats(id)
-    failure_count = Health.get_failure_count(id)
 
-    indexer_with_health = %{
-      id: indexer.id,
-      name: indexer.name,
-      type: indexer.type,
-      enabled: indexer.enabled,
-      priority: indexer.priority,
-      base_url: indexer.base_url,
-      api_key: if(indexer.api_key, do: "***", else: nil),
-      indexer_ids: indexer.indexer_ids,
-      categories: indexer.categories,
-      rate_limit: indexer.rate_limit,
-      connection_settings: indexer.connection_settings,
-      health: health,
-      rate_limit_stats: rate_limit_stats,
-      consecutive_failures: failure_count
-    }
-
-    json(conn, %{data: indexer_with_health})
+    # check_health/2 looks the config up again, so an indexer deleted since the
+    # lookup above comes back as {:error, :not_found} rather than raising.
+    case Health.check_health(id) do
+      {:ok, health} -> json(conn, %{data: indexer_with_health(indexer, id, health)})
+      {:error, :not_found} -> not_found(conn)
+    end
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{error: "Indexer not found"})
+    Ecto.NoResultsError -> not_found(conn)
   end
 
   @doc """
@@ -102,9 +84,7 @@ defmodule MydiaWeb.Api.IndexerController do
         json(conn, %{data: health})
 
       {:error, :not_found} ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Indexer not found"})
+        not_found(conn)
     end
   end
 
@@ -139,9 +119,31 @@ defmodule MydiaWeb.Api.IndexerController do
 
     json(conn, %{message: "Failure counter reset successfully"})
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{error: "Indexer not found"})
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  defp not_found(conn) do
+    conn
+    |> put_status(:not_found)
+    |> json(%{error: "Indexer not found"})
+  end
+
+  defp indexer_with_health(indexer, id, health) do
+    %{
+      id: indexer.id,
+      name: indexer.name,
+      type: indexer.type,
+      enabled: indexer.enabled,
+      priority: indexer.priority,
+      base_url: indexer.base_url,
+      api_key: if(indexer.api_key, do: "***", else: nil),
+      indexer_ids: indexer.indexer_ids,
+      categories: indexer.categories,
+      rate_limit: indexer.rate_limit,
+      connection_settings: indexer.connection_settings,
+      health: health,
+      rate_limit_stats: RateLimiter.get_stats(id),
+      consecutive_failures: Health.get_failure_count(id)
+    }
   end
 end
