@@ -574,10 +574,7 @@ defmodule Mydia.Indexers do
   # "runtime::" id for an env indexer that no longer exists raises a plain
   # RuntimeError (Settings.ServiceConfigs.get_indexer_config!/2).
   defp fetch_indexer_config(id) do
-    case Settings.get_indexer_config!(id) do
-      nil -> {:error, "Indexer not found"}
-      config -> {:ok, config}
-    end
+    {:ok, Settings.get_indexer_config!(id)}
   rescue
     _ in [Ecto.NoResultsError, RuntimeError] -> {:error, "Indexer not found"}
   end
@@ -726,9 +723,7 @@ defmodule Mydia.Indexers do
     end
   end
 
-  defp format_indexer_error(%{message: message}) when is_binary(message), do: message
-  defp format_indexer_error(error) when is_binary(error), do: error
-  defp format_indexer_error(error), do: inspect(error)
+  defp format_indexer_error(%Adapter.Error{message: message}), do: message
 
   defp filter_by_seeders(results, min_seeders) when min_seeders > 0 do
     # NZB results have nil seeders; the min-seeders setting is torrent-only.

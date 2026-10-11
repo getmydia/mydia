@@ -511,6 +511,48 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
     updated
   end
 
+  describe "probe_search/3 with an unsatisfiable JSON row selector" do
+    test "returns a handled error outcome instead of raising" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, ~s({"data": []}))
+      end)
+
+      url = "http://localhost:#{bypass.port}"
+      parsed = parsed_for(url)
+
+      parsed = %{
+        parsed
+        | search: %{
+            parsed.search
+            | paths: [%{path: "/search", response: %{type: "json"}}],
+              rows: %{selector: "data.items"}
+          }
+      }
+
+      assert {:error, message} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      assert is_binary(message)
+    end
+  end
+
+  describe "probe_search/3 with a search path that fails to render" do
+    test "returns a handled error outcome instead of raising" do
+      url = "http://localhost:1"
+      parsed = parsed_for(url)
+
+      parsed = %{
+        parsed
+        | search: %{parsed.search | paths: [%{path: "/search/{{ .Keywords "}]}
+      }
+
+      assert {:error, message} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      assert is_binary(message)
+    end
+  end
+
   describe "probe_search/3" do
     test "reports the row count when the search returns results" do
       bypass = Bypass.open()

@@ -718,6 +718,68 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
     end
   end
 
+  describe "search/3 with an unsatisfiable JSON row selector" do
+    test "returns an Adapter.Error rather than a bare atom", %{
+      definition: definition,
+      bypass: bypass
+    } do
+      yaml =
+        sample_yaml("http://localhost:#{bypass.port}")
+        |> String.replace(
+          "  path: /search/{{ .Keywords }}/\n",
+          "  path: /search/{{ .Keywords }}/\n  response:\n    type: json\n"
+        )
+        |> String.replace(~s(selector: "table.results tr"), ~s(selector: "data.items"))
+
+      definition |> Ecto.Changeset.change(%{definition: yaml}) |> Repo.update!()
+
+      Bypass.stub(bypass, "GET", "/search/badpath/", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, ~s({"data": []}))
+      end)
+
+      config = %{type: :cardigann, name: "Test Indexer", indexer_id: "test-indexer"}
+
+      assert {:error, %Error{}} = Cardigann.search(config, "badpath")
+    end
+  end
+
+  describe "parsing template context from a real search" do
+    test "renders the operator's definition config in field filter arguments", %{
+      definition: definition,
+      bypass: bypass
+    } do
+      yaml =
+        String.replace(
+          sample_yaml("http://localhost:#{bypass.port}"),
+          ~s(title:\n      selector: "td.title a"),
+          ~s(title:\n      selector: "td.title a"\n      filters:\n        - {name: append, args: ["{{ .Config.suffix }}"]})
+        )
+
+      definition
+      |> Ecto.Changeset.change(%{definition: yaml, config: %{"suffix" => "-CFG"}})
+      |> Repo.update!()
+
+      Bypass.stub(bypass, "GET", "/search/cfgq/", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.resp(200, """
+        <html><body><table class="results"><tr><th>Header</th></tr>
+        <tr><td class="title"><a href="/t/1">Some Title</a></td>
+        <td class="download"><a href="magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567">d</a></td>
+        <td class="size">1 GB</td><td class="seeders">5</td><td class="leechers">1</td>
+        <td class="category">Movies</td></tr></table></body></html>
+        """)
+      end)
+
+      config = %{type: :cardigann, name: "Test Indexer", indexer_id: "test-indexer"}
+
+      assert {:ok, [result]} = Cardigann.search(config, "cfgq")
+      assert result.title == "Some Title-CFG"
+    end
+  end
+
   describe "parsing template context" do
     test "applies keywordsfilters to Keywords before result parsing" do
       parsed = %Parsed{

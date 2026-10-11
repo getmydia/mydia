@@ -9,7 +9,7 @@ defmodule Mydia.Config.Schema do
 
   require Logger
 
-  alias Mydia.Settings.PathMappingConfig
+  alias Mydia.Config.Schema.PathMappingChangeset
   alias Mydia.Indexers.NewznabEndpoint
   alias Mydia.Plugins.Index.Signature
 
@@ -73,6 +73,7 @@ defmodule Mydia.Config.Schema do
 
   embedded_schema do
     embeds_one :server, Server, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       field :port, :integer, default: 4000
       field :host, :string, default: "0.0.0.0"
       field :url_scheme, :string, default: "http"
@@ -86,11 +87,13 @@ defmodule Mydia.Config.Schema do
     # transaction mode are correctness settings rather than tuning knobs.
     # See issue #503.
     embeds_one :database, Database, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       field :path, :string, default: "mydia_dev.db"
       field :pool_size, :integer, default: 5
     end
 
     embeds_one :auth, Auth, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       field :local_enabled, :boolean, default: true
       field :oidc_enabled, :boolean, default: false
       field :oidc_issuer, :string
@@ -104,6 +107,7 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_one :media, Media, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       # Legacy paths - prefer LIBRARY_PATH_* env vars instead
       field :movies_path, :string
       field :tv_path, :string
@@ -120,12 +124,14 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_one :metadata, Metadata, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       # Language sent to TMDB/TVDB through metadata-relay. Accepts ISO 639-1
       # codes ("de") or BCP 47 language tags ("de-DE", "pt-BR").
       field :language, :string, default: "en-US"
     end
 
     embeds_one :downloads, Downloads, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       field :monitor_interval_minutes, :integer, default: 2
       # Default TTL (in days) applied when a `release_blacklist` row is
       # inserted without an explicit `expires_at`. See `Mydia.Downloads.Blacklists`
@@ -177,6 +183,7 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_one :upgrades, Upgrades, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       # Master switch for Mydia.Jobs.UpgradeSweep, the daily bounded sweep
       # that looks for quality upgrades to already-present library files.
       field :sweep_enabled, :boolean, default: true
@@ -186,6 +193,7 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_one :streaming, Streaming, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       # Ceiling, in pixels, on the output height of any HLS transcode. nil
       # means no ceiling: a transcode keeps the source resolution.
       #
@@ -260,16 +268,19 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_one :logging, Logging, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       field :level, :string, default: "info"
       field :format, :string, default: "[$level] $message\n"
     end
 
     embeds_one :oban, Oban, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       field :poll_interval, :integer, default: 1000
       field :max_age_days, :integer, default: 7
     end
 
     embeds_one :plugins, Plugins, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       # WASM plugin runtime sandbox limits (KTD4). Fuel metering defaults OFF
       # for raw speed; the event-dispatch path forces it ON regardless (the
       # safety floor against a hung guest draining the pool).
@@ -307,6 +318,7 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_one :flaresolverr, FlareSolverr, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       field :enabled, :boolean, default: false
       field :url, :string
       field :timeout, :integer, default: 60_000
@@ -318,10 +330,12 @@ defmodule Mydia.Config.Schema do
     # this schema on purpose: see Mydia.Player. ENABLE_REMOTE_ACCESS overrides
     # the admin toggle that writes this.
     embeds_one :remote_access, RemoteAccess, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
       field :enabled, :boolean, default: true
     end
 
     embeds_many :download_clients, DownloadClient, on_replace: :delete, primary_key: false do
+      @type t :: %__MODULE__{}
       field :name, :string
 
       field :type, Ecto.Enum,
@@ -357,6 +371,7 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_many :indexers, Indexer, on_replace: :delete, primary_key: false do
+      @type t :: %__MODULE__{}
       field :name, :string
       field :type, Ecto.Enum, values: [:prowlarr, :jackett, :newznab, :public]
       field :enabled, :boolean, default: true
@@ -371,6 +386,7 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_many :subtitle_providers, SubtitleProvider, on_replace: :delete, primary_key: false do
+      @type t :: %__MODULE__{}
       field :name, :string
       field :type, :string
       field :enabled, :boolean, default: true
@@ -381,6 +397,7 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_many :media_servers, MediaServer, on_replace: :delete, primary_key: false do
+      @type t :: %__MODULE__{}
       field :name, :string
       field :type, Ecto.Enum, values: [:jellyfin]
       field :enabled, :boolean, default: true
@@ -391,6 +408,7 @@ defmodule Mydia.Config.Schema do
     # S3-compatible storage backends (STORAGE_BACKEND_<N>_*, `storage_backends:`).
     # Library paths reference one as s3://<name>/<prefix>.
     embeds_many :storage_backends, StorageBackend, on_replace: :delete, primary_key: false do
+      @type t :: %__MODULE__{}
       field :name, :string
       field :endpoint, :string
       field :region, :string, default: "us-east-1"
@@ -401,6 +419,7 @@ defmodule Mydia.Config.Schema do
     end
 
     embeds_many :library_paths, LibraryPath, on_replace: :delete, primary_key: false do
+      @type t :: %__MODULE__{}
       field :path, :string
       field :name, :string
       # Keeps @removed_library_types (:music, :books, :adult) even though
@@ -418,6 +437,7 @@ defmodule Mydia.Config.Schema do
     # `plugin_settings:`). Mydia.Plugins.DeclaredSettings writes them onto the
     # installed plugin's row. They never install, approve or enable a plugin.
     embeds_many :plugin_settings, PluginSettingsDecl, on_replace: :delete, primary_key: false do
+      @type t :: %__MODULE__{}
       field :slug, :string
       field :settings, :map, default: %{}
     end
@@ -427,6 +447,7 @@ defmodule Mydia.Config.Schema do
     # `legacy_source` marks entries translated from the deprecated Plex form of
     # MEDIA_SERVER_<N>_* / `media_servers:`.
     embeds_many :plugin_instances, PluginInstanceDecl, on_replace: :delete, primary_key: false do
+      @type t :: %__MODULE__{}
       field :plugin, :string
       field :name, :string
       field :enabled, :boolean, default: true
@@ -437,11 +458,13 @@ defmodule Mydia.Config.Schema do
     # Env/YAML-declared plugin catalogs (PLUGINS_SOURCE_<N>_*, `plugin_sources:`).
     # Mydia.Plugins.DeclaredSources persists them as read-only rows at boot.
     embeds_many :plugin_sources, PluginSourceDecl, on_replace: :delete, primary_key: false do
+      @type t :: %__MODULE__{}
       field :url, :string
       field :public_key, :string
     end
 
     embeds_many :path_mappings, PathMapping, on_replace: :delete, primary_key: false do
+      @type t :: %__MODULE__{}
       field :remote_prefix, :string
       field :local_prefix, :string
     end
@@ -476,7 +499,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:plugin_settings, with: &plugin_settings_changeset/2)
     |> cast_embed(:plugin_instances, with: &plugin_instance_changeset/2)
     |> cast_embed(:plugin_sources, with: &plugin_source_changeset/2)
-    |> cast_embed(:path_mappings, with: &path_mapping_changeset/2)
+    |> cast_embed(:path_mappings, with: &PathMappingChangeset.changeset/2)
     |> validate_configuration()
   end
 
@@ -1065,71 +1088,6 @@ defmodule Mydia.Config.Schema do
     schema
     |> cast(attrs, [:slug, :settings])
     |> validate_required([:slug])
-  end
-
-  defp path_mapping_changeset(schema, attrs) do
-    schema
-    |> cast(attrs, [:remote_prefix, :local_prefix])
-    |> update_change(:remote_prefix, &PathMappingConfig.normalize_prefix/1)
-    |> update_change(:local_prefix, &PathMappingConfig.normalize_prefix/1)
-    |> validate_required([:remote_prefix, :local_prefix])
-    |> validate_path_mapping_absolute(:remote_prefix)
-    |> validate_path_mapping_absolute(:local_prefix)
-    |> validate_path_mapping_no_traversal(:remote_prefix)
-    |> validate_path_mapping_no_traversal(:local_prefix)
-    |> validate_path_mapping_remote_prefix_specific()
-    |> validate_path_mapping_distinct_prefixes()
-  end
-
-  defp validate_path_mapping_absolute(changeset, field) do
-    case get_field(changeset, field) do
-      "/" <> _ -> changeset
-      nil -> changeset
-      _ -> add_error(changeset, field, "must be an absolute path (start with /)")
-    end
-  end
-
-  defp validate_path_mapping_no_traversal(changeset, field) do
-    case get_field(changeset, field) do
-      value when is_binary(value) ->
-        if ".." in Path.split(value) do
-          add_error(changeset, field, "must not contain '..' segments")
-        else
-          changeset
-        end
-
-      _ ->
-        changeset
-    end
-  end
-
-  defp validate_path_mapping_remote_prefix_specific(changeset) do
-    case get_field(changeset, :remote_prefix) do
-      value when is_binary(value) ->
-        if length(Path.split(value)) < 3 do
-          add_error(
-            changeset,
-            :remote_prefix,
-            "must be at least two path segments deep (e.g. /downloads/complete)"
-          )
-        else
-          changeset
-        end
-
-      _ ->
-        changeset
-    end
-  end
-
-  defp validate_path_mapping_distinct_prefixes(changeset) do
-    remote = get_field(changeset, :remote_prefix)
-    local = get_field(changeset, :local_prefix)
-
-    if not is_nil(remote) and remote == local do
-      add_error(changeset, :local_prefix, "must differ from the remote prefix")
-    else
-      changeset
-    end
   end
 
   defp validate_oidc_config(changeset) do

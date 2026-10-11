@@ -130,6 +130,7 @@ ${YELLOW}Development Commands:${NC}
   test [args]          Run tests (mix test) natively, with test-DB setup
   feature-test [args]  Run Wallaby browser tests (uses in-shell chromedriver)
   format               Format code (mix format)
+  dialyzer [args]      Run Dialyzer (mix dialyzer, MIX_ENV=test)
   deps.get             Install dependencies
   db.setup             Create and migrate the development database
   ecto.migrate         Run database migrations
@@ -461,6 +462,10 @@ case "$COMMAND" in
     format)
         echo -e "${GREEN}Formatting code...${NC}"
         in_shell mix format
+        ;;
+    dialyzer)
+        echo -e "${GREEN}Running Dialyzer...${NC}"
+        in_shell mix dialyzer "$@"
         ;;
     deps.get)
         echo -e "${GREEN}Installing dependencies...${NC}"

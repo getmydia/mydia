@@ -101,7 +101,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
                definition
              ) do
         # Build template context for filter rendering
-        template_context = build_template_context_for_parsing(parsed, user_config, search_opts)
+        template_context = build_template_context_for_parsing(parsed, search_opts)
 
         # Get base URL for resolving relative URLs
         base_url =
@@ -123,13 +123,6 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
           filtered_results = apply_search_filters(results, opts)
           {:ok, filtered_results}
         end
-      else
-        {:error, %Error{} = error} ->
-          {:error, error}
-
-        {:error, reason} ->
-          Logger.error("Cardigann search failed: #{inspect(reason)}")
-          {:error, Error.search_failed("Search failed: #{inspect(reason)}")}
       end
     else
       Logger.debug("Cardigann search skipped - feature disabled")
@@ -684,16 +677,12 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   defp has_movie_search_mode?(_), do: false
 
   # Build template context for rendering filter arguments during result parsing
-  defp build_template_context_for_parsing(parsed, user_config, search_opts) do
-    config_map =
-      case user_config do
-        %{config: config} when is_map(config) -> config
-        %{"config" => config} when is_map(config) -> config
-        _ -> %{}
-      end
-
-    search_opts
-    |> Keyword.put(:config, config_map)
-    |> then(&Mydia.Indexers.Cardigann.TemplateContext.build(parsed, &1))
+  #
+  # The operator's settings travel in search_opts[:config] (definition.config, see
+  # build_search_opts/4). The session user_config holds only credentials and
+  # cookies, so reading :config from it always produced %{} and dropped every
+  # setting from filter arguments.
+  defp build_template_context_for_parsing(parsed, search_opts) do
+    Mydia.Indexers.Cardigann.TemplateContext.build(parsed, search_opts)
   end
 end

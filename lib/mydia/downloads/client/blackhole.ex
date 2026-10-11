@@ -83,7 +83,6 @@ defmodule Mydia.Downloads.Client.Blackhole do
       {:ok, torrent_hash}
     else
       {:error, %Error{} = error} -> {:error, error}
-      {:error, reason} -> {:error, Error.api_error("Failed to add torrent: #{inspect(reason)}")}
     end
   end
 

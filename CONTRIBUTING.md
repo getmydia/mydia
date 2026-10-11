@@ -61,9 +61,10 @@ to your branch.
 
 This is not grandfathering. Nothing lists the findings that already exist, and the
 gate only ever tightens: once a function is simplified or a file shrinks, the
-lower number becomes the new baseline. Findings are matched by check, function name
-and message, ignoring file and module, so moving an unchanged function into a new
-module is free. Splitting a large file is exactly what the gate wants.
+lower number becomes the new baseline. Findings are matched by check and function name
+(a lower complexity or depth passes, a higher one fails), ignoring file and module, so
+moving an unchanged function into a new module is free. Splitting a large file is
+exactly what the gate wants.
 
 ### What is forbidden
 

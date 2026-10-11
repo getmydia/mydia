@@ -59,8 +59,8 @@ defmodule Mydia.Downloads.ImportCandidates do
       "name" => file.name,
       "size" => file.size,
       "skip_reason" => skip_reason(file, library_type),
-      "parsed_season" => parsed && parsed.season,
-      "parsed_episode" => parsed && first_episode(parsed)
+      "parsed_season" => parsed.season,
+      "parsed_episode" => first_episode(parsed)
     }
   end
 

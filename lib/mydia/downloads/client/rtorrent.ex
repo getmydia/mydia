@@ -175,7 +175,7 @@ defmodule Mydia.Downloads.Client.Rtorrent do
 
       {:error, %Error{type: :api_error} = error} ->
         # Check if it's a "not found" error
-        if String.contains?(error.message || "", "Could not find") do
+        if String.contains?(error.message, "Could not find") do
           {:error, Error.not_found("Torrent not found")}
         else
           {:error, error}
@@ -521,8 +521,6 @@ defmodule Mydia.Downloads.Client.Rtorrent do
     |> String.replace("\"", "&quot;")
     |> String.replace("'", "&apos;")
   end
-
-  defp escape_xml(other), do: to_string(other)
 
   # Parse XML-RPC response
   defp parse_xmlrpc_response(body) when is_binary(body) do

@@ -143,10 +143,8 @@ defmodule Mix.Tasks.Mydia.NfoExport do
         Mix.shell().info("  [dry-run] #{media_item.title} - #{count} NFO file(s)")
         %{acc | written: acc.written + count}
       else
-        case NfoWriter.write_for_media_item(media_item, library_path) do
-          :ok -> %{acc | written: acc.written + count}
-          {:error, _reason} -> %{acc | skipped: acc.skipped + 1}
-        end
+        :ok = NfoWriter.write_for_media_item(media_item, library_path)
+        %{acc | written: acc.written + count}
       end
     end
   end

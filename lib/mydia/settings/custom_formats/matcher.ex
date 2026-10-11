@@ -52,9 +52,6 @@ defmodule Mydia.Settings.CustomFormats.Matcher do
       # :re returns the reason as a charlist, not a binary.
       {:error, {reason, at}} ->
         {:error, "#{List.to_string(reason)} at position #{at}"}
-
-      {:error, reason} ->
-        {:error, inspect(reason)}
     end
   end
 

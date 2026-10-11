@@ -71,8 +71,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           episode: integer() | nil,
           imdb_id: String.t() | nil,
           tmdb_id: integer() | nil,
+          tvdb_id: integer() | nil,
           config: map() | nil,
-          settings: [map()] | nil
+          settings: [map()] | nil,
+          base_url: String.t() | nil,
+          on_promote: (String.t() -> term()) | nil
         ]
 
   @type http_response :: %{
@@ -123,14 +126,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   def execute_search(%Parsed{} = definition, opts, user_config, flaresolverr_opts)
       when is_list(opts) do
-    candidates =
-      case Keyword.get(opts, :base_url) do
-        nil ->
-          Links.candidates(definition)
+    active = opts |> Keyword.get(:base_url) |> List.wrap()
 
-        active ->
-          [String.trim_trailing(active, "/") | Links.candidates(definition)] |> Enum.uniq()
-      end
+    candidates =
+      (Enum.map(active, &String.trim_trailing(&1, "/")) ++ Links.candidates(definition))
+      |> Enum.uniq()
       |> Enum.take(@max_search_candidates)
 
     case candidates do
@@ -877,14 +877,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   # Render a template string using the CardigannTemplate engine
   defp render_template(template, definition, opts) do
-    context = build_template_context(definition, opts)
-    CardigannTemplate.render(template, context)
+    with {:error, reason} <-
+           CardigannTemplate.render(template, build_template_context(definition, opts)) do
+      {:error, Error.search_failed("Search path failed to render: #{inspect(reason)}")}
+    end
   end
 
-  # Build template context from definition and search options
-  defp build_template_context(definition, opts) do
-    Mydia.Indexers.Cardigann.TemplateContext.build(definition, opts)
-  end
+  defp build_template_context(definition, opts),
+    do: Mydia.Indexers.Cardigann.TemplateContext.build(definition, opts)
 
   @doc """
   Joins a rendered path onto a base URL, honouring an absolute path.

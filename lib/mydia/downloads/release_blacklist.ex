@@ -50,7 +50,7 @@ defmodule Mydia.Downloads.ReleaseBlacklist do
   `indexer` is normalized to lowercase here so the unique constraint catches
   `"Prowlarr"` vs `"prowlarr"` mismatches.
   """
-  @spec changeset(t() | Ecto.Changeset.t(), map()) :: Ecto.Changeset.t()
+  @spec changeset(%__MODULE__{} | Ecto.Changeset.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct, attrs) do
     struct
     |> cast(attrs, @required ++ @optional)

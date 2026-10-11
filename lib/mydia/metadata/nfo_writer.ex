@@ -102,7 +102,7 @@ defmodule Mydia.Metadata.NfoWriter do
 
   Returns `:ok` regardless of individual file write failures (failures are logged).
   """
-  @spec write_for_media_item(MediaItem.t(), LibraryPath.t()) :: :ok | {:error, Storage.Error.t()}
+  @spec write_for_media_item(MediaItem.t(), LibraryPath.t()) :: :ok
   def write_for_media_item(%MediaItem{metadata: nil}, _library_path), do: :ok
 
   def write_for_media_item(%MediaItem{} = media_item, %LibraryPath{} = library_path) do

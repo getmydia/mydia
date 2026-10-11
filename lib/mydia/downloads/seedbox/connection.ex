@@ -94,9 +94,12 @@ defmodule Mydia.Downloads.Seedbox.Connection do
     port = normalize_port(Map.get(rf, "port", 22))
 
     case :ssh_sftp.start_channel(host, port, ssh_opts) do
-      {:ok, channel, _connection_ref} -> {:ok, channel, cleanup(channel, key_dir)}
-      {:ok, channel} -> {:ok, channel, cleanup(channel, key_dir)}
-      {:error, reason} -> cleanup_key_dir(key_dir) && {:error, reason}
+      {:ok, channel, _connection_ref} ->
+        {:ok, channel, cleanup(channel, key_dir)}
+
+      {:error, reason} ->
+        cleanup_key_dir(key_dir)
+        {:error, reason}
     end
   end
 
@@ -156,6 +159,10 @@ defmodule Mydia.Downloads.Seedbox.Connection do
     :public_key.pem_encode([reencoded])
   end
 
-  defp cleanup_key_dir(nil), do: true
-  defp cleanup_key_dir(dir), do: File.rm_rf!(dir) && true
+  defp cleanup_key_dir(nil), do: :ok
+
+  defp cleanup_key_dir(dir) do
+    File.rm_rf!(dir)
+    :ok
+  end
 end

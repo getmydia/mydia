@@ -52,17 +52,19 @@ defmodule Mydia.Indexers.CardigannAuth do
 
   import Ecto.Query
 
-  @type auth_method :: :form | :api_key | :cookie
+  @type auth_method :: :form | :api_key | :cookie | :none
   @type user_config :: %{
           optional(:username) => String.t(),
           optional(:password) => String.t(),
           optional(:api_key) => String.t(),
-          optional(:cookies) => [String.t()]
+          optional(:cookies) => [String.t()],
+          optional(:config) => map()
         }
 
   @type session :: %{
+          optional(:api_key) => String.t(),
           cookies: [String.t()],
-          expires_at: DateTime.t(),
+          expires_at: DateTime.t() | nil,
           method: auth_method()
         }
 
@@ -313,8 +315,6 @@ defmodule Mydia.Indexers.CardigannAuth do
       _ -> user_config
     end
   end
-
-  defp config_for(_user_config), do: %{}
 
   defp perform_api_key_auth(_definition, user_config) do
     case Map.get(user_config, :api_key) do

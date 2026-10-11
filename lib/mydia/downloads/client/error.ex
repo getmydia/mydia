@@ -18,6 +18,7 @@ defmodule Mydia.Downloads.Client.Error do
     * `:api_error` - Generic API error from the client
     * `:network_error` - Network-related error
     * `:parse_error` - Error parsing response from client
+    * `:stale_session` - Internal marker: the client session expired and the caller should re-authenticate
     * `:unknown` - Unknown or unexpected error
 
   ## Examples
@@ -44,6 +45,7 @@ defmodule Mydia.Downloads.Client.Error do
           | :api_error
           | :network_error
           | :parse_error
+          | :stale_session
           | :unknown
 
   @type t :: %__MODULE__{

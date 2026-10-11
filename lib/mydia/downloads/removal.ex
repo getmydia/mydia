@@ -252,7 +252,6 @@ defmodule Mydia.Downloads.Removal do
           :ok -> :deleted
           {:ok, _job} -> :deleted
           {:error, reason} -> Repo.rollback(reason)
-          other -> Repo.rollback({:unexpected_enqueue_result, other})
         end
 
       {:error, changeset} ->
