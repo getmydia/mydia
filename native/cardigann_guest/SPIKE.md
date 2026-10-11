@@ -1,6 +1,6 @@
 # Cardigann wasm spike
 
-Verdict: **GO** (details and the rule-by-rule check at the end).
+Verdict: **GO, with an open sandbox concern** (the component only links with `allow_http: true`, which also grants ambient network and DNS; see the verdict section).
 
 ## Toolchain
 
@@ -13,10 +13,12 @@ Verdict: **GO** (details and the rule-by-rule check at the end).
 
 ## Substitutions count
 
-9 upstream files are replaced by shims (see `SUBSTITUTIONS.md`): 8 from Task 2 plus
-`NzbDrone.Common/Http/HttpClient.cs`, added in Task 4 (one line removed, see Build obstacles 7).
-Two further shims are additions with no upstream counterpart (`Services.cs`,
-`ExchangeDispatcher.cs`/`RequestMapping.cs`).
+9 upstream files are not compiled and are replaced (the 9 rows of `SUBSTITUTIONS.md`): `IndexerDefinitionUpdateService.cs`,
+`IndexerStatusService.cs`, `ProviderStatusServiceBase.cs`, `IndexerProxyFactory.cs`, `LocalizationService.cs`,
+`LazyLoaded.cs`, `RuntimeInfo.cs`, `EnsureStringExtensions.cs` (Task 2) and `HttpClient.cs` (Task 4, one line removed,
+see Build obstacle 8). They are covered by 8 shim files, because `shim/IndexerStatus.cs` replaces two upstream files.
+`shim/` holds 13 files in all: those 8, plus `Services.cs`, `ExchangeDispatcher.cs` and `RequestMapping.cs` (additions with
+no upstream counterpart) and `HostExchange.cs` and `HostLogTarget.cs` (wasm-only host glue).
 
 ## Component shape (Task 3)
 
@@ -138,7 +140,7 @@ Real runs, one Linux machine, median as stated. The test is
 |---|---|
 | `.wasm` size, unstripped | 75,612,093 bytes (72.1 MiB) |
 | `.wasm` size, `wasm-tools strip` | 39,148,384 bytes (37.3 MiB) |
-| Compile (`Component.new`), median of 3 | 3,269 ms (runs: 3585, 3269, 3269; an earlier run 3718, 3605, 3642) |
+| Compile (`Component.new`), median of 3 | 3,269 ms (the three samples of the final run: 3585, 3269, 3269; an earlier run of the same test gave 3718, 3605, 3642, median 3642) |
 | Instantiate with a reused compiled component, median of 20 | 0 ms (sub-millisecond, `Instance.new` alone reads 3 ms median incl. store) |
 | Fresh store + compile, median of 20 | 3,320 ms |
 | Fresh store + `Instance.new` of an already compiled component | 3 ms median |
@@ -189,7 +191,12 @@ Observed on Wasmex 0.15.1. `Wasmex.Components.call_function/4` wraps the call in
 
 ## Verdict
 
-**GO.**
+**GO, with an open sandbox concern.**
+
+**Sandbox deviation, not met yet:** the component links only with `allow_http: true`, and `store.rs` then also calls
+`inherit_network()` and `allow_ip_name_lookup(true)`. The constraint "the guest's only egress is `http-request`" is therefore
+NOT enforced today. Mitigations are listed under Linking under Wasmex. Phase 2 must not ship this as the standard sandbox
+until one of them lands.
 
 | Rule | Result |
 |---|---|
@@ -205,4 +212,6 @@ What GO does not cover, to settle before or during Phase 2:
    engine and compiled component. Plugin-host style `start_link` per call is not viable.
 3. The AOT build needed three fixes found only by running it (obstacles 7 to 9); more reflection
    or platform gaps may surface in definitions other than the two fixtures.
-4. `publish-unix` is `:none` for dated rows.
+4. `publish-unix` is `:none` for dated rows. This is a wasm-only defect: the native `RunnerTests` assert the parsed
+   date (`2031-04-02`) for this same fixture and pass on plain .NET, so the fixture and `ToRelease` are not at fault.
+   `spike_test.exs` has a `:known_wasm_defect` test asserting the date, excluded by default, so a fix turns it green.

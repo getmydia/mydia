@@ -3,7 +3,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SpikeTest do
   # normal suite skips it: run with `--include cardigann_spike`.
   use ExUnit.Case, async: false
 
-  @moduletag :cardigann_spike
+  # :cardigann_spike is tagged per test (not per module) so the known-defect
+  # test below can sit outside `--include cardigann_spike`.
   @moduletag timeout: 900_000
   @wasm Path.expand("../../../../../native/cardigann_guest/out/cardigann.wasm", __DIR__)
   @fixtures Path.expand("../../../../support/fixtures/cardigann_wasm", __DIR__)
@@ -66,6 +67,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SpikeTest do
     }
   end
 
+  # SANDBOX DEVIATION. allow_http is true only because Wasmex links wasi:http
+  # (which the component imports) solely when it is true, and it then also
+  # inherits the host network and DNS. The guest does not use them, but nothing
+  # enforces that. Do NOT copy this as the standard sandbox for the Engine; see
+  # "Linking under Wasmex" in native/cardigann_guest/SPIKE.md for mitigations.
   defp wasi,
     do: %WasiP2Options{
       inherit_stdin: false,
@@ -126,6 +132,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SpikeTest do
     |> String.to_integer()
   end
 
+  @tag :cardigann_spike
   test "public search returns releases", %{bypass: bypass, bytes: bytes} do
     stub_search(bypass)
     {pid, start_ms} = start(bytes)
@@ -142,6 +149,22 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SpikeTest do
     Process.exit(pid, :kill)
   end
 
+  # Known wasm-only defect: the native RunnerTests parse this same fixture's
+  # date (2031-04-02); under wasm publish-unix is :none. Excluded by default so
+  # the spike run stays green; a later fix flips it.
+  # Run it with `--include known_wasm_defect`.
+  @tag :known_wasm_defect
+  test "search parses the release publish date", %{bypass: bypass, bytes: bytes} do
+    stub_search(bypass)
+    {pid, _} = start(bytes)
+
+    assert {:ok, {:ok, %{releases: [first | _]}}} = search(pid, bypass)
+    expected = DateTime.to_unix(~U[2031-04-02 00:00:00Z])
+    assert {:some, ^expected} = first["publish-unix"]
+    Process.exit(pid, :kill)
+  end
+
+  @tag :cardigann_spike
   test "form login returns a session cookie", %{bypass: bypass, bytes: bytes} do
     Bypass.stub(bypass, "GET", "/login.php", fn conn ->
       Plug.Conn.resp(conn, 200, File.read!(Path.join(@fixtures, "quill-login-page.html")))
@@ -176,6 +199,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SpikeTest do
     Process.exit(pid, :kill)
   end
 
+  @tag :cardigann_spike
   test "measures compile and instantiate separately", %{bypass: bypass, bytes: bytes} do
     stub_search(bypass)
 
