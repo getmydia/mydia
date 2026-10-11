@@ -497,7 +497,9 @@ defmodule Mydia.Library.MetadataMatcher do
 
         {:error, :no_local_match} ->
           # No local match, search external metadata provider
-          search_external_tv_show(parsed, config, opts)
+          with {:error, :no_matches_found} <- search_external_tv_show(parsed, config, opts) do
+            search_other_tv_provider(parsed, config, opts)
+          end
       end
     else
       {:error, :no_title_extracted}
@@ -553,6 +555,31 @@ defmodule Mydia.Library.MetadataMatcher do
         error
     end
   end
+
+  # A show the library's provider does not carry may still be on the other
+  # one. Only a clean "nothing found" falls through: a relay error stays an
+  # error, so an outage on one provider cannot quietly re-match a library onto
+  # the other. The result keeps its own `provider_type`, and
+  # `Mydia.Library.FileIngest` refuses to auto-promote a match whose provider
+  # differs from the library's, so this only ever produces a suggestion.
+  defp search_other_tv_provider(parsed, config, opts) do
+    case other_tv_provider(Keyword.get(opts, :provider)) do
+      nil ->
+        {:error, :no_matches_found}
+
+      other ->
+        Logger.debug("No match on library provider, trying the other one",
+          title: parsed.title,
+          provider: other
+        )
+
+        search_external_tv_show(parsed, config, Keyword.put(opts, :provider, other))
+    end
+  end
+
+  defp other_tv_provider(:tvdb), do: :tmdb
+  defp other_tv_provider(:tmdb), do: :tvdb
+  defp other_tv_provider(_), do: nil
 
   ## Private Functions
 
