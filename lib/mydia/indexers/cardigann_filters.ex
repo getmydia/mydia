@@ -97,13 +97,20 @@ defmodule Mydia.Indexers.CardigannFilters do
     args =
       case Map.get(filter, :args) || Map.get(filter, "args") do
         nil -> []
-        args when is_list(args) -> args
-        arg when is_binary(arg) -> [arg]
-        other -> [other]
+        args when is_list(args) -> Enum.map(args, &stringify_arg/1)
+        other -> [stringify_arg(other)]
       end
 
     {name, args}
   end
+
+  # Cardigann treats every filter arg as a string, but YAML decodes bare scalars
+  # as numbers/booleans. The kickasstorrents-ws definition uses
+  # `replace` with args ["N/A", 0], and String.replace/3 raises on the integer 0.
+  defp stringify_arg(arg) when is_integer(arg) or is_float(arg) or is_boolean(arg),
+    do: to_string(arg)
+
+  defp stringify_arg(arg), do: arg
 
   # String manipulation filters
 

@@ -542,4 +542,26 @@ defmodule Mydia.Indexers.CardigannFilterImplTest do
       assert {:ok, "abc"} = apply_filter("abc", %{"name" => "hexdump"})
     end
   end
+
+  describe "numeric filter args" do
+    alias Mydia.Indexers.CardigannFilters
+
+    # kickasstorrents-ws.yml uses `replace` with args ["N/A", 0]; YAML decodes the 0 as an integer.
+    test "replace accepts an integer replacement (string-keyed)" do
+      assert {:ok, "0"} =
+               CardigannFilters.apply(%{"name" => "replace", "args" => ["N/A", 0]}, "N/A")
+    end
+
+    test "replace accepts an integer replacement (atom-keyed)" do
+      assert {:ok, "0"} = CardigannFilters.apply(%{name: "replace", args: ["N/A", 0]}, "N/A")
+    end
+
+    test "append accepts an integer arg" do
+      assert {:ok, "x1"} = CardigannFilters.apply(%{name: "append", args: [1]}, "x")
+    end
+
+    test "append accepts a single non-list integer arg" do
+      assert {:ok, "x1"} = CardigannFilters.apply(%{name: "append", args: 1}, "x")
+    end
+  end
 end
