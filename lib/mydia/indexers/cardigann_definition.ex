@@ -113,6 +113,7 @@ defmodule Mydia.Indexers.CardigannDefinition do
       :schema_version
     ])
     |> validate_inclusion(:type, @indexer_types)
+    |> validate_enabled_in_library()
     |> unique_constraint(:indexer_id)
   end
 

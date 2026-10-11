@@ -218,6 +218,25 @@ defmodule Mydia.Indexers.CardigannDefinitionTest do
   end
 
   describe "changeset/2" do
+    test "refuses an enabled definition outside the library" do
+      attrs = %{
+        indexer_id: "outside-test",
+        name: "Outside Test",
+        type: "public",
+        links: %{"0" => "https://a.example.com"},
+        capabilities: %{},
+        definition: "id: outside-test",
+        schema_version: "v11",
+        enabled: true,
+        in_library: false
+      }
+
+      changeset = CardigannDefinition.changeset(%CardigannDefinition{}, attrs)
+
+      refute changeset.valid?
+      assert {"add the indexer before enabling it", _} = changeset.errors[:enabled]
+    end
+
     test "casts active_link and link_status" do
       attrs = %{
         indexer_id: "link-test",
