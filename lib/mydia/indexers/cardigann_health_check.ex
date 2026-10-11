@@ -297,7 +297,12 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
   def promotable?(_parsed, _user_config, _candidate), do: false
 
-  defp probe_query(%Parsed{capabilities: capabilities}) do
+  @doc """
+  The query a probe search sends: a movie title for movie-search definitions, a
+  series for tv-search, otherwise a generic term.
+  """
+  @spec probe_query(Parsed.t()) :: String.t()
+  def probe_query(%Parsed{capabilities: capabilities}) do
     # Map.get/3's default only applies when the key is ABSENT. A parsed
     # definition can have `modes: nil` (key present, value nil), in which case
     # Map.get(capabilities, :modes, %{}) returns nil, not %{}, and the
