@@ -1,0 +1,274 @@
+---
+id: world-torrent
+replaces:
+  - zetorrents
+  - torrent9clone
+  - torrent9-tel
+  - nortorrent
+name: World-torrent
+description: "World-torrent is a FRENCH Public site for MOVIES / TV / GENERAL"
+language: fr-FR
+type: public
+encoding: UTF-8
+# to fetch current domain use https://www.torrent-site.my/
+links:
+  - https://ww1.darkfox.run/
+  - https://ww1.vidlox.run/
+  - https://ww1.worldivx.run/
+  - https://ww1.wikibox.run/
+  - https://ww1.sharkibox.run/
+  - https://ww1.workino.run/
+  - https://ww1.oxtorrent.run/
+  - https://ww1.torrent911.run/
+legacylinks:
+  # latest domains list
+  - https://www.torrent-site.my/
+  - https://www.torrent-p2p.my/
+  # domain lists no longer working
+  - https://www.protege-torrent.com/
+  - https://www.torrent.ws/
+  - https://www.protege-liens.com/
+  - https://www.protege-liens.net/
+  - https://www.torrent.onl/
+  - https://www.site-torrent.com/
+  - https://www.rantop.my/
+  - https://www.torrent-site.com/
+  - https://www.rantop.org/
+  - https://www.site-torrent.cc/
+  - https://www.torrent-p2p.cc/
+  - https://www.rantop.xyz/
+  - https://www.torrent-site.cc/
+  # actual legacylinks
+  # Darkfox
+  - https://www.darkflix.cc/
+  - https://darkfox5.cc/
+  - https://darkfox.my/
+  - https://darkfox.ws/
+  - https://ww1.fit/darkfox/
+  - https://ww1-darkfox.officiel.cc/
+  - https://www.darkfox2.cc/
+  - https://www.darkfox3.cc/
+  - https://www.darkfox4.cc/
+  - https://www.darkfox6.cc/
+  - https://darkfox.proxy-site.cc/
+  - https://darkfox.proxy-site2.cc/
+  - https://ww1-darkfox.officiel.pw/
+  # Vidlox
+  - https://vidlox.pw/
+  - https://vidlox5.cc/
+  - https://vidlox.my/
+  - https://vidlox.ws/
+  - https://ww1.fit/vidlox/
+  - https://ww1-vidlox.officiel.cc/
+  - https://www.vidlox2.cc/
+  - https://www.vidlox3.cc/
+  - https://www.vidlox4.cc/
+  - https://www.vidlox6.cc/
+  - https://www.vidlox7.cc/
+  - https://vidlox.proxy-site.cc/
+  - https://vidlox.proxy-site2.cc/
+  - https://ww1-vidlox.officiel.pw/
+  # Wikibox
+  - https://wikibox3.cc/
+  - https://wikibox5.cc/
+  - https://wikibox.my/
+  - https://wikibox.ws/
+  - https://ww1.fit/wikibox/
+  - https://ww1-wikibox.officiel.cc/
+  - https://www.wikibox1.cc/
+  - https://www.wikibox2.cc/
+  - https://www.wikibox3.cc/
+  - https://www.wikibox4.cc/
+  - https://wikibox.proxy-site.cc/
+  - https://wikibox.proxy-site2.cc/
+  - https://ww1-wikibox.officiel.pw/
+  # Sharkibox
+  - https://sharkibox.pw/
+  - https://sharkibox.ws/
+  - https://ww1.fit/sharkibox/
+  - https://ww1-sharkibox.officiel.cc/
+  - https://www.sharkibox1.cc/
+  - https://www.sharkibox.cc/
+  - https://sharkibox.proxy-site.cc/
+  - https://sharkibox.proxy-site2.cc/
+  - https://ww1-sharkibox.officiel.pw/
+  # Worldivx
+  - https://worldivx.pw/
+  - https://worldivx.ws/
+  - https://ww1.fit/worldivx/
+  - https://ww1-worldivx.officiel.cc/
+  - https://www.worldivx1.cc/
+  - https://www.worldivx.cc/
+  - https://worldivx.proxy-site.cc/
+  - https://worldivx.proxy-site2.cc/
+  - https://ww1-worldivx.officiel.pw/
+  # Workino
+  - https://workino.pw/
+  - https://workino.ws/
+  - https://ww1.fit/workino/
+  - https://ww1-workino.officiel.cc/
+  - https://www.workino.cc/
+  - https://workino.proxy-site.cc/
+  - https://workino.proxy-site2.cc/
+  - https://ww1-workino.officiel.pw/
+  # Oxtorrent
+  - https://oxtorrent5.ws/
+  - https://oxtorrent.win/
+  - https://oxtorrent.lat/
+  - https://oxtorrent.ml/
+  - https://ww1.fit/oxtorrent/
+  - https://ww1-oxtorrent.officiel.cc/
+  - https://www.oxtorrent2.ws/
+  - https://www.oxtorrent3.ws/
+  - https://www.oxtorrent5.ws/
+  - https://www.oxtorrent2.my/
+  - https://oxtorrent.proxy-site.cc/
+  - https://oxtorrent.proxy-site2.cc/
+  - https://ww1-oxtorrent.officiel.pw/
+  # Torrent911
+  - https://torrent911.win/
+  - https://torrent911.lat/
+  - https://ww1.fit/torrent911/
+  - https://ww1-torrent911.officiel.cc/
+  - https://www.torrent911.wiki/
+  - https://www.torrent911.store/
+  - https://torrent911.proxy-site.cc/
+  - https://torrent911.proxy-site2.cc/
+  - https://ww1-torrent911.officiel.pw/
+
+caps:
+  categorymappings:
+    - {id: Films, cat: Movies, desc: "Movies"}
+    - {id: Animes, cat: TV/Anime, desc: "Anime"}
+    - {id: Documentaires, cat: TV/Documentary, desc: "Documentaires"}
+    - {id: Séries, cat: TV, desc: "TV"}
+    - {id: Musiques, cat: Audio, desc: "Music"}
+    - {id: Ebooks, cat: Books, desc: "Books"}
+    - {id: Livres, cat: Books, desc: "Livres"}
+    - {id: Logiciels, cat: PC, desc: "Software"}
+    - {id: Applications, cat: PC, desc: "Applications"}
+    - {id: Jeux-PC, cat: PC/Games, desc: "PC Games"}
+    - {id: Jeux-Consoles, cat: Console/XBox 360, desc: "Console Games"}
+    - {id: Porno, cat: XXX, desc: "Porno"}
+    - {id: Pornfilm, cat: XXX, desc: "Pornfilm"}
+    - {id: Pornbook, cat: XXX, desc: "Pornbook"}
+    - {id: Spectacles, cat: TV/Other, desc: "Spectacles"}
+    - {id: Sports, cat: TV/Sport, desc: "Sports"}
+    - {id: Formations, cat: Other, desc: "Formations"}
+    - {id: Vidéos, cat: TV, desc: "Vidéos"}
+
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+    movie-search: [q]
+    music-search: [q]
+    book-search: [q]
+  allowrawsearch: true
+
+settings:
+  - name: multilang
+    type: checkbox
+    label: Replace MULTi by another language in release name
+    default: false
+  - name: multilanguage
+    type: select
+    label: Replace MULTi by this language
+    default: FRENCH
+    options:
+      FRENCH: FRENCH
+      MULTi FRENCH: MULTi FRENCH
+      ENGLISH: ENGLISH
+      MULTi ENGLISH: MULTi ENGLISH
+      VOSTFR: VOSTFR
+      MULTi VOSTFR: MULTi VOSTFR
+  - name: vostfr
+    type: checkbox
+    label: Replace VOSTFR and SUBFRENCH with ENGLISH
+    default: false
+
+download:
+  selectors:
+    - selector: a[href^="magnet:?"]
+      attribute: href
+
+search:
+  paths:
+    - path: "{{ if .Keywords }}recherche/{{ .Keywords }}{{ else }}derniers{{ end }}"
+  keywordsfilters:
+    # if searching for season packs switch S01 to saison 1 #9712
+    - name: re_replace
+      args: ["(?i)(S0)(\\d{1,2})$", "saison $2"]
+    - name: re_replace
+      args: ["(?i)(S)(\\d{1,3})$", "saison $2"]
+
+  rows:
+    selector: table.table > tbody > tr:has(a[href^="/detail/"])
+
+  fields:
+    category:
+      selector: td:nth-child(1)
+      attribute: title
+    title_phase1:
+      selector: a[href^="/detail/"]
+      remove: span
+      filters:
+        - name: replace
+          args: ["WEBRIP", "WEBDL"]
+        - name: re_replace
+          args: ["(?i)\\b(FRENCH|MULTI|TRUEFRENCH|VOSTFR|SUBFRENCH)\\b(.+?)(\\b((19|20)\\d{2})\\b)$", "$3 $1$2"]
+    title_vostfr:
+      text: "{{ .Result.title_phase1 }}"
+      filters:
+        - name: re_replace
+          args: ["(?i)\\b(vostfr|subfrench)\\b", "ENGLISH"]
+    title_phase2:
+      text: "{{ if .Config.vostfr }}{{ .Result.title_vostfr }}{{ else }}{{ .Result.title_phase1 }}{{ end }}"
+    title_multilang:
+      text: "{{ .Result.title_phase2 }}"
+      filters:
+        - name: re_replace
+          args: ["(?i)\\b(MULTI(?!.*(?:FRENCH|ENGLISH|VOSTFR)))\\b", "{{ .Config.multilanguage }}"]
+    title:
+      text: "{{ if .Config.multilang }}{{ .Result.title_multilang }}{{ else }}{{ .Result.title_phase2 }}{{ end }}"
+    details:
+      selector: a[href^="/detail/"]
+      attribute: href
+    download:
+      selector: a[href^="/detail/"]
+      attribute: href
+    size:
+      selector: td:nth-child(3)
+    seeders:
+      selector: td:nth-child(4)
+    leechers:
+      selector: td:nth-child(5)
+    grabs:
+      selector: td:nth-child(6)
+    date:
+      selector: td:nth-child(7)
+      filters:
+        - name: replace
+          args: ["heures", "hours"]
+        - name: replace
+          args: ["heure", "hour"]
+        - name: replace
+          args: ["jours", "days"]
+        - name: replace
+          args: ["jour", "day"]
+        - name: replace
+          args: ["semaines", "weeks"]
+        - name: replace
+          args: ["semaine", "week"]
+        - name: replace
+          args: ["mois", "months"]
+        - name: replace
+          args: ["ans", "years"]
+        - name: replace
+          args: ["an", "year"]
+        - name: append
+          args: " ago"
+    downloadvolumefactor:
+      text: 0
+    uploadvolumefactor:
+      text: 1
+# engine n/a

@@ -46,7 +46,7 @@ defmodule Mydia.Indexers.Cardigann.Selector do
   defp do_find(_doc, scope, selector) when selector in [nil, ""], do: [scope]
 
   defp do_find(%Document{markers: markers}, scope, selector) do
-    native = rewrite(selector, markers)
+    native = selector |> rewrite(markers) |> rewrite_scope(scope)
 
     try do
       scope |> LazyHTML.query(native) |> Enum.to_list()
@@ -119,6 +119,25 @@ defmodule Mydia.Indexers.Cardigann.Selector do
                 "selector #{inspect(selector)} uses #{full}, which was not declared to Selector.parse/2"
       end
     end)
+  end
+
+  # lexbor does not implement `:scope`, which goquery and AngleSharp resolve to
+  # the element being searched from (Cardigann definitions write
+  # `:scope > span`). The scope element carries its node id, so the pseudo-class
+  # becomes an attribute match on it. The document root has no id; `:root` is
+  # the closest equivalent there.
+  defp rewrite_scope(selector, scope) do
+    if String.contains?(selector, ":scope") do
+      replacement =
+        case LazyHTML.attribute(scope, @nid) do
+          [id | _] -> "[#{@nid}=\"#{id}\"]"
+          [] -> ":root"
+        end
+
+      String.replace(selector, ":scope", replacement)
+    else
+      selector
+    end
   end
 
   # -- tree annotation ----------------------------------------------------------

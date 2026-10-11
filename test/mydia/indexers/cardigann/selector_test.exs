@@ -134,6 +134,27 @@ defmodule Mydia.Indexers.Cardigann.SelectorTest do
     end
   end
 
+  describe ":scope" do
+    test "resolves to the element searched from, not to every ancestor match" do
+      html = ~s(<div id=a><span>one</span><div id=b><span>two</span></div></div>)
+      doc = Selector.parse(html, ["div"])
+      [outer] = Selector.find(doc, :root, "div#a")
+      [inner] = Selector.find(doc, :root, "div#b")
+
+      assert outer |> then(&Selector.find(doc, &1, ":scope > span")) |> Selector.text() == "one"
+      assert inner |> then(&Selector.find(doc, &1, ":scope > span")) |> Selector.text() == "two"
+    end
+
+    test "combines with :contains() and comma alternatives" do
+      html = ~s(<div><span>a ago</span><span>b</span></div>)
+      selector = ~S|:scope > span:contains("ago"), :scope > i|
+      doc = Selector.parse(html, [selector])
+      [row] = Selector.find(doc, :root, "div")
+
+      assert doc |> Selector.find(row, selector) |> length() == 1
+    end
+  end
+
   describe "without/3" do
     test "keeps the node itself when it matches the remove selector" do
       html = ~s(<table><tr><td class=t>Paper Harbor<span class=t> [junk]</span></td></tr></table>)

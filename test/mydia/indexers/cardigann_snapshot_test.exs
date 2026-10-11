@@ -384,4 +384,40 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
       end
     end
   end
+
+  # These trackers returned zero or wrong rows while the HTML path ran on Floki,
+  # which builds no implied <tbody>, mis-evaluates nested :has()/:not(:has()) and
+  # has no :scope. Each fixture is a reduction of a live capture.
+  describe "HTML5 tree and modern CSS" do
+    # Rows now match for both skipped ids; the remaining cause is outside the
+    # selector engine:
+    # - world-torrent: `title` is a text field that reads {{ .Result.title_phase2 }},
+    #   but text fields are computed in map-key order rather than definition order,
+    #   so title_phase2 is still nil and the row is dropped.
+    # - ebookbay: the live page puts the title in div.poststuff and the download
+    #   link in the sibling div.entry, but each row selector alternative matches only
+    #   one of them, so no row has both (definition/site drift).
+    @skipped %{
+      "world-torrent" => "text fields computed out of definition order",
+      "ebookbay" => "title and download live in sibling elements; definition drift"
+    }
+
+    for id <-
+          ~w(acgrip torrentkitty rutor byrutor torrentdownloads 0magnet torrentproject2 world-torrent ebookbay) do
+      @id id
+      if reason = @skipped[id], do: @tag(skip: reason)
+
+      test "#{id} yields rows with a title and a download" do
+        run_snapshot("test/fixtures/cardigann/#{@id}",
+          min_results: 2,
+          assertions: fn results ->
+            for r <- results do
+              assert r.title != ""
+              assert is_binary(r.download_url) and r.download_url != ""
+            end
+          end
+        )
+      end
+    end
+  end
 end

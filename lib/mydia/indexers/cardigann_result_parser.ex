@@ -8,7 +8,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   ## HTML Parsing
 
-  Uses Floki for HTML parsing with CSS selector support:
+  Uses the lexbor-backed `Mydia.Indexers.Cardigann.Selector` for HTML5 parsing with CSS selector support:
   - Row selectors to identify result elements
   - Field selectors to extract data from each row
   - Attribute extraction (href, data-*, etc.)
@@ -60,6 +60,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   alias Mydia.Indexers.Cardigann.Charset
   alias Mydia.Indexers.Cardigann.JsonPath
+  alias Mydia.Indexers.Cardigann.Selector
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.QualityParser
@@ -193,7 +194,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   ## Process
 
-  1. Parse HTML with Floki
+  1. Parse HTML as HTML5 with the lexbor-backed Selector module
   2. Extract rows using row selector
   3. For each row, extract fields using field selectors
   4. Apply filters to field values (with template rendering)
@@ -226,8 +227,10 @@ defmodule Mydia.Indexers.CardigannResultParser do
     # Convert encoding if needed (e.g., windows-1251 → UTF-8)
     converted_body = Charset.decode(html_body, definition.encoding)
 
-    with {:ok, document} <- parse_html_document(converted_body),
-         {:ok, rows} <- extract_rows(document, definition.search, template_context) do
+    document =
+      Selector.parse(converted_body, declared_selectors(definition.search, template_context))
+
+    with {:ok, rows} <- extract_rows(document, definition.search, template_context) do
       Logger.info("[#{indexer_name}] Extracted #{length(rows)} rows from HTML")
 
       # parse_row_fields/4 has a single clause and always returns {:ok, _}, so
@@ -399,67 +402,40 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   # HTML Parsing Functions
 
-  defp parse_html_document(html_body) do
-    case Floki.parse_document(html_body) do
-      {:ok, document} -> {:ok, document}
-      {:error, reason} -> {:error, Error.search_failed("HTML parse error: #{inspect(reason)}")}
-    end
-  end
-
   defp extract_rows(document, %{rows: %{selector: selector} = row_config}, template_context) do
     # Render Go templates in the row selector
     rendered_selector = render_selector_template(selector, template_context)
     Logger.info("Extracting rows with selector: #{inspect(rendered_selector)}")
     # Use enhanced find that supports :contains() pseudo-selector
-    rows = floki_find_enhanced(document, rendered_selector)
-
-    # Browsers auto-insert <tbody> but Floki doesn't. If selector uses tbody and
-    # yields 0 results, retry without tbody to handle raw HTML tables.
-    rows =
-      if rows == [] and String.contains?(rendered_selector, "tbody") do
-        fallback_selector = String.replace(rendered_selector, "> tbody >", ">")
-        fallback_rows = floki_find_enhanced(document, fallback_selector)
-
-        if fallback_rows != [] do
-          Logger.info("Retried without tbody, found #{length(fallback_rows)} rows")
-          fallback_rows
-        else
-          rows
-        end
-      else
-        rows
-      end
+    rows = find_nodes(document, :root, rendered_selector)
 
     Logger.info("Found #{length(rows)} rows before filtering")
 
     # Debug: if no rows found, log some HTML structure info
     if rows == [] do
-      # Try to find any tr elements to understand the structure
-      all_trs = Floki.find(document, "tr")
-      all_tables = Floki.find(document, "table")
+      all_trs = Selector.find(document, :root, "tr")
+      all_tables = Selector.find(document, :root, "table")
 
-      Logger.info(
+      Logger.debug(
         "Debug: Found #{length(all_trs)} tr elements and #{length(all_tables)} tables in document"
       )
 
-      # Check for common row patterns
-      torrent_links = Floki.find(document, "a[href*=\"torrent\"]")
-      Logger.info("Debug: Found #{length(torrent_links)} links containing 'torrent' in href")
+      torrent_links = Selector.find(document, :root, "a[href*=\"torrent\"]")
+      Logger.debug("Debug: Found #{length(torrent_links)} links containing 'torrent' in href")
 
-      # Log first 500 chars of HTML to understand structure
-      html_preview = document |> Floki.raw_html() |> String.slice(0, 1000)
-      Logger.info("Debug: HTML preview: #{html_preview}")
+      html_preview = document.root |> LazyHTML.to_html() |> String.slice(0, 1000)
+      Logger.debug("Debug: HTML preview: #{html_preview}")
     end
 
     # `rows.multiple` needs no handling here: it declares that the selector's
     # comma-separated alternatives form one combined row set rather than a
-    # first-match-wins choice, and floki_find_enhanced/2 already unions them.
+    # first-match-wins choice, and the selector engine already unions them.
     missing_attr_no_results = Map.get(row_config, :missing_attribute_equals_no_results) == true
     row_attribute = Map.get(row_config, :attribute)
 
     rows =
       if missing_attr_no_results and is_binary(row_attribute) do
-        Enum.filter(rows, fn row -> Floki.attribute([row], row_attribute) != [] end)
+        Enum.filter(rows, fn row -> Selector.attribute([row], row_attribute) != nil end)
       else
         rows
       end
@@ -511,139 +487,46 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   defp render_selector_template(selector, _template_context), do: selector
 
-  # Enhanced Floki.find supporting :contains(), :has(), and :not() pseudo-selectors
-  # that Floki doesn't natively handle.
-  defp floki_find_enhanced(document, selector) do
-    # Handle comma-separated selectors (OR) - but be careful not to split
-    # inside pseudo-selector parentheses
-    parts = split_selector_on_commas(selector)
+  # A selector lexbor cannot parse (a JSONPath or XPath-style string handed to
+  # the HTML path, say) matches nothing, as it did under the previous engine,
+  # rather than failing the whole search. A selector that uses :contains() without
+  # having been declared to Selector.parse/2 is a programming error and still raises.
+  defp find_nodes(document, scope, selector) do
+    Selector.find(document, scope, selector)
+  rescue
+    error in ArgumentError ->
+      case Exception.message(error) do
+        "invalid selector" <> _ = message ->
+          Logger.warning("Ignoring unparseable selector: #{message}")
+          []
 
-    if length(parts) > 1 do
-      parts
-      |> Enum.map(&String.trim/1)
-      |> Enum.flat_map(&floki_find_enhanced(document, &1))
-      |> Enum.uniq()
-    else
-      floki_find_single_selector(document, selector)
-    end
+        _ ->
+          reraise error, __STACKTRACE__
+      end
   end
 
-  # Split selector on commas that are not inside parentheses
-  defp split_selector_on_commas(selector) do
-    {parts, current, _depth} =
-      selector
-      |> String.graphemes()
-      |> Enum.reduce({[], [], 0}, fn char, {parts, current, depth} ->
-        cond do
-          char == "(" ->
-            {parts, [char | current], depth + 1}
+  # Every selector the HTML path may evaluate against this document, rendered,
+  # so Selector.parse/2 can mark each :contains() needle once.
+  defp declared_selectors(search, template_context) do
+    row_selector = get_in(search, [:rows, :selector])
 
-          char == ")" ->
-            {parts, [char | current], max(depth - 1, 0)}
-
-          char == "," and depth == 0 ->
-            {[current |> Enum.reverse() |> Enum.join() | parts], [], 0}
-
-          true ->
-            {parts, [char | current], depth}
+    field_selectors =
+      search
+      |> Map.get(:fields, %{})
+      |> Enum.flat_map(fn {_name, config} ->
+        if is_map(config) do
+          case_keys = (Map.get(config, :case) || %{}) |> Map.keys() |> Enum.map(&to_string/1)
+          remove = config |> Map.get(:remove) |> List.wrap() |> Enum.map(&to_string/1)
+          [Map.get(config, :selector) | case_keys ++ remove]
+        else
+          []
         end
       end)
 
-    [current |> Enum.reverse() |> Enum.join() | parts] |> Enum.reverse()
+    [row_selector | field_selectors]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&render_selector_template(to_string(&1), template_context))
   end
-
-  # Regex matching :contains(), :has(), or :not() pseudo-selectors (supports both quote styles)
-  @pseudo_regex ~r/:(?:contains|has|not)\(\s*(?:['"]([^'"]*?)['"]|([^)]*?))\s*\)/
-
-  defp floki_find_single_selector(document, selector) do
-    case Regex.run(@pseudo_regex, selector) do
-      nil ->
-        # No pseudo-selectors, use normal Floki.find
-        Floki.find(document, selector)
-
-      [full_match | _captures] ->
-        # Determine which pseudo-selector we hit
-        {pseudo_type, inner_arg} = parse_pseudo_match(full_match)
-
-        # Split selector around the pseudo-selector
-        [before_pseudo | rest] = String.split(selector, full_match, parts: 2)
-        after_pseudo = Enum.join(rest, "")
-
-        before_selector = String.trim(before_pseudo)
-
-        # Find candidate elements
-        elements =
-          if before_selector == "" do
-            [document]
-          else
-            Floki.find(document, before_selector)
-          end
-
-        # Apply the pseudo-selector filter
-        matching_elements = apply_pseudo_filter(elements, pseudo_type, inner_arg)
-
-        # If there's more selector after the pseudo, continue processing
-        if String.trim(after_pseudo) == "" do
-          matching_elements
-        else
-          remaining = String.trim(after_pseudo)
-
-          # If remaining starts with a space, it's a descendant selector
-          Enum.flat_map(matching_elements, fn el ->
-            floki_find_enhanced(el, remaining)
-          end)
-        end
-    end
-  end
-
-  defp parse_pseudo_match(match) do
-    cond do
-      String.starts_with?(match, ":contains(") ->
-        inner = extract_pseudo_inner(match, ":contains(")
-        {:contains, inner}
-
-      String.starts_with?(match, ":has(") ->
-        inner = extract_pseudo_inner(match, ":has(")
-        {:has, inner}
-
-      String.starts_with?(match, ":not(") ->
-        inner = extract_pseudo_inner(match, ":not(")
-        {:not, inner}
-
-      true ->
-        {:unknown, ""}
-    end
-  end
-
-  defp extract_pseudo_inner(match, prefix) do
-    match
-    |> String.trim_leading(prefix)
-    |> String.trim_trailing(")")
-    |> String.trim()
-    |> String.trim("'")
-    |> String.trim("\"")
-  end
-
-  defp apply_pseudo_filter(elements, :contains, text) do
-    Enum.filter(elements, fn el ->
-      el_text = Floki.text(el)
-      String.contains?(el_text, text)
-    end)
-  end
-
-  defp apply_pseudo_filter(elements, :has, child_selector) do
-    Enum.filter(elements, fn el ->
-      Floki.find(el, child_selector) != []
-    end)
-  end
-
-  defp apply_pseudo_filter(elements, :not, not_selector) do
-    Enum.filter(elements, fn el ->
-      not floki_node_matches?(el, not_selector)
-    end)
-  end
-
-  defp apply_pseudo_filter(elements, _, _), do: elements
 
   # Applies andmatch row-level filtering: drops rows where the title doesn't contain
   # all search keywords. Only active when any field has an "andmatch" filter.
@@ -678,18 +561,18 @@ defmodule Mydia.Indexers.CardigannResultParser do
     end
   end
 
-  defp parse_row_fields(rows, %{fields: fields}, _document, template_context) do
+  defp parse_row_fields(rows, %{fields: fields}, document, template_context) do
     parsed_rows =
       rows
       |> Enum.map(fn row ->
-        parse_single_row(row, fields, template_context)
+        parse_single_row(document, row, fields, template_context)
       end)
       |> Enum.filter(&(&1 != nil))
 
     {:ok, parsed_rows}
   end
 
-  defp parse_single_row(row, fields, template_context) do
+  defp parse_single_row(document, row, fields, template_context) do
     # Separate fields into selector-based and text-based (computed) fields
     # A field is text-based if it has a non-empty :text or "text" key
     {selector_fields, text_fields} =
@@ -712,7 +595,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
           is_optional =
             Map.get(field_config, :optional) || Map.get(field_config, "optional", false)
 
-          case extract_field_value(row, field_config, template_context) do
+          case extract_field_value(document, row, field_config, template_context) do
             {:ok, value} ->
               Map.put(acc, field_name, value)
 
@@ -886,7 +769,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
     end
   end
 
-  defp extract_field_value(row, field_config, template_context) when is_map(field_config) do
+  defp extract_field_value(document, row, field_config, template_context)
+       when is_map(field_config) do
     selector = Map.get(field_config, :selector) || Map.get(field_config, "selector")
     attribute = Map.get(field_config, :attribute) || Map.get(field_config, "attribute")
     filters = Map.get(field_config, :filters) || Map.get(field_config, "filters", [])
@@ -895,7 +779,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
     # If remove is configured, strip matching child elements before extraction
     effective_row =
       if remove do
-        remove_elements(row, remove)
+        Selector.without(document, row, remove |> List.wrap() |> Enum.map(&to_string/1))
       else
         row
       end
@@ -904,9 +788,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
     raw_result =
       if is_map(case_map) and map_size(case_map) > 0 do
-        extract_case_value(effective_row, selector, case_map)
+        extract_case_value(document, effective_row, selector, case_map)
       else
-        extract_raw_value(effective_row, selector, attribute)
+        extract_raw_value(document, effective_row, selector, attribute)
       end
 
     case raw_result do
@@ -931,12 +815,12 @@ defmodule Mydia.Indexers.CardigannResultParser do
   # `case` maps a CSS selector to a literal output value, scoped to whatever the
   # field's own selector matched. `*` matches unconditionally and is the
   # fallback, so it is checked last regardless of the map's iteration order.
-  defp extract_case_value(row, selector, case_map) do
+  defp extract_case_value(document, row, selector, case_map) do
     scope =
       case selector do
-        nil -> row
-        "" -> row
-        sel -> floki_find_enhanced(row, sel)
+        nil -> [row]
+        "" -> [row]
+        sel -> find_nodes(document, row, sel)
       end
 
     if scope == [] do
@@ -946,7 +830,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
       match =
         Enum.find_value(specific, fn {case_selector, value} ->
-          if floki_find_enhanced(scope, to_string(case_selector)) != [], do: to_string(value)
+          if Enum.any?(scope, &(find_nodes(document, &1, to_string(case_selector)) != [])),
+            do: to_string(value)
         end)
 
       cond do
@@ -957,73 +842,17 @@ defmodule Mydia.Indexers.CardigannResultParser do
     end
   end
 
-  # Removes child elements matching the given selector(s) from the HTML tree.
-  # The `remove` config can be a single selector string or a list of selectors.
-  defp remove_elements(row, remove_selector) when is_binary(remove_selector) do
-    Floki.traverse_and_update(row, fn
-      {tag, attrs, children} = node ->
-        # Check if this node matches the remove selector
-        if floki_node_matches?(node, remove_selector) do
-          nil
-        else
-          {tag, attrs, children}
-        end
-
-      other ->
-        other
-    end)
-  end
-
-  defp remove_elements(row, remove_selectors) when is_list(remove_selectors) do
-    Enum.reduce(remove_selectors, row, fn selector, acc ->
-      remove_elements(acc, to_string(selector))
-    end)
-  end
-
-  defp remove_elements(row, _), do: row
-
-  # Checks if a single HTML node matches a CSS selector by wrapping it in
-  # a temporary parent and running Floki.find
-  defp floki_node_matches?({_tag, _attrs, _children} = node, selector) do
-    wrapper = [{"div", [], [node]}]
-
-    case Floki.find(wrapper, "div > #{selector}") do
-      [] -> false
-      _ -> true
-    end
-  rescue
-    _ -> false
-  end
-
-  defp floki_node_matches?(_, _), do: false
-
-  defp extract_raw_value(row, selector, nil) do
-    # Extract text content
-    case Floki.find(row, selector) do
-      [] ->
-        {:error, :not_found}
-
-      elements ->
-        text =
-          elements
-          |> Floki.text()
-          |> String.trim()
-
-        {:ok, text}
+  defp extract_raw_value(document, row, selector, nil) do
+    case find_nodes(document, row, selector) do
+      [] -> {:error, :not_found}
+      elements -> {:ok, elements |> Selector.text() |> String.trim()}
     end
   end
 
-  defp extract_raw_value(row, selector, attribute) do
-    # Extract attribute value
-    case Floki.find(row, selector) do
-      [] ->
-        {:error, :not_found}
-
-      elements ->
-        case Floki.attribute(elements, attribute) do
-          [value | _] -> {:ok, String.trim(value)}
-          [] -> {:error, :not_found}
-        end
+  defp extract_raw_value(document, row, selector, attribute) do
+    case document |> find_nodes(row, selector) |> Selector.attribute(attribute) do
+      nil -> {:error, :not_found}
+      value -> {:ok, String.trim(value)}
     end
   end
 
