@@ -228,7 +228,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
          # argument below.
          winner = served_by(base_url),
          :ok <- CardigannSearchEngine.validate_response(response),
-         {:ok, results} <- parse_probe_results(parsed, response, winner, opts) do
+         {:ok, results, stats} <- parse_probe_results(parsed, response, winner, opts),
+         :ok <- ensure_usable(results, stats) do
       {:ok, length(results), winner}
     else
       {:error, %Error{message: message}} -> classify_probe_error(message)
@@ -272,13 +273,24 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
   defp parse_probe_results(parsed, response, base_url, opts) do
     with {:ok, search_path} <- CardigannSearchEngine.select_search_path(parsed, opts) do
-      CardigannResultParser.parse_results(parsed, response, parsed.name,
+      CardigannResultParser.parse_results_with_stats(parsed, response, parsed.name,
         template_context: TemplateContext.build(parsed, opts),
         base_url: base_url,
         search_path: search_path
       )
     end
   end
+
+  # Rows the selector matched but that were all discarded for a missing title or
+  # download are a broken definition, not an empty search. Report them as an
+  # error so the definition is marked degraded instead of healthy with zero.
+  defp ensure_usable([], %{dropped: dropped, matched: matched, first_missing: missing})
+       when dropped > 0 do
+    {:error,
+     Error.search_failed("#{matched} rows matched, none usable (missing #{missing || "unknown"})")}
+  end
+
+  defp ensure_usable(_results, _stats), do: :ok
 
   @doc """
   True when `candidate` may become the definition's sticky `active_link`.

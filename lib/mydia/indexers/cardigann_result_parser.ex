@@ -61,6 +61,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   alias Mydia.Indexers.Cardigann.Charset
   alias Mydia.Indexers.Cardigann.JsonPath
+  alias Mydia.Indexers.Cardigann.ParseStats
   alias Mydia.Indexers.Cardigann.Selector
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.SearchResult
@@ -110,6 +111,21 @@ defmodule Mydia.Indexers.CardigannResultParser do
   """
   @spec parse_results(Parsed.t(), http_response(), String.t(), keyword()) :: parse_result()
   def parse_results(%Parsed{} = definition, response, indexer_name, opts \\ []) do
+    with {:ok, results, _stats} <-
+           parse_results_with_stats(definition, response, indexer_name, opts) do
+      {:ok, results}
+    end
+  end
+
+  @doc """
+  Like `parse_results/4`, and also reports what happened to the matched rows.
+
+  The `Mydia.Indexers.Cardigann.ParseStats` separates a search that matched
+  nothing from one whose rows were all dropped for a missing title or download.
+  """
+  @spec parse_results_with_stats(Parsed.t(), http_response(), String.t(), keyword()) ::
+          {:ok, [SearchResult.t()], ParseStats.t()} | {:error, Error.t()}
+  def parse_results_with_stats(%Parsed{} = definition, response, indexer_name, opts \\ []) do
     template_context = Keyword.get(opts, :template_context, %{})
     base_url = Keyword.get(opts, :base_url, "")
 
@@ -130,7 +146,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
   defp parse_body(body, definition, ctx, _opts) when is_map(body) or is_list(body) do
     {indexer_name, template_context, base_url, category_mappings} = ctx
 
-    parse_json_results_from_map(
+    do_parse_json_results_from_map(
       definition,
       body,
       indexer_name,
@@ -146,7 +162,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   defp parse_body(body, definition, ctx, opts) do
     if String.trim(body) == "" do
-      {:ok, []}
+      {:ok, [], %ParseStats{}}
     else
       search_path = resolve_search_path(definition, opts)
       declared_type = get_declared_response_type(search_path)
@@ -159,7 +175,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
     case type do
       :html ->
-        parse_html_results(
+        do_parse_html_results(
           definition,
           body,
           indexer_name,
@@ -169,7 +185,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
         )
 
       :json ->
-        parse_json_results(
+        do_parse_json_results(
           definition,
           body,
           indexer_name,
@@ -179,7 +195,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
         )
 
       :xml ->
-        parse_xml_results(
+        do_parse_xml_results(
           definition,
           body,
           indexer_name,
@@ -225,6 +241,27 @@ defmodule Mydia.Indexers.CardigannResultParser do
         base_url \\ "",
         category_mappings \\ []
       ) do
+    with {:ok, results, _stats} <-
+           do_parse_html_results(
+             definition,
+             html_body,
+             indexer_name,
+             template_context,
+             base_url,
+             category_mappings
+           ) do
+      {:ok, results}
+    end
+  end
+
+  defp do_parse_html_results(
+         definition,
+         html_body,
+         indexer_name,
+         template_context,
+         base_url,
+         category_mappings
+       ) do
     # Convert encoding if needed (e.g., windows-1251 → UTF-8)
     converted_body = Charset.decode(html_body, definition.encoding)
 
@@ -234,9 +271,10 @@ defmodule Mydia.Indexers.CardigannResultParser do
     with {:ok, rows} <- extract_rows(document, definition.search, template_context) do
       Logger.info("[#{indexer_name}] Extracted #{length(rows)} rows from HTML")
 
-      # parse_row_fields/4 has a single clause and always returns {:ok, _}, so
+      # parse_row_fields/4 has a single clause and always returns {:ok, _, _}, so
       # there is no error case to branch on here.
-      {:ok, parsed_rows} = parse_row_fields(rows, definition.search, document, template_context)
+      {:ok, parsed_rows, drops} =
+        parse_row_fields(rows, definition.search, document, template_context)
 
       # Apply andmatch row-level filter if any field has it
       filtered_rows =
@@ -248,7 +286,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
         transform_to_search_results(filtered_rows, indexer_name, base_url, category_mappings)
 
       Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
-      {:ok, results}
+
+      stats = build_stats(rows, parsed_rows, filtered_rows, drops, results, indexer_name)
+      {:ok, results, stats}
     end
   rescue
     # lexbor rejected a selector in the definition. Selector.find/3 names it in
@@ -293,14 +333,36 @@ defmodule Mydia.Indexers.CardigannResultParser do
         base_url \\ "",
         category_mappings \\ []
       ) do
+    with {:ok, results, _stats} <-
+           do_parse_json_results(
+             definition,
+             json_body,
+             indexer_name,
+             template_context,
+             base_url,
+             category_mappings
+           ) do
+      {:ok, results}
+    end
+  end
+
+  defp do_parse_json_results(
+         definition,
+         json_body,
+         indexer_name,
+         template_context,
+         base_url,
+         category_mappings
+       ) do
     with {:ok, json} <- Jason.decode(json_body),
          false <- JsonPath.reports_no_results?(json, definition.search),
          {:ok, rows} <- extract_json_rows(json, definition.search, template_context) do
       Logger.info("[#{indexer_name}] Extracted #{length(rows)} rows from JSON")
 
-      # parse_json_row_fields/3 has a single clause and always returns {:ok, _},
-      # so there is no error case to branch on here.
-      {:ok, parsed_rows} = parse_json_row_fields(rows, definition.search, template_context)
+      # parse_json_row_fields/3 has a single clause and always returns
+      # {:ok, _, _}, so there is no error case to branch on here.
+      {:ok, parsed_rows, drops} =
+        parse_json_row_fields(rows, definition.search, template_context)
 
       Logger.info("[#{indexer_name}] Parsed #{length(parsed_rows)} JSON rows successfully")
 
@@ -308,10 +370,12 @@ defmodule Mydia.Indexers.CardigannResultParser do
         transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
 
       Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
-      {:ok, results}
+
+      stats = build_stats(rows, parsed_rows, parsed_rows, drops, results, indexer_name)
+      {:ok, results, stats}
     else
       true ->
-        {:ok, []}
+        {:ok, [], %ParseStats{}}
 
       {:error, %Jason.DecodeError{} = error} ->
         {:error, Error.search_failed("Invalid JSON: #{inspect(error)}")}
@@ -359,16 +423,38 @@ defmodule Mydia.Indexers.CardigannResultParser do
         category_mappings \\ []
       )
       when is_map(json) or is_list(json) do
+    with {:ok, results, _stats} <-
+           do_parse_json_results_from_map(
+             definition,
+             json,
+             indexer_name,
+             template_context,
+             base_url,
+             category_mappings
+           ) do
+      {:ok, results}
+    end
+  end
+
+  defp do_parse_json_results_from_map(
+         definition,
+         json,
+         indexer_name,
+         template_context,
+         base_url,
+         category_mappings
+       ) do
     if JsonPath.reports_no_results?(json, definition.search) do
-      {:ok, []}
+      {:ok, [], %ParseStats{}}
     else
       with {:ok, rows} <- extract_json_rows(json, definition.search, template_context),
-           {:ok, parsed_rows} <-
+           {:ok, parsed_rows, drops} <-
              parse_json_row_fields(rows, definition.search, template_context) do
         results =
           transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
 
-        {:ok, results}
+        stats = build_stats(rows, parsed_rows, parsed_rows, drops, results, indexer_name)
+        {:ok, results, stats}
       end
     end
   rescue
@@ -387,15 +473,37 @@ defmodule Mydia.Indexers.CardigannResultParser do
         base_url \\ "",
         category_mappings \\ []
       ) do
+    with {:ok, results, _stats} <-
+           do_parse_xml_results(
+             definition,
+             xml_body,
+             indexer_name,
+             template_context,
+             base_url,
+             category_mappings
+           ) do
+      {:ok, results}
+    end
+  end
+
+  defp do_parse_xml_results(
+         definition,
+         xml_body,
+         indexer_name,
+         template_context,
+         base_url,
+         category_mappings
+       ) do
     converted_body = Charset.decode(xml_body, definition.encoding)
 
     with {:ok, doc} <- parse_xml_document(converted_body),
          {:ok, rows} <- extract_xml_rows(doc, definition.search, template_context) do
       Logger.info("[#{indexer_name}] Extracted #{length(rows)} rows from XML")
 
-      # parse_xml_row_fields/3 has a single clause and always returns {:ok, _},
-      # so there is no error case to branch on here.
-      {:ok, parsed_rows} = parse_xml_row_fields(rows, definition.search, template_context)
+      # parse_xml_row_fields/3 has a single clause and always returns
+      # {:ok, _, _}, so there is no error case to branch on here.
+      {:ok, parsed_rows, drops} =
+        parse_xml_row_fields(rows, definition.search, template_context)
 
       Logger.info("[#{indexer_name}] Parsed #{length(parsed_rows)} XML rows successfully")
 
@@ -403,7 +511,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
         transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
 
       Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
-      {:ok, results}
+
+      stats = build_stats(rows, parsed_rows, parsed_rows, drops, results, indexer_name)
+      {:ok, results, stats}
     end
   rescue
     error ->
@@ -555,14 +665,14 @@ defmodule Mydia.Indexers.CardigannResultParser do
   end
 
   defp parse_row_fields(rows, %{fields: fields}, document, template_context) do
-    parsed_rows =
+    {parsed_rows, drops} =
       rows
       |> Enum.map(fn row ->
         parse_single_row(document, row, fields, template_context)
       end)
-      |> Enum.filter(&(&1 != nil))
+      |> partition_rows()
 
-    {:ok, parsed_rows}
+    {:ok, parsed_rows, drops}
   end
 
   defp parse_single_row(document, row, fields, template_context) do
@@ -628,24 +738,49 @@ defmodule Mydia.Indexers.CardigannResultParser do
       end)
 
     # Handle compound title fields (title_default, title_optional -> title)
-    field_values = combine_compound_fields(field_values)
+    field_values
+    |> combine_compound_fields()
+    |> require_title_and_download()
+  end
 
-    # Only return row if we got at least title and download/infohash
+  # A row is kept only when it has a title and a download/infohash. Otherwise it
+  # is reported as dropped with the missing field's name (title wins when both
+  # are missing). `build_stats/6` logs one summary instead of a line per row.
+  defp require_title_and_download(field_values) do
     has_title = Map.has_key?(field_values, "title") || Map.has_key?(field_values, :title)
 
     has_download =
       Map.has_key?(field_values, "download") || Map.has_key?(field_values, :download) ||
         Map.has_key?(field_values, "infohash") || Map.has_key?(field_values, :infohash)
 
-    if has_title && has_download do
-      field_values
-    else
-      Logger.info(
-        "Row filtered out - title: #{has_title}, download: #{has_download}, fields: #{inspect(Map.keys(field_values))}"
-      )
-
-      nil
+    cond do
+      not has_title -> {:dropped, "title"}
+      not has_download -> {:dropped, "download"}
+      true -> field_values
     end
+  end
+
+  # Splits mapped row results into kept rows and drop reasons.
+  defp partition_rows(mapped) do
+    {drops, rows} = Enum.split_with(mapped, &match?({:dropped, _}, &1))
+    {rows, Enum.map(drops, fn {:dropped, reason} -> reason end)}
+  end
+
+  defp build_stats(rows, parsed_rows, filtered_rows, drops, results, indexer_name) do
+    stats = %ParseStats{
+      matched: length(rows),
+      filtered: length(parsed_rows) - length(filtered_rows),
+      dropped: length(drops) + (length(filtered_rows) - length(results)),
+      first_missing: List.first(drops)
+    }
+
+    if stats.dropped > 0 do
+      Logger.warning(
+        "[#{indexer_name}] #{stats.matched} rows matched, #{stats.dropped} dropped (first missing: #{stats.first_missing || "unknown"})"
+      )
+    end
+
+    stats
   end
 
   # Computes a text-based field value using template rendering
@@ -1027,14 +1162,14 @@ defmodule Mydia.Indexers.CardigannResultParser do
   end
 
   defp parse_json_row_fields(rows, %{fields: fields}, template_context) do
-    parsed_rows =
+    {parsed_rows, drops} =
       rows
       |> Enum.map(fn row ->
         parse_single_json_row(row, fields, template_context)
       end)
-      |> Enum.filter(&(&1 != nil))
+      |> partition_rows()
 
-    {:ok, parsed_rows}
+    {:ok, parsed_rows, drops}
   end
 
   defp parse_single_json_row(row, fields, template_context) when is_map(row) do
@@ -1074,20 +1209,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
       end)
 
     # Handle compound fields (title_default + title_optional → title)
-    field_values = combine_compound_fields(field_values)
-
-    # Only return row if we got at least title and download/infohash
-    has_title = Map.has_key?(field_values, :title) || Map.has_key?(field_values, "title")
-
-    has_download =
-      Map.has_key?(field_values, :download) || Map.has_key?(field_values, "download") ||
-        Map.has_key?(field_values, :infohash) || Map.has_key?(field_values, "infohash")
-
-    if has_title && has_download do
-      field_values
-    else
-      nil
-    end
+    field_values
+    |> combine_compound_fields()
+    |> require_title_and_download()
   end
 
   defp extract_json_raw_value(row, field_config) when is_map(field_config) do
@@ -1185,14 +1309,14 @@ defmodule Mydia.Indexers.CardigannResultParser do
   end
 
   defp parse_xml_row_fields(rows, %{fields: fields}, template_context) do
-    parsed_rows =
+    {parsed_rows, drops} =
       rows
       |> Enum.map(fn row ->
         parse_single_xml_row(row, fields, template_context)
       end)
-      |> Enum.filter(&(&1 != nil))
+      |> partition_rows()
 
-    {:ok, parsed_rows}
+    {:ok, parsed_rows, drops}
   end
 
   defp parse_single_xml_row(row, fields, template_context) do
@@ -1236,19 +1360,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
         end
       end)
 
-    field_values = combine_compound_fields(field_values)
-
-    has_title = Map.has_key?(field_values, :title) || Map.has_key?(field_values, "title")
-
-    has_download =
-      Map.has_key?(field_values, :download) || Map.has_key?(field_values, "download") ||
-        Map.has_key?(field_values, :infohash) || Map.has_key?(field_values, "infohash")
-
-    if has_title && has_download do
-      field_values
-    else
-      nil
-    end
+    field_values
+    |> combine_compound_fields()
+    |> require_title_and_download()
   end
 
   defp extract_xml_field_value(row, field_config, template_context) when is_map(field_config) do

@@ -51,7 +51,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
     search = search(parsed, config, base_url, CardigannHealthCheck.probe_query(parsed))
 
     empty =
-      if match?({:ok, [], _, _}, search), do: search(parsed, config, base_url, ""), else: nil
+      if match?({:ok, [], _, _, _}, search), do: search(parsed, config, base_url, ""), else: nil
 
     first = first_result(search, empty)
 
@@ -66,6 +66,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
       bucket: classify(observations),
       base_url: winner(search) || base_url,
       rows: row_count(search),
+      dropped: dropped_count(search),
       rows_empty_query: if(empty, do: row_count(empty)),
       grab: if(grab, do: grab |> inspect() |> String.slice(0, 200)),
       error: error_message(search)
@@ -98,13 +99,13 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
          winner = served_by(base_url),
          :ok <- CardigannSearchEngine.validate_response(response),
          {:ok, path} <- CardigannSearchEngine.select_search_path(parsed, opts),
-         {:ok, results} <-
-           CardigannResultParser.parse_results(parsed, response, parsed.name,
+         {:ok, results, stats} <-
+           CardigannResultParser.parse_results_with_stats(parsed, response, parsed.name,
              template_context: TemplateContext.build(parsed, opts),
              base_url: winner,
              search_path: path
            ) do
-      {:ok, results, winner, response}
+      {:ok, results, winner, response, stats}
     else
       {:error, %Error{message: message}} -> CardigannHealthCheck.classify_probe_error(message)
       {:error, other} -> {:error, inspect(other)}
@@ -124,21 +125,27 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
   end
 
   defp summarize(nil), do: nil
-  defp summarize({:ok, results, _winner, _response}), do: {:ok, length(results)}
+
+  defp summarize({:ok, results, _winner, _response, stats}),
+    do: {:ok, length(results), stats.dropped}
+
   defp summarize(other), do: other
 
-  defp row_count({:ok, results, _, _}), do: length(results)
+  defp row_count({:ok, results, _, _, _}), do: length(results)
   defp row_count(_), do: 0
 
-  defp winner({:ok, _, winner, _}), do: winner
+  defp dropped_count({:ok, _, _, _, stats}), do: stats.dropped
+  defp dropped_count(_), do: 0
+
+  defp winner({:ok, _, winner, _, _}), do: winner
   defp winner(_), do: nil
 
   defp error_message({:error, message}), do: message
   defp error_message({:cloudflare, message}), do: message
   defp error_message(_), do: nil
 
-  defp first_result({:ok, [first | _], _, _}, _empty), do: first
-  defp first_result(_search, {:ok, [first | _], _, _}), do: first
+  defp first_result({:ok, [first | _], _, _, _}, _empty), do: first
+  defp first_result(_search, {:ok, [first | _], _, _, _}), do: first
   defp first_result(_, _), do: nil
 
   # -- grab -------------------------------------------------------------------
@@ -200,12 +207,13 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
   @spec classify(map()) :: Outcome.bucket()
   def classify(%{search: {:cloudflare, _}}), do: :cloudflare
   def classify(%{search: {:error, message}}), do: classify_error(message)
-  def classify(%{search: {:ok, n}, grab: grab}) when n > 0, do: with_grab(:ok, grab)
+  def classify(%{search: {:ok, n, _dropped}, grab: grab}) when n > 0, do: with_grab(:ok, grab)
 
-  def classify(%{search: {:ok, 0}, empty: {:ok, n}, grab: grab}) when n > 0,
+  def classify(%{search: {:ok, 0, _dropped}, empty: {:ok, n, _}, grab: grab}) when n > 0,
     do: with_grab(:ok_empty_query, grab)
 
-  def classify(%{search: {:ok, 0}}), do: :no_rows
+  def classify(%{search: {:ok, 0, dropped}}) when dropped > 0, do: :rows_dropped
+  def classify(%{search: {:ok, 0, _dropped}}), do: :no_rows
 
   defp with_grab(bucket, {:magnet, _}), do: bucket
   defp with_grab(bucket, {:torrent, _}), do: bucket
@@ -252,9 +260,9 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
     end
   end
 
-  defp best_response({:ok, [_ | _], _, response}, _empty, query), do: {query, response}
-  defp best_response(_search, {:ok, _, _, response}, _query), do: {"", response}
-  defp best_response({:ok, _, _, response}, _empty, query), do: {query, response}
+  defp best_response({:ok, [_ | _], _, response, _}, _empty, query), do: {query, response}
+  defp best_response(_search, {:ok, _, _, response, _}, _query), do: {"", response}
+  defp best_response({:ok, _, _, response, _}, _empty, query), do: {query, response}
   defp best_response(_, _, _), do: nil
 
   # The details page a download block reads, so grab fixtures can be reduced.

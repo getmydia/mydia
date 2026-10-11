@@ -646,6 +646,25 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert {:ok, 0, ^url} = CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
     end
 
+    test "reports degraded when rows matched but none had a download" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<table><tr><td>Copper Lantern</td></tr><tr><td>Paper Harbor</td></tr></table>"
+        )
+      end)
+
+      url = "http://localhost:#{bypass.port}"
+
+      assert {:error, message} = CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
+      assert message =~ "none usable"
+      assert message =~ "2 rows matched"
+      assert message =~ "missing download"
+    end
+
     test "reports an error when the search 404s even though the homepage is fine" do
       # A homepage probe passes here. This is exactly the false green.
       bypass = Bypass.open()
@@ -667,7 +686,12 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
     defp capture_path(bypass, test_pid) do
       Bypass.stub(bypass, "GET", "/search/:term", fn conn ->
         send(test_pid, {:request_path, conn.request_path})
-        Plug.Conn.resp(conn, 200, "<html><body><table><tr><td>x</td></tr></table></body></html>")
+
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>x<a href=\"/d/1\">d</a></td></tr></table></body></html>"
+        )
       end)
     end
 

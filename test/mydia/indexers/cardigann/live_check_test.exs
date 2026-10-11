@@ -6,24 +6,38 @@ defmodule Mydia.Indexers.Cardigann.LiveCheckTest do
   describe "classify/1" do
     test "rows on the probe query and a magnet grab is ok" do
       assert LiveCheck.classify(%{
-               search: {:ok, 3},
+               search: {:ok, 3, 0},
                empty: nil,
                grab: {:magnet, "magnet:?xt=urn:btih:1"}
              }) == :ok
     end
 
     test "rows only on the empty query is ok_empty_query" do
-      assert LiveCheck.classify(%{search: {:ok, 0}, empty: {:ok, 5}, grab: {:torrent, 512}}) ==
+      assert LiveCheck.classify(%{
+               search: {:ok, 0, 0},
+               empty: {:ok, 5, 0},
+               grab: {:torrent, 512}
+             }) ==
                :ok_empty_query
     end
 
     test "rows with a failed grab is grab_failed" do
-      assert LiveCheck.classify(%{search: {:ok, 3}, empty: nil, grab: {:error, "no selector"}}) ==
+      assert LiveCheck.classify(%{
+               search: {:ok, 3, 0},
+               empty: nil,
+               grab: {:error, "no selector"}
+             }) ==
                :grab_failed
     end
 
     test "zero rows on both queries is no_rows" do
-      assert LiveCheck.classify(%{search: {:ok, 0}, empty: {:ok, 0}, grab: nil}) == :no_rows
+      assert LiveCheck.classify(%{search: {:ok, 0, 0}, empty: {:ok, 0, 0}, grab: nil}) ==
+               :no_rows
+    end
+
+    test "matched rows that were all dropped is rows_dropped" do
+      assert LiveCheck.classify(%{search: {:ok, 0, 4}, empty: {:ok, 0, 0}, grab: nil}) ==
+               :rows_dropped
     end
 
     test "a cloudflare probe is cloudflare" do
@@ -109,6 +123,22 @@ defmodule Mydia.Indexers.Cardigann.LiveCheckTest do
       outcome = LiveCheck.check(yaml)
       assert outcome.bucket == :ok
       assert outcome.rows == 1
+    end
+
+    test "rows matched without a download link is rows_dropped", %{bypass: bypass, yaml: yaml} do
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, """
+        <table class="results">
+        <tr><td class="title">Copper Lantern S01E02</td></tr>
+        <tr><td class="title">Paper Harbor 2031</td></tr>
+        </table>
+        """)
+      end)
+
+      outcome = LiveCheck.check(yaml)
+      assert outcome.bucket == :rows_dropped
+      assert outcome.rows == 0
+      assert outcome.dropped == 2
     end
 
     test "rows only on the empty query is ok_empty_query", %{bypass: bypass, yaml: yaml} do

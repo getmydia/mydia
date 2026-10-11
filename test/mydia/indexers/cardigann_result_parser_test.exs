@@ -1834,6 +1834,92 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
     end
   end
 
+  describe "parse_results_with_stats/4" do
+    defp stats_definition do
+      %Parsed{
+        id: "stats",
+        name: "Stats",
+        type: "public",
+        links: ["https://example.invalid"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td.t"},
+            "download" => %{selector: "a.d", attribute: "href"}
+          }
+        }
+      }
+    end
+
+    test "counts rows dropped for a missing download and names the field" do
+      html = """
+      <table><tr><td class="t">Copper Lantern</td></tr><tr><td class="t">Paper Harbor</td><td><a class="d" href="/1">d</a></td></tr></table>
+      """
+
+      assert {:ok, [_one],
+              %Mydia.Indexers.Cardigann.ParseStats{
+                matched: 2,
+                dropped: 1,
+                first_missing: "download"
+              }} =
+               CardigannResultParser.parse_results_with_stats(
+                 stats_definition(),
+                 %{status: 200, body: html},
+                 "Stats",
+                 base_url: "https://example.invalid"
+               )
+    end
+
+    test "names title when the title is missing" do
+      html = ~s(<table><tr><td><a class="d" href="/1">d</a></td></tr></table>)
+
+      assert {:ok, [], %{matched: 1, dropped: 1, first_missing: "title"}} =
+               CardigannResultParser.parse_results_with_stats(
+                 stats_definition(),
+                 %{status: 200, body: html},
+                 "Stats",
+                 base_url: "https://example.invalid"
+               )
+    end
+
+    test "counts dropped JSON rows" do
+      definition = %{
+        stats_definition()
+        | search: %{
+            paths: [%{path: "/", response: %{type: "json"}}],
+            rows: %{selector: "items"},
+            fields: %{"title" => %{selector: "name"}, "download" => %{selector: "url"}}
+          }
+      }
+
+      body = ~s({"items": [{"name": "Copper Lantern"}, {"name": "Paper Harbor", "url": "/1"}]})
+
+      assert {:ok, [_one], %{matched: 2, dropped: 1, first_missing: "download"}} =
+               CardigannResultParser.parse_results_with_stats(
+                 definition,
+                 %{status: 200, body: body},
+                 "Stats",
+                 base_url: "https://example.invalid"
+               )
+    end
+
+    test "an empty body yields empty stats" do
+      assert {:ok, [], %{matched: 0, dropped: 0}} =
+               CardigannResultParser.parse_results_with_stats(
+                 stats_definition(),
+                 %{status: 200, body: ""},
+                 "Stats"
+               )
+    end
+  end
+
   describe "rows.missingAttributeEqualsNoResults" do
     test "returns no rows instead of an error when the attribute is missing" do
       html =
