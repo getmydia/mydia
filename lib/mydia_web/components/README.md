@@ -186,6 +186,17 @@ through four rounds, and only `document.elementFromPoint` over the menu rectangl
 in a real browser caught it. History: #465, `4f598bbae`, then `a66b1107b`, then
 `122b8a741`, all z-index moves, then the dialog rewrite.
 
+The rule is about cards in a poster grid, which sit next to the sidebar and
+above the dock. A dropdown in the main content column that opens away from the
+sidebar only has to beat the card badges, and `z-20` on its `.dropdown`
+wrapper does that while staying under the header, sidebar and dock. Use that
+band. The Media Files card's file actions menu was `z-[1]` on the list, so the
+franchise rail's rating badges painted through it on phones (#1107).
+`test/mydia_web/features/media_file_menu_stacking_test.exs` guards it, and
+shows the probe trap too: `refute_covered/2`'s 3x3 grid fell between the
+25px-tall badges and passed with the bug present, so the test hit-tests the
+centre of each overlap instead.
+
 ## .menu is fit-content, so truncate inflates instead of clipping
 
 daisyUI 5's `.menu` is `flex-flow: column wrap; width: fit-content` and does not
