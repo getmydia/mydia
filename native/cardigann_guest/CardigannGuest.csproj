@@ -17,6 +17,7 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <SelfContained>true</SelfContained>
     <OutputType>Library</OutputType>
+    <DefineConstants>$(DefineConstants);WASM_BUILD</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,6 +32,7 @@
 
   <ItemGroup Condition="'$(WasmBuild)' == 'true'">
     <PackageReference Include="BytecodeAlliance.Componentize.DotNet.Wasm.SDK" Version="0.8.0-preview00011" />
+    <PackageReference Include="runtime.linux-x64.microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-rc.1.26355.1" />
     <Wit Include="wit/cardigann.wit" World="cardigann" />
   </ItemGroup>
 

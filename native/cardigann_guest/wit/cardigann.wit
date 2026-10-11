@@ -1,0 +1,128 @@
+package mydia:cardigann@1.0.0;
+
+interface types {
+  record header { name: string, value: string }
+
+  record http-req {
+    method: string,
+    url: string,
+    headers: list<header>,
+    body: option<list<u8>>,
+  }
+
+  record http-resp {
+    status: u16,
+    headers: list<header>,
+    body: list<u8>,
+  }
+
+  variant http-error {
+    timeout(string),
+    connect(string),
+    blocked(string),
+    other(string),
+  }
+
+  record setting { name: string, value: string }
+
+  record session {
+    cookies: list<header>,
+    expires-unix: option<s64>,
+  }
+
+  enum query-kind { search, movie, tv }
+
+  record query {
+    kind: query-kind,
+    term: string,
+    categories: list<s32>,
+    imdb-id: option<string>,
+    tmdb-id: option<s32>,
+    tvdb-id: option<s32>,
+    season: option<s32>,
+    episode: option<string>,
+    limit: option<s32>,
+    offset: option<s32>,
+  }
+
+  record release {
+    title: string,
+    guid: string,
+    download-url: option<string>,
+    magnet-url: option<string>,
+    info-url: option<string>,
+    info-hash: option<string>,
+    size: option<s64>,
+    seeders: option<s32>,
+    peers: option<s32>,
+    grabs: option<s32>,
+    publish-unix: option<s64>,
+    categories: list<s32>,
+    imdb-id: option<string>,
+    tmdb-id: option<s32>,
+    tvdb-id: option<s32>,
+    download-volume-factor: option<f64>,
+    upload-volume-factor: option<f64>,
+    minimum-ratio: option<f64>,
+    minimum-seed-time: option<s64>,
+  }
+
+  record search-out {
+    releases: list<release>,
+    session: session,
+    session-changed: bool,
+  }
+
+  variant download-payload {
+    bytes(list<u8>),
+    link(string),
+  }
+
+  record download-out { payload: download-payload, session: session }
+
+  record captcha-challenge {
+    image: list<u8>,
+    content-type: string,
+    state: string,
+  }
+
+  variant login-out {
+    ok(session),
+    captcha(captcha-challenge),
+  }
+
+  record captcha-answer { answer: string, state: string }
+
+  variant engine-error {
+    login-failed(string),
+    captcha-required(string),
+    request-limit(string),
+    cloudflare(string),
+    parse-failed(string),
+    http(string),
+    internal(string),
+  }
+}
+
+interface host {
+  use types.{http-req, http-resp, http-error};
+
+  http-request: func(req: http-req) -> result<http-resp, http-error>;
+  /// 0 trace, 1 debug, 2 info, 3 warn, 4 error
+  log: func(level: u8, message: string);
+}
+
+interface engine {
+  use types.{setting, session, query, search-out, download-out, login-out, captcha-answer, engine-error};
+
+  capabilities: func(def-yaml: string) -> result<string, engine-error>;
+  search: func(def-yaml: string, settings: list<setting>, q: query, s: session) -> result<search-out, engine-error>;
+  download: func(def-yaml: string, settings: list<setting>, link: string, s: session) -> result<download-out, engine-error>;
+  login: func(def-yaml: string, settings: list<setting>, s: session, answer: option<captcha-answer>) -> result<login-out, engine-error>;
+  test: func(def-yaml: string, settings: list<setting>, s: session) -> result<session, engine-error>;
+}
+
+world cardigann {
+  import host;
+  export engine;
+}

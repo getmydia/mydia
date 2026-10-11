@@ -9,7 +9,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 
 image="mcr.microsoft.com/dotnet/sdk:10.0"
 cache="${NUGET_CACHE:-$HOME/.cache/mydia-cardigann-nuget}"
-mkdir -p "$cache"
+mkdir -p "$cache" "$cache-wasi-sdk"
 # Run as the invoking user so bin/, obj/ and out/ are not root-owned.
 run() {
   docker run --rm \
@@ -17,6 +17,7 @@ run() {
     -e HOME=/tmp -e DOTNET_CLI_HOME=/tmp -e NUGET_PACKAGES=/nuget \
     -v "$here:/src" -w /src \
     -v "$cache:/nuget" \
+    -v "$cache-wasi-sdk:/tmp/.wasi-sdk" \
     "$image" bash -c "$1"
 }
 
@@ -24,8 +25,10 @@ case "${1:-}" in
   check) run "dotnet build CardigannGuest.csproj -c Release -p:WasmBuild=false" ;;
   test)  run "dotnet test tests/CardigannGuest.Tests -c Release" ;;
   wasm)
-    run "dotnet publish CardigannGuest.csproj -c Release -p:WasmBuild=true -o out/publish \
-         && cp out/publish/CardigannGuest.wasm out/cardigann.wasm"
+    # componentize-dotnet's SDK publishes as part of `dotnet build`; a separate
+    # `dotnet publish` hits a circular Publish target.
+    run "dotnet build CardigannGuest.csproj -c Release -p:WasmBuild=true \
+         && mkdir -p out && cp bin/Release/net10.0/wasi-wasm/native/CardigannGuest.wasm out/cardigann.wasm"
     ;;
   *) echo "usage: build.sh check|test|wasm" >&2; exit 2 ;;
 esac
