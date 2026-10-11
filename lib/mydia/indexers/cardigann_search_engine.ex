@@ -946,7 +946,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   # A stored session row holds either plain "name=value" strings or cookie maps
   # (older versions wrote FlareSolverr's cookies there), and
-  # CardigannAuth.get_stored_session/1 hands back whatever is in the row without
+  # SessionManager.user_config/2 hands back whatever is in the row without
   # looking. Joining a map raises Protocol.UndefinedError before the request is
   # even sent, so a leftover row would crash the next search. Entries are
   # normalized here and anything unusable is dropped.

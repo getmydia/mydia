@@ -89,6 +89,33 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert updated_definition.health_status in ["healthy", "degraded", "unhealthy", "unknown"]
     end
 
+    test "keeps needs_login intact and sends no request" do
+      definition = cardigann_definition_fixture(%{enabled: true})
+      bypass = Bypass.open()
+
+      yaml =
+        String.replace(
+          definition.definition,
+          "search:\n",
+          "login:\n  method: cookie\n  inputs:\n    cookie: \"{{ .Config.cookie }}\"\n  test:\n    path: /\n    selector: a\nsearch:\n"
+        )
+
+      {:ok, definition} =
+        definition
+        |> Ecto.Changeset.change(%{definition: yaml, health_status: "needs_login"})
+        |> Repo.update()
+
+      # Bypass fails the test on exit if any request reaches it.
+      definition = put_link(definition, "http://localhost:#{bypass.port}")
+
+      assert {:ok, %{status: "needs_login", success: false}} =
+               CardigannHealthCheck.execute_health_check(definition)
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      assert reloaded.health_status == "needs_login"
+      assert reloaded.consecutive_failures in [0, nil]
+    end
+
     test "tracks consecutive failures" do
       # A closed local port, not a real hostname, gives a deterministic
       # connection failure without touching the network (same pattern as the

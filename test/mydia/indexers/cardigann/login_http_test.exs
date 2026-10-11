@@ -59,6 +59,24 @@ defmodule Mydia.Indexers.Cardigann.LoginHttpTest do
     assert Inputs.resolve_page("http://h/sub/login.php?a=1", "/x") == "http://h/x"
   end
 
+  test "resolve joins a relative login path onto the site link and keeps an absolute one" do
+    assert Inputs.resolve("https://abn.lol", "/login.php") == "https://abn.lol/login.php"
+
+    assert Inputs.resolve("https://abn.lol", "https://auth.abn.lol/api/login") ==
+             "https://auth.abn.lol/api/login"
+  end
+
+  test "base_url names the site link as the problem when the definition has none" do
+    alias Mydia.Indexers.CardigannDefinition
+
+    parsed = %{parsed("http://unused.example", %{}) | links: []}
+
+    assert {:error, %Error{message: message}} =
+             Inputs.base_url(parsed, %CardigannDefinition{config: %{}, active_link: nil})
+
+    assert message =~ "No site link configured"
+  end
+
   test "refuses a redirect to a host outside the definition", %{bypass: bypass, base: base} do
     Bypass.expect_once(bypass, "POST", "/login.php", fn conn ->
       conn

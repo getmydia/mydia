@@ -196,10 +196,11 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
   end
 
   defp twofa_key(inputs) do
-    Enum.find_value(@twofa_keys, fn key ->
-      if Enum.any?(inputs, fn {_k, v} -> String.contains?(v, ".Config." <> key) end), do: key
-    end)
+    Enum.find(@twofa_keys, fn key -> references_config?(inputs, key) end)
   end
+
+  defp references_config?(inputs, key),
+    do: Enum.any?(inputs, fn {_k, v} -> String.contains?(v, ".Config." <> key) end)
 
   defp content_type(%{headers: headers}) do
     case Map.get(headers, "content-type") do
