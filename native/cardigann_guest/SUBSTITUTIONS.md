@@ -21,7 +21,7 @@ These have no upstream counterpart because upstream wires them with dependency i
 
 | Shim | Purpose |
 |---|---|
-| shim/Services.cs | `NullEventAggregator`, `NoRateLimitService` (the host rate-limits), `CallConfigService` (Prowlarr's default values). |
+| shim/Services.cs | `NullEventAggregator`, `NoRateLimitService` (the host rate-limits), `NoProxyFactory` (no indexer proxies), `CallConfigService` (Prowlarr's default values). |
 | shim/ExchangeDispatcher.cs, shim/RequestMapping.cs | Test seam and mapping for the HTTP exchange, replacing `ManagedHttpDispatcher`'s socket code. `RequestMapping` mirrors its user agent, Cookie header, Set-Cookie and response header handling. |
 
 ## Compile-time resources

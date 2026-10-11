@@ -1,0 +1,60 @@
+id: quill
+name: Quill
+description: Invented private tracker for tests
+language: en-US
+type: private
+encoding: UTF-8
+links:
+  - https://quill.invalid/
+caps:
+  categorymappings:
+    - {id: 1, cat: Movies, desc: Movies}
+    - {id: 2, cat: TV, desc: TV}
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+    movie-search: [q]
+settings:
+  - {name: username, type: text, label: Username}
+  - {name: password, type: password, label: Password}
+login:
+  path: login.php
+  method: form
+  form: form#login
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+  error:
+    - selector: div.error
+  test:
+    path: index.php
+    selector: a[href="logout.php"]
+search:
+  paths:
+    - path: search
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table.results > tbody > tr
+  fields:
+    title:
+      selector: td.name a
+    details:
+      selector: td.name a
+      attribute: href
+    download:
+      selector: td.dl a
+      attribute: href
+    category:
+      selector: td.cat
+    size:
+      selector: td.size
+    seeders:
+      selector: td.seed
+    leechers:
+      selector: td.leech
+    date:
+      selector: td.date
+      filters:
+        - name: dateparse
+          args: "yyyy-MM-dd"

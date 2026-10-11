@@ -2,7 +2,7 @@
   <PropertyGroup>
     <ProwlarrRoot>$(MSBuildThisFileDirectory).prowlarr/</ProwlarrRoot>
   </PropertyGroup>
-  <Target Name="IncludeProwlarrFiles" BeforeTargets="BeforeBuild;CoreCompile">
+  <Target Name="IncludeProwlarrFiles" BeforeTargets="BeforeBuild;CoreCompile" Condition="'$(SkipVendorFiles)' != 'true'">
     <ReadLinesFromFile File="$(MSBuildThisFileDirectory)vendor-files.txt">
       <Output TaskParameter="Lines" ItemName="_VendorLine" />
     </ReadLinesFromFile>

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using FluentValidation.Results;
+using NzbDrone.Core.IndexerProxies;
 using NzbDrone.Common.Http.Proxy;
 using NzbDrone.Common.Messaging;
 using NzbDrone.Common.TPL;
@@ -26,6 +28,36 @@ namespace Mydia.CardigannGuest.Shim
         }
 
         public Task WaitAndPulseAsync(string key, TimeSpan interval) => Task.CompletedTask;
+    }
+
+    // The guest registers no indexer proxies (no FlareSolverr, no HTTP proxy).
+    public sealed class NoProxyFactory : IIndexerProxyFactory
+    {
+        public List<IndexerProxyDefinition> All() => new List<IndexerProxyDefinition>();
+        public List<IIndexerProxy> GetAvailableProviders() => new List<IIndexerProxy>();
+        public bool Exists(int id) => false;
+        public IndexerProxyDefinition Find(int id) => null;
+        public IndexerProxyDefinition Get(int id) => throw new NotSupportedException();
+        public IEnumerable<IndexerProxyDefinition> Get(IEnumerable<int> ids) => new List<IndexerProxyDefinition>();
+        public IndexerProxyDefinition Create(IndexerProxyDefinition definition) => throw new NotSupportedException();
+        public void Update(IndexerProxyDefinition definition) => throw new NotSupportedException();
+        public IEnumerable<IndexerProxyDefinition> Update(IEnumerable<IndexerProxyDefinition> definitions) => throw new NotSupportedException();
+        public void Delete(int id) => throw new NotSupportedException();
+        public void Delete(IEnumerable<int> ids) => throw new NotSupportedException();
+        public IEnumerable<IndexerProxyDefinition> GetDefaultDefinitions() => new List<IndexerProxyDefinition>();
+        public IEnumerable<IndexerProxyDefinition> GetPresetDefinitions(IndexerProxyDefinition providerDefinition) => new List<IndexerProxyDefinition>();
+        public void SetProviderCharacteristics(IndexerProxyDefinition definition)
+        {
+        }
+
+        public void SetProviderCharacteristics(IIndexerProxy provider, IndexerProxyDefinition definition)
+        {
+        }
+
+        public IIndexerProxy GetInstance(IndexerProxyDefinition definition) => throw new NotSupportedException();
+        public ValidationResult Test(IndexerProxyDefinition definition) => throw new NotSupportedException();
+        public object RequestAction(IndexerProxyDefinition definition, string action, IDictionary<string, string> query) => null;
+        public List<IndexerProxyDefinition> AllForTag(int tagId) => new List<IndexerProxyDefinition>();
     }
 
     // Replaces the database-backed ConfigService. Values are Prowlarr's defaults.
