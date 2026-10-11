@@ -55,12 +55,6 @@
         test_result={assigns[:library_config_test_result]}
       />
     <% end %>
-    <MydiaWeb.AdminIndexersLive.LoginComponents.login_modal
-      :if={@login_challenge}
-      challenge={@login_challenge}
-      definition={@login_definition}
-      error={@login_error}
-      busy={@login_busy}
-    />
+    <MydiaWeb.AdminIndexersLive.LoginComponents.login_prompt {assigns} />
   </.admin_page>
 </Layouts.app>

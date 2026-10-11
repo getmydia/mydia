@@ -16,6 +16,19 @@ defmodule MydiaWeb.AdminIndexersLive.LoginComponents do
     """
   end
 
+  @doc "Renders the login modal while a login challenge is pending, from the LiveView assigns."
+  def login_prompt(assigns) do
+    ~H"""
+    <.login_modal
+      :if={@login_challenge}
+      challenge={@login_challenge}
+      definition={@login_definition}
+      error={@login_error}
+      busy={@login_busy}
+    />
+    """
+  end
+
   attr :challenge, :any, required: true
   attr :definition, :any, required: true
   attr :error, :string, default: nil
