@@ -34,7 +34,14 @@ defmodule Mydia.Indexers.FlareSolverr.GateTest do
 
     holder =
       Task.async(fn ->
-        Gate.run(fn -> send(parent, :holding) && Process.sleep(500) end, server: server, limit: 1)
+        Gate.run(
+          fn ->
+            send(parent, :holding)
+            Process.sleep(500)
+          end,
+          server: server,
+          limit: 1
+        )
       end)
 
     assert_receive :holding
@@ -52,7 +59,11 @@ defmodule Mydia.Indexers.FlareSolverr.GateTest do
 
     {:ok, pid} =
       Task.start(fn ->
-        Gate.run(fn -> send(parent, :holding) && Process.sleep(:infinity) end,
+        Gate.run(
+          fn ->
+            send(parent, :holding)
+            Process.sleep(:infinity)
+          end,
           server: server,
           limit: 1
         )
