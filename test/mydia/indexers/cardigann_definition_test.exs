@@ -278,6 +278,27 @@ defmodule Mydia.Indexers.CardigannDefinitionTest do
     end
   end
 
+  describe "nil flags" do
+    test "toggle_changeset returns an invalid changeset for enabled: nil" do
+      changeset =
+        CardigannDefinition.toggle_changeset(%CardigannDefinition{in_library: true}, %{
+          enabled: nil
+        })
+
+      refute changeset.valid?
+    end
+
+    test "membership_changeset returns an invalid changeset for in_library: nil" do
+      changeset =
+        CardigannDefinition.membership_changeset(%CardigannDefinition{}, %{
+          in_library: nil,
+          enabled: true
+        })
+
+      refute changeset.valid?
+    end
+  end
+
   describe "membership_changeset/2" do
     test "sets both flags" do
       changeset =

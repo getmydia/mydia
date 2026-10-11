@@ -138,7 +138,7 @@ defmodule Mydia.Indexers.CardigannDefinition do
   end
 
   defp validate_enabled_in_library(changeset) do
-    if get_field(changeset, :enabled) and not get_field(changeset, :in_library) do
+    if get_field(changeset, :enabled) == true and get_field(changeset, :in_library) != true do
       add_error(changeset, :enabled, "add the indexer before enabling it")
     else
       changeset
