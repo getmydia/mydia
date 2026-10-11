@@ -107,7 +107,42 @@ defmodule Mydia.Indexers.Cardigann.SelectorTest do
     end
   end
 
+  describe ":contains needles with special characters" do
+    test "parentheses in a quoted needle" do
+      html = "<p>total (all)</p><p>total</p>"
+      assert count(html, ~S|p:contains("total (all)")|) == 1
+    end
+
+    test "escaped quote, also inside :has and :not" do
+      html = ~S|<div class=a><b>say "hi"</b></div><div class=a><b>other</b></div>|
+      assert count(html, ~S|b:contains("say \"hi\"")|) == 1
+      assert count(html, ~S|div.a:has(b:contains("say \"hi\""))|) == 1
+      assert count(html, ~S|div.a:not(:has(b:contains("say \"hi\"")))|) == 1
+    end
+  end
+
+  describe "text/1 and attribute/2 edges" do
+    test "text concatenates multiple nodes" do
+      doc = Selector.parse("<p>one</p><p>two</p>", ["p"])
+      assert doc |> Selector.find(:root, "p") |> Selector.text() == "onetwo"
+    end
+
+    test "attribute on an empty list and on a missing attribute" do
+      doc = Selector.parse("<p>x</p>", ["p"])
+      assert Selector.attribute([], "href") == nil
+      assert doc |> Selector.find(:root, "p") |> Selector.attribute("href") == nil
+    end
+  end
+
   describe "without/3" do
+    test "keeps the node itself when it matches the remove selector" do
+      html = ~s(<table><tr><td class=t>Paper Harbor<span class=t> [junk]</span></td></tr></table>)
+      doc = Selector.parse(html, ["td.t", ".t"])
+      [cell] = Selector.find(doc, :root, "td.t")
+      stripped = Selector.without(doc, cell, [".t"])
+      assert Selector.text([stripped]) == "Paper Harbor"
+    end
+
     test "removes matching descendants before reading text" do
       html = ~s(<table><tr><td class=t>Paper Harbor<span class=x> [junk]</span></td></tr></table>)
       doc = Selector.parse(html, ["td.t", "span.x"])

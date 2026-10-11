@@ -15,7 +15,8 @@ defmodule Mydia.Indexers.Cardigann.Selector do
   and the query stays native, including inside `:has()` and `:not()`.
 
   Every element also gets a `data-mydia-nid` so `without/3` can drop exactly the
-  nodes a `remove:` selector matched.
+  nodes a `remove:` selector matched. Because of these attributes, callers must
+  not enumerate attribute lists or serialize nodes expecting the source HTML.
   """
 
   alias Mydia.Indexers.Cardigann.Selector.Document
@@ -72,10 +73,15 @@ defmodule Mydia.Indexers.Cardigann.Selector do
 
   @spec without(Document.t(), LazyHTML.t(), [String.t()]) :: LazyHTML.t()
   def without(%Document{} = doc, node, selectors) do
+    # query/2 includes the scope itself; goquery's Find().Remove() only removes
+    # descendants, so the scope's own id is never dropped.
+    own = LazyHTML.attribute(node, @nid)
+
     drop =
       selectors
       |> Enum.flat_map(&find(doc, node, &1))
       |> Enum.flat_map(&LazyHTML.attribute(&1, @nid))
+      |> Enum.reject(&(&1 in own))
       |> MapSet.new()
 
     node |> LazyHTML.to_tree() |> prune(drop) |> LazyHTML.from_tree()
@@ -93,7 +99,10 @@ defmodule Mydia.Indexers.Cardigann.Selector do
 
   defp needles(_), do: []
 
-  defp needle_from_match([_full | groups]) do
+  defp needle_from_match([_full | groups]), do: needle(groups)
+
+  # The first non-empty capture group (double-quoted, single-quoted, bare), unescaped.
+  defp needle(groups) do
     groups |> Enum.find(&(&1 not in [nil, ""])) |> Kernel.||("") |> unescape()
   end
 
@@ -101,9 +110,7 @@ defmodule Mydia.Indexers.Cardigann.Selector do
 
   defp rewrite(selector, markers) do
     Regex.replace(@contains, selector, fn full, d, s, u ->
-      needle = unescape(Enum.find([d, s, u], &(&1 != "")) || "")
-
-      case Map.fetch(markers, needle) do
+      case Map.fetch(markers, needle([d, s, u])) do
         {:ok, attr} ->
           "[#{attr}]"
 
