@@ -62,7 +62,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
   alias Mydia.Metadata.Provider.Registry
   alias Mydia.Repo
   alias Mydia.Settings
-  alias MydiaWeb.SearchLive.Index, as: SearchLive
+  alias MydiaWeb.SearchLive.ReleaseAdd
   alias MydiaWeb.SearchLive.DownloadConfirmTest.BlockingProvider
   alias MydiaWeb.SearchLive.DownloadConfirmTest.TwoHitProvider
 
@@ -266,7 +266,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
         search_on_add: false
       }
 
-      assert SearchLive.download_opts("item-1", :created, defaults) ==
+      assert ReleaseAdd.download_opts("item-1", :created, defaults) ==
                [media_item_id: "item-1", library_path_id: "lib-1"]
     end
 
@@ -278,7 +278,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
         search_on_add: false
       }
 
-      assert SearchLive.download_opts("item-1", :existing, defaults) == [media_item_id: "item-1"]
+      assert ReleaseAdd.download_opts("item-1", :existing, defaults) == [media_item_id: "item-1"]
     end
   end
 end

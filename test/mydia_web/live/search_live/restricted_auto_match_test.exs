@@ -46,7 +46,7 @@ defmodule MydiaWeb.SearchLive.RestrictedAutoMatchTest do
   alias Mydia.Metadata.Provider.Registry
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.MetadataStubProvider
-  alias MydiaWeb.SearchLive.Index, as: SearchLive
+  alias MydiaWeb.SearchLive.ReleaseAdd
   alias MydiaWeb.SearchLive.RestrictedAutoMatchTest.TwoHitProvider
 
   setup :setup_metadata_stub
@@ -82,7 +82,7 @@ defmodule MydiaWeb.SearchLive.RestrictedAutoMatchTest do
     before = items()
 
     assert {:ok, {:multiple_matches, [only], :movie}} =
-             SearchLive.search_and_fetch_metadata(scope_allowing(["movie"]), parsed())
+             ReleaseAdd.search_and_fetch_metadata(scope_allowing(["movie"]), parsed())
 
     assert only.title == MetadataStubProvider.movie_title()
     assert items() == before
@@ -92,14 +92,14 @@ defmodule MydiaWeb.SearchLive.RestrictedAutoMatchTest do
     before = items()
 
     assert {:error, :no_metadata_match} =
-             SearchLive.search_and_fetch_metadata(scope_allowing(["cartoon_movie"]), parsed())
+             ReleaseAdd.search_and_fetch_metadata(scope_allowing(["cartoon_movie"]), parsed())
 
     assert items() == before
   end
 
   test "one hit that is in bounds is fetched and linked as before" do
     assert {:ok, %MediaMetadata{} = metadata} =
-             SearchLive.search_and_fetch_metadata(scope_allowing(["movie"]), parsed())
+             ReleaseAdd.search_and_fetch_metadata(scope_allowing(["movie"]), parsed())
 
     assert metadata.title == MetadataStubProvider.movie_title()
   end
@@ -108,6 +108,6 @@ defmodule MydiaWeb.SearchLive.RestrictedAutoMatchTest do
     Registry.register(:metadata_relay, TwoHitProvider)
 
     assert {:ok, {:multiple_matches, [_, _], :movie}} =
-             SearchLive.search_and_fetch_metadata(Scope.unrestricted(), parsed())
+             ReleaseAdd.search_and_fetch_metadata(Scope.unrestricted(), parsed())
   end
 end
