@@ -515,7 +515,7 @@ defmodule Mydia.ImportCandidates.Review do
   def maybe_after_id(query, id), do: where(query, [c], c.id > ^id)
 
   # Walks a whole group's undismissed candidates in keyset pages of
-  # #{@member_page_size}, so a group the size of a full season tree is never
+  # `@member_page_size` (500), so a group the size of a full season tree is never
   # one unbounded allocation, while still handing callers
   # (`AcceptQueue.load_queued_members/3`, `AcceptQueue.load_pending_members/2`)
   # the complete membership they need to act on the
