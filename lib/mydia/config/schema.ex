@@ -311,6 +311,10 @@ defmodule Mydia.Config.Schema do
       field :url, :string
       field :timeout, :integer, default: 60_000
       field :max_timeout, :integer, default: 120_000
+      # Chrome tabs FlareSolverr may run at once across all indexers. Each one
+      # costs a few hundred MB; the default of 1 is what keeps a small container
+      # from crashing tabs when several protected indexers search together.
+      field :max_concurrent_requests, :integer, default: 1
     end
 
     # Whether this server runs its p2p node and accepts pairing. It only counts
@@ -774,10 +778,11 @@ defmodule Mydia.Config.Schema do
 
   defp flaresolverr_changeset(schema, attrs) do
     schema
-    |> cast(attrs, [:enabled, :url, :timeout, :max_timeout])
+    |> cast(attrs, [:enabled, :url, :timeout, :max_timeout, :max_concurrent_requests])
     |> validate_flaresolverr_url()
     |> validate_number(:timeout, greater_than: 0)
     |> validate_number(:max_timeout, greater_than: 0)
+    |> validate_number(:max_concurrent_requests, greater_than: 0)
   end
 
   defp validate_flaresolverr_url(changeset) do

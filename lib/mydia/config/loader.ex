@@ -429,6 +429,11 @@ defmodule Mydia.Config.Loader do
     |> put_if_present(:url, System.get_env("FLARESOLVERR_URL"))
     |> put_if_present(:timeout, System.get_env("FLARESOLVERR_TIMEOUT"), &parse_integer/1)
     |> put_if_present(:max_timeout, System.get_env("FLARESOLVERR_MAX_TIMEOUT"), &parse_integer/1)
+    |> put_if_present(
+      :max_concurrent_requests,
+      System.get_env("FLARESOLVERR_MAX_CONCURRENT_REQUESTS"),
+      &parse_integer/1
+    )
   end
 
   # parse_boolean_or_invalid/1, not parse_boolean/1: this switch puts a network
