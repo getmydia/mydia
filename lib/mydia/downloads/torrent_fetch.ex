@@ -245,10 +245,6 @@ defmodule Mydia.Downloads.TorrentFetch do
       {:error, {:unexpected_status, status}} ->
         Logger.error("Unexpected HTTP status #{status} when downloading from: #{url}")
         {:error, {:download_failed, "Unexpected HTTP status: #{status}"}}
-
-      {:error, reason} ->
-        Logger.error("Failed to download torrent file from #{url}: #{inspect(reason)}")
-        {:error, {:download_failed, inspect(reason)}}
     end
   end
 
@@ -360,10 +356,6 @@ defmodule Mydia.Downloads.TorrentFetch do
 
         {:error, {:unexpected_status, status}}
 
-      {:ok, %{status: status}} ->
-        Logger.error("Unexpected HTTP status #{status} during redirect check for URL: #{url}")
-        {:error, {:unexpected_status, status}}
-
       {:error, exception} ->
         {:error, {:http_error, exception}}
     end
@@ -413,11 +405,6 @@ defmodule Mydia.Downloads.TorrentFetch do
         Logger.error(
           "Unexpected HTTP status #{status} during GET redirect check for URL: #{url}, response: #{body_preview}"
         )
-
-        {:error, {:unexpected_status, status}}
-
-      {:ok, %{status: status}} ->
-        Logger.error("Unexpected HTTP status #{status} during GET redirect check for URL: #{url}")
 
         {:error, {:unexpected_status, status}}
 
