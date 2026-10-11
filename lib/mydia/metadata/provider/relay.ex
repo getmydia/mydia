@@ -1515,11 +1515,10 @@ defmodule Mydia.Metadata.Provider.Relay do
 
     # Record the ID→type mapping from search results
     # This helps prevent future 404s from type mismatches
-    if media_type do
-      ProviderIDRegistry.record_id_type(
-        {:tmdb, String.to_integer(search_result.provider_id)},
-        media_type
-      )
+    # A result with no id has an empty provider_id; it has nothing to record.
+    with true <- media_type != nil,
+         {id, ""} <- Integer.parse(search_result.provider_id) do
+      ProviderIDRegistry.record_id_type({:tmdb, id}, media_type)
     end
 
     search_result

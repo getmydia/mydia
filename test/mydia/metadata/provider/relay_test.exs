@@ -667,6 +667,30 @@ defmodule Mydia.Metadata.Provider.RelayTest do
     end
   end
 
+  describe "search/3 with a malformed result" do
+    test "keeps the other results when one result has no id" do
+      bypass = Bypass.open()
+
+      body = %{
+        "results" => [
+          %{"id" => 603, "title" => "Fictional Grid", "release_date" => "1999-03-31"},
+          %{"title" => "Result Without An Id"}
+        ]
+      }
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      assert {:ok, results} =
+               Relay.search(relay_config(bypass), "fictional grid", media_type: :movie)
+
+      assert [%{provider_id: "603"}, %{provider_id: ""}] = results
+    end
+  end
+
   defp relay_config(bypass) do
     %{
       type: :metadata_relay,
