@@ -16,7 +16,6 @@ src/NzbDrone.Core/Indexers/HttpIndexerBase.cs
 src/NzbDrone.Core/Indexers/TorrentIndexerBase.cs
 # HTTP stack: Prowlarr's own client keeps cookies, redirects and headers
 src/NzbDrone.Common/Http/Dispatchers/IHttpDispatcher.cs
-src/NzbDrone.Common/Http/HttpClient.cs
 src/NzbDrone.Common/Http/HttpRequest.cs
 src/NzbDrone.Common/Http/HttpResponse.cs
 src/NzbDrone.Common/Http/HttpUri.cs

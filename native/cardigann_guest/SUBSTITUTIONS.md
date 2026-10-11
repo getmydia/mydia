@@ -14,6 +14,7 @@ namespace and the members the vendored code uses.
 | src/NzbDrone.Core/Datastore/LazyLoaded.cs | shim/LazyLoaded.cs | Upstream `LazyLoaded<T>` takes an `IDatabase` and logs through `SqlBuilderExtensions`. The shim keeps the public surface (`Value`, `IsLoaded`, implicit conversions, the JSON converter attribute) without the database hooks. |
 | src/NzbDrone.Common/EnvironmentInfo/RuntimeInfo.cs | shim/RuntimeInfo.cs | Upstream reads the process, OS and Windows service state and needs Microsoft.Extensions.Hosting. The vendored HTTP code only reads the static `IsProduction`, which the shim fixes to `true` (a released Prowlarr: requests auto redirect). |
 | src/NzbDrone.Common/EnsureThat/EnsureStringExtensions.cs | shim/EnsureStringExtensions.cs | Upstream also has path validators that pull in `PathExtensions`, `IAppFolderInfo` and `OsInfo`. Only `IsNotNullOrWhiteSpace` (the one the vendored cache code uses) is kept, with the upstream message. |
+| src/NzbDrone.Common/Http/HttpClient.cs | shim/HttpClient.cs | Verbatim copy minus one line, `ServicePointManager.DefaultConnectionLimit = 12;`, which throws `PlatformNotSupportedException` on wasi-wasm (System.Net.Requests is not supported there). Found by running the component under Wasmex (Task 4). |
 
 ## Added, not substituted
 

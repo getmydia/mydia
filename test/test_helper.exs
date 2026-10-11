@@ -33,7 +33,8 @@ s3_exclude =
 
 ExUnit.start(
   max_cases: max_cases,
-  exclude: [:external, :feature, :requires_relay, :ffmpeg, :hwaccel] ++ s3_exclude
+  exclude:
+    [:external, :feature, :requires_relay, :ffmpeg, :hwaccel, :cardigann_spike] ++ s3_exclude
 )
 
 Ecto.Adapters.SQL.Sandbox.mode(Mydia.Repo, :manual)

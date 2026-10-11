@@ -164,6 +164,19 @@ namespace CardigannWorld.wit.Exports.mydia.cardigann.v1_0_0
             }
         }
 
+        // Unexpected failures often wrap the real cause (YamlDotNet, reflection
+        // under AOT), so an internal error carries the whole chain.
+        private static string InnerChain(Exception ex)
+        {
+            var text = "";
+            for (var inner = ex.InnerException; inner != null; inner = inner.InnerException)
+            {
+                text += "\ncaused by " + inner.GetType().FullName + ": " + inner.Message;
+            }
+
+            return text;
+        }
+
         private static T.EngineError Map(Exception ex)
         {
             var message = ex.Message;
@@ -179,7 +192,7 @@ namespace CardigannWorld.wit.Exports.mydia.cardigann.v1_0_0
                 HttpRequestException => T.EngineError.Http(message),
                 HttpException => T.EngineError.Http(message),
                 WebException => T.EngineError.Http(message),
-                _ => T.EngineError.@internal(ex.GetType().FullName + ": " + message + "\n" + ex.StackTrace)
+                _ => T.EngineError.@internal(ex.GetType().FullName + ": " + message + "\n" + ex.StackTrace + InnerChain(ex))
             };
         }
     }
