@@ -255,8 +255,14 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     end
   end
 
-  defp classify_probe_error(message) when is_binary(message) do
-    if String.contains?(String.downcase(message), "cloudflare") do
+  # The engine prefixes every FlareSolverr failure with "FlareSolverr:" (see
+  # flaresolverr_error/2), so a crashed tab or a rejected cookie reads as the
+  # challenge problem it is rather than as a generic search failure.
+  @doc false
+  def classify_probe_error(message) when is_binary(message) do
+    lower = String.downcase(message)
+
+    if String.contains?(lower, "cloudflare") or String.starts_with?(message, "FlareSolverr:") do
       {:cloudflare, message}
     else
       {:error, message}
@@ -397,7 +403,11 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
           success: true,
           status: "degraded",
           message:
-            "Cloudflare challenge on #{active_link}. Enable FlareSolverr for this indexer.",
+            if(String.starts_with?(message, "FlareSolverr:"),
+              do: "#{message} (via #{active_link})",
+              else:
+                "Cloudflare challenge on #{active_link}. Enable FlareSolverr for this indexer."
+            ),
           response_time_ms: elapsed,
           error: message
         }

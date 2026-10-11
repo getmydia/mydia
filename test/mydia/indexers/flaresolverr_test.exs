@@ -406,6 +406,87 @@ defmodule Mydia.Indexers.FlareSolverrTest do
       %{bypass: bypass}
     end
 
+    test "a 500 with FlareSolverr's error JSON becomes a categorized error", %{bypass: bypass} do
+      Bypass.expect(bypass, "POST", "/v1", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          500,
+          Jason.encode!(%{
+            "status" => "error",
+            "message" =>
+              "Error: Error solving the challenge. Message: invalid cookie domain: Cookie 'domain' mismatch\n  (Session info: chrome=152.0.7977.82)\nStacktrace:\n#0 0x55b4f300818e <unknown>\n",
+            "startTimestamp" => 1,
+            "endTimestamp" => 2,
+            "version" => "3.5.2"
+          })
+        )
+      end)
+
+      assert {:error, {:cookie_rejected, "invalid cookie domain: Cookie 'domain' mismatch"}} =
+               FlareSolverr.get("https://protected.example.com")
+    end
+
+    test "a crashed tab is retried once, then reported as :browser_crashed", %{bypass: bypass} do
+      counter = :counters.new(1, [])
+
+      Bypass.expect(bypass, "POST", "/v1", fn conn ->
+        :counters.add(counter, 1, 1)
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          500,
+          Jason.encode!(%{
+            "status" => "error",
+            "message" =>
+              "Error: Error solving the challenge. Message: tab crashed\n  (Session info: chrome=152.0.7977.82)\n"
+          })
+        )
+      end)
+
+      assert {:error, {:browser_crashed, "tab crashed"}} =
+               FlareSolverr.get("https://protected.example.com", retry_delay_ms: 0)
+
+      assert :counters.get(counter, 1) == 2
+    end
+
+    test "a crashed tab that succeeds on retry returns the solution", %{bypass: bypass} do
+      counter = :counters.new(1, [])
+
+      Bypass.expect(bypass, "POST", "/v1", fn conn ->
+        :counters.add(counter, 1, 1)
+
+        {status, body} =
+          if :counters.get(counter, 1) == 1 do
+            {500,
+             %{
+               "status" => "error",
+               "message" => "Error: Error solving the challenge. Message: tab crashed\n"
+             }}
+          else
+            {200,
+             %{
+               "status" => "ok",
+               "solution" => %{
+                 "url" => "https://protected.example.com",
+                 "status" => 200,
+                 "response" => "<html></html>",
+                 "cookies" => [],
+                 "userAgent" => "test-agent"
+               }
+             }}
+          end
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(status, Jason.encode!(body))
+      end)
+
+      assert {:ok, %Mydia.Indexers.FlareSolverr.Response{status: "ok"}} =
+               FlareSolverr.get("https://protected.example.com", retry_delay_ms: 0)
+    end
+
     test "returns parsed Response on successful challenge solve", %{bypass: bypass} do
       Bypass.expect_once(bypass, "POST", "/v1", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)

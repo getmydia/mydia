@@ -363,25 +363,50 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           end
         end
 
-      {:error, {:challenge_failed, message}} ->
-        Logger.error("FlareSolverr challenge failed for #{definition.id}: #{message}")
-        {:error, Error.connection_failed("Cloudflare challenge failed: #{message}")}
-
-      {:error, {:challenge_timeout, message}} ->
-        Logger.error("FlareSolverr timeout for #{definition.id}: #{message}")
-        {:error, Error.connection_failed("Cloudflare challenge timeout: #{message}")}
-
-      {:error, :timeout} ->
-        Logger.error("FlareSolverr request timeout for #{definition.id}")
-        {:error, Error.connection_failed("FlareSolverr request timeout")}
-
-      {:error, {:connection_error, reason}} ->
-        Logger.error("FlareSolverr connection error for #{definition.id}: #{inspect(reason)}")
-        {:error, Error.connection_failed("FlareSolverr unavailable: #{inspect(reason)}")}
-
       {:error, reason} ->
-        Logger.error("FlareSolverr error for #{definition.id}: #{inspect(reason)}")
-        {:error, Error.search_failed("FlareSolverr error: #{inspect(reason)}")}
+        {:error, flaresolverr_error(definition.id, reason)}
+    end
+  end
+
+  # Operator-facing text for a FlareSolverr failure. Every message starts with
+  # "FlareSolverr:" so the connection test can recognise it, and none of them
+  # inspects the raw reason, which used to put FlareSolverr's whole JSON body
+  # and Chrome's stack trace in the admin UI.
+  defp flaresolverr_error(definition_id, reason) do
+    Logger.error("FlareSolverr failed for #{definition_id}: #{inspect(reason)}")
+
+    case reason do
+      {:browser_crashed, _} ->
+        Error.connection_failed(
+          "FlareSolverr: browser tab crashed (FlareSolverr's Chrome ran out of resources; " <>
+            "lower flaresolverr.max_concurrent_requests or give FlareSolverr more memory)"
+        )
+
+      {:cookie_rejected, message} ->
+        Error.connection_failed("FlareSolverr: Chrome rejected a cookie (#{message})")
+
+      {:challenge_timeout, _} ->
+        Error.connection_failed("FlareSolverr: timed out solving the challenge")
+
+      {category, message} when is_atom(category) and is_binary(message) ->
+        Error.connection_failed("FlareSolverr: #{message}")
+
+      :timeout ->
+        Error.connection_failed("FlareSolverr: request timed out")
+
+      :flaresolverr_busy ->
+        Error.connection_failed(
+          "FlareSolverr: busy with other indexers; no slot freed up before the search deadline"
+        )
+
+      {:connection_error, conn_reason} ->
+        Error.connection_failed("FlareSolverr: unreachable (#{inspect(conn_reason)})")
+
+      {:http_error, status, _body} ->
+        Error.connection_failed("FlareSolverr: HTTP #{status}")
+
+      other ->
+        Error.search_failed("FlareSolverr: #{inspect(other)}")
     end
   end
 

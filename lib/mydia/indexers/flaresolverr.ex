@@ -59,6 +59,13 @@ defmodule Mydia.Indexers.FlareSolverr do
     * `:session` - Optional session ID to reuse browser instance
     * `:cookies` - Optional list of cookies to include in the request
     * `:proxy` - Optional proxy URL to use
+    * `:retry_delay_ms` - Pause before the single retry of a crashed tab or
+      timed-out solve (default: `:flaresolverr_retry_delay_ms` app env, else 1000)
+
+  Failures return `{:error, {category, message}}` where `category` is one of
+  `:browser_crashed`, `:cookie_rejected`, `:challenge_timeout`,
+  `:challenge_failed`, `:cloudflare_error`, `:captcha_required`,
+  `:session_error` or `:unknown_error`.
 
   ## Examples
 
@@ -312,8 +319,41 @@ defmodule Mydia.Indexers.FlareSolverr do
 
     Logger.debug("FlareSolverr request: #{cmd} #{url}")
 
-    case Req.post(flaresolverr_url, json: body, receive_timeout: timeout) do
+    request = fn -> post_to_flaresolverr(flaresolverr_url, body, timeout, url) end
+
+    # A crashed Chrome tab or a solve that ran out of time is FlareSolverr
+    # running short of resources, and a second attempt usually succeeds once
+    # the tab is gone. Anything else (a captcha, a bad cookie) would fail the
+    # same way again.
+    case request.() do
+      {:error, {category, _message}} when category in [:browser_crashed, :challenge_timeout] ->
+        Process.sleep(retry_delay(opts))
+        request.()
+
+      {:error, :timeout} ->
+        Process.sleep(retry_delay(opts))
+        request.()
+
+      result ->
+        result
+    end
+  end
+
+  defp retry_delay(opts) do
+    Keyword.get(opts, :retry_delay_ms) ||
+      Application.get_env(:mydia, :flaresolverr_retry_delay_ms, 1_000)
+  end
+
+  defp post_to_flaresolverr(flaresolverr_url, body, timeout, url) do
+    case Req.post(flaresolverr_url, json: body, receive_timeout: timeout, retry: false) do
       {:ok, %Req.Response{status: 200, body: response_body}} when is_map(response_body) ->
+        handle_response(response_body, url)
+
+      # FlareSolverr reports a failed solve as HTTP 500 with the same
+      # {"status": "error", "message": ...} body it would otherwise send with a
+      # 200. Treating it as a bare HTTP error put the raw map, Chrome stack
+      # trace included, in front of operators.
+      {:ok, %Req.Response{status: 500, body: %{"status" => "error"} = response_body}} ->
         handle_response(response_body, url)
 
       {:ok, %Req.Response{status: status, body: body}} ->
@@ -348,8 +388,7 @@ defmodule Mydia.Indexers.FlareSolverr do
 
   defp handle_response(%{"status" => "error", "message" => message}, url) do
     Logger.warning("FlareSolverr failed for #{url}: #{message}")
-    error_type = categorize_error(message)
-    {:error, {error_type, message}}
+    {:error, {categorize_error(message), summarize_message(message)}}
   end
 
   defp handle_response(body, url) do
@@ -360,17 +399,49 @@ defmodule Mydia.Indexers.FlareSolverr do
   defp categorize_error(message) when is_binary(message) do
     message_lower = String.downcase(message)
 
+    # Specific causes go first, because FlareSolverr wraps every failure in
+    # "Error solving the challenge".
     cond do
-      String.contains?(message_lower, "timeout") -> :challenge_timeout
-      String.contains?(message_lower, "challenge") -> :challenge_failed
-      String.contains?(message_lower, "cloudflare") -> :cloudflare_error
-      String.contains?(message_lower, "captcha") -> :captcha_required
-      String.contains?(message_lower, "session") -> :session_error
-      true -> :unknown_error
+      String.contains?(message_lower, "tab crashed") ->
+        :browser_crashed
+
+      String.contains?(message_lower, "cookie") and String.contains?(message_lower, "domain") ->
+        :cookie_rejected
+
+      String.contains?(message_lower, "timeout") ->
+        :challenge_timeout
+
+      String.contains?(message_lower, "challenge") ->
+        :challenge_failed
+
+      String.contains?(message_lower, "cloudflare") ->
+        :cloudflare_error
+
+      String.contains?(message_lower, "captcha") ->
+        :captcha_required
+
+      String.contains?(message_lower, "session") ->
+        :session_error
+
+      true ->
+        :unknown_error
     end
   end
 
   defp categorize_error(_), do: :unknown_error
+
+  # FlareSolverr's message is "Error: Error solving the challenge. Message: <cause>"
+  # followed by Chrome's session info and a stack trace. Only the cause is useful
+  # to an operator.
+  defp summarize_message(message) when is_binary(message) do
+    message
+    |> String.split("\n", parts: 2)
+    |> hd()
+    |> String.replace(~r/^Error: Error solving the challenge\. Message: /, "")
+    |> String.trim()
+  end
+
+  defp summarize_message(message), do: inspect(message)
 
   defp maybe_add_session(body, nil), do: body
   defp maybe_add_session(body, session), do: Map.put(body, :session, session)

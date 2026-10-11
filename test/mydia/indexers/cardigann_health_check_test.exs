@@ -1008,4 +1008,13 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert result.message =~ "#{legacy.port}"
     end
   end
+
+  describe "classify_probe_error/1" do
+    test "a FlareSolverr failure is reported as a challenge problem with its readable message" do
+      assert {:cloudflare, "FlareSolverr: browser tab crashed" <> _} =
+               CardigannHealthCheck.classify_probe_error(
+                 "FlareSolverr: browser tab crashed (FlareSolverr's Chrome ran out of resources)"
+               )
+    end
+  end
 end
