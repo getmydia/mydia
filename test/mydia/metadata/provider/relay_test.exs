@@ -668,7 +668,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   end
 
   describe "search/3 with a malformed result" do
-    test "keeps the other results when one result has no id" do
+    test "drops a result with no id and keeps the others" do
       bypass = Bypass.open()
 
       body = %{
@@ -687,7 +687,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert {:ok, results} =
                Relay.search(relay_config(bypass), "fictional grid", media_type: :movie)
 
-      assert [%{provider_id: "603"}, %{provider_id: ""}] = results
+      assert [%{provider_id: "603"}] = results
     end
   end
 

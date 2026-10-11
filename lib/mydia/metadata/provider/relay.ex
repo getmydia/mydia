@@ -1502,7 +1502,11 @@ defmodule Mydia.Metadata.Provider.Relay do
   defp maybe_add_param(params, key, value), do: params ++ [{key, value}]
 
   defp parse_search_results(%{"results" => results}, media_type) when is_list(results) do
-    Enum.map(results, &parse_search_result(&1, media_type))
+    results
+    |> Enum.map(&parse_search_result(&1, media_type))
+    # A result with no provider id cannot be looked up, matched or rendered
+    # downstream, so it is dropped here rather than passed on with "".
+    |> Enum.reject(&(&1.provider_id == ""))
   end
 
   defp parse_search_results(_, _media_type), do: []
