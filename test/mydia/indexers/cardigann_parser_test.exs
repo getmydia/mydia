@@ -569,6 +569,71 @@ defmodule Mydia.Indexers.CardigannParserTest do
 
       assert {:error, :missing_login_method} = CardigannParser.parse_login_config(yaml_data)
     end
+
+    test "normalises every login key Prowlarr reads" do
+      yaml = %{
+        "login" => %{
+          "method" => "form",
+          "path" => "login.php",
+          "submitpath" => "takelogin.php",
+          "form" => "form#login",
+          "selectors" => true,
+          "inputs" => %{"username" => "{{ .Config.username }}", "ssl" => true, "keep" => 1},
+          "selectorinputs" => %{
+            "csrf" => %{"selector" => "input[name=csrf]", "attribute" => "value"}
+          },
+          "getselectorinputs" => %{"t" => %{"selector" => "#token", "optional" => true}},
+          "error" => [%{"selector" => "div.error"}],
+          "test" => %{"path" => "index.php", "selector" => "a[href*=logout]"},
+          "cookies" => ["lang=en"],
+          "captcha" => %{
+            "type" => "image",
+            "selector" => "img#captcha",
+            "input" => "imagestring"
+          },
+          "headers" => %{"X-Requested-With" => ["XMLHttpRequest"]}
+        }
+      }
+
+      assert {:ok, login} = CardigannParser.parse_login_config(yaml)
+      assert login.method == "form"
+      assert login.form == "form#login"
+      assert login.selectors == true
+
+      assert login.inputs == %{
+               "username" => "{{ .Config.username }}",
+               "ssl" => "true",
+               "keep" => "1"
+             }
+
+      assert %{selector: "input[name=csrf]", attribute: "value"} = login.selectorinputs["csrf"]
+      assert %{selector: "#token", optional: true} = login.getselectorinputs["t"]
+      assert login.test == %{path: "index.php", selector: "a[href*=logout]"}
+      assert login.cookies == ["lang=en"]
+      assert login.captcha == %{type: "image", selector: "img#captcha", input: "imagestring"}
+      assert login.headers == %{"X-Requested-With" => ["XMLHttpRequest"]}
+    end
+
+    test "defaults form to \"form\" and selectors to false" do
+      assert {:ok, login} =
+               CardigannParser.parse_login_config(%{
+                 "login" => %{"method" => "post", "path" => "/l"}
+               })
+
+      assert login.form == "form"
+      assert login.selectors == false
+      assert login.selectorinputs == %{}
+      assert login.headers == %{}
+      assert login.test == nil
+      assert login.captcha == nil
+    end
+
+    test "wraps a single-string header value in a list" do
+      yaml = %{"login" => %{"method" => "post", "headers" => %{"Accept" => "text/html"}}}
+
+      assert {:ok, %{headers: %{"Accept" => ["text/html"]}}} =
+               CardigannParser.parse_login_config(yaml)
+    end
   end
 
   describe "validate_definition/1" do

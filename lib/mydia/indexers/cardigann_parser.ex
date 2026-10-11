@@ -120,11 +120,16 @@ defmodule Mydia.Indexers.CardigannParser do
           method: Map.fetch!(login, "method"),
           path: Map.get(login, "path"),
           submitpath: Map.get(login, "submitpath"),
-          inputs: Map.get(login, "inputs", %{}),
+          form: Map.get(login, "form") || "form",
+          selectors: Map.get(login, "selectors") == true,
+          inputs: stringify_inputs(Map.get(login, "inputs")),
+          selectorinputs: normalize_selector_map(Map.get(login, "selectorinputs")),
+          getselectorinputs: normalize_selector_map(Map.get(login, "getselectorinputs")),
           error: parse_error_selectors(login),
-          test: Map.get(login, "test"),
-          cookies: Map.get(login, "cookies", []),
-          captcha: Map.get(login, "captcha")
+          test: parse_login_test(Map.get(login, "test")),
+          cookies: List.wrap(Map.get(login, "cookies")),
+          captcha: parse_captcha(Map.get(login, "captcha")),
+          headers: parse_headers(Map.get(login, "headers"))
         }
 
         {:ok, login_config}
@@ -292,6 +297,40 @@ defmodule Mydia.Indexers.CardigannParser do
       error -> [normalize_selector(error)]
     end
   end
+
+  defp stringify_inputs(inputs) when is_map(inputs),
+    do: Map.new(inputs, fn {k, v} -> {to_string(k), stringify_input(v)} end)
+
+  defp stringify_inputs(_), do: %{}
+
+  defp stringify_input(nil), do: ""
+  defp stringify_input(v) when is_binary(v), do: v
+  defp stringify_input(v), do: to_string(v)
+
+  defp normalize_selector_map(map) when is_map(map),
+    do: Map.new(map, fn {k, v} -> {to_string(k), normalize_selector(v)} end)
+
+  defp normalize_selector_map(_), do: %{}
+
+  defp parse_login_test(%{} = test),
+    do: %{path: Map.get(test, "path"), selector: Map.get(test, "selector")}
+
+  defp parse_login_test(_), do: nil
+
+  defp parse_captcha(%{} = captcha) do
+    %{
+      type: Map.get(captcha, "type", "image"),
+      selector: Map.get(captcha, "selector"),
+      input: Map.get(captcha, "input")
+    }
+  end
+
+  defp parse_captcha(_), do: nil
+
+  defp parse_headers(headers) when is_map(headers),
+    do: Map.new(headers, fn {k, v} -> {to_string(k), Enum.map(List.wrap(v), &to_string/1)} end)
+
+  defp parse_headers(_), do: %{}
 
   defp parse_capabilities(yaml_data) do
     case Map.get(yaml_data, "caps") do
