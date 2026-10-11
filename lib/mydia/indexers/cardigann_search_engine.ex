@@ -126,14 +126,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   def execute_search(%Parsed{} = definition, opts, user_config, flaresolverr_opts)
       when is_list(opts) do
-    candidates =
-      case Keyword.get(opts, :base_url) do
-        nil ->
-          Links.candidates(definition)
+    active = opts |> Keyword.get(:base_url) |> List.wrap()
 
-        active ->
-          [String.trim_trailing(active, "/") | Links.candidates(definition)] |> Enum.uniq()
-      end
+    candidates =
+      (Enum.map(active, &String.trim_trailing(&1, "/")) ++ Links.candidates(definition))
+      |> Enum.uniq()
       |> Enum.take(@max_search_candidates)
 
     case candidates do

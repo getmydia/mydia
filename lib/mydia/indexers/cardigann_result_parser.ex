@@ -1547,17 +1547,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
   end
 
   defp xml_case_selector_matches?(row, selector, case_key) do
-    spec =
-      case selector do
-        "" -> xml_string_spec(".//#{case_key}")
-        sel -> xml_string_spec("./#{sel}/#{case_key}")
-      end
+    path = if selector == "", do: ".//#{case_key}", else: "./#{selector}/#{case_key}"
 
-    case xpath(row, spec) do
-      nil -> false
-      "" -> false
-      _ -> true
-    end
+    xpath(row, xml_string_spec(path)) not in [nil, ""]
   end
 
   defp extract_xml_raw_value(row, selector, attribute) do
