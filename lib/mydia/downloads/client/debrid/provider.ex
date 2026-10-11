@@ -70,7 +70,7 @@ defmodule Mydia.Downloads.Client.Debrid.Provider do
 
   @doc """
   Fetches a single job's current state. Used by non-cron callers
-  (`queue.ex` re-queue verify, `media_import.ex` save_path resolve).
+  (`queue/client_selection.ex` re-queue verify, `media_import.ex` save_path resolve).
   """
   @callback get_job(config(), provider_job_id()) :: {:ok, ProviderJob.t()} | {:error, Error.t()}
 

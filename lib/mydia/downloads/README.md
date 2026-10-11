@@ -9,7 +9,7 @@ transmission runs inside the PIA VPN netns, where DHT yields no peers while
 **Magnets**, fixed 2026-08-04 in getmydia/mydia#331. Bitmagnet always emits a
 bare `magnet:?xt=urn:btih:HASH&dn=NAME`, and Prowlarr does whenever `/download`
 302s to a magnet. `TorrentHash.ensure_trackers/1` now appends the 8
-`@public_trackers`, called at the exit of `prepare_torrent_input/2`. Before the
+`@public_trackers`, called at the exit of `TorrentFetch.prepare_torrent_input/2`. Before the
 fix, rqbit with magnets completed 26 of 26 while transmission with magnets
 completed 0 of 23.
 
