@@ -547,6 +547,23 @@ defmodule Mydia.Indexers.CardigannParserTest do
       assert is_map(login.test)
     end
 
+    test "keeps the message selector of a login error" do
+      yaml_data = %{
+        "login" => %{
+          "method" => "form",
+          "path" => "/login",
+          "error" => [
+            %{"selector" => "div.err", "message" => %{"selector" => "div.err > p"}},
+            %{"selector" => "div.other"}
+          ]
+        }
+      }
+
+      assert {:ok, %{error: [first, second]}} = CardigannParser.parse_login_config(yaml_data)
+      assert %{selector: "div.err", message: %{selector: "div.err > p"}} = first
+      assert %{selector: "div.other", message: nil} = second
+    end
+
     test "parses cookie-based login" do
       yaml_data = %{
         "login" => %{

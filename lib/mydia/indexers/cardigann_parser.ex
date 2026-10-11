@@ -293,10 +293,18 @@ defmodule Mydia.Indexers.CardigannParser do
   defp parse_error_selectors(login) do
     case Map.get(login, "error") do
       nil -> []
-      errors when is_list(errors) -> Enum.map(errors, &normalize_selector/1)
-      error -> [normalize_selector(error)]
+      errors when is_list(errors) -> Enum.map(errors, &normalize_error/1)
+      error -> [normalize_error(error)]
     end
   end
+
+  # An error block may carry a `message:` selector naming where the tracker puts
+  # its explanation, which is the text worth showing to the person.
+  defp normalize_error(error),
+    do: error |> normalize_selector() |> Map.put(:message, message_block(error))
+
+  defp message_block(%{"message" => message}), do: normalize_selector(message)
+  defp message_block(_), do: nil
 
   defp stringify_inputs(inputs) when is_map(inputs),
     do: Map.new(inputs, fn {k, v} -> {to_string(k), stringify_input(v)} end)

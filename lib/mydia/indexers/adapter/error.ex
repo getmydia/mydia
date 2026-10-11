@@ -9,6 +9,7 @@ defmodule Mydia.Indexers.Adapter.Error do
 
     * `:connection_failed` - Unable to connect to the indexer
     * `:authentication_failed` - Invalid API key or authentication error
+    * `:login_required` - A person must finish logging in (captcha or one-time code)
     * `:timeout` - Request timed out
     * `:rate_limited` - Rate limit exceeded
     * `:search_failed` - Search query failed
@@ -34,6 +35,7 @@ defmodule Mydia.Indexers.Adapter.Error do
   @type error_type ::
           :connection_failed
           | :authentication_failed
+          | :login_required
           | :timeout
           | :rate_limited
           | :search_failed
@@ -97,6 +99,12 @@ defmodule Mydia.Indexers.Adapter.Error do
   def authentication_failed(message, details \\ nil) do
     new(:authentication_failed, message, details)
   end
+
+  @doc """
+  The indexer needs a person to finish logging in (captcha or one-time code).
+  """
+  @spec login_required(String.t(), map() | nil) :: t()
+  def login_required(message, details \\ nil), do: new(:login_required, message, details)
 
   @doc """
   Creates a timeout error.
