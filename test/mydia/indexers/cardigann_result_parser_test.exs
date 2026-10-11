@@ -547,9 +547,34 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       response = %{status: 200, body: "not valid json {"}
 
-      # Invalid JSON that looks like JSON will be treated as HTML
-      # and return empty results since no HTML elements match
-      assert {:ok, []} = CardigannResultParser.parse_results(definition, response, "Test")
+      # Invalid JSON that looks like JSON is treated as HTML. "$.results" is not a
+      # CSS selector, so the failure is structured and names the selector.
+      assert {:error, %{type: :search_failed, message: message}} =
+               CardigannResultParser.parse_results(definition, response, "Test")
+
+      assert message =~ "$.results"
+    end
+
+    test "an unparseable HTML selector returns a search_failed error naming the indexer and selector" do
+      definition = %Parsed{
+        id: "bad-selector",
+        name: "Bad Selector",
+        search: %{
+          rows: %{selector: "tr[[["},
+          fields: %{"title" => %{selector: "td"}, "download" => %{selector: "a"}}
+        }
+      }
+
+      response = %{
+        status: 200,
+        body: "<html><body><table><tr><td>x</td></tr></table></body></html>"
+      }
+
+      assert {:error, %{type: :search_failed, message: message}} =
+               CardigannResultParser.parse_results(definition, response, "Bad Selector")
+
+      assert message =~ "Bad Selector"
+      assert message =~ "tr[[["
     end
 
     test "navigates dotted JSON paths without $. prefix" do
@@ -1698,7 +1723,9 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       response = %{status: 200, body: xml}
 
-      assert {:ok, []} =
+      # The html path runs the XML row selector through the CSS engine, which
+      # rejects it; Floki used to swallow that and return no rows.
+      assert {:error, %{type: :search_failed}} =
                CardigannResultParser.parse_results(
                  definition,
                  response,

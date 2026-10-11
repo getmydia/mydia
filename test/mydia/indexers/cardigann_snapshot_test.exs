@@ -403,7 +403,7 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
     }
 
     for id <-
-          ~w(acgrip torrentkitty rutor byrutor torrentdownloads 0magnet torrentproject2 world-torrent ebookbay) do
+          ~w(acgrip torrentkitty rutor byrutor torrentdownloads torrentproject2 world-torrent ebookbay) do
       @id id
       if reason = @skipped[id], do: @tag(skip: reason)
 

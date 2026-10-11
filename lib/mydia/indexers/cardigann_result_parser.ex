@@ -8,7 +8,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
   ## HTML Parsing
 
-  Uses the lexbor-backed `Mydia.Indexers.Cardigann.Selector` for HTML5 parsing with CSS selector support:
+  Uses the lexbor-backed `Mydia.Indexers.Cardigann.Selector` for HTML5 parsing
+  with CSS selector support:
   - Row selectors to identify result elements
   - Field selectors to extract data from each row
   - Attribute extraction (href, data-*, etc.)
@@ -250,6 +251,16 @@ defmodule Mydia.Indexers.CardigannResultParser do
       {:ok, results}
     end
   rescue
+    # lexbor rejected a selector in the definition. Selector.find/3 names it in
+    # the message; add the indexer so the failure is traceable to a definition.
+    error in ArgumentError ->
+      Logger.error("Invalid selector in #{indexer_name} definition: #{Exception.message(error)}")
+
+      {:error,
+       Error.search_failed(
+         "Invalid selector in the #{indexer_name} definition: #{Exception.message(error)}"
+       )}
+
     error ->
       Logger.error("HTML parsing error for #{indexer_name}: #{inspect(error)}")
       {:error, Error.search_failed("Failed to parse HTML response: #{inspect(error)}")}
@@ -407,7 +418,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
     rendered_selector = render_selector_template(selector, template_context)
     Logger.info("Extracting rows with selector: #{inspect(rendered_selector)}")
     # Use enhanced find that supports :contains() pseudo-selector
-    rows = find_nodes(document, :root, rendered_selector)
+    rows = Selector.find(document, :root, rendered_selector)
 
     Logger.info("Found #{length(rows)} rows before filtering")
 
@@ -486,24 +497,6 @@ defmodule Mydia.Indexers.CardigannResultParser do
   end
 
   defp render_selector_template(selector, _template_context), do: selector
-
-  # A selector lexbor cannot parse (a JSONPath or XPath-style string handed to
-  # the HTML path, say) matches nothing, as it did under the previous engine,
-  # rather than failing the whole search. A selector that uses :contains() without
-  # having been declared to Selector.parse/2 is a programming error and still raises.
-  defp find_nodes(document, scope, selector) do
-    Selector.find(document, scope, selector)
-  rescue
-    error in ArgumentError ->
-      case Exception.message(error) do
-        "invalid selector" <> _ = message ->
-          Logger.warning("Ignoring unparseable selector: #{message}")
-          []
-
-        _ ->
-          reraise error, __STACKTRACE__
-      end
-  end
 
   # Every selector the HTML path may evaluate against this document, rendered,
   # so Selector.parse/2 can mark each :contains() needle once.
@@ -820,7 +813,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
       case selector do
         nil -> [row]
         "" -> [row]
-        sel -> find_nodes(document, row, sel)
+        sel -> Selector.find(document, row, sel)
       end
 
     if scope == [] do
@@ -830,7 +823,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
       match =
         Enum.find_value(specific, fn {case_selector, value} ->
-          if Enum.any?(scope, &(find_nodes(document, &1, to_string(case_selector)) != [])),
+          if Enum.any?(scope, &(Selector.find(document, &1, to_string(case_selector)) != [])),
             do: to_string(value)
         end)
 
@@ -843,14 +836,14 @@ defmodule Mydia.Indexers.CardigannResultParser do
   end
 
   defp extract_raw_value(document, row, selector, nil) do
-    case find_nodes(document, row, selector) do
+    case Selector.find(document, row, selector) do
       [] -> {:error, :not_found}
       elements -> {:ok, elements |> Selector.text() |> String.trim()}
     end
   end
 
   defp extract_raw_value(document, row, selector, attribute) do
-    case document |> find_nodes(row, selector) |> Selector.attribute(attribute) do
+    case document |> Selector.find(row, selector) |> Selector.attribute(attribute) do
       nil -> {:error, :not_found}
       value -> {:ok, String.trim(value)}
     end
