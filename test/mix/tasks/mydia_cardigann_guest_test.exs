@@ -108,4 +108,40 @@ defmodule Mix.Tasks.Mydia.CardigannGuestTest do
     File.write!(wasm <> ".sha256", sha("x"))
     assert :ok = Task.verify(false)
   end
+
+  describe "compile step" do
+    alias Mix.Tasks.Compile.CardigannGuest, as: Compiler
+
+    test "logs a checksum mismatch loudly", %{bypass: bypass, wasm: wasm} do
+      name = Path.basename(wasm)
+      serve(bypass, name, "tampered")
+      serve(bypass, name <> ".sha256", sha("original"))
+
+      err = ExUnit.CaptureIO.capture_io(:stderr, fn -> Compiler.fetch_and_report() end)
+      assert err =~ "failed verification"
+      assert err =~ "checksum_mismatch"
+      refute File.exists?(wasm)
+    end
+
+    test "remembers an unavailable asset and skips the network", %{bypass: bypass, dir: dir} do
+      Bypass.expect(bypass, fn conn -> Plug.Conn.resp(conn, 404, "nope") end)
+      quiet(&Compiler.fetch_and_report/0)
+      assert [_marker] = Path.wildcard(Path.join(dir, ".unavailable-*"), match_dot: true)
+
+      Bypass.down(bypass)
+      assert :cached_unavailable = Compiler.fetch_and_report()
+    end
+
+    test "an expired marker is probed again", %{bypass: bypass, dir: dir, wasm: wasm} do
+      [] = Path.wildcard(Path.join(dir, ".unavailable-*"), match_dot: true)
+      stale = Path.join(dir, ".unavailable-#{Artifact.source_hash()}")
+      File.write!(stale, "#{System.os_time(:second) - 7200}\n")
+
+      name = Path.basename(wasm)
+      serve(bypass, name, "ok")
+      serve(bypass, name <> ".sha256", sha("ok"))
+      assert :ok = Compiler.fetch_and_report()
+      assert {:ok, "ok"} = Artifact.load(wasm)
+    end
+  end
 end

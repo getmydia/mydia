@@ -114,7 +114,7 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
   defp get(name) do
     url = base_url() <> "/" <> name
 
-    case Req.get(url, retry: false, receive_timeout: 120_000, connect_options: [timeout: 10_000]) do
+    case Req.get(url, retry: false, receive_timeout: 120_000, connect_options: [timeout: 3_000]) do
       {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) -> {:ok, body}
       {:ok, %Req.Response{status: status}} -> {:unavailable, "#{url} returned HTTP #{status}"}
       {:error, e} -> {:unavailable, "#{url}: #{Exception.message(e)}"}
@@ -143,7 +143,8 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
     end
   end
 
-  defp target do
+  @doc false
+  def target do
     case Application.get_env(:mydia, :cardigann_guest_dir) do
       nil -> Artifact.path()
       dir -> Artifact.path_in(dir)

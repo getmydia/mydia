@@ -54,3 +54,10 @@ screenshots
 # Prebuilt Cardigann wasm guest: fetched by hash during `mix compile` in the image.
 priv/cardigann/*.wasm
 priv/cardigann/*.wasm.sha256
+native/cardigann_guest/out
+native/cardigann_guest/obj
+native/cardigann_guest/bin
+native/cardigann_guest/.prowlarr
+native/cardigann_guest/tests/**/bin
+native/cardigann_guest/tests/**/obj
+native/cardigann_guest/deny/target

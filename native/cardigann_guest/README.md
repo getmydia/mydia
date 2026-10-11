@@ -61,3 +61,12 @@ A PR that changes the guest therefore takes two steps:
 
 Until step 2 lands the Nix package builds without the guest (a stale pin names a
 different file than the sources expect, which the runtime treats as missing).
+
+## CI gap: the main CI often has no wasm
+
+The `fetch` step in `ci.yml` only finds an asset that is already published. So on
+a PR that changes the guest, and on a master push that races the publish job,
+the main CI runs without the wasm. Any test that needs it (the Wasmex-hosted
+engine tests) must be explicitly tagged and visibly skipped when
+`Artifact.load/0` fails, with the skip reason printed. It must never pass
+silently, or a green check will say nothing about the engine.

@@ -4,9 +4,10 @@ name: Cardigann guest
 # release asset named by the hash of its sources. Everything else (mix, Docker,
 # Nix) downloads it by that name, so nobody needs .NET locally.
 #
-# Pull requests build and test but never publish. The asset is published on a
-# push to master, once per distinct source hash. Never create the release or
-# upload assets by hand.
+# Pull requests build and test but never publish, and the build job holds a
+# read-only token because it runs PR-controlled build scripts. Only the publish
+# job (push to master) gets contents: write, and it runs no repository build
+# scripts. Never create the release or upload assets by hand.
 
 on:
   pull_request:
@@ -20,19 +21,23 @@ on:
       - ".github/workflows/cardigann-guest.yml"
 
 permissions:
-  contents: write
+  contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   build:
-    name: Build and publish
+    name: Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      hash: ${{ steps.hash.outputs.hash }}
+      built: ${{ steps.exists.outputs.exists != 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           persist-credentials: false
 
@@ -42,10 +47,11 @@ jobs:
         id: hash
         run: echo "hash=$(native/cardigann_guest/scripts/source-hash.sh)" >> "$GITHUB_OUTPUT"
 
+      # The .wasm is uploaded last, so its presence means the release is complete.
       - name: Skip if published
         id: exists
         run: |
-          if gh release view cardigann-guest --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' 2>/dev/null \
+          if gh release view cardigann-guest --json assets -q '.assets[].name' 2>/dev/null \
             | grep -qx "cardigann-${{ steps.hash.outputs.hash }}.wasm"; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           fi
@@ -77,26 +83,50 @@ jobs:
 
       - name: Upload for this run
         if: steps.exists.outputs.exists != 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cardigann-guest
           path: native/cardigann_guest/out/cardigann.wasm
           retention-days: 7
 
+  publish:
+    name: Publish
+    needs: build
+    if: github.event_name == 'push' && needs.build.outputs.built == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: cardigann-guest-publish
+      cancel-in-progress: false
+    steps:
+      # Only for LICENSE and NOTICE; no repository script runs in this job.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Download built component
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: cardigann-guest
+          path: out
+
+      # Sidecars first, the .wasm last: the build job treats the .wasm as proof
+      # that a release is complete, so a partial upload is retried, not skipped.
       - name: Publish
-        if: github.event_name == 'push' && steps.exists.outputs.exists != 'true'
         run: |
-          cd native/cardigann_guest/out
-          name="cardigann-${{ steps.hash.outputs.hash }}.wasm"
-          cp cardigann.wasm "$name"
+          name="cardigann-${{ needs.build.outputs.hash }}.wasm"
+          cp out/cardigann.wasm "$name"
           sha256sum "$name" | cut -d' ' -f1 > "$name.sha256"
-          cp ../LICENSE "$name.LICENSE"
-          cp ../NOTICE "$name.NOTICE"
+          cp native/cardigann_guest/LICENSE "$name.LICENSE"
+          { cat native/cardigann_guest/NOTICE; printf '\nBuilt from %s\n' "$GITHUB_SHA"; } > "$name.NOTICE"
           gh release view cardigann-guest >/dev/null 2>&1 || \
             gh release create cardigann-guest --prerelease --title "Cardigann guest builds" \
               --notes "Prebuilt Cardigann wasm guests, named by source hash. Source: native/cardigann_guest at the commit that published each asset."
-          gh release upload cardigann-guest "$name" "$name.sha256" "$name.LICENSE" "$name.NOTICE"
+          gh release upload cardigann-guest --clobber "$name.sha256" "$name.LICENSE" "$name.NOTICE"
+          gh release upload cardigann-guest --clobber "$name"
           echo "Published $name"
-          echo "Pin for nix: $(cut -d' ' -f1 < "$name.sha256")"
+          echo "Pin for nix: $(cat "$name.sha256")"
         env:
           GH_TOKEN: ${{ github.token }}
