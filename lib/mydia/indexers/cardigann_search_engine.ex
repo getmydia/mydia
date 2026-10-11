@@ -14,19 +14,21 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   1. **Build Search URL:** Apply query template with parameters
   2. **Build Request Params:** Construct query parameters
   3. **Execute HTTP Request:** Send request with headers, cookies, etc.
-     - If FlareSolverr enabled: Route through FlareSolverr
-     - If Cloudflare detected: Auto-retry through FlareSolverr
+     - Direct first, with any cached Cloudflare clearance for the host
+     - If Cloudflare challenges: solve through FlareSolverr, then repeat directly
   4. **Validate Response:** Check response is valid
   5. **Return Response:** Pass to result parser (handled by caller)
 
   ## FlareSolverr Integration
 
-  When an indexer requires Cloudflare bypass:
-  1. Check if `flaresolverr_enabled` is true for the indexer
-  2. Check if global FlareSolverr is configured and available
-  3. Route requests through FlareSolverr if both conditions are met
-  4. Extract and cache cookies from FlareSolverr responses
-  5. Reuse cached cookies for subsequent requests until they expire
+  FlareSolverr earns a clearance; it does not fetch the page:
+  1. A request goes direct first. An indexer flagged as needing FlareSolverr
+     skips this only when no clearance is cached for its host.
+  2. On a Cloudflare challenge, FlareSolverr gets the bare URL and no cookies.
+  3. The solution's cookies and user-agent are cached per host in
+     `Mydia.Indexers.FlareSolverr.ClearanceCache` (memory only).
+  4. The request is repeated directly and that response is parsed. Chrome's
+     rendered page is only a fallback when the repeat is still challenged.
 
   ## URL Template Variables
 
@@ -53,16 +55,27 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   """
 
   alias Mydia.Indexers.Cardigann.CredentialScope
+  alias Mydia.Indexers.Cardigann.FlareSolverrFlow
   alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Indexers.Cardigann.RequestHeaders
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.FlareSolverr
-  alias Mydia.Indexers.FlareSolverr.Response, as: FlareSolverrResponse
+  alias Mydia.Indexers.FlareSolverr.ClearanceCache
 
   require Logger
 
   @max_search_candidates 3
+
+  # Interstitial titles are matched at any status: some challenges are served
+  # with a 200, and a 403 page can omit the word "Cloudflare" entirely.
+  @challenge_titles [
+    "<title>Just a moment...</title>",
+    "<title>Attention Required! | Cloudflare</title>",
+    "<title>Please Wait... | Cloudflare</title>",
+    "<title>DDoS-Guard</title>"
+  ]
 
   @type search_opts :: [
           query: String.t(),
@@ -99,12 +112,13 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   - `user_config` - Optional user configuration (cookies, credentials)
   - `flaresolverr_opts` - Optional FlareSolverr configuration:
     - `:enabled` - Whether to use FlareSolverr for this indexer
-    - `:definition_id` - Database ID for storing FlareSolverr cookies
+    - `:definition_id` - Database ID of the indexer
 
   ## Returns
 
   - `{:ok, response}` - HTTP response ready for parsing
-  - `{:ok, response, flaresolverr_cookies}` - Response with FlareSolverr cookies to cache
+  - `{:ok, response, [{:flaresolverr_required, true}]}` - A challenge was solved, so
+    the caller should flag the indexer. Never contains cookies.
   - `{:error, reason}` - Search execution error
 
   ## Examples
@@ -116,7 +130,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
       # With FlareSolverr enabled
       iex> flaresolverr_opts = %{enabled: true, definition_id: "uuid"}
-      iex> {:ok, response, cookies} = execute_search(definition, opts, %{}, flaresolverr_opts)
+      iex> {:ok, response, markers} = execute_search(definition, opts, %{}, flaresolverr_opts)
   """
   @spec execute_search(Parsed.t(), search_opts(), map(), flaresolverr_opts()) ::
           {:ok, http_response()}
@@ -178,8 +192,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       config = Keyword.get(opts, :config, %{})
 
       result =
-        if should_use_flaresolverr?(flaresolverr_opts) do
-          execute_with_flaresolverr(definition, url, request_params, user_config, config)
+        if FlareSolverrFlow.solve_first?(flaresolverr_opts, url) do
+          FlareSolverrFlow.solve_and_repeat(definition, url, request_params, user_config, config)
         else
           execute_direct_request(
             definition,
@@ -269,7 +283,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
-  # Handle Cloudflare challenge by routing through FlareSolverr
+  # Handle a Cloudflare challenge by earning a clearance through FlareSolverr
+  # and repeating the request directly.
   defp handle_cloudflare_challenge(
          definition,
          url,
@@ -281,25 +296,18 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     Logger.info("Cloudflare challenge detected for #{definition.id}, attempting FlareSolverr")
 
     if FlareSolverr.enabled?() do
-      case execute_with_flaresolverr(definition, url, request_params, user_config, config) do
-        {:ok, response, cookies} ->
-          # Return with indicator that FlareSolverr was used and indexer should be flagged
-          {:ok, response, [{:flaresolverr_required, true} | cookies]}
+      # A challenge despite a cached clearance means that clearance is stale
+      # (expired, or bound to a user-agent that has since changed).
+      ClearanceCache.delete(url)
 
+      case FlareSolverrFlow.solve_and_repeat(definition, url, request_params, user_config, config) do
         {:ok, response} ->
+          # Flag the indexer so the next search skips the doomed direct request.
           {:ok, response, [{:flaresolverr_required, true}]}
 
-        {:error, _} ->
-          # FlareSolverr failed, return original Cloudflare error
-          Logger.warning(
-            "FlareSolverr failed for #{definition.id}, falling back to Cloudflare error"
-          )
-
-          {:error,
-           Error.connection_failed(
-             "Cloudflare protection detected but FlareSolverr failed. " <>
-               "Enable FlareSolverr for this indexer or try again later."
-           )}
+        {:error, _} = error ->
+          # Already carries the readable FlareSolverr message.
+          error
       end
     else
       Logger.warning("Cloudflare detected for #{definition.id} but FlareSolverr not available")
@@ -312,162 +320,9 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
-  # Execute request through FlareSolverr
-  #
-  # FlareSolverr used to receive user_config's cookies unconditionally, whatever
-  # host url named, while the direct Req path gated every request through
-  # attach_cookies/4. The two paths carry the same session credential, so they
-  # now consult the same cookie_disposition/2 decision before it is forwarded.
-  defp execute_with_flaresolverr(definition, url, request_params, user_config, config) do
-    Logger.debug("Executing request through FlareSolverr: #{url}")
-
-    # Apply rate limiting if configured
-    apply_rate_limit(definition)
-
-    user_config = withhold_flaresolverr_cookies(user_config, url, definition, config)
-
-    # Build FlareSolverr options from user_config
-    flaresolverr_request_opts = build_flaresolverr_opts(user_config)
-
-    result =
-      case request_params.method do
-        :get ->
-          # For GET requests, append query params to URL
-          url_with_params = append_query_params(url, request_params.query_params)
-          FlareSolverr.get(url_with_params, flaresolverr_request_opts)
-
-        :post ->
-          FlareSolverr.post(
-            url,
-            Keyword.put(flaresolverr_request_opts, :post_data, request_params.query_params)
-          )
-      end
-
-    case result do
-      {:ok, %FlareSolverrResponse{} = fs_response} ->
-        # Convert FlareSolverr response to http_response format
-        response = %{
-          status: FlareSolverrResponse.http_status(fs_response) || 200,
-          body: FlareSolverrResponse.body(fs_response) || "",
-          headers: convert_flaresolverr_headers(fs_response)
-        }
-
-        # Extract cookies for caching
-        cookies = FlareSolverrResponse.cookies(fs_response)
-
-        with :ok <- validate_response(response) do
-          if cookies != [] do
-            {:ok, response, cookies}
-          else
-            {:ok, response}
-          end
-        end
-
-      {:error, {:challenge_failed, message}} ->
-        Logger.error("FlareSolverr challenge failed for #{definition.id}: #{message}")
-        {:error, Error.connection_failed("Cloudflare challenge failed: #{message}")}
-
-      {:error, {:challenge_timeout, message}} ->
-        Logger.error("FlareSolverr timeout for #{definition.id}: #{message}")
-        {:error, Error.connection_failed("Cloudflare challenge timeout: #{message}")}
-
-      {:error, :timeout} ->
-        Logger.error("FlareSolverr request timeout for #{definition.id}")
-        {:error, Error.connection_failed("FlareSolverr request timeout")}
-
-      {:error, {:connection_error, reason}} ->
-        Logger.error("FlareSolverr connection error for #{definition.id}: #{inspect(reason)}")
-        {:error, Error.connection_failed("FlareSolverr unavailable: #{inspect(reason)}")}
-
-      {:error, reason} ->
-        Logger.error("FlareSolverr error for #{definition.id}: #{inspect(reason)}")
-        {:error, Error.search_failed("FlareSolverr error: #{inspect(reason)}")}
-    end
-  end
-
-  # Only consult the scope when there is a cookie to protect. Mirrors the gate
-  # in build_request_options/5, so a cookie-less FlareSolverr request never
-  # logs a withholding warning it has nothing to withhold.
-  defp withhold_flaresolverr_cookies(user_config, url, definition, config) do
-    case Map.get(user_config, :cookies) do
-      cookies when is_list(cookies) and cookies != [] ->
-        trusted_origins = CredentialScope.trusted_origins(definition, config)
-
-        case cookie_disposition(url, trusted_origins) do
-          {:withhold, reason} ->
-            Logger.warning("Cardigann: withholding session cookies from #{reason}")
-            Map.delete(user_config, :cookies)
-
-          :ok ->
-            user_config
-        end
-
-      _ ->
-        user_config
-    end
-  end
-
-  # Check if FlareSolverr should be used for this request
-  defp should_use_flaresolverr?(flaresolverr_opts) do
-    flaresolverr_opts[:enabled] == true && FlareSolverr.enabled?()
-  end
-
-  # Build FlareSolverr request options from user_config
-  defp build_flaresolverr_opts(user_config) do
-    opts = []
-
-    # Add cookies if present
-    case Map.get(user_config, :cookies) do
-      cookies when is_list(cookies) and cookies != [] ->
-        # Convert cookies to FlareSolverr format
-        fs_cookies =
-          Enum.map(cookies, fn
-            cookie when is_binary(cookie) ->
-              # Parse "name=value" format
-              case String.split(cookie, "=", parts: 2) do
-                [name, value] -> %{name: name, value: value}
-                _ -> nil
-              end
-
-            cookie when is_map(cookie) ->
-              cookie
-          end)
-          |> Enum.reject(&is_nil/1)
-
-        if fs_cookies != [], do: Keyword.put(opts, :cookies, fs_cookies), else: opts
-
-      _ ->
-        opts
-    end
-  end
-
-  # Append query params to URL
-  defp append_query_params(url, params) when params == %{}, do: url
-
-  defp append_query_params(url, params) do
-    query_string =
-      params
-      |> Enum.map_join("&", fn {k, v} ->
-        "#{URI.encode_www_form(to_string(k))}=#{URI.encode_www_form(to_string(v))}"
-      end)
-
-    if String.contains?(url, "?") do
-      "#{url}&#{query_string}"
-    else
-      "#{url}?#{query_string}"
-    end
-  end
-
-  # Convert FlareSolverr headers to list format
-  defp convert_flaresolverr_headers(%FlareSolverrResponse{solution: %{headers: headers}})
-       when is_map(headers) do
-    Enum.map(headers, fn {k, v} -> {k, v} end)
-  end
-
-  defp convert_flaresolverr_headers(_), do: []
-
   # Detect Cloudflare challenge response
-  defp cloudflare_challenge?(%{status: 403, body: body}) when is_binary(body) do
+  @doc false
+  def cloudflare_challenge?(%{status: 403, body: body}) when is_binary(body) do
     cloudflare_indicators = [
       "cf-browser-verification",
       "cf_clearance",
@@ -480,14 +335,19 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       "DDoS-Guard"
     ]
 
-    Enum.any?(cloudflare_indicators, &String.contains?(body, &1))
+    Enum.any?(cloudflare_indicators, &String.contains?(body, &1)) or challenge_title?(body)
   end
 
-  defp cloudflare_challenge?(%{status: 503, body: body}) when is_binary(body) do
-    String.contains?(body, "Cloudflare") || String.contains?(body, "cloudflare")
+  def cloudflare_challenge?(%{status: 503, body: body}) when is_binary(body) do
+    String.contains?(body, "Cloudflare") || String.contains?(body, "cloudflare") ||
+      challenge_title?(body)
   end
 
-  defp cloudflare_challenge?(_), do: false
+  def cloudflare_challenge?(%{body: body}) when is_binary(body), do: challenge_title?(body)
+
+  def cloudflare_challenge?(_), do: false
+
+  defp challenge_title?(body), do: Enum.any?(@challenge_titles, &String.contains?(body, &1))
 
   @doc """
   Builds the search URL from the definition's path template and search options.
@@ -629,7 +489,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   Redirects are therefore followed one hop at a time with `redirect: false`.
   Each hop rebuilds its options through `build_request_options/5`, so
-  `attach_cookies/4` re-runs `cookie_disposition/2` against the new URL. That
+  `session_cookie_pairs/4` re-runs `cookie_disposition/2` against the new URL. That
   is the per-hop origin check left out of the branch that first enabled
   redirect following: a session cookie is re-authorised for every hop instead
   of being carried across one blindly.
@@ -987,12 +847,23 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   defp build_request_options(definition, url, request_params, user_config, config) do
-    # Base options
+    {session_pairs, session_attached?} =
+      session_cookie_pairs(Map.get(user_config, :cookies), url, definition, config)
+
+    {headers, clearance_attached?} =
+      RequestHeaders.build(request_params.headers, url, session_pairs)
+
     base_opts = [
-      headers: request_params.headers,
+      headers: headers,
       receive_timeout: 30_000,
       connect_options: [timeout: 10_000],
-      redirect: definition.follow_redirect,
+      # Neither a session cookie nor a clearance cookie (cf_clearance) may ride
+      # a redirect to another host: Req carries a manual cookie header across
+      # it (see the note on session_cookie_pairs/4). Definition cookies are not
+      # credentials, so they alone do not disable redirects.
+      redirect:
+        definition.follow_redirect == true and not session_attached? and
+          not clearance_attached?,
       retry: false
     ]
 
@@ -1007,27 +878,12 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       end
 
     # Add query params for GET, body for POST
-    opts_with_params =
-      case request_params.method do
-        :get ->
-          Keyword.put(base_opts, :params, request_params.query_params)
+    case request_params.method do
+      :get ->
+        Keyword.put(base_opts, :params, request_params.query_params)
 
-        :post ->
-          Keyword.put(base_opts, :form, request_params.query_params)
-      end
-
-    # Add cookies if present in user config
-    case Map.get(user_config, :cookies) do
-      cookies when is_list(cookies) and cookies != [] ->
-        attach_cookies(
-          opts_with_params,
-          url,
-          cookies,
-          CredentialScope.trusted_origins(definition, config)
-        )
-
-      _ ->
-        opts_with_params
+      :post ->
+        Keyword.put(base_opts, :form, request_params.query_params)
     end
   end
 
@@ -1053,36 +909,24 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   # of a result row, can both name an origin the operator never trusted, and a
   # download link is remote content rather than shipped YAML. Withhold and
   # continue, because an anonymous result beats a leaked login.
-  defp attach_cookies(opts, url, cookies, trusted_origins) do
-    case cookie_disposition(url, trusted_origins) do
+  defp session_cookie_pairs(cookies, url, definition, config)
+       when is_list(cookies) and cookies != [] do
+    case cookie_disposition(url, CredentialScope.trusted_origins(definition, config)) do
       {:withhold, reason} ->
         Logger.warning("Cardigann: withholding session cookies from #{reason}")
-        opts
+        {[], false}
 
       :ok ->
-        cookie_header =
-          cookies
-          |> Enum.map(&normalize_cookie/1)
-          |> Enum.reject(&is_nil/1)
-          |> Enum.join("; ")
-
-        if cookie_header == "" do
-          opts
-        else
-          existing_headers = Keyword.get(opts, :headers, [])
-
-          opts
-          |> Keyword.put(:headers, [{"Cookie", cookie_header} | existing_headers])
-          |> Keyword.put(:redirect, false)
-        end
+        pairs = cookies |> Enum.map(&normalize_cookie/1) |> Enum.reject(&is_nil/1)
+        {pairs, pairs != []}
     end
   end
 
+  defp session_cookie_pairs(_cookies, _url, _definition, _config), do: {[], false}
+
   # The one place that decides whether a URL may receive the definition's
-  # session. Both the direct Req path (attach_cookies/4) and the FlareSolverr
-  # path (withhold_flaresolverr_cookies/4) consult it, so the policy cannot
-  # drift between them. It drifted once: FlareSolverr forwarded cookies to any
-  # host at all while the direct path was gated.
+  # session. FlareSolverr no longer receives session cookies at all, so
+  # session_cookie_pairs/4 is the only caller.
   defp cookie_disposition(url, trusted_origins) do
     cond do
       CredentialScope.cleartext?(url) ->
@@ -1100,12 +944,12 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
-  # A stored session row holds either plain "name=value" strings or the cookie
-  # maps store_flaresolverr_cookies/2 writes, and
+  # A stored session row holds either plain "name=value" strings or cookie maps
+  # (older versions wrote FlareSolverr's cookies there), and
   # CardigannAuth.get_stored_session/1 hands back whatever is in the row without
   # looking. Joining a map raises Protocol.UndefinedError before the request is
-  # even sent, so any indexer that had once been through FlareSolverr crashed its
-  # next search. Entries are normalized here and anything unusable is dropped.
+  # even sent, so a leftover row would crash the next search. Entries are
+  # normalized here and anything unusable is dropped.
   defp normalize_cookie(cookie) when is_binary(cookie), do: cookie
 
   defp normalize_cookie(cookie) when is_map(cookie) do

@@ -112,6 +112,7 @@ FLARESOLVERR_URL=http://flaresolverr:8191
 # FLARESOLVERR_ENABLED is auto-enabled when URL is set
 # FLARESOLVERR_TIMEOUT=60000
 # FLARESOLVERR_MAX_TIMEOUT=120000
+# FLARESOLVERR_MAX_CONCURRENT_REQUESTS=1
 ```
 
 See [Environment Variables](../reference/environment-variables.md#flaresolverr) for the full reference.

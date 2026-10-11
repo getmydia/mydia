@@ -3,6 +3,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineRedirectTest do
 
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannSearchEngine
+  alias Mydia.Indexers.FlareSolverr.ClearanceCache
 
   @magnet "magnet:?xt=urn:btih:d2e202a5d71ea60b26203f2a9003a1e569382096&dn=Harbour.Lights.S01"
 
@@ -153,6 +154,63 @@ defmodule Mydia.Indexers.CardigannSearchEngineRedirectTest do
              )
 
     assert message =~ "no Location header"
+  end
+
+  describe "clearance cookies and redirects" do
+    test "a cached clearance disables redirects even with follow_redirect: true" do
+      bypass = Bypass.open()
+      url = "http://localhost:#{bypass.port}/search"
+
+      ClearanceCache.put(
+        url,
+        [%{name: "cf_clearance", value: "tok", domain: "localhost", expires: -1}],
+        "Mozilla/5.0 test"
+      )
+
+      on_exit(fn -> ClearanceCache.delete(url) end)
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        assert ["cf_clearance=tok"] = Plug.Conn.get_req_header(conn, "cookie")
+
+        conn
+        |> Plug.Conn.put_resp_header("location", "/files/c.torrent")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      assert {:ok, %{status: 302}} =
+               CardigannSearchEngine.execute_http_request(
+                 definition(bypass.port),
+                 url,
+                 params(),
+                 %{},
+                 %{}
+               )
+    end
+
+    test "with no session and no clearance, follow_redirect: true still follows" do
+      bypass = Bypass.open()
+      url = "http://localhost:#{bypass.port}/search"
+      ClearanceCache.delete(url)
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "/files/d.torrent")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/files/d.torrent", fn conn ->
+        Plug.Conn.resp(conn, 200, "d8:announce")
+      end)
+
+      assert {:ok, %{status: 200}} =
+               CardigannSearchEngine.execute_http_request(
+                 definition(bypass.port),
+                 url,
+                 params(),
+                 %{},
+                 %{}
+               )
+    end
   end
 
   describe "execute_http_request/5 error containment" do

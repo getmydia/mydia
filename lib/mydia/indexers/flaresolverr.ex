@@ -13,11 +13,19 @@ defmodule Mydia.Indexers.FlareSolverr do
   any of these layers:
 
     * Environment: `FLARESOLVERR_ENABLED`, `FLARESOLVERR_URL`,
-      `FLARESOLVERR_TIMEOUT`, `FLARESOLVERR_MAX_TIMEOUT` (highest priority)
+      `FLARESOLVERR_TIMEOUT`, `FLARESOLVERR_MAX_TIMEOUT`,
+      `FLARESOLVERR_MAX_CONCURRENT_REQUESTS` (highest priority)
     * Admin UI / database: the FlareSolverr row on the Indexers tab persists
       `flaresolverr.*` `ConfigSetting` rows, then calls
       `Mydia.Config.Loader.reload/0` so the change takes effect without a restart
     * `config/config.yml` under the `flaresolverr` key
+
+  ## Concurrency
+
+  `max_concurrent_requests` caps the Chrome tabs FlareSolverr runs at once across
+  all indexers. Each one costs a few hundred MB; the default of 1 is what keeps a
+  small container from crashing tabs when several protected indexers search
+  together.
 
   ## Usage
 
@@ -43,11 +51,13 @@ defmodule Mydia.Indexers.FlareSolverr do
   - `sessions.destroy` - Destroy a session
   """
 
+  alias Mydia.Indexers.FlareSolverr.Gate
   alias Mydia.Indexers.FlareSolverr.Response
 
   require Logger
 
   @api_path "/v1"
+  @receive_margin_ms 10_000
 
   @doc """
   Fetches a URL through FlareSolverr, solving any Cloudflare challenges.
@@ -59,6 +69,18 @@ defmodule Mydia.Indexers.FlareSolverr do
     * `:session` - Optional session ID to reuse browser instance
     * `:cookies` - Optional list of cookies to include in the request
     * `:proxy` - Optional proxy URL to use
+    * `:queue_timeout` - How long to wait for a free request slot before
+      returning `{:error, :flaresolverr_busy}` (default: the configured
+      `max_timeout`, the longest one solve can hold a slot, so a queued caller
+      outlasts the solves ahead of it; a caller under its own deadline is
+      cancelled by that deadline and the gate cleans up after it)
+    * `:retry_delay_ms` - Pause before the single retry of a crashed tab or
+      a solve that timed out inside FlareSolverr (default: `:flaresolverr_retry_delay_ms` app env, else 1000)
+
+  Failures return `{:error, {category, message}}` where `category` is one of
+  `:browser_crashed`, `:cookie_rejected`, `:challenge_timeout`,
+  `:challenge_failed`, `:cloudflare_error`, `:captcha_required`,
+  `:session_error` or `:unknown_error`.
 
   ## Examples
 
@@ -274,7 +296,8 @@ defmodule Mydia.Indexers.FlareSolverr do
            enabled: Map.get(config, :enabled, false) || false,
            url: Map.get(config, :url),
            timeout: Map.get(config, :timeout) || 60_000,
-           max_timeout: Map.get(config, :max_timeout) || 120_000
+           max_timeout: Map.get(config, :max_timeout) || 120_000,
+           max_concurrent_requests: Map.get(config, :max_concurrent_requests) || 1
          }}
 
       _ ->
@@ -299,6 +322,11 @@ defmodule Mydia.Indexers.FlareSolverr do
     timeout = opts[:timeout] || config.timeout
     max_timeout = opts[:max_timeout] || config.max_timeout
 
+    # FlareSolverr keeps solving for up to max_timeout and only then answers.
+    # Giving up sooner would leave its tab running while the caller moves on,
+    # so the transport waits out the longest solve plus a margin.
+    receive_timeout = max(timeout, max_timeout + @receive_margin_ms)
+
     body =
       %{
         cmd: cmd,
@@ -312,8 +340,49 @@ defmodule Mydia.Indexers.FlareSolverr do
 
     Logger.debug("FlareSolverr request: #{cmd} #{url}")
 
-    case Req.post(flaresolverr_url, json: body, receive_timeout: timeout) do
+    request = fn -> post_to_flaresolverr(flaresolverr_url, body, receive_timeout, url) end
+
+    # The retry runs inside the gate, so it keeps its slot instead of queueing
+    # behind other callers while the first attempt's tab is still being torn down.
+    Gate.run(
+      fn -> request_with_retry(request, opts) end,
+      limit: config.max_concurrent_requests,
+      timeout: opts[:queue_timeout] || max_timeout
+    )
+  end
+
+  # A crashed Chrome tab or a solve that ran out of time is FlareSolverr
+  # running short of resources, and a second attempt usually succeeds once
+  # the tab is gone. FlareSolverr reports both only after it has finished with
+  # the tab. A transport timeout is deliberately not retried: the first tab may
+  # still be alive, and a second one is what the gate exists to prevent.
+  # Anything else (a captcha, a bad cookie) would fail the same way again.
+  defp request_with_retry(request, opts) do
+    case request.() do
+      {:error, {category, _message}} when category in [:browser_crashed, :challenge_timeout] ->
+        Process.sleep(retry_delay(opts))
+        request.()
+
+      result ->
+        result
+    end
+  end
+
+  defp retry_delay(opts) do
+    Keyword.get(opts, :retry_delay_ms) ||
+      Application.get_env(:mydia, :flaresolverr_retry_delay_ms, 1_000)
+  end
+
+  defp post_to_flaresolverr(flaresolverr_url, body, timeout, url) do
+    case Req.post(flaresolverr_url, json: body, receive_timeout: timeout, retry: false) do
       {:ok, %Req.Response{status: 200, body: response_body}} when is_map(response_body) ->
+        handle_response(response_body, url)
+
+      # FlareSolverr reports a failed solve as HTTP 500 with the same
+      # {"status": "error", "message": ...} body it would otherwise send with a
+      # 200. Treating it as a bare HTTP error put the raw map, Chrome stack
+      # trace included, in front of operators.
+      {:ok, %Req.Response{status: 500, body: %{"status" => "error"} = response_body}} ->
         handle_response(response_body, url)
 
       {:ok, %Req.Response{status: status, body: body}} ->
@@ -348,8 +417,7 @@ defmodule Mydia.Indexers.FlareSolverr do
 
   defp handle_response(%{"status" => "error", "message" => message}, url) do
     Logger.warning("FlareSolverr failed for #{url}: #{message}")
-    error_type = categorize_error(message)
-    {:error, {error_type, message}}
+    {:error, {categorize_error(message), summarize_message(message)}}
   end
 
   defp handle_response(body, url) do
@@ -357,20 +425,41 @@ defmodule Mydia.Indexers.FlareSolverr do
     {:error, {:unexpected_response, body}}
   end
 
+  # Specific causes go first, because FlareSolverr wraps every failure in
+  # "Error solving the challenge". A row matches when the lowercased message
+  # contains every needle in it, so a rejected cookie needs both words.
+  @error_categories [
+    {["tab crashed"], :browser_crashed},
+    {["cookie", "domain"], :cookie_rejected},
+    {["timeout"], :challenge_timeout},
+    {["challenge"], :challenge_failed},
+    {["cloudflare"], :cloudflare_error},
+    {["captcha"], :captcha_required},
+    {["session"], :session_error}
+  ]
+
   defp categorize_error(message) when is_binary(message) do
     message_lower = String.downcase(message)
 
-    cond do
-      String.contains?(message_lower, "timeout") -> :challenge_timeout
-      String.contains?(message_lower, "challenge") -> :challenge_failed
-      String.contains?(message_lower, "cloudflare") -> :cloudflare_error
-      String.contains?(message_lower, "captcha") -> :captcha_required
-      String.contains?(message_lower, "session") -> :session_error
-      true -> :unknown_error
-    end
+    Enum.find_value(@error_categories, :unknown_error, fn {needles, category} ->
+      if Enum.all?(needles, &String.contains?(message_lower, &1)), do: category
+    end)
   end
 
   defp categorize_error(_), do: :unknown_error
+
+  # FlareSolverr's message is "Error: Error solving the challenge. Message: <cause>"
+  # followed by Chrome's session info and a stack trace. Only the cause is useful
+  # to an operator.
+  defp summarize_message(message) when is_binary(message) do
+    message
+    |> String.split("\n", parts: 2)
+    |> hd()
+    |> String.replace(~r/^Error: Error solving the challenge\. Message: /, "")
+    |> String.trim()
+  end
+
+  defp summarize_message(message), do: inspect(message)
 
   defp maybe_add_session(body, nil), do: body
   defp maybe_add_session(body, session), do: Map.put(body, :session, session)

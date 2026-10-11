@@ -26,6 +26,9 @@ config :mydia, Mydia.Storage.S3,
   copy_threshold: 10 * 1024 * 1024,
   copy_part_size: 5 * 1024 * 1024
 
+# FlareSolverr retries a crashed tab once; tests must not wait out the pause.
+config :mydia, :flaresolverr_retry_delay_ms, 0
+
 case database_adapter do
   Ecto.Adapters.Postgres ->
     config :mydia, Mydia.Repo,

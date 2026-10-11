@@ -383,33 +383,14 @@ defmodule Mydia.Config.Loader do
   end
 
   defp load_streaming_env do
-    %{}
-    |> put_if_present(
-      :max_transcode_height,
-      System.get_env("MAX_TRANSCODE_HEIGHT"),
-      &parse_integer/1
+    load_env_table(
+      max_transcode_height: {"MAX_TRANSCODE_HEIGHT", &parse_integer/1},
+      audio_language: {"AUDIO_LANGUAGE", &parse_string_list/1},
+      prefer_default_audio_track: {"PREFER_DEFAULT_AUDIO_TRACK", &parse_boolean/1},
+      subtitle_language: {"SUBTITLE_PLAYBACK_LANGUAGE", &parse_string_list/1},
+      hwaccel: {"HWACCEL", &parse_hwaccel/1},
+      hwaccel_device: {"HWACCEL_DEVICE", &{:ok, &1}}
     )
-    |> put_if_present(
-      :audio_language,
-      System.get_env("AUDIO_LANGUAGE"),
-      &parse_string_list/1
-    )
-    |> put_if_present(
-      :prefer_default_audio_track,
-      System.get_env("PREFER_DEFAULT_AUDIO_TRACK"),
-      &parse_boolean/1
-    )
-    |> put_if_present(
-      :subtitle_language,
-      System.get_env("SUBTITLE_PLAYBACK_LANGUAGE"),
-      &parse_string_list/1
-    )
-    |> put_if_present(
-      :hwaccel,
-      System.get_env("HWACCEL"),
-      &parse_hwaccel/1
-    )
-    |> put_if_present(:hwaccel_device, System.get_env("HWACCEL_DEVICE"))
   end
 
   defp load_logging_env do
@@ -424,11 +405,21 @@ defmodule Mydia.Config.Loader do
   end
 
   defp load_flaresolverr_env do
-    %{}
-    |> put_if_present(:enabled, System.get_env("FLARESOLVERR_ENABLED"), &parse_boolean/1)
-    |> put_if_present(:url, System.get_env("FLARESOLVERR_URL"))
-    |> put_if_present(:timeout, System.get_env("FLARESOLVERR_TIMEOUT"), &parse_integer/1)
-    |> put_if_present(:max_timeout, System.get_env("FLARESOLVERR_MAX_TIMEOUT"), &parse_integer/1)
+    load_env_table(
+      enabled: {"FLARESOLVERR_ENABLED", &parse_boolean/1},
+      url: {"FLARESOLVERR_URL", &{:ok, &1}},
+      timeout: {"FLARESOLVERR_TIMEOUT", &parse_integer/1},
+      max_timeout: {"FLARESOLVERR_MAX_TIMEOUT", &parse_integer/1},
+      max_concurrent_requests: {"FLARESOLVERR_MAX_CONCURRENT_REQUESTS", &parse_integer/1}
+    )
+  end
+
+  # One `key: {env var, parser}` row per setting, for sections that are a plain
+  # list of variables. A missing or empty variable leaves the key out.
+  defp load_env_table(specs) do
+    Enum.reduce(specs, %{}, fn {key, {var, parser}}, acc ->
+      put_if_present(acc, key, System.get_env(var), parser)
+    end)
   end
 
   # parse_boolean_or_invalid/1, not parse_boolean/1: this switch puts a network

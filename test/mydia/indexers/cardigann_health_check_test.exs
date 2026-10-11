@@ -723,6 +723,85 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert {:cloudflare, _message} =
                CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
     end
+
+    test "a probe FlareSolverr solves and that parses rows is healthy, not degraded" do
+      site = Bypass.open()
+      fs = Bypass.open()
+      url = "http://localhost:#{site.port}"
+
+      original = Application.get_env(:mydia, :runtime_config)
+
+      config =
+        case original do
+          %Mydia.Config.Schema{} = config -> config
+          _ -> Mydia.Config.Schema.defaults()
+        end
+
+      flaresolverr =
+        struct(Mydia.Config.Schema.FlareSolverr,
+          enabled: true,
+          url: "http://localhost:#{fs.port}",
+          max_concurrent_requests: 1
+        )
+
+      Application.put_env(:mydia, :runtime_config, %{config | flaresolverr: flaresolverr})
+
+      on_exit(fn ->
+        Mydia.Indexers.FlareSolverr.ClearanceCache.delete(url <> "/")
+
+        if original,
+          do: Application.put_env(:mydia, :runtime_config, original),
+          else: Application.delete_env(:mydia, :runtime_config)
+      end)
+
+      hits = :counters.new(1, [])
+
+      Bypass.expect(site, "GET", "/search", fn conn ->
+        :counters.add(hits, 1, 1)
+
+        if :counters.get(hits, 1) == 1 do
+          Plug.Conn.resp(
+            conn,
+            403,
+            "<html><head><title>Just a moment...</title></head></html>"
+          )
+        else
+          Plug.Conn.resp(
+            conn,
+            200,
+            "<html><body><table><tr><td><a href=\"/download/1\">Some Release</a></td></tr></table></body></html>"
+          )
+        end
+      end)
+
+      Bypass.expect_once(fs, "POST", "/v1", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "status" => "ok",
+            "solution" => %{
+              "url" => url <> "/search",
+              "status" => 200,
+              "response" => "<html></html>",
+              "cookies" => [
+                %{
+                  "name" => "cf_clearance",
+                  "value" => "solved",
+                  "domain" => "localhost",
+                  "path" => "/",
+                  "expires" => -1
+                }
+              ],
+              "userAgent" => "SolverAgent/9"
+            }
+          })
+        )
+      end)
+
+      assert {:ok, 1, ^url} = CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
+    end
   end
 
   describe "active_link promotion" do
@@ -1048,6 +1127,15 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert result.status == "degraded"
       assert result.message =~ "anonymously"
       assert result.message =~ "#{legacy.port}"
+    end
+  end
+
+  describe "classify_probe_error/1" do
+    test "a FlareSolverr failure is reported as a challenge problem with its readable message" do
+      assert {:cloudflare, "FlareSolverr: browser tab crashed" <> _} =
+               CardigannHealthCheck.classify_probe_error(
+                 "FlareSolverr: browser tab crashed (FlareSolverr's Chrome ran out of resources)"
+               )
     end
   end
 end

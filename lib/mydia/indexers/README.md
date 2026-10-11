@@ -30,7 +30,9 @@ Req forwards a manually supplied `Cookie` header along a redirect, including to 
 different host. It special-cases only the `authorization` header, which is
 dropped on untrusted cross-host redirects and tunable via
 `:redirect_trusted_hosts`. Headers you set yourself, `Cookie` included, are
-carried to the redirect target unchanged.
+carried to the redirect target unchanged. That includes a cached FlareSolverr
+`cf_clearance`, so the search engine disables redirects whenever a session or
+clearance cookie is attached.
 
 Verified empirically on 2026-08-29 with two Bypass servers on different ports:
 server A returned a 302 to server B, and B received `session=secret` verbatim. Req
@@ -44,7 +46,7 @@ that is attacker-triggerable rather than accidental.
 When attaching credentials as a raw header, either set `redirect: false` and
 handle hops yourself with a per-hop origin check, or accept that the credential
 goes wherever the response points. The Cardigann search engine takes the first
-option: `attach_cookies/4` in `lib/mydia/indexers/cardigann_search_engine.ex`
+option: `session_cookie_pairs/4` in `lib/mydia/indexers/cardigann_search_engine.ex`
 sets `redirect: false` whenever it attaches a `Cookie`, and an unfollowed 3xx
 falls through to the existing failover. Trusted-origin scoping for absolute paths
 and mirror failover is tracked in issue #602.
@@ -152,3 +154,41 @@ admin Indexers page, and on the Prowlarr row of manual search
 calls Prowlarr's per-indexer `POST /api/v1/indexer/test?forceTest=true`, one
 indexer at a time. Never call that from a background job or `testall`: a
 failed test escalates the backoff, and the backoff exists to protect trackers.
+
+## FlareSolverr earns a clearance; the request is repeated directly
+
+Cardigann follows Prowlarr's FlareSolverr model
+(`src/NzbDrone.Core/IndexerProxies/FlareSolverr/FlareSolverr.cs`).
+
+- A request goes direct first.
+- On a Cloudflare challenge, FlareSolverr gets the bare URL. It never gets
+  cookies: FlareSolverr 3.x adds them to a browser that has already
+  navigated, and Chrome rejects any whose domain does not match ("invalid
+  cookie domain").
+- The solution's cookies and `userAgent` go into
+  `Mydia.Indexers.FlareSolverr.ClearanceCache`, keyed by host and port.
+- The request is repeated directly, and that response is what gets parsed.
+
+`cf_clearance` is bound to the user-agent that earned it, so the two are only
+sent together.
+
+Parsing `solution.response`, Chrome's rendered DOM, is a fallback for a site
+whose clearance does not carry over. Parsing it routinely is what made 1337x,
+EZTV and kickass return zero rows: that path dropped the definition's own
+headers, EZTV's `layout=def_wlinks` cookie among them.
+
+Every FlareSolverr request opens a Chrome tab. They queue on
+`Mydia.Indexers.FlareSolverr.Gate`, sized by
+`flaresolverr.max_concurrent_requests` (`FLARESOLVERR_MAX_CONCURRENT_REQUESTS`,
+default 1). Without it, `search_all/2` asked for one tab per protected indexer
+at once and FlareSolverr crashed them.
+
+A queued caller waits up to `flaresolverr.max_timeout` for a slot (the longest
+one solve can hold it), then gets `:flaresolverr_busy`. `search_all/2` cancels
+its tasks at the search deadline first, and the gate's monitors free their
+places. Req waits `max_timeout` plus 10s for an answer, and a transport timeout
+is not retried because FlareSolverr's first tab may still be alive. The health
+probe (`sessions.list`) does not go through the gate because it opens no tab.
+
+No sessions (`sessions.create`): each keeps a Chrome instance resident, which
+is the resource the gate exists to protect.

@@ -201,6 +201,10 @@ defmodule Mydia.Indexers.FlareSolverrTest do
   end
 
   describe "config/0" do
+    test "max_concurrent_requests defaults to 1" do
+      assert %Mydia.Config.Schema.FlareSolverr{}.max_concurrent_requests == 1
+    end
+
     test "returns nil when not configured" do
       clear_flaresolverr_config()
       assert FlareSolverr.config() == nil
@@ -400,10 +404,169 @@ defmodule Mydia.Indexers.FlareSolverrTest do
         enabled: true,
         url: "http://localhost:#{bypass.port}",
         timeout: 30_000,
-        max_timeout: 60_000
+        max_timeout: 60_000,
+        max_concurrent_requests: 1
       )
 
       %{bypass: bypass}
+    end
+
+    test "a 500 with FlareSolverr's error JSON becomes a categorized error", %{bypass: bypass} do
+      Bypass.expect(bypass, "POST", "/v1", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          500,
+          Jason.encode!(%{
+            "status" => "error",
+            "message" =>
+              "Error: Error solving the challenge. Message: invalid cookie domain: Cookie 'domain' mismatch\n  (Session info: chrome=152.0.7977.82)\nStacktrace:\n#0 0x55b4f300818e <unknown>\n",
+            "startTimestamp" => 1,
+            "endTimestamp" => 2,
+            "version" => "3.5.2"
+          })
+        )
+      end)
+
+      assert {:error, {:cookie_rejected, "invalid cookie domain: Cookie 'domain' mismatch"}} =
+               FlareSolverr.get("https://protected.example.com")
+    end
+
+    test "a crashed tab is retried once, then reported as :browser_crashed", %{bypass: bypass} do
+      counter = :counters.new(1, [])
+
+      Bypass.expect(bypass, "POST", "/v1", fn conn ->
+        :counters.add(counter, 1, 1)
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          500,
+          Jason.encode!(%{
+            "status" => "error",
+            "message" =>
+              "Error: Error solving the challenge. Message: tab crashed\n  (Session info: chrome=152.0.7977.82)\n"
+          })
+        )
+      end)
+
+      assert {:error, {:browser_crashed, "tab crashed"}} =
+               FlareSolverr.get("https://protected.example.com", retry_delay_ms: 0)
+
+      assert :counters.get(counter, 1) == 2
+    end
+
+    test "concurrent requests never exceed max_concurrent_requests", %{bypass: bypass} do
+      # counters: 1 = in flight, 2 = peak in flight
+      in_flight = :counters.new(2, [])
+
+      Bypass.expect(bypass, "POST", "/v1", fn conn ->
+        :counters.add(in_flight, 1, 1)
+        now = :counters.get(in_flight, 1)
+        if now > :counters.get(in_flight, 2), do: :counters.put(in_flight, 2, now)
+        Process.sleep(60)
+        :counters.sub(in_flight, 1, 1)
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "status" => "ok",
+            "solution" => %{
+              "url" => "https://protected.example.com",
+              "status" => 200,
+              "response" => "<html></html>",
+              "cookies" => [],
+              "userAgent" => "test-agent"
+            }
+          })
+        )
+      end)
+
+      results =
+        1..3
+        |> Enum.map(fn _ ->
+          Task.async(fn -> FlareSolverr.get("https://protected.example.com") end)
+        end)
+        |> Task.await_many(10_000)
+
+      assert Enum.all?(results, &match?({:ok, %Response{}}, &1))
+      assert :counters.get(in_flight, 2) == 1
+    end
+
+    test "a queued caller waits for a solve that outlasts config.timeout instead of going busy",
+         %{bypass: bypass} do
+      put_flaresolverr_config(
+        enabled: true,
+        url: "http://localhost:#{bypass.port}",
+        timeout: 200,
+        max_timeout: 2_000,
+        max_concurrent_requests: 1
+      )
+
+      Bypass.expect(bypass, "POST", "/v1", fn conn ->
+        # Longer than config.timeout, shorter than max_timeout.
+        Process.sleep(500)
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "status" => "ok",
+            "solution" => %{
+              "url" => "https://protected.example.com",
+              "status" => 200,
+              "response" => "<html></html>",
+              "cookies" => [],
+              "userAgent" => "test-agent"
+            }
+          })
+        )
+      end)
+
+      first = Task.async(fn -> FlareSolverr.get("https://protected.example.com") end)
+      Process.sleep(50)
+      second = Task.async(fn -> FlareSolverr.get("https://protected.example.com") end)
+
+      assert [{:ok, %Response{}}, {:ok, %Response{}}] = Task.await_many([first, second], 10_000)
+    end
+
+    test "a crashed tab that succeeds on retry returns the solution", %{bypass: bypass} do
+      counter = :counters.new(1, [])
+
+      Bypass.expect(bypass, "POST", "/v1", fn conn ->
+        :counters.add(counter, 1, 1)
+
+        {status, body} =
+          if :counters.get(counter, 1) == 1 do
+            {500,
+             %{
+               "status" => "error",
+               "message" => "Error: Error solving the challenge. Message: tab crashed\n"
+             }}
+          else
+            {200,
+             %{
+               "status" => "ok",
+               "solution" => %{
+                 "url" => "https://protected.example.com",
+                 "status" => 200,
+                 "response" => "<html></html>",
+                 "cookies" => [],
+                 "userAgent" => "test-agent"
+               }
+             }}
+          end
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(status, Jason.encode!(body))
+      end)
+
+      assert {:ok, %Mydia.Indexers.FlareSolverr.Response{status: "ok"}} =
+               FlareSolverr.get("https://protected.example.com", retry_delay_ms: 0)
     end
 
     test "returns parsed Response on successful challenge solve", %{bypass: bypass} do

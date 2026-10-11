@@ -187,6 +187,8 @@ defmodule Mydia.Application do
         Mydia.Downloads.ClientStatusCache,
         Mydia.Indexers.Adapter.Registry,
         Mydia.Indexers.RateLimiter,
+        Mydia.Indexers.FlareSolverr.Gate,
+        Mydia.Indexers.FlareSolverr.ClearanceCache,
         # Passive circuit breaker for subtitle providers. In-memory only, no DB,
         # so it is safe to start in every environment including tests.
         Mydia.Subtitles.Health,

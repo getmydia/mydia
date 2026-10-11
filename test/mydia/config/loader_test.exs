@@ -1345,6 +1345,16 @@ defmodule Mydia.Config.LoaderTest do
 
       assert config.flaresolverr.url == "http://from-the-environment:8191"
     end
+
+    test "FLARESOLVERR_MAX_CONCURRENT_REQUESTS sets the FlareSolverr concurrency cap" do
+      System.put_env("FLARESOLVERR_MAX_CONCURRENT_REQUESTS", "3")
+      on_exit(fn -> System.delete_env("FLARESOLVERR_MAX_CONCURRENT_REQUESTS") end)
+
+      assert {:ok, config} =
+               Loader.load(config_file: "nonexistent.yml", sources: [:yaml, :env])
+
+      assert config.flaresolverr.max_concurrent_requests == 3
+    end
   end
 
   describe "reload/0" do

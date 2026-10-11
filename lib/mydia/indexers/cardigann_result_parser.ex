@@ -58,6 +58,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
       {:ok, results} = CardigannResultParser.parse_results(definition, response)
   """
 
+  alias Mydia.Indexers.Cardigann.JsonPath
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.QualityParser
@@ -106,21 +107,56 @@ defmodule Mydia.Indexers.CardigannResultParser do
   """
   @spec parse_results(Parsed.t(), http_response(), String.t(), keyword()) :: parse_result()
   def parse_results(%Parsed{} = definition, response, indexer_name, opts \\ []) do
-    body = response.body
     template_context = Keyword.get(opts, :template_context, %{})
     base_url = Keyword.get(opts, :base_url, "")
 
     # Extract category mappings from definition capabilities
     category_mappings = get_in(definition.capabilities, [:categorymappings]) || []
 
-    # Guard against nil or non-string bodies
-    cond do
-      is_nil(body) ->
-        {:error, Error.search_failed("Empty response body")}
+    ctx = {indexer_name, template_context, base_url, category_mappings}
+    parse_body(response.body, definition, ctx, opts)
+  end
 
-      is_map(body) ->
-        # Req auto-decoded JSON response - parse directly
-        parse_json_results_from_map(
+  # Guard against nil or non-string bodies
+  defp parse_body(nil, _definition, _ctx, _opts) do
+    {:error, Error.search_failed("Empty response body")}
+  end
+
+  # Req auto-decoded JSON. apibay.org (The Pirate Bay) answers with a
+  # top-level array, which decodes to a list, not a map.
+  defp parse_body(body, definition, ctx, _opts) when is_map(body) or is_list(body) do
+    {indexer_name, template_context, base_url, category_mappings} = ctx
+
+    parse_json_results_from_map(
+      definition,
+      body,
+      indexer_name,
+      template_context,
+      base_url,
+      category_mappings
+    )
+  end
+
+  defp parse_body(body, _definition, _ctx, _opts) when not is_binary(body) do
+    {:error, Error.search_failed("Invalid response body type: #{inspect(body)}")}
+  end
+
+  defp parse_body(body, definition, ctx, opts) do
+    if String.trim(body) == "" do
+      {:ok, []}
+    else
+      search_path = resolve_search_path(definition, opts)
+      declared_type = get_declared_response_type(search_path)
+      parse_typed_body(detect_response_type(body, declared_type), body, definition, ctx)
+    end
+  end
+
+  defp parse_typed_body(type, body, definition, ctx) do
+    {indexer_name, template_context, base_url, category_mappings} = ctx
+
+    case type do
+      :html ->
+        parse_html_results(
           definition,
           body,
           indexer_name,
@@ -129,47 +165,25 @@ defmodule Mydia.Indexers.CardigannResultParser do
           category_mappings
         )
 
-      not is_binary(body) ->
-        {:error, Error.search_failed("Invalid response body type: #{inspect(body)}")}
+      :json ->
+        parse_json_results(
+          definition,
+          body,
+          indexer_name,
+          template_context,
+          base_url,
+          category_mappings
+        )
 
-      String.trim(body) == "" ->
-        {:ok, []}
-
-      true ->
-        search_path = resolve_search_path(definition, opts)
-        declared_type = get_declared_response_type(search_path)
-
-        case detect_response_type(body, declared_type) do
-          :html ->
-            parse_html_results(
-              definition,
-              body,
-              indexer_name,
-              template_context,
-              base_url,
-              category_mappings
-            )
-
-          :json ->
-            parse_json_results(
-              definition,
-              body,
-              indexer_name,
-              template_context,
-              base_url,
-              category_mappings
-            )
-
-          :xml ->
-            parse_xml_results(
-              definition,
-              body,
-              indexer_name,
-              template_context,
-              base_url,
-              category_mappings
-            )
-        end
+      :xml ->
+        parse_xml_results(
+          definition,
+          body,
+          indexer_name,
+          template_context,
+          base_url,
+          category_mappings
+        )
     end
   end
 
@@ -265,6 +279,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
         category_mappings \\ []
       ) do
     with {:ok, json} <- Jason.decode(json_body),
+         false <- JsonPath.reports_no_results?(json, definition.search),
          {:ok, rows} <- extract_json_rows(json, definition.search, template_context) do
       Logger.info("[#{indexer_name}] Extracted #{length(rows)} rows from JSON")
 
@@ -280,6 +295,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
       Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
       {:ok, results}
     else
+      true ->
+        {:ok, []}
+
       {:error, %Jason.DecodeError{} = error} ->
         {:error, Error.search_failed("Invalid JSON: #{inspect(error)}")}
 
@@ -309,8 +327,14 @@ defmodule Mydia.Indexers.CardigannResultParser do
   - `{:ok, results}` - List of SearchResult structs
   - `{:error, reason}` - Parsing error
   """
-  @spec parse_json_results_from_map(Parsed.t(), map(), String.t(), map(), String.t(), list()) ::
-          parse_result()
+  @spec parse_json_results_from_map(
+          Parsed.t(),
+          map() | list(),
+          String.t(),
+          map(),
+          String.t(),
+          list()
+        ) :: parse_result()
   def parse_json_results_from_map(
         %Parsed{} = definition,
         json,
@@ -319,13 +343,18 @@ defmodule Mydia.Indexers.CardigannResultParser do
         base_url \\ "",
         category_mappings \\ []
       )
-      when is_map(json) do
-    with {:ok, rows} <- extract_json_rows(json, definition.search, template_context),
-         {:ok, parsed_rows} <- parse_json_row_fields(rows, definition.search, template_context) do
-      results =
-        transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
+      when is_map(json) or is_list(json) do
+    if JsonPath.reports_no_results?(json, definition.search) do
+      {:ok, []}
+    else
+      with {:ok, rows} <- extract_json_rows(json, definition.search, template_context),
+           {:ok, parsed_rows} <-
+             parse_json_row_fields(rows, definition.search, template_context) do
+        results =
+          transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
 
-      {:ok, results}
+        {:ok, results}
+      end
     end
   rescue
     error ->
@@ -1116,7 +1145,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
     # Render Go templates in the row selector
     selector = render_selector_template(raw_selector, template_context)
 
-    case navigate_json_path(json, selector) do
+    case JsonPath.navigate(json, selector) do
       {:ok, rows} when is_list(rows) ->
         # If attribute is set (e.g., "torrents"), expand sub-arrays within each row.
         # Each sub-item becomes its own row with a "__parent" key for ".." prefix access.
@@ -1163,92 +1192,6 @@ defmodule Mydia.Indexers.CardigannResultParser do
           [parent_row]
       end
     end)
-  end
-
-  defp navigate_json_path(json, "$") do
-    {:ok, json}
-  end
-
-  defp navigate_json_path(json, "$.") do
-    {:ok, json}
-  end
-
-  defp navigate_json_path(json, "$." <> path) do
-    navigate_json_path_parts(json, String.split(path, "."))
-  end
-
-  defp navigate_json_path(json, path) do
-    # Split dotted paths (e.g., "data.movies" → ["data", "movies"])
-    parts = String.split(path, ".")
-    navigate_json_path_parts(json, parts)
-  end
-
-  defp navigate_json_path_parts(value, []) do
-    {:ok, value}
-  end
-
-  defp navigate_json_path_parts(map, [key | rest]) when is_map(map) do
-    # Handle bracket notation: key[N] for array indexing or ["key-with-dashes"]
-    case parse_bracket_access(key) do
-      {:index, base_key, index} ->
-        # Access map key then array index: e.g., "items[0]"
-        with value when not is_nil(value) <- Map.get(map, base_key),
-             true <- is_list(value),
-             item when not is_nil(item) <- Enum.at(value, index) do
-          navigate_json_path_parts(item, rest)
-        else
-          _ -> {:error, :path_not_found}
-        end
-
-      {:quoted_key, quoted_key} ->
-        # Bracket notation with quoted key: $["key-with-dashes"]
-        case Map.get(map, quoted_key) do
-          nil -> {:error, :path_not_found}
-          value -> navigate_json_path_parts(value, rest)
-        end
-
-      :plain ->
-        case Map.get(map, key) do
-          nil -> {:error, :path_not_found}
-          value -> navigate_json_path_parts(value, rest)
-        end
-    end
-  end
-
-  defp navigate_json_path_parts(list, [key | rest]) when is_list(list) do
-    # Direct array index access
-    case Integer.parse(key) do
-      {index, ""} ->
-        case Enum.at(list, index) do
-          nil -> {:error, :path_not_found}
-          value -> navigate_json_path_parts(value, rest)
-        end
-
-      _ ->
-        {:error, :invalid_path}
-    end
-  end
-
-  defp navigate_json_path_parts(_value, _path) do
-    {:error, :invalid_path}
-  end
-
-  # Parses bracket access notation in JSON path keys
-  defp parse_bracket_access(key) do
-    cond do
-      # key[N] pattern - array index on a map value
-      Regex.match?(~r/^(.+)\[(\d+)\]$/, key) ->
-        [_, base_key, idx_str] = Regex.run(~r/^(.+)\[(\d+)\]$/, key)
-        {:index, base_key, String.to_integer(idx_str)}
-
-      # ["key"] or ['key'] pattern - quoted key access
-      Regex.match?(~r/^\[["'](.+?)["']\]$/, key) ->
-        [_, quoted_key] = Regex.run(~r/^\[["'](.+?)["']\]$/, key)
-        {:quoted_key, quoted_key}
-
-      true ->
-        :plain
-    end
   end
 
   defp parse_json_row_fields(rows, %{fields: fields}, template_context) do
@@ -1359,7 +1302,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
     case Map.get(row, selector) do
       nil ->
         if String.contains?(selector, ".") do
-          navigate_json_path(row, selector)
+          JsonPath.navigate(row, selector)
         else
           {:error, :not_found}
         end

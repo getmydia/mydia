@@ -467,6 +467,7 @@ FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer s
 | `FLARESOLVERR_ENABLED` | Enable FlareSolverr integration | Auto-enabled if URL is set |
 | `FLARESOLVERR_TIMEOUT` | Request timeout in milliseconds | `60000` |
 | `FLARESOLVERR_MAX_TIMEOUT` | Maximum timeout in milliseconds | `120000` |
+| `FLARESOLVERR_MAX_CONCURRENT_REQUESTS` | How many FlareSolverr requests run at once across all indexers. Raise it only if FlareSolverr has the memory for several Chrome tabs. | `1` |
 
 ## Automatic Quality Upgrades
 
