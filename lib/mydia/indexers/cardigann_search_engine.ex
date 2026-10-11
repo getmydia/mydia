@@ -54,6 +54,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:ok, response} = CardigannSearchEngine.execute_search(definition, opts)
   """
 
+  alias Mydia.Indexers.Cardigann.Charset
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
   alias Mydia.Indexers.Cardigann.Links
@@ -736,7 +737,9 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   # Render a template string using the CardigannTemplate engine
   defp render_template(template, definition, opts) do
     with {:error, reason} <-
-           CardigannTemplate.render(template, build_template_context(definition, opts)) do
+           CardigannTemplate.render(template, build_template_context(definition, opts),
+             charset: definition.encoding
+           ) do
       {:error, Error.search_failed("Search path failed to render: #{inspect(reason)}")}
     end
   end
@@ -796,6 +799,13 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           v ->
             v
         end
+
+      # Query strings and form bodies carry the site's charset bytes; Req
+      # percent-encodes them later. GET and POST share these params.
+      substituted_value =
+        if is_binary(substituted_value),
+          do: Charset.encode(substituted_value, definition.encoding),
+          else: substituted_value
 
       if substituted_value == "" and not allow_empty do
         acc

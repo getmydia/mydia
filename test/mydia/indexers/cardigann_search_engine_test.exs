@@ -40,6 +40,29 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                CardigannSearchEngine.build_search_url(definition, query: "Привет")
     end
 
+    test "query inputs carry the definition's charset bytes" do
+      definition = %Parsed{
+        id: "cp1251-inputs",
+        name: "cp1251",
+        links: ["https://example.invalid"],
+        encoding: "windows-1251",
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{"search" => "{{ .Keywords }}", "cat" => "0"},
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, %{query_params: params}} =
+               CardigannSearchEngine.build_request_params(definition, query: "Привет")
+
+      assert params["search"] == <<0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2>>
+      assert params["cat"] == "0"
+    end
+
     test "builds URL with simple keyword substitution" do
       definition = %Parsed{
         id: "test",

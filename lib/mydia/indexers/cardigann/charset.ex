@@ -33,8 +33,9 @@ defmodule Mydia.Indexers.Cardigann.Charset do
   Decodes `body` from `encoding` to UTF-8.
 
   Returns `body` unchanged when the encoding is nil, UTF-8 or not supported
-  (the unsupported case logs a warning). Bytes with no mapping in the charset
-  become U+FFFD.
+  (the unsupported case logs a warning once per encoding) or when decoding
+  fails, so on those paths the result is not guaranteed to be valid UTF-8.
+  Bytes with no mapping in the charset become U+FFFD.
   """
   @spec decode(binary(), String.t() | nil) :: String.t()
   def decode(body, encoding) when is_binary(body) do
@@ -43,7 +44,7 @@ defmodule Mydia.Indexers.Cardigann.Charset do
         body
 
       nil ->
-        Logger.warning("Cardigann: unsupported encoding #{inspect(encoding)}, using the raw body")
+        warn_unsupported_once(encoding)
         body
 
       name ->
@@ -76,6 +77,17 @@ defmodule Mydia.Indexers.Cardigann.Charset do
       _ ->
         value
     end
+  end
+
+  defp warn_unsupported_once(encoding) do
+    key = {__MODULE__, :unsupported, encoding}
+
+    if :persistent_term.get(key, nil) == nil do
+      :persistent_term.put(key, true)
+      Logger.warning("Cardigann: unsupported encoding #{inspect(encoding)}, using the raw body")
+    end
+
+    :ok
   end
 
   defp codepage(nil), do: :utf8

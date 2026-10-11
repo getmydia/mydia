@@ -1369,6 +1369,51 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
     end
   end
 
+  describe "andmatch with a non-UTF-8 definition" do
+    test "matches a Cyrillic query against the decoded windows-1251 titles" do
+      definition = %Parsed{
+        id: "andmatch-cp1251",
+        name: "Andmatch cp1251",
+        type: "public",
+        links: ["https://example.invalid"],
+        encoding: "windows-1251",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td.title", filters: [%{name: "andmatch"}]},
+            "download" => %{selector: "a.dl", attribute: "href"}
+          }
+        }
+      }
+
+      html =
+        ~s|<html><body><table>| <>
+          ~s|<tr><td class="title">Медный фонарь 2031</td><a class="dl" href="magnet:?xt=urn:btih:AAA">d</a></tr>| <>
+          ~s|<tr><td class="title">Бумажная гавань</td><a class="dl" href="magnet:?xt=urn:btih:BBB">d</a></tr>| <>
+          ~s|</table></body></html>|
+
+      body = Mydia.Indexers.Cardigann.Charset.encode(html, "windows-1251")
+      context = Mydia.Indexers.Cardigann.TemplateContext.build(definition, query: "Медный фонарь")
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: body},
+                 "Andmatch cp1251",
+                 template_context: context,
+                 base_url: "https://example.invalid"
+               )
+
+      assert result.title == "Медный фонарь 2031"
+    end
+  end
+
   describe "field case" do
     defp case_definition(category_field) do
       %Parsed{

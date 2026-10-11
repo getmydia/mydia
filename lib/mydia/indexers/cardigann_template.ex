@@ -47,6 +47,8 @@ defmodule Mydia.Indexers.CardigannTemplate do
   import NimbleParsec
   require Logger
 
+  alias Mydia.Indexers.Cardigann.Charset
+
   @type context :: %{
           optional(:keywords) => String.t() | nil,
           optional(:config) => map(),
@@ -258,10 +260,22 @@ defmodule Mydia.Indexers.CardigannTemplate do
 
   @doc """
   Renders a Cardigann template string with the given context.
+
+  Options:
+
+    * `:url_encode` - percent-encode interpolated values (default `true`)
+    * `:charset` - a definition's `encoding:`; when URL-encoding, values are
+      first converted from UTF-8 to that charset so the percent-escapes carry
+      the site's bytes (e.g. `%CF` for "П" in windows-1251). The context itself
+      stays UTF-8.
   """
   @spec render(String.t(), context(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def render(template, context, opts \\ []) when is_binary(template) do
-    url_encode? = Keyword.get(opts, :url_encode, true)
+    url_encode? =
+      case {Keyword.get(opts, :url_encode, true), Keyword.get(opts, :charset)} do
+        {true, charset} when is_binary(charset) -> {:charset, charset}
+        {flag, _} -> flag
+      end
 
     case parse_template(template) do
       {:ok, tokens, "", _, _, _} ->
@@ -890,6 +904,10 @@ defmodule Mydia.Indexers.CardigannTemplate do
   defp format_output(nil, _), do: ""
   defp format_output("", _), do: ""
   defp format_output(v, true) when is_binary(v), do: url_encode(v)
+
+  defp format_output(v, {:charset, encoding}) when is_binary(v),
+    do: v |> Charset.encode(encoding) |> url_encode()
+
   defp format_output(v, false) when is_binary(v), do: v
   defp format_output(v, _) when is_boolean(v), do: to_string(v)
   defp format_output(v, _) when is_number(v), do: to_string(v)
