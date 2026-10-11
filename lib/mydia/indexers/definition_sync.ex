@@ -171,7 +171,7 @@ defmodule Mydia.Indexers.DefinitionSync do
       existing ->
         # Update existing definition (preserve user's enabled/config settings)
         existing
-        |> CardigannDefinition.changeset(Map.drop(attrs, [:enabled, :config]))
+        |> CardigannDefinition.changeset(Map.drop(attrs, [:enabled, :in_library, :config]))
         |> Repo.update()
         |> case do
           {:ok, definition} ->

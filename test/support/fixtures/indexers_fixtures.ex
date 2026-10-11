@@ -65,6 +65,8 @@ defmodule Mydia.IndexersFixtures do
         last_synced_at: DateTime.utc_now()
       })
 
+    definition_attrs = Map.put_new(definition_attrs, :in_library, definition_attrs.enabled)
+
     %CardigannDefinition{}
     |> CardigannDefinition.changeset(definition_attrs)
     |> Repo.insert!()

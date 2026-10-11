@@ -193,6 +193,7 @@ defmodule Mydia.Logger do
   defp operation_message(:save_indexer), do: "Failed to save indexer"
   defp operation_message(:delete_indexer), do: "Failed to delete indexer"
   defp operation_message(:test_indexer), do: "Failed to test indexer"
+  defp operation_message(:remove_library_indexer), do: "Failed to remove indexer"
   defp operation_message(:save_library_path), do: "Failed to save library path"
   defp operation_message(:delete_library_path), do: "Failed to delete library path"
   defp operation_message(operation), do: "Operation failed: #{operation}"

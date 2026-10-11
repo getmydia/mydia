@@ -26,7 +26,8 @@ defmodule Mydia.Indexers.CardigannDownloadResolutionTest do
       capabilities: %{},
       definition: yaml,
       schema_version: "1",
-      enabled: true
+      enabled: true,
+      in_library: true
     })
     |> Repo.insert!()
   end
@@ -134,6 +135,7 @@ defmodule Mydia.Indexers.CardigannDownloadResolutionTest do
           definition: yaml,
           schema_version: "1",
           enabled: true,
+          in_library: true,
           config: %{"apiurl" => "localhost:#{api.port}"}
         })
         |> Repo.insert!()

@@ -880,6 +880,7 @@ defmodule Mydia.Indexers do
     - `:type` - Filter by indexer type ("public", "private", "semi-private")
     - `:language` - Filter by language code (e.g., "en-US")
     - `:enabled` - Filter by enabled status (true/false)
+    - `:in_library` - Filter by library membership (true/false)
     - `:search` - Search by name or description (case-insensitive)
 
   ## Examples
@@ -1067,37 +1068,19 @@ defmodule Mydia.Indexers do
 
   def cardigann_download_credential_allowed?(_indexer_name, _download_url), do: false
 
-  @doc """
-  Enables a Cardigann indexer definition.
+  defdelegate add_cardigann_definition(definition), to: Mydia.Indexers.CardigannLibrary, as: :add
 
-  ## Examples
+  defdelegate remove_cardigann_definition(definition),
+    to: Mydia.Indexers.CardigannLibrary,
+    as: :remove
 
-      iex> enable_cardigann_definition(definition)
-      {:ok, %CardigannDefinition{enabled: true}}
-  """
-  @spec enable_cardigann_definition(CardigannDefinition.t()) ::
-          {:ok, CardigannDefinition.t()} | {:error, Ecto.Changeset.t()}
-  def enable_cardigann_definition(%CardigannDefinition{} = definition) do
-    definition
-    |> CardigannDefinition.toggle_changeset(%{enabled: true})
-    |> Repo.update()
-  end
+  defdelegate enable_cardigann_definition(definition),
+    to: Mydia.Indexers.CardigannLibrary,
+    as: :enable
 
-  @doc """
-  Disables a Cardigann indexer definition.
-
-  ## Examples
-
-      iex> disable_cardigann_definition(definition)
-      {:ok, %CardigannDefinition{enabled: false}}
-  """
-  @spec disable_cardigann_definition(CardigannDefinition.t()) ::
-          {:ok, CardigannDefinition.t()} | {:error, Ecto.Changeset.t()}
-  def disable_cardigann_definition(%CardigannDefinition{} = definition) do
-    definition
-    |> CardigannDefinition.toggle_changeset(%{enabled: false})
-    |> Repo.update()
-  end
+  defdelegate disable_cardigann_definition(definition),
+    to: Mydia.Indexers.CardigannLibrary,
+    as: :disable
 
   @doc """
   Updates the configuration for a Cardigann definition (credentials, etc.).
@@ -1264,6 +1247,13 @@ defmodule Mydia.Indexers do
   defp apply_cardigann_filters(query, [{:enabled, enabled} | rest]) when is_boolean(enabled) do
     query
     |> where([d], d.enabled == ^enabled)
+    |> apply_cardigann_filters(rest)
+  end
+
+  defp apply_cardigann_filters(query, [{:in_library, in_library} | rest])
+       when is_boolean(in_library) do
+    query
+    |> where([d], d.in_library == ^in_library)
     |> apply_cardigann_filters(rest)
   end
 

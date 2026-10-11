@@ -55,7 +55,8 @@ defmodule Mydia.Downloads.QueueCookieScopeTest do
       capabilities: %{},
       definition: yaml,
       schema_version: "1",
-      enabled: true
+      enabled: true,
+      in_library: true
     })
     |> Repo.insert!()
   end

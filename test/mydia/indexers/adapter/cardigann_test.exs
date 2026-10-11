@@ -106,6 +106,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
         definition: sample_yaml(base_url),
         schema_version: "v11",
         enabled: true,
+        in_library: true,
         last_synced_at: DateTime.utc_now()
       })
       |> Repo.insert()
@@ -261,6 +262,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
           definition: yaml,
           schema_version: "v11",
           enabled: true,
+          in_library: true,
           # String keys, exactly as the database and the admin form supply them.
           config: %{"username" => "stringuser", "password" => "stringpass"},
           last_synced_at: DateTime.utc_now()
@@ -376,6 +378,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
           definition: yaml,
           schema_version: "v11",
           enabled: true,
+          in_library: true,
           # String keys, exactly as the database and the admin form supply
           # them. apiurl deliberately does not match the setting's default
           # (localhost:1), so the rendered login URL can only hit `override`
@@ -559,7 +562,8 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
           schema_version: "v11",
           config: %{"username" => "me", "password" => "secret"},
           definition: yaml,
-          enabled: true
+          enabled: true,
+          in_library: true
         })
         |> Repo.insert()
 
