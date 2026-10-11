@@ -539,20 +539,6 @@ config :mydia, :downloads,
   transcode_cache_dir: "priv/data/transcodes",
   max_concurrent_transcodes: 2
 
-# Single-byte charsets Cardigann definitions declare (`encoding:`), compiled into
-# Codepagex. Keep in sync with Mydia.Indexers.Cardigann.Charset.
-config :codepagex, :encodings, [
-  :iso_8859_1,
-  :iso_8859_2,
-  "ISO8859/8859-11",
-  "VENDORS/MICSFT/WINDOWS/CP1250",
-  "VENDORS/MICSFT/WINDOWS/CP1251",
-  "VENDORS/MICSFT/WINDOWS/CP1252",
-  "VENDORS/MICSFT/WINDOWS/CP1255",
-  "VENDORS/MICSFT/WINDOWS/CP1256",
-  "VENDORS/MICSFT/WINDOWS/CP874"
-]
-
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
