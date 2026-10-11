@@ -192,9 +192,12 @@ defmodule Mydia.Downloads.TorrentFetch do
         # one the request started at).
         scoped_cookie_header = scoped_cookie_header(final_url, indexer_name, cookie_header)
 
+        # Req strips only `authorization` on a cross-origin redirect, never a
+        # manual `cookie` header, so a request carrying the cookie must not
+        # follow redirects: a 3xx here is a failed download.
         req_opts =
           if scoped_cookie_header != "",
-            do: [headers: [{"cookie", scoped_cookie_header}]],
+            do: [headers: [{"cookie", scoped_cookie_header}], redirect: false],
             else: []
 
         case Req.get(final_url, req_opts) do

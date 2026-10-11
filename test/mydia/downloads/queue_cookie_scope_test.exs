@@ -126,4 +126,37 @@ defmodule Mydia.Downloads.QueueCookieScopeTest do
     assert_receive {:foreign_cookie_header, foreign_cookie_header}, 2_000
     assert foreign_cookie_header == []
   end
+
+  test "a session cookie does not follow a redirect answered by the final download GET" do
+    home = Bypass.open()
+    foreign = Bypass.open()
+    test_pid = self()
+
+    definition = store_definition!(home.port)
+    {:ok, _session} = CardigannAuth.store_session(definition.id, ["session=topsecret"])
+
+    # The probe sees the indexer's own host as the final URL...
+    Bypass.stub(home, "HEAD", "/download", fn conn ->
+      Plug.Conn.resp(conn, 200, "")
+    end)
+
+    # ...but the real GET answers with a redirect to another origin.
+    Bypass.stub(home, "GET", "/download", fn conn ->
+      send(test_pid, {:home_get_cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+
+      conn
+      |> Plug.Conn.put_resp_header("location", "http://localhost:#{foreign.port}/download")
+      |> Plug.Conn.resp(302, "")
+    end)
+
+    Bypass.stub(foreign, "GET", "/download", fn conn ->
+      send(test_pid, {:foreign_cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+      Plug.Conn.resp(conn, 200, "d8:announce")
+    end)
+
+    Queue.select_and_add_to_client(search_result("http://localhost:#{home.port}/download"), [])
+
+    assert_receive {:home_get_cookie_header, ["session=topsecret"]}, 2_000
+    refute_receive {:foreign_cookie_header, ["session=topsecret"]}, 500
+  end
 end
