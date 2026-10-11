@@ -44,6 +44,25 @@ defmodule Mydia.Indexers.Cardigann.LoggedOutTest do
              :ok
   end
 
+  test "a :contains() test selector is matched" do
+    parsed =
+      parsed("https://tracker.example", %{test: %{path: "/", selector: ~s|a:contains("Log out")|}})
+
+    page = ~s|<a href="/x">Log out</a>|
+
+    assert LoggedOut.check(parsed, {:ok, %{status: 200, body: page, headers: @html}}, true) == :ok
+  end
+
+  test "a test selector lexbor rejects never reads as logged out" do
+    parsed = parsed("https://tracker.example", %{test: %{path: "/", selector: "a["}})
+
+    assert LoggedOut.check(
+             parsed,
+             {:ok, %{status: 200, body: "<p>login</p>", headers: @html}},
+             true
+           ) == :ok
+  end
+
   test "JSON responses skip the selector test" do
     json = %{"content-type" => ["application/json"]}
     assert LoggedOut.check(@parsed, {:ok, %{status: 200, body: "{}", headers: json}}, true) == :ok

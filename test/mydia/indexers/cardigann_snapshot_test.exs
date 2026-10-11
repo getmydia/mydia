@@ -17,7 +17,8 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Indexers.CardigannResultParser
 
-  import Mydia.CardigannSnapshotHelper, only: [run_snapshot: 2, run_download_snapshot: 1]
+  import Mydia.CardigannSnapshotHelper,
+    only: [run_snapshot: 2, run_download_snapshot: 1, run_download_snapshot: 2]
 
   @fixtures_base "test/fixtures/cardigann"
 
@@ -382,6 +383,18 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
           assert Map.has_key?(definition.search.fields, :title)
         end
       end
+    end
+  end
+
+  describe "CrackingPatching snapshot" do
+    @tag :snapshot
+    test "crackingpatching: search rows parse" do
+      run_snapshot("test/fixtures/cardigann/crackingpatching", min_results: 2)
+    end
+
+    @tag :snapshot
+    test "crackingpatching: download selector resolves on the details page" do
+      run_download_snapshot("test/fixtures/cardigann/crackingpatching", expect: :magnet)
     end
   end
 

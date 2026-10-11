@@ -8,6 +8,7 @@ defmodule Mydia.Indexers.Cardigann.LoggedOut do
   """
 
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Cardigann.{Charset, Selector}
   alias Mydia.Indexers.CardigannDefinition.Parsed
 
   @sent_key {__MODULE__, :session_sent}
@@ -47,7 +48,7 @@ defmodule Mydia.Indexers.Cardigann.LoggedOut do
         true
       )
       when is_binary(selector) and is_binary(body) do
-    if not data_paths?(parsed) and html?(resp) and missing?(body, selector),
+    if not data_paths?(parsed) and html?(resp) and missing?(parsed, body, selector),
       do: :logged_out,
       else: :ok
   end
@@ -80,10 +81,12 @@ defmodule Mydia.Indexers.Cardigann.LoggedOut do
 
   defp html?(_), do: true
 
-  defp missing?(body, selector) do
-    case Floki.parse_document(body) do
-      {:ok, doc} -> Floki.find(doc, selector) == []
-      _ -> false
-    end
+  # A selector lexbor rejects cannot say anything about the page, so it never
+  # reads as logged out.
+  defp missing?(%Parsed{encoding: encoding}, body, selector) do
+    document = body |> Charset.decode(encoding) |> Selector.parse([selector])
+    Selector.find(document, :root, selector) == []
+  rescue
+    ArgumentError -> false
   end
 end

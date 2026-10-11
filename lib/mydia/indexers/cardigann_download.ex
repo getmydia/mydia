@@ -22,6 +22,8 @@ defmodule Mydia.Indexers.CardigannDownload do
   require Logger
 
   alias Mydia.Downloads.TorrentHash
+  alias Mydia.Indexers.Cardigann.Charset
+  alias Mydia.Indexers.Cardigann.Selector
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannResultParser
   alias Mydia.Indexers.CardigannSearchEngine
@@ -147,15 +149,19 @@ defmodule Mydia.Indexers.CardigannDownload do
     with {:ok, source} <-
            infohash_source(definition, infohash, download_url, before_response, user_config) do
       case source do
-        {:magnet, magnet} -> {:ok, {:magnet, magnet}}
-        {:response, response} -> build_magnet_from_response(response, infohash, variables)
+        {:magnet, magnet} ->
+          {:ok, {:magnet, magnet}}
+
+        {:response, response} ->
+          build_magnet_from_response(definition, response, infohash, variables)
       end
     end
   end
 
-  defp build_magnet_from_response(response, infohash, variables) do
-    with {:ok, hash} <- match_selector(response, Map.get(infohash, :hash), variables, "hash"),
-         {:ok, title} <- match_title(response, Map.get(infohash, :title), variables) do
+  defp build_magnet_from_response(definition, response, infohash, variables) do
+    with {:ok, hash} <-
+           match_selector(definition, response, Map.get(infohash, :hash), variables, "hash"),
+         {:ok, title} <- match_title(definition, response, Map.get(infohash, :title), variables) do
       case TorrentHash.build_magnet(hash, title) do
         nil ->
           {:error, {:cardigann_download, "infohash #{inspect(hash)} did not form a valid magnet"}}
@@ -180,10 +186,10 @@ defmodule Mydia.Indexers.CardigannDownload do
   # A magnet without a display name is still valid, so a title that fails to
   # match costs us nothing but a cosmetic label. Losing the hash is fatal;
   # losing the name is not.
-  defp match_title(_response, nil, _variables), do: {:ok, nil}
+  defp match_title(_definition, _response, nil, _variables), do: {:ok, nil}
 
-  defp match_title(response, selector, variables) do
-    case match_selector(response, selector, variables, "title") do
+  defp match_title(definition, response, selector, variables) do
+    case match_selector(definition, response, selector, variables, "title") do
       {:ok, title} -> {:ok, title}
       {:error, _reason} -> {:ok, nil}
     end
@@ -213,7 +219,7 @@ defmodule Mydia.Indexers.CardigannDownload do
   defp match_download_selectors(definition, selectors, download_url, response, variables, config) do
     selectors
     |> Enum.find_value(fn selector ->
-      case match_selector(response, selector, variables, "download link") do
+      case match_selector(definition, response, selector, variables, "download link") do
         {:ok, link} when is_binary(link) and link != "" -> link
         _ -> nil
       end
@@ -241,12 +247,12 @@ defmodule Mydia.Indexers.CardigannDownload do
 
   # -- selector matching ------------------------------------------------------
 
-  defp match_selector(_response, nil, _variables, label) do
+  defp match_selector(_definition, _response, nil, _variables, label) do
     {:error, {:cardigann_download, "no #{label} selector configured"}}
   end
 
-  defp match_selector(response, selector, variables, label) do
-    body = to_body(response)
+  defp match_selector(definition, response, selector, variables, label) do
+    body = response |> to_body() |> Charset.decode(definition.encoding)
     filters = Map.get(selector, :filters) || []
 
     with {:ok, selector_text} <- render(Map.get(selector, :selector), variables),
@@ -265,35 +271,26 @@ defmodule Mydia.Indexers.CardigannDownload do
   end
 
   defp extract(body, selector_text, attribute, label) do
-    with {:ok, document} <- parse_document(body, label) do
-      case Floki.find(document, selector_text) do
-        [] ->
-          {:error, {:cardigann_download, "#{label} selector #{selector_text} matched nothing"}}
+    document = Selector.parse(body, [selector_text])
 
-        elements ->
-          {:ok, element_value(elements, attribute)}
-      end
+    case Selector.find(document, :root, selector_text) do
+      [] ->
+        {:error, {:cardigann_download, "#{label} selector #{selector_text} matched nothing"}}
+
+      elements ->
+        {:ok, element_value(elements, attribute)}
     end
+  rescue
+    error in ArgumentError ->
+      {:error,
+       {:cardigann_download,
+        "Invalid selector in the #{label} definition: #{Exception.message(error)}"}}
   end
 
-  defp element_value(elements, nil), do: elements |> Floki.text() |> String.trim()
+  defp element_value(elements, nil), do: elements |> Selector.text() |> String.trim()
 
-  defp element_value(elements, attribute) do
-    case Floki.attribute(elements, attribute) do
-      [value | _] -> String.trim(value)
-      [] -> ""
-    end
-  end
-
-  defp parse_document(body, label) do
-    case Floki.parse_document(body) do
-      {:ok, document} ->
-        {:ok, document}
-
-      {:error, reason} ->
-        {:error, {:cardigann_download, "could not parse #{label} response: #{inspect(reason)}"}}
-    end
-  end
+  defp element_value(elements, attribute),
+    do: String.trim(Selector.attribute(elements, attribute) || "")
 
   # -- http -------------------------------------------------------------------
 

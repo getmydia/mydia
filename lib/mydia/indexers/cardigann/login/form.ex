@@ -9,6 +9,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
   """
 
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Cardigann.{Charset, Selector}
   alias Mydia.Indexers.Cardigann.Login.{Challenge, Http, Inputs, Session, Verify}
   alias Mydia.Indexers.CardigannResultParser
 
@@ -24,9 +25,9 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
          {:ok, submitpath} <- Inputs.render(login.submitpath, context),
          login_url = Inputs.resolve(base, path),
          {:ok, landing, ctx} <- Http.request(ctx, :get, login_url, []),
-         {:ok, doc} <- Floki.parse_document(landing.body),
+         doc = parse_landing(landing.body, parsed),
          {:ok, form} <- find_form(doc, login.form, login_url),
-         {:ok, scraped} <- apply_selector_inputs(scrape(form), login.selectorinputs, doc),
+         {:ok, scraped} <- apply_selector_inputs(scrape(doc, form), login.selectorinputs, doc),
          {:ok, query} <- apply_selector_inputs(%{}, login.getselectorinputs, doc),
          {:ok, ctx, image} <- maybe_captcha(ctx, login.captcha, doc, login_url) do
       pending = %{
@@ -55,6 +56,12 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
          }}
       end
     end
+  rescue
+    error in ArgumentError -> {:error, invalid_selector(error)}
+  end
+
+  defp invalid_selector(error) do
+    Error.invalid_config("Invalid selector in the login definition: #{Exception.message(error)}")
   end
 
   @spec complete(Challenge.t(), map()) :: {:ok, Session.t()} | {:error, Error.t()}
@@ -77,10 +84,27 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
          {:ok, ctx} <- Verify.check(parsed, resp, ctx, p.base) do
       {:ok, %Session{method: :form, cookies: Http.cookies(ctx)}}
     end
+  rescue
+    error in ArgumentError -> {:error, invalid_selector(error)}
+  end
+
+  # Every selector the strategy will run goes to Selector.parse/2 up front, so any
+  # `:contains` needle is declared.
+  defp parse_landing(body, parsed) do
+    login = parsed.login
+    captcha = login.captcha || %{}
+
+    selectors =
+      [login.form, "input", captcha[:selector], captcha[:input]] ++
+        Enum.map(login.selectorinputs, fn {_name, block} -> block.selector end) ++
+        Enum.map(login.getselectorinputs, fn {_name, block} -> block.selector end) ++
+        if(login.selectors, do: Map.keys(login.inputs), else: [])
+
+    body |> Charset.decode(parsed.encoding) |> Selector.parse(selectors)
   end
 
   defp find_form(doc, selector, url) do
-    case Floki.find(doc, selector) do
+    case Selector.find(doc, :root, selector) do
       [form | _] ->
         {:ok, form}
 
@@ -89,8 +113,8 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
     end
   end
 
-  defp scrape(form) do
-    for input <- Floki.find(form, "input"),
+  defp scrape(doc, form) do
+    for input <- Selector.find(doc, form, "input"),
         name = attr(input, "name"),
         name != nil,
         attr(input, "disabled") == nil,
@@ -122,7 +146,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
   end
 
   defp extract(doc, %{selector: selector} = block) do
-    case Floki.find(doc, selector) do
+    case Selector.find(doc, :root, selector) do
       [] ->
         :none
 
@@ -130,7 +154,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
         raw =
           if block[:attribute],
             do: attr(el, block.attribute) || "",
-            else: el |> Floki.text() |> String.trim()
+            else: Selector.text([el]) |> String.trim()
 
         # apply_filters/2 always returns {:ok, value}.
         {:ok, value} = CardigannResultParser.apply_filters(raw, block[:filters] || [])
@@ -150,7 +174,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
   end
 
   defp field_name(doc, selector) do
-    with [el | _] <- Floki.find(doc, selector),
+    with [el | _] <- Selector.find(doc, :root, selector),
          name when is_binary(name) <- attr(el, "name") do
       {:ok, name}
     else
@@ -168,7 +192,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
   end
 
   defp maybe_captcha(ctx, %{type: "image", selector: selector}, doc, login_url) do
-    case Floki.find(doc, selector) do
+    case Selector.find(doc, :root, selector) do
       [el | _] ->
         src = Inputs.resolve_page(login_url, attr(el, "src") || "")
 
@@ -212,5 +236,5 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
     end
   end
 
-  defp attr(el, name), do: el |> Floki.attribute(name) |> List.first()
+  defp attr(el, name), do: Selector.attribute([el], name)
 end
