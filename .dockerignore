@@ -38,6 +38,9 @@ plugins/**/target
 # context so the image always reflects committed source.
 priv/plugins/*.wasm
 
+# Locally built Dialyzer PLTs (tens of MB) never belong in the build context.
+priv/plts
+
 # Metadata relay local build artifacts
 metadata-relay/_build
 metadata-relay/deps
