@@ -1546,7 +1546,6 @@ defmodule Mydia.Indexers.CardigannResultParser do
   defp xml_case_selector_matches?(row, selector, case_key) do
     spec =
       case selector do
-        nil -> xml_string_spec(".//#{case_key}")
         "" -> xml_string_spec(".//#{case_key}")
         sel -> xml_string_spec("./#{sel}/#{case_key}")
       end
@@ -2041,8 +2040,6 @@ defmodule Mydia.Indexers.CardigannResultParser do
         :html
     end
   end
-
-  defp detect_response_type(_), do: :html
 
   # Encoding conversion - handles non-UTF-8 responses from some indexers
   defp maybe_convert_encoding(body, encoding) when is_binary(body) and is_binary(encoding) do

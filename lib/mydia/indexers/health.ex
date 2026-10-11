@@ -196,13 +196,7 @@ defmodule Mydia.Indexers.Health do
   ## Private Functions
 
   defp perform_health_check(indexer_id) do
-    case Settings.get_indexer_config!(indexer_id) do
-      nil ->
-        {:error, :not_found}
-
-      config ->
-        do_health_check(config)
-    end
+    do_health_check(Settings.get_indexer_config!(indexer_id))
   rescue
     Ecto.NoResultsError ->
       {:error, :not_found}
@@ -232,16 +226,10 @@ defmodule Mydia.Indexers.Health do
           )
 
         {:error, error} ->
-          error_message =
-            case error do
-              %{message: msg} -> msg
-              _ -> inspect(error)
-            end
-
           # Track failure
           track_failure(config)
 
-          unhealthy_result(error_message)
+          unhealthy_result(error.message)
       end
 
     # Cache the result

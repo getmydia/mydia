@@ -71,8 +71,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           episode: integer() | nil,
           imdb_id: String.t() | nil,
           tmdb_id: integer() | nil,
+          tvdb_id: integer() | nil,
           config: map() | nil,
-          settings: [map()] | nil
+          settings: [map()] | nil,
+          base_url: String.t() | nil,
+          on_promote: (String.t() -> term()) | nil
         ]
 
   @type http_response :: %{

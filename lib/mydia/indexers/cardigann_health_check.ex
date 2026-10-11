@@ -229,8 +229,6 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
       {:ok, length(results), winner}
     else
       {:error, %Error{message: message}} -> classify_probe_error(message)
-      {:error, reason} when is_binary(reason) -> classify_probe_error(reason)
-      {:error, reason} -> {:error, inspect(reason)}
     end
   end
 
@@ -543,9 +541,6 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     |> Repo.update()
   end
 
-  defp format_error(error) when is_binary(error), do: error
-  defp format_error(error), do: inspect(error)
-
   defp ok_entry(http_status) do
     %{
       "ok" => true,
@@ -559,7 +554,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     %{
       "ok" => false,
       "status" => nil,
-      "error" => format_error(error),
+      "error" => error,
       "checked_at" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
   end
