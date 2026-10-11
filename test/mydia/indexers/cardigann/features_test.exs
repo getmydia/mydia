@@ -65,4 +65,21 @@ defmodule Mydia.Indexers.Cardigann.FeaturesTest do
     yaml = %{"login" => %{"method" => "form", "captcha" => %{"type" => "image"}}, "search" => %{}}
     assert :login_captcha in Features.required(yaml)
   end
+
+  test "required/1 treats image and untyped captchas as the supported kind" do
+    for captcha <- [%{"type" => "image"}, %{"selector" => "img"}] do
+      required = Features.required(%{"login" => %{"method" => "form", "captcha" => captcha}})
+      assert :login_captcha in required
+      refute :login_captcha_other in required
+    end
+  end
+
+  test "required/1 flags a non-image captcha as unsupported" do
+    required =
+      Features.required(%{"login" => %{"method" => "form", "captcha" => %{"type" => "text"}}})
+
+    assert :login_captcha_other in required
+    refute :login_captcha in required
+    refute :login_captcha_other in Features.supported()
+  end
 end

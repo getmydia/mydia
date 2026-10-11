@@ -84,7 +84,7 @@ defmodule Mydia.Indexers.Cardigann.Features do
     case Map.get(yaml, "login") do
       login when is_map(login) ->
         acc
-        |> maybe_add(:login_captcha, is_map(Map.get(login, "captcha")))
+        |> add_captcha(Map.get(login, "captcha"))
         |> maybe_add(
           :login_selectorinputs,
           present_list_or_map?(Map.get(login, "selectorinputs"))
@@ -104,6 +104,17 @@ defmodule Mydia.Indexers.Cardigann.Features do
         acc
     end
   end
+
+  # Only image captchas are implemented (Login.Form returns invalid_config for
+  # other types). A missing type is an image captcha, as the parser defaults it.
+  defp add_captcha(acc, captcha) when is_map(captcha) do
+    case Map.get(captcha, "type") do
+      type when type in [nil, "image"] -> [:login_captcha | acc]
+      _ -> [:login_captcha_other | acc]
+    end
+  end
+
+  defp add_captcha(acc, _), do: acc
 
   defp add_login_method(acc, "cookie"), do: [:login_method_cookie | acc]
   defp add_login_method(acc, "get"), do: [:login_method_get | acc]
