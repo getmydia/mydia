@@ -181,5 +181,12 @@ Every FlareSolverr request opens a Chrome tab. They queue on
 default 1). Without it, `search_all/2` asked for one tab per protected indexer
 at once and FlareSolverr crashed them.
 
+A queued caller waits up to `flaresolverr.max_timeout` for a slot (the longest
+one solve can hold it), then gets `:flaresolverr_busy`. `search_all/2` cancels
+its tasks at the search deadline first, and the gate's monitors free their
+places. Req waits `max_timeout` plus 10s for an answer, and a transport timeout
+is not retried because FlareSolverr's first tab may still be alive. The health
+probe (`sessions.list`) does not go through the gate because it opens no tab.
+
 No sessions (`sessions.create`): each keeps a Chrome instance resident, which
 is the resource the gate exists to protect.

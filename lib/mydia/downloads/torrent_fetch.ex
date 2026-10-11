@@ -293,13 +293,22 @@ defmodule Mydia.Downloads.TorrentFetch do
 
         {:error, reason} ->
           Logger.error("FlareSolverr download failed: #{inspect(reason)}")
-          {:error, {:download_failed, "FlareSolverr error: #{inspect(reason)}"}}
+          {:error, {:download_failed, flaresolverr_error_text(reason)}}
       end
     else
       Logger.error("FlareSolverr required but not enabled/configured")
       {:error, {:download_failed, "FlareSolverr required but not configured"}}
     end
   end
+
+  defp flaresolverr_error_text({category, message})
+       when is_atom(category) and is_binary(message),
+       do: "FlareSolverr: #{message}"
+
+  defp flaresolverr_error_text(:flaresolverr_busy),
+    do: "FlareSolverr: busy with other indexers; no request slot freed up in time"
+
+  defp flaresolverr_error_text(reason), do: "FlareSolverr error: #{inspect(reason)}"
 
   defp follow_to_final_url(url, indexer_name, cookie_header, redirects_remaining \\ 10)
 

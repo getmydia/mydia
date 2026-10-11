@@ -495,6 +495,44 @@ defmodule Mydia.Indexers.FlareSolverrTest do
       assert :counters.get(in_flight, 2) == 1
     end
 
+    test "a queued caller waits for a solve that outlasts config.timeout instead of going busy",
+         %{bypass: bypass} do
+      put_flaresolverr_config(
+        enabled: true,
+        url: "http://localhost:#{bypass.port}",
+        timeout: 200,
+        max_timeout: 2_000,
+        max_concurrent_requests: 1
+      )
+
+      Bypass.expect(bypass, "POST", "/v1", fn conn ->
+        # Longer than config.timeout, shorter than max_timeout.
+        Process.sleep(500)
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "status" => "ok",
+            "solution" => %{
+              "url" => "https://protected.example.com",
+              "status" => 200,
+              "response" => "<html></html>",
+              "cookies" => [],
+              "userAgent" => "test-agent"
+            }
+          })
+        )
+      end)
+
+      first = Task.async(fn -> FlareSolverr.get("https://protected.example.com") end)
+      Process.sleep(50)
+      second = Task.async(fn -> FlareSolverr.get("https://protected.example.com") end)
+
+      assert [{:ok, %Response{}}, {:ok, %Response{}}] = Task.await_many([first, second], 10_000)
+    end
+
     test "a crashed tab that succeeds on retry returns the solution", %{bypass: bypass} do
       counter = :counters.new(1, [])
 

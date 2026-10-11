@@ -50,6 +50,7 @@ defmodule Mydia.Indexers.FlareSolverr do
   require Logger
 
   @api_path "/v1"
+  @receive_margin_ms 10_000
 
   @doc """
   Fetches a URL through FlareSolverr, solving any Cloudflare challenges.
@@ -62,9 +63,12 @@ defmodule Mydia.Indexers.FlareSolverr do
     * `:cookies` - Optional list of cookies to include in the request
     * `:proxy` - Optional proxy URL to use
     * `:queue_timeout` - How long to wait for a free request slot before
-      returning `{:error, :flaresolverr_busy}` (default: the configured timeout)
+      returning `{:error, :flaresolverr_busy}` (default: the configured
+      `max_timeout`, the longest one solve can hold a slot, so a queued caller
+      outlasts the solves ahead of it; a caller under its own deadline is
+      cancelled by that deadline and the gate cleans up after it)
     * `:retry_delay_ms` - Pause before the single retry of a crashed tab or
-      timed-out solve (default: `:flaresolverr_retry_delay_ms` app env, else 1000)
+      a solve that timed out inside FlareSolverr (default: `:flaresolverr_retry_delay_ms` app env, else 1000)
 
   Failures return `{:error, {category, message}}` where `category` is one of
   `:browser_crashed`, `:cookie_rejected`, `:challenge_timeout`,
@@ -311,6 +315,11 @@ defmodule Mydia.Indexers.FlareSolverr do
     timeout = opts[:timeout] || config.timeout
     max_timeout = opts[:max_timeout] || config.max_timeout
 
+    # FlareSolverr keeps solving for up to max_timeout and only then answers.
+    # Giving up sooner would leave its tab running while the caller moves on,
+    # so the transport waits out the longest solve plus a margin.
+    receive_timeout = max(timeout, max_timeout + @receive_margin_ms)
+
     body =
       %{
         cmd: cmd,
@@ -324,28 +333,26 @@ defmodule Mydia.Indexers.FlareSolverr do
 
     Logger.debug("FlareSolverr request: #{cmd} #{url}")
 
-    request = fn -> post_to_flaresolverr(flaresolverr_url, body, timeout, url) end
+    request = fn -> post_to_flaresolverr(flaresolverr_url, body, receive_timeout, url) end
 
     # The retry runs inside the gate, so it keeps its slot instead of queueing
     # behind other callers while the first attempt's tab is still being torn down.
     Gate.run(
       fn -> request_with_retry(request, opts) end,
       limit: config.max_concurrent_requests,
-      timeout: opts[:queue_timeout] || config.timeout
+      timeout: opts[:queue_timeout] || max_timeout
     )
   end
 
   # A crashed Chrome tab or a solve that ran out of time is FlareSolverr
   # running short of resources, and a second attempt usually succeeds once
-  # the tab is gone. Anything else (a captcha, a bad cookie) would fail the
-  # same way again.
+  # the tab is gone. FlareSolverr reports both only after it has finished with
+  # the tab. A transport timeout is deliberately not retried: the first tab may
+  # still be alive, and a second one is what the gate exists to prevent.
+  # Anything else (a captcha, a bad cookie) would fail the same way again.
   defp request_with_retry(request, opts) do
     case request.() do
       {:error, {category, _message}} when category in [:browser_crashed, :challenge_timeout] ->
-        Process.sleep(retry_delay(opts))
-        request.()
-
-      {:error, :timeout} ->
         Process.sleep(retry_delay(opts))
         request.()
 

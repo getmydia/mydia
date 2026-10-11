@@ -240,6 +240,49 @@ defmodule Mydia.Indexers.CardigannSearchEngineFlareSolverrTest do
     end
   end
 
+  describe "when every FlareSolverr slot stays taken" do
+    test "the search fails with a readable busy message", %{} do
+      put_flaresolverr_config(
+        enabled: true,
+        url: "http://localhost:1",
+        # The queue wait defaults to max_timeout, so a tiny one keeps this fast.
+        max_timeout: 100,
+        max_concurrent_requests: 1
+      )
+
+      test_pid = self()
+
+      holder =
+        Task.async(fn ->
+          Mydia.Indexers.FlareSolverr.Gate.run(
+            fn ->
+              send(test_pid, :slot_held)
+
+              receive do
+                :release -> :ok
+              end
+            end,
+            limit: 1
+          )
+        end)
+
+      assert_receive :slot_held
+
+      definition = scoped_definition(["http://localhost:1"], [%{path: "/search"}])
+
+      assert {:error, %{message: "FlareSolverr: busy" <> _}} =
+               CardigannSearchEngine.execute_search(
+                 definition,
+                 [query: "x"],
+                 %{},
+                 %{enabled: true}
+               )
+
+      send(holder.pid, :release)
+      assert :ok = Task.await(holder)
+    end
+  end
+
   ## Helpers: inject FlareSolverr settings into the layered runtime config.
   ## Mirrors Mydia.Indexers.FlareSolverrTest.
 

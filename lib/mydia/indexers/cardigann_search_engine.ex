@@ -425,7 +425,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
       :flaresolverr_busy ->
         Error.connection_failed(
-          "FlareSolverr: busy with other indexers; no slot freed up before the search deadline"
+          "FlareSolverr: busy with other indexers; no request slot freed up in time"
         )
 
       {:connection_error, conn_reason} ->
