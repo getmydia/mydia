@@ -151,6 +151,7 @@ defmodule MydiaWeb.SearchLive.DownloadModalTest do
 
     render_click(view, "show_download_modal", %{"download_url" => r.download_url})
 
+    assert has_element?(view, "#download-modal")
     refute has_element?(view, ~s(input[name="config[search_on_add]"]))
   end
 
@@ -159,8 +160,23 @@ defmodule MydiaWeb.SearchLive.DownloadModalTest do
     view = page_with(conn, [r])
 
     render_click(view, "show_download_modal", %{"download_url" => r.download_url})
+    assert has_element?(view, "#download-modal")
     render_click(view, "close_download_modal", %{})
 
     refute has_element?(view, "#download-modal")
+  end
+
+  test "a detected type with no library is not swapped for the other type",
+       %{conn: conn, movies: movies} do
+    Mydia.Settings.delete_library_path(movies)
+    r = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
+    view = page_with(conn, [r])
+
+    render_click(view, "show_download_modal", %{"download_url" => r.download_url})
+
+    assert has_element?(view, "#download-modal")
+    refute has_element?(view, ~s(#download-config-form input[name=media_type][checked]))
+    refute has_element?(view, ~s(select[name="config[library_path_id]"]))
+    assert has_element?(view, "#download-config-form button[type=submit][disabled]")
   end
 end

@@ -226,35 +226,39 @@ defmodule MydiaWeb.SearchLive.Index do
   end
 
   def handle_event("select_metadata_match", %{"match_id" => match_id}, socket) do
-    # Find the selected match
-    selected_match =
-      Enum.find(socket.assigns.metadata_matches, fn m -> to_string(m.provider_id) == match_id end)
+    with_create_access(socket, fn ->
+      # Find the selected match
+      selected_match =
+        Enum.find(socket.assigns.metadata_matches, fn m ->
+          to_string(m.provider_id) == match_id
+        end)
 
-    if selected_match do
-      # Fetch full metadata and create media item
-      media_type = socket.assigns.metadata_media_type
-      parsed = socket.assigns.pending_parsed
-      defaults = socket.assigns.pending_add_defaults
-      scope = socket.assigns.current_scope
+      if selected_match do
+        # Fetch full metadata and create media item
+        media_type = socket.assigns.metadata_media_type
+        parsed = socket.assigns.pending_parsed
+        defaults = socket.assigns.pending_add_defaults
+        scope = socket.assigns.current_scope
 
-      {:noreply,
-       socket
-       # Keep modal open but show loading state on selected match
-       |> assign(:selecting_match_id, match_id)
-       |> start_async(:finalize_add_to_library, fn ->
-         config = Metadata.default_relay_config()
+        {:noreply,
+         socket
+         # Keep modal open but show loading state on selected match
+         |> assign(:selecting_match_id, match_id)
+         |> start_async(:finalize_add_to_library, fn ->
+           config = Metadata.default_relay_config()
 
-         case fetch_full_metadata(config, selected_match, media_type) do
-           {:ok, metadata} ->
-             create_media_item_from_metadata(scope, parsed, metadata, defaults: defaults)
+           case fetch_full_metadata(config, selected_match, media_type) do
+             {:ok, metadata} ->
+               create_media_item_from_metadata(scope, parsed, metadata, defaults: defaults)
 
-           error ->
-             error
-         end
-       end)}
-    else
-      {:noreply, socket}
-    end
+             error ->
+               error
+           end
+         end)}
+      else
+        {:noreply, socket}
+      end
+    end)
   end
 
   def handle_event("close_disambiguation_modal", _params, socket) do
@@ -267,18 +271,20 @@ defmodule MydiaWeb.SearchLive.Index do
   end
 
   def handle_event("manual_search_submit", %{"search_query" => query}, socket) do
-    media_type = Map.get(socket.assigns, :manual_search_media_type, :movie)
-    scope = socket.assigns.current_scope
+    with_create_access(socket, fn ->
+      media_type = Map.get(socket.assigns, :manual_search_media_type, :movie)
+      scope = socket.assigns.current_scope
 
-    {:noreply,
-     socket
-     |> start_async(:manual_metadata_search, fn ->
-       config = Metadata.default_relay_config()
+      {:noreply,
+       socket
+       |> start_async(:manual_metadata_search, fn ->
+         config = Metadata.default_relay_config()
 
-       with {:ok, results} <- Metadata.search(config, query, media_type: media_type) do
-         {:ok, RemoteFilter.filter(results, scope)}
-       end
-     end)}
+         with {:ok, results} <- Metadata.search(config, query, media_type: media_type) do
+           {:ok, RemoteFilter.filter(results, scope)}
+         end
+       end)}
+    end)
   end
 
   def handle_event("close_manual_search_modal", _params, socket) do
@@ -295,69 +301,75 @@ defmodule MydiaWeb.SearchLive.Index do
         %{"match_id" => match_id, "media_type" => media_type},
         socket
       ) do
-    # Find the selected match from manual search
-    selected_match =
-      Enum.find(socket.assigns.metadata_matches, fn m -> to_string(m.provider_id) == match_id end)
+    with_create_access(socket, fn ->
+      # Find the selected match from manual search
+      selected_match =
+        Enum.find(socket.assigns.metadata_matches, fn m ->
+          to_string(m.provider_id) == match_id
+        end)
 
-    if selected_match do
-      media_type_atom = String.to_existing_atom(media_type)
-      defaults = socket.assigns.pending_add_defaults
-      scope = socket.assigns.current_scope
+      if selected_match do
+        media_type_atom = String.to_existing_atom(media_type)
+        defaults = socket.assigns.pending_add_defaults
+        scope = socket.assigns.current_scope
 
-      {:noreply,
-       socket
-       # Keep modal open but show loading state on selected match
-       |> assign(:selecting_match_id, match_id)
-       |> start_async(:finalize_manual_add, fn ->
-         config = Metadata.default_relay_config()
+        {:noreply,
+         socket
+         # Keep modal open but show loading state on selected match
+         |> assign(:selecting_match_id, match_id)
+         |> start_async(:finalize_manual_add, fn ->
+           config = Metadata.default_relay_config()
 
-         case fetch_full_metadata(config, selected_match, media_type_atom) do
-           {:ok, metadata} ->
-             # Create media item without parsed data (since parsing failed)
-             # Episodes are automatically fetched for TV shows via create_media_item
-             attr_opts = [user: scope.user] ++ if(defaults, do: [defaults: defaults], else: [])
+           case fetch_full_metadata(config, selected_match, media_type_atom) do
+             {:ok, metadata} ->
+               # Create media item without parsed data (since parsing failed)
+               # Episodes are automatically fetched for TV shows via create_media_item
+               attr_opts = [user: scope.user] ++ if(defaults, do: [defaults: defaults], else: [])
 
-             attrs =
-               Mydia.Media.AttrsFromMetadata.from_metadata(metadata, media_type_atom, attr_opts)
+               attrs =
+                 Mydia.Media.AttrsFromMetadata.from_metadata(metadata, media_type_atom, attr_opts)
 
-             case Media.create_media_item(scope, attrs) do
-               {:ok, item} -> {:ok, item, :created}
-               other -> other
-             end
+               case Media.create_media_item(scope, attrs) do
+                 {:ok, item} -> {:ok, item, :created}
+                 other -> other
+               end
 
-           error ->
-             error
-         end
-       end)}
-    else
-      {:noreply, socket}
-    end
+             error ->
+               error
+           end
+         end)}
+      else
+        {:noreply, socket}
+      end
+    end)
   end
 
   def handle_event("retry_add_to_library", _params, socket) do
-    # Retry adding to library with the same parameters
-    release_title = socket.assigns.pending_release_title
-    media_type = socket.assigns.pending_media_type
-    defaults = socket.assigns.pending_add_defaults
+    with_create_access(socket, fn ->
+      # Retry adding to library with the same parameters
+      release_title = socket.assigns.pending_release_title
+      media_type = socket.assigns.pending_media_type
+      defaults = socket.assigns.pending_add_defaults
 
-    if release_title && media_type do
-      Logger.info("Retrying add to library for: #{release_title}")
-      scope = socket.assigns.current_scope
+      if release_title && media_type do
+        Logger.info("Retrying add to library for: #{release_title}")
+        scope = socket.assigns.current_scope
 
-      {:noreply,
-       socket
-       |> assign(:show_retry_modal, false)
-       |> mark_downloading()
-       |> start_async(:add_to_library, fn ->
-         add_release_to_library(scope, release_title, media_type, defaults)
-       end)}
-    else
-      {:noreply,
-       socket
-       |> assign(:show_retry_modal, false)
-       |> finish_pending()
-       |> put_flash(:error, "Cannot retry: missing release information")}
-    end
+        {:noreply,
+         socket
+         |> assign(:show_retry_modal, false)
+         |> mark_downloading()
+         |> start_async(:add_to_library, fn ->
+           add_release_to_library(scope, release_title, media_type, defaults)
+         end)}
+      else
+        {:noreply,
+         socket
+         |> assign(:show_retry_modal, false)
+         |> finish_pending()
+         |> put_flash(:error, "Cannot retry: missing release information")}
+      end
+    end)
   end
 
   def handle_event("close_retry_modal", _params, socket) do
@@ -415,6 +427,7 @@ defmodule MydiaWeb.SearchLive.Index do
     user = socket.assigns.current_user
 
     with :ok <- MydiaWeb.Live.Authorization.authorize_create_media(socket),
+         :ok <- ensure_no_add_pending(socket),
          %{result: %SearchResult{} = result} <- socket.assigns.download_config,
          {:ok, media_type} <- parse_media_type(params["media_type"]),
          {:ok, defaults} <-
@@ -437,6 +450,12 @@ defmodule MydiaWeb.SearchLive.Index do
     else
       {:unauthorized, socket} ->
         {:noreply, socket}
+
+      :add_pending ->
+        {:noreply,
+         socket
+         |> close_download_modal()
+         |> put_flash(:error, "Another release is still being added. Try again when it finishes.")}
 
       {:error, :unknown_library} ->
         {:noreply,
@@ -779,6 +798,7 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> assign(:selecting_match_id, nil)
+     |> clear_spinner()
      |> put_flash(:error, add_to_library_error_message(reason))}
   end
 
@@ -788,6 +808,7 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> assign(:selecting_match_id, nil)
+     |> clear_spinner()
      |> put_flash(:error, "Failed to add to library unexpectedly")}
   end
 
@@ -823,10 +844,37 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> assign(:selecting_match_id, nil)
+     |> clear_spinner()
      |> put_flash(:error, add_to_library_error_message(reason))}
   end
 
+  def handle_async(:finalize_manual_add, {:exit, reason}, socket) do
+    Logger.error("Finalize manual add task crashed: #{inspect(reason)}")
+
+    {:noreply,
+     socket
+     |> assign(:selecting_match_id, nil)
+     |> finish_pending()
+     |> put_flash(:error, "Failed to add to library unexpectedly")}
+  end
+
   ## Private Functions
+
+  # Runs `fun` (which returns the `{:noreply, socket}` tuple) only for a user
+  # who may create media. Every write path on this page goes through it or
+  # through the same check in `confirm_download`.
+  defp with_create_access(socket, fun) do
+    case MydiaWeb.Live.Authorization.authorize_create_media(socket) do
+      :ok -> fun.()
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # One add runs at a time: a second `start_async` under the same name would
+  # replace the first task and overwrite its pending state.
+  defp ensure_no_add_pending(socket) do
+    if socket.assigns.pending_search_result, do: :add_pending, else: :ok
+  end
 
   # Shared by every `handle_async` clause above that falls back to showing
   # `reason` verbatim. `:restricted` gets Media's own generic wording instead
@@ -918,9 +966,10 @@ defmodule MydiaWeb.SearchLive.Index do
   defp download_type_label(:movie), do: "Movies"
   defp download_type_label(:tv_show), do: "TV Series"
 
-  # Only types with a library to land in are offered. A preferred type that
-  # has none is dropped rather than shown with an empty picker; with exactly
-  # one type available it is chosen for the user.
+  # Only types with a library to land in are offered. With no detected type
+  # and exactly one type available, that one is chosen for the user. A
+  # detected type with no library is left unchosen instead: swapping it for
+  # the other type would send a movie through TV matching.
   defp build_download_config(socket, %SearchResult{} = result, preferred) do
     available =
       for type <- @media_types, MediaAddHelpers.candidate_libraries(type) != [], do: type
@@ -928,7 +977,7 @@ defmodule MydiaWeb.SearchLive.Index do
     media_type =
       cond do
         preferred in available -> preferred
-        match?([_only], available) -> hd(available)
+        is_nil(preferred) and match?([_only], available) -> hd(available)
         true -> nil
       end
 
@@ -1497,7 +1546,6 @@ defmodule MydiaWeb.SearchLive.Index do
   # Helper to get library type label for display
   defp library_type_label(:movies), do: "Movies"
   defp library_type_label(:series), do: "TV Series"
-  defp library_type_label(:other), do: "Other"
   defp library_type_label(:unknown), do: "Unknown"
 
   defp type_source_hint(:title), do: "Guessed from release title"

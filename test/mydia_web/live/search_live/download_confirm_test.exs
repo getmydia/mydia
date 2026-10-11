@@ -24,6 +24,27 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest.TwoHitProvider do
   defdelegate fetch_by_ref(config, ref, opts), to: MetadataStubProvider
 end
 
+defmodule MydiaWeb.SearchLive.DownloadConfirmTest.BlockingProvider do
+  @moduledoc false
+  # Holds the add in flight: search announces itself to the test process and
+  # waits for a release message, so a test can confirm a second row while the
+  # first is still being added.
+
+  alias Mydia.MetadataStubProvider
+
+  def search(config, query, opts) do
+    send(:persistent_term.get({__MODULE__, :test_pid}), {:add_blocked, self()})
+
+    receive do
+      :release -> MetadataStubProvider.search(config, query, opts)
+    after
+      10_000 -> {:error, :blocked_too_long}
+    end
+  end
+
+  defdelegate fetch_by_ref(config, ref, opts), to: MetadataStubProvider
+end
+
 defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
   # The metadata stub registry is global.
   use MydiaWeb.ConnCase, async: false
@@ -42,6 +63,7 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
   alias Mydia.Repo
   alias Mydia.Settings
   alias MydiaWeb.SearchLive.Index, as: SearchLive
+  alias MydiaWeb.SearchLive.DownloadConfirmTest.BlockingProvider
   alias MydiaWeb.SearchLive.DownloadConfirmTest.TwoHitProvider
 
   setup :setup_metadata_stub
@@ -190,6 +212,33 @@ defmodule MydiaWeb.SearchLive.DownloadConfirmTest do
 
     assert has_element?(view, "#disambiguation-dialog")
     refute has_element?(view, "#download-modal")
+  end
+
+  test "confirming a second row while one add is in flight is refused",
+       %{conn: conn, movies: movies} do
+    :persistent_term.put({BlockingProvider, :test_pid}, self())
+    on_exit(fn -> :persistent_term.erase({BlockingProvider, :test_pid}) end)
+    Registry.register(:metadata_relay, BlockingProvider)
+
+    a = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", 2040)
+    b = result("Invented.Sequel.2022.1080p.BluRay.x264-GRP", 2040)
+    view = page_with(conn, [a, b])
+    params = %{"media_type" => "movie", "config" => %{"library_path_id" => movies.id}}
+
+    open_and_submit(view, a, params)
+    assert_receive {:add_blocked, task_pid}, 5_000
+
+    html = open_and_submit(view, b, params)
+    assert html =~ "Another release is still being added"
+    refute has_element?(view, "#download-modal")
+    refute has_element?(view, ~s(button[phx-value-download_url="#{b.download_url}"][disabled]))
+
+    send(task_pid, :release)
+    render_async(view, 5_000)
+
+    assert Repo.aggregate(MediaItem, :count) == 1
+    assert Repo.one!(MediaItem).library_path_id == movies.id
+    assert :sys.get_state(view.pid).socket.assigns.downloading_urls == MapSet.new()
   end
 
   test "the add_to_library event no longer exists", %{conn: conn} do
