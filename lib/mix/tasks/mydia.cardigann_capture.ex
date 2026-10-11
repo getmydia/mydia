@@ -164,7 +164,7 @@ defmodule Mix.Tasks.Mydia.CardigannCapture do
       keywords: filtered_query,
       config: build_default_config(definition),
       categories: [],
-      settings: definition.settings || [],
+      settings: definition.settings,
       query: %{}
     }
 
@@ -203,7 +203,7 @@ defmodule Mix.Tasks.Mydia.CardigannCapture do
   end
 
   defp build_default_config(definition) do
-    (definition.settings || [])
+    definition.settings
     |> Enum.reduce(%{}, fn setting, acc ->
       name = setting[:name] || setting["name"]
       default = setting[:default] || setting["default"]
@@ -231,12 +231,12 @@ defmodule Mix.Tasks.Mydia.CardigannCapture do
           keywords: Mydia.Indexers.CardigannFilters.apply_keywords_filters(query, definition),
           config: build_default_config(definition),
           categories: [],
-          settings: definition.settings || [],
+          settings: definition.settings,
           query: %{}
         }
 
         response = %{status: 200, body: response_body}
-        indexer_name = definition.name || definition.id
+        indexer_name = definition.name
 
         case Mydia.Indexers.CardigannResultParser.parse_results(
                definition,
@@ -248,7 +248,7 @@ defmodule Mix.Tasks.Mydia.CardigannCapture do
           {:ok, [first | _]} ->
             download_url = first.download_url
 
-            if is_binary(download_url) and download_url != "" do
+            if download_url != "" do
               absolute_url = absolutize_url(base_url, download_url)
               Mix.shell().info("  Capturing download page: #{absolute_url}")
 

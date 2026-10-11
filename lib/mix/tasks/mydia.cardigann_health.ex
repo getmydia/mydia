@@ -187,6 +187,5 @@ defmodule Mix.Tasks.Mydia.CardigannHealth do
   end
 
   defp format_error(%{message: msg}), do: msg
-  defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason), do: inspect(reason)
 end

@@ -38,7 +38,7 @@ defmodule Mix.Tasks.Mydia.BackupBeforeMigrate do
            Mydia.Release.backup_before_migrations()
          end) do
       {:ok, result, _started_apps} -> report(result)
-      {:error, reason} -> report({:error, {:repo_not_started, reason}})
+      {:error, reason} -> fail({:repo_not_started, reason})
     end
   end
 
@@ -62,7 +62,10 @@ defmodule Mix.Tasks.Mydia.BackupBeforeMigrate do
     Mix.shell().info("✓ PostgreSQL: no automatic backup, see the logged warning")
   end
 
-  defp report({:error, reason}) do
+  defp report({:error, reason}), do: fail(reason)
+
+  @spec fail(term()) :: no_return()
+  defp fail(reason) do
     Mix.shell().error("✗ Failed to create backup: #{inspect(reason)}")
     exit({:shutdown, 1})
   end

@@ -71,7 +71,11 @@ defmodule Mydia.Indexers.CardigannResultParser do
   require Logger
 
   @type parse_result :: {:ok, [SearchResult.t()]} | {:error, Error.t()}
-  @type http_response :: %{status: integer(), body: String.t()}
+  @type http_response :: %{
+          required(:status) => integer(),
+          required(:body) => String.t(),
+          optional(:headers) => [{term(), term()}]
+        }
 
   @doc """
   Parses search results from an HTTP response using Cardigann definition.
