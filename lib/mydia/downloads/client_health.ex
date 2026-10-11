@@ -155,13 +155,9 @@ defmodule Mydia.Downloads.ClientHealth do
   ## Private Functions
 
   defp perform_health_check(client_id) do
-    case Settings.get_download_client_config!(client_id) do
-      nil ->
-        {:error, :not_found}
-
-      config ->
-        do_health_check(config)
-    end
+    client_id
+    |> Settings.get_download_client_config!()
+    |> do_health_check()
   rescue
     Ecto.NoResultsError ->
       {:error, :not_found}

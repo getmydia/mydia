@@ -430,7 +430,7 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
 
     req_opts =
       Keyword.merge(
-        [url: url, headers: headers, into: File.stream!(part_path, [:append, :raw])],
+        [url: url, headers: headers, into: File.stream!(part_path, [:append])],
         state.req_options
       )
 

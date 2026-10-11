@@ -540,7 +540,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
     progress = if size_mb > 0, do: downloaded_mb / size_mb * 100, else: 0.0
 
     # Parse speeds and times
-    download_speed_kb = parse_float(get_in(item, ["kbpersec"])) || 0.0
+    download_speed_kb = parse_float(get_in(item, ["kbpersec"]))
     download_speed_bytes = round(download_speed_kb * 1024)
 
     eta_text = get_in(item, ["timeleft"]) || "0:00:00"
