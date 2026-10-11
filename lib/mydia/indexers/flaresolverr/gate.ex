@@ -45,6 +45,11 @@ defmodule Mydia.Indexers.FlareSolverr.Gate do
       :exit, {:timeout, _} ->
         GenServer.cast(server, {:cancel, ref})
         {:error, :flaresolverr_busy}
+
+      # The gate is down, restarting or stopped mid-call. It holds nothing of
+      # ours (a restarted gate has no queue), so there is no place to cancel.
+      :exit, {reason, _} when reason in [:noproc, :normal, :shutdown] ->
+        {:error, :flaresolverr_busy}
     else
       :ok ->
         try do

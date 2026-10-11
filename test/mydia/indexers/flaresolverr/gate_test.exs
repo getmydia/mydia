@@ -29,6 +29,21 @@ defmodule Mydia.Indexers.FlareSolverr.GateTest do
     assert :counters.get(in_flight, 2) == 2
   end
 
+  describe "when the gate process is unavailable" do
+    test "a gate that was never started returns :flaresolverr_busy" do
+      assert {:error, :flaresolverr_busy} =
+               Gate.run(fn -> :ran end, server: :nonexistent_gate_name)
+    end
+
+    test "a gate that was stopped returns :flaresolverr_busy" do
+      name = :"stopped_gate_#{System.unique_integer([:positive])}"
+      pid = start_supervised!({Gate, name: name}, id: name)
+      :ok = GenServer.stop(pid)
+
+      assert {:error, :flaresolverr_busy} = Gate.run(fn -> :ran end, server: name)
+    end
+  end
+
   test "a caller that cannot get a slot in time gets :flaresolverr_busy", %{server: server} do
     parent = self()
 

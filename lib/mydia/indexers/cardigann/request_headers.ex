@@ -23,8 +23,13 @@ defmodule Mydia.Indexers.Cardigann.RequestHeaders do
   `definition_headers` are the definition's own headers and `session_pairs` the
   `"name=value"` session cookies the caller decided may be sent. A cached
   clearance for `url` contributes its cookies and its user-agent.
+
+  Returns `{headers, clearance_attached?}`. The flag is true when clearance
+  cookies went into the cookie header, so the caller can keep them off a
+  redirect without looking the clearance up a second time.
   """
-  @spec build([{term(), term()}] | nil, String.t(), [String.t()]) :: [{String.t(), String.t()}]
+  @spec build([{term(), term()}] | nil, String.t(), [String.t()]) ::
+          {[{String.t(), String.t()}], boolean()}
   def build(definition_headers, url, session_pairs) do
     clearance =
       case ClearanceCache.lookup(url) do
@@ -47,8 +52,11 @@ defmodule Mydia.Indexers.Cardigann.RequestHeaders do
       |> Enum.reject(&(&1 in [nil, ""]))
       |> Enum.join("; ")
 
-    [{"user-agent", user_agent} | other_headers] ++
-      if(cookie_header == "", do: [], else: [{"cookie", cookie_header}])
+    headers =
+      [{"user-agent", user_agent} | other_headers] ++
+        if(cookie_header == "", do: [], else: [{"cookie", cookie_header}])
+
+    {headers, clearance_pairs != []}
   end
 
   defp split_headers(headers) do

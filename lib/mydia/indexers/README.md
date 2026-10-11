@@ -30,7 +30,9 @@ Req forwards a manually supplied `Cookie` header along a redirect, including to 
 different host. It special-cases only the `authorization` header, which is
 dropped on untrusted cross-host redirects and tunable via
 `:redirect_trusted_hosts`. Headers you set yourself, `Cookie` included, are
-carried to the redirect target unchanged.
+carried to the redirect target unchanged. That includes a cached FlareSolverr
+`cf_clearance`, so the search engine disables redirects whenever a session or
+clearance cookie is attached.
 
 Verified empirically on 2026-08-29 with two Bypass servers on different ports:
 server A returned a 302 to server B, and B received `session=secret` verbatim. Req

@@ -850,16 +850,20 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     {session_pairs, session_attached?} =
       session_cookie_pairs(Map.get(user_config, :cookies), url, definition, config)
 
-    headers = RequestHeaders.build(request_params.headers, url, session_pairs)
+    {headers, clearance_attached?} =
+      RequestHeaders.build(request_params.headers, url, session_pairs)
 
     base_opts = [
       headers: headers,
       receive_timeout: 30_000,
       connect_options: [timeout: 10_000],
-      # A session cookie must not ride a redirect to another host (see the
-      # note on session_cookie_pairs/4). Clearance and definition cookies are
-      # not credentials, so they alone do not disable redirects.
-      redirect: definition.follow_redirect == true and not session_attached?,
+      # Neither a session cookie nor a clearance cookie (cf_clearance) may ride
+      # a redirect to another host: Req carries a manual cookie header across
+      # it (see the note on session_cookie_pairs/4). Definition cookies are not
+      # credentials, so they alone do not disable redirects.
+      redirect:
+        definition.follow_redirect == true and not session_attached? and
+          not clearance_attached?,
       retry: false
     ]
 
