@@ -77,16 +77,18 @@ defmodule Mydia.Indexers.Cardigann.SessionManager do
     end
   end
 
-  # A search running alongside may already have replaced the rejected session;
-  # reuse its session rather than deleting it and logging in a second time.
+  # A search running alongside may already have replaced the rejected session.
+  # Delete only the rejected cookies, then reuse whatever session is stored, and
+  # log in only when there is none.
   defp fresh_session(parsed, definition, rejected) do
+    CardigannAuth.invalidate_session(definition.id, rejected || [])
+
     case CardigannAuth.get_stored_session(definition.id) do
-      {:ok, %{cookies: cookies}} when cookies != rejected ->
+      {:ok, %{cookies: cookies}} ->
         {:ok, %{cookies: cookies}}
 
-      _ ->
+      {:error, _} ->
         Logger.info("Cardigann #{definition.indexer_id}: session rejected, logging in again")
-        CardigannAuth.invalidate_session(definition.id)
         login(parsed, definition)
     end
   end

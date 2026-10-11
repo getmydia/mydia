@@ -104,4 +104,20 @@ defmodule Mydia.Indexers.CardigannAuth do
 
     :ok
   end
+
+  @doc """
+  Deletes the stored session only while it still holds `cookies`, so a session
+  another search stored in the meantime survives.
+  """
+  @spec invalidate_session(String.t(), [String.t()]) :: :ok
+  def invalidate_session(cardigann_definition_id, cookies) do
+    from(s in CardigannSearchSession,
+      where:
+        s.cardigann_definition_id == ^cardigann_definition_id and
+          s.cookies == type(^cookies, Mydia.Settings.JsonListType)
+    )
+    |> Repo.delete_all()
+
+    :ok
+  end
 end

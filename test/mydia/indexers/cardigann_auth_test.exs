@@ -39,6 +39,17 @@ defmodule Mydia.Indexers.CardigannAuthTest do
       assert :ok = CardigannAuth.invalidate_session(d.id)
       assert {:error, :not_found} = CardigannAuth.get_stored_session(d.id)
     end
+
+    test "invalidate_session/2 removes the row only while it holds those cookies", %{
+      definition: d
+    } do
+      {:ok, _} = CardigannAuth.store_session(d.id, ["a=2"])
+      assert :ok = CardigannAuth.invalidate_session(d.id, ["a=1"])
+      assert {:ok, %{cookies: ["a=2"]}} = CardigannAuth.get_stored_session(d.id)
+
+      assert :ok = CardigannAuth.invalidate_session(d.id, ["a=2"])
+      assert {:error, :not_found} = CardigannAuth.get_stored_session(d.id)
+    end
   end
 
   describe "get_stored_session/1 and store_session/3" do
