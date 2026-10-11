@@ -1139,7 +1139,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
     result_types =
       Map.new(ranked, fn r ->
-        {r.download_url, Map.get_lazy(cached, r.download_url, fn -> ResultType.detect(r) end)}
+        {r.download_url, classify(cached, r)}
       end)
 
     sorted =
@@ -1386,7 +1386,20 @@ defmodule MydiaWeb.SearchLive.Index do
   # Reads the per-search cache, classifying on a miss so a result that reached
   # a modal by another path still gets a type.
   defp result_type(result_types, %SearchResult{} = result) do
-    Map.get_lazy(result_types, result.download_url, fn -> ResultType.detect(result) end)
+    {_inputs, classification} = classify(result_types, result)
+    classification
+  end
+
+  # Cache entries are `{inputs, {kind, source}}`. Two indexers can return the
+  # same download_url with a different title or category, so an entry is reused
+  # only while the inputs `ResultType.detect/1` reads are unchanged.
+  defp classify(result_types, %SearchResult{} = result) do
+    inputs = {result.title, result.category}
+
+    case Map.get(result_types, result.download_url) do
+      {^inputs, _classification} = entry -> entry
+      _ -> {inputs, ResultType.detect(result)}
+    end
   end
 
   # Badge color for library type

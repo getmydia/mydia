@@ -71,13 +71,20 @@ defmodule MydiaWeb.SearchLive.TypeFilterTest do
     render_patch(view, ~p"/search?q=invented")
     wait_for_progress(view)
 
+    send_progress(view, indexer, results)
+
+    render(view)
+    view
+  end
+
+  defp send_progress(view, indexer, results) do
     search_id = :sys.get_state(view.pid).socket.assigns.search_id
 
     send(
       view.pid,
       {:indexer_progress, search_id,
        %IndexerProgress{
-         indexer: "pending",
+         indexer: indexer.name,
          indexer_id: indexer.id,
          status: :ok,
          results: results,
@@ -89,7 +96,6 @@ defmodule MydiaWeb.SearchLive.TypeFilterTest do
     )
 
     render(view)
-    view
   end
 
   defp filter(view, type) do
@@ -125,6 +131,22 @@ defmodule MydiaWeb.SearchLive.TypeFilterTest do
     view = page_with(conn, [episode, categorized])
 
     assert has_element?(view, "##{dom_id(episode)} [data-type-source=title]")
+    assert has_element?(view, "##{dom_id(categorized)} [data-type-source=category]")
+  end
+
+  test "a later indexer's category reclassifies a release already cached", %{conn: conn} do
+    uncategorized = result("Invented.Feature.2021.1080p.BluRay.x264-GRP", nil)
+    categorized = %{uncategorized | indexer: "Other", category: 5040}
+
+    view = page_with(conn, [uncategorized])
+
+    other =
+      indexer_config_fixture(%{name: "other", type: :prowlarr, base_url: "http://localhost:1"})
+
+    send_progress(view, other, [categorized])
+
+    filter(view, "series")
+    assert has_element?(view, "##{dom_id(categorized)}")
     assert has_element?(view, "##{dom_id(categorized)} [data-type-source=category]")
   end
 end
