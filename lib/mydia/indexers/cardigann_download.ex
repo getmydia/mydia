@@ -65,7 +65,7 @@ defmodule Mydia.Indexers.CardigannDownload do
   def resolve(%Parsed{download: download} = definition, download_url, user_config)
       when is_map(download) do
     with {:ok, download_url} <- absolutize_download_url(definition, download_url, user_config) do
-      variables = template_variables(download_url)
+      variables = template_variables(definition, download_url, user_config)
       infohash = Map.get(download, :infohash)
       selectors = Map.get(download, :selectors) || []
 
@@ -399,7 +399,12 @@ defmodule Mydia.Indexers.CardigannDownload do
 
   # Cardigann exposes the row's link to templates as `.DownloadUri`, which is
   # how a `before` block derives its inputs from the landing page URL.
-  defp template_variables(download_url) do
+  #
+  # `.Config.<name>` is available too, falling back to the setting's default:
+  # limetorrents and torrentdownloads pick their link with
+  # `a[href*="{{ .Config.primarydownloadlink }}"]`. Left empty it becomes
+  # `[href*=""]`, which CSS defines as matching nothing.
+  defp template_variables(definition, download_url, user_config) do
     uri = URI.parse(download_url)
 
     %{
@@ -410,7 +415,9 @@ defmodule Mydia.Indexers.CardigannDownload do
         "Host" => uri.host,
         "Query" => uri.query || "",
         "PathAndQuery" => path_and_query(uri)
-      }
+      },
+      config: user_config || %{},
+      settings: definition.settings || []
     }
   end
 

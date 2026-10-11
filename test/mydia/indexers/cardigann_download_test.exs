@@ -277,6 +277,31 @@ defmodule Mydia.Indexers.CardigannDownloadTest do
       assert link == "http://localhost:#{bypass.port}/get/24845983.torrent"
     end
 
+    # `[href*=""]` matches nothing in CSS, so an unrendered `.Config` value
+    # would leave the selector empty. Limetorrents and torrentdownloads pick
+    # their link this way.
+    test "renders .Config in a selector, using the setting default" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/info/1", fn conn ->
+        Plug.Conn.resp(conn, 200, @landing_page)
+      end)
+
+      definition =
+        bypass.port
+        |> definition_with_selector(~s|a[href*="{{ .Config.pick }}"]|)
+        |> Map.put(:settings, [%{name: "pick", type: "select", default: "/get/"}])
+
+      url = "http://localhost:#{bypass.port}/info/1"
+
+      assert {:ok, {:link, link}} = CardigannDownload.resolve(definition, url)
+      assert link == "http://localhost:#{bypass.port}/get/24845983.torrent"
+
+      # The operator's own value wins over the default.
+      assert {:error, {:cardigann_download, _}} =
+               CardigannDownload.resolve(definition, url, %{"pick" => "/nowhere/"})
+    end
+
     test "decodes a windows-1251 details page before matching" do
       bypass = Bypass.open()
       needle = "Скачать"
