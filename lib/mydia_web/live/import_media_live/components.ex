@@ -313,6 +313,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   attr :id, :string, required: true
   attr :group, :map, required: true
   attr :band, :atom, required: true
+  attr :library_provider, :atom, default: nil
   attr :selected, :boolean, required: true
   attr :expanded, :boolean, required: true
   attr :members, :any, required: true
@@ -374,6 +375,15 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             class="font-medium text-base-content/90 truncate max-w-md"
           >
             {suggestion_line(@group)}
+          </span>
+          <span
+            :if={cross_provider?(@group, @library_provider)}
+            id={"group-provider-badge-#{@dom_key}"}
+            class="badge badge-warning badge-xs"
+          >
+            From {provider_label(@group.provider_type)} · not found on {provider_label(
+              to_string(@library_provider)
+            )}
           </span>
           <span
             :if={disagreement_label(@group)}
@@ -616,6 +626,25 @@ defmodule MydiaWeb.ImportMediaLive.Components do
       </form>
 
       <div
+        :if={@state && @state.library_provider && @state.media_type != "movie"}
+        id="match-provider-toggle"
+        class="join mt-3"
+      >
+        <input
+          :for={{value, label} <- [{"tvdb", "TVDB"}, {"tmdb", "TMDB"}]}
+          type="radio"
+          name="provider"
+          id={"match-provider-#{value}"}
+          class="join-item btn btn-sm"
+          aria-label={label}
+          value={value}
+          checked={to_string(@state.provider) == value}
+          phx-click="match_search_provider"
+          phx-value-provider={value}
+        />
+      </div>
+
+      <div
         :if={@state}
         class="mt-4 flex flex-col gap-1.5 max-h-96 overflow-y-auto"
         id="match-results"
@@ -659,7 +688,18 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               <.icon name="hero-film" class="w-6 h-6 opacity-30" />
             </div>
             <div class="flex-1 min-w-0">
-              <p class="font-semibold text-sm truncate">{result.title}</p>
+              <p class="font-semibold text-sm truncate flex items-center gap-1.5">
+                <span class="truncate">{result.title}</span>
+                <span
+                  :if={
+                    @state.library_provider && result.provider in [:tvdb, :tmdb] &&
+                      result.provider != @state.library_provider
+                  }
+                  class="badge badge-ghost badge-xs shrink-0"
+                >
+                  {provider_label(to_string(result.provider))}
+                </span>
+              </p>
               <p class="text-xs text-base-content/60 flex items-center gap-1.5 mt-1">
                 <span :if={result.year} class="font-mono">{result.year}</span>
                 <span class="badge badge-ghost badge-xs font-medium">
@@ -750,6 +790,12 @@ defmodule MydiaWeb.ImportMediaLive.Components do
     year = if group.suggested_year, do: " (#{group.suggested_year})", else: ""
     "→ #{group.suggested_title}#{year}"
   end
+
+  defp cross_provider?(%{media_type: "tv_show", provider_type: type}, library_provider)
+       when type in ["tvdb", "tmdb"] and library_provider in [:tvdb, :tmdb],
+       do: type != to_string(library_provider)
+
+  defp cross_provider?(_group, _library_provider), do: false
 
   defp provider_label("tvdb"), do: "TVDB"
   defp provider_label("tmdb"), do: "TMDB"

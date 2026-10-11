@@ -101,6 +101,7 @@
               id={dom_id}
               group={group}
               band={ImportCandidates.band(group)}
+              library_provider={@selected_tv_provider}
               selected={SelectionScope.selected?(@selection, group.id)}
               expanded={MapSet.member?(@expanded_ids, group.id)}
               members={if @expanded_group_id == group.id, do: @streams.members, else: []}
