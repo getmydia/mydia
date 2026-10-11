@@ -407,14 +407,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
   defp get_all_settings_with_sources do
     config = Settings.get_runtime_config()
-
-    config =
-      if is_struct(config) do
-        config
-      else
-        Mydia.Config.Schema.defaults()
-      end
-
     streaming = config.streaming || %Mydia.Config.Schema.Streaming{}
 
     all_db_settings = Settings.applied_config_settings_by_key()

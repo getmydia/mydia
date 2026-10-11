@@ -376,8 +376,6 @@ defmodule MydiaWeb.Live.UserAuth do
     "in about #{minutes} minutes"
   end
 
-  defp retry_after_text(_seconds), do: "later"
-
   # Get a MapSet of library types that have at least one enabled library path
   defp get_configured_library_types do
     Mydia.Settings.list_library_paths()

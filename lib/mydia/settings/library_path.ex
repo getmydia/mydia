@@ -160,8 +160,11 @@ defmodule Mydia.Settings.LibraryPath do
   The label the UI shows for a library: its name, else its folder name.
   Accepts runtime structs and plain maps as well as rows.
   """
-  @spec display_name(%{required(:path) => String.t(), optional(:name) => String.t() | nil}) ::
-          String.t()
+  @spec display_name(%{
+          required(:path) => String.t(),
+          optional(:name) => String.t() | nil,
+          optional(atom()) => term()
+        }) :: String.t()
   def display_name(%{path: path} = library_path) do
     case Map.get(library_path, :name) do
       name when is_binary(name) and name != "" -> name

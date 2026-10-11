@@ -1268,10 +1268,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         phx-value-download-url={result.download_url}
                         phx-value-title={result.title}
                         phx-value-indexer={result.indexer}
-                        phx-value-size={result.size || 0}
+                        phx-value-size={result.size}
                         phx-value-seeders={result.seeders || 0}
                         phx-value-leechers={result.leechers || 0}
-                        phx-value-quality={get_search_quality_badge(result) || "Unknown"}
+                        phx-value-quality={get_search_quality_badge(result)}
                         title={"Failed: #{Map.get(result, :grab_failed)} — click to retry"}
                       >
                         <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
@@ -1284,10 +1284,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         phx-value-download-url={result.download_url}
                         phx-value-title={result.title}
                         phx-value-indexer={result.indexer}
-                        phx-value-size={result.size || 0}
+                        phx-value-size={result.size}
                         phx-value-seeders={result.seeders || 0}
                         phx-value-leechers={result.leechers || 0}
-                        phx-value-quality={get_search_quality_badge(result) || "Unknown"}
+                        phx-value-quality={get_search_quality_badge(result)}
                         title="Download this release"
                       >
                         <span class="loading loading-spinner loading-xs hidden group-[.phx-click-loading]/dl:inline"></span>

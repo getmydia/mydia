@@ -751,16 +751,16 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
       movie? = download.media_item && download.media_item.type == "movie"
 
-      valid_episode_ids =
+      episodes =
         case download.media_item do
           %{type: "tv_show", id: media_item_id} ->
-            socket.assigns.current_scope
-            |> Media.list_episodes(media_item_id)
-            |> MapSet.new(& &1.id)
+            Media.list_episodes(socket.assigns.current_scope, media_item_id)
 
           _other ->
-            MapSet.new()
+            []
         end
+
+      valid_episode_ids = MapSet.new(episodes, & &1.id)
 
       path_by_index = Map.get(params, "target_path", %{})
 

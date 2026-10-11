@@ -460,7 +460,7 @@ defmodule Mydia.Indexers do
       {:ok, [%{id: 1, name: "TorrentLeech", enabled: true, protocol: "torrent"}, ...]}
   """
   @spec list_prowlarr_indexers(Settings.IndexerConfig.t() | map()) ::
-          {:ok, [map()]} | {:error, binary()}
+          {:ok, [map()]} | {:error, binary() | Adapter.Error.t()}
   def list_prowlarr_indexers(%Settings.IndexerConfig{type: :prowlarr} = config) do
     adapter_config = indexer_config_to_adapter_config(config)
     Adapter.Prowlarr.list_indexers(adapter_config)
