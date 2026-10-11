@@ -499,13 +499,12 @@ defmodule Mydia.P2p.Server do
       {:error, reason} ->
         Logger.warning("GraphQL execution failed: #{inspect(reason)}")
 
-        # A reason that is already a sentence is sent as one. `inspect/1` on a
-        # binary wraps it in quotes, which the player would render verbatim.
-        message = if is_binary(reason), do: reason, else: inspect(reason)
-
+        # `Absinthe.run/3` and `run_graphql/5` both fail with a sentence, which
+        # is sent as is: `inspect/1` on a binary wraps it in quotes, which the
+        # player would render verbatim.
         %P2p.GraphQLResponse{
           data: nil,
-          errors: encode_json([%{message: message}])
+          errors: encode_json([%{message: reason}])
         }
     end
   end
@@ -1276,9 +1275,6 @@ defmodule Mydia.P2p.Server do
       {:error, _} -> nil
     end
   end
-
-  defp encode_graphql_errors(nil), do: nil
-  defp encode_graphql_errors([]), do: nil
 
   defp encode_graphql_errors(errors) when is_list(errors) do
     # Convert Absinthe errors to a JSON-serializable format

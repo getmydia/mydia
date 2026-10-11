@@ -1157,8 +1157,6 @@ defmodule Mydia.Accounts do
     Map.get(delta, key) || Map.get(delta, String.to_atom(key))
   end
 
-  defp delta_fetch(_delta, _key), do: nil
-
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking preference changes.
   """

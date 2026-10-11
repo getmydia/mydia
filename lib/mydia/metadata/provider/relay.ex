@@ -421,7 +421,7 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   defp request_tmdb_videos(config, tmdb_id) do
     case perform_tmdb_fetch(config, tmdb_id, :tv_show, append_to_response: ["videos"]) do
-      {:ok, %MediaMetadata{videos: videos}} when is_list(videos) ->
+      {:ok, %MediaMetadata{videos: videos}} ->
         {:ok, videos}
 
       {:error, _reason} = error ->
@@ -431,14 +431,6 @@ defmodule Mydia.Metadata.Provider.Relay do
         )
 
         error
-
-      other ->
-        Logger.debug("TMDB trailer fallback returned no videos",
-          tmdb_id: tmdb_id,
-          result: inspect(other)
-        )
-
-        {:ok, []}
     end
   end
 
@@ -1523,7 +1515,7 @@ defmodule Mydia.Metadata.Provider.Relay do
 
     # Record the ID→type mapping from search results
     # This helps prevent future 404s from type mismatches
-    if search_result.provider_id && media_type do
+    if media_type do
       ProviderIDRegistry.record_id_type(
         {:tmdb, String.to_integer(search_result.provider_id)},
         media_type

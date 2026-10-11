@@ -153,8 +153,6 @@ defmodule Mydia.Streaming.Compatibility do
 
   # Containers that can be remuxed to fMP4 without transcoding.
   # These containers support the same codecs as MP4 but browsers can't play them directly.
-  defp remuxable_container?(nil), do: false
-
   defp remuxable_container?(container) do
     normalized = String.downcase(container)
 
@@ -293,7 +291,7 @@ defmodule Mydia.Streaming.Compatibility do
         "Incompatible audio codec (#{audio_codec || "unknown"})"
 
       not DeviceProfile.container_allowed?(profile, container) ->
-        "Incompatible container format (#{container || "unknown"})"
+        "Incompatible container format (#{container})"
 
       true ->
         "Unknown compatibility issue"

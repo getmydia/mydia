@@ -375,5 +375,4 @@ defmodule Mydia.Plugins.Setup do
   end
 
   defp error_message(%{message: message}) when is_binary(message), do: message
-  defp error_message(other), do: inspect(other)
 end

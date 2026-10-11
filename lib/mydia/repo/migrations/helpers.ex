@@ -762,7 +762,7 @@ defmodule Mydia.Repo.Migrations.Helpers do
         direct_fk_children(repo),
         [to_string(table)],
         [],
-        MapSet.new()
+        %{}
       )
 
     ordered
@@ -779,12 +779,12 @@ defmodule Mydia.Repo.Migrations.Helpers do
               "foreign key cycle detected while rebuilding #{List.last(stack)}: " <>
                 Enum.join(Enum.reverse([child | stack]), " -> ")
 
-        MapSet.member?(visited, child) ->
+        Map.has_key?(visited, child) ->
           {acc, visited}
 
         true ->
           {acc, visited} =
-            collect_fk_children(child, graph, [child | stack], acc, MapSet.put(visited, child))
+            collect_fk_children(child, graph, [child | stack], acc, Map.put(visited, child, true))
 
           {acc ++ [child], visited}
       end

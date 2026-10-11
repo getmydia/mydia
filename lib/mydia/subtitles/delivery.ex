@@ -93,8 +93,14 @@ defmodule Mydia.Subtitles.Delivery do
   # the guard against serving a stale body after an offset changes, and it is
   # the one part of that path a test can reach without a real media file on
   # disk and a working ffmpeg. Not part of the module's contract.
-  @spec cache_path(binary(), integer(), File.Stat.t(), String.t(), integer()) :: String.t()
-  def cache_path(media_file_id, track_id, %File.Stat{mtime: mtime, size: size}, format, offset_ms) do
+  @spec cache_path(
+          binary(),
+          integer(),
+          %{optional(atom()) => term(), mtime: term(), size: non_neg_integer()},
+          String.t(),
+          integer()
+        ) :: String.t()
+  def cache_path(media_file_id, track_id, %{mtime: mtime, size: size}, format, offset_ms) do
     stamp = :erlang.phash2({mtime, size, offset_ms})
     Path.join([cache_dir(), media_file_id, "#{track_id}-#{stamp}.#{format}"])
   end
@@ -143,15 +149,15 @@ defmodule Mydia.Subtitles.Delivery do
 
   @doc false
   # The ffmpeg input for a media file (a local path or a presigned URL) with a
-  # `File.Stat` carrying the size and mtime the cache keys are stamped with.
+  # `Storage.Entry` carrying the size and mtime the cache keys are stamped with.
   # Shared with `Mydia.Subtitles.ImageTrack`.
   @spec media_input(MediaFile.t()) ::
-          {:ok, String.t(), File.Stat.t()} | {:error, :media_file_not_found}
+          {:ok, String.t(), Storage.Entry.t()} | {:error, :media_file_not_found}
   def media_input(media_file) do
     with {:ok, source} <- Storage.source(media_file),
          {:ok, input} <- Storage.input(source),
-         {:ok, %{size: size, mtime: mtime}} <- Storage.stat(source) do
-      {:ok, input, %File.Stat{size: size, mtime: mtime}}
+         {:ok, entry} <- Storage.stat(source) do
+      {:ok, input, entry}
     else
       {:error, _} -> {:error, :media_file_not_found}
     end
