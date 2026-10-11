@@ -6,7 +6,7 @@ defmodule Mydia.Jobs.DeleteImportCandidates do
   `Jobs.ApplyImportCandidates` and `Jobs.RematchImportCandidates`, so this job
   carries only the library path and discovers its own work. It shares their
   queue and uniqueness reasoning, including where the narrowed `unique`
-  `states:` list lives (`Mydia.ImportCandidates`' private `enqueue/2`). The
+  `states:` list lives (`Mydia.ImportCandidates.Store.enqueue/2`). The
   three never contend for a row: a candidate carries at most one `queued_op`
   and each worker drains only its own value.
 

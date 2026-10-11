@@ -515,7 +515,7 @@ Two traps when reading this module. `promote_group/3` does
 `candidates = Enum.sort_by(candidates, & &1.id)` and rebinds before
 `commit_group`, `lock_group` and `lock_candidates` see the list, so `ids` is
 always id-ascending and matches the locking query's `order_by(asc: candidate.id)`
-even though `ImportCandidates.load_all_members/2` hands `accept_group/2` its
+even though `ImportCandidates.Review.load_all_members/2` hands `ImportCandidates.AcceptQueue.accept_group/2` its
 members ordered by `relative_path`. Reading the caller chain without reading
 `promote_group`'s body above its `with` produces a convincing but wrong "order
 mismatch" theory. And `candidate_promotion_test.exs`'s two-candidate test asserts
