@@ -29,6 +29,7 @@ defmodule Mydia.Indexers.CardigannDefinition do
           definition: String.t() | nil,
           schema_version: String.t() | nil,
           enabled: boolean(),
+          in_library: boolean(),
           config: map() | nil,
           last_synced_at: DateTime.t() | nil,
           health_status: String.t(),
@@ -57,6 +58,7 @@ defmodule Mydia.Indexers.CardigannDefinition do
     field :definition, :string
     field :schema_version, :string
     field :enabled, :boolean, default: false
+    field :in_library, :boolean, default: false
     field :config, Mydia.Settings.JsonMapType
     field :last_synced_at, :utc_datetime
 
@@ -95,6 +97,7 @@ defmodule Mydia.Indexers.CardigannDefinition do
       :definition,
       :schema_version,
       :enabled,
+      :in_library,
       :config,
       :last_synced_at,
       :flaresolverr_required,
@@ -114,12 +117,32 @@ defmodule Mydia.Indexers.CardigannDefinition do
   end
 
   @doc """
-  Changeset for enabling/disabling an indexer.
+  Changeset for enabling/disabling an indexer. Only a definition in the
+  library can be enabled.
   """
   def toggle_changeset(definition, attrs) do
     definition
     |> cast(attrs, [:enabled])
     |> validate_required([:enabled])
+    |> validate_enabled_in_library()
+  end
+
+  @doc """
+  Changeset for adding a definition to, or removing it from, the library.
+  """
+  def membership_changeset(definition, attrs) do
+    definition
+    |> cast(attrs, [:in_library, :enabled])
+    |> validate_required([:in_library, :enabled])
+    |> validate_enabled_in_library()
+  end
+
+  defp validate_enabled_in_library(changeset) do
+    if get_field(changeset, :enabled) and not get_field(changeset, :in_library) do
+      add_error(changeset, :enabled, "add the indexer before enabling it")
+    else
+      changeset
+    end
   end
 
   @doc """
