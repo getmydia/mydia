@@ -1,0 +1,97 @@
+defmodule Mydia.Indexers.Cardigann.Charset do
+  @moduledoc """
+  Converts between UTF-8 and the single-byte charset a Cardigann definition
+  declares in `encoding:`.
+
+  Responses are decoded before parsing: lexbor and SweetXml both expect UTF-8,
+  and raw windows-1251 bytes used to crash the HTML parser outright. Outgoing
+  keywords are encoded the other way, because a windows-1251 tracker reads
+  `%D0%9F` (UTF-8 for "П") as two unrelated characters.
+
+  The compiled set lives in `config :codepagex, :encodings`; keep it in sync
+  with `@names` below.
+  """
+
+  require Logger
+
+  @names %{
+    "ISO88591" => "ISO8859/8859-1",
+    "LATIN1" => "ISO8859/8859-1",
+    "ISO88592" => "ISO8859/8859-2",
+    "TIS620" => "ISO8859/8859-11",
+    "ISO885911" => "ISO8859/8859-11",
+    "WINDOWS874" => "VENDORS/MICSFT/WINDOWS/CP874",
+    "WINDOWS1250" => "VENDORS/MICSFT/WINDOWS/CP1250",
+    "WINDOWS1251" => "VENDORS/MICSFT/WINDOWS/CP1251",
+    "WINDOWS1252" => "VENDORS/MICSFT/WINDOWS/CP1252",
+    "CP1252" => "VENDORS/MICSFT/WINDOWS/CP1252",
+    "WINDOWS1255" => "VENDORS/MICSFT/WINDOWS/CP1255",
+    "WINDOWS1256" => "VENDORS/MICSFT/WINDOWS/CP1256"
+  }
+
+  @doc """
+  Decodes `body` from `encoding` to UTF-8.
+
+  Returns `body` unchanged when the encoding is nil, UTF-8 or not supported
+  (the unsupported case logs a warning). Bytes with no mapping in the charset
+  become U+FFFD.
+  """
+  @spec decode(binary(), String.t() | nil) :: String.t()
+  def decode(body, encoding) when is_binary(body) do
+    case codepage(encoding) do
+      :utf8 ->
+        body
+
+      nil ->
+        Logger.warning("Cardigann: unsupported encoding #{inspect(encoding)}, using the raw body")
+        body
+
+      name ->
+        case Codepagex.to_string(body, name, Codepagex.use_utf_replacement()) do
+          {:ok, utf8, _replaced} ->
+            utf8
+
+          {:error, reason, _acc} ->
+            Logger.warning("Cardigann: could not decode #{encoding}: #{inspect(reason)}")
+            body
+        end
+    end
+  end
+
+  @doc """
+  Encodes a UTF-8 `value` into `encoding`, the inverse of `decode/2`.
+
+  Returns `value` unchanged when the encoding is nil, UTF-8 or unsupported, and
+  when the value holds a character the charset cannot represent.
+  """
+  @spec encode(String.t(), String.t() | nil) :: binary()
+  def encode(value, encoding) when is_binary(value) do
+    case codepage(encoding) do
+      name when is_binary(name) ->
+        case Codepagex.from_string(value, name) do
+          {:ok, bytes} -> bytes
+          {:error, _} -> value
+        end
+
+      _ ->
+        value
+    end
+  end
+
+  defp codepage(nil), do: :utf8
+
+  defp codepage(encoding) when is_binary(encoding) do
+    normalized = encoding |> String.upcase() |> String.replace(["-", "_"], "")
+
+    if normalized in ["UTF8", ""] do
+      :utf8
+    else
+      with name when is_binary(name) <- Map.get(@names, normalized) do
+        # Codepagex resolves string names with String.to_existing_atom/1, so its
+        # mapping module (which defines those atoms) must be loaded first.
+        Code.ensure_loaded(Codepagex.Mappings)
+        name
+      end
+    end
+  end
+end

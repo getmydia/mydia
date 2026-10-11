@@ -20,6 +20,26 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
   end
 
   describe "build_search_url/2" do
+    test "keywords are percent-encoded in the definition's charset" do
+      definition = %Parsed{
+        id: "cp1251-test",
+        name: "cp1251",
+        links: ["https://example.invalid"],
+        encoding: "windows-1251",
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "/s/{{ .Keywords }}"}],
+          inputs: %{},
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, "https://example.invalid/s/%CF%F0%E8%E2%E5%F2"} =
+               CardigannSearchEngine.build_search_url(definition, query: "Привет")
+    end
+
     test "builds URL with simple keyword substitution" do
       definition = %Parsed{
         id: "test",

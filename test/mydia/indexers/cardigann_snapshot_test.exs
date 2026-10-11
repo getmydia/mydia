@@ -349,6 +349,20 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
   end
 
   # ============================================================================
+  # MegaPeer - windows-1251 response body
+  # ============================================================================
+
+  describe "MegaPeer snapshot" do
+    @tag :snapshot
+    test "megapeer: windows-1251 page parses" do
+      run_snapshot(Path.join(@fixtures_base, "megapeer"),
+        min_results: 2,
+        assertions: fn [first | _] -> assert String.valid?(first.title) end
+      )
+    end
+  end
+
+  # ============================================================================
   # Definition-only tests (no response fixture - just validate parsing)
   # ============================================================================
 

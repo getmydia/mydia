@@ -58,6 +58,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
       {:ok, results} = CardigannResultParser.parse_results(definition, response)
   """
 
+  alias Mydia.Indexers.Cardigann.Charset
   alias Mydia.Indexers.Cardigann.JsonPath
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.SearchResult
@@ -222,8 +223,8 @@ defmodule Mydia.Indexers.CardigannResultParser do
         base_url \\ "",
         category_mappings \\ []
       ) do
-    # Convert encoding if needed (e.g., ISO-8859-1 → UTF-8)
-    converted_body = maybe_convert_encoding(html_body, definition.encoding)
+    # Convert encoding if needed (e.g., windows-1251 → UTF-8)
+    converted_body = Charset.decode(html_body, definition.encoding)
 
     with {:ok, document} <- parse_html_document(converted_body),
          {:ok, rows} <- extract_rows(document, definition.search, template_context) do
@@ -372,7 +373,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
         base_url \\ "",
         category_mappings \\ []
       ) do
-    converted_body = maybe_convert_encoding(xml_body, definition.encoding)
+    converted_body = Charset.decode(xml_body, definition.encoding)
 
     with {:ok, doc} <- parse_xml_document(converted_body),
          {:ok, rows} <- extract_xml_rows(doc, definition.search, template_context) do
@@ -1977,36 +1978,5 @@ defmodule Mydia.Indexers.CardigannResultParser do
         # Default to HTML for ambiguous cases
         :html
     end
-  end
-
-  # Encoding conversion - handles non-UTF-8 responses from some indexers
-  defp maybe_convert_encoding(body, encoding) when is_binary(body) and is_binary(encoding) do
-    normalized = encoding |> String.upcase() |> String.replace("-", "")
-
-    if normalized in ["UTF8", ""] do
-      body
-    else
-      convert_from_latin1(body, normalized)
-    end
-  end
-
-  defp maybe_convert_encoding(body, _encoding), do: body
-
-  # Convert ISO-8859-1/Windows-1252 to UTF-8 (covers most non-UTF-8 indexers)
-  defp convert_from_latin1(body, encoding)
-       when encoding in ["ISO88591", "LATIN1", "WINDOWS1252", "CP1252"] do
-    body
-    |> :binary.bin_to_list()
-    |> Enum.map(fn byte -> <<byte::utf8>> end)
-    |> IO.iodata_to_binary()
-  rescue
-    _ ->
-      Logger.warning("Failed to convert encoding #{encoding}, using raw body")
-      body
-  end
-
-  defp convert_from_latin1(body, encoding) do
-    Logger.debug("Unknown encoding #{encoding}, using raw body")
-    body
   end
 end

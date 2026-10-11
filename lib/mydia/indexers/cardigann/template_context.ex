@@ -1,6 +1,7 @@
 defmodule Mydia.Indexers.Cardigann.TemplateContext do
   @moduledoc false
 
+  alias Mydia.Indexers.Cardigann.Charset
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannFilters
 
@@ -12,7 +13,9 @@ defmodule Mydia.Indexers.Cardigann.TemplateContext do
       |> CardigannFilters.apply_keywords_filters(definition)
 
     %{
-      keywords: query,
+      # Encoded last so the site gets the charset's bytes once the template
+      # percent-encodes them. `query.series` below stays UTF-8 text.
+      keywords: Charset.encode(query, definition.encoding),
       config: Keyword.get(opts, :config, %{}),
       query: %{
         series: query,
