@@ -751,14 +751,14 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       >
         <.icon name="hero-information-circle" class={@icon} />
       </button>
-      <div class="dropdown dropdown-end">
+      <div class="dropdown dropdown-end z-20">
         <div tabindex="0" role="button" class={@square} aria-label="More file actions" title="More">
           <.icon name="hero-ellipsis-horizontal" class={@icon} />
         </div>
         <ul
           id={"file-actions-menu-#{@file.id}"}
           tabindex="0"
-          class="dropdown-content menu bg-base-100 rounded-box z-[1] w-56 p-2 shadow-lg border border-base-300 ms-0 whitespace-normal before:hidden"
+          class="dropdown-content menu bg-base-100 rounded-box w-56 p-2 shadow-lg border border-base-300 ms-0 whitespace-normal before:hidden"
         >
           <li>
             <button
