@@ -224,6 +224,26 @@ defmodule Mydia.Plugins.Net.GateTest do
       refute inspect(event.metadata) =~ "SECRETKEY"
     end
 
+    test ":redacted survives a hostless or unparseable URL" do
+      for {slug, url} <- [{"audit-nohost", "not a url"}, {"audit-badscheme", "http://"}] do
+        assert {:error, %Error{type: :invalid_url}} =
+                 Gate.request(url, allowed_hosts: [], slug: slug, audit: :redacted)
+
+        assert [event] = audit_events(slug)
+        assert event.metadata["url"] == "[unparseable url]"
+      end
+    end
+
+    test "an unknown audit value raises instead of recording the full URL" do
+      for bad <- [nil, true, :ful, "full"] do
+        assert_raise ArgumentError, ~r/invalid :audit option/, fn ->
+          denied_request("audit-bad", audit: bad)
+        end
+      end
+
+      assert audit_events("audit-bad") == []
+    end
+
     test "false writes no event" do
       denied_request("audit-off", audit: false)
       assert audit_events("audit-off") == []
