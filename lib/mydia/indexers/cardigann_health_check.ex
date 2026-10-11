@@ -14,6 +14,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   - Consecutive failure tracking
   """
 
+  import Ecto.Query, only: [from: 2]
+
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.Links
@@ -559,7 +561,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     end
   end
 
-  defp update_health_status(definition, result) do
+  @doc false
+  def update_health_status(definition, result) do
     now = DateTime.utc_now()
 
     attrs =
@@ -578,9 +581,24 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
         }
       end
 
-    definition
-    |> CardigannDefinition.health_check_changeset(attrs)
-    |> Repo.update()
+    changeset = CardigannDefinition.health_check_changeset(definition, attrs)
+
+    # The probe takes seconds and works on a struct loaded before it started. A
+    # search may have set needs_login meanwhile, and only a login clears it, so
+    # the write is conditional on the row's current status, not the struct's.
+    with true <- changeset.valid?,
+         {1, _} <-
+           Repo.update_all(
+             from(d in CardigannDefinition,
+               where: d.id == ^definition.id and d.health_status != "needs_login"
+             ),
+             set: Map.to_list(changeset.changes)
+           ) do
+      {:ok, Repo.get!(CardigannDefinition, definition.id)}
+    else
+      false -> {:error, changeset}
+      {0, _} -> {:ok, Repo.get!(CardigannDefinition, definition.id)}
+    end
   end
 
   defp ok_entry(http_status) do

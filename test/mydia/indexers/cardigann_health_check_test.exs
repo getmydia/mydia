@@ -9,6 +9,7 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Repo
 
+  import Ecto.Query
   import Mydia.IndexersFixtures
 
   describe "test_connection/2" do
@@ -114,6 +115,36 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       reloaded = Repo.get!(CardigannDefinition, definition.id)
       assert reloaded.health_status == "needs_login"
       assert reloaded.consecutive_failures in [0, nil]
+    end
+
+    test "a probe result never overwrites a needs_login set while it ran" do
+      definition = cardigann_definition_fixture(%{enabled: true})
+
+      # The struct was loaded before the probe; a concurrent search then parks the row.
+      Repo.update_all(
+        from(d in CardigannDefinition, where: d.id == ^definition.id),
+        set: [health_status: "needs_login"]
+      )
+
+      result = %{success: true, status: "healthy"}
+      CardigannHealthCheck.update_health_status(definition, result)
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      assert reloaded.health_status == "needs_login"
+      assert reloaded.last_health_check_at == nil
+    end
+
+    test "a probe result still updates a definition that is not parked" do
+      definition = cardigann_definition_fixture(%{enabled: true})
+
+      assert {:ok, updated} =
+               CardigannHealthCheck.update_health_status(definition, %{
+                 success: true,
+                 status: "healthy"
+               })
+
+      assert updated.health_status == "healthy"
+      assert Repo.get!(CardigannDefinition, definition.id).health_status == "healthy"
     end
 
     test "tracks consecutive failures" do
