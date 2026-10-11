@@ -382,11 +382,10 @@ defmodule MydiaWeb.Api.HlsController do
   and returns the master playlist URL.
 
   POST /api/v1/hls/start
-  Body: {"media_file_id": 123}
+  Body: {"media_file_id": "<media file UUID>"}
   """
   def start_session(conn, %{"media_file_id" => media_file_id}) do
     with {:ok, user_id} <- get_user_id(conn),
-         {media_file_id, ""} <- Integer.parse(to_string(media_file_id)),
          :ok <- authorize_media_file(conn, media_file_id),
          session_opts <- audio_session_opts(user_id, media_file_id),
          {:ok, _pid} <-
@@ -431,11 +430,6 @@ defmodule MydiaWeb.Api.HlsController do
         conn
         |> put_status(:internal_server_error)
         |> json(%{error: "Failed to start HLS session"})
-
-      :error ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{error: "Invalid media_file_id"})
     end
   end
 
