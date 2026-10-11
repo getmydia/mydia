@@ -3,9 +3,6 @@ defmodule Mydia.System do
   System information helpers for application version, environment, etc.
   """
 
-  # Capture the environment at compile time so it's available in releases
-  @env Mix.env()
-
   # Capture build commit at compile time (set via BUILD_COMMIT env var during Docker builds)
   @build_commit System.get_env("BUILD_COMMIT")
 
@@ -35,11 +32,10 @@ defmodule Mydia.System do
   @doc """
   Check if running in development mode.
   """
-  def dev_mode?, do: dev_env?(@env)
+  def dev_mode?, do: Application.get_env(:mydia, :env) == :dev
 
-  # The three helpers below are public so they are analysed against any input
-  # rather than the single compile-time value the module attributes hold, and so
-  # tests can drive each branch without recompiling with a different environment.
+  # The two helpers below are public so tests can drive the commit formatting
+  # directly, without recompiling with a different BUILD_COMMIT.
 
   @doc false
   @spec version_with_commit(String.t(), String.t() | nil) :: String.t()
@@ -54,8 +50,4 @@ defmodule Mydia.System do
   @spec normalize_commit(String.t() | nil) :: String.t() | nil
   def normalize_commit(""), do: nil
   def normalize_commit(commit), do: commit
-
-  @doc false
-  @spec dev_env?(atom()) :: boolean()
-  def dev_env?(env), do: env == :dev
 end

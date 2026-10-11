@@ -22,8 +22,8 @@ defmodule Mydia.SystemTest do
     end
   end
 
-  test "dev_env?/1 is true only for :dev" do
-    assert MydiaSystem.dev_env?(:dev)
-    refute MydiaSystem.dev_env?(:prod)
+  test "dev_mode?/0 follows the :env the build was configured with" do
+    refute MydiaSystem.dev_mode?()
+    assert Application.get_env(:mydia, :env) == :test
   end
 end
