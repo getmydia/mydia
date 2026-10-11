@@ -1789,6 +1789,49 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       assert result.title == "Debian 12 ISO"
     end
+
+    test "bare attribute selectors match torznab:attr elements" do
+      xml = """
+      <?xml version="1.0"?>
+      <rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel>
+        <item><title>Copper Lantern S01E02</title><link>magnet:?xt=urn:btih:1111111111111111111111111111111111111111</link>
+          <torznab:attr name="seeders" value="12"/></item>
+      </channel></rss>
+      """
+
+      definition = %Parsed{
+        id: "xml-attr",
+        name: "XML Attr",
+        type: "public",
+        links: ["https://example.invalid"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/rss", response: %{type: "xml"}}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "rss > channel > item"},
+          fields: %{
+            "title" => %{selector: "title"},
+            "download" => %{selector: "link"},
+            "seeders" => %{selector: "[name=seeders]", attribute: "value"}
+          }
+        }
+      }
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: xml},
+                 "XML Attr",
+                 template_context: %{},
+                 base_url: "https://example.invalid"
+               )
+
+      assert result.seeders == 12
+    end
   end
 
   describe "rows.missingAttributeEqualsNoResults" do

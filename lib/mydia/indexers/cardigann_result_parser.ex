@@ -746,6 +746,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
     # Handle download/download2 fallback pattern
     download = field_values[:download] || field_values["download"]
     download2 = field_values[:download2] || field_values["download2"]
+    magnet = field_values[:magnet] || field_values["magnet"]
 
     cond do
       download && download != "" ->
@@ -756,6 +757,14 @@ defmodule Mydia.Indexers.CardigannResultParser do
         |> Map.put(:download, download2)
         |> Map.delete(:download2)
         |> Map.delete("download2")
+
+      # Definitions such as nekobt name the link `magnet` (it holds a magnet or
+      # a torrent URL) and have no `download` field.
+      is_binary(magnet) and magnet != "" ->
+        field_values
+        |> Map.put(:download, magnet)
+        |> Map.delete(:magnet)
+        |> Map.delete("magnet")
 
       true ->
         field_values
@@ -1353,7 +1362,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
       |> String.replace(" > ", "/")
       |> String.replace(" ", "")
 
-    prefix <> normalized
+    prefix <> css_attrs_to_xpath(normalized)
   end
 
   defp xml_field_spec(".", attribute) when is_binary(attribute) and attribute != "" do
@@ -1373,9 +1382,29 @@ defmodule Mydia.Indexers.CardigannResultParser do
     xml_string_spec("./#{selector}/text()")
   end
 
+  # CSS attribute predicates as Cardigann XML definitions write them
+  # ([name=seeders], [name="seeders"], [name]) to XPath. A predicate with no
+  # element before it gets the wildcard step AngleSharp implies, which also
+  # matches namespaced elements such as torznab:attr. Predicates that already
+  # start with `@`, a digit or a function call are left alone.
+  defp css_attrs_to_xpath(selector) do
+    selector
+    |> then(&Regex.replace(~r/(^|\/)\[/, &1, "\\1*["))
+    |> then(&Regex.replace(~r/\[([A-Za-z_][\w:.-]*)\]/, &1, "[@\\1]"))
+    |> then(
+      &Regex.replace(
+        ~r/\[([A-Za-z_][\w:.-]*)=(?:"([^"]*)"|'([^']*)'|([^\]"']*))\]/,
+        &1,
+        fn _full, name, double, single, bare ->
+          "[@#{name}='#{double <> single <> bare}']"
+        end
+      )
+    )
+  end
+
   defp xml_string_spec(path) do
     %SweetXpath{
-      path: String.to_charlist(path),
+      path: path |> css_attrs_to_xpath() |> String.to_charlist(),
       is_value: true,
       is_list: false,
       is_keyword: false,

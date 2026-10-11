@@ -435,6 +435,20 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
     end
   end
 
+  describe "XML bare attribute selectors" do
+    @tag :snapshot
+    test "nekobt: torznab attributes parse" do
+      run_snapshot("test/fixtures/cardigann/nekobt",
+        min_results: 2,
+        assertions: fn [first, second | _] ->
+          assert first.seeders == 12
+          assert second.seeders == 7
+          assert first.leechers == 3
+        end
+      )
+    end
+  end
+
   # These trackers returned zero or wrong rows while the HTML path ran on Floki,
   # which builds no implied <tbody>, mis-evaluates nested :has()/:not(:has()) and
   # has no :scope. Each fixture is a reduction of a live capture.

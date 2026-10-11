@@ -31,7 +31,7 @@ defmodule Mydia.CardigannSnapshotHelper do
 
   The directory must contain:
   - `definition.yml` - The Cardigann YAML definition
-  - `response.html` or `response.json` - The saved search response
+  - `response.html`, `response.json` or `response.xml` - The saved search response
 
   Optionally:
   - `metadata.json` - Query metadata (keywords, expected count, etc.)
@@ -323,10 +323,12 @@ defmodule Mydia.CardigannSnapshotHelper do
   defp load_response_fixture(fixture_dir) do
     html_path = Path.join(fixture_dir, "response.html")
     json_path = Path.join(fixture_dir, "response.json")
+    xml_path = Path.join(fixture_dir, "response.xml")
 
     cond do
       File.exists?(html_path) -> {File.read!(html_path), :html}
       File.exists?(json_path) -> {File.read!(json_path), :json}
+      File.exists?(xml_path) -> {File.read!(xml_path), :xml}
       true -> raise "No response fixture found in #{fixture_dir}"
     end
   end
