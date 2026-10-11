@@ -143,4 +143,43 @@ defmodule MydiaWeb.AdminIndexersLive.LoginFlowTest do
     view |> element("#indexer-login-cancel") |> render_click()
     refute has_element?(view, "#indexer-login-modal")
   end
+
+  test "closing the modal while the login is in flight drops the result", %{
+    conn: conn,
+    bypass: bypass,
+    definition: d
+  } do
+    test_pid = self()
+
+    Bypass.stub(bypass, "GET", "/login.php", fn conn ->
+      # The client is cancelled mid-request, which kills this handler; don't let
+      # Bypass report that as a test failure.
+      Process.flag(:trap_exit, true)
+      send(test_pid, :landing_hit)
+      Process.sleep(300)
+
+      Plug.Conn.resp(
+        conn,
+        200,
+        ~s(<form action="/t"><input name="username"></form><img class="c" src="/c.png">)
+      )
+    end)
+
+    Bypass.stub(bypass, "GET", "/c.png", fn conn ->
+      conn |> Plug.Conn.put_resp_content_type("image/png") |> Plug.Conn.resp(200, "PNG")
+    end)
+
+    {:ok, view, _} = live(conn, ~p"/admin/indexers")
+    view |> element("#indexer-login-#{d.id}") |> render_click()
+    # Close once the request is really in flight (no modal is rendered yet).
+    assert_receive :landing_hit, 2_000
+    render_click(view, "indexer_login_close", %{})
+    # The cancelled task never reports back, so wait out the slow request instead.
+    Process.sleep(500)
+    render(view)
+
+    assert Process.alive?(view.pid)
+    refute has_element?(view, "#indexer-login-modal")
+    assert {:error, _} = CardigannAuth.get_stored_session(d.id)
+  end
 end

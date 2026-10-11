@@ -32,7 +32,8 @@ defmodule MydiaWeb.AdminIndexersLive.LoginFlow do
     {:halt, socket |> assign(login_definition: definition, login_error: nil) |> begin()}
   end
 
-  defp handle_event("indexer_login_refresh", _params, socket), do: {:halt, begin(socket)}
+  defp handle_event("indexer_login_refresh", _params, socket),
+    do: {:halt, socket |> assign(login_error: nil) |> begin()}
 
   defp handle_event("indexer_login_submit", %{"login" => answers}, socket) do
     challenge = socket.assigns.login_challenge
@@ -43,8 +44,20 @@ defmodule MydiaWeb.AdminIndexersLive.LoginFlow do
      |> start_async(@complete, fn -> Login.complete(challenge, answers) end)}
   end
 
-  defp handle_event("indexer_login_close", _params, socket), do: {:halt, reset(socket)}
+  defp handle_event("indexer_login_close", _params, socket) do
+    {:halt,
+     socket
+     |> cancel_async(@begin)
+     |> cancel_async(@complete)
+     |> reset()}
+  end
+
   defp handle_event(_event, _params, socket), do: {:cont, socket}
+
+  # The modal was closed while the request ran: drop the late result.
+  defp handle_async(name, _result, %{assigns: %{login_definition: nil}} = socket)
+       when name in [@begin, @complete],
+       do: {:halt, socket}
 
   # A rejected answer: a fresh attempt gives a new image and keeps the modal open.
   defp handle_async(@complete, {:ok, {:error, error}}, socket),
