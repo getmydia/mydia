@@ -7,6 +7,8 @@ defmodule Mydia.Indexers.Cardigann.LoggedOut do
   so any redirect means the tracker sent us to its login page.
   """
 
+  require Logger
+
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.{Charset, Selector}
   alias Mydia.Indexers.CardigannDefinition.Parsed
@@ -83,10 +85,20 @@ defmodule Mydia.Indexers.Cardigann.LoggedOut do
 
   # A selector lexbor rejects cannot say anything about the page, so it never
   # reads as logged out.
-  defp missing?(%Parsed{encoding: encoding}, body, selector) do
+  defp missing?(%Parsed{encoding: encoding, id: id}, body, selector) do
     document = body |> Charset.decode(encoding) |> Selector.parse([selector])
     Selector.find(document, :root, selector) == []
   rescue
-    ArgumentError -> false
+    error in ArgumentError ->
+      if Selector.selector_error?(error) do
+        Logger.warning(
+          "Cardigann #{id}: login test selector #{inspect(selector)} is invalid, " <>
+            "so the session is not treated as logged out: #{Exception.message(error)}"
+        )
+
+        false
+      else
+        reraise error, __STACKTRACE__
+      end
   end
 end

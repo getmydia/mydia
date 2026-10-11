@@ -217,16 +217,24 @@ defmodule Mydia.Indexers.CardigannDownload do
   end
 
   defp match_download_selectors(definition, selectors, download_url, response, variables, config) do
-    selectors
-    |> Enum.find_value(fn selector ->
-      case match_selector(definition, response, selector, variables, "download link") do
-        {:ok, link} when is_binary(link) and link != "" -> link
-        _ -> nil
-      end
+    results =
+      Enum.map(selectors, &match_selector(definition, response, &1, variables, "download link"))
+
+    results
+    |> Enum.find_value(fn
+      {:ok, link} when is_binary(link) and link != "" -> link
+      _ -> nil
     end)
     |> case do
       nil ->
-        {:error, {:cardigann_download, "no download selector matched the response"}}
+        # A definition bug (invalid selector) is more useful than the generic miss.
+        invalid =
+          Enum.find_value(results, fn
+            {:error, {:cardigann_download, "Invalid selector" <> _}} = error -> error
+            _ -> nil
+          end)
+
+        invalid || {:error, {:cardigann_download, "no download selector matched the response"}}
 
       link ->
         # Many definitions point their download selector straight at a magnet.
@@ -256,7 +264,8 @@ defmodule Mydia.Indexers.CardigannDownload do
     filters = Map.get(selector, :filters) || []
 
     with {:ok, selector_text} <- render(Map.get(selector, :selector), variables),
-         {:ok, raw} <- extract(body, selector_text, Map.get(selector, :attribute), label),
+         {:ok, raw} <-
+           extract(definition, body, selector_text, Map.get(selector, :attribute), label),
          {:ok, value} <- CardigannResultParser.apply_filters(raw, filters, variables) do
       case String.trim(value) do
         "" -> {:error, {:cardigann_download, "#{label} selector matched an empty value"}}
@@ -265,12 +274,12 @@ defmodule Mydia.Indexers.CardigannDownload do
     end
   end
 
-  defp extract(body, selector_text, _attribute, _label)
+  defp extract(_definition, body, selector_text, _attribute, _label)
        when selector_text in @whole_document_selectors do
     {:ok, body}
   end
 
-  defp extract(body, selector_text, attribute, label) do
+  defp extract(definition, body, selector_text, attribute, label) do
     document = Selector.parse(body, [selector_text])
 
     case Selector.find(document, :root, selector_text) do
@@ -282,9 +291,13 @@ defmodule Mydia.Indexers.CardigannDownload do
     end
   rescue
     error in ArgumentError ->
-      {:error,
-       {:cardigann_download,
-        "Invalid selector in the #{label} definition: #{Exception.message(error)}"}}
+      if Selector.selector_error?(error) do
+        {:error,
+         {:cardigann_download,
+          "Invalid selector in the #{definition.id} definition (#{label}): #{Exception.message(error)}"}}
+      else
+        reraise error, __STACKTRACE__
+      end
   end
 
   defp element_value(elements, nil), do: elements |> Selector.text() |> String.trim()

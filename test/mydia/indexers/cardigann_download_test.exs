@@ -310,8 +310,13 @@ defmodule Mydia.Indexers.CardigannDownloadTest do
       definition = definition_with_selector(bypass.port, "a[")
       url = "http://localhost:#{bypass.port}/info/1"
 
-      assert {:error, {:cardigann_download, _message}} =
+      assert {:error, {:cardigann_download, message}} =
                CardigannDownload.resolve(definition, url)
+
+      assert message =~ "Invalid selector"
+      assert message =~ "selectortest"
+      assert message =~ ~s(invalid selector "a[")
+      refute message =~ "no download selector matched"
     end
   end
 

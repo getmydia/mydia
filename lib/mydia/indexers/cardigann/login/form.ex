@@ -57,11 +57,20 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
       end
     end
   rescue
-    error in ArgumentError -> {:error, invalid_selector(error)}
+    error in ArgumentError -> {:error, invalid_selector(error, __STACKTRACE__, parsed.id)}
   end
 
-  defp invalid_selector(error) do
-    Error.invalid_config("Invalid selector in the login definition: #{Exception.message(error)}")
+  # Selector raises ArgumentError for a selector lexbor rejects ("invalid selector ...")
+  # or an undeclared :contains ("selector ... uses ..."). Any other ArgumentError is a
+  # bug elsewhere and must not be mislabelled as a definition problem.
+  defp invalid_selector(error, stacktrace, definition_id) do
+    if Selector.selector_error?(error) do
+      Error.invalid_config(
+        "Invalid selector in the #{definition_id} login definition: #{Exception.message(error)}"
+      )
+    else
+      reraise error, stacktrace
+    end
   end
 
   @spec complete(Challenge.t(), map()) :: {:ok, Session.t()} | {:error, Error.t()}
@@ -85,7 +94,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
       {:ok, %Session{method: :form, cookies: Http.cookies(ctx)}}
     end
   rescue
-    error in ArgumentError -> {:error, invalid_selector(error)}
+    error in ArgumentError -> {:error, invalid_selector(error, __STACKTRACE__, parsed.id)}
   end
 
   # Every selector the strategy will run goes to Selector.parse/2 up front, so any

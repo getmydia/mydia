@@ -1,6 +1,8 @@
 defmodule Mydia.Indexers.Cardigann.Login.Verify do
   @moduledoc "Applies a definition's `login.error` and `login.test` blocks to a login response."
 
+  require Logger
+
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.{Charset, Selector}
   alias Mydia.Indexers.Cardigann.Login.{Http, Inputs}
@@ -9,8 +11,8 @@ defmodule Mydia.Indexers.Cardigann.Login.Verify do
   @spec check(Parsed.t(), map(), map(), String.t()) :: {:ok, map()} | {:error, Error.t()}
   def check(%Parsed{login: login} = parsed, response, ctx, base_url) do
     with :ok <- check_status(response),
-         :ok <- check_errors(login.error, response.body, parsed.encoding) do
-      check_test(login.test, parsed.encoding, ctx, base_url)
+         :ok <- check_errors(login.error, response.body, parsed) do
+      check_test(login.test, parsed, ctx, base_url)
     end
   end
 
@@ -19,17 +21,26 @@ defmodule Mydia.Indexers.Cardigann.Login.Verify do
 
   defp check_status(_), do: :ok
 
-  defp check_errors(errors, _body, _encoding) when errors in [nil, []], do: :ok
+  defp check_errors(errors, _body, _parsed) when errors in [nil, []], do: :ok
 
-  defp check_errors(errors, body, encoding) when is_binary(body) do
-    document = Selector.parse(Charset.decode(body, encoding), error_selectors(errors))
+  defp check_errors(errors, body, parsed) when is_binary(body) do
+    document = Selector.parse(Charset.decode(body, parsed.encoding), error_selectors(errors))
     Enum.find_value(errors, :ok, fn error -> error_result(error, document) end)
   rescue
     # A selector lexbor rejects says nothing about the page, so it is not a login failure.
-    ArgumentError -> :ok
+    error in ArgumentError ->
+      if Selector.selector_error?(error) do
+        Logger.warning(
+          "Cardigann #{parsed.id}: login error selector ignored: #{Exception.message(error)}"
+        )
+
+        :ok
+      else
+        reraise error, __STACKTRACE__
+      end
   end
 
-  defp check_errors(_errors, _body, _encoding), do: :ok
+  defp check_errors(_errors, _body, _parsed), do: :ok
 
   # Every selector goes to Selector.parse/2 up front so `:contains` needles are declared.
   defp error_selectors(errors) do
@@ -61,14 +72,14 @@ defmodule Mydia.Indexers.Cardigann.Login.Verify do
 
   defp text(nodes), do: nodes |> Selector.text() |> String.trim()
 
-  defp check_test(nil, _encoding, ctx, _base), do: {:ok, ctx}
+  defp check_test(nil, _parsed, ctx, _base), do: {:ok, ctx}
 
-  defp check_test(%{selector: selector}, _encoding, ctx, _base) when selector in [nil, ""],
+  defp check_test(%{selector: selector}, _parsed, ctx, _base) when selector in [nil, ""],
     do: {:ok, ctx}
 
-  defp check_test(%{selector: selector} = test, encoding, ctx, base) do
+  defp check_test(%{selector: selector} = test, parsed, ctx, base) do
     with {:ok, resp, ctx} <- Http.request(ctx, :get, Inputs.resolve(base, test[:path] || "/"), []),
-         {:ok, found?} <- test_selector_matches?(resp.body, encoding, selector) do
+         {:ok, found?} <- test_selector_matches?(resp.body, parsed, selector) do
       if found?,
         do: {:ok, ctx},
         else:
@@ -79,14 +90,20 @@ defmodule Mydia.Indexers.Cardigann.Login.Verify do
     end
   end
 
-  defp test_selector_matches?(body, encoding, selector) do
-    document = body |> to_string() |> Charset.decode(encoding) |> Selector.parse([selector])
+  defp test_selector_matches?(body, parsed, selector) do
+    document =
+      body |> to_string() |> Charset.decode(parsed.encoding) |> Selector.parse([selector])
+
     {:ok, Selector.find(document, :root, selector) != []}
   rescue
     error in ArgumentError ->
-      {:error,
-       Error.authentication_failed(
-         "Invalid login test selector in the definition: #{Exception.message(error)}"
-       )}
+      if Selector.selector_error?(error) do
+        {:error,
+         Error.authentication_failed(
+           "Invalid login test selector in the #{parsed.id} definition: #{Exception.message(error)}"
+         )}
+      else
+        reraise error, __STACKTRACE__
+      end
   end
 end

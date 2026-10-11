@@ -392,8 +392,12 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
       run_snapshot("test/fixtures/cardigann/crackingpatching", min_results: 2)
     end
 
+    # The magnet in download_response.html is synthetic. This only proves that the
+    # magnet selector resolves on a details page shaped like the site's. The live
+    # crackingpatching page currently carries no magnet (known site drift, its
+    # definition's selector cannot match), so this does not cover the live grab.
     @tag :snapshot
-    test "crackingpatching: download selector resolves on the details page" do
+    test "crackingpatching: magnet selector resolves on a details page with a synthetic magnet" do
       run_download_snapshot("test/fixtures/cardigann/crackingpatching", expect: :magnet)
     end
   end

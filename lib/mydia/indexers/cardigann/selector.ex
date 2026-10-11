@@ -58,6 +58,17 @@ defmodule Mydia.Indexers.Cardigann.Selector do
     end
   end
 
+  @doc """
+  True when an `ArgumentError` came from a selector the definition got wrong
+  (lexbor rejected it, or a `:contains` needle was not declared), as opposed to
+  an unrelated bug that happens to raise `ArgumentError`.
+  """
+  @spec selector_error?(Exception.t()) :: boolean()
+  def selector_error?(%ArgumentError{message: message}),
+    do: String.starts_with?(message, ["invalid selector", "selector "])
+
+  def selector_error?(_), do: false
+
   @spec text([LazyHTML.t()]) :: String.t()
   def text(nodes), do: Enum.map_join(nodes, &LazyHTML.text/1)
 
