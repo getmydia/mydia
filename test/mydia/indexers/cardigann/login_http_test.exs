@@ -86,8 +86,13 @@ defmodule Mydia.Indexers.Cardigann.LoginHttpTest do
 
     ctx = Http.new_ctx(parsed(base, %{}), %{}, [])
 
-    assert {:error, %Error{type: :connection_failed}} =
+    assert {:error, %Error{type: :connection_failed, message: message}} =
              Http.request(ctx, :post, base <> "/login.php", form: %{})
+
+    # A DNS failure on elsewhere.example would give the same error type, so the
+    # message is what proves the origin check fired.
+    assert message =~ "https://elsewhere.example/steal"
+    assert message =~ "not one of this indexer's hosts"
   end
 
   test "refuses a cleartext non-loopback login URL" do
