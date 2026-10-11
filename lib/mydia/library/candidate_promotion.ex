@@ -7,6 +7,7 @@ defmodule Mydia.Library.CandidatePromotion do
   alias Mydia.{DB, Metadata, Repo}
   alias Mydia.Library.{EpisodeMinter, ImportCandidate, MediaFile, MetadataEnricher}
   alias Mydia.Media
+  alias Mydia.Media.ProviderSwitch
   alias Mydia.Settings.LibraryPath
   alias Mydia.Storage
   alias Mydia.Subtitles.Sidecars
@@ -20,6 +21,7 @@ defmodule Mydia.Library.CandidatePromotion do
 
     with :ok <- one_group?(candidates),
          {:ok, preparation} <- MetadataEnricher.prepare(match, config: config),
+         preparation = stamp_pin(preparation, hd(candidates)),
          {:ok, {media_files, media_item}} <-
            commit_group(candidates, snapshot, preparation, opts) do
       MetadataEnricher.finalize(media_item)
@@ -29,6 +31,30 @@ defmodule Mydia.Library.CandidatePromotion do
   end
 
   def promote_group([], _match, _opts), do: {:error, :empty_group}
+
+  # A show created on the provider its library does not use is pinned there,
+  # so Refresh keeps it on that provider. Only a create decides this: attaching
+  # files to a show that already exists is not a provider choice.
+  defp stamp_pin(
+         %{operation: :create, media_type: :tv_show, provider_type: provider} = preparation,
+         %ImportCandidate{library_path_id: library_path_id}
+       ) do
+    library_provider =
+      Repo.one(
+        from lp in LibraryPath, where: lp.id == ^library_path_id, select: lp.tv_metadata_source
+      )
+
+    attrs =
+      Map.put(
+        preparation.media_item_attrs,
+        :metadata_source_pinned,
+        ProviderSwitch.pin_for(provider, library_provider)
+      )
+
+    %{preparation | media_item_attrs: attrs}
+  end
+
+  defp stamp_pin(preparation, _candidate), do: preparation
 
   @doc """
   Attaches one candidate to an item that already exists: a movie
