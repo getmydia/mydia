@@ -256,7 +256,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   end
 
   # The engine prefixes every FlareSolverr failure with "FlareSolverr:" (see
-  # flaresolverr_error/2), so a crashed tab or a rejected cookie reads as the
+  # Cardigann.FlareSolverrFlow), so a crashed tab or a rejected cookie reads as the
   # challenge problem it is rather than as a generic search failure.
   @doc false
   def classify_probe_error(message) when is_binary(message) do

@@ -20,6 +20,13 @@ defmodule Mydia.Indexers.FlareSolverr do
       `Mydia.Config.Loader.reload/0` so the change takes effect without a restart
     * `config/config.yml` under the `flaresolverr` key
 
+  ## Concurrency
+
+  `max_concurrent_requests` caps the Chrome tabs FlareSolverr runs at once across
+  all indexers. Each one costs a few hundred MB; the default of 1 is what keeps a
+  small container from crashing tabs when several protected indexers search
+  together.
+
   ## Usage
 
       # Check if FlareSolverr is available
@@ -418,36 +425,25 @@ defmodule Mydia.Indexers.FlareSolverr do
     {:error, {:unexpected_response, body}}
   end
 
+  # Specific causes go first, because FlareSolverr wraps every failure in
+  # "Error solving the challenge". A row matches when the lowercased message
+  # contains every needle in it, so a rejected cookie needs both words.
+  @error_categories [
+    {["tab crashed"], :browser_crashed},
+    {["cookie", "domain"], :cookie_rejected},
+    {["timeout"], :challenge_timeout},
+    {["challenge"], :challenge_failed},
+    {["cloudflare"], :cloudflare_error},
+    {["captcha"], :captcha_required},
+    {["session"], :session_error}
+  ]
+
   defp categorize_error(message) when is_binary(message) do
     message_lower = String.downcase(message)
 
-    # Specific causes go first, because FlareSolverr wraps every failure in
-    # "Error solving the challenge".
-    cond do
-      String.contains?(message_lower, "tab crashed") ->
-        :browser_crashed
-
-      String.contains?(message_lower, "cookie") and String.contains?(message_lower, "domain") ->
-        :cookie_rejected
-
-      String.contains?(message_lower, "timeout") ->
-        :challenge_timeout
-
-      String.contains?(message_lower, "challenge") ->
-        :challenge_failed
-
-      String.contains?(message_lower, "cloudflare") ->
-        :cloudflare_error
-
-      String.contains?(message_lower, "captcha") ->
-        :captcha_required
-
-      String.contains?(message_lower, "session") ->
-        :session_error
-
-      true ->
-        :unknown_error
-    end
+    Enum.find_value(@error_categories, :unknown_error, fn {needles, category} ->
+      if Enum.all?(needles, &String.contains?(message_lower, &1)), do: category
+    end)
   end
 
   defp categorize_error(_), do: :unknown_error

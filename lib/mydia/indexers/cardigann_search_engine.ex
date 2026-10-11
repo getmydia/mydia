@@ -55,23 +55,18 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   """
 
   alias Mydia.Indexers.Cardigann.CredentialScope
+  alias Mydia.Indexers.Cardigann.FlareSolverrFlow
   alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Indexers.Cardigann.RequestHeaders
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.FlareSolverr
   alias Mydia.Indexers.FlareSolverr.ClearanceCache
-  alias Mydia.Indexers.FlareSolverr.Response, as: FlareSolverrResponse
 
   require Logger
 
   @max_search_candidates 3
-
-  # Req's own "req/x.y" user-agent is refused or served a different page by
-  # some public trackers. Prowlarr sends a desktop browser's string by default,
-  # and a definition's own user-agent header still takes precedence.
-  @default_user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " <>
-                        "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
 
   # Interstitial titles are matched at any status: some challenges are served
   # with a 200, and a 403 page can omit the word "Cloudflare" entirely.
@@ -197,8 +192,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       config = Keyword.get(opts, :config, %{})
 
       result =
-        if solve_first?(flaresolverr_opts, url) do
-          solve_and_repeat(definition, url, request_params, user_config, config)
+        if FlareSolverrFlow.solve_first?(flaresolverr_opts, url) do
+          FlareSolverrFlow.solve_and_repeat(definition, url, request_params, user_config, config)
         else
           execute_direct_request(
             definition,
@@ -305,7 +300,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       # (expired, or bound to a user-agent that has since changed).
       ClearanceCache.delete(url)
 
-      case solve_and_repeat(definition, url, request_params, user_config, config) do
+      case FlareSolverrFlow.solve_and_repeat(definition, url, request_params, user_config, config) do
         {:ok, response} ->
           # Flag the indexer so the next search skips the doomed direct request.
           {:ok, response, [{:flaresolverr_required, true}]}
@@ -324,145 +319,6 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
        )}
     end
   end
-
-  # An indexer already known to sit behind Cloudflare skips the doomed direct
-  # request, unless a clearance for this host is cached, in which case the
-  # direct request is exactly what the clearance is for.
-  defp solve_first?(flaresolverr_opts, url) do
-    flaresolverr_opts[:enabled] == true and FlareSolverr.enabled?() and
-      ClearanceCache.lookup(url) == :none
-  end
-
-  # Prowlarr's model (IndexerProxies/FlareSolverr/FlareSolverr.cs): FlareSolverr
-  # gets the bare request, never cookies, and is used to earn a clearance, not
-  # to fetch the page. The request is then repeated directly with the
-  # clearance and that response is parsed, so the definition's own headers
-  # (EZTV's layout cookie, a user-agent) apply exactly as on any direct
-  # request. Parsing Chrome's rendered DOM instead dropped those headers and
-  # returned zero rows for 1337x, EZTV and kickass while Prowlarr returned
-  # plenty. The rendered DOM is kept only as a fallback for a site whose
-  # clearance does not carry over to a plain HTTP client.
-  #
-  # No explicit rate limit here: execute_http_request/5 applies the definition's
-  # request_delay before the repeat, and the direct attempt that preceded a
-  # solve applied it before the challenge, so the site is not paced three times.
-  defp solve_and_repeat(definition, url, request_params, user_config, config) do
-    case solve(url, request_params) do
-      {:ok, %FlareSolverrResponse{} = solved} ->
-        ClearanceCache.put(
-          url,
-          FlareSolverrResponse.cookies(solved),
-          FlareSolverrResponse.user_agent(solved)
-        )
-
-        repeat_after_solve(definition, url, request_params, user_config, config, solved)
-
-      {:error, reason} ->
-        {:error, flaresolverr_error(definition.id, reason)}
-    end
-  end
-
-  defp repeat_after_solve(definition, url, request_params, user_config, config, solved) do
-    case execute_http_request(definition, url, request_params, user_config, config) do
-      {:ok, response} ->
-        if cloudflare_challenge?(response) do
-          Logger.info(
-            "Cardigann: #{definition.id} still challenged after FlareSolverr; " <>
-              "using the rendered page"
-          )
-
-          # The clearance did not carry over, so caching it only makes every
-          # later search pay a doomed direct request first.
-          ClearanceCache.delete(url)
-
-          rendered = %{
-            status: FlareSolverrResponse.http_status(solved) || 200,
-            body: FlareSolverrResponse.body(solved) || "",
-            headers: convert_flaresolverr_headers(solved)
-          }
-
-          with :ok <- validate_response(rendered), do: {:ok, rendered}
-        else
-          with :ok <- validate_response(response), do: {:ok, response}
-        end
-
-      {:error, _} = error ->
-        error
-    end
-  end
-
-  defp solve(url, %{method: :get, query_params: params}),
-    do: FlareSolverr.get(append_query_params(url, params))
-
-  defp solve(url, %{method: :post, query_params: params}),
-    do: FlareSolverr.post(url, post_data: URI.encode_query(params))
-
-  # Operator-facing text for a FlareSolverr failure. Every message starts with
-  # "FlareSolverr:" so the connection test can recognise it, and none of them
-  # inspects the raw reason, which used to put FlareSolverr's whole JSON body
-  # and Chrome's stack trace in the admin UI.
-  defp flaresolverr_error(definition_id, reason) do
-    Logger.error("FlareSolverr failed for #{definition_id}: #{inspect(reason)}")
-
-    case reason do
-      {:browser_crashed, _} ->
-        Error.connection_failed(
-          "FlareSolverr: browser tab crashed (FlareSolverr's Chrome ran out of resources; " <>
-            "lower flaresolverr.max_concurrent_requests or give FlareSolverr more memory)"
-        )
-
-      {:cookie_rejected, message} ->
-        Error.connection_failed("FlareSolverr: Chrome rejected a cookie (#{message})")
-
-      {:challenge_timeout, _} ->
-        Error.connection_failed("FlareSolverr: timed out solving the challenge")
-
-      {category, message} when is_atom(category) and is_binary(message) ->
-        Error.connection_failed("FlareSolverr: #{message}")
-
-      :timeout ->
-        Error.connection_failed("FlareSolverr: request timed out")
-
-      :flaresolverr_busy ->
-        Error.connection_failed(
-          "FlareSolverr: busy with other indexers; no request slot freed up in time"
-        )
-
-      {:connection_error, conn_reason} ->
-        Error.connection_failed("FlareSolverr: unreachable (#{inspect(conn_reason)})")
-
-      {:http_error, status, _body} ->
-        Error.connection_failed("FlareSolverr: HTTP #{status}")
-
-      other ->
-        Error.search_failed("FlareSolverr: #{inspect(other)}")
-    end
-  end
-
-  # Append query params to URL
-  defp append_query_params(url, params) when params == %{}, do: url
-
-  defp append_query_params(url, params) do
-    query_string =
-      params
-      |> Enum.map_join("&", fn {k, v} ->
-        "#{URI.encode_www_form(to_string(k))}=#{URI.encode_www_form(to_string(v))}"
-      end)
-
-    if String.contains?(url, "?") do
-      "#{url}&#{query_string}"
-    else
-      "#{url}?#{query_string}"
-    end
-  end
-
-  # Convert FlareSolverr headers to list format
-  defp convert_flaresolverr_headers(%FlareSolverrResponse{solution: %{headers: headers}})
-       when is_map(headers) do
-    Enum.map(headers, fn {k, v} -> {k, v} end)
-  end
-
-  defp convert_flaresolverr_headers(_), do: []
 
   # Detect Cloudflare challenge response
   @doc false
@@ -991,33 +847,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   defp build_request_options(definition, url, request_params, user_config, config) do
-    clearance =
-      case ClearanceCache.lookup(url) do
-        {:ok, clearance} -> clearance
-        :none -> nil
-      end
-
-    {defined_ua, defined_cookie, other_headers} = split_headers(request_params.headers)
-
-    # A solved clearance is bound to the user-agent that solved it, so it wins.
-    user_agent = (clearance && clearance.user_agent) || defined_ua || @default_user_agent
-
     {session_pairs, session_attached?} =
       session_cookie_pairs(Map.get(user_config, :cookies), url, definition, config)
 
-    clearance_pairs =
-      if clearance, do: Enum.map(clearance.cookies, fn {n, v} -> "#{n}=#{v}" end), else: []
-
-    # One cookie header only: a second one beside the definition's own is
-    # dropped or mangled by some servers.
-    cookie_header =
-      [defined_cookie | session_pairs ++ clearance_pairs]
-      |> Enum.reject(&(&1 in [nil, ""]))
-      |> Enum.join("; ")
-
-    headers =
-      [{"user-agent", user_agent} | other_headers] ++
-        if(cookie_header == "", do: [], else: [{"cookie", cookie_header}])
+    headers = RequestHeaders.build(request_params.headers, url, session_pairs)
 
     base_opts = [
       headers: headers,
@@ -1048,18 +881,6 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       :post ->
         Keyword.put(base_opts, :form, request_params.query_params)
     end
-  end
-
-  defp split_headers(headers) do
-    Enum.reduce(headers || [], {nil, nil, []}, fn {name, value}, {ua, cookie, rest} ->
-      value = if is_list(value), do: Enum.join(value, "; "), else: to_string(value)
-
-      case String.downcase(to_string(name)) do
-        "user-agent" -> {value, cookie, rest}
-        "cookie" -> {ua, value, rest}
-        _ -> {ua, cookie, rest ++ [{name, value}]}
-      end
-    end)
   end
 
   # A session cookie is a bearer credential for the tracker account. Base URL

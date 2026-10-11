@@ -311,9 +311,7 @@ defmodule Mydia.Config.Schema do
       field :url, :string
       field :timeout, :integer, default: 60_000
       field :max_timeout, :integer, default: 120_000
-      # Chrome tabs FlareSolverr may run at once across all indexers. Each one
-      # costs a few hundred MB; the default of 1 is what keeps a small container
-      # from crashing tabs when several protected indexers search together.
+      # Why the default is 1: see "Concurrency" in Mydia.Indexers.FlareSolverr.
       field :max_concurrent_requests, :integer, default: 1
     end
 
@@ -713,16 +711,10 @@ defmodule Mydia.Config.Schema do
       :override_dir
     ])
     |> validate_required([:fuel_enabled])
-    |> validate_number(:fuel_limit, greater_than: 0)
-    |> validate_number(:memory_limit_bytes, greater_than: 0)
-    |> validate_number(:invocation_timeout_ms, greater_than: 0)
-    |> validate_number(:schedule_timeout_ms, greater_than: 0)
-    |> validate_number(:setup_timeout_ms, greater_than: 0)
-    |> validate_number(:pool_size, greater_than: 0)
-    |> validate_number(:store_max_keys, greater_than: 0)
-    |> validate_number(:store_max_bytes, greater_than: 0)
-    |> validate_number(:page_timeout_ms, greater_than: 0)
-    |> validate_number(:page_http_timeout_ms, greater_than: 0)
+    |> validate_positive(
+      ~w(fuel_limit memory_limit_bytes invocation_timeout_ms schedule_timeout_ms setup_timeout_ms)a ++
+        ~w(pool_size store_max_keys store_max_bytes page_timeout_ms page_http_timeout_ms)a
+    )
     |> validate_https_source(:index_url)
     |> validate_index_public_key()
   end
@@ -780,10 +772,11 @@ defmodule Mydia.Config.Schema do
     schema
     |> cast(attrs, [:enabled, :url, :timeout, :max_timeout, :max_concurrent_requests])
     |> validate_flaresolverr_url()
-    |> validate_number(:timeout, greater_than: 0)
-    |> validate_number(:max_timeout, greater_than: 0)
-    |> validate_number(:max_concurrent_requests, greater_than: 0)
+    |> validate_positive([:timeout, :max_timeout, :max_concurrent_requests])
   end
+
+  defp validate_positive(changeset, fields),
+    do: Enum.reduce(fields, changeset, &validate_number(&2, &1, greater_than: 0))
 
   defp validate_flaresolverr_url(changeset) do
     enabled = get_field(changeset, :enabled)
