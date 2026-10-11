@@ -77,6 +77,45 @@ defmodule Mydia.Indexers.FlareSolverr.ClearanceCacheTest do
     assert :none = ClearanceCache.lookup("https://#{h}/", 1_000 + 1_801)
   end
 
+  test "a hostless URL is never stored or found" do
+    assert :ignored = ClearanceCache.put("/just/a/path", [], "UA", 0)
+    assert :none = ClearanceCache.lookup("/just/a/path", 1)
+    assert :none = ClearanceCache.lookup("", 1)
+    assert :ok = ClearanceCache.delete("/just/a/path")
+  end
+
+  test "a cookie for .h matches www.h" do
+    h = host()
+    :ok = ClearanceCache.put("https://www.#{h}/", [cookie("a", "1", ".#{h}")], "UA", 0)
+
+    assert {:ok, %Clearance{cookies: [{"a", "1"}]}} =
+             ClearanceCache.lookup("https://www.#{h}/", 1)
+  end
+
+  test "a cookie for h does not match evilh" do
+    h = host()
+    assert :ignored = ClearanceCache.put("https://evil#{h}/", [cookie("a", "1", h)], nil, 0)
+  end
+
+  test "the default port and the explicit one share a key" do
+    h = host()
+    :ok = ClearanceCache.put("https://#{h}/", [cookie("a", "1", h)], "UA", 0)
+    assert {:ok, _} = ClearanceCache.lookup("https://#{h}:443/", 1)
+  end
+
+  test "host case does not matter" do
+    h = host()
+    :ok = ClearanceCache.put("https://#{String.upcase(h)}/", [cookie("a", "1", h)], "UA", 0)
+    assert {:ok, _} = ClearanceCache.lookup("https://#{h}/", 1)
+  end
+
+  test "delete removes an entry" do
+    h = host()
+    :ok = ClearanceCache.put("https://#{h}/", [cookie("a", "1", h)], "UA", 0)
+    assert :ok = ClearanceCache.delete("https://#{h}/")
+    assert :none = ClearanceCache.lookup("https://#{h}/", 1)
+  end
+
   test "nothing usable is ignored" do
     assert :ignored = ClearanceCache.put("https://#{host()}/", [], nil, 0)
   end

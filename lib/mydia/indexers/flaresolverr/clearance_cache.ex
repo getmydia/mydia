@@ -28,49 +28,77 @@ defmodule Mydia.Indexers.FlareSolverr.ClearanceCache do
   end
 
   @spec put(String.t(), list(), String.t() | nil, integer()) :: :ok | :ignored
+  # The ETS calls below raise ArgumentError while the owning process is down or
+  # restarting. They sit on the search path, and a missing cache only costs a
+  # solve, so they fail soft instead of failing the search.
   def put(url, cookies, user_agent, now \\ System.os_time(:second)) do
-    %URI{host: host} = uri = URI.parse(url)
-    matching = Enum.filter(cookies, &domain_matches?(&1, host))
+    with {:ok, key, host} <- key(url) do
+      matching = Enum.filter(cookies, &domain_matches?(&1, host))
 
-    if matching == [] and is_nil(user_agent) do
-      :ignored
+      if matching == [] and is_nil(user_agent) do
+        :ignored
+      else
+        clearance = %Clearance{
+          key: key,
+          cookies: Enum.map(matching, &{&1.name, &1.value}),
+          user_agent: user_agent,
+          expires_at: expires_at(matching, now)
+        }
+
+        :ets.insert(@table, {key, clearance})
+        :ok
+      end
     else
-      clearance = %Clearance{
-        key: key(uri),
-        cookies: Enum.map(matching, &{&1.name, &1.value}),
-        user_agent: user_agent,
-        expires_at: expires_at(matching, now)
-      }
-
-      :ets.insert(@table, {clearance.key, clearance})
-      :ok
+      :error -> :ignored
     end
+  rescue
+    ArgumentError -> :ignored
   end
 
   @spec lookup(String.t(), integer()) :: {:ok, Clearance.t()} | :none
   def lookup(url, now \\ System.os_time(:second)) do
-    key = url |> URI.parse() |> key()
+    with {:ok, key, _host} <- key(url) do
+      case :ets.lookup(@table, key) do
+        [{^key, %Clearance{expires_at: expires_at} = clearance}] when expires_at > now ->
+          {:ok, clearance}
 
-    case :ets.lookup(@table, key) do
-      [{^key, %Clearance{expires_at: expires_at} = clearance}] when expires_at > now ->
-        {:ok, clearance}
+        [{^key, _expired}] ->
+          :ets.delete(@table, key)
+          :none
 
-      [{^key, _expired}] ->
-        :ets.delete(@table, key)
-        :none
-
-      [] ->
-        :none
+        [] ->
+          :none
+      end
+    else
+      :error -> :none
     end
+  rescue
+    ArgumentError -> :none
   end
 
   @spec delete(String.t()) :: :ok
   def delete(url) do
-    :ets.delete(@table, url |> URI.parse() |> key())
+    with {:ok, key, _host} <- key(url) do
+      :ets.delete(@table, key)
+    end
+
     :ok
+  rescue
+    ArgumentError -> :ok
   end
 
-  defp key(%URI{host: host, port: port}), do: "#{host}:#{port}"
+  # A URL without a host has no clearance to hold: every such URL would share
+  # one key and be handed each other's user-agent. Hosts are case-insensitive.
+  defp key(url) do
+    case URI.parse(url) do
+      %URI{host: host, port: port} when is_binary(host) and host != "" ->
+        host = String.downcase(host)
+        {:ok, "#{host}:#{port}", host}
+
+      _ ->
+        :error
+    end
+  end
 
   # RFC 6265 domain matching: ".example.com" and "example.com" both cover
   # example.com and its subdomains.
