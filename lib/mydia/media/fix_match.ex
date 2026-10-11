@@ -8,9 +8,9 @@ defmodule Mydia.Media.FixMatch do
   item's stored title is the wrong one and searching by it is how the bad
   match was made.
 
-  Changing provider is not this module's job: the library's provider setting
-  and `Mydia.Media.ProviderSwitch` own that. A show is fixed on its library's
-  provider, so the next Refresh does not re-identify it away from the fix.
+  Changing provider is the Fix Match provider toggle's job (see `adopt/5`); a
+  show fixed onto a provider its library does not use is pinned there, so the
+  next Refresh does not re-identify it away from the fix.
   """
 
   import Ecto.Query, only: [from: 2]
@@ -24,13 +24,17 @@ defmodule Mydia.Media.FixMatch do
   @doc """
   The provider a fix-match searches and adopts from.
 
-  Movies use TMDB. A show uses its library's provider, so a fix lands where
+  Movies use TMDB. A pinned show uses its stored source. Otherwise a show uses
+  its library's provider, so a fix lands where
   `ProviderSwitch.provider_refresh_decision/1` already expects it and Refresh
   will not re-identify it away. With no single library provider it falls back
   to the show's stored source, then TMDB.
   """
   @spec provider_for(MediaItem.t()) :: :tmdb | :tvdb
   def provider_for(%MediaItem{type: "movie"}), do: :tmdb
+
+  def provider_for(%MediaItem{type: "tv_show", metadata_source_pinned: true} = item),
+    do: stored_provider(item)
 
   def provider_for(%MediaItem{id: nil} = item), do: stored_provider(item)
 
