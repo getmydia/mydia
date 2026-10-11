@@ -60,14 +60,27 @@ defmodule Mydia.RatchetTest do
   @nest3 "Function body is nested too deep (max depth is 2, was 3)."
 
   describe "issue_key/1" do
-    test "uses the check, the last scope segment and the message" do
+    test "uses the check and the last scope segment, not the measured value" do
       assert Ratchet.issue_key(issue("Nesting", "Mydia.Media.Items.rescan", @nest3)) ==
-               {"Credo.Check.Refactor.Nesting", "rescan", @nest3}
+               {"Credo.Check.Refactor.Nesting", "rescan"}
+
+      assert Ratchet.issue_key(issue("CyclomaticComplexity", "M.f", @cc15)) ==
+               Ratchet.issue_key(issue("CyclomaticComplexity", "M.f", @cc16))
     end
 
     test "tolerates a nil scope" do
-      assert {"Credo.Check.Refactor.Nesting", "", @nest3} =
+      assert {"Credo.Check.Refactor.Nesting", ""} =
                Ratchet.issue_key(issue("Nesting", nil, @nest3))
+    end
+  end
+
+  describe "issue_value/1" do
+    test "reads the complexity from a cyclomatic complexity message" do
+      assert Ratchet.issue_value(issue("CyclomaticComplexity", "M.f", @cc15)) == 15
+    end
+
+    test "reads the depth from a nesting message" do
+      assert Ratchet.issue_value(issue("Nesting", "M.f", @nest3)) == 3
     end
   end
 
@@ -102,6 +115,40 @@ defmodule Mydia.RatchetTest do
       base = [issue("Nesting", "M.f", @nest3)]
       head = [issue("Nesting", "M.f", @nest3), issue("Nesting", "M.f", @nest3)]
       assert [_one] = Ratchet.complexity_regressions(base, head)
+    end
+
+    test "a function that got less complex is not a regression" do
+      base = [issue("CyclomaticComplexity", "M.f", @cc16)]
+      head = [issue("CyclomaticComplexity", "M.f", @cc15)]
+      assert Ratchet.complexity_regressions(base, head) == []
+    end
+
+    test "a function that got less nested is not a regression" do
+      deeper = "Function body is nested too deep (max depth is 2, was 4)."
+
+      assert Ratchet.complexity_regressions([issue("Nesting", "M.f", deeper)], [
+               issue("Nesting", "M.f", @nest3)
+             ]) == []
+    end
+
+    test "duplicates pair largest to largest" do
+      base = [
+        issue("CyclomaticComplexity", "M.f", @cc16),
+        issue("CyclomaticComplexity", "M.f", @cc15)
+      ]
+
+      same = [
+        issue("CyclomaticComplexity", "M.f", @cc15),
+        issue("CyclomaticComplexity", "M.f", @cc15)
+      ]
+
+      worse = [
+        issue("CyclomaticComplexity", "M.f", @cc16),
+        issue("CyclomaticComplexity", "M.f", @cc16)
+      ]
+
+      assert Ratchet.complexity_regressions(base, same) == []
+      assert [%{"message" => @cc16}] = Ratchet.complexity_regressions(base, worse)
     end
 
     test "fixed issues are never regressions" do

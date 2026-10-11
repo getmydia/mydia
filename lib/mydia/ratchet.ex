@@ -8,9 +8,11 @@ defmodule Mydia.Ratchet do
   "Ratchets" in CONTRIBUTING.md and `Mix.Tasks.Mydia.Ratchet`, which gathers the
   inputs.
 
-  Complexity and nesting issues are matched on `{check, function name, message}`.
-  File, module, line and column are ignored on purpose: moving an unchanged complex
-  function into a new module is not a regression, which keeps splitting modules free.
+  Complexity and nesting issues are matched on `{check, function name}`, and a match
+  is a regression only if its measured value (complexity or depth) went up. A
+  function that got simpler is an improvement, not a new finding. File, module, line
+  and column are ignored on purpose: moving an unchanged complex function into a new
+  module is not a regression, which keeps splitting modules free.
   """
 
   @max_lines 800
@@ -59,25 +61,57 @@ defmodule Mydia.Ratchet do
     Map.fetch!(decoded, "issues")
   end
 
-  @spec issue_key(map()) :: {String.t(), String.t(), String.t()}
+  @spec issue_key(map()) :: {String.t(), String.t()}
   def issue_key(issue) do
     scope = issue["scope"] || ""
     function_name = scope |> String.split(".") |> List.last()
 
-    {issue["check"], function_name, issue["message"]}
+    {issue["check"], function_name}
   end
 
   @doc """
-  HEAD issues in excess of the base, compared per `issue_key/1` as a multiset.
+  The measured value in a credo message: the complexity ("cyclomatic complexity is
+  14, max is 9") or the depth ("max depth is 2, was 3"). Messages with neither
+  count as 0.
+  """
+  @spec issue_value(map()) :: non_neg_integer()
+  def issue_value(issue) do
+    case Regex.run(~r/(?:complexity is|was) (\d+)/, issue["message"] || "") do
+      [_, value] -> String.to_integer(value)
+      nil -> 0
+    end
+  end
+
+  @doc """
+  HEAD issues that are new or worse than the base.
+
+  Issues are grouped per `issue_key/1`. Within a group the base and HEAD values are
+  each sorted descending and paired off: a HEAD issue with no partner, or with a
+  higher value than its partner, is a regression. A lower value is an improvement.
   """
   @spec complexity_regressions([map()], [map()]) :: [map()]
   def complexity_regressions(base_issues, head_issues) do
-    base_counts = Enum.frequencies_by(base_issues, &issue_key/1)
+    base_values =
+      base_issues
+      |> Enum.group_by(&issue_key/1, &issue_value/1)
+      |> Map.new(fn {key, values} -> {key, Enum.sort(values, :desc)} end)
 
     head_issues
     |> Enum.group_by(&issue_key/1)
-    |> Enum.flat_map(fn {key, issues} -> Enum.drop(issues, Map.get(base_counts, key, 0)) end)
+    |> Enum.flat_map(fn {key, issues} ->
+      issues
+      |> Enum.sort_by(&issue_value/1, :desc)
+      |> worse_than(Map.get(base_values, key, []))
+    end)
     |> Enum.sort_by(&{&1["filename"], &1["line_no"]})
+  end
+
+  defp worse_than([], _base_values), do: []
+  defp worse_than(issues, []), do: issues
+
+  defp worse_than([issue | issues], [base_value | base_values]) do
+    rest = worse_than(issues, base_values)
+    if issue_value(issue) > base_value, do: [issue | rest], else: rest
   end
 
   @spec format_size_regression(size_regression()) :: String.t()
