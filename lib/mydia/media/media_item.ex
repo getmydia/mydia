@@ -13,7 +13,7 @@ defmodule Mydia.Media.MediaItem do
   @foreign_key_type :binary_id
 
   @type t :: %__MODULE__{
-          id: binary(),
+          id: binary() | nil,
           type: String.t() | nil,
           title: String.t() | nil,
           original_title: String.t() | nil,
@@ -41,8 +41,8 @@ defmodule Mydia.Media.MediaItem do
           downloads: [Mydia.Downloads.Download.t()] | Ecto.Association.NotLoaded.t(),
           media_requests: [Mydia.Media.MediaRequest.t()] | Ecto.Association.NotLoaded.t(),
           playback_progress: [Mydia.Playback.Progress.t()] | Ecto.Association.NotLoaded.t(),
-          inserted_at: DateTime.t(),
-          updated_at: DateTime.t()
+          inserted_at: DateTime.t() | nil,
+          updated_at: DateTime.t() | nil
         }
 
   @type_values ~w(movie tv_show)

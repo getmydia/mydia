@@ -52,7 +52,7 @@ defmodule Mydia.Library.MediaFiles do
   @doc """
   Returns a list of unique media item IDs that have files in the given library path.
   """
-  @spec list_media_ids_in_library_path(%{id: binary()}) :: [binary()]
+  @spec list_media_ids_in_library_path(Mydia.Settings.LibraryPath.t()) :: [binary()]
   def list_media_ids_in_library_path(%{id: library_path_id}) do
     MediaFile
     |> where([mf], mf.library_path_id == ^library_path_id)

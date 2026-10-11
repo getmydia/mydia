@@ -2623,6 +2623,4 @@ defmodule Mydia.Jobs.TVShowSearch do
   defp stringify_keys(map) when is_map(map) do
     Map.new(map, fn {k, v} -> {to_string(k), v} end)
   end
-
-  defp stringify_keys(other), do: other
 end

@@ -571,7 +571,7 @@ defmodule Mydia.Library.ReleaseParser do
       end
 
     quality_factor =
-      if filename_result.quality && filename_result.quality.resolution != nil do
+      if filename_result.quality.resolution != nil do
         0.02
       else
         0.0

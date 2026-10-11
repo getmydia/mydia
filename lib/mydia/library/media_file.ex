@@ -26,7 +26,7 @@ defmodule Mydia.Library.MediaFile do
           analyzed_at: DateTime.t() | nil,
           analysis_attempts: integer(),
           last_analysis_error: String.t() | nil,
-          metadata: Mydia.Library.Structs.FileMetadata.t(),
+          metadata: Mydia.Library.Structs.FileMetadata.t() | nil,
           cover_blob: String.t() | nil,
           sprite_blob: String.t() | nil,
           vtt_blob: String.t() | nil,

@@ -185,9 +185,6 @@ defmodule Mydia.Jobs.HdrBackfill do
           dolby_vision_bl_compat_id: hdr.bl_compat_id
         )
 
-      {:ok, _result} ->
-        stamp(id, [])
-
       {:error, %Mydia.Storage.Error{kind: kind}} when kind != :not_found ->
         :skipped
 

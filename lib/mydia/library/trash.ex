@@ -426,7 +426,7 @@ defmodule Mydia.Library.Trash do
 
   defp drop_trash_state(%FileMetadata{} = metadata) do
     extra =
-      (metadata.extra || %{})
+      metadata.extra
       |> Map.delete("trashed_path")
       |> Map.delete("trashed_missing")
 

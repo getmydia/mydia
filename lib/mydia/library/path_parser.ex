@@ -297,7 +297,6 @@ defmodule Mydia.Library.PathParser do
 
   defp extract_movie_folder_parts(_), do: {nil, nil, nil}
 
-  defp parse_year(nil), do: nil
   defp parse_year(""), do: nil
 
   defp parse_year(year_str) when is_binary(year_str) do
@@ -307,8 +306,6 @@ defmodule Mydia.Library.PathParser do
     end
   end
 
-  defp parse_provider_id(nil, _), do: {nil, nil}
-  defp parse_provider_id(_, nil), do: {nil, nil}
   defp parse_provider_id("", _), do: {nil, nil}
   defp parse_provider_id(_, ""), do: {nil, nil}
 
@@ -324,7 +321,6 @@ defmodule Mydia.Library.PathParser do
     {provider, id_str}
   end
 
-  defp parse_provider(nil), do: nil
   defp parse_provider(""), do: nil
 
   defp parse_provider(provider_str) do

@@ -84,8 +84,11 @@ defmodule Mydia.Media.RemoteSignals do
   @spec ref_for(SearchResult.t()) :: {:ok, Ref.t()} | :error
   def ref_for(%SearchResult{provider_id: provider_id} = result) do
     case Integer.parse(to_string(provider_id)) do
-      {id, ""} when id > 0 -> {:ok, Ref.from_search_result(%{result | provider_id: id})}
-      _ -> :error
+      {id, ""} when id > 0 ->
+        {:ok, Ref.from_search_result(%{result | provider_id: Integer.to_string(id)})}
+
+      _ ->
+        :error
     end
   end
 
