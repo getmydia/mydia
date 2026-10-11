@@ -57,6 +57,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheckTest do
         {"Failed to parse XML response: x", :parse_error},
         {"HTTP 400", :http_4xx},
         {"Request failed: {:invalid_request_target, \"/a b\"}", :http_4xx},
+        {"Blocked page: 🚫 This Website is Blocked 🚫", :blocked_page},
         {"HTTP 404", :unreachable},
         {"Connection failed: :nxdomain", :unreachable},
         {"Request timeout", :unreachable}

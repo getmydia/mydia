@@ -1798,4 +1798,76 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       refute Map.has_key?(params, "bad")
     end
   end
+
+  describe "block page failover" do
+    defp failover_definition(links) do
+      %Parsed{
+        id: "failover",
+        name: "failover",
+        description: "",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: links,
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "/search"}],
+          inputs: %{},
+          rows: %{selector: "tr.r"},
+          fields: %{}
+        },
+        login: nil,
+        download: nil,
+        settings: [],
+        request_delay: nil,
+        follow_redirect: false
+      }
+    end
+
+    test "a block page on the first mirror fails over to the second" do
+      blocked = Bypass.open()
+      live = Bypass.open()
+
+      Bypass.stub(blocked, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, File.read!("test/fixtures/cardigann/block_page/response.html"))
+      end)
+
+      Bypass.stub(live, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, ~s(<table><tr class=r><td>Copper Lantern</td></tr></table>))
+      end)
+
+      definition =
+        failover_definition([
+          "http://localhost:#{blocked.port}",
+          "http://localhost:#{live.port}"
+        ])
+
+      test_pid = self()
+
+      assert {:ok, response} =
+               CardigannSearchEngine.execute_search(
+                 definition,
+                 [query: "x", categories: [], on_promote: &send(test_pid, {:promoted, &1})],
+                 %{}
+               )
+
+      assert response.body =~ "Copper Lantern"
+      assert_received {:promoted, "http://localhost:" <> _}
+    end
+
+    test "a block page on the only mirror is reported as a blocked page" do
+      blocked = Bypass.open()
+
+      Bypass.stub(blocked, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, File.read!("test/fixtures/cardigann/block_page/response.html"))
+      end)
+
+      definition = failover_definition(["http://localhost:#{blocked.port}"])
+
+      assert {:error, %{message: "Blocked page: " <> title}} =
+               CardigannSearchEngine.execute_search(definition, [query: "x", categories: []], %{})
+
+      assert title =~ "Blocked"
+    end
+  end
 end

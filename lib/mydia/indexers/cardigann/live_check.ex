@@ -227,6 +227,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
 
   defp classify_error(message) do
     cond do
+      message =~ ~r/^Blocked page:/ -> :blocked_page
       message =~ ~r/failed to render|parse error at line/i -> :template_error
       message =~ ~r/Failed to parse (HTML|XML|JSON)/ -> :parse_error
       message =~ ~r/invalid_request_target|^HTTP 4(?!04)\d\d/ -> :http_4xx

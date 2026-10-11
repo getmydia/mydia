@@ -17,6 +17,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   import Ecto.Query, only: [from: 2]
 
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Cardigann.BlockPage
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.Cardigann.SessionManager
@@ -549,8 +550,11 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
       end
 
     case Req.get(base_url, req_opts) do
-      {:ok, %Req.Response{status: status}} when status in 200..399 ->
-        {:ok, status}
+      {:ok, %Req.Response{status: status, body: body}} when status in 200..399 ->
+        case BlockPage.fingerprint(body) do
+          nil -> {:ok, status}
+          title -> {:error, "Blocked page: #{title}"}
+        end
 
       {:ok, %Req.Response{status: status}} ->
         {:error, "HTTP #{status}"}

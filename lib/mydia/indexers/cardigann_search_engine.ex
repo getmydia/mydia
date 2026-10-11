@@ -54,6 +54,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:ok, response} = CardigannSearchEngine.execute_search(definition, opts)
   """
 
+  alias Mydia.Indexers.Cardigann.BlockPage
   alias Mydia.Indexers.Cardigann.Charset
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
@@ -207,6 +208,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           )
         end
 
+      result = reject_block_page(definition, result)
+
       cond do
         elem(result, 0) == :ok ->
           if candidate != first_tried, do: promote(opts, candidate)
@@ -229,6 +232,19 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
+  # A seized or parked mirror answers 200 with a notice page. Turning it into an
+  # error lets failover move on instead of reporting "search worked, no results".
+  defp reject_block_page(definition, {:ok, response} = ok),
+    do: if(BlockPage.blocked?(definition, response), do: blocked_error(response), else: ok)
+
+  defp reject_block_page(definition, {:ok, response, _markers} = ok),
+    do: if(BlockPage.blocked?(definition, response), do: blocked_error(response), else: ok)
+
+  defp reject_block_page(_definition, other), do: other
+
+  defp blocked_error(response),
+    do: {:error, Error.search_failed("Blocked page: #{BlockPage.fingerprint(response.body)}")}
+
   defp promote(opts, candidate) do
     case Keyword.get(opts, :on_promote) do
       fun when is_function(fun, 1) -> fun.(candidate)
@@ -243,12 +259,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   #
   # Failures that would repeat identically on every candidate stay terminal: a
   # template that will not render, or a request target the client refuses, is
-  # not going to behave differently against another host.
+  # not going to behave differently against another host. A block, parked or
+  # for-sale page is the opposite: it is specific to that mirror, so move on.
   defp retryable_failure?({:error, %Error{type: :connection_failed}}), do: true
 
   defp retryable_failure?({:error, %Error{message: message}}) when is_binary(message) do
     String.contains?(message, "Server error: HTTP 5") or
       String.contains?(message, "HTTP 404") or
+      String.contains?(message, "Blocked page:") or
       String.contains?(message, "Redirected (HTTP 3")
   end
 
