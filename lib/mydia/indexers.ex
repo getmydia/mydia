@@ -1073,63 +1073,19 @@ defmodule Mydia.Indexers do
 
   def cardigann_download_credential_allowed?(_indexer_name, _download_url), do: false
 
-  @doc """
-  Adds a Cardigann definition to the library and enables it. Config from an
-  earlier membership is kept, so re-adding restores credentials.
-  """
-  @spec add_cardigann_definition(CardigannDefinition.t()) ::
-          {:ok, CardigannDefinition.t()} | {:error, Ecto.Changeset.t()}
-  def add_cardigann_definition(%CardigannDefinition{} = definition) do
-    set_cardigann_membership(definition, true)
-  end
+  defdelegate add_cardigann_definition(definition), to: Mydia.Indexers.CardigannLibrary, as: :add
 
-  @doc """
-  Removes a Cardigann definition from the library, disabling it. Its config is
-  kept in case it is added again.
-  """
-  @spec remove_cardigann_definition(CardigannDefinition.t()) ::
-          {:ok, CardigannDefinition.t()} | {:error, Ecto.Changeset.t()}
-  def remove_cardigann_definition(%CardigannDefinition{} = definition) do
-    set_cardigann_membership(definition, false)
-  end
+  defdelegate remove_cardigann_definition(definition),
+    to: Mydia.Indexers.CardigannLibrary,
+    as: :remove
 
-  defp set_cardigann_membership(definition, member?) do
-    definition
-    |> CardigannDefinition.membership_changeset(%{in_library: member?, enabled: member?})
-    |> Repo.update()
-  end
+  defdelegate enable_cardigann_definition(definition),
+    to: Mydia.Indexers.CardigannLibrary,
+    as: :enable
 
-  @doc """
-  Enables a Cardigann indexer definition.
-
-  ## Examples
-
-      iex> enable_cardigann_definition(definition)
-      {:ok, %CardigannDefinition{enabled: true}}
-  """
-  @spec enable_cardigann_definition(CardigannDefinition.t()) ::
-          {:ok, CardigannDefinition.t()} | {:error, Ecto.Changeset.t()}
-  def enable_cardigann_definition(%CardigannDefinition{} = definition) do
-    definition
-    |> CardigannDefinition.toggle_changeset(%{enabled: true})
-    |> Repo.update()
-  end
-
-  @doc """
-  Disables a Cardigann indexer definition.
-
-  ## Examples
-
-      iex> disable_cardigann_definition(definition)
-      {:ok, %CardigannDefinition{enabled: false}}
-  """
-  @spec disable_cardigann_definition(CardigannDefinition.t()) ::
-          {:ok, CardigannDefinition.t()} | {:error, Ecto.Changeset.t()}
-  def disable_cardigann_definition(%CardigannDefinition{} = definition) do
-    definition
-    |> CardigannDefinition.toggle_changeset(%{enabled: false})
-    |> Repo.update()
-  end
+  defdelegate disable_cardigann_definition(definition),
+    to: Mydia.Indexers.CardigannLibrary,
+    as: :disable
 
   @doc """
   Updates the configuration for a Cardigann definition (credentials, etc.).
