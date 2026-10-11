@@ -255,7 +255,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     assigns =
       assigns
       |> assign(:provider, assigns.fix_match.provider)
-      |> assign(:current_id, Mydia.Media.FixMatch.current_provider_id(assigns.media_item))
+      |> assign(:current_id, current_id(assigns.fix_match, assigns.media_item))
 
     ~H"""
     <div id="fix-match-modal" class="modal modal-open">
@@ -392,6 +392,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
       <div class="modal-backdrop" phx-click="close_fix_match"></div>
     </div>
     """
+  end
+
+  # An id only identifies the current match on the provider it belongs to, so
+  # results from the other provider are never "current".
+  defp current_id(fix_match, media_item) do
+    if fix_match.provider == Mydia.Media.FixMatch.provider_for(media_item),
+      do: Mydia.Media.FixMatch.current_provider_id(media_item)
   end
 
   defp provider_label(provider), do: MydiaWeb.MediaLive.Show.Helpers.provider_label(provider)
