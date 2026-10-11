@@ -16,7 +16,7 @@ defmodule Mydia.Jobs.ApplyImportCandidates do
   already running must enqueue a fresh job rather than be swallowed by the
   uniqueness guard, otherwise rows marked during the final page are stranded
   with nothing left to pick them up. `Jobs.MediaImport` documents the same
-  tradeoff. The narrowed `states:` list lives on `ImportCandidates.enqueue/2`,
+  tradeoff. The narrowed `states:` list lives on `ImportCandidates.Store.enqueue/2`,
   the single call site both this worker and `Jobs.RematchImportCandidates`
   share, rather than here: declaring it statically on `use Oban.Worker` trips
   Oban's compile-time `--warnings-as-errors` check for a missing incomplete
