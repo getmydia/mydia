@@ -11,7 +11,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
   attr :available_languages, :list, required: true
   attr :filter_type, :string, required: true
   attr :filter_language, :string, required: true
-  attr :filter_enabled, :string, required: true
+  attr :filter_added, :string, required: true
   attr :search_query, :string, required: true
   attr :syncing, :boolean, required: true
   attr :configuring_definition, :any, required: true
@@ -23,7 +23,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
       id="indexer-library-modal"
       icon="hero-book-open"
       title="Indexer Library"
-      subtitle="Browse and enable indexers from the definition library"
+      subtitle="Browse and add indexers from the definition library"
       on_close="close_indexer_library"
       size={:lg}
     >
@@ -93,11 +93,11 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
               <label class="label py-1">
                 <span class="label-text text-xs">Status</span>
               </label>
-              <select class="select select-bordered select-sm" name="enabled">
-                <option value="all" selected={@filter_enabled == "all"}>All Status</option>
-                <option value="enabled" selected={@filter_enabled == "enabled"}>Enabled</option>
-                <option value="disabled" selected={@filter_enabled == "disabled"}>
-                  Disabled
+              <select class="select select-bordered select-sm" name="added">
+                <option value="all" selected={@filter_added == "all"}>All</option>
+                <option value="added" selected={@filter_added == "added"}>Added</option>
+                <option value="not_added" selected={@filter_added == "not_added"}>
+                  Not added
                 </option>
               </select>
             </div>
@@ -126,7 +126,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
             <.definition_row definition={definition} />
           </:row>
           <:empty>
-            <%= if @search_query != "" or @filter_type != "all" or @filter_language != "all" or @filter_enabled != "all" do %>
+            <%= if @search_query != "" or @filter_type != "all" or @filter_language != "all" or @filter_added != "all" do %>
               No indexers match your filters. Try adjusting your search criteria.
             <% else %>
               No indexer definitions available. Click "Sync Library" to fetch indexers from the repository.
@@ -213,29 +213,29 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
             <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-warning" />
           </div>
         <% end %>
-        <%= if @definition.enabled and @definition.health_status not in [nil, "unknown"] do %>
+        <%= if @definition.in_library and @definition.health_status not in [nil, "unknown"] do %>
           <span class={"badge badge-sm badge-outline #{Components.library_health_status_badge_class(@definition.health_status)}"}>
             {Components.library_health_status_label(@definition.health_status)}
           </span>
         <% end %>
-        <%!-- Enable/Disable toggle with status label --%>
+        <%!-- Add/remove toggle with membership label --%>
         <label class="flex items-center gap-2 cursor-pointer">
           <span class={[
-            "text-xs font-medium min-w-14 text-right",
-            if(@definition.enabled, do: "text-success", else: "text-base-content/50")
+            "text-xs font-medium min-w-16 text-right",
+            if(@definition.in_library, do: "text-success", else: "text-base-content/50")
           ]}>
-            {if @definition.enabled, do: "Enabled", else: "Disabled"}
+            {if @definition.in_library, do: "Added", else: "Not added"}
           </span>
           <input
             type="checkbox"
             class="toggle toggle-success toggle-sm"
-            checked={@definition.enabled}
+            checked={@definition.in_library}
             phx-click="toggle_library_definition"
             phx-value-id={@definition.id}
             aria-label={
-              if @definition.enabled,
-                do: "Disable #{@definition.name}",
-                else: "Enable #{@definition.name}"
+              if @definition.in_library,
+                do: "Remove #{@definition.name}",
+                else: "Add #{@definition.name}"
             }
           />
         </label>

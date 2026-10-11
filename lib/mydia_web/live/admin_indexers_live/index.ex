@@ -767,8 +767,8 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
        params["language"] || socket.assigns.library_filter_language
      )
      |> assign(
-       :library_filter_enabled,
-       params["enabled"] || socket.assigns.library_filter_enabled
+       :library_filter_added,
+       params["added"] || socket.assigns.library_filter_added
      )
      |> load_library_definitions()}
   end
@@ -786,10 +786,10 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     definition = Indexers.get_cardigann_definition!(id)
 
     result =
-      if definition.enabled do
-        Indexers.disable_cardigann_definition(definition)
+      if definition.in_library do
+        Indexers.remove_cardigann_definition(definition)
       else
-        Indexers.enable_cardigann_definition(definition)
+        Indexers.add_cardigann_definition(definition)
       end
 
     case result do
@@ -1212,7 +1212,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     |> assign(:library_available_languages, [])
     |> assign(:library_filter_type, "all")
     |> assign(:library_filter_language, "all")
-    |> assign(:library_filter_enabled, "all")
+    |> assign(:library_filter_added, "all")
     |> assign(:library_search_query, "")
     |> assign(:library_syncing, false)
     |> assign(:library_configuring_definition, nil)
@@ -1255,9 +1255,9 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
       end
 
     filters =
-      case assigns.library_filter_enabled do
-        "enabled" -> [{:enabled, true} | filters]
-        "disabled" -> [{:enabled, false} | filters]
+      case assigns.library_filter_added do
+        "added" -> [{:in_library, true} | filters]
+        "not_added" -> [{:in_library, false} | filters]
         _ -> filters
       end
 
