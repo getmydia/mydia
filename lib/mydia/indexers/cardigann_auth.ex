@@ -154,9 +154,7 @@ defmodule Mydia.Indexers.CardigannAuth do
   def get_stored_session(cardigann_definition_id) do
     query =
       from s in CardigannSearchSession,
-        where: s.cardigann_definition_id == ^cardigann_definition_id,
-        order_by: [desc: s.updated_at],
-        limit: 1
+        where: s.cardigann_definition_id == ^cardigann_definition_id
 
     case Repo.one(query) do
       nil ->
@@ -186,7 +184,8 @@ defmodule Mydia.Indexers.CardigannAuth do
 
   - `cardigann_definition_id` - Database ID of the definition
   - `cookies` - List of cookie strings to store
-  - `expires_at` - Session expiration time (optional, defaults to 7 days)
+  - `expires_at` - Session expiration time (optional, nil means no expiry).
+    Upserts: one row is kept per definition.
 
   ## Returns
 
@@ -196,17 +195,30 @@ defmodule Mydia.Indexers.CardigannAuth do
   @spec store_session(String.t(), [String.t()], DateTime.t() | nil) ::
           {:ok, CardigannSearchSession.t()} | {:error, Ecto.Changeset.t()}
   def store_session(cardigann_definition_id, cookies, expires_at \\ nil) do
-    expires_at = expires_at || DateTime.add(DateTime.utc_now(), @default_session_ttl, :second)
-
-    attrs = %{
+    %CardigannSearchSession{}
+    |> CardigannSearchSession.changeset(%{
       cardigann_definition_id: cardigann_definition_id,
       cookies: cookies,
       expires_at: expires_at
-    }
+    })
+    |> Repo.insert(
+      on_conflict: {:replace, [:cookies, :expires_at, :updated_at]},
+      conflict_target: :cardigann_definition_id,
+      returning: true
+    )
+  end
 
-    %CardigannSearchSession{}
-    |> CardigannSearchSession.changeset(attrs)
-    |> Repo.insert()
+  @doc """
+  Deletes the stored session for a definition, forcing a fresh login.
+  """
+  @spec invalidate_session(String.t()) :: :ok
+  def invalidate_session(cardigann_definition_id) do
+    from(s in CardigannSearchSession,
+      where: s.cardigann_definition_id == ^cardigann_definition_id
+    )
+    |> Repo.delete_all()
+
+    :ok
   end
 
   @doc """

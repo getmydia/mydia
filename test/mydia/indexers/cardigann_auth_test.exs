@@ -169,7 +169,7 @@ defmodule Mydia.Indexers.CardigannAuthTest do
 
       assert stored_session != nil
       assert stored_session.cookies != nil
-      assert stored_session.expires_at != nil
+      assert stored_session.expires_at == nil
     end
 
     test "an operator override of a login-path setting reaches the login request" do
@@ -333,6 +333,42 @@ defmodule Mydia.Indexers.CardigannAuthTest do
       session = %{cookies: ["session=abc"], expires_at: expires_at, method: :form}
 
       assert CardigannAuth.validate_session(session, nil) == false
+    end
+  end
+
+  describe "session store" do
+    setup do
+      definition =
+        Repo.insert!(%Mydia.Indexers.CardigannDefinition{
+          indexer_id: "invented-tracker",
+          name: "Invented Tracker",
+          type: "private",
+          links: %{},
+          capabilities: %{},
+          definition: "id: invented-tracker",
+          schema_version: "v11"
+        })
+
+      {:ok, definition: definition}
+    end
+
+    test "store_session/3 keeps exactly one row per definition", %{definition: d} do
+      {:ok, _} = CardigannAuth.store_session(d.id, ["a=1"])
+      {:ok, _} = CardigannAuth.store_session(d.id, ["a=2"])
+
+      assert Repo.aggregate(CardigannSearchSession, :count) == 1
+      assert {:ok, %{cookies: ["a=2"]}} = CardigannAuth.get_stored_session(d.id)
+    end
+
+    test "a session without expiry never expires", %{definition: d} do
+      {:ok, _} = CardigannAuth.store_session(d.id, ["a=1"], nil)
+      assert {:ok, %{expires_at: nil}} = CardigannAuth.get_stored_session(d.id)
+    end
+
+    test "invalidate_session/1 removes the row", %{definition: d} do
+      {:ok, _} = CardigannAuth.store_session(d.id, ["a=1"])
+      assert :ok = CardigannAuth.invalidate_session(d.id)
+      assert {:error, :not_found} = CardigannAuth.get_stored_session(d.id)
     end
   end
 
