@@ -263,10 +263,20 @@ defmodule Mydia.Library.FileIngestTest do
           title: Mydia.MetadataStubProvider.tmdb_series_title()
         })
 
-      refute match?(
-               {:candidate, _},
-               FileIngest.ingest(candidate, match, policy: :unattended)
-             )
+      assert {:promoted, _} = FileIngest.ingest(candidate, match, policy: :unattended)
+    end
+
+    test "a cross-provider match from the local database is not held for review" do
+      candidate = tv_candidate(:tvdb)
+
+      match =
+        tv_match(:tmdb, %{
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tmdb_id()),
+          title: Mydia.MetadataStubProvider.tmdb_series_title(),
+          from_local_db: true
+        })
+
+      assert {:promoted, _} = FileIngest.ingest(candidate, match, policy: :unattended)
     end
   end
 end

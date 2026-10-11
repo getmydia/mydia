@@ -43,6 +43,18 @@ defmodule MydiaWeb.ImportMediaProviderToggleTest do
     render_async(view)
   end
 
+  test "a movies library's match modal has no provider toggle", %{conn: conn} do
+    lp = library_path_fixture(%{type: "movies"})
+
+    seed_group(lp, "Harbor Lights", %{provider_id: nil, confidence: nil, media_type: "movie"})
+
+    {:ok, view, _html} = mount_import(conn, lp)
+    open_match_search(view, lp, "Harbor Lights")
+
+    assert has_element?(view, "#match-search-form")
+    refute has_element?(view, "#match-provider-toggle")
+  end
+
   test "the toggle searches TMDB and the picked result is stamped TMDB", %{conn: conn} do
     lp = library_path_fixture(%{type: "series", tv_metadata_source: :tvdb})
 

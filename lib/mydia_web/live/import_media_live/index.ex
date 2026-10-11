@@ -119,10 +119,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> assign(:page_group_ids, [])
       |> assign(:selected_library_path_id, selected_library_path_id)
       |> assign(:selected_library_path, selected_library_path)
-      |> assign(
-        :selected_tv_provider,
-        selected_library_path && selected_library_path.tv_metadata_source
-      )
+      |> assign(:selected_tv_provider, library_tv_provider(selected_library_path))
       |> assign(:selection, SelectionScope.new(selected_library_path_id))
       # Guards the :import_candidates_changed debounce below: true while a
       # deferred refresh is already scheduled, so a burst of broadcasts
@@ -666,7 +663,16 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       group ->
         query = group.suggested_title || group.display_title || ""
 
-        library_provider = socket.assigns.selected_tv_provider
+        library_path =
+          Enum.find(
+            socket.assigns.library_paths,
+            &(&1.id == socket.assigns.selected_library_path_id)
+          )
+
+        # The toggle only makes sense when this search will be a TV search.
+        library_provider =
+          if search_media_type(library_path, group.media_type) == :tv_show,
+            do: library_tv_provider(library_path)
 
         state = %{
           anchor_key: group.anchor_key,
@@ -991,10 +997,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     socket
     |> assign(:selected_library_path_id, id)
     |> assign(:selected_library_path, selected_library_path)
-    |> assign(
-      :selected_tv_provider,
-      selected_library_path && selected_library_path.tv_metadata_source
-    )
+    |> assign(:selected_tv_provider, library_tv_provider(selected_library_path))
     |> assign(:active_run, active_run)
     |> update(:active_runs_by_library, fn runs ->
       if active_run, do: Map.put(runs, id, active_run), else: Map.delete(runs, id)
@@ -1206,7 +1209,9 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # empty query as invalid, so there is nothing useful to send.
   defp run_match_search(socket, query) do
     if String.trim(query) == "" do
-      assign(socket, :match_search, %{socket.assigns.match_search | results: [], searching: false})
+      socket
+      |> assign(:match_search_token, socket.assigns.match_search_token + 1)
+      |> assign(:match_search, %{socket.assigns.match_search | results: [], searching: false})
     else
       token = socket.assigns.match_search_token + 1
       anchor_key = socket.assigns.match_search.anchor_key
@@ -1255,6 +1260,14 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   defp search_media_type(%{type: :mixed}, "tv_show"), do: :tv_show
   defp search_media_type(%{type: :mixed}, "movie"), do: :movie
   defp search_media_type(_library_path, _hint), do: nil
+
+  # Only series and mixed libraries have a TV provider; the column defaults to
+  # :tvdb on every library type, so a movies library must not report one.
+  defp library_tv_provider(%{type: type, tv_metadata_source: source})
+       when type in [:series, :mixed],
+       do: source
+
+  defp library_tv_provider(_library_path), do: nil
 
   defp tv_provider("tvdb"), do: :tvdb
   defp tv_provider("tmdb"), do: :tmdb
