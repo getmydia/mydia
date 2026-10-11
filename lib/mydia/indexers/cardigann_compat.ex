@@ -35,6 +35,7 @@ defmodule Mydia.Indexers.CardigannCompat do
   - `:fully_supported` - All required features are implemented
   - `:partially_supported` - Uses at least one unsupported feature
   - `:by_feature` - Feature atom to count of definitions that feature blocks
+  - `:by_login_method` - Login method (`"none"` when absent) to count of analyzed definitions
   - `:definitions` - List of per-definition analysis results
   - `:parse_failures` - List of `{filename, reason}` tuples
   """
@@ -103,6 +104,11 @@ defmodule Mydia.Indexers.CardigannCompat do
       |> Enum.frequencies()
       |> Enum.sort_by(fn {_feature, count} -> -count end)
 
+    by_login_method =
+      results
+      |> Enum.filter(&(&1.status != :parse_failed))
+      |> Enum.frequencies_by(& &1.login_method)
+
     parse_failures =
       results
       |> Enum.filter(&(&1.status == :parse_failed))
@@ -115,6 +121,7 @@ defmodule Mydia.Indexers.CardigannCompat do
       fully_supported: fully_supported,
       partially_supported: partially_supported,
       by_feature: by_feature,
+      by_login_method: by_login_method,
       definitions: results,
       parse_failures: parse_failures
     }
@@ -149,10 +156,15 @@ defmodule Mydia.Indexers.CardigannCompat do
     Map.merge(metadata, %{
       status: status,
       required_features: MapSet.to_list(required),
+      login_method: login_method(yaml_data),
       missing_features: missing,
       error: nil
     })
   end
+
+  defp login_method(%{"login" => %{"method" => method}}) when is_binary(method), do: method
+  defp login_method(%{"login" => %{}}), do: "unspecified"
+  defp login_method(_), do: "none"
 
   defp definition_metadata(yaml_data, yaml_content, filename) do
     case CardigannParser.parse_definition(yaml_content) do
@@ -201,6 +213,7 @@ defmodule Mydia.Indexers.CardigannCompat do
       type: nil,
       status: :parse_failed,
       required_features: [],
+      login_method: "none",
       missing_features: [],
       error: reason
     }

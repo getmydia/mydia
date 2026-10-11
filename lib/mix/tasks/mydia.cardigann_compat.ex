@@ -117,6 +117,8 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
       Mix.shell().info("")
     end
 
+    print_login_methods(report.by_login_method)
+
     if report.parse_failures != [] do
       failures_to_show =
         if verbose, do: report.parse_failures, else: Enum.take(report.parse_failures, 10)
@@ -165,6 +167,23 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
     end
   end
 
+  defp print_login_methods(by_login_method) when map_size(by_login_method) == 0, do: :ok
+
+  defp print_login_methods(by_login_method) do
+    Mix.shell().info("Login methods:")
+    Mix.shell().info(String.duplicate("-", 50))
+
+    by_login_method
+    |> Enum.sort_by(fn {method, count} -> {-count, method} end)
+    |> Enum.each(fn {method, count} ->
+      Mix.shell().info(
+        "  #{String.pad_trailing(method, 35)} #{String.pad_leading(to_string(count), 5)}"
+      )
+    end)
+
+    Mix.shell().info("")
+  end
+
   defp print_json_report(report) do
     json_data = %{
       summary: %{
@@ -175,6 +194,7 @@ defmodule Mix.Tasks.Mydia.CardigannCompat do
         partially_supported: report.partially_supported
       },
       by_feature: Map.new(report.by_feature),
+      by_login_method: report.by_login_method,
       definitions:
         Enum.map(report.definitions, fn defn ->
           %{

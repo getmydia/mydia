@@ -19,11 +19,8 @@ defmodule Mydia.Indexers.CardigannCompatTest do
           2000: Movies
       settings: []
       login:
-        method: form
+        method: oneurl
         path: /login
-        captcha:
-          type: image
-          selector: img#cap
       search:
         paths:
           - path: /search
@@ -40,7 +37,7 @@ defmodule Mydia.Indexers.CardigannCompatTest do
       result = CardigannCompat.analyze_definition(yaml, "partial.yml")
 
       assert result.status == :partially_supported
-      assert :login_captcha in result.missing_features
+      assert :login_method_other in result.missing_features
       assert :field_selector in result.required_features
     end
 
@@ -95,6 +92,88 @@ defmodule Mydia.Indexers.CardigannCompatTest do
 
       assert result.status == :parse_failed
       assert result.error != nil
+    end
+  end
+
+  describe "login scoring" do
+    @base """
+    id: invented-tracker
+    name: Invented Tracker
+    type: private
+    links: [https://tracker.example/]
+    caps: {categorymappings: [{id: 1, cat: Movies}], modes: {search: [q]}}
+    search: {paths: [{path: b.php}], rows: {selector: tr}, fields: {title: {selector: td}}}
+    """
+
+    test "scores the login method, 2FA and headers as supported" do
+      yaml =
+        @base <>
+          """
+          login:
+            method: form
+            path: login.php
+            headers: {X-Test: [a]}
+            inputs: {otp: "{{ .Config.2facode }}"}
+          """
+
+      result = CardigannCompat.analyze_definition(yaml, "invented.yml")
+
+      assert :login_method_form in result.required_features
+      assert :login_2fa in result.required_features
+      assert :login_headers in result.required_features
+      assert result.status == :fully_supported
+      assert result.login_method == "form"
+    end
+
+    for method <- ~w(cookie get post form) do
+      test "the #{method} login method is supported" do
+        yaml = @base <> "login: {method: #{unquote(method)}, path: login.php}\n"
+        result = CardigannCompat.analyze_definition(yaml, "m.yml")
+
+        assert String.to_existing_atom("login_method_" <> unquote(method)) in result.required_features
+        assert result.missing_features == []
+      end
+    end
+
+    test "getselectorinputs is detected" do
+      yaml =
+        @base <>
+          """
+          login:
+            method: form
+            path: login.php
+            getselectorinputs: {token: {selector: "input#t", attribute: value}}
+          """
+
+      assert :login_getselectorinputs in CardigannCompat.analyze_definition(yaml, "g.yml").required_features
+    end
+
+    test "an unknown login method is reported missing" do
+      yaml = @base <> "login: {method: oneurl, path: x}\n"
+      result = CardigannCompat.analyze_definition(yaml, "odd.yml")
+
+      assert :login_method_other in result.missing_features
+      assert result.status == :partially_supported
+    end
+
+    test "a definition without login has no login method" do
+      result = CardigannCompat.analyze_definition(@base, "pub.yml")
+      assert result.login_method == "none"
+    end
+
+    test "build_report counts definitions per login method" do
+      results =
+        for {yaml, name} <- [
+              {@base, "a.yml"},
+              {@base <> "login: {method: form, path: x}\n", "b.yml"},
+              {@base <> "login: {method: form, path: x}\n", "c.yml"},
+              {@base <> "login: {method: oneurl, path: x}\n", "d.yml"}
+            ] do
+          CardigannCompat.analyze_definition(yaml, name)
+        end
+
+      assert CardigannCompat.build_report(results).by_login_method ==
+               %{"none" => 1, "form" => 2, "oneurl" => 1}
     end
   end
 end

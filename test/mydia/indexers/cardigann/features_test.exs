@@ -32,9 +32,12 @@ defmodule Mydia.Indexers.Cardigann.FeaturesTest do
     end
   end
 
-  test "supported/0 does not claim login features" do
-    refute :login_captcha in Features.supported()
-    refute :login_selectorinputs in Features.supported()
+  test "supported/0 claims the implemented login features but not other methods" do
+    for feature <- [:login_captcha, :login_selectorinputs, :login_method_form, :login_2fa] do
+      assert feature in Features.supported()
+    end
+
+    refute :login_method_other in Features.supported()
   end
 
   test "required/1 detects features from a definition map" do
