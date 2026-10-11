@@ -14,6 +14,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Challenge do
           pending: map()
         }
 
+  @derive {Inspect, except: [:pending, :image]}
   @enforce_keys [:definition_id, :fields, :pending]
   defstruct [:definition_id, :image, :image_type, fields: [], pending: %{}]
 end

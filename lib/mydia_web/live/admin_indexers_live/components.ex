@@ -3,7 +3,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   use MydiaWeb, :html
 
   alias Mydia.Settings
-  alias MydiaWeb.AdminIndexersLive.FlareSolverrComponents
+  alias MydiaWeb.AdminIndexersLive.{FlareSolverrComponents, LoginComponents}
   alias MydiaWeb.IndexerComponents
 
   @doc """
@@ -267,6 +267,10 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
       </:badges>
       <:actions>
         <.row_actions>
+          <LoginComponents.login_button
+            :if={@indexer.health_status == "needs_login"}
+            indexer={@indexer}
+          />
           <.row_action
             id={"configure-library-indexer-#{@indexer.id}"}
             icon="hero-cog-6-tooth"
@@ -350,12 +354,14 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   def library_health_status_badge_class("healthy"), do: "badge-success"
   def library_health_status_badge_class("degraded"), do: "badge-warning"
   def library_health_status_badge_class("unhealthy"), do: "badge-error"
+  def library_health_status_badge_class("needs_login"), do: "badge-warning"
   def library_health_status_badge_class(_), do: "badge-ghost"
 
   @doc false
   def library_health_status_label("healthy"), do: "Healthy"
   def library_health_status_label("degraded"), do: "Degraded"
   def library_health_status_label("unhealthy"), do: "Unhealthy"
+  def library_health_status_label("needs_login"), do: "Needs login"
   def library_health_status_label(_), do: "Unknown"
 
   @doc false
