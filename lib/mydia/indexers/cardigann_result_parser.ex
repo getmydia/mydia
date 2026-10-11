@@ -1135,8 +1135,11 @@ defmodule Mydia.Indexers.CardigannResultParser do
 
         {:ok, []}
 
-      error ->
-        error
+      {:error, reason} ->
+        {:error,
+         Error.search_failed(
+           "JSON row selector #{inspect(selector)} does not apply to the response: #{inspect(reason)}"
+         )}
     end
   end
 

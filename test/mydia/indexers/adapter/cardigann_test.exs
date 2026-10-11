@@ -718,6 +718,33 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
     end
   end
 
+  describe "search/3 with an unsatisfiable JSON row selector" do
+    test "returns an Adapter.Error rather than a bare atom", %{
+      definition: definition,
+      bypass: bypass
+    } do
+      yaml =
+        sample_yaml("http://localhost:#{bypass.port}")
+        |> String.replace(
+          "  path: /search/{{ .Keywords }}/\n",
+          "  path: /search/{{ .Keywords }}/\n  response:\n    type: json\n"
+        )
+        |> String.replace(~s(selector: "table.results tr"), ~s(selector: "data.items"))
+
+      definition |> Ecto.Changeset.change(%{definition: yaml}) |> Repo.update!()
+
+      Bypass.stub(bypass, "GET", "/search/badpath/", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, ~s({"data": []}))
+      end)
+
+      config = %{type: :cardigann, name: "Test Indexer", indexer_id: "test-indexer"}
+
+      assert {:error, %Error{}} = Cardigann.search(config, "badpath")
+    end
+  end
+
   describe "parsing template context from a real search" do
     test "renders the operator's definition config in field filter arguments", %{
       definition: definition,
