@@ -125,8 +125,7 @@ defmodule Mydia.Streaming.HardwareAccel do
 
   @impl true
   def handle_continue(:probe, state) do
-    config = Mydia.Config.get()
-    streaming = Map.get(config || %{}, :streaming) || %{}
+    streaming = Mydia.Config.get().streaming || %{}
 
     opts = [
       hwaccel: Map.get(streaming, :hwaccel, :auto),

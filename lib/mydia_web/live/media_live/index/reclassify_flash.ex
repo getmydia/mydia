@@ -3,7 +3,11 @@ defmodule MydiaWeb.MediaLive.Index.ReclassifyFlash do
   The flash message for the library's bulk reclassify action.
   """
 
-  @spec message(%{updated: non_neg_integer(), skipped: non_neg_integer()}) :: String.t()
+  @spec message(%{
+          required(:updated) => non_neg_integer(),
+          required(:skipped) => non_neg_integer(),
+          optional(atom()) => term()
+        }) :: String.t()
   def message(%{updated: updated, skipped: skipped}) when updated > 0 and skipped > 0,
     do: "Reclassified #{updated} #{items(updated)}, #{skipped} skipped (category override)"
 

@@ -421,7 +421,7 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   defp request_tmdb_videos(config, tmdb_id) do
     case perform_tmdb_fetch(config, tmdb_id, :tv_show, append_to_response: ["videos"]) do
-      {:ok, %MediaMetadata{videos: videos}} when is_list(videos) ->
+      {:ok, %MediaMetadata{videos: videos}} ->
         {:ok, videos}
 
       {:error, _reason} = error ->
@@ -431,14 +431,6 @@ defmodule Mydia.Metadata.Provider.Relay do
         )
 
         error
-
-      other ->
-        Logger.debug("TMDB trailer fallback returned no videos",
-          tmdb_id: tmdb_id,
-          result: inspect(other)
-        )
-
-        {:ok, []}
     end
   end
 
@@ -1510,7 +1502,11 @@ defmodule Mydia.Metadata.Provider.Relay do
   defp maybe_add_param(params, key, value), do: params ++ [{key, value}]
 
   defp parse_search_results(%{"results" => results}, media_type) when is_list(results) do
-    Enum.map(results, &parse_search_result(&1, media_type))
+    results
+    |> Enum.map(&parse_search_result(&1, media_type))
+    # A result with no provider id cannot be looked up, matched or rendered
+    # downstream, so it is dropped here rather than passed on with "".
+    |> Enum.reject(&(&1.provider_id == ""))
   end
 
   defp parse_search_results(_, _media_type), do: []
@@ -1523,11 +1519,10 @@ defmodule Mydia.Metadata.Provider.Relay do
 
     # Record the ID→type mapping from search results
     # This helps prevent future 404s from type mismatches
-    if search_result.provider_id && media_type do
-      ProviderIDRegistry.record_id_type(
-        {:tmdb, String.to_integer(search_result.provider_id)},
-        media_type
-      )
+    # A result with no id has an empty provider_id; it has nothing to record.
+    with true <- media_type != nil,
+         {id, ""} <- Integer.parse(search_result.provider_id) do
+      ProviderIDRegistry.record_id_type({:tmdb, id}, media_type)
     end
 
     search_result

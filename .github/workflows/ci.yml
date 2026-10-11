@@ -286,6 +286,22 @@ jobs:
             echo "::error::exit_status: 0 found in .credo.exs - fix the finding or disable the check with false (see CONTRIBUTING.md)"
             exit 1
           fi
+          # Dialyzer findings are fixed, never listed. See "Dialyzer" in
+          # CONTRIBUTING.md.
+          if grep -n "ignore_warnings" mix.exs; then
+            echo "::error::ignore_warnings found in mix.exs - fix the Dialyzer finding instead (see CONTRIBUTING.md)"
+            exit 1
+          fi
+          # Dialyxir reads .dialyzer_ignore.exs by default when it exists, even
+          # without ignore_warnings in mix.exs.
+          if [ -e .dialyzer_ignore.exs ]; then
+            echo "::error::.dialyzer_ignore.exs exists - fix the Dialyzer finding instead (see CONTRIBUTING.md)"
+            exit 1
+          fi
+          if grep -rn "@dialyzer" lib test/support --include='*.ex'; then
+            echo "::error::@dialyzer attributes are not allowed in lib/ or test/support - fix the finding instead (see CONTRIBUTING.md)"
+            exit 1
+          fi
           # Guard against DEPRECATED markers surviving in lib/: deprecated
           # code must be deleted, not left behind under a marker. See
           # CONTRIBUTING.md.
@@ -314,6 +330,87 @@ jobs:
           mix ecto.create
           mix ecto.migrate
           mix test --cover --warnings-as-errors
+          DEVENV
+
+  dialyzer:
+    name: Dialyzer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: mydia
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: devenv
+          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+
+      - name: Install devenv
+        run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
+
+      - name: Cache dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: deps
+          key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-devenv-
+
+      # Same key as the Test job, so this restores the _build/test and
+      # priv/native it saved. See the Test job for why both are cached together.
+      - name: Cache build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            _build
+            priv/native
+          key: ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
+          restore-keys: |
+            ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
+
+      # See the Test job: retried so one flaky Nix substitution does not fail
+      # the real step.
+      - name: Warm devenv environment
+        run: |
+          for attempt in 1 2 3; do
+            if devenv shell -- true; then exit 0; fi
+            echo "::warning::devenv shell attempt $attempt failed"
+            [ "$attempt" -lt 3 ] && sleep 15
+          done
+          echo "::error::devenv environment failed to materialize after 3 attempts"
+          exit 1
+
+      # Keyed on the toolchain and lock: the core PLT only changes when Elixir,
+      # OTP or a dependency does. restore-keys lets a lock change rebuild the
+      # project PLT incrementally from the previous one.
+      - name: Cache Dialyzer PLTs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: priv/plts
+          key: ${{ runner.os }}-plts-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-plts-${{ hashFiles('.elixir-version', '.otp-version') }}-
+
+      - name: Dialyzer under devenv
+        run: |
+          devenv shell -- bash <<'DEVENV'
+          set -euo pipefail
+          export MIX_ENV=test
+          mix local.hex --force --if-missing
+          mix local.rebar --force --if-missing
+          mix deps.get
+          mix dialyzer --format github
           DEVENV
 
   rust:

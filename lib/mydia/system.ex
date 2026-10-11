@@ -3,9 +3,6 @@ defmodule Mydia.System do
   System information helpers for application version, environment, etc.
   """
 
-  # Capture the environment at compile time so it's available in releases
-  @env Mix.env()
-
   # Capture build commit at compile time (set via BUILD_COMMIT env var during Docker builds)
   @build_commit System.get_env("BUILD_COMMIT")
 
@@ -22,11 +19,7 @@ defmodule Mydia.System do
         vsn -> to_string(vsn)
       end
 
-    case @build_commit do
-      nil -> base_version
-      "" -> base_version
-      commit -> "#{base_version}*#{String.slice(commit, 0, 7)}"
-    end
+    version_with_commit(base_version, @build_commit)
   end
 
   @doc """
@@ -34,18 +27,27 @@ defmodule Mydia.System do
 
   Returns nil for stable releases built from tags.
   """
-  def build_commit do
-    case @build_commit do
-      nil -> nil
-      "" -> nil
-      commit -> commit
-    end
-  end
+  def build_commit, do: normalize_commit(@build_commit)
 
   @doc """
   Check if running in development mode.
   """
-  def dev_mode? do
-    @env == :dev
+  def dev_mode?, do: Application.get_env(:mydia, :env) == :dev
+
+  # The two helpers below are public so tests can drive the commit formatting
+  # directly, without recompiling with a different BUILD_COMMIT.
+
+  @doc false
+  @spec version_with_commit(String.t(), String.t() | nil) :: String.t()
+  def version_with_commit(base_version, commit) do
+    case normalize_commit(commit) do
+      nil -> base_version
+      commit -> "#{base_version}*#{String.slice(commit, 0, 7)}"
+    end
   end
+
+  @doc false
+  @spec normalize_commit(String.t() | nil) :: String.t() | nil
+  def normalize_commit(""), do: nil
+  def normalize_commit(commit), do: commit
 end

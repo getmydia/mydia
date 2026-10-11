@@ -24,17 +24,10 @@ defmodule MydiaWeb.Api.MediaController do
     - 404: Media item not found
   """
   def show(conn, %{"id" => id}) do
-    case Media.get_media_item!(conn.assigns.current_scope, id,
-           preload: [:library_path, :episodes]
-         ) do
-      nil ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Media item not found"})
+    media_item =
+      Media.get_media_item!(conn.assigns.current_scope, id, preload: [:library_path, :episodes])
 
-      media_item ->
-        json(conn, %{data: serialize_media_item(media_item)})
-    end
+    json(conn, %{data: serialize_media_item(media_item)})
   rescue
     Ecto.NoResultsError ->
       conn
@@ -85,15 +78,8 @@ defmodule MydiaWeb.Api.MediaController do
           |> json(%{error: "invalid provider_type, must be 'tmdb' or 'tvdb'"})
 
         true ->
-          case Media.get_media_item!(conn.assigns.current_scope, id) do
-            nil ->
-              conn
-              |> put_status(:not_found)
-              |> json(%{error: "Media item not found"})
-
-            media_item ->
-              perform_manual_match(conn, media_item, provider_id, provider_type, fetch_episodes)
-          end
+          media_item = Media.get_media_item!(conn.assigns.current_scope, id)
+          perform_manual_match(conn, media_item, provider_id, provider_type, fetch_episodes)
       end
     else
       conn
@@ -118,8 +104,6 @@ defmodule MydiaWeb.Api.MediaController do
 
   defp parse_media_type("movie"), do: :movie
   defp parse_media_type("tv_show"), do: :tv_show
-  defp parse_media_type(:movie), do: :movie
-  defp parse_media_type(:tv_show), do: :tv_show
   defp parse_media_type(_), do: :movie
 
   defp perform_manual_match(conn, media_item, provider_id, provider_type, fetch_episodes) do
@@ -396,6 +380,4 @@ defmodule MydiaWeb.Api.MediaController do
       }
     end)
   end
-
-  defp serialize_episodes(_), do: nil
 end

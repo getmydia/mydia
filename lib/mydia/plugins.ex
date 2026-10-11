@@ -91,7 +91,7 @@ defmodule Mydia.Plugins do
         is_map(config.manifest),
         descriptor = config.manifest["connection"],
         is_map(descriptor),
-        Manifest.device_flow?(%Manifest{connection: descriptor}) do
+        Manifest.device_flow?(descriptor) do
       %{
         slug: config.slug,
         name: config.name,

@@ -856,10 +856,7 @@ defmodule Mydia.Plugins.Host do
     end
   end
 
-  defp event_type(payload) when is_map(payload),
-    do: Map.get(payload, :event) || Map.get(payload, "event")
-
-  defp event_type(_), do: nil
+  defp event_type(payload), do: Map.get(payload, :event) || Map.get(payload, "event")
 
   defp emit_end_marker(inv, result, duration_ms) do
     {level, outcome, detail} = classify_outcome(inv.handler, result)

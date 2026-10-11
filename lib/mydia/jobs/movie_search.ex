@@ -997,8 +997,6 @@ defmodule Mydia.Jobs.MovieSearch do
     Map.new(map, fn {k, v} -> {to_string(k), v} end)
   end
 
-  defp stringify_keys(other), do: other
-
   # Drops results matching an active `(indexer, guid)` row in the
   # release_blacklist table (#123). The "filter, don't rank" convention
   # keeps this distinct from `ReleaseRanker`. See `Mydia.Downloads.Blacklists`

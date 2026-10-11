@@ -58,6 +58,7 @@ defmodule Mydia.PluginV15Helpers do
       Registry.register(slug, %Plugin{
         slug: slug,
         name: "V15 Fixture",
+        version: "1.0.0",
         granted_capabilities: @grants,
         enabled: true,
         setup: true,

@@ -31,10 +31,6 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
 
       {:error, :insufficient_search_criteria} ->
         {:error, "This file has no hash or metadata IDs to search with"}
-
-      {:error, reason} ->
-        Logger.error("Subtitle search failed: #{inspect(reason)}")
-        {:error, "Subtitle search failed"}
     end
   end
 

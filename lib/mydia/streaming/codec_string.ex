@@ -264,21 +264,21 @@ defmodule Mydia.Streaming.CodecString do
       %{hevc_profile_idc: profile_idc, hevc_level_idc: level_idc}
       when not is_nil(profile_idc) and not is_nil(level_idc) ->
         tier = metadata.hevc_tier_flag || 0
-        format_hvc1(profile_idc, tier, level_idc)
+        format_hevc("hvc1", profile_idc, tier, level_idc)
 
       _ ->
         # Fall back to deriving from human-readable profile name
         {profile_idc, tier, level_idc} = hevc_profile_to_idc(codec)
-        format_hvc1(profile_idc, tier, level_idc)
+        format_hevc("hvc1", profile_idc, tier, level_idc)
     end
   end
 
-  defp format_hvc1(profile_idc, tier, level_idc) do
+  defp format_hevc(prefix, profile_idc, tier, level_idc) do
     tier_char = if tier == 1, do: "H", else: "L"
     # Profile compatibility is a 32-bit field, we use a simple default
     # 4 for Main, 6 for Main10 are common values
     compat = hevc_profile_compatibility(profile_idc)
-    "hvc1.#{profile_idc}.#{compat}.#{tier_char}#{level_idc}.B0"
+    "#{prefix}.#{profile_idc}.#{compat}.#{tier_char}#{level_idc}.B0"
   end
 
   defp hevc_profile_compatibility(1), do: 4
@@ -318,11 +318,9 @@ defmodule Mydia.Streaming.CodecString do
   defp hevc_variants(codec, metadata) do
     primary = hevc_codec_string(codec, metadata)
     {profile_idc, tier, level_idc} = hevc_profile_to_idc(codec)
-    tier_char = if tier == 1, do: "H", else: "L"
-    compat = hevc_profile_compatibility(profile_idc)
 
     # hev1 variant (in-band parameters)
-    hev1 = "hev1.#{profile_idc}.#{compat}.#{tier_char}#{level_idc}.B0"
+    hev1 = format_hevc("hev1", profile_idc, tier, level_idc)
 
     [
       primary,

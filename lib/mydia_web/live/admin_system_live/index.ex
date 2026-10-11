@@ -9,9 +9,6 @@ defmodule MydiaWeb.AdminSystemLive.Index do
   alias Mydia.Settings
   alias Mydia.System
 
-  # Capture Mix.env at compile time since Mix is not available in releases
-  @env Mix.env()
-
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -110,7 +107,7 @@ defmodule MydiaWeb.AdminSystemLive.Index do
   end
 
   defp get_database_health do
-    if @env == :test do
+    if Application.get_env(:mydia, :env) == :test do
       :healthy
     else
       if Repo.checked_out?() or test_db_connection(), do: :healthy, else: :unhealthy

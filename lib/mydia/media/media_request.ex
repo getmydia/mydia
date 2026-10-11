@@ -9,7 +9,7 @@ defmodule Mydia.Media.MediaRequest do
   @foreign_key_type :binary_id
 
   @type t :: %__MODULE__{
-          id: binary(),
+          id: binary() | nil,
           media_type: String.t() | nil,
           title: String.t() | nil,
           original_title: String.t() | nil,
@@ -27,8 +27,8 @@ defmodule Mydia.Media.MediaRequest do
           requester: Mydia.Accounts.User.t() | Ecto.Association.NotLoaded.t(),
           approved_by: Mydia.Accounts.User.t() | nil | Ecto.Association.NotLoaded.t(),
           media_item: Mydia.Media.MediaItem.t() | nil | Ecto.Association.NotLoaded.t(),
-          inserted_at: DateTime.t(),
-          updated_at: DateTime.t()
+          inserted_at: DateTime.t() | nil,
+          updated_at: DateTime.t() | nil
         }
 
   @status_values ~w(pending approved rejected)

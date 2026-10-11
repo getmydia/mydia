@@ -21,6 +21,9 @@ config :mydia,
   generators: [timestamp_type: :utc_datetime],
   database_adapter: database_adapter
 
+# The build environment, readable at runtime (releases bake config.exs in).
+config :mydia, :env, config_env()
+
 # Configures the endpoint
 config :mydia, MydiaWeb.Endpoint,
   url: [host: "localhost"],

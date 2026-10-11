@@ -30,6 +30,7 @@ defmodule Mydia.ShelfHelpers do
       Registry.register(slug, %Plugin{
         slug: slug,
         name: "Shelf Test",
+        version: "1.0.0",
         enabled: Keyword.get(opts, :enabled, true),
         granted_capabilities: Keyword.get(opts, :granted, %{"surfaces:shelf" => []}),
         shelves: [shelf]

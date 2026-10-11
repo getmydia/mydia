@@ -252,7 +252,7 @@ defmodule Mydia.Settings do
       {:ok, %{action: :create, profile: %QualityProfile{}, conflicts: []}}
   """
   @spec import_profile(String.t(), keyword()) ::
-          {:ok, QualityProfile.t() | map()} | {:error, String.t()}
+          {:ok, QualityProfile.t() | map()} | {:error, term()}
   defdelegate import_profile(source, opts \\ []), to: Mydia.Settings.QualityProfiles
 
   @doc """

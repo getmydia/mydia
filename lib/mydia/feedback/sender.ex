@@ -102,7 +102,6 @@ defmodule Mydia.Feedback.Sender do
   end
 
   defp header_entries(headers) when is_map(headers), do: Map.to_list(headers)
-  defp header_entries(headers), do: List.wrap(headers)
 
   defp normalize_header_value([value | _]), do: normalize_header_value(value)
   defp normalize_header_value(value) when is_binary(value), do: value

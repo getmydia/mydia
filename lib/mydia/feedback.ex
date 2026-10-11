@@ -52,7 +52,6 @@ defmodule Mydia.Feedback do
     end
   end
 
-  defp parse_boolean(value) when is_boolean(value), do: value
   defp parse_boolean("true"), do: true
   defp parse_boolean("1"), do: true
   defp parse_boolean("yes"), do: true

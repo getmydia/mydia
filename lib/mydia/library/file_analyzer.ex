@@ -121,8 +121,6 @@ defmodule Mydia.Library.FileAnalyzer do
     end
   end
 
-  defp maybe_probe_hdr10_plus(metadata, _file_path), do: metadata
-
   defp run_frame_probe(file_path) do
     args = [
       "-v",
@@ -298,7 +296,7 @@ defmodule Mydia.Library.FileAnalyzer do
   # Close the port and ensure no zombie OS process survives the timeout. Mirrors
   # the pattern in `Mydia.Streaming.FFmpegHlsTranscoder` (lines 340-374).
   defp kill_ffprobe(port, os_pid) do
-    if is_port(port) and Port.info(port) do
+    if Port.info(port) do
       Port.close(port)
     end
 

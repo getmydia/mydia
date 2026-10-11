@@ -141,7 +141,9 @@ defmodule Mydia.CrashReporter.Sender do
   end
 
   defp get_crash_report_url do
-    base_url = Mydia.Metadata.metadata_relay_url()
-    "#{base_url}/crashes/report"
+    case Mydia.Metadata.metadata_relay_url() do
+      "" -> ""
+      base_url -> "#{base_url}/crashes/report"
+    end
   end
 end

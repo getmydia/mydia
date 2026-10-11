@@ -325,10 +325,10 @@ defmodule Mydia.Plugins.Manifest do
   def auth_header(%{"auth_header" => header}) when is_binary(header), do: split_header(header)
   def auth_header(_), do: split_header(@default_auth_header)
 
-  @doc "True when the manifest declares a host-run OAuth device flow."
-  @spec device_flow?(t()) :: boolean()
-  def device_flow?(%__MODULE__{connection: %{"type" => "oauth_device"}}), do: true
-  def device_flow?(_), do: false
+  @doc "True when the manifest (or its `connection` map) declares a host-run OAuth device flow."
+  @spec device_flow?(t() | map() | nil) :: boolean()
+  def device_flow?(%__MODULE__{connection: conn}), do: device_flow?(conn)
+  def device_flow?(conn), do: match?(%{"type" => "oauth_device"}, conn)
 
   defp split_header(header) do
     [name, value] = String.split(header, ":", parts: 2)

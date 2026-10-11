@@ -41,9 +41,6 @@ defmodule Mydia.DB do
 
   import Ecto.Query
 
-  # Capture the database adapter at compile time for use in macros
-  @database_adapter Application.compile_env(:mydia, :database_adapter, Ecto.Adapters.SQLite3)
-
   @doc """
   Returns the current database adapter type.
 
@@ -658,6 +655,6 @@ defmodule Mydia.DB do
   # Returns true if PostgreSQL is configured (used at macro expansion time)
   @doc false
   defp postgres_configured? do
-    @database_adapter == Ecto.Adapters.Postgres
+    postgres?()
   end
 end

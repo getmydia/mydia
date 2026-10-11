@@ -66,10 +66,37 @@ lower number becomes the new baseline. Findings are matched by check and functio
 moving an unchanged function into a new module is free. Splitting a large file is
 exactly what the gate wants.
 
+### Dialyzer
+
+`./dev dialyzer` (and the `Dialyzer` CI job) must report zero findings. There is
+no ignore list: no `ignore_warnings`, no `.dialyzer_ignore.exs`, no `@dialyzer`
+attributes. CI fails if any appear.
+
+Fix a finding by making the code and its `@spec` agree, and prefer correcting
+the spec. A clause Dialyzer calls unreachable is either dead (delete it) or
+proof the callee's spec is too narrow (widen the spec). A spec you cannot state
+precisely gets looser (`map()`, `term()`), not deleted.
+
+Two patterns come up often. An `Ecto.Multi` pipeline trips an opaque-type false
+positive, so write the transaction with `Repo.transaction/1` and
+`Repo.rollback/1` instead. A compile-time `Mix.env()` comparison is reported as
+`exact_compare`, so read `Application.get_env(:mydia, :env)` (set in
+`config/config.exs`) rather than adding helpers to dodge it.
+
+It runs in `MIX_ENV=test`, with `:mix`, `:ex_unit` and `:wallaby` added to the
+PLT. The first run builds the PLT under `priv/plts` (a few minutes); later runs
+reuse it.
+
+This gate exists because nothing else checks the typespecs. Once Elixir's
+native type signatures replace typespecs, it goes away with them.
+
 ### What is forbidden
 
 Because each of these is a list of deferred findings, not a rule:
 
+- Dialyzer ignores: `ignore_warnings` in `mix.exs`, a `.dialyzer_ignore.exs`
+  file (Dialyxir loads it by default, so the file alone is enough), or `@dialyzer`
+  attributes in `lib/` or `test/support/`. CI checks for each.
 - `exit_status: 0` on an otherwise-enabled Credo check. CI greps `.credo.exs`
   for this and fails the build if it reappears.
 - `mix credo --mute-exit-status` in CI.

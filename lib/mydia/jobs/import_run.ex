@@ -414,13 +414,13 @@ defmodule Mydia.Jobs.ImportRun do
     existing.size != size or mtime_differs?(existing.mtime, mtime)
   end
 
-  # A missing mtime on either side (a candidate written by a path that never
-  # set it, such as `ImportCandidates.demote_episode_files/1`) means there is
-  # nothing to compare against, not proof that the file changed -- treating it
-  # as a change would clear a demoted candidate's deliberately preserved
-  # provider identity the moment a later scan revisits its path.
+  # A missing stored mtime (a candidate written by a path that never set it,
+  # such as `ImportCandidates.demote_episode_files/1`) means there is nothing
+  # to compare against, not proof that the file changed -- treating it as a
+  # change would clear a demoted candidate's deliberately preserved provider
+  # identity the moment a later scan revisits its path. The scanned mtime is
+  # always present.
   defp mtime_differs?(nil, _mtime), do: false
-  defp mtime_differs?(_mtime, nil), do: false
   defp mtime_differs?(a, b), do: DateTime.compare(a, b) != :eq
 
   defp scan_parsed_info(parsed) do

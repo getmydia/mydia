@@ -24,21 +24,15 @@ defmodule MydiaWeb.Api.PlaybackController do
   def show_movie(conn, %{"id" => media_item_id}) do
     current_user = Guardian.Plug.current_resource(conn)
 
-    case Media.get_media_item!(conn.assigns.current_scope, media_item_id) do
-      nil ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Media item not found"})
+    media_item = Media.get_media_item!(conn.assigns.current_scope, media_item_id)
 
-      media_item ->
-        if media_item.type != "movie" do
-          conn
-          |> put_status(:not_found)
-          |> json(%{error: "Media item is not a movie"})
-        else
-          progress = Playback.get_progress(current_user.id, media_item_id: media_item_id)
-          json(conn, serialize_progress(progress))
-        end
+    if media_item.type != "movie" do
+      conn
+      |> put_status(:not_found)
+      |> json(%{error: "Media item is not a movie"})
+    else
+      progress = Playback.get_progress(current_user.id, media_item_id: media_item_id)
+      json(conn, serialize_progress(progress))
     end
   rescue
     Ecto.NoResultsError ->
@@ -59,16 +53,9 @@ defmodule MydiaWeb.Api.PlaybackController do
   def show_episode(conn, %{"id" => episode_id}) do
     current_user = Guardian.Plug.current_resource(conn)
 
-    case Media.get_episode!(conn.assigns.current_scope, episode_id) do
-      nil ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Episode not found"})
-
-      _episode ->
-        progress = Playback.get_progress(current_user.id, episode_id: episode_id)
-        json(conn, serialize_progress(progress))
-    end
+    _episode = Media.get_episode!(conn.assigns.current_scope, episode_id)
+    progress = Playback.get_progress(current_user.id, episode_id: episode_id)
+    json(conn, serialize_progress(progress))
   rescue
     Ecto.NoResultsError ->
       conn
@@ -95,40 +82,34 @@ defmodule MydiaWeb.Api.PlaybackController do
   def update_movie(conn, %{"id" => media_item_id} = params) do
     current_user = Guardian.Plug.current_resource(conn)
 
-    case Media.get_media_item!(conn.assigns.current_scope, media_item_id) do
-      nil ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Media item not found"})
+    media_item = Media.get_media_item!(conn.assigns.current_scope, media_item_id)
 
-      media_item ->
-        if media_item.type != "movie" do
+    if media_item.type != "movie" do
+      conn
+      |> put_status(:not_found)
+      |> json(%{error: "Media item is not a movie"})
+    else
+      attrs = %{
+        position_seconds: params["position_seconds"],
+        duration_seconds: params["duration_seconds"]
+      }
+
+      case Playback.save_progress(current_user.id, [media_item_id: media_item_id], attrs) do
+        {:ok, progress} ->
+          Logger.debug("Saved movie playback progress",
+            user_id: current_user.id,
+            media_item_id: media_item_id,
+            position: progress.position_seconds,
+            percentage: progress.completion_percentage
+          )
+
+          json(conn, serialize_progress(progress))
+
+        {:error, changeset} ->
           conn
-          |> put_status(:not_found)
-          |> json(%{error: "Media item is not a movie"})
-        else
-          attrs = %{
-            position_seconds: params["position_seconds"],
-            duration_seconds: params["duration_seconds"]
-          }
-
-          case Playback.save_progress(current_user.id, [media_item_id: media_item_id], attrs) do
-            {:ok, progress} ->
-              Logger.debug("Saved movie playback progress",
-                user_id: current_user.id,
-                media_item_id: media_item_id,
-                position: progress.position_seconds,
-                percentage: progress.completion_percentage
-              )
-
-              json(conn, serialize_progress(progress))
-
-            {:error, changeset} ->
-              conn
-              |> put_status(:unprocessable_entity)
-              |> json(%{error: "Invalid data", details: format_changeset_errors(changeset)})
-          end
-        end
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "Invalid data", details: format_changeset_errors(changeset)})
+      end
     end
   rescue
     Ecto.NoResultsError ->
@@ -156,34 +137,28 @@ defmodule MydiaWeb.Api.PlaybackController do
   def update_episode(conn, %{"id" => episode_id} = params) do
     current_user = Guardian.Plug.current_resource(conn)
 
-    case Media.get_episode!(conn.assigns.current_scope, episode_id) do
-      nil ->
+    _episode = Media.get_episode!(conn.assigns.current_scope, episode_id)
+
+    attrs = %{
+      position_seconds: params["position_seconds"],
+      duration_seconds: params["duration_seconds"]
+    }
+
+    case Playback.save_progress(current_user.id, [episode_id: episode_id], attrs) do
+      {:ok, progress} ->
+        Logger.debug("Saved episode playback progress",
+          user_id: current_user.id,
+          episode_id: episode_id,
+          position: progress.position_seconds,
+          percentage: progress.completion_percentage
+        )
+
+        json(conn, serialize_progress(progress))
+
+      {:error, changeset} ->
         conn
-        |> put_status(:not_found)
-        |> json(%{error: "Episode not found"})
-
-      _episode ->
-        attrs = %{
-          position_seconds: params["position_seconds"],
-          duration_seconds: params["duration_seconds"]
-        }
-
-        case Playback.save_progress(current_user.id, [episode_id: episode_id], attrs) do
-          {:ok, progress} ->
-            Logger.debug("Saved episode playback progress",
-              user_id: current_user.id,
-              episode_id: episode_id,
-              position: progress.position_seconds,
-              percentage: progress.completion_percentage
-            )
-
-            json(conn, serialize_progress(progress))
-
-          {:error, changeset} ->
-            conn
-            |> put_status(:unprocessable_entity)
-            |> json(%{error: "Invalid data", details: format_changeset_errors(changeset)})
-        end
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "Invalid data", details: format_changeset_errors(changeset)})
     end
   rescue
     Ecto.NoResultsError ->

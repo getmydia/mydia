@@ -253,7 +253,6 @@ defmodule Mydia.Library.Misfile do
   defp episode_disagrees?(nil, _expected), do: false
   defp episode_disagrees?([], _expected), do: false
   defp episode_disagrees?(parsed, expected) when is_list(parsed), do: expected not in parsed
-  defp episode_disagrees?(parsed, expected), do: parsed != expected
 
   defp title_uncovered?(%MediaFile{relative_path: path}, %TargetContext{} = target) do
     case ReleaseParser.parse_with_path(path).title do
@@ -268,10 +267,10 @@ defmodule Mydia.Library.Misfile do
   end
 
   defp item_names(%TargetContext{title: title, alt_titles: alts}) do
-    bare = Regex.replace(~r/\s*\(\d{4}\)\s*$/u, title || "", "")
+    bare = Regex.replace(~r/\s*\(\d{4}\)\s*$/u, title, "")
 
-    [title, bare | alts || []]
-    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+    [title, bare | alts]
+    |> Enum.reject(&(&1 == ""))
     |> Enum.uniq()
   end
 

@@ -302,7 +302,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
             case error do
               %{message: msg} -> msg
               msg when is_binary(msg) -> msg
-              _ -> "Failed to fetch indexers"
             end
 
           {:noreply,
@@ -380,12 +379,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
            |> put_flash(:info, "Connection successful! Version: #{version}")}
 
         {:error, error} ->
-          error_msg =
-            case error do
-              msg when is_binary(msg) -> msg
-              %{message: msg} -> msg
-              _ -> MydiaLogger.extract_error_message(error)
-            end
+          error_msg = error.message
 
           {:noreply,
            socket
@@ -559,7 +553,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
     settings =
       case CardigannParser.parse_definition(definition.definition) do
-        {:ok, parsed} -> parsed.settings || []
+        {:ok, parsed} -> parsed.settings
         {:error, _} -> []
       end
 
@@ -1022,7 +1016,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   # though the underlying boot defect is fixed.
   defp flaresolverr_values_and_sources do
     config = Settings.get_runtime_config()
-    config = if is_struct(config), do: config, else: Mydia.Config.Schema.defaults()
     fs = config.flaresolverr || %Mydia.Config.Schema.FlareSolverr{}
     all_db = Settings.list_config_settings() |> Map.new(&{&1.key, &1})
 
@@ -1309,7 +1302,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
           case error do
             %{message: msg} -> msg
             msg when is_binary(msg) -> msg
-            _ -> "Failed to fetch indexers"
           end
 
         socket

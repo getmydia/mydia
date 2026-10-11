@@ -75,7 +75,7 @@ defmodule Mydia.CardigannSnapshotHelper do
         _ -> ""
       end
 
-    indexer_name = definition.name || definition.id
+    indexer_name = definition.name
 
     # Parse results
     response = %{status: 200, body: response_body}
@@ -360,7 +360,7 @@ defmodule Mydia.CardigannSnapshotHelper do
 
     # Build config from definition settings defaults
     config =
-      (definition.settings || [])
+      definition.settings
       |> Enum.reduce(%{}, fn setting, acc ->
         name = setting[:name] || setting["name"]
         default = setting[:default] || setting["default"]
@@ -371,7 +371,7 @@ defmodule Mydia.CardigannSnapshotHelper do
       keywords: keywords,
       config: config,
       categories: [],
-      settings: definition.settings || [],
+      settings: definition.settings,
       query: %{}
     }
   end

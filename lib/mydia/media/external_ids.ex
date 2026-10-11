@@ -26,9 +26,9 @@ defmodule Mydia.Media.ExternalIds do
   alias Mydia.Repo
 
   @type t :: %{
-          tmdb: integer() | nil,
-          tvdb: integer() | nil,
-          imdb: String.t() | nil
+          optional(:tmdb) => integer() | nil,
+          optional(:tvdb) => integer() | nil,
+          optional(:imdb) => String.t() | nil
         }
 
   @providers [:tmdb, :tvdb]
@@ -161,8 +161,11 @@ defmodule Mydia.Media.ExternalIds do
 
   The same `:type` (required), `:exclude_id` and `:title` as `put_free_ids/3`.
   """
-  @spec write(map(), keyword(), (map() -> {:ok, term()} | {:error, Ecto.Changeset.t()})) ::
-          {:ok, term()} | {:error, Ecto.Changeset.t()}
+  @spec write(
+          map(),
+          keyword(),
+          (map() -> {:ok, term()} | {:error, Ecto.Changeset.t() | :restricted})
+        ) :: {:ok, term()} | {:error, Ecto.Changeset.t() | :restricted}
   def write(attrs, opts, fun) when is_function(fun, 1) do
     type = fetch_type!(opts)
 

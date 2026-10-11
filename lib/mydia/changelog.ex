@@ -42,12 +42,14 @@ defmodule Mydia.Changelog do
   The newest bundled version string, or `nil` when no notes are bundled.
   """
   @spec latest() :: String.t() | nil
-  def latest do
-    case @entries do
-      [] -> nil
-      [%Entry{version_string: version_string} | _] -> version_string
-    end
-  end
+  def latest, do: latest(@entries)
+
+  @doc """
+  Pure form of `latest/0` taking an explicit entry list, newest first.
+  """
+  @spec latest([Entry.t()]) :: String.t() | nil
+  def latest([]), do: nil
+  def latest([%Entry{version_string: version_string} | _]), do: version_string
 
   @doc """
   Entries newer than `last_seen`, newest first.

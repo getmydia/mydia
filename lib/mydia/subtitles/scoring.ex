@@ -56,7 +56,7 @@ defmodule Mydia.Subtitles.Scoring do
 
   def build_reference(%MediaFile{} = media_file) do
     parsed = ReleaseParser.parse(MediaFile.display_name(media_file), standardize: true)
-    quality = parsed.quality || %Quality{}
+    quality = parsed.quality
 
     # A file named "S01E03.mkv" parses to nothing. The analyzed columns know
     # what the stream actually is, so they fill the two fields they cover, run
@@ -120,7 +120,7 @@ defmodule Mydia.Subtitles.Scoring do
 
   defp parse_candidate(name) when is_binary(name) and name != "" do
     parsed = ReleaseParser.parse(name, standardize: true)
-    quality = parsed.quality || %Quality{}
+    quality = parsed.quality
 
     %Reference{
       release_group: parsed.release_group,

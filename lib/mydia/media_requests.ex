@@ -23,7 +23,6 @@ defmodule Mydia.MediaRequests do
   alias Mydia.Media.MediaRequest
   alias Mydia.DB
   alias Mydia.Search
-  alias Ecto.Multi
 
   @doc """
   Returns the list of media requests.
@@ -229,39 +228,18 @@ defmodule Mydia.MediaRequests do
   # decide whether to queue a search; a linked request must not queue one for
   # a media item someone else already added.
   defp insert_approval(scope, request, media_attrs, attrs, opts) do
-    Multi.new()
-    |> Multi.run(:media_item, fn _repo, _changes ->
-      case Add.from_attrs(
-             scope,
-             media_attrs,
-             opts[:config],
-             [
-               actor_type: :user,
-               actor_id: attrs[:approved_by_id],
-               exclude_request_id: request.id
-             ] ++ Keyword.take(opts, [:season_monitoring])
-           ) do
-        {:ok, media_item} ->
-          {:ok, %{item: media_item, created?: true}}
+    Repo.transaction(fn ->
+      {media_item, created?} = insert_or_link_item(scope, request, media_attrs, attrs, opts)
 
-        # Not a failure: the request is asking for something already in the
-        # library. Link the request to the existing row instead of bouncing
-        # the approval off a unique constraint the admin can't act on.
-        {:error, {:already_in_library, media_item}} ->
-          {:ok, %{item: media_item, created?: false}}
-
-        {:error, {:changeset, changeset}} ->
-          {:error, changeset}
+      case request
+           |> MediaRequest.approve_changeset(Map.put(attrs, :media_item_id, media_item.id))
+           |> Repo.update() do
+        {:ok, updated_request} -> {updated_request, media_item, created?}
+        {:error, changeset} -> Repo.rollback(changeset)
       end
     end)
-    |> Multi.run(:request, fn _repo, %{media_item: %{item: media_item}} ->
-      request
-      |> MediaRequest.approve_changeset(Map.put(attrs, :media_item_id, media_item.id))
-      |> Repo.update()
-    end)
-    |> Repo.transaction()
     |> case do
-      {:ok, %{request: updated_request, media_item: %{item: media_item, created?: created?}}} ->
+      {:ok, {updated_request, media_item, created?}} ->
         # "linked to", not "created": approval also lands here when the item
         # was already in the library and the request was pointed at it.
         Logger.info(
@@ -279,12 +257,36 @@ defmodule Mydia.MediaRequests do
 
         {:ok, %{request: updated_request, media_item: media_item}, created?}
 
-      {:error, :media_item, changeset, _changes} ->
-        Logger.error("Failed to create media item for request #{request.id}")
+      {:error, changeset} ->
         {:error, changeset}
+    end
+  end
 
-      {:error, :request, changeset, _changes} ->
-        {:error, changeset}
+  # Runs inside the approval transaction; rolls back with the changeset when
+  # the media item cannot be created.
+  defp insert_or_link_item(scope, request, media_attrs, attrs, opts) do
+    case Add.from_attrs(
+           scope,
+           media_attrs,
+           opts[:config],
+           [
+             actor_type: :user,
+             actor_id: attrs[:approved_by_id],
+             exclude_request_id: request.id
+           ] ++ Keyword.take(opts, [:season_monitoring])
+         ) do
+      {:ok, media_item} ->
+        {media_item, true}
+
+      # Not a failure: the request is asking for something already in the
+      # library. Link the request to the existing row instead of bouncing
+      # the approval off a unique constraint the admin can't act on.
+      {:error, {:already_in_library, media_item}} ->
+        {media_item, false}
+
+      {:error, {:changeset, changeset}} ->
+        Logger.error("Failed to create media item for request #{request.id}")
+        Repo.rollback(changeset)
     end
   end
 

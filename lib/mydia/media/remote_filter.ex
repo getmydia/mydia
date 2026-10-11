@@ -149,7 +149,7 @@ defmodule Mydia.Media.RemoteFilter do
     kinds = MapSet.new(allowed, &kind/1)
 
     cond do
-      kinds == MapSet.new([:anime]) ->
+      MapSet.equal?(kinds, MapSet.new([:anime])) ->
         [required_genres: [@animation_genre_id], original_language: "ja"]
 
       MapSet.subset?(kinds, MapSet.new([:anime, :cartoon])) ->

@@ -55,6 +55,48 @@ defmodule MydiaWeb.Api.HlsControllerTest do
     {:ok, pid}
   end
 
+  describe "POST /api/v1/hls/start" do
+    test "accepts the UUID of a real media file instead of rejecting it as invalid", %{
+      conn: conn,
+      token: token,
+      user: user
+    } do
+      media_file = media_file_fixture()
+
+      on_exit(fn ->
+        Mydia.Streaming.HlsSessionSupervisor.stop_user_sessions(user.id, fn _ -> false end)
+      end)
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> post("/api/v1/hls/start", %{"media_file_id" => media_file.id})
+
+      # Whether ffmpeg can actually transcode the fixture is beside the point:
+      # the id must get past parsing and authorization, which used to answer
+      # 400 "Invalid media_file_id" for every UUID.
+      refute conn.status in [400, 404]
+    end
+
+    test "answers 404 for a media file id that does not exist", %{conn: conn, token: token} do
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> post("/api/v1/hls/start", %{"media_file_id" => Ecto.UUID.generate()})
+
+      assert json_response(conn, 404)["error"] == "Media file not found"
+    end
+
+    test "answers 404 for an id that is not a UUID", %{conn: conn, token: token} do
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> post("/api/v1/hls/start", %{"media_file_id" => "not-a-uuid"})
+
+      assert json_response(conn, 404)["error"] == "Media file not found"
+    end
+  end
+
   describe "GET /api/v1/hls/:session_id/:segment" do
     test "a materialized subtitle returns 200 with a text/vtt content type", %{
       conn: conn,

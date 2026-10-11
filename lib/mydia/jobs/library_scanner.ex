@@ -714,10 +714,9 @@ defmodule Mydia.Jobs.LibraryScanner do
     existing.size != size or candidate_mtime_differs?(existing.mtime, mtime)
   end
 
-  # A missing mtime on either side means there is nothing to compare against,
-  # not proof that the file changed.
+  # A missing stored mtime means there is nothing to compare against, not
+  # proof that the file changed. The scanned mtime is always present.
   defp candidate_mtime_differs?(nil, _mtime), do: false
-  defp candidate_mtime_differs?(_mtime, nil), do: false
   defp candidate_mtime_differs?(a, b), do: DateTime.compare(a, b) != :eq
 
   defp discovered_candidate_parsed_info(parsed) do

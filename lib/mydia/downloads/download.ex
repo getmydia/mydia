@@ -38,7 +38,7 @@ defmodule Mydia.Downloads.Download do
           removal_kind: String.t() | nil,
           removal_delete_files: boolean(),
           removal_error: String.t() | nil,
-          media_item: Mydia.Media.MediaItem.t() | Ecto.Association.NotLoaded.t(),
+          media_item: Mydia.Media.MediaItem.t() | nil | Ecto.Association.NotLoaded.t(),
           episode: Mydia.Media.Episode.t() | nil | Ecto.Association.NotLoaded.t(),
           library_path: Mydia.Settings.LibraryPath.t() | nil | Ecto.Association.NotLoaded.t(),
           inserted_at: DateTime.t(),

@@ -127,7 +127,6 @@ defmodule Mydia.MediaServer.Health do
       case adapter.test_connection(config) do
         :ok -> healthy_result(%{})
         {:error, %Error{} = error} -> unhealthy_result(Error.message(error))
-        {:error, other} -> unhealthy_result(inspect(other))
       end
 
     cache_health(config.id, result)

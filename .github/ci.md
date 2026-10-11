@@ -416,6 +416,17 @@ Four gotchas around it:
   when a local dev-env compile is clean. Reproduce with
   `MIX_ENV=test mix compile --warnings-as-errors --force`.
 
+### The Dialyzer job
+
+`ci.yml`'s `Dialyzer` job runs `mix dialyzer --format github` in `MIX_ENV=test`
+and fails on any finding. It reuses the Test job's `Cache build` key, so it
+restores the same `_build/test` and `priv/native`. The PLTs live in `priv/plts`
+under their own cache, keyed on `.elixir-version`, `.otp-version` and `mix.lock`,
+with a restore prefix on the toolchain so a lock change rebuilds incrementally.
+The Test job greps `mix.exs` for `ignore_warnings`, `lib/` and `test/support/` for `@dialyzer`,
+and checks for a `.dialyzer_ignore.exs` file (Dialyxir loads it by default without any
+`mix.exs` setting). It fails if any of the three appears. The policy is in `CONTRIBUTING.md`.
+
 ### Rust lint and test-warning gates
 
 The `rust` job runs two lint steps before its tests: "Lint native crates (fmt +

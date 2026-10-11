@@ -75,7 +75,6 @@ defmodule Mydia.Subtitles.Hash do
     case :file.position(file, position) do
       {:ok, _new_position} ->
         case IO.binread(file, @chunk_size) do
-          {:ok, data} -> {:ok, data}
           data when is_binary(data) -> {:ok, data}
           {:error, reason} -> {:error, reason}
           :eof -> {:error, :eof}
