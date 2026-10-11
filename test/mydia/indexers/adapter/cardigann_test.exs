@@ -287,7 +287,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       %{bypass: bypass, private_definition: definition}
     end
 
-    test "string-keyed credentials reach a form login", %{bypass: bypass} do
+    test "string-keyed definition config reaches a form login", %{bypass: bypass} do
       test_pid = self()
 
       Bypass.stub(bypass, "GET", "/login.php", fn conn ->
@@ -319,8 +319,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       config = %{
         type: :cardigann,
         name: "Private Indexer",
-        indexer_id: "private-indexer",
-        user_settings: %{"username" => "stringuser", "password" => "stringpass"}
+        indexer_id: "private-indexer"
       }
 
       assert {:ok, _results} = Cardigann.search(config, "query")
