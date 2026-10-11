@@ -438,7 +438,7 @@ defmodule Mydia.Downloads.ImportCandidates do
   end
 
   # Prefers the download's actually-resolved `library_path.type` — the type
-  # `MediaImport.organize_and_import_files/4` really filtered against — over
+  # `MediaImport.FileImport.organize_and_import_files/4` really filtered against — over
   # the movie/series guess below. A failed download was routed through
   # `determine_library_path/1` at least once, so when the caller preloaded
   # `:library_path` this is the real answer rather than a reconstruction.

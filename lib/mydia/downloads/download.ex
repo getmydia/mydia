@@ -134,7 +134,7 @@ defmodule Mydia.Downloads.Download do
   and import-retrying (transient failures still have `import_next_retry_at` set).
 
   Note: a transient import failure sets `import_failed_at` on the first attempt
-  (see `MediaImport.handle_import_failure/3`), so `import_failed_at` alone does not
+  (see `MediaImport.Failure.handle_import_failure/3`), so `import_failed_at` alone does not
   mean "done" — the `import_next_retry_at` nil check distinguishes terminal from
   retrying.
   """
