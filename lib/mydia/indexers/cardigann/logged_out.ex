@@ -10,6 +10,23 @@ defmodule Mydia.Indexers.Cardigann.LoggedOut do
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.CardigannDefinition.Parsed
 
+  @sent_key {__MODULE__, :session_sent}
+
+  @doc """
+  Records, in the calling process, whether the last search request carried the
+  session cookies. The search engine withholds them from cleartext and untrusted
+  hosts, and that anonymous response must not be blamed on the session.
+  """
+  @spec note_session_sent(boolean()) :: :ok
+  def note_session_sent(sent?) do
+    Process.put(@sent_key, sent?)
+    :ok
+  end
+
+  @doc "Returns and clears the last `note_session_sent/1` value; nil when none was recorded."
+  @spec take_session_sent() :: boolean() | nil
+  def take_session_sent, do: Process.delete(@sent_key)
+
   @spec check(Parsed.t(), tuple(), boolean()) :: :ok | :logged_out
   def check(_parsed, _result, false), do: :ok
   def check(%Parsed{login: nil}, _result, _sent), do: :ok

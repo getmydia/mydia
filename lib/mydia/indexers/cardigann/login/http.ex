@@ -21,7 +21,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Http do
     %{
       jar: put_cookies(%{}, seed_cookies),
       headers: Inputs.headers(parsed, Inputs.context(parsed, config)),
-      origins: CredentialScope.trusted_origins(parsed, config || %{}),
+      origins: CredentialScope.trusted_origins(parsed, config),
       max_hops: @max_hops
     }
   end

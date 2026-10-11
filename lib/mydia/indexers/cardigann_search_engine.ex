@@ -57,6 +57,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
   alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Indexers.Cardigann.LoggedOut
   alias Mydia.Indexers.Cardigann.RequestHeaders
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
@@ -428,10 +429,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   - `request_params` - Request parameters from build_request_params/2
   - `user_config` - User configuration (cookies, credentials)
 
-  ## Returns
-
-  - `{:ok, response}` - HTTP response with status, body, headers
-  - `{:error, reason}` - Request execution error
+  Records whether the session cookies went out, via `LoggedOut.note_session_sent/1`.
 
   ## Examples
 
@@ -849,6 +847,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   defp build_request_options(definition, url, request_params, user_config, config) do
     {session_pairs, session_attached?} =
       session_cookie_pairs(Map.get(user_config, :cookies), url, definition, config)
+
+    LoggedOut.note_session_sent(session_attached?)
 
     {headers, clearance_attached?} =
       RequestHeaders.build(request_params.headers, url, session_pairs)

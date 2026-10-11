@@ -21,6 +21,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
     ctx = Http.new_ctx(parsed, config, login.cookies)
 
     with {:ok, path} <- Inputs.render(login.path, context),
+         {:ok, submitpath} <- Inputs.render(login.submitpath, context),
          login_url = Inputs.resolve(base, path),
          {:ok, landing, ctx} <- Http.request(ctx, :get, login_url, []),
          {:ok, doc} <- Floki.parse_document(landing.body),
@@ -35,7 +36,7 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
         doc: doc,
         ctx: ctx,
         scraped: scraped,
-        submit_url: submit_url(login, form, login_url, query),
+        submit_url: submit_url(submitpath, form, login_url, query),
         twofa_key: twofa_key(login.inputs)
       }
 
@@ -186,8 +187,10 @@ defmodule Mydia.Indexers.Cardigann.Login.Form do
   defp maybe_captcha(_ctx, %{type: type}, _doc, _url),
     do: {:error, Error.invalid_config("Captcha type #{inspect(type)} is not supported")}
 
-  defp submit_url(login, form, login_url, query) do
-    path = login.submitpath || attr(form, "action") || login.path || ""
+  # Both paths arrive rendered; an absent submitpath renders to "". Without one or
+  # a form action, the form posts back to the page it came from.
+  defp submit_url(submitpath, form, login_url, query) do
+    path = if submitpath == "", do: attr(form, "action") || "", else: submitpath
     url = Inputs.resolve_page(login_url, path)
 
     if query == %{},

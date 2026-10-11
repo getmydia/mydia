@@ -38,11 +38,11 @@ defmodule Mydia.Indexers.Cardigann.SessionManager do
   @spec with_session(Parsed.t(), CardigannDefinition.t(), (map() -> any())) :: any()
   def with_session(%Parsed{} = parsed, %CardigannDefinition{} = definition, search) do
     with {:ok, user_config} <- user_config(parsed, definition) do
-      result = search.(user_config)
+      {result, sent?} = run(search, user_config)
 
-      case LoggedOut.check(parsed, unwrap(result), cookies?(user_config)) do
+      case LoggedOut.check(parsed, unwrap(result), sent?) do
         :ok -> result
-        :logged_out -> relogin_and_retry(parsed, definition, search)
+        :logged_out -> relogin_and_retry(parsed, definition, search, user_config[:cookies])
       end
     end
   end
@@ -60,14 +60,11 @@ defmodule Mydia.Indexers.Cardigann.SessionManager do
     :ok
   end
 
-  defp relogin_and_retry(parsed, definition, search) do
-    Logger.info("Cardigann #{definition.indexer_id}: session rejected, logging in again")
-    CardigannAuth.invalidate_session(definition.id)
+  defp relogin_and_retry(parsed, definition, search, rejected) do
+    with {:ok, user_config} <- fresh_session(parsed, definition, rejected) do
+      {result, sent?} = run(search, user_config)
 
-    with {:ok, user_config} <- login(parsed, definition) do
-      result = search.(user_config)
-
-      case LoggedOut.check(parsed, unwrap(result), cookies?(user_config)) do
+      case LoggedOut.check(parsed, unwrap(result), sent?) do
         :ok ->
           result
 
@@ -78,6 +75,36 @@ defmodule Mydia.Indexers.Cardigann.SessionManager do
            )}
       end
     end
+  end
+
+  # A search running alongside may already have replaced the rejected session;
+  # reuse its session rather than deleting it and logging in a second time.
+  defp fresh_session(parsed, definition, rejected) do
+    case CardigannAuth.get_stored_session(definition.id) do
+      {:ok, %{cookies: cookies}} when cookies != rejected ->
+        {:ok, %{cookies: cookies}}
+
+      _ ->
+        Logger.info("Cardigann #{definition.indexer_id}: session rejected, logging in again")
+        CardigannAuth.invalidate_session(definition.id)
+        login(parsed, definition)
+    end
+  end
+
+  # Whether the cookies went out is what the search engine recorded; a search
+  # function that bypasses the engine records nothing, so fall back to whether
+  # there were cookies to send.
+  defp run(search, user_config) do
+    LoggedOut.take_session_sent()
+    result = search.(user_config)
+
+    sent? =
+      case LoggedOut.take_session_sent() do
+        nil -> cookies?(user_config)
+        sent? -> sent?
+      end
+
+    {result, sent?}
   end
 
   defp login(parsed, definition) do

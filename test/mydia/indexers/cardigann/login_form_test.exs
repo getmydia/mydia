@@ -111,6 +111,30 @@ defmodule Mydia.Indexers.Cardigann.LoginFormTest do
     assert {:ok, _} = Login.begin(parsed, definition(%{}))
   end
 
+  test "submitpath renders its template", %{bypass: bypass, base: base} do
+    landing(bypass)
+    expect_submit(bypass, "/do-login", fn _params, _conn -> :ok end)
+
+    parsed = parsed(base, %{method: "form", submitpath: "/{{ .Config.sub }}"})
+
+    assert {:ok, _} = Login.begin(parsed, definition(%{"sub" => "do-login"}))
+  end
+
+  test "a form without an action posts back to the rendered login path", %{
+    bypass: bypass,
+    base: base
+  } do
+    Bypass.expect_once(bypass, "GET", "/members/login.php", fn conn ->
+      Plug.Conn.resp(conn, 200, ~s(<form><input name="username"></form>))
+    end)
+
+    expect_submit(bypass, "/members/login.php", fn _params, _conn -> :ok end)
+
+    parsed = parsed(base, %{method: "form", path: "/{{ .Config.area }}/login.php"})
+
+    assert {:ok, _} = Login.begin(parsed, definition(%{"area" => "members"}))
+  end
+
   test "selectors: true resolves input keys to field names", %{bypass: bypass, base: base} do
     landing(bypass)
 

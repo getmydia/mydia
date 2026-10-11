@@ -4,7 +4,7 @@ defmodule Mydia.Indexers.Cardigann.SessionManagerTest do
   import Mydia.CardigannLoginFixtures
 
   alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Indexers.Cardigann.SessionManager
+  alias Mydia.Indexers.Cardigann.{LoggedOut, SessionManager}
   alias Mydia.Indexers.{CardigannAuth, CardigannDefinition}
 
   setup do
@@ -65,6 +65,48 @@ defmodule Mydia.Indexers.Cardigann.SessionManagerTest do
 
     assert {:error, %Error{type: :authentication_failed}} =
              SessionManager.with_session(parsed(base, %{}), d, fn _ -> redirect() end)
+  end
+
+  test "a logged-out response to a request that withheld the cookies keeps the session", %{
+    base: base
+  } do
+    d = definition(%{"username" => "a", "password" => "b"})
+    {:ok, _} = CardigannAuth.store_session(d.id, ["uid=1"])
+
+    search = fn _ ->
+      LoggedOut.note_session_sent(false)
+      redirect()
+    end
+
+    assert {:error, %Error{message: "Redirected" <> _}} =
+             SessionManager.with_session(parsed(base, %{}), d, search)
+
+    assert {:ok, %{cookies: ["uid=1"]}} = CardigannAuth.get_stored_session(d.id)
+  end
+
+  test "reuses a session another search stored after the rejected one", %{base: base} do
+    d = definition(%{"username" => "a", "password" => "b"})
+    {:ok, _} = CardigannAuth.store_session(d.id, ["uid=old"])
+
+    {:ok, agent} = Agent.start_link(fn -> 0 end)
+
+    # The first search is rejected, and meanwhile another search logs in and
+    # stores uid=new. No login request may go out (bypass expects none).
+    search = fn user_config ->
+      case Agent.get_and_update(agent, &{&1, &1 + 1}) do
+        0 ->
+          {:ok, _} = CardigannAuth.store_session(d.id, ["uid=new"])
+          redirect()
+
+        _ ->
+          {{:ok, %{status: 200, body: "{}", headers: %{}}}, user_config}
+      end
+    end
+
+    assert {{:ok, _}, %{cookies: ["uid=new"]}} =
+             SessionManager.with_session(parsed(base, %{}), d, search)
+
+    assert {:ok, %{cookies: ["uid=new"]}} = CardigannAuth.get_stored_session(d.id)
   end
 
   test "a captcha at re-login marks needs_login and broadcasts", %{bypass: bypass, base: base} do
