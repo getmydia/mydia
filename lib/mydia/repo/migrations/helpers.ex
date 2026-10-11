@@ -756,18 +756,12 @@ defmodule Mydia.Repo.Migrations.Helpers do
   # can be exercised without a migration wrapped around it.
   @spec sqlite_fk_children(module(), atom() | String.t()) :: [String.t()]
   def sqlite_fk_children(repo, table) do
-    {ordered, _visited} =
-      collect_fk_children(
-        to_string(table),
-        direct_fk_children(repo),
-        [to_string(table)],
-        [],
-        %{}
-      )
-
+    name = to_string(table)
+    {ordered, _visited} = collect_fk_children(name, direct_fk_children(repo), [name], [], %{})
     ordered
   end
 
+  # `visited` is a map, not a MapSet: a MapSet here trips Dialyzer's opaque check.
   defp collect_fk_children(table, graph, stack, acc, visited) do
     graph
     |> Map.get(table, [])
