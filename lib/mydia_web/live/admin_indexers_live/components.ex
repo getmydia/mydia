@@ -15,7 +15,6 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :library_indexers, :list, required: true
   attr :library_indexer_stats, :map, required: true
   attr :cardigann_enabled, :boolean, required: true
-  attr :recently_disabled_indexer, :any, default: nil
   attr :flaresolverr, :map, default: %{enabled: false, url: nil, configured: false, env?: false}
   attr :flaresolverr_status, :map, default: %{configured: false, status: :loading}
   attr :retesting_paused, :any, default: MapSet.new()
@@ -56,7 +55,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
         </.admin_section>
 
         <.admin_section
-          :if={@library_indexers != [] or @recently_disabled_indexer}
+          :if={@library_indexers != []}
           id="library-indexers-section"
           title="Library Indexers"
           icon="hero-book-open"
@@ -72,27 +71,6 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
               <.icon name="hero-plus" class="w-3 h-3" /> Add More
             </button>
           </div>
-          <%!-- Undo Banner for Recently Disabled Indexer --%>
-          <%= if @recently_disabled_indexer do %>
-            <div id="undo-disabled-indexer" class="alert alert-warning shadow-sm">
-              <.icon name="hero-arrow-uturn-left" class="w-5 h-5" />
-              <span>
-                <strong>{@recently_disabled_indexer.name}</strong> was disabled
-              </span>
-              <div class="flex gap-2">
-                <button class="btn btn-sm btn-ghost" phx-click="undo_disable_library_indexer">
-                  Undo
-                </button>
-                <button
-                  class="btn btn-sm btn-ghost btn-circle"
-                  phx-click="dismiss_undo_banner"
-                  title="Dismiss"
-                >
-                  <.icon name="hero-x-mark" class="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          <% end %>
           <.admin_list id="library-indexers" items={@library_indexers}>
             <:row :let={indexer}>
               <.library_indexer_row
@@ -102,7 +80,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
                 }
               />
             </:row>
-            <:empty>No enabled library indexers.</:empty>
+            <:empty>No library indexers.</:empty>
           </.admin_list>
         </.admin_section>
       <% end %>
@@ -220,7 +198,10 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
 
   defp library_indexer_row(assigns) do
     ~H"""
-    <.admin_row id={"library-indexer-#{@indexer.id}"}>
+    <.admin_row
+      id={"library-indexer-#{@indexer.id}"}
+      class={if(!@indexer.enabled, do: "opacity-60")}
+    >
       <:title>
         {@indexer.name}
         <span class={"badge badge-xs #{library_indexer_type_badge_class(@indexer.type)}"}>
@@ -230,6 +211,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
       </:title>
       <:descriptor :if={@indexer.description}>{@indexer.description}</:descriptor>
       <:badges>
+        <span :if={!@indexer.enabled} class="badge badge-sm badge-ghost">Disabled</span>
         <%= if @indexer.health_status not in [nil, "unknown"] do %>
           <span class={"badge badge-sm badge-outline #{library_health_status_badge_class(@indexer.health_status)}"}>
             {library_health_status_label(@indexer.health_status)}
@@ -298,6 +280,15 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             title="Test"
             phx-click="test_library_indexer"
             phx-value-id={@indexer.id}
+          />
+          <.row_action
+            id={"remove-library-indexer-#{@indexer.id}"}
+            icon="hero-trash"
+            title="Remove"
+            destructive
+            phx-click="remove_library_indexer"
+            phx-value-id={@indexer.id}
+            data-confirm={"Remove #{@indexer.name}? Its settings are kept if you add it again."}
           />
         </.row_actions>
       </:actions>

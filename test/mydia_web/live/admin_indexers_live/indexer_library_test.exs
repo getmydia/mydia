@@ -329,16 +329,56 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
       assert html =~ "Enabled Library Indexer"
     end
 
-    test "does not show library indexers section when no enabled indexers exist", %{conn: conn} do
+    test "does not list definitions that were never added", %{conn: conn} do
+      set_cardigann_feature_flag(true)
+      definition = cardigann_definition_fixture(%{enabled: false})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      refute has_element?(view, "#library-indexer-#{definition.id}")
+    end
+
+    test "switching an indexer off keeps it listed", %{conn: conn} do
+      set_cardigann_feature_flag(true)
+      definition = cardigann_definition_fixture(%{name: "Stays Listed", enabled: true})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      view
+      |> element("input[phx-click='toggle_library_indexer'][phx-value-id='#{definition.id}']")
+      |> render_click()
+
+      assert has_element?(view, "#library-indexer-#{definition.id}")
+      assert has_element?(view, "input[aria-label='Enable Stays Listed']")
+      refute Indexers.get_cardigann_definition!(definition.id).enabled
+    end
+
+    test "switching a disabled indexer back on enables it", %{conn: conn} do
       set_cardigann_feature_flag(true)
 
-      # Create a disabled library indexer only
-      cardigann_definition_fixture(%{name: "Disabled Library Indexer", enabled: false})
+      {:ok, definition} =
+        cardigann_definition_fixture(%{enabled: true})
+        |> Indexers.disable_cardigann_definition()
 
-      {:ok, _view, html} = live(conn, ~p"/admin/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
-      # Should NOT show the Library Indexers section (since no enabled ones exist)
-      refute html =~ "Disabled Library Indexer"
+      view
+      |> element("input[phx-click='toggle_library_indexer'][phx-value-id='#{definition.id}']")
+      |> render_click()
+
+      assert Indexers.get_cardigann_definition!(definition.id).enabled
+    end
+
+    test "Remove takes an indexer off the page", %{conn: conn} do
+      set_cardigann_feature_flag(true)
+      definition = cardigann_definition_fixture(%{enabled: true})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      view |> element("#remove-library-indexer-#{definition.id}") |> render_click()
+
+      refute has_element?(view, "#library-indexer-#{definition.id}")
+      refute Indexers.get_cardigann_definition!(definition.id).in_library
     end
 
     test "library indexer rows use the shared row actions", %{conn: conn} do
@@ -349,6 +389,7 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
 
       assert has_element?(view, "#library-indexers .join .join-item[title=Configure]")
       assert has_element?(view, "#library-indexers .join .join-item[title=Test]")
+      assert has_element?(view, "#library-indexers .join .join-item[title=Remove]")
     end
 
     test "library indexer enable toggle has an accessible name", %{conn: conn} do
