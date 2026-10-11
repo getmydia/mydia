@@ -292,8 +292,8 @@ jobs:
             echo "::error::ignore_warnings found in mix.exs - fix the Dialyzer finding instead (see CONTRIBUTING.md)"
             exit 1
           fi
-          if grep -rn "@dialyzer" lib --include='*.ex'; then
-            echo "::error::@dialyzer attributes are not allowed in lib/ - fix the finding instead (see CONTRIBUTING.md)"
+          if grep -rn "@dialyzer" lib test/support --include='*.ex'; then
+            echo "::error::@dialyzer attributes are not allowed in lib/ or test/support - fix the finding instead (see CONTRIBUTING.md)"
             exit 1
           fi
           # Guard against DEPRECATED markers surviving in lib/: deprecated

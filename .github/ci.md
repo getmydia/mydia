@@ -423,7 +423,7 @@ and fails on any finding. It reuses the Test job's `Cache build` key, so it
 restores the same `_build/test` and `priv/native`. The PLTs live in `priv/plts`
 under their own cache, keyed on `.elixir-version`, `.otp-version` and `mix.lock`,
 with a restore prefix on the toolchain so a lock change rebuilds incrementally.
-The Test job greps `mix.exs` for `ignore_warnings` and `lib/` for `@dialyzer`,
+The Test job greps `mix.exs` for `ignore_warnings` and `lib/` and `test/support/` for `@dialyzer`,
 and fails if either appears. The policy is in `CONTRIBUTING.md`.
 
 ### Rust lint and test-warning gates

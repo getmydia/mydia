@@ -265,7 +265,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
       # The dialog stays open with the admin's own choices, not fresh defaults.
       # config.defaults is an %AddDefaults{}, so assigning the resolved struct
       # back is all it takes. Nothing was written: the metadata fetch happens
-      # before the Multi opens, so the request is still pending.
+      # before the transaction opens, so the request is still pending.
       {:error, {:metadata, reason}} ->
         Logger.warning("Approval blocked by metadata failure: #{inspect(reason)}")
 

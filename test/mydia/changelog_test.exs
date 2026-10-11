@@ -16,6 +16,16 @@ defmodule Mydia.ChangelogTest do
     [entry("0.13.0"), entry("0.12.0"), entry("0.11.1"), entry("0.11.0")]
   end
 
+  describe "latest/1" do
+    test "returns nil when no entries are bundled" do
+      assert Changelog.latest([]) == nil
+    end
+
+    test "returns the version string of the first (newest) entry" do
+      assert Changelog.latest(fixtures()) == "0.13.0"
+    end
+  end
+
   describe "unseen/2" do
     test "returns nothing when the stored version is the newest" do
       assert Changelog.unseen(fixtures(), "0.13.0") == []
