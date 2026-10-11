@@ -79,11 +79,11 @@ defmodule Mydia.Library.ItemFolders do
   @spec blockers(Folder.t(), keyword()) :: [blocker()]
   def blockers(%Folder{} = folder, opts \\ []) do
     ignore = Keyword.get(opts, :ignore, [])
-    ignore_ids = Enum.map(ignore, & &1.id)
+    ignore_ids = Map.new(ignore, &{&1.id, true})
 
     rows =
       row_blockers(MediaFile, :media_file, folder, ignore_ids) ++
-        row_blockers(ImportCandidate, :import_candidate, folder, [])
+        row_blockers(ImportCandidate, :import_candidate, folder, %{})
 
     if length(rows) >= @blocker_limit do
       Enum.take(rows, @blocker_limit)
@@ -217,7 +217,7 @@ defmodule Mydia.Library.ItemFolders do
     |> select([r], {r.id, r.relative_path})
     |> Repo.all()
     |> Enum.filter(fn {id, rel} ->
-      String.starts_with?(rel, prefix) and id not in ignore_ids
+      String.starts_with?(rel, prefix) and not Map.has_key?(ignore_ids, id)
     end)
     |> Enum.map(fn {_id, rel} -> {kind, rel} end)
   end
