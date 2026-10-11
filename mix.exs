@@ -97,7 +97,7 @@ defmodule Mydia.MixProject do
     # priv/. Unlike `:unused` (which must wrap elixir, hence prepended) `:plugins`
     # is independent. It runs on every compile in every env, including the
     # test-env --warnings-as-errors compile.
-    base = [:phoenix_live_view] ++ Mix.compilers() ++ [:plugins]
+    base = [:phoenix_live_view] ++ Mix.compilers() ++ [:plugins, :cardigann_guest]
 
     if System.get_env("UNUSED_CHECK") == "true" and Mix.env() in [:dev, :test] do
       [:unused | base]

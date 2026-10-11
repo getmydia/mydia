@@ -330,6 +330,26 @@
         '';
       };
 
+      # Prebuilt Cardigann wasm guest, published by CI (cardigann-guest.yml) as a
+      # release asset named by the hash of native/cardigann_guest. The pin file
+      # holds "<source-hash> <sha256>" and is the one place the hash is copied
+      # into Nix; see native/cardigann_guest/README.md for the update procedure.
+      # Anything else in the file (a placeholder, no asset published yet) skips
+      # the fetch: the package still builds and Cardigann wasm reports
+      # unavailable at runtime.
+      cardigannPin = builtins.match "([0-9a-f]{16}) ([0-9a-f]{64})[[:space:]]*"
+        (builtins.readFile ../../native/cardigann_guest/ARTIFACT_SHA256);
+      cardigannHash = if cardigannPin == null then null else builtins.elemAt cardigannPin 0;
+      cardigannSha256 = if cardigannPin == null then null else builtins.elemAt cardigannPin 1;
+      # Fixed-output, so the sandbox stays offline. The name carries the source
+      # hash for the same reason tailwindcss_4_src's does: a stale pin must force
+      # a real fetch instead of matching an old store path.
+      cardigannGuest = if cardigannPin == null then null else pkgs.fetchurl {
+        name = "cardigann-${cardigannHash}.wasm";
+        url = "https://github.com/getmydia/mydia/releases/download/cardigann-guest/cardigann-${cardigannHash}.wasm";
+        sha256 = cardigannSha256;
+      };
+
       # Extract default version from mix.exs version() function
       version = let
         content = builtins.readFile ../../mix.exs;
@@ -381,8 +401,19 @@
           inherit npmDeps;
           npmRoot = "assets";
 
+          # The sandbox has no network, so the Cardigann guest comes from the
+          # fixed-output fetch above and the compiler's own fetch is skipped.
+          MYDIA_SKIP_CARDIGANN_FETCH = "1";
+
           # Create missing deps symlinks and set up Cargo vendoring for Rust NIF
-          postConfigure = ''
+          postConfigure = (if cardigannGuest != null then ''
+            echo "=== postConfigure: Vendoring the Cardigann wasm guest ==="
+            mkdir -p priv/cardigann
+            cp ${cardigannGuest} priv/cardigann/cardigann-${cardigannHash}.wasm
+            echo ${cardigannSha256} > priv/cardigann/cardigann-${cardigannHash}.wasm.sha256
+          '' else ''
+            echo "WARNING: native/cardigann_guest/ARTIFACT_SHA256 holds no pin; building without the Cardigann wasm guest (it will report unavailable at runtime)" >&2
+          '') + ''
             echo "=== postConfigure: Creating missing deps symlinks ==="
 
             # Create deps symlinks for packages linked in _build/prod/lib

@@ -240,6 +240,12 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/app/native/mydia_p2p_core/target,sharing=locked \
     mix compile
 
+# The Cardigann wasm guest is downloaded by hash during `mix compile` (the
+# :cardigann_guest compiler). A guest that is not published yet only leaves
+# Cardigann wasm unavailable at runtime, so a missing file is allowed here; a
+# file that is present with a wrong checksum fails the build.
+RUN mix mydia.cardigann_guest verify --allow-missing
+
 # Fail the build if a bundled plugin's wasm artifact was not produced (the
 # :plugins compiler graceful-skips a missing toolchain, so this is the guard
 # that a release image never ships without its bundled plugins).

@@ -50,3 +50,7 @@ metadata-relay/.nix-mix
 # Misc local artifacts
 screenshots
 *.log
+
+# Prebuilt Cardigann wasm guest: fetched by hash during `mix compile` in the image.
+priv/cardigann/*.wasm
+priv/cardigann/*.wasm.sha256

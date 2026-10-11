@@ -1,0 +1,102 @@
+name: Cardigann guest
+
+# Builds the Cardigann wasm guest (native/cardigann_guest) and publishes it as a
+# release asset named by the hash of its sources. Everything else (mix, Docker,
+# Nix) downloads it by that name, so nobody needs .NET locally.
+#
+# Pull requests build and test but never publish. The asset is published on a
+# push to master, once per distinct source hash. Never create the release or
+# upload assets by hand.
+
+on:
+  pull_request:
+    paths:
+      - "native/cardigann_guest/**"
+      - ".github/workflows/cardigann-guest.yml"
+  push:
+    branches: [master]
+    paths:
+      - "native/cardigann_guest/**"
+      - ".github/workflows/cardigann-guest.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Same value as Mydia.Indexers.Cardigann.Wasm.SourceHash; a mix test
+      # (artifact_test.exs) fails when this script and the Elixir drift.
+      - name: Compute source hash
+        id: hash
+        run: echo "hash=$(native/cardigann_guest/scripts/source-hash.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if published
+        id: exists
+        run: |
+          if gh release view cardigann-guest --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' 2>/dev/null \
+            | grep -qx "cardigann-${{ steps.hash.outputs.hash }}.wasm"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Cold builds take several minutes (NuGet restore, the wasi-sdk download,
+      # installing wit-bindgen/wac/wasm-tools). The keys cover every pin that
+      # changes what those caches hold.
+      - name: Cache build tools
+        if: steps.exists.outputs.exists != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/mydia-cardigann-nuget
+            ~/.cache/mydia-cardigann-nuget-wasi-sdk
+            ~/.cache/mydia-cardigann-cargo
+          key: cardigann-guest-${{ runner.os }}-${{ hashFiles('native/cardigann_guest/PROWLARR_REF', 'native/cardigann_guest/CardigannGuest.csproj', 'native/cardigann_guest/deny/Cargo.lock', 'native/cardigann_guest/scripts/rust-tools.sh') }}
+          restore-keys: |
+            cardigann-guest-${{ runner.os }}-
+
+      - name: Test on plain .NET
+        if: steps.exists.outputs.exists != 'true'
+        run: native/cardigann_guest/build.sh test
+
+      - name: Build component
+        if: steps.exists.outputs.exists != 'true'
+        run: native/cardigann_guest/build.sh wasm
+
+      - name: Upload for this run
+        if: steps.exists.outputs.exists != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cardigann-guest
+          path: native/cardigann_guest/out/cardigann.wasm
+          retention-days: 7
+
+      - name: Publish
+        if: github.event_name == 'push' && steps.exists.outputs.exists != 'true'
+        run: |
+          cd native/cardigann_guest/out
+          name="cardigann-${{ steps.hash.outputs.hash }}.wasm"
+          cp cardigann.wasm "$name"
+          sha256sum "$name" | cut -d' ' -f1 > "$name.sha256"
+          cp ../LICENSE "$name.LICENSE"
+          cp ../NOTICE "$name.NOTICE"
+          gh release view cardigann-guest >/dev/null 2>&1 || \
+            gh release create cardigann-guest --prerelease --title "Cardigann guest builds" \
+              --notes "Prebuilt Cardigann wasm guests, named by source hash. Source: native/cardigann_guest at the commit that published each asset."
+          gh release upload cardigann-guest "$name" "$name.sha256" "$name.LICENSE" "$name.NOTICE"
+          echo "Published $name"
+          echo "Pin for nix: $(cut -d' ' -f1 < "$name.sha256")"
+        env:
+          GH_TOKEN: ${{ github.token }}

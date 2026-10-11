@@ -327,6 +327,10 @@ jobs:
           if [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
             UNUSED_CHECK=true mix compile --force || true
           fi
+          # Soft: downloads the published Cardigann wasm guest (or copies a local
+          # build); exits 0 when the asset is not published yet (a PR that changes
+          # the guest), so tests needing it skip. See native/cardigann_guest/README.md.
+          mix mydia.cardigann_guest fetch
           mix ecto.create
           mix ecto.migrate
           mix test --cover --warnings-as-errors
@@ -593,6 +597,10 @@ jobs:
           mix local.rebar --force --if-missing
           mix deps.get
           mix compile
+          # Soft: downloads the published Cardigann wasm guest (or copies a local
+          # build); exits 0 when the asset is not published yet (a PR that changes
+          # the guest), so tests needing it skip. See native/cardigann_guest/README.md.
+          mix mydia.cardigann_guest fetch
           mix ecto.create
           mix ecto.migrate
           mix ecto.migrations
