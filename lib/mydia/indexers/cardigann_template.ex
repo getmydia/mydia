@@ -78,16 +78,18 @@ defmodule Mydia.Indexers.CardigannTemplate do
     |> ignore(string("\""))
     |> reduce({List, :to_string, []})
 
-  # Field path: .Field or .Field.Nested
+  # Field path: .Field or .Field.Nested. Segments may contain '-' after their
+  # first character: Cardigann setting names such as cat-id and api-url are
+  # referenced as .Config.cat-id. A '-' after whitespace is a trim marker and is
+  # never reached here, because whitespace ends the segment.
+  field_segment =
+    ascii_char([?a..?z, ?A..?Z, ?0..?9, ?_])
+    |> optional(ascii_string([?a..?z, ?A..?Z, ?0..?9, ?_, ?-], min: 1))
+    |> reduce({List, :to_string, []})
+
   field_path =
     string(".")
-    |> optional(
-      ascii_string([?a..?z, ?A..?Z, ?0..?9, ?_], min: 1)
-      |> repeat(
-        ignore(string("."))
-        |> ascii_string([?a..?z, ?A..?Z, ?0..?9, ?_], min: 1)
-      )
-    )
+    |> optional(field_segment |> repeat(ignore(string(".")) |> concat(field_segment)))
     |> reduce(:build_field_path)
 
   # Integer literal (for index function)

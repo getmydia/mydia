@@ -778,42 +778,44 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     # Substitute template variables in input values
     # For query params, don't URL-encode (Req will do it)
     Enum.reduce(base_params, %{}, fn {key, value}, acc ->
-      substituted_value =
-        case value do
-          v when is_binary(v) ->
-            # Handle special $raw: prefix (same behavior, just explicit)
-            if String.starts_with?(v, "$raw:") do
-              template = String.replace_prefix(v, "$raw:", "")
+      case render_input_value(value, context) do
+        :render_failed ->
+          Logger.warning(
+            "Cardigann #{definition.id}: input #{key} did not render and was omitted"
+          )
 
-              case CardigannTemplate.render(template, context, url_encode: false) do
-                {:ok, rendered} -> rendered
-                {:error, _} -> v
-              end
-            else
-              case CardigannTemplate.render(v, context, url_encode: false) do
-                {:ok, rendered} -> rendered
-                {:error, _} -> v
-              end
-            end
+          acc
 
-          v ->
-            v
-        end
+        rendered ->
+          # Query strings and form bodies carry the site's charset bytes; Req
+          # percent-encodes them later. GET and POST share these params.
+          encoded =
+            if is_binary(rendered),
+              do: Charset.encode(rendered, definition.encoding),
+              else: rendered
 
-      # Query strings and form bodies carry the site's charset bytes; Req
-      # percent-encodes them later. GET and POST share these params.
-      substituted_value =
-        if is_binary(substituted_value),
-          do: Charset.encode(substituted_value, definition.encoding),
-          else: substituted_value
-
-      if substituted_value == "" and not allow_empty do
-        acc
-      else
-        Map.put(acc, key, substituted_value)
+          if encoded == "" and not allow_empty do
+            acc
+          else
+            Map.put(acc, key, encoded)
+          end
       end
     end)
   end
+
+  # Renders one input value. A template that fails to render yields
+  # :render_failed so the caller omits the input instead of sending its source.
+  defp render_input_value(v, context) when is_binary(v) do
+    # "$raw:" is an explicit marker with the same behaviour as a plain template.
+    template = String.replace_prefix(v, "$raw:", "")
+
+    case CardigannTemplate.render(template, context, url_encode: false) do
+      {:ok, rendered} -> rendered
+      {:error, _} -> :render_failed
+    end
+  end
+
+  defp render_input_value(v, _context), do: v
 
   defp build_headers(%Parsed{search: search}) do
     case Map.get(search, :headers) do

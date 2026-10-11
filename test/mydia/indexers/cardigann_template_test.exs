@@ -903,4 +903,35 @@ defmodule Mydia.Indexers.CardigannTemplateTest do
                )
     end
   end
+
+  describe "hyphenated field names" do
+    test ".Config.cat-id resolves" do
+      assert {:ok, "search-x-5-1.html"} =
+               CardigannTemplate.render(
+                 "search-{{ .Keywords }}-{{ .Config.cat-id }}-1.html",
+                 %{keywords: "x", config: %{"cat-id" => "5"}},
+                 url_encode: false
+               )
+    end
+
+    test "a hyphenated name inside a URL" do
+      assert {:ok, "https://api.example.invalid/x"} =
+               CardigannTemplate.render(
+                 "https://{{ .Config.api-url }}/x",
+                 %{config: %{"api-url" => "api.example.invalid"}},
+                 url_encode: false
+               )
+    end
+
+    test "a trim marker after a name still trims" do
+      # Whitespace trimming is parsed but not applied by the evaluator, so only
+      # assert that the marker no longer breaks the parse after a name.
+      assert {:ok, out} =
+               CardigannTemplate.render("a{{ .Config.k -}} b", %{config: %{"k" => ""}},
+                 url_encode: false
+               )
+
+      assert String.replace(out, " ", "") == "ab"
+    end
+  end
 end

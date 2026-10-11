@@ -1736,4 +1736,28 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       assert parsed.follow_redirect == true
     end
   end
+
+  describe "build_request_params/2 with a failing input template" do
+    test "an input whose template fails to render is omitted, not sent raw" do
+      definition = %Parsed{
+        id: "input-test",
+        name: "input",
+        links: ["https://example.invalid"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "/"}],
+          inputs: %{"q" => "{{ .Keywords }}", "bad" => "{{ if .Keywords"},
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, %{query_params: params}} =
+               CardigannSearchEngine.build_request_params(definition, query: "x")
+
+      assert params["q"] == "x"
+      refute Map.has_key?(params, "bad")
+    end
+  end
 end
