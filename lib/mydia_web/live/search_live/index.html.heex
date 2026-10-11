@@ -460,7 +460,7 @@
           >
             <.icon name="hero-x-mark" class="w-5 h-5" />
           </button>
-          <h3 class="font-bold text-xl mb-4 pr-8">
+          <h3 class="font-bold text-xl mb-4 pr-8 break-all">
             {@selected_result.title}
           </h3>
           <%!-- Quality and Size Info --%>
@@ -468,7 +468,7 @@
             <div class="stat bg-base-200 rounded-lg p-4">
               <div class="stat-title text-xs">Quality</div>
               <div class="stat-value text-base whitespace-normal">
-                <span class="badge badge-primary h-auto min-h-5 whitespace-normal break-all text-left leading-snug py-0.5">
+                <span class="badge badge-primary h-auto min-h-5 whitespace-normal break-words rounded-lg text-left leading-snug py-0.5">
                   {get_quality_badge(@selected_result)}
                 </span>
               </div>
