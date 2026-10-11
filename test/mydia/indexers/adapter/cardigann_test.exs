@@ -156,9 +156,9 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       assert message =~ "not found"
     end
 
-    # Regression: test_indexer_reachable/3 used to probe with only
+    # Regression: test_indexer_reachable/2 used to probe with only
     # definition.config, never building the authenticated session
-    # get_or_create_session/3 builds for a real search. A private indexer
+    # SessionManager.user_config/2 builds for a real search. A private indexer
     # with a stored session - established the same way a real search
     # establishes one - searched successfully because its cookies rode along
     # on every real search, while Test reported a connection failure because
@@ -182,6 +182,19 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
         end
       end)
 
+      # Only a definition with a login block uses a stored session.
+      {:ok, definition} =
+        definition
+        |> Ecto.Changeset.change(%{
+          definition:
+            String.replace(
+              definition.definition,
+              "search:\n",
+              "login:\n  method: cookie\n  inputs:\n    cookie: \"{{ .Config.cookie }}\"\n  test:\n    path: /\n    selector: a\nsearch:\n"
+            )
+        })
+        |> Repo.update()
+
       {:ok, _session} =
         %CardigannSearchSession{}
         |> CardigannSearchSession.changeset(%{
@@ -203,6 +216,8 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
   end
 
   describe "credential key shape" do
+    @login_form ~s(<form method="post" action="/login.php"><input name="username"><input name="password"></form>)
+
     # `definition.config` is a JsonMapType, so anything that has been through the
     # database comes back string-keyed, and the admin form supplies string keys
     # too. Reading only atom keys authenticated every private indexer with empty
@@ -272,8 +287,16 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       %{bypass: bypass, private_definition: definition}
     end
 
-    test "string-keyed credentials reach a form login", %{bypass: bypass} do
+    test "string-keyed definition config reaches a form login", %{bypass: bypass} do
       test_pid = self()
+
+      Bypass.stub(bypass, "GET", "/login.php", fn conn ->
+        Plug.Conn.resp(conn, 200, @login_form)
+      end)
+
+      Bypass.stub(bypass, "GET", "/", fn conn ->
+        Plug.Conn.resp(conn, 200, "<a href='/logout'>Logout</a>")
+      end)
 
       Bypass.expect_once(bypass, "POST", "/login.php", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -289,15 +312,14 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
         |> Plug.Conn.put_resp_content_type("text/html")
         |> Plug.Conn.resp(
           200,
-          "<html><body><table class=\"results\"><tr><th>Header</th></tr></table></body></html>"
+          "<html><body><a href='/logout'>Logout</a><table class=\"results\"><tr><th>Header</th></tr></table></body></html>"
         )
       end)
 
       config = %{
         type: :cardigann,
         name: "Private Indexer",
-        indexer_id: "private-indexer",
-        user_settings: %{"username" => "stringuser", "password" => "stringpass"}
+        indexer_id: "private-indexer"
       }
 
       assert {:ok, _results} = Cardigann.search(config, "query")
@@ -309,9 +331,8 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
   end
 
   describe "operator config override reaches the login request" do
-    # Regression: get_or_create_session/3 built the credentials map passed to
-    # CardigannAuth.authenticate/3 from config.user_settings alone, never from
-    # definition.config. A login.path templated as {{ .Config.apiurl }} always
+    # Regression: the login used to be built from config.user_settings alone,
+    # never from definition.config. A login.path templated as {{ .Config.apiurl }} always
     # rendered to the setting's schema default, so an operator's override was
     # silently ignored and a login could be established against the wrong
     # host while a search (which does read definition.config) used the right
@@ -394,6 +415,18 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
 
       test_pid = self()
 
+      Bypass.stub(site, "GET", "/", fn conn ->
+        Plug.Conn.resp(conn, 200, "<a href='/logout'>Logout</a>")
+      end)
+
+      Bypass.stub(override, "GET", "/login.php", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          ~s(<form method="post" action="/login.php"><input name="username"><input name="password"></form>)
+        )
+      end)
+
       Bypass.expect_once(override, "POST", "/login.php", fn conn ->
         send(test_pid, :login_hit)
 
@@ -407,7 +440,7 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
         |> Plug.Conn.put_resp_content_type("text/html")
         |> Plug.Conn.resp(
           200,
-          "<html><body><table class=\"results\"><tr><th>Header</th></tr></table></body></html>"
+          "<html><body><a href='/logout'>Logout</a><table class=\"results\"><tr><th>Header</th></tr></table></body></html>"
         )
       end)
 
@@ -423,6 +456,116 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       Cardigann.search(config, "query")
 
       assert_receive :login_hit
+    end
+  end
+
+  describe "login wiring" do
+    defp insert_cookie_definition(bypass, config, attrs \\ []) do
+      base_url = "http://localhost:#{bypass.port}"
+
+      yaml = """
+      id: cookie-tracker
+      name: Cookie Tracker
+      description: A private indexer that logs in with a pasted cookie
+      language: en-US
+      type: private
+      encoding: UTF-8
+      links:
+        - #{base_url}
+      caps:
+        modes:
+          search: {search-type: q}
+        categories:
+          5000: TV
+      settings:
+        - name: cookie
+          type: text
+          label: Cookie
+      login:
+        method: cookie
+        inputs:
+          cookie: "{{ .Config.cookie }}"
+        test:
+          path: /
+          selector: "a[href*=logout]"
+      search:
+        paths:
+          - path: /browse.php
+        rows:
+          selector: "table.t tr"
+        fields:
+          title:
+            selector: "td.title a"
+          download:
+            selector: "td.download a"
+            attribute: href
+          size:
+            selector: "td.size"
+          seeders:
+            selector: "td.seeders"
+      """
+
+      {:ok, definition} =
+        %CardigannDefinition{}
+        |> CardigannDefinition.changeset(
+          Map.merge(
+            %{
+              indexer_id: "cookie-tracker",
+              name: "Cookie Tracker",
+              description: "A private indexer that logs in with a pasted cookie",
+              language: "en-US",
+              type: "private",
+              encoding: "UTF-8",
+              links: %{"0" => base_url},
+              capabilities: %{modes: %{"search" => %{}}, categories: %{"5000" => "TV"}},
+              definition: yaml,
+              schema_version: "v11",
+              enabled: true,
+              in_library: true,
+              config: config,
+              last_synced_at: DateTime.utc_now()
+            },
+            Map.new(Keyword.delete(attrs, :health_status))
+          )
+        )
+        |> Repo.insert()
+
+      case Keyword.fetch(attrs, :health_status) do
+        {:ok, status} ->
+          definition |> Ecto.Changeset.change(%{health_status: status}) |> Repo.update!()
+
+        :error ->
+          definition
+      end
+    end
+
+    defp config_for(definition),
+      do: %{type: :cardigann, name: definition.name, indexer_id: definition.indexer_id}
+
+    test "a cookie-method tracker sends the configured cookie" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/browse.php", fn conn ->
+        [header] = Plug.Conn.get_req_header(conn, "cookie")
+        assert header |> String.split("; ") |> Enum.sort() == ["pass=abc", "uid=7"]
+
+        Plug.Conn.resp(
+          conn,
+          200,
+          ~s(<a href="/logout.php">x</a><table class="t"></table>)
+        )
+      end)
+
+      definition = insert_cookie_definition(bypass, %{"cookie" => "uid=7; pass=abc"})
+      assert {:ok, []} = Cardigann.search(config_for(definition), "invented query")
+    end
+
+    test "a needs_login tracker is skipped with login_required" do
+      bypass = Bypass.open()
+      definition = insert_cookie_definition(bypass, %{}, health_status: "needs_login")
+
+      assert {:error, %Error{type: :login_required}} =
+               Cardigann.search(config_for(definition), "q")
     end
   end
 

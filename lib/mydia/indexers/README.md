@@ -51,6 +51,80 @@ sets `redirect: false` whenever it attaches a `Cookie`, and an unfollowed 3xx
 falls through to the existing failover. Trusted-origin scoping for absolute paths
 and mirror failover is tracked in issue #602.
 
+## Cardigann login
+
+`Mydia.Indexers.Cardigann.Login` owns authentication for a definition. It picks
+the strategy from the definition's `login.method` (`cookie`, `get`, `post` or
+`form`), never from which credentials happen to be filled in, and returns a
+`Login.Session` of cookies. The pieces live under `cardigann/login/`: `Simple`
+for the first three methods, `Form` for scraping and submitting a login form,
+`Http` for the requests, `Inputs` for rendering and `Verify` for the
+definition's `login.error` and `login.test` blocks.
+
+**Setting names come from the definition.** Login paths, inputs and headers are
+rendered through `CardigannTemplate` with the stored config as `.Config`, so a
+definition that writes `{{ .Config.apikey }}` or `{{ .Config.pin }}` reads the
+setting called `apikey` or `pin`. The `cookie` method reads a setting literally
+named `cookie` and accepts a pasted Cookie header. Mydia has no username and
+password fields of its own to map onto; do not add one, or definitions that
+name their settings differently stop working.
+
+**Login HTTP never lets Req follow a redirect.** `Login.Http` sends every
+request with `redirect: false` and walks `Location` headers itself, up to five
+hops. Req would carry the Cookie header we set to whatever host a redirect
+names (see the Req section above), and a login is exactly when that header
+holds credentials. Each hop is checked first: a cleartext non-loopback URL is
+refused, and so is any origin outside `CredentialScope.trusted_origins/2`. A
+redirect after a POST becomes a GET, as browsers do, and `Set-Cookie` values
+are folded into a jar that rides along on later hops. Login goes to the
+definition's active link when that is one of its own origins, otherwise to the
+first link, so a legacy mirror never receives credentials.
+
+**A form login can pause for a person.** `Form.begin/1` fetches the login page
+and scrapes the form. When the definition has an image captcha, or its inputs
+reference a 2FA key (`2facode`, `2fa_code`, `alt2fatoken`), it returns
+`{:needs_input, %Challenge{}}` instead of submitting. The challenge keeps the
+cookie jar and the scraped page, so the captcha image and the eventual submit
+share one tracker session, and `Login.complete/2` finishes it with the answers.
+Nothing submitted by a person (captcha text, one-time code, credentials) is
+logged.
+
+### Sessions and recovery
+
+`SessionManager` is what searches and health checks call. There is one stored
+session row per definition (`CardigannAuth.store_session/3` upserts) and no
+fixed TTL: a session lives until the tracker stops honoring it. Stored cookies
+are used as they are. With none stored, the manager logs in. Saving a changed
+config (a pasted cookie is the credential) or removing the definition from the
+library deletes the stored session, via `Indexers.configure_cardigann_definition/2`
+and `Indexers.remove_cardigann_definition/1`.
+
+When a search that sent our cookies comes back logged out, `with_session/3`
+invalidates the session, logs in once and retries once. `LoggedOut.check/3`
+follows Prowlarr's CheckIfLoginIsNeeded and recognizes three signs: a redirect,
+a 401 or 403, and an HTML page missing the definition's `login.test.selector`.
+The selector test is skipped when every search path declares a json or xml
+`response.type`, whatever content-type the tracker sent.
+It only looks at requests that carried our cookies, and any redirect counts
+because the search engine never follows a cookie-bearing redirect, so a 3xx can
+only be the tracker sending us to its login page. If the retry is still logged
+out, the error says so rather than looping.
+
+### needs_login
+
+`health_status: "needs_login"` is set only when a login needs a person, that
+is when `Login.begin/2` returns a `Challenge`. While it is set,
+`SessionManager.user_config/2` returns a `:login_required` error, so searches
+skip the indexer and the health check reports "Needs login" without writing
+anything or counting a failure. Two things clear it: a stored session
+(`SessionManager.store/2` moves the definition back to `healthy`) and saving a
+changed config, which resets it to `unknown` so new credentials get a fresh
+attempt. Do not clear it from a health check or a timer; the health check's
+status write skips rows that are `needs_login`, so a probe that was running when
+a search parked the row cannot overwrite it. A check that passes while the tracker still
+needs a captcha would hide the problem until the next search failed.
+Status changes broadcast on `SessionManager.topic/0` for the admin page.
+
 ## Ranking has one path
 
 Every ranking decision ends in `QualityProfile.score_media_file/2`, and every

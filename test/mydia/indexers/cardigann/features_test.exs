@@ -32,9 +32,12 @@ defmodule Mydia.Indexers.Cardigann.FeaturesTest do
     end
   end
 
-  test "supported/0 does not claim login features" do
-    refute :login_captcha in Features.supported()
-    refute :login_selectorinputs in Features.supported()
+  test "supported/0 claims the implemented login features but not other methods" do
+    for feature <- [:login_captcha, :login_selectorinputs, :login_method_form, :login_2fa] do
+      assert feature in Features.supported()
+    end
+
+    refute :login_method_other in Features.supported()
   end
 
   test "required/1 detects features from a definition map" do
@@ -61,5 +64,22 @@ defmodule Mydia.Indexers.Cardigann.FeaturesTest do
   test "required/1 detects login features it does not support" do
     yaml = %{"login" => %{"method" => "form", "captcha" => %{"type" => "image"}}, "search" => %{}}
     assert :login_captcha in Features.required(yaml)
+  end
+
+  test "required/1 treats image and untyped captchas as the supported kind" do
+    for captcha <- [%{"type" => "image"}, %{"selector" => "img"}] do
+      required = Features.required(%{"login" => %{"method" => "form", "captcha" => captcha}})
+      assert :login_captcha in required
+      refute :login_captcha_other in required
+    end
+  end
+
+  test "required/1 flags a non-image captcha as unsupported" do
+    required =
+      Features.required(%{"login" => %{"method" => "form", "captcha" => %{"type" => "text"}}})
+
+    assert :login_captcha_other in required
+    refute :login_captcha in required
+    refute :login_captcha_other in Features.supported()
   end
 end

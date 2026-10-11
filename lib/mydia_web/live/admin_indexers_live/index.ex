@@ -10,6 +10,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
+  alias MydiaWeb.AdminIndexersLive.LoginFlow
   alias MydiaWeb.IndexerComponents
 
   @impl true
@@ -25,7 +26,8 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> init_library_assigns()
      |> assign(:retesting_paused, MapSet.new())
      |> load_data()
-     |> maybe_load_flaresolverr_status()}
+     |> maybe_load_flaresolverr_status()
+     |> LoginFlow.attach()}
   end
 
   @impl true
@@ -887,22 +889,9 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   end
 
   defp load_data(socket) do
-    socket = assign_indexers_and_health(socket)
-    cardigann_enabled = CardigannFeatureFlags.enabled?()
-
-    library_indexers =
-      if cardigann_enabled,
-        do: Indexers.list_cardigann_definitions(in_library: true),
-        else: []
-
-    library_indexer_stats =
-      if cardigann_enabled,
-        do: Indexers.count_cardigann_definitions(),
-        else: %{total: 0, enabled: 0, disabled: 0}
-
     socket
-    |> assign(:library_indexers, library_indexers)
-    |> assign(:library_indexer_stats, library_indexer_stats)
+    |> assign_indexers_and_health()
+    |> reload_library_indexers()
     |> assign(:show_indexer_modal, false)
     |> assign(:show_indexer_library_modal, false)
     |> assign(:show_library_config_modal, false)

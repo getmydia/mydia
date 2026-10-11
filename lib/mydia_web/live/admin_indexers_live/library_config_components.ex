@@ -220,6 +220,9 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryConfigComponents do
             class="input input-bordered w-full"
           />
       <% end %>
+      <p :if={@field_name == "cookie"} class="label-text-alt opacity-70 mt-1">
+        Paste the Cookie request header from a browser that is logged in to this site.
+      </p>
     </div>
     """
   end

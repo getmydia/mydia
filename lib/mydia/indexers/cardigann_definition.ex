@@ -12,7 +12,7 @@ defmodule Mydia.Indexers.CardigannDefinition do
   @foreign_key_type :binary_id
 
   @indexer_types ["public", "private", "semi-private"]
-  @health_statuses ["healthy", "degraded", "unhealthy", "unknown"]
+  @health_statuses ["healthy", "degraded", "unhealthy", "unknown", "needs_login"]
 
   @type t :: %__MODULE__{
           id: binary(),

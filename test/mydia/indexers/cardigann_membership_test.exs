@@ -57,4 +57,57 @@ defmodule Mydia.Indexers.CardigannMembershipTest do
     ids = Indexers.list_cardigann_definitions(enabled: true) |> Enum.map(& &1.id)
     refute disabled.id in ids
   end
+
+  describe "stored login sessions" do
+    alias Mydia.Indexers.CardigannAuth
+    alias Mydia.Indexers.CardigannDefinition
+
+    defp with_status(definition, status) do
+      definition
+      |> CardigannDefinition.health_check_changeset(%{health_status: status})
+      |> Mydia.Repo.update!()
+    end
+
+    test "saving new config drops the stored session" do
+      definition = cardigann_definition_fixture(%{config: %{"cookie" => "old"}})
+      {:ok, _} = CardigannAuth.store_session(definition.id, ["a=1"])
+
+      assert {:ok, _} = Indexers.configure_cardigann_definition(definition, %{"cookie" => "new"})
+      assert {:error, _} = CardigannAuth.get_stored_session(definition.id)
+    end
+
+    test "saving config that did not change keeps the session" do
+      definition = cardigann_definition_fixture(%{config: %{"cookie" => "same"}})
+      {:ok, _} = CardigannAuth.store_session(definition.id, ["a=1"])
+
+      assert {:ok, _} = Indexers.configure_cardigann_definition(definition, %{"cookie" => "same"})
+      assert {:ok, _} = CardigannAuth.get_stored_session(definition.id)
+    end
+
+    test "saving new config gives a needs_login definition a fresh attempt" do
+      definition = with_status(cardigann_definition_fixture(%{}), "needs_login")
+
+      assert {:ok, saved} =
+               Indexers.configure_cardigann_definition(definition, %{"cookie" => "n"})
+
+      assert saved.health_status == "unknown"
+    end
+
+    test "saving config leaves other health statuses alone" do
+      definition = with_status(cardigann_definition_fixture(%{}), "unhealthy")
+
+      assert {:ok, saved} =
+               Indexers.configure_cardigann_definition(definition, %{"cookie" => "n"})
+
+      assert saved.health_status == "unhealthy"
+    end
+
+    test "removing a definition from the library drops the stored session" do
+      definition = cardigann_definition_fixture(%{})
+      {:ok, _} = CardigannAuth.store_session(definition.id, ["a=1"])
+
+      assert {:ok, _} = Indexers.remove_cardigann_definition(definition)
+      assert {:error, _} = CardigannAuth.get_stored_session(definition.id)
+    end
+  end
 end

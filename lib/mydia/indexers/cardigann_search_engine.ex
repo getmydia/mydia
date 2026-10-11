@@ -57,6 +57,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
   alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Indexers.Cardigann.LoggedOut
   alias Mydia.Indexers.Cardigann.RequestHeaders
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
@@ -428,10 +429,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   - `request_params` - Request parameters from build_request_params/2
   - `user_config` - User configuration (cookies, credentials)
 
-  ## Returns
-
-  - `{:ok, response}` - HTTP response with status, body, headers
-  - `{:error, reason}` - Request execution error
+  Records whether the session cookies went out, via `LoggedOut.note_session_sent/1`.
 
   ## Examples
 
@@ -850,6 +848,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     {session_pairs, session_attached?} =
       session_cookie_pairs(Map.get(user_config, :cookies), url, definition, config)
 
+    LoggedOut.note_session_sent(session_attached?)
+
     {headers, clearance_attached?} =
       RequestHeaders.build(request_params.headers, url, session_pairs)
 
@@ -946,7 +946,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   # A stored session row holds either plain "name=value" strings or cookie maps
   # (older versions wrote FlareSolverr's cookies there), and
-  # CardigannAuth.get_stored_session/1 hands back whatever is in the row without
+  # SessionManager.user_config/2 hands back whatever is in the row without
   # looking. Joining a map raises Protocol.UndefinedError before the request is
   # even sent, so a leftover row would crash the next search. Entries are
   # normalized here and anything unusable is dropped.

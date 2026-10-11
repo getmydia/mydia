@@ -1092,11 +1092,9 @@ defmodule Mydia.Indexers do
   """
   @spec configure_cardigann_definition(CardigannDefinition.t(), map()) ::
           {:ok, CardigannDefinition.t()} | {:error, Ecto.Changeset.t()}
-  def configure_cardigann_definition(%CardigannDefinition{} = definition, config) do
-    definition
-    |> CardigannDefinition.config_changeset(%{config: config})
-    |> Repo.update()
-  end
+  defdelegate configure_cardigann_definition(definition, config),
+    to: Mydia.Indexers.CardigannLibrary,
+    as: :configure
 
   @doc """
   Tests the connection to a Cardigann indexer definition.

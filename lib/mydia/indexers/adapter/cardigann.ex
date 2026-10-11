@@ -54,7 +54,8 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   @behaviour Mydia.Indexers.Adapter
 
   alias Mydia.Indexers.{CardigannParser, CardigannSearchEngine, CardigannResultParser}
-  alias Mydia.Indexers.{CardigannDefinition, CardigannAuth, CardigannFeatureFlags}
+  alias Mydia.Indexers.{CardigannDefinition, CardigannFeatureFlags}
+  alias Mydia.Indexers.Cardigann.SessionManager
   alias Mydia.Indexers.CardigannHealthCheck
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Repo
@@ -66,7 +67,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     if CardigannFeatureFlags.enabled?() do
       with {:ok, definition} <- fetch_definition(config),
            {:ok, parsed} <- parse_definition(definition),
-           :ok <- test_indexer_reachable(parsed, definition, config) do
+           :ok <- test_indexer_reachable(parsed, definition) do
         {:ok,
          %{
            name: parsed.name,
@@ -87,15 +88,16 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
       with {:ok, definition} <- fetch_definition(config),
            {:ok, parsed} <- parse_definition(definition),
            {:ok, search_opts} <- build_search_opts(parsed, definition, query, opts),
-           {:ok, user_config} <- get_or_create_session(parsed, definition, config),
            flaresolverr_opts <- build_flaresolverr_opts(definition),
            {:ok, response, flaresolverr_result} <-
-             execute_search_with_flaresolverr(
-               parsed,
-               search_opts,
-               user_config,
-               flaresolverr_opts
-             ) do
+             SessionManager.with_session(parsed, definition, fn user_config ->
+               execute_search_with_flaresolverr(
+                 parsed,
+                 search_opts,
+                 user_config,
+                 flaresolverr_opts
+               )
+             end) do
         # Build template context for filter rendering
         template_context = build_template_context_for_parsing(parsed, search_opts)
 
@@ -130,7 +132,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   defp execute_search_with_flaresolverr(parsed, search_opts, user_config, flaresolverr_opts) do
     # FlareSolverr clearance lives in FlareSolverr.ClearanceCache, keyed by
     # host. It used to be written to cardigann_search_sessions, the table and
-    # "latest row per definition" query CardigannAuth uses for tracker logins,
+    # "latest row per definition" query the login session store uses,
     # so a solve could replace a login session.
     case CardigannSearchEngine.execute_search(
            parsed,
@@ -229,11 +231,10 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   # it as such is what let 1337x, EZTV, KickassTorrents, YTS and The Pirate Bay
   # all report a successful connection test while every search failed.
   #
-  # Also takes the caller-supplied adapter config (not just the
-  # CardigannDefinition) so the probe can build the same authenticated session
-  # get_or_create_session/3 builds for a real search. Without it, a private
-  # indexer with a stored session (or one whose login the caller's credentials
-  # can satisfy) probed unauthenticated and reported a false connection
+  # The probe builds the same authenticated session a real search gets from
+  # SessionManager.user_config/2. Without it, a private indexer with a stored
+  # session (or one whose login the definition's settings can satisfy) probed
+  # unauthenticated and reported a false connection
   # failure while its real, authenticated searches kept succeeding - the exact
   # false red this task exists to eliminate, mirror image of the false green
   # above.
@@ -243,11 +244,11 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   # build_search_opts/4 (the real search path) does the same, so sourcing it
   # any other way here would let the probe render {{ .Config.* }} differently
   # than a real search does, either dropping settings that do work or
-  # reporting settings that don't. build_probe_user_config/3 layers the
-  # session's cookies/api_key on top of definition.config instead of
+  # reporting settings that don't. build_probe_user_config/2 layers the
+  # session's cookies on top of definition.config instead of
   # replacing it, so both stay true at once.
-  defp test_indexer_reachable(parsed, %CardigannDefinition{} = definition, config) do
-    with {:ok, user_config} <- build_probe_user_config(parsed, definition, config) do
+  defp test_indexer_reachable(parsed, %CardigannDefinition{} = definition) do
+    with {:ok, user_config} <- build_probe_user_config(parsed, definition) do
       case CardigannHealthCheck.probe_candidates(parsed, user_config) do
         {:ok, url, _status} ->
           case CardigannHealthCheck.probe_search(parsed, user_config, url) do
@@ -273,16 +274,14 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     end
   end
 
-  # Builds the same authenticated session get_or_create_session/3 builds for a
-  # real search (a stored session's cookies, or a fresh login when the
-  # definition requires one), then layers it onto definition.config. A
-  # genuine login failure (credentials configured but rejected) surfaces as a
-  # connection failure here, same as it would surface as a search failure for
-  # a real search; an indexer with no credentials configured authenticates as
-  # :none and is not penalized for it, matching get_or_create_session/3's own
-  # success case for public indexers.
-  defp build_probe_user_config(parsed, %CardigannDefinition{} = definition, config) do
-    with {:ok, session_user_config} <- get_or_create_session(parsed, definition, config) do
+  # Builds the same authenticated session a real search gets from
+  # SessionManager.user_config/2 (a stored session's cookies, or a fresh login
+  # when the definition requires one), then layers it onto definition.config.
+  # A genuine login failure surfaces as a connection failure here, same as it
+  # would surface as a search failure for a real search; a definition with no
+  # login block gets an empty session and is not penalized for it.
+  defp build_probe_user_config(parsed, %CardigannDefinition{} = definition) do
+    with {:ok, session_user_config} <- SessionManager.user_config(parsed, definition) do
       {:ok, Map.merge(definition.config || %{}, session_user_config)}
     end
   end
@@ -314,106 +313,6 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     ]
 
     {:ok, search_opts}
-  end
-
-  defp get_or_create_session(parsed, definition, config) do
-    user_settings = setting(config, :user_settings) || %{}
-
-    # Build user config from settings
-    credentials = %{
-      username: setting(user_settings, :username),
-      password: setting(user_settings, :password),
-      api_key: setting(user_settings, :api_key),
-      cookies: setting(user_settings, :cookies) || []
-    }
-
-    # Drop anything the user has not actually configured. An empty cookie list or
-    # a blank form field is not a credential, and leaving the key in place made
-    # CardigannAuth.determine_auth_method/2 - which tests for :cookies before
-    # :username - select :cookie and skip the form login outright, so a private
-    # tracker with a username and password searched anonymously and returned
-    # nothing. The admin form submits untouched fields as "", so blank strings
-    # reach here as readily as nils.
-    credentials = Map.reject(credentials, fn {_k, v} -> blank?(v) end)
-
-    # Try to get stored session first
-    case CardigannAuth.get_stored_session(definition.id) do
-      {:ok, session} ->
-        # Validate session hasn't expired
-        if CardigannAuth.validate_session(session, parsed) do
-          {:ok, convert_session_to_user_config(session)}
-        else
-          # Session expired, re-authenticate
-          authenticate_and_convert(parsed, credentials, definition.id, definition.config || %{})
-        end
-
-      {:error, :not_found} ->
-        # No stored session, authenticate if needed
-        authenticate_and_convert(parsed, credentials, definition.id, definition.config || %{})
-
-      {:error, :expired} ->
-        # Session expired, re-authenticate
-        authenticate_and_convert(parsed, credentials, definition.id, definition.config || %{})
-    end
-  end
-
-  # Credentials are read by name rather than by key type. `definition.config` is
-  # a `Mydia.Settings.JsonMapType`, so anything that has been through the
-  # database comes back from `Jason.decode/1` with string keys, and the admin
-  # form supplies string keys too. Reading only atoms meant every configured
-  # private indexer authenticated with empty credentials: the login failed, the
-  # search returned nothing, and the connection test now reports a failure the
-  # tracker never caused.
-  defp setting(map, key) when is_map(map) do
-    case Map.fetch(map, key) do
-      {:ok, value} -> value
-      :error -> Map.get(map, Atom.to_string(key))
-    end
-  end
-
-  defp setting(_map, _key), do: nil
-
-  defp blank?(nil), do: true
-  defp blank?(value) when is_binary(value), do: String.trim(value) == ""
-  defp blank?([]), do: true
-  defp blank?(%{} = value), do: map_size(value) == 0
-  defp blank?(_value), do: false
-
-  defp authenticate_and_convert(parsed, credentials, definition_id, definition_config) do
-    case CardigannAuth.authenticate(
-           parsed,
-           Map.put(credentials, :config, definition_config),
-           definition_id
-         ) do
-      {:ok, session} ->
-        {:ok, convert_session_to_user_config(session)}
-
-      {:error, error} ->
-        # `credentials` deliberately stays free of :config here: this test asks
-        # whether the operator configured any credential at all, and a settings
-        # map is not a credential.
-        if parsed.login != nil and credentials != %{} do
-          {:error, error}
-        else
-          {:ok, %{}}
-        end
-    end
-  end
-
-  defp convert_session_to_user_config(session) do
-    case session.method do
-      :api_key ->
-        %{api_key: session.api_key}
-
-      :cookie ->
-        %{cookies: session.cookies}
-
-      :form ->
-        %{cookies: session.cookies}
-
-      :none ->
-        %{}
-    end
   end
 
   defp apply_search_filters(results, opts) do
