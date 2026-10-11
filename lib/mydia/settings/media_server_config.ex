@@ -9,7 +9,7 @@ defmodule Mydia.Settings.MediaServerConfig do
   @foreign_key_type :binary_id
 
   @type t :: %__MODULE__{
-          id: binary(),
+          id: binary() | nil,
           name: String.t() | nil,
           type: atom() | nil,
           enabled: boolean(),
@@ -24,8 +24,8 @@ defmodule Mydia.Settings.MediaServerConfig do
           connections_refreshed_at: DateTime.t() | nil,
           updated_by: Mydia.Accounts.User.t() | nil | Ecto.Association.NotLoaded.t(),
           updated_by_id: binary() | nil,
-          inserted_at: DateTime.t(),
-          updated_at: DateTime.t()
+          inserted_at: DateTime.t() | nil,
+          updated_at: DateTime.t() | nil
         }
 
   @server_types [:jellyfin]

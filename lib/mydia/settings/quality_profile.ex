@@ -13,7 +13,7 @@ defmodule Mydia.Settings.QualityProfile do
   @foreign_key_type :binary_id
 
   @type t :: %__MODULE__{
-          id: binary(),
+          id: binary() | nil,
           name: String.t() | nil,
           upgrades_allowed: boolean(),
           upgrade_until_score: integer() | nil,
@@ -26,8 +26,8 @@ defmodule Mydia.Settings.QualityProfile do
           last_synced_at: DateTime.t() | nil,
           quality_standards: map() | nil,
           media_files: [Mydia.Library.MediaFile.t()] | Ecto.Association.NotLoaded.t(),
-          inserted_at: DateTime.t(),
-          updated_at: DateTime.t()
+          inserted_at: DateTime.t() | nil,
+          updated_at: DateTime.t() | nil
         }
 
   # Allowed values for quality standards validation

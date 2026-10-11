@@ -125,7 +125,7 @@ defmodule Mydia.Settings do
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking quality profile changes.
   """
-  @spec change_quality_profile(%QualityProfile{}, map()) :: Ecto.Changeset.t()
+  @spec change_quality_profile(QualityProfile.t(), map()) :: Ecto.Changeset.t()
   defdelegate change_quality_profile(quality_profile, attrs \\ %{}),
     to: Mydia.Settings.QualityProfiles
 
@@ -570,7 +570,7 @@ defmodule Mydia.Settings do
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking media server config changes.
   """
-  @spec change_media_server_config(%MediaServerConfig{}, map()) :: Ecto.Changeset.t()
+  @spec change_media_server_config(MediaServerConfig.t(), map()) :: Ecto.Changeset.t()
   defdelegate change_media_server_config(config, attrs \\ %{}), to: Mydia.Settings.ServiceConfigs
 
   @doc """
