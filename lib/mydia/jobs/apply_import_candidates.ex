@@ -20,7 +20,7 @@ defmodule Mydia.Jobs.ApplyImportCandidates do
   the single call site both this worker and `Jobs.RematchImportCandidates`
   share, rather than here: declaring it statically on `use Oban.Worker` trips
   Oban's compile-time `--warnings-as-errors` check for a missing incomplete
-  state, the same reason `Jobs.MediaImport.schedule_snooze_retry/2` overrides
+  state, the same reason `Jobs.MediaImport.Failure.schedule_snooze_retry/3` overrides
   it at its own call site instead of in its module attributes.
 
   A library with candidates still queued at the end is reported to Oban as a

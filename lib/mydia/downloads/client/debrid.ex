@@ -17,7 +17,7 @@ defmodule Mydia.Downloads.Client.Debrid do
   Fetcher claim.
 
   `get_status/2` is the synchronous variant for the two non-cron callers
-  (`queue/client_selection.ex` re-queue verify, `media_import.ex` save_path resolve). It
+  (`queue/client_selection.ex` re-queue verify, `media_import/discovery.ex` save_path resolve). It
   does NOT persist R8 or start the Fetcher — those flows belong to the
   cron path.
 

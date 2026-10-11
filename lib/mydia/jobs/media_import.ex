@@ -26,7 +26,7 @@ defmodule Mydia.Jobs.MediaImport do
     # Full incomplete-state set: every normal caller (Downloads.Queue, DownloadMonitor,
     # the downloads LiveView) gets full duplicate protection, including against
     # a MediaImport job that's already :executing for the same download_id.
-    # `Failure.schedule_snooze_retry/2` is the one exception — it overrides
+    # `Failure.schedule_snooze_retry/3` is the one exception — it overrides
     # `:states` at the call site to drop `:executing`, since it needs to
     # self-reinsert while its own parent job is still running.
     unique: [

@@ -1192,7 +1192,7 @@ defmodule Mydia.ImportCandidates do
   # `--warnings-as-errors` compile check (it warns whenever `:states` omits
   # any incomplete state); overriding it only here, at the single call site
   # both workers share, avoids the warning the same way
-  # `Jobs.MediaImport.Failure.schedule_snooze_retry/2` does for its own narrowed case.
+  # `Jobs.MediaImport.Failure.schedule_snooze_retry/3` does for its own narrowed case.
   defp enqueue(worker, library_path_id) do
     %{"library_path_id" => library_path_id}
     |> worker.new(unique: [states: [:available, :scheduled, :retryable]])

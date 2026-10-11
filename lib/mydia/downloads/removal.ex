@@ -222,7 +222,7 @@ defmodule Mydia.Downloads.Removal do
   end
 
   defp finish(%Download{} = download) do
-    # Built before the delete, as Queue.finish_reject/2 does: it reads through
+    # Built before the delete, as Queue.Lifecycle.finish_reject/2 does: it reads through
     # the media_item association.
     search = if download.removal_kind == "reject", do: Queue.replacement_search(download)
 

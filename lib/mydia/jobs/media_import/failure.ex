@@ -364,7 +364,7 @@ defmodule Mydia.Jobs.MediaImport.Failure do
       original_args
       |> Map.put("snooze_count", new_snooze_count)
 
-    # This job is currently :executing (schedule_snooze_retry/2 only runs from
+    # This job is currently :executing (schedule_snooze_retry/3 only runs from
     # inside perform/1), so the unique states are narrowed to drop :executing
     # here — otherwise Oban would see this insert as colliding with its own
     # still-running parent and silently discard the snooze. See the `unique`
