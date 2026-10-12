@@ -3,7 +3,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Delivery do
   Gets the Cardigann guest onto disk at runtime, for installs that opted into
   `CARDIGANN_ENGINE=prowlarr`. The release image carries no guest.
 
-  `ensure/0` resolves the `.wasm` and returns its path with the bytes that were
+  `ensure/1` resolves the `.wasm` and returns its path with the bytes that were
   verified. Callers compile those bytes and do not read the path again, so a
   file swapped in after the check is never used. The order:
 
@@ -34,11 +34,18 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Delivery do
           | {:download_failed, String.t()}
           | {:write_failed, term()}
 
-  @doc "The verified `.wasm` path and bytes, downloading it first when nothing usable is on disk."
-  @spec ensure() :: {:ok, Path.t(), binary()} | {:error, reason()}
-  def ensure do
+  @progress_interval_ms 250
+
+  @doc """
+  The verified `.wasm` path and bytes, downloading it first when nothing usable
+  is on disk. `progress: fun(bytes, total)` is called during a download (at most
+  every #{@progress_interval_ms} ms, and once at the end); `total` is `nil` when
+  the server sends no content length.
+  """
+  @spec ensure(keyword()) :: {:ok, Path.t(), binary()} | {:error, reason()}
+  def ensure(opts \\ []) do
     case env_path() do
-      nil -> ensure_local_or_cached()
+      nil -> ensure_local_or_cached(opts)
       path -> from_env(path)
     end
   end
@@ -58,24 +65,24 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Delivery do
     end
   end
 
-  defp ensure_local_or_cached do
+  defp ensure_local_or_cached(opts) do
     # The development artifact trusts its own sidecar, so a release (no Mix)
     # does not take this branch: there only the pin counts.
     with true <- Code.ensure_loaded?(Mix),
          {:ok, bytes} <- Artifact.load() do
       {:ok, Artifact.path(), bytes}
     else
-      _ -> ensure_cached()
+      _ -> ensure_cached(opts)
     end
   end
 
-  defp ensure_cached do
+  defp ensure_cached(opts) do
     target = Path.join(Artifact.cache_dir(), Artifact.file_name())
 
     with {:ok, pin} <- pin() do
       case cached(target, pin) do
         {:ok, bytes} -> {:ok, target, bytes}
-        :miss -> download(target, pin)
+        :miss -> download(target, pin, opts)
       end
     end
   end
@@ -94,32 +101,77 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Delivery do
     end
   end
 
-  defp download(target, pin) do
+  defp download(target, pin, opts) do
     url = Artifact.base_url() <> "/" <> Artifact.file_name()
     Logger.info("Cardigann engine: downloading #{url}")
 
-    with {:ok, bytes} <- get(url),
+    with {:ok, bytes} <- get(url, Keyword.get(opts, :progress, fn _, _ -> :ok end)),
          :ok <- verify(bytes, pin, url),
          :ok <- write_atomically(target, bytes) do
       {:ok, target, bytes}
     end
   end
 
-  defp get(url) do
+  # The body is collected in the response's private map so progress can be
+  # reported per chunk. The 39 MB guest is compiled from memory anyway.
+  defp get(url, progress) do
     case Req.get(url,
            retry: false,
            decode_body: false,
            receive_timeout: 300_000,
-           connect_options: [timeout: 10_000]
+           connect_options: [timeout: 10_000],
+           into: &collect(&1, &2, progress)
          ) do
-      {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) ->
-        {:ok, body}
+      {:ok, %Req.Response{status: 200} = resp} ->
+        bytes =
+          resp
+          |> Req.Response.get_private(:chunks, [])
+          |> Enum.reverse()
+          |> IO.iodata_to_binary()
+
+        progress.(byte_size(bytes), content_length(resp))
+        {:ok, bytes}
 
       {:ok, %Req.Response{status: status}} ->
         {:error, {:download_failed, "#{url} returned HTTP #{status}"}}
 
       {:error, e} ->
         {:error, {:download_failed, "#{url}: #{Exception.message(e)}"}}
+    end
+  end
+
+  defp collect({:data, data}, {req, %Req.Response{status: 200} = resp}, progress) do
+    chunks = [data | Req.Response.get_private(resp, :chunks, [])]
+    received = Req.Response.get_private(resp, :received, 0) + byte_size(data)
+    now = System.monotonic_time(:millisecond)
+    last = Req.Response.get_private(resp, :reported_at, nil)
+
+    reported_at =
+      if last == nil or now - last >= @progress_interval_ms do
+        progress.(received, content_length(resp))
+        now
+      else
+        last
+      end
+
+    resp =
+      resp
+      |> Req.Response.put_private(:chunks, chunks)
+      |> Req.Response.put_private(:received, received)
+      |> Req.Response.put_private(:reported_at, reported_at)
+
+    {:cont, {req, resp}}
+  end
+
+  # An error page is not the guest: drop it, the status decides.
+  defp collect({:data, _data}, acc, _progress), do: {:cont, acc}
+
+  defp content_length(resp) do
+    with [value | _] <- Req.Response.get_header(resp, "content-length"),
+         {n, ""} <- Integer.parse(value) do
+      n
+    else
+      _ -> nil
     end
   end
 
