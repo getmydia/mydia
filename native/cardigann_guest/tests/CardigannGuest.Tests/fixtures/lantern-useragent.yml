@@ -1,0 +1,32 @@
+id: lanternua
+name: LanternUa
+description: Invented public tracker that sets its own User-Agent, for tests
+language: en-US
+type: public
+encoding: UTF-8
+links:
+  - https://lantern.invalid/
+caps:
+  categorymappings:
+    - {id: 1, cat: Movies, desc: Movies}
+  modes:
+    search: [q]
+settings: []
+search:
+  paths:
+    - path: search
+  headers:
+    User-Agent: ["Invented/1.0"]
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table.results > tbody > tr
+  fields:
+    title:
+      selector: td.name a
+    details:
+      selector: td.name a
+      attribute: href
+    download:
+      selector: td.dl a
+      attribute: href

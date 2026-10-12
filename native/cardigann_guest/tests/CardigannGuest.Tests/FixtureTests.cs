@@ -241,6 +241,19 @@ namespace Mydia.CardigannGuest.Tests
         }
 
         [Fact]
+        public void Requests_carry_a_browser_user_agent_unless_the_definition_sets_one()
+        {
+            var http = new FakeExchange().On("GET", "/search", _ => FakeExchange.Html(Fixture("lantern-search.html")));
+
+            Runner.Search(Fixture("lantern-public.yml"), new Dictionary<string, string>(), Query("harbor"), Empty, http);
+            Runner.Search(Fixture("lantern-useragent.yml"), new Dictionary<string, string>(), Query("harbor"), Empty, http);
+
+            string UserAgentOf(RawRequest r) => Assert.Single(r.Headers, h => h.Name == "User-Agent").Value;
+            Assert.StartsWith("Mozilla/5.0 ", UserAgentOf(http.Seen[0]));
+            Assert.Equal("Invented/1.0", UserAgentOf(http.Seen[1]));
+        }
+
+        [Fact]
         public void A_definition_with_a_byte_order_mark_loads()
         {
             // Upstream reads definitions with File.ReadAllText, which drops the BOM.

@@ -14,8 +14,15 @@ namespace Mydia.CardigannGuest.Shim
     // header and cookie collection), minus the socket, proxy and TLS code.
     public static class RequestMapping
     {
-        // ManagedHttpDispatcher takes this from UserAgentBuilder, which needs OsInfo.
-        public const string UserAgent = "Prowlarr/2.6.5.5623 (linux)";
+        // ManagedHttpDispatcher sends "Prowlarr/<version> (<os>)" from UserAgentBuilder,
+        // which needs OsInfo. Cloudflare answers that string with a 403 on
+        // trackers that serve a desktop browser normally (the benchmark's Prowlarr
+        // is refused by kickasstorrents-ws, megapeer, 0magnet and others that
+        // answer a browser string), and Mydia's other Cardigann requests already
+        // send this browser string, so it is the default here. A definition's own
+        // User-Agent header still replaces it (AddRequestHeaders).
+        public const string UserAgent =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
         public const string UserAgentSimplified = "Prowlarr/2.6";
 
         public static RawRequest ToRaw(HttpRequest request, CookieContainer cookies)
