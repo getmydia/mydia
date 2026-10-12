@@ -1,0 +1,41 @@
+id: ember
+name: Ember
+description: Invented public JSON tracker for tests
+language: en-US
+type: public
+encoding: UTF-8
+links:
+  - https://ember.invalid/
+caps:
+  categorymappings:
+    - {id: 1, cat: Movies, desc: Movies}
+    - {id: 2, cat: TV, desc: TV}
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+    movie-search: [q]
+settings: []
+search:
+  paths:
+    - path: api/search
+      response:
+        type: json
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: data.items
+  fields:
+    title:
+      selector: name
+    details:
+      selector: page
+    download:
+      selector: torrent
+    category:
+      selector: cat
+    size:
+      selector: bytes
+    seeders:
+      selector: seeds
+    leechers:
+      selector: peers

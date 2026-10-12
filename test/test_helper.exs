@@ -31,9 +31,35 @@ s3_exclude =
       [:s3]
   end
 
+# The Wasmex-hosted Cardigann engine tests need the prebuilt guest. Without it
+# they are excluded, loudly: a green run must never read as "the engine works"
+# when it was not exercised (native/cardigann_guest/README.md, "CI gap"). Naming
+# the tag with --include makes them run, and fail with the same message.
+cardigann_wasm_exclude =
+  case Mydia.Indexers.Cardigann.Wasm.Artifact.load() do
+    {:ok, _bytes} ->
+      []
+
+    {:error, reason} ->
+      IO.puts(
+        "cardigann_wasm tests skipped: #{reason}; " <>
+          "run mix mydia.cardigann_guest fetch or native/cardigann_guest/build.sh wasm"
+      )
+
+      [:cardigann_wasm]
+  end
+
 ExUnit.start(
   max_cases: max_cases,
-  exclude: [:external, :feature, :requires_relay, :ffmpeg, :hwaccel] ++ s3_exclude
+  exclude:
+    [
+      :external,
+      :feature,
+      :requires_relay,
+      :ffmpeg,
+      :hwaccel,
+      :cardigann_spike
+    ] ++ s3_exclude ++ cardigann_wasm_exclude
 )
 
 Ecto.Adapters.SQL.Sandbox.mode(Mydia.Repo, :manual)

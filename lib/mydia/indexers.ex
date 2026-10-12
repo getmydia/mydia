@@ -50,7 +50,7 @@ defmodule Mydia.Indexers do
     - `:prowlarr` - Prowlarr indexer aggregator
     - `:jackett` - Jackett indexer proxy
     - `:newznab` - Generic Newznab Usenet indexer (including NZBHydra2)
-    - `:cardigann` - Native Cardigann definition support
+    - `:cardigann` - Native Cardigann support (`CARDIGANN_ENGINE` picks the engine)
   """
   @spec register_adapters() :: :ok
   def register_adapters do
@@ -60,7 +60,7 @@ defmodule Mydia.Indexers do
     Adapter.Registry.register(:prowlarr, Mydia.Indexers.Adapter.Prowlarr)
     Adapter.Registry.register(:jackett, Mydia.Indexers.Adapter.Jackett)
     Adapter.Registry.register(:newznab, Mydia.Indexers.Adapter.Newznab)
-    Adapter.Registry.register(:cardigann, Mydia.Indexers.Adapter.Cardigann)
+    Adapter.Registry.register(:cardigann, Mydia.Indexers.CardigannFeatureFlags.adapter())
 
     Logger.info("Indexer adapter registration complete")
     :ok
@@ -620,10 +620,10 @@ defmodule Mydia.Indexers do
       min(max(indexer_count, 1), 16)
   end
 
-  # 4x a normal 30s response. Generous on purpose: indexers here are legitimately
-  # slow and do eventually answer, so this is a backstop against a wedged
-  # connection rather than a latency budget.
-  defp search_deadline_ms(opts) do
+  # 4x a normal 30s response: a backstop against a wedged connection, not a
+  # latency budget. The Cardigann wasm adapter spends it across mirrors.
+  @doc false
+  def search_deadline_ms(opts) do
     Keyword.get(opts, :deadline_ms) ||
       Application.get_env(:mydia, :indexer_search, [])[:deadline_ms] ||
       120_000

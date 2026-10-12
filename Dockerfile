@@ -179,14 +179,31 @@ COPY patches/ueberauth_oidcc_request.ex ./deps/ueberauth_oidcc/lib/ueberauth_oid
 # skipped in the deps.get layer above, which has no patches/ yet. It stops the
 # build on any Exqlite version but the one the patch targets.
 COPY patches/exqlite ./patches/exqlite
+# Wasmex gets the same treatment: a patch that adds precompile-to-file and
+# deserialize-file, which the opt-in Cardigann engine uses to keep one compiled
+# copy of its 75 MB guest on disk instead of a GB of compiler heap
+# (native/cardigann_guest/BENCH.md, "Memory spike"). The patch lives in the Rust
+# half of the NIF, so Wasmex is built from source below instead of downloading
+# its precompiled NIF.
+COPY patches/wasmex ./patches/wasmex
 RUN mix deps.patch
 
 # Compile dependencies
-# Cache cargo registry for Rust NIF compilation (mydia_p2p_core)
+# Cache cargo registry for Rust NIF compilation (mydia_p2p_core, wasmex).
+# WASMEX_BUILD=1 makes rustler_precompiled build the patched NIF from source.
+# Set as ENV, not a prefix on the command: ci.yml anchors on a bare
+# `mix deps.compile` line.
+ENV WASMEX_BUILD=1
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/app/native/mydia_p2p_core/target,sharing=locked \
+    --mount=type=cache,target=/app/deps/wasmex/native/wasmex/target,sharing=locked \
     mix deps.compile
+
+# Prove the Wasmex patch took effect: this fails if the NIF came from Wasmex's
+# precompiled download (which has neither function) instead of the patched source.
+RUN elixir -pa "_build/prod/lib/*/ebin" \
+      -e 'true = is_boolean(Wasmex.Engine.malloc_trim()); IO.puts("wasmex NIF is patched")'
 
 # Prove the Exqlite patch took effect. This fails if the NIF came from Exqlite's
 # precompiled download instead of the patched source, or if it still stalls.
@@ -239,6 +256,25 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/app/native/mydia_p2p_core/target,sharing=locked \
     mix compile
+
+# The Cardigann wasm guest is NOT in the image. Installs that opt in with
+# CARDIGANN_ENGINE=prowlarr download it into their data directory on first boot,
+# verified against a SHA-256 pinned at build time: either
+# native/cardigann_guest/ARTIFACT_SHA256, or the release's `.sha256` sidecar,
+# fetched here (only the 64-character sidecar, never the guest) into
+# priv/cardigann/. The :cardigann_guest compiler does not fetch in a
+# prod build.
+#
+# The guest is published after a master push, so a build of a commit that
+# changes it can have no sidecar yet. That is soft by default (the engine then
+# reports "no published Cardigann engine for this build") and fatal for release
+# images, which pass CARDIGANN_REQUIRE_PIN=true.
+ARG CARDIGANN_REQUIRE_PIN=false
+RUN if [ "$CARDIGANN_REQUIRE_PIN" = "true" ]; then \
+      mix mydia.cardigann_guest pin --require; \
+    else \
+      mix mydia.cardigann_guest pin; \
+    fi
 
 # Fail the build if a bundled plugin's wasm artifact was not produced (the
 # :plugins compiler graceful-skips a missing toolchain, so this is the guard

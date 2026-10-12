@@ -280,6 +280,26 @@ if config_env() == :prod do
       _ -> Application.get_env(:mydia, :features)[:cardigann_enabled] || false
     end
 
+  # builtin (default) runs the Elixir engine; prowlarr runs Prowlarr's engine
+  # compiled to wasm. Anything else is a typo worth failing the boot over.
+  cardigann_engine =
+    case System.get_env("CARDIGANN_ENGINE") do
+      nil ->
+        Application.get_env(:mydia, :features)[:cardigann_engine] || :builtin
+
+      "" ->
+        Application.get_env(:mydia, :features)[:cardigann_engine] || :builtin
+
+      "builtin" ->
+        :builtin
+
+      "prowlarr" ->
+        :prowlarr
+
+      other ->
+        raise "CARDIGANN_ENGINE must be \"builtin\" or \"prowlarr\", got: #{inspect(other)}"
+    end
+
   import_lists_enabled =
     case System.get_env("ENABLE_IMPORT_LISTS") do
       "true" ->
@@ -301,6 +321,7 @@ if config_env() == :prod do
 
   config :mydia, :features,
     cardigann_enabled: cardigann_enabled,
+    cardigann_engine: cardigann_engine,
     import_lists_enabled: import_lists_enabled
 
   # Enable/disable public IP detection via external services
@@ -441,6 +462,26 @@ if config_env() in [:dev, :test] do
       _ -> Application.get_env(:mydia, :features)[:cardigann_enabled] || false
     end
 
+  # builtin (default) runs the Elixir engine; prowlarr runs Prowlarr's engine
+  # compiled to wasm. Anything else is a typo worth failing the boot over.
+  cardigann_engine =
+    case System.get_env("CARDIGANN_ENGINE") do
+      nil ->
+        Application.get_env(:mydia, :features)[:cardigann_engine] || :builtin
+
+      "" ->
+        Application.get_env(:mydia, :features)[:cardigann_engine] || :builtin
+
+      "builtin" ->
+        :builtin
+
+      "prowlarr" ->
+        :prowlarr
+
+      other ->
+        raise "CARDIGANN_ENGINE must be \"builtin\" or \"prowlarr\", got: #{inspect(other)}"
+    end
+
   import_lists_enabled =
     case System.get_env("ENABLE_IMPORT_LISTS") do
       "true" ->
@@ -462,6 +503,7 @@ if config_env() in [:dev, :test] do
 
   config :mydia, :features,
     cardigann_enabled: cardigann_enabled,
+    cardigann_engine: cardigann_engine,
     import_lists_enabled: import_lists_enabled
 end
 
@@ -505,6 +547,18 @@ resolved_p2p_keypair_path =
     Path.join(System.get_env("MYDIA_DATA_DIR") || "priv/data", "p2p_keypair.bin")
 
 config :mydia, :p2p_keypair_path, resolved_p2p_keypair_path
+
+# Where state that is safe to lose but costly to rebuild goes (the Cardigann
+# engine download and its precompiled form). MYDIA_DATA_DIR when set, else the
+# directory of the database file, which is a volume in the image, else priv/data.
+data_dir =
+  System.get_env("MYDIA_DATA_DIR") ||
+    case System.get_env("DATABASE_PATH") do
+      path when path in [nil, ""] -> "priv/data"
+      path -> Path.dirname(path)
+    end
+
+config :mydia, :data_dir, data_dir
 
 # Ueberauth OIDC configuration (all environments)
 # This runs at application startup, so environment variables are available

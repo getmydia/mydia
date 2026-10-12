@@ -54,6 +54,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:ok, response} = CardigannSearchEngine.execute_search(definition, opts)
   """
 
+  alias Mydia.Indexers.Cardigann.AdapterSupport
   alias Mydia.Indexers.Cardigann.BlockPage
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
@@ -68,8 +69,6 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.FlareSolverr.ClearanceCache
 
   require Logger
-
-  @max_search_candidates 3
 
   # Interstitial titles are matched at any status: some challenges are served
   # with a 200, and a 403 page can omit the word "Cloudflare" entirely.
@@ -144,12 +143,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   def execute_search(%Parsed{} = definition, opts, user_config, flaresolverr_opts)
       when is_list(opts) do
-    active = opts |> Keyword.get(:base_url) |> List.wrap()
-
-    candidates =
-      (Enum.map(active, &String.trim_trailing(&1, "/")) ++ Links.candidates(definition))
-      |> Enum.uniq()
-      |> Enum.take(@max_search_candidates)
+    candidates = AdapterSupport.search_candidates(definition, Keyword.get(opts, :base_url))
 
     case candidates do
       [] ->

@@ -32,6 +32,60 @@ To disable:
 ENABLE_CARDIGANN=false
 ```
 
+## Using Prowlarr's engine (experimental)
+
+Mydia can run Prowlarr's own Cardigann engine instead of its built-in one:
+
+```bash
+CARDIGANN_ENGINE=prowlarr
+```
+
+The default is `builtin`, and anything else stops Mydia at startup with a message
+naming the two valid values. With `prowlarr`, definitions are read by the same
+code Prowlarr uses, so results match Prowlarr's, and a search that hits a dead or
+blocked mirror moves on to the next link the definition lists. Against Prowlarr on
+the 44 public trackers where Prowlarr returned results, it matched on all of them,
+and the built-in engine on 28.
+
+It is opt-in because it costs something. Read this before turning it on:
+
+- **The first start downloads about 39 MB from GitHub and compiles it.** The
+  compile takes about 18 s on the Alpine image and uses up to about 1.6 GB of
+  memory while it runs, then settles at about 500 MB. A container limited to
+  less than about 2 GB can be killed during it. Cardigann searches fail with a message
+  saying why until it finishes; the rest of Mydia is not held up. If the download
+  fails, Mydia retries in the background.
+- **Later starts load the compiled copy in under a second.** It is kept in a
+  `cardigann` folder in your data directory (`MYDIA_DATA_DIR`, or next to the
+  database file, which is `/config` in the Docker image): 39 MB for the download
+  and 119 MB for the compiled copy. Keep that folder on a volume. Without one,
+  every container recreate downloads and compiles again.
+- **Memory.** About 65 MB more than the built-in engine when idle, and about
+  290 MB more while four searches run at once.
+- **Speed.** About 60 ms slower per search at the median, 110 ms at the 95th
+  percentile, not counting the tracker's own response time.
+- **Errors are Prowlarr's wording**, such as an HTTP status, "Cloudflare protection
+  detected" or "No answer from the tracker". In the benchmark, 20 of 81 public
+  trackers ended in one of these; Prowlarr could not search any of those 20 either.
+  FlareSolverr still applies.
+- **It cannot reach trackers on your local network**, and it is only measured
+  against public trackers. Private-tracker logins are untested.
+- **It is built with an experimental toolchain** (a pre-release .NET compiled to
+  WebAssembly). Expect rough edges, and report them.
+
+Without internet access on the server, download `cardigann-<hash>.wasm` for your
+Mydia version yourself, put it on the server and point Mydia at it:
+
+```bash
+CARDIGANN_WASM_PATH=/path/to/cardigann-<hash>.wasm
+```
+
+Mydia checks the file against the checksum built into your version and refuses
+one that does not match. Nothing is downloaded, and the compiled copy is still
+cached in the data directory.
+
+If you set `ENABLE_CARDIGANN=false`, Cardigann is off whichever engine you pick.
+
 ## Supported Indexers
 
 Mydia syncs the full upstream definition catalogue. Coverage is strongest for

@@ -224,6 +224,11 @@ in
     # IEx shell history.
     ERL_AFLAGS = "-kernel shell_history enabled";
 
+    # Wasmex carries a local patch in its Rust half (patches/wasmex), so it is
+    # built from source instead of downloading its precompiled NIF. The first
+    # build compiles wasmtime (several minutes); it is cached in deps/ and _build/.
+    WASMEX_BUILD = "1";
+
     # C cross-compilation for the wasm32-unknown-unknown target listed under
     # languages.rust above. `ring`, which is rustls' crypto provider and so
     # iroh's, compiles C sources through cc-rs, and cc-rs falls back to the

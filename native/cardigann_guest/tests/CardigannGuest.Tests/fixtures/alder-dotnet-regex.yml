@@ -1,0 +1,50 @@
+id: alder
+name: Alder
+description: Invented public tracker whose fields need .NET regex semantics
+language: en-US
+type: public
+encoding: UTF-8
+links:
+  - https://alder.invalid/
+caps:
+  categorymappings:
+    - {id: 1, cat: Movies, desc: Movies}
+  modes:
+    search: [q]
+settings: []
+search:
+  paths:
+    - path: search
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table.results > tbody > tr
+  fields:
+    # A balancing group removes a balanced, possibly nested, parenthetical.
+    # PCRE has no such construct and rejects the pattern.
+    title:
+      selector: td.name a
+      filters:
+        - name: re_replace
+          args: ["\\((?>[^()]+|\\((?<depth>)|\\)(?<-depth>))*(?(depth)(?!))\\)", ""]
+        - name: re_replace
+          args: ["\\s+", " "]
+        - name: trim
+    details:
+      selector: td.name a
+      attribute: href
+    download:
+      selector: td.dl a
+      attribute: href
+    category:
+      selector: td.cat
+    # Lookbehind plus a named group.
+    size:
+      selector: td.meta
+      filters:
+        - name: regexp
+          args: "(?<=Size: )(?<n>[\\d.]+ ?[KMGT]B)"
+    seeders:
+      selector: td.seed
+    leechers:
+      selector: td.leech

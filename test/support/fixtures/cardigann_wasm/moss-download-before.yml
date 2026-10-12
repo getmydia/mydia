@@ -1,0 +1,42 @@
+id: moss
+name: Moss
+description: Invented public tracker whose downloads need a priming request
+language: en-US
+type: public
+encoding: UTF-8
+links:
+  - https://moss.invalid/
+caps:
+  categorymappings:
+    - {id: 1, cat: Movies, desc: Movies}
+  modes:
+    search: [q]
+settings: []
+download:
+  before:
+    path: before
+    method: get
+search:
+  paths:
+    - path: search
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table.results > tbody > tr
+  fields:
+    title:
+      selector: td.name a
+    details:
+      selector: td.name a
+      attribute: href
+    download:
+      selector: td.dl a
+      attribute: href
+    category:
+      selector: td.cat
+    size:
+      selector: td.size
+    seeders:
+      selector: td.seed
+    leechers:
+      selector: td.leech

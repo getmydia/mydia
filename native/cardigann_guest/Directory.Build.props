@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <ProwlarrRoot>$(MSBuildThisFileDirectory).prowlarr/</ProwlarrRoot>
+  </PropertyGroup>
+  <Target Name="IncludeProwlarrFiles" BeforeTargets="BeforeBuild;CoreCompile" Condition="'$(SkipVendorFiles)' != 'true'">
+    <ReadLinesFromFile File="$(MSBuildThisFileDirectory)vendor-files.txt">
+      <Output TaskParameter="Lines" ItemName="_VendorLine" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <_VendorFile Include="@(_VendorLine->'$(ProwlarrRoot)%(Identity)')"
+                   Condition="'%(Identity)' != '' and !$([System.String]::Copy('%(Identity)').StartsWith('#'))" />
+      <Compile Include="@(_VendorFile)" Link="upstream/%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+    <Error Condition="!Exists('%(_VendorFile.Identity)')" Text="vendor-files.txt names a missing upstream file: %(_VendorFile.Identity)" />
+  </Target>
+</Project>

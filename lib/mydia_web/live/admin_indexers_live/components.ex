@@ -2,6 +2,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
+  alias Mydia.Indexers.CardigannFeatureFlags
   alias Mydia.Settings
   alias MydiaWeb.AdminIndexersLive.{FlareSolverrComponents, LoginComponents}
   alias MydiaWeb.IndexerComponents
@@ -20,12 +21,37 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :retesting_paused, :any, default: MapSet.new()
 
   def indexers_tab(assigns) do
+    # Read on every render rather than at mount, so any re-render shows the current engine state.
+    assigns = assign(assigns, :cardigann_engine_status, CardigannFeatureFlags.engine_status())
+
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
       <FlareSolverrComponents.flaresolverr_row
         flaresolverr={@flaresolverr}
         flaresolverr_status={@flaresolverr_status}
       />
+
+      <div
+        :if={
+          (@cardigann_enabled and @cardigann_engine_status) &&
+            @cardigann_engine_status.engine == :prowlarr
+        }
+        id="cardigann-engine-status"
+        class={[
+          "text-sm flex items-center gap-2",
+          if(@cardigann_engine_status.state == :ready,
+            do: "text-base-content/60",
+            else: "text-warning"
+          )
+        ]}
+      >
+        <.icon name="hero-cpu-chip" class="w-4 h-4" />
+        <span>
+          Indexer library engine: {@cardigann_engine_status.label}<span :if={
+            @cardigann_engine_status.detail
+          }>, {@cardigann_engine_status.detail}</span>
+        </span>
+      </div>
 
       <%= if @indexers == [] and @library_indexers == [] do %>
         <div class="alert alert-info">

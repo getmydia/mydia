@@ -1,0 +1,20 @@
+[package]
+name = "cardigann-deny"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Trapping stand-ins for wasi:http and wasi:sockets, composed under the Cardigann guest."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "=0.62.0"
+
+[workspace]
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+panic = "abort"

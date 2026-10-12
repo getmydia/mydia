@@ -1,0 +1,12 @@
+# Prowlarr 2.6.5.5623 is the oracle for the Cardigann benchmark. Its engine is
+# the one the wasm guest is built from (native/cardigann_guest/PROWLARR_REF).
+# Pinned by tag and by multi-arch index digest (verified with
+# `docker buildx imagetools inspect`). When the tag is bumped, update both.
+services:
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:2.6.5.5623-ls163@sha256:f9151e5bc1025c6d0a630d503210cdcb6bb55a7cc098562609d96a408d838902
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+    ports: ["127.0.0.1:9696:9696"]
+    volumes: ["./data:/config"]

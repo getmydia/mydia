@@ -17,6 +17,10 @@ concurrency:
 
 env:
   MIX_ENV: test
+  # Wasmex carries a local patch in its Rust half (patches/wasmex), so it is
+  # built from source instead of downloading its precompiled NIF. The cached
+  # deps/ and _build/ keys include patches/**.
+  WASMEX_BUILD: "1"
   # Harden Rust crate fetches against transient crates.io flakiness. The Rustler
   # NIF (native/mydia_p2p) is built during `mix compile`; CI intermittently hit
   # "download of … failed / curl failed / [16] Error in the HTTP2 framing layer".
@@ -327,6 +331,10 @@ jobs:
           if [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
             UNUSED_CHECK=true mix compile --force || true
           fi
+          # Soft: downloads the published Cardigann wasm guest (or copies a local
+          # build); exits 0 when the asset is not published yet (a PR that changes
+          # the guest), so tests needing it skip. See native/cardigann_guest/README.md.
+          mix mydia.cardigann_guest fetch
           mix ecto.create
           mix ecto.migrate
           mix test --cover --warnings-as-errors
@@ -391,16 +399,18 @@ jobs:
           echo "::error::devenv environment failed to materialize after 3 attempts"
           exit 1
 
-      # Keyed on the toolchain and lock: the core PLT only changes when Elixir,
-      # OTP or a dependency does. restore-keys lets a lock change rebuild the
-      # project PLT incrementally from the previous one.
+      # Keyed on the toolchain, lock and dependency patches: the core PLT only
+      # changes when Elixir, OTP or a dependency does, and a patch adds functions
+      # (patches/wasmex) that a PLT built from unpatched source lacks. v2 drops
+      # the PLTs cached before patches/ was in the key. restore-keys lets a lock
+      # change rebuild the project PLT incrementally from the previous one.
       - name: Cache Dialyzer PLTs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: priv/plts
-          key: ${{ runner.os }}-plts-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('**/mix.lock') }}
+          key: ${{ runner.os }}-plts-v2-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('**/mix.lock', 'patches/**') }}
           restore-keys: |
-            ${{ runner.os }}-plts-${{ hashFiles('.elixir-version', '.otp-version') }}-
+            ${{ runner.os }}-plts-v2-${{ hashFiles('.elixir-version', '.otp-version') }}-
 
       - name: Dialyzer under devenv
         run: |
@@ -593,6 +603,10 @@ jobs:
           mix local.rebar --force --if-missing
           mix deps.get
           mix compile
+          # Soft: downloads the published Cardigann wasm guest (or copies a local
+          # build); exits 0 when the asset is not published yet (a PR that changes
+          # the guest), so tests needing it skip. See native/cardigann_guest/README.md.
+          mix mydia.cardigann_guest fetch
           mix ecto.create
           mix ecto.migrate
           mix ecto.migrations

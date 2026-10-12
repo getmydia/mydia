@@ -111,6 +111,10 @@ docs/.venv/
 # compilation). The manifests (priv/plugins/*.json) stay tracked; only the
 # build-produced .wasm is ignored — source under plugins/*/ is the truth.
 /priv/plugins/*.wasm
+/priv/cardigann/*.wasm
+/priv/cardigann/*.wasm.sha256
+/priv/cardigann/*.wasm.cwasm
+/priv/cardigann/.unavailable-*
 
 # Cookie jars (from HTTP clients)
 cookie.jar
@@ -183,3 +187,4 @@ live-repo/
 dryrun-live/
 dryrun-dest/
 repofiles/
+bench/cardigann/data/

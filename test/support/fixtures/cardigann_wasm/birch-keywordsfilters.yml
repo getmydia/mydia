@@ -1,0 +1,42 @@
+id: birch
+name: Birch
+description: Invented public tracker that rewrites the keywords before searching
+language: en-US
+type: public
+encoding: UTF-8
+links:
+  - https://birch.invalid/
+caps:
+  categorymappings:
+    - {id: 1, cat: Movies, desc: Movies}
+  modes:
+    search: [q]
+settings: []
+search:
+  paths:
+    - path: search
+  keywordsfilters:
+    - name: re_replace
+      args: ["[^A-Za-z0-9 ]+", ""]
+    - name: tolower
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table.results > tbody > tr
+  fields:
+    title:
+      selector: td.name a
+    details:
+      selector: td.name a
+      attribute: href
+    download:
+      selector: td.dl a
+      attribute: href
+    category:
+      selector: td.cat
+    size:
+      selector: td.size
+    seeders:
+      selector: td.seed
+    leechers:
+      selector: td.leech

@@ -97,7 +97,7 @@ defmodule Mydia.MixProject do
     # priv/. Unlike `:unused` (which must wrap elixir, hence prepended) `:plugins`
     # is independent. It runs on every compile in every env, including the
     # test-env --warnings-as-errors compile.
-    base = [:phoenix_live_view] ++ Mix.compilers() ++ [:plugins]
+    base = [:phoenix_live_view] ++ Mix.compilers() ++ [:plugins, :cardigann_guest]
 
     if System.get_env("UNUSED_CHECK") == "true" and Mix.env() in [:dev, :test] do
       [:unused | base]
@@ -323,7 +323,8 @@ defmodule Mydia.MixProject do
   # whoever bumps rebases the patch or retires it. patches/exqlite/ explains
   # its patch, and how to tell whether upstream still needs it.
   @dep_patches [
-    {:exqlite, "0.41.0", "patches/exqlite/statement-destructor-never-blocks.patch"}
+    {:exqlite, "0.41.0", "patches/exqlite/statement-destructor-never-blocks.patch"},
+    {:wasmex, "0.15.1", "patches/wasmex/component-precompile-and-deserialize.patch"}
   ]
 
   # Runs after every `mix deps.get`, so dev, CI and the Docker image all build

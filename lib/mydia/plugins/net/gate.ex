@@ -77,11 +77,17 @@ defmodule Mydia.Plugins.Net.Gate do
     * `:resolver` — `(host -> {:ok, [ip_tuple]} | {:error, term})`, injected in tests
     * `:allow_private` — test seam (see moduledoc)
     * `:approved_endpoints` - exact `%{"scheme", "host", "port"}` entries the operator approved
+    * `:audit` - `:full` (default, the whole URL), `:redacted` (URL without query
+      string, fragment or userinfo; the path is kept, so secrets in path segments
+      are NOT stripped) or `false` (no event). For high-volume callers whose URLs
+      carry credentials in the query string. Any other value raises `ArgumentError`
+      before the request is made.
   """
   @spec request(String.t(), keyword()) :: {:ok, result()} | {:error, Error.t()}
   def request(url, opts) when is_binary(url) do
     allowed = Keyword.get(opts, :allowed_hosts, [])
     approved_endpoints = Keyword.get(opts, :approved_endpoints, [])
+    audit_mode = fetch_audit_mode!(opts)
     started = System.monotonic_time()
 
     outcome =
@@ -95,7 +101,7 @@ defmodule Mydia.Plugins.Net.Gate do
     duration_ms =
       System.convert_time_unit(System.monotonic_time() - started, :native, :millisecond)
 
-    audit(url, outcome, duration_ms, opts)
+    audit(audit_mode, url, outcome, duration_ms, opts)
     outcome
   end
 
@@ -483,7 +489,42 @@ defmodule Mydia.Plugins.Net.Gate do
 
   # Auditing must never break egress: a failure to record the event (e.g. no DB
   # connection in the caller's context) is logged and swallowed.
-  defp audit(url, outcome, duration_ms, opts) do
+  # Fail closed: only the three documented values are accepted, so a typo or
+  # nil can never silently record a credential-bearing URL.
+  defp fetch_audit_mode!(opts) do
+    case Keyword.get(opts, :audit, :full) do
+      mode when mode in [:full, :redacted, false] ->
+        mode
+
+      other ->
+        raise ArgumentError,
+              "invalid :audit option #{inspect(other)}, expected :full, :redacted or false"
+    end
+  end
+
+  defp audit(false, _url, _outcome, _duration_ms, _opts), do: :ok
+
+  defp audit(:full, url, outcome, duration_ms, opts),
+    do: write_audit(url, outcome, duration_ms, opts)
+
+  defp audit(:redacted, url, outcome, duration_ms, opts),
+    do: write_audit(redact_url(url), outcome, duration_ms, opts)
+
+  # Auditing must never break egress, so a URL that cannot be parsed is
+  # replaced rather than raised on.
+  defp redact_url(url) do
+    case URI.parse(url) do
+      %URI{host: host} = uri when is_binary(host) and host != "" ->
+        URI.to_string(%{uri | query: nil, fragment: nil, userinfo: nil, authority: nil})
+
+      _ ->
+        "[unparseable url]"
+    end
+  rescue
+    _ -> "[unparseable url]"
+  end
+
+  defp write_audit(url, outcome, duration_ms, opts) do
     slug = Keyword.get(opts, :slug, "unknown")
     method = opts |> Keyword.get(:method, "GET") |> to_string() |> String.upcase()
     {status, severity, bytes} = audit_fields(outcome)

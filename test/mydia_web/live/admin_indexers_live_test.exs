@@ -677,6 +677,46 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     end
   end
 
+  describe "Cardigann engine status line" do
+    setup %{conn: conn, token: token} do
+      features = Application.get_env(:mydia, :features, [])
+      on_exit(fn -> Application.put_env(:mydia, :features, features) end)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn, features: features}
+    end
+
+    defp put_engine(features, engine),
+      do:
+        Application.put_env(
+          :mydia,
+          :features,
+          Keyword.merge(features, cardigann_enabled: true, cardigann_engine: engine)
+        )
+
+    test "is hidden under the built-in engine", %{conn: conn, features: features} do
+      put_engine(features, :builtin)
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      refute has_element?(view, "#cardigann-engine-status")
+    end
+
+    test "names the wasm engine and why it cannot search yet", %{conn: conn, features: features} do
+      # The test application never starts the engine process, so it reads as
+      # selected but not running.
+      put_engine(features, :prowlarr)
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      assert has_element?(view, "#cardigann-engine-status.text-warning", "Prowlarr engine")
+      assert has_element?(view, "#cardigann-engine-status", "not running")
+    end
+  end
+
   describe "FlareSolverr panel" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)

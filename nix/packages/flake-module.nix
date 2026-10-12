@@ -107,33 +107,18 @@
         extraRegistries = crateRegistries;
       };
 
-      # Precompiled wasmex NIF (rustler_precompiled downloads this at compile
-      # time, which the Nix sandbox forbids). Pre-fetch the release tarball and
-      # point RUSTLER_PRECOMPILED_GLOBAL_CACHE_PATH at it so the wasmex build
-      # reuses the cached artifact instead of hitting the network. Hashes come
-      # from deps/wasmex/checksum-Elixir.Wasmex.Native.exs (only nif-2.15
-      # artifacts are published, which is also rustler_precompiled's default).
-      wasmexVersion = "0.15.1";
-      wasmexNifTarget = {
-        "x86_64-linux" = "x86_64-unknown-linux-gnu";
-        "aarch64-linux" = "aarch64-unknown-linux-gnu";
-        "x86_64-darwin" = "x86_64-apple-darwin";
-        "aarch64-darwin" = "aarch64-apple-darwin";
-      }.${system} or "x86_64-unknown-linux-gnu";
-      wasmexNifHash = {
-        "x86_64-unknown-linux-gnu" = "sha256-5iQqTFjElY7ZuDPT9vUZjyqSUaE0MgajOvvoR/XmZh0=";
-        "aarch64-unknown-linux-gnu" = "sha256-P5Id4S5KgaZpNSSRv7HJeevggEqg/LnqXezE0sVgL30=";
-        "x86_64-apple-darwin" = "sha256-L0Imgy9YrGOGz6kusc9AwI5ypeVbc/Rf6bsxFpzuyHM=";
-        "aarch64-apple-darwin" = "sha256-VwMGKS8nmuF6vyVY5zMb7GQsMNg/0x8bSoQ99lN5f2w=";
-      }.${wasmexNifTarget};
-      wasmexNifFileName = "libwasmex-v${wasmexVersion}-nif-2.15-${wasmexNifTarget}.so.tar.gz";
-      wasmexNifTarball = pkgs.fetchurl {
-        url = "https://github.com/tessi/wasmex/releases/download/v${wasmexVersion}/${wasmexNifFileName}";
-        hash = wasmexNifHash;
+      # Wasmex is built from source, with patches/wasmex applied: the patch adds
+      # the precompile-to-file and deserialize-file calls the opt-in Cardigann
+      # engine needs, and lives in the Rust half of the NIF, so Wasmex's
+      # precompiled NIF cannot be used. The crates come from nix/wasmex-Cargo.lock,
+      # a copy of the lock the patched crate resolves (the patch adds a direct
+      # `libc` dependency, which the published lock lacks). Regenerate it when
+      # wasmex is bumped: copy deps/wasmex/native/wasmex/Cargo.lock after
+      # `mix deps.patch` and a build.
+      wasmexCargoDeps = pkgs.rustPlatform.importCargoLock {
+        lockFile = ../wasmex-Cargo.lock;
+        extraRegistries = crateRegistries;
       };
-      wasmexNifCache = pkgs.linkFarm "wasmex-precompiled-nif" [
-        { name = wasmexNifFileName; path = wasmexNifTarball; }
-      ];
 
       # Import Mix dependencies from deps.nix with overrides for Nix sandbox builds
       mixNixDeps = import ../../deps.nix {
@@ -185,11 +170,33 @@
             '';
           };
 
-          # wasmex: rustler_precompiled wants to download the NIF tarball at
-          # compile time; serve it from a pre-fetched local cache instead.
+          # wasmex: patched and built from source (see wasmexCargoDeps), with its
+          # crates vendored because the sandbox has no network.
           wasmex = prev.wasmex.override {
+            patches = [ ../../patches/wasmex/component-precompile-and-deserialize.patch ];
+            # Rustler decodes `cargo metadata` with Jason while compiling
+            # Wasmex.Native (the precompiled path never does). Jason is only
+            # Rustler's own dependency, and the offline `mix compile
+            # --no-deps-check` does not resolve a dependency's dependencies, so
+            # Jason would be missing from the code path. Name it directly.
+            postPatch = ''
+              substituteInPlace mix.exs \
+                --replace-fail '{:rustler, "~> 0.38"},' '{:rustler, "~> 0.38"}, {:jason, "~> 1.0"},'
+            '';
+            nativeBuildInputs = [ rustToolchain ];
             preBuild = ''
-              export RUSTLER_PRECOMPILED_GLOBAL_CACHE_PATH=${wasmexNifCache}
+              export HOME=/tmp
+              export WASMEX_BUILD=1
+              mkdir -p native/wasmex/.cargo
+              cat > native/wasmex/.cargo/config.toml <<CARGO_EOF
+              [source.crates-io]
+              replace-with = "vendored-sources"
+
+              [source.vendored-sources]
+              directory = "${wasmexCargoDeps}"
+              CARGO_EOF
+              cp ${../wasmex-Cargo.lock} native/wasmex/Cargo.lock
+              chmod u+w native/wasmex/Cargo.lock
             '';
           };
         };
@@ -380,6 +387,13 @@
           # Pre-fetched npm dependencies
           inherit npmDeps;
           npmRoot = "assets";
+
+          # The Cardigann guest is not part of the package: installs that opt in
+          # with CARDIGANN_ENGINE=prowlarr download it at runtime, verified
+          # against native/cardigann_guest/ARTIFACT_SHA256, which the build
+          # compiles in. The compiler step that fetches it for development is
+          # skipped.
+          MYDIA_SKIP_CARDIGANN_FETCH = "1";
 
           # Create missing deps symlinks and set up Cargo vendoring for Rust NIF
           postConfigure = ''

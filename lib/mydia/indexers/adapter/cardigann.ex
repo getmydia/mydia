@@ -58,7 +58,15 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   alias Mydia.Indexers.Cardigann.SessionManager
   alias Mydia.Indexers.CardigannHealthCheck
   alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Repo
+  alias Mydia.Indexers.Cardigann.AdapterSupport
+
+  import AdapterSupport,
+    only: [
+      apply_search_filters: 2,
+      build_flaresolverr_opts: 1,
+      fetch_definition: 1,
+      handle_flaresolverr_result: 2
+    ]
 
   require Logger
 
@@ -151,46 +159,6 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     end
   end
 
-  # Build FlareSolverr options from definition
-  defp build_flaresolverr_opts(%CardigannDefinition{} = definition) do
-    %{
-      enabled: CardigannDefinition.use_flaresolverr?(definition),
-      definition_id: definition.id
-    }
-  end
-
-  # Flag the definition when a challenge was solved for it
-  defp handle_flaresolverr_result(definition, {:flaresolverr_markers, markers}) do
-    if {:flaresolverr_required, true} in markers do
-      mark_flaresolverr_required(definition)
-    end
-
-    :ok
-  end
-
-  defp handle_flaresolverr_result(_definition, :no_flaresolverr), do: :ok
-
-  # Mark an indexer as requiring FlareSolverr
-  defp mark_flaresolverr_required(%CardigannDefinition{flaresolverr_required: true}), do: :ok
-
-  defp mark_flaresolverr_required(%CardigannDefinition{} = definition) do
-    Logger.info("Auto-detected FlareSolverr requirement for indexer: #{definition.indexer_id}")
-
-    definition
-    |> CardigannDefinition.flaresolverr_changeset(%{
-      flaresolverr_required: true,
-      flaresolverr_enabled: true
-    })
-    |> Repo.update()
-    |> case do
-      {:ok, _} ->
-        Logger.debug("Updated indexer #{definition.indexer_id} FlareSolverr settings")
-
-      {:error, changeset} ->
-        Logger.error("Failed to update FlareSolverr settings: #{inspect(changeset.errors)}")
-    end
-  end
-
   @impl true
   def get_capabilities(config) do
     with {:ok, definition} <- fetch_definition(config),
@@ -201,20 +169,6 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
   end
 
   ## Private Functions
-
-  defp fetch_definition(%{indexer_id: indexer_id}) do
-    case Repo.get_by(CardigannDefinition, indexer_id: indexer_id) do
-      nil ->
-        {:error, Error.invalid_config("Cardigann definition not found: #{indexer_id}")}
-
-      definition ->
-        {:ok, definition}
-    end
-  end
-
-  defp fetch_definition(_config) do
-    {:error, Error.invalid_config("Missing indexer_id in config")}
-  end
 
   defp parse_definition(%CardigannDefinition{definition: yaml_string}) do
     case CardigannParser.parse_definition(yaml_string) do
@@ -298,52 +252,11 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
       config: definition.config || %{},
       settings: parsed.settings,
       base_url: definition.active_link,
-      on_promote: fn winning_url ->
-        # A legacy mirror that answers must not become sticky for a definition
-        # that has a session to protect; the credential scope would then withhold
-        # its cookies on every subsequent search.
-        if CardigannHealthCheck.promotable?(parsed, definition.config || %{}, winning_url) do
-          definition
-          |> Ecto.Changeset.change(%{active_link: winning_url})
-          |> Mydia.Repo.update()
-        else
-          :ok
-        end
-      end
+      on_promote: &AdapterSupport.promote_active_link(parsed, definition, &1)
     ]
 
     {:ok, search_opts}
   end
-
-  defp apply_search_filters(results, opts) do
-    results
-    |> filter_by_min_seeders(Keyword.get(opts, :min_seeders, 0))
-    |> filter_by_min_size(Keyword.get(opts, :min_size))
-    |> filter_by_max_size(Keyword.get(opts, :max_size))
-    |> limit_results(Keyword.get(opts, :limit))
-  end
-
-  defp filter_by_min_seeders(results, min_seeders) when min_seeders > 0 do
-    # NZB results have nil seeders; the min-seeders setting is torrent-only.
-    Enum.filter(results, fn result -> is_nil(result.seeders) or result.seeders >= min_seeders end)
-  end
-
-  defp filter_by_min_seeders(results, _), do: results
-
-  defp filter_by_min_size(results, nil), do: results
-
-  defp filter_by_min_size(results, min_size) do
-    Enum.filter(results, fn result -> result.size >= min_size end)
-  end
-
-  defp filter_by_max_size(results, nil), do: results
-
-  defp filter_by_max_size(results, max_size) do
-    Enum.filter(results, fn result -> result.size <= max_size end)
-  end
-
-  defp limit_results(results, nil), do: results
-  defp limit_results(results, limit), do: Enum.take(results, limit)
 
   defp build_capabilities_response(parsed) do
     # Extract categories from the definition

@@ -283,6 +283,70 @@ will use, marks each element whose text contains a needle with a
 attribute. A `:contains` that was not declared at parse time raises. Nothing
 under `lib/mydia/indexers/cardigann*` calls Floki.
 
+## Cardigann engines: built-in and Prowlarr's
+
+Two engines can run Cardigann definitions, chosen at boot with
+`CARDIGANN_ENGINE` (config key `config :mydia, :features, cardigann_engine:`):
+
+- `builtin` (the default): the Elixir engine under `lib/mydia/indexers/cardigann*`.
+  Costs nothing extra: no download, no compile, no memory.
+- `prowlarr`: Prowlarr's own C# Cardigann engine, compiled to a wasm component and
+  run inside Mydia (`Mydia.Indexers.Cardigann.Wasm.*`). Definitions are read by the
+  code that reads them in Prowlarr, so results match Prowlarr's. Anything else
+  raises at boot, naming the two valid values. `ENABLE_CARDIGANN=false` turns
+  Cardigann off whichever engine is set.
+
+What `prowlarr` gives: on the 44 public definitions where Prowlarr returned
+results, the wasm engine agreed with Prowlarr on all of them (the Elixir engine on
+28); it fails over to the next entry of `links:` when a mirror is down or blocked,
+and remembers the one that worked. What it costs, measured on the Alpine image
+(`native/cardigann_guest/BENCH.md` has the method and every number):
+
+- **First boot.** The engine is not in the image. It downloads about 39 MB from the
+  `cardigann-guest` GitHub release, verifies it against a SHA-256 that is compiled
+  into the build (a mismatch is an error, never a fallback), compiles it once and
+  caches the compiled form. The compile takes about 18 s on Alpine and peaks near
+  1.6 GB of resident memory, then settles at about 500 MB. Until it is done,
+  Cardigann searches fail with a message saying why, and the indexer status line
+  shows it; the rest of Mydia boots normally. A failed download or compile retries
+  in the background, 30 s doubling to 30 min.
+- **Where it lives.** `cardigann/` under `MYDIA_DATA_DIR`, or next to the database
+  file when that is unset (`/config` in the image). It holds the `.wasm` (39 MB) and
+  the compiled `.cwasm` (119 MB, named for the wasm hash, the wasmtime version and
+  the CPU architecture, with a checksum file that is verified before every load).
+  Files for other versions are deleted after a successful load. Keep the directory
+  on a volume: without one, every container recreate repeats the download and the
+  compile.
+- **Later boots.** The `.cwasm` loads in under a second. A `.cwasm` that fails its
+  checksum or is rejected by wasmtime (another CPU, a corrupt file) is deleted and
+  rebuilt.
+- **Air-gapped installs.** Set `CARDIGANN_WASM_PATH` to a local copy of
+  `cardigann-<hash>.wasm`. It is verified against the same pin, so it must be the
+  file published for this Mydia version, and nothing is downloaded. The compiled
+  form is still cached in the data directory.
+- **Memory.** About 64 MB more than the default engine at rest, and 290 MB more
+  at the peak of four concurrent searches (measured on a small fixture page, so
+  real pages are larger). Containers capped below about 2 GB can be killed during
+  the first-boot compile.
+- **Latency.** About 60 ms more per search at the median, and 110 ms more at p95,
+  on top of the network time.
+- **Experimental toolchain.** The component is built with a pre-release .NET
+  (NativeAOT-LLVM to `wasm32-wasip2`) and runs on a patched Wasmex that is built
+  from source. Expect rough edges.
+- **Errors are Prowlarr's.** A failed search says what the C# engine says: an HTTP
+  status, "Cloudflare protection detected", "No answer from the tracker". 20 of the
+  81 public definitions in the benchmark end in such an error; Prowlarr returned
+  nothing on all 20 too. FlareSolverr is still the way through a Cloudflare block.
+- **LAN trackers are refused** (the host's SSRF gate), and Brotli responses are
+  not decoded. The benchmark covers public definitions only; private-tracker
+  logins were not measured.
+
+The gate that decided this: fidelity, coverage and regressions pass, latency
+passes with 24 ms to spare, the first-boot compile time and the memory under load
+do not, which is why it is opt-in. Builds from a commit whose guest has not been
+published yet have no pin; the engine then reports "no published Cardigann engine
+for this build" and the default engine is unaffected.
+
 ## Measuring live compatibility
 
 `mix mydia.cardigann_compat` scores YAML features statically and reads about 99%

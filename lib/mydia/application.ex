@@ -225,6 +225,7 @@ defmodule Mydia.Application do
       Mydia.Player.children() ++
       client_health_children() ++
       indexer_health_children() ++
+      cardigann_wasm_children() ++
       media_server_health_children() ++
       plugin_instance_health_children() ++
       oban_children(oban_config) ++
@@ -243,6 +244,18 @@ defmodule Mydia.Application do
   def config_change(changed, _new, removed) do
     MydiaWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  # The wasm engine exists only for installs that opted in with
+  # CARDIGANN_ENGINE=prowlarr: otherwise no process, no compile, no memory. It
+  # prepares the guest after boot (handle_continue); a missing artifact leaves
+  # it unavailable, it never fails startup.
+  defp cardigann_wasm_children do
+    if Mydia.Indexers.CardigannFeatureFlags.wasm_engine?() do
+      [Mydia.Indexers.Cardigann.Wasm.Engine]
+    else
+      []
+    end
   end
 
   defp client_health_children do

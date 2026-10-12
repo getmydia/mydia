@@ -1,0 +1,30 @@
+id: cedar
+name: Cedar
+description: Invented public tracker with string category ids
+language: en-US
+type: public
+encoding: UTF-8
+links:
+  - https://cedar.invalid/
+caps:
+  categorymappings:
+    - {id: "Movies/HD", cat: Movies/HD, desc: "Films in HD"}
+    - {id: "TV/Packs", cat: TV/HD, desc: "Season packs"}
+  modes:
+    search: [q]
+settings: []
+search:
+  paths:
+    - path: search
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: table.results > tbody > tr
+  fields:
+    title:
+      selector: td.name a
+    download:
+      selector: td.dl a
+      attribute: href
+    category:
+      selector: td.cat

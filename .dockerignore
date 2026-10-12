@@ -50,3 +50,18 @@ metadata-relay/.nix-mix
 # Misc local artifacts
 screenshots
 *.log
+
+# The Cardigann wasm guest is never part of the image: opted-in installs
+# download it at runtime. Keep local copies out of the build context.
+priv/cardigann/*.wasm
+priv/cardigann/*.wasm.sha256
+priv/cardigann/*.cwasm
+priv/cardigann/*.wasm.cwasm
+priv/data/cardigann
+native/cardigann_guest/out
+native/cardigann_guest/obj
+native/cardigann_guest/bin
+native/cardigann_guest/.prowlarr
+native/cardigann_guest/tests/**/bin
+native/cardigann_guest/tests/**/obj
+native/cardigann_guest/deny/target
