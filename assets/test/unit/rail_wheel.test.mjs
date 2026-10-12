@@ -13,6 +13,7 @@ const wheel = (overrides = {}) => ({
   deltaY: 100,
   deltaMode: 0,
   ctrlKey: false,
+  shiftKey: false,
   ...overrides,
 });
 
@@ -35,6 +36,10 @@ test("leaves horizontal gestures to the browser", () => {
 
 test("leaves pinch-zoom to the browser", () => {
   assert.deepEqual(decide(wheel({ ctrlKey: true }), MID, NOW, LONG_AGO), { action: "native" });
+});
+
+test("leaves Shift+wheel to the browser even when it arrives as deltaY", () => {
+  assert.deepEqual(decide(wheel({ shiftKey: true }), MID, NOW, LONG_AGO), { action: "native" });
 });
 
 test("hands the wheel to the page while a page scroll is under way", () => {

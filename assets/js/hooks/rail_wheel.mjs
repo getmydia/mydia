@@ -27,10 +27,12 @@ function toPixels(deltaY, deltaMode, clientWidth) {
 }
 
 export function decide(event, rail, now, lastPageWheelAt) {
-  const { deltaX, deltaY, deltaMode, ctrlKey } = event;
+  const { deltaX, deltaY, deltaMode, ctrlKey, shiftKey } = event;
   const { scrollLeft, scrollWidth, clientWidth } = rail;
 
-  if (Math.abs(deltaX) >= Math.abs(deltaY) || ctrlKey) return { action: "native" };
+  // Some browsers report Shift+wheel as deltaY with shiftKey set and scroll
+  // sideways themselves, so a Shift-held wheel is theirs too.
+  if (Math.abs(deltaX) >= Math.abs(deltaY) || ctrlKey || shiftKey) return { action: "native" };
   if (now - lastPageWheelAt < QUIET_MS) return { action: "page" };
 
   const maxScroll = scrollWidth - clientWidth;
