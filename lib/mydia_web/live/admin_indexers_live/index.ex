@@ -11,6 +11,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
+  alias MydiaWeb.AdminIndexersLive.CardigannEngineComponents
   alias MydiaWeb.AdminIndexersLive.LoginFlow
   alias MydiaWeb.IndexerComponents
 
@@ -137,7 +138,19 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   ## Cardigann engine events
 
+  @cardigann_engine_events [
+    "switch_cardigann_engine",
+    "retry_cardigann_engine",
+    "remove_cardigann_engine_cache"
+  ]
+
   @impl true
+  # The switcher is not started while Cardigann is disabled, so a stray event is ignored.
+  def handle_event(event, _params, %{assigns: %{cardigann_enabled: false}} = socket)
+      when event in @cardigann_engine_events do
+    {:noreply, socket}
+  end
+
   def handle_event("switch_cardigann_engine", %{"engine" => engine}, socket)
       when engine in ["builtin", "prowlarr"] do
     engine = String.to_existing_atom(engine)
@@ -164,7 +177,10 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
       {:ok, bytes} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Removed the cached Prowlarr engine (#{div(bytes, 1_048_576)} MB)")
+         |> put_flash(
+           :info,
+           "Removed the cached Prowlarr engine (#{CardigannEngineComponents.format_mb(bytes)})"
+         )
          |> load_cardigann_engine()}
 
       {:error, :in_use} ->

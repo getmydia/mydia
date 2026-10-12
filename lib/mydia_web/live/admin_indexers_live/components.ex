@@ -367,6 +367,51 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
     """
   end
 
+  @doc "The page modals, shown from the LiveView assigns."
+  def modals(assigns) do
+    ~H"""
+    <%= if assigns[:show_flaresolverr_modal] do %>
+      <MydiaWeb.AdminIndexersLive.FlareSolverrComponents.flaresolverr_modal
+        form={@flaresolverr_form}
+        sources={@flaresolverr_sources}
+      />
+    <% end %>
+    <%= if assigns[:show_indexer_modal] do %>
+      <MydiaWeb.AdminIndexersLive.ModalComponents.indexer_modal
+        indexer_form={@indexer_form}
+        indexer_mode={@indexer_mode}
+        testing_indexer_connection={assigns[:testing_indexer_connection] || false}
+        available_env_indexers={assigns[:available_env_indexers] || []}
+        prowlarr_indexers={assigns[:prowlarr_indexers]}
+        fetching_prowlarr_indexers={assigns[:fetching_prowlarr_indexers] || false}
+        prowlarr_indexers_error={assigns[:prowlarr_indexers_error]}
+        selected_prowlarr_indexer_ids={assigns[:selected_prowlarr_indexer_ids] || MapSet.new()}
+      />
+    <% end %>
+    <%= if assigns[:show_indexer_library_modal] and @cardigann_enabled do %>
+      <MydiaWeb.AdminIndexersLive.LibraryBrowserComponents.indexer_library_modal
+        definitions={@library_definitions}
+        available_languages={@library_available_languages}
+        filter_type={@library_filter_type}
+        filter_language={@library_filter_language}
+        filter_added={@library_filter_added}
+        search_query={@library_search_query}
+        syncing={@library_syncing}
+        configuring_definition={@library_configuring_definition}
+        config_form={@library_config_form}
+      />
+    <% end %>
+    <%= if assigns[:show_library_config_modal] and assigns[:configuring_library_indexer] do %>
+      <MydiaWeb.AdminIndexersLive.LibraryConfigComponents.library_config_modal
+        configuring_library_indexer={@configuring_library_indexer}
+        settings={@library_indexer_settings}
+        testing={assigns[:library_config_testing] || false}
+        test_result={assigns[:library_config_test_result]}
+      />
+    <% end %>
+    """
+  end
+
   # Display helpers shared with the library modals (LibraryConfigComponents,
   # LibraryBrowserComponents).
 

@@ -951,6 +951,17 @@ defmodule Mydia.Config.Loader do
 
   defp parse_atom(_), do: :error
 
+  # A dedicated fixed-enum parser (parse_atom/1 mints atoms). An unknown value
+  # becomes :invalid so validation rejects it by name instead of the setting
+  # silently falling back to :builtin.
+  defp parse_cardigann_engine(value) when is_binary(value) do
+    case value |> String.trim() |> String.downcase() do
+      "builtin" -> {:ok, :builtin}
+      "prowlarr" -> {:ok, :prowlarr}
+      _unrecognised -> {:ok, :invalid}
+    end
+  end
+
   # A fixed enum rather than parse_atom/1, which falls back to
   # String.to_atom/1 and would mint an atom from an environment variable.
   # Atoms are never garbage collected, and the project rule is explicit: no
@@ -963,17 +974,6 @@ defmodule Mydia.Config.Loader do
   # this setting exists to remove. :invalid is not a member of the Ecto.Enum,
   # so config validation rejects it by name. That matches how a bad
   # DOWNLOAD_CLIENT_<N>_TYPE already behaves, minus the atom leak.
-  # A dedicated fixed-enum parser (parse_atom/1 mints atoms). An unknown value
-  # becomes :invalid so validation rejects it by name instead of the setting
-  # silently falling back to :builtin.
-  defp parse_cardigann_engine(value) when is_binary(value) do
-    case value |> String.trim() |> String.downcase() do
-      "builtin" -> {:ok, :builtin}
-      "prowlarr" -> {:ok, :prowlarr}
-      _unrecognised -> {:ok, :invalid}
-    end
-  end
-
   defp parse_external_torrents(value) when is_atom(value), do: {:ok, value}
 
   defp parse_external_torrents(value) when is_binary(value) do

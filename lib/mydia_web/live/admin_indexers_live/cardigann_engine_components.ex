@@ -137,7 +137,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
                 Next attempt at {Calendar.strftime(@transition.next_retry_at, "%H:%M")} UTC.
               </p>
               <p :if={is_nil(@transition.next_retry_at)} class="text-xs opacity-80">
-                Fix the cause and switch the engine again.
+                Fix the cause, then switch to Built-in and back to Prowlarr to try again.
               </p>
             </div>
             <button
@@ -152,10 +152,12 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
           </div>
         <% :fetching -> %>
           <progress
+            :if={@transition.total}
             class="progress progress-primary w-full"
             value={@transition.bytes}
             max={@transition.total}
           />
+          <progress :if={is_nil(@transition.total)} class="progress progress-primary w-full" />
           <p class="text-sm">
             Downloading the Prowlarr engine {download_label(@transition)}
           </p>
@@ -164,7 +166,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
           <p class="text-sm">
             {if phase == :compiling, do: "Compiling", else: "Preparing"} the Prowlarr engine...
             <span
-              id="cardigann-engine-elapsed"
+              id={"cardigann-engine-elapsed-#{phase}"}
               phx-hook=".ElapsedSeconds"
               phx-update="ignore"
               data-since={DateTime.to_iso8601(@transition.phase_started_at)}
@@ -231,6 +233,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
   defp download_label(%Transition{bytes: bytes, total: total}),
     do: "#{mb(bytes)} / #{format_mb(total)}"
 
-  defp format_mb(bytes), do: "#{mb(bytes)} MB"
+  @doc false
+  def format_mb(bytes), do: "#{mb(bytes)} MB"
   defp mb(bytes), do: :erlang.float_to_binary(bytes / 1_048_576, decimals: 1)
 end

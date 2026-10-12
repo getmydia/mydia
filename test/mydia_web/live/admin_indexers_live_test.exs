@@ -647,6 +647,40 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert has_element?(view, "#cardigann-engine-prowlarr[checked]")
     end
 
+    test "download progress without a total renders an indeterminate bar", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      view |> element("#cardigann-engine-form") |> render_change(%{"engine" => "prowlarr"})
+      engine_event(view, {:phase, :fetching})
+      engine_event(view, {:progress, 1_048_576, nil})
+
+      assert has_element?(view, "#cardigann-engine-transition progress")
+      refute has_element?(view, "#cardigann-engine-transition progress[value]")
+    end
+
+    test "removing the cached engine reports its size and deletes the files", %{conn: conn} do
+      previous = Application.get_env(:mydia, :cardigann_cache_dir)
+      dir = Path.join(System.tmp_dir!(), "engine-cache-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      file = Path.join(dir, "engine.wasm")
+      File.write!(file, :binary.copy(<<0>>, 1_572_864))
+      Application.put_env(:mydia, :cardigann_cache_dir, dir)
+
+      on_exit(fn ->
+        if previous,
+          do: Application.put_env(:mydia, :cardigann_cache_dir, previous),
+          else: Application.delete_env(:mydia, :cardigann_cache_dir)
+
+        File.rm_rf(dir)
+      end)
+
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      view |> element("#cardigann-engine-remove-cache") |> render_click()
+
+      assert has_element?(view, "#flash-info", "1.5 MB")
+      refute File.exists?(file)
+      refute has_element?(view, "#cardigann-engine-remove-cache")
+    end
+
     test "CARDIGANN_ENGINE locks the choice", %{conn: conn} do
       System.put_env("CARDIGANN_ENGINE", "builtin")
       {:ok, view, _} = live(conn, ~p"/admin/indexers")
