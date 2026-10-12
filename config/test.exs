@@ -219,3 +219,7 @@ config :mydia, Mydia.Perf, enabled: false
 # duplicate DOM id; a LiveComponent rendered twice under one id) fail the test
 # instead of printing a warning nobody reads.
 config :phoenix_live_view, :test_warnings, :raise
+
+# Compiling the Cardigann guest takes seconds and a few hundred MB, so tests
+# compile it on the first call rather than at boot.
+config :mydia, :cardigann_wasm_eager, false

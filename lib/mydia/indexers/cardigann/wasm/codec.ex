@@ -110,9 +110,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Codec do
         }
   def decode_download(out) do
     payload =
-      case field(out, :payload) do
-        {:bytes, bytes} -> {:bytes, bytes_to_binary(bytes)}
-        {:link, link} -> {:link, link}
+      case variant(field(out, :payload)) do
+        {"bytes", bytes} -> {:bytes, bytes_to_binary(bytes)}
+        {"link", link} -> {:link, link}
       end
 
     %{payload: payload, session: out |> field(:session) |> decode_session()}
@@ -122,15 +122,19 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Codec do
   @spec decode_login({:ok, map()} | {:captcha, map()}) ::
           {:ok, session()}
           | {:captcha, %{image: binary(), content_type: String.t(), state: String.t()}}
-  def decode_login({:ok, session}), do: {:ok, decode_session(session)}
+  def decode_login(login_out) do
+    case variant(login_out) do
+      {"ok", session} ->
+        {:ok, decode_session(session)}
 
-  def decode_login({:captcha, challenge}) do
-    {:captcha,
-     %{
-       image: challenge |> field(:image) |> bytes_to_binary(),
-       content_type: field(challenge, :"content-type"),
-       state: field(challenge, :state)
-     }}
+      {"captcha", challenge} ->
+        {:captcha,
+         %{
+           image: challenge |> field(:image) |> bytes_to_binary(),
+           content_type: field(challenge, :"content-type"),
+           state: field(challenge, :state)
+         }}
+    end
   end
 
   @doc """
@@ -173,19 +177,57 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Codec do
 
   @doc "Maps an `engine-error` variant onto `Mydia.Indexers.Adapter.Error`."
   @spec decode_error(term()) :: Error.t()
-  def decode_error({:login_failed, message}), do: Error.authentication_failed(message)
-  def decode_error({:captcha_required, message}), do: Error.captcha_required(message)
-  def decode_error({:request_limit, message}), do: Error.rate_limited(message)
+  def decode_error(error) do
+    case variant(error) do
+      {"login_failed", message} ->
+        Error.authentication_failed(message)
 
-  def decode_error({:cloudflare, message}),
-    do: Error.api_error("Cloudflare protection: " <> message, %{cloudflare: true})
+      {"captcha_required", message} ->
+        Error.captcha_required(message)
 
-  def decode_error({:parse_failed, message}), do: Error.parse_error(message)
-  def decode_error({:http, message}), do: Error.network_error(message)
-  def decode_error({:internal, message}), do: Error.engine_error(message)
-  def decode_error(other), do: Error.engine_error("Unrecognised engine error: #{inspect(other)}")
+      {"request_limit", message} ->
+        Error.rate_limited(message)
+
+      {"cloudflare", message} ->
+        Error.api_error("Cloudflare protection: " <> message, %{cloudflare: true})
+
+      {"parse_failed", message} ->
+        Error.parse_error(message)
+
+      {"http", message} ->
+        decode_http_error(message)
+
+      {"internal", message} ->
+        Error.engine_error(message)
+
+      _other ->
+        Error.engine_error("Unrecognised engine error: #{inspect(error)}")
+    end
+  end
+
+  # The guest reports a failed host exchange as an `http` error whose message
+  # starts with the `http-error` case it came from (shim/HostExchange.cs), after
+  # any text upstream put in front of it.
+  defp decode_http_error(message) do
+    cond do
+      message =~ "timeout: " -> Error.timeout(message)
+      message =~ "connect: " -> Error.connection_failed(message)
+      message =~ "blocked: " -> Error.network_error(message, %{kind: :blocked})
+      message =~ "other: " -> Error.network_error(message, %{kind: :other})
+      true -> Error.network_error(message)
+    end
+  end
 
   # ── Helpers ───────────────────────────────────────────────────────────────
+
+  # Wasmex delivers a variant case as an atom only when that atom already exists
+  # in the VM; `login-failed` arrived as the string "login-failed". Normalise to
+  # {"snake_case_name", payload}.
+  defp variant({tag, payload}), do: {tag_name(tag), payload}
+  defp variant(tag) when is_atom(tag) or is_binary(tag), do: {tag_name(tag), nil}
+  defp variant(other), do: {"unrecognised", other}
+
+  defp tag_name(tag), do: tag |> to_string() |> String.replace("-", "_")
 
   @doc false
   def field(map, key) when is_map(map) do

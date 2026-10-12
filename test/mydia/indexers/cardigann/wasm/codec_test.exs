@@ -133,6 +133,35 @@ defmodule Mydia.Indexers.Cardigann.Wasm.CodecTest do
              Codec.decode_login({:captcha, challenge})
   end
 
+  test "variant cases arrive as kebab-case strings when the atom does not exist yet" do
+    assert %{type: :authentication_failed} = Codec.decode_error({"login-failed", "bad"})
+    assert %{type: :rate_limited} = Codec.decode_error({"request-limit", "slow"})
+    assert %{type: :captcha_required} = Codec.decode_error({"captcha-required", ""})
+    assert %{type: :parse_error} = Codec.decode_error({"parse-failed", "x"})
+
+    assert {:ok, %{cookies: %{}}} =
+             Codec.decode_login({"ok", %{cookies: [], "expires-unix": :none}})
+
+    assert %{payload: {:link, "magnet:?x"}} =
+             Codec.decode_download(%{
+               payload: {"link", "magnet:?x"},
+               session: %{cookies: [], "expires-unix": :none}
+             })
+  end
+
+  test "host http errors are told apart by the case the guest names" do
+    assert %{type: :timeout} = Codec.decode_error({:http, "timeout: gave up"})
+    assert %{type: :connection_failed} = Codec.decode_error({:http, "connect: refused"})
+
+    assert %{type: :network_error, details: %{kind: :blocked}} =
+             Codec.decode_error({:http, "blocked: x"})
+
+    assert %{type: :network_error, details: %{kind: :other}} =
+             Codec.decode_error({:http, "other: x"})
+
+    assert %{type: :network_error, details: nil} = Codec.decode_error({:http, "Download failed"})
+  end
+
   test "engine errors map to adapter errors" do
     assert %{type: :authentication_failed} = Codec.decode_error({:login_failed, "bad password"})
     assert %{type: :rate_limited} = Codec.decode_error({:request_limit, "slow down"})

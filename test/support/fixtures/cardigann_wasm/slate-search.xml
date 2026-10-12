@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed>
+  <item>
+    <title>Salt Meridian 2033 720p WEB-DL x264</title>
+    <guid>https://slate.invalid/t/31</guid>
+    <enclosure url="https://slate.invalid/dl/31.torrent" type="application/x-bittorrent"/>
+    <category>1</category>
+    <length>1073741824</length>
+    <seeds>25</seeds>
+    <peers>4</peers>
+  </item>
+  <item>
+    <title>Hollow Pines S01E02 1080p WEB-DL x264</title>
+    <guid>https://slate.invalid/t/32</guid>
+    <enclosure url="https://slate.invalid/dl/32.torrent" type="application/x-bittorrent"/>
+    <category>2</category>
+    <length>536870912</length>
+    <seeds>9</seeds>
+    <peers>2</peers>
+  </item>
+</feed>

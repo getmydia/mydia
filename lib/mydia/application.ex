@@ -187,6 +187,9 @@ defmodule Mydia.Application do
         Mydia.Downloads.ClientStatusCache,
         Mydia.Indexers.Adapter.Registry,
         Mydia.Indexers.RateLimiter,
+        # Compiles the Cardigann wasm guest after boot (handle_continue); a
+        # missing artifact leaves it unavailable, it never fails startup.
+        Mydia.Indexers.Cardigann.Wasm.Engine,
         Mydia.Indexers.FlareSolverr.Gate,
         Mydia.Indexers.FlareSolverr.ClearanceCache,
         # Passive circuit breaker for subtitle providers. In-memory only, no DB,

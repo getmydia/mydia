@@ -36,8 +36,15 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Artifact do
   @doc "16 hex characters naming the artifact this source tree needs."
   def source_hash, do: @pinned_hash
 
-  @doc "Where the artifact lives (and where `fetch` puts it)."
-  def path, do: path_in(Application.app_dir(:mydia, ["priv", "cardigann"]))
+  @doc """
+  Where the artifact lives (and where `fetch` puts it). The
+  `:cardigann_wasm_path` application env overrides it; tests use that to point
+  the engine at a missing file.
+  """
+  def path do
+    Application.get_env(:mydia, :cardigann_wasm_path) ||
+      path_in(Application.app_dir(:mydia, ["priv", "cardigann"]))
+  end
 
   @doc "File name of the published release asset."
   def file_name, do: "cardigann-#{@pinned_hash}.wasm"

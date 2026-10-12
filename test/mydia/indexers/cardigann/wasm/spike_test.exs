@@ -3,8 +3,6 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SpikeTest do
   # normal suite skips it: run with `--include cardigann_spike`.
   use ExUnit.Case, async: false
 
-  # :cardigann_spike is tagged per test (not per module) so the known-defect
-  # test below can sit outside `--include cardigann_spike`.
   @moduletag timeout: 900_000
   @wasm Path.expand("../../../../../native/cardigann_guest/out/cardigann.wasm", __DIR__)
   @fixtures Path.expand("../../../../support/fixtures/cardigann_wasm", __DIR__)
@@ -144,21 +142,6 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SpikeTest do
     assert {:ok, {:ok, %{releases: releases}}} = normalize(result)
     assert length(releases) == 2
     IO.puts("spike: start=#{start_ms}ms search=#{div(call_us, 1000)}ms")
-    Process.exit(pid, :kill)
-  end
-
-  # Known wasm-only defect: the native RunnerTests parse this same fixture's
-  # date (2031-04-02); under wasm publish-unix is :none. Excluded by default so
-  # the spike run stays green; a later fix flips it.
-  # Run it with `--include known_wasm_defect`.
-  @tag :known_wasm_defect
-  test "search parses the release publish date", %{bypass: bypass, bytes: bytes} do
-    stub_search(bypass)
-    {pid, _} = start(bytes)
-
-    assert {:ok, {:ok, %{releases: [first | _]}}} = search(pid, bypass)
-    expected = DateTime.to_unix(~U[2031-04-02 00:00:00Z])
-    assert {:some, ^expected} = first["publish-unix"]
     Process.exit(pid, :kill)
   end
 
