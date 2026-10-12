@@ -201,5 +201,28 @@ namespace Mydia.CardigannGuest.Tests
             Assert.Equal("Birch Hollow 1080p BluRay x264", release.Title);
             Assert.Equal(2684354560L, release.Size);
         }
+
+        [Fact]
+        public void A_header_the_server_repeats_is_read_as_one_value()
+        {
+            // Servers and CDNs send "Vary: Accept-Encoding" twice. .NET joins the
+            // values of one name, and HttpHeader.GetSingleValue throws on two. The
+            // Cloudflare detection reads Vary on every response from a Cloudflare
+            // or DDoS-Guard server.
+            var http = new FakeExchange().On("GET", "/search", _ => new RawResponse(200,
+                new[]
+                {
+                    ("Server", "cloudflare"),
+                    ("Vary", "Accept-Encoding"),
+                    ("Content-Type", "text/html; charset=utf-8"),
+                    ("vary", "Cookie"),
+                    ("Vary", "Accept-Encoding"),
+                },
+                Encoding.UTF8.GetBytes(Fixture("lantern-search.html"))));
+
+            var result = Runner.Search(Fixture("lantern-public.yml"), new Dictionary<string, string>(), Query("harbor"), Empty, http);
+
+            Assert.Equal(2, result.Releases.Count);
+        }
     }
 }

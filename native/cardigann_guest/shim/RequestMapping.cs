@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Linq;
 using System.Net;
 using System.Text;
 using NzbDrone.Common.Extensions;
@@ -100,10 +101,17 @@ namespace Mydia.CardigannGuest.Shim
             var uri = (Uri)request.Url;
             var headers = new NameValueCollection();
 
+            // Upstream builds the collection with HttpHeaders.ToNameValueCollection,
+            // which adds one entry per header name with the values joined by ";".
+            // A name repeated in the raw list (Vary, Set-Cookie) must therefore
+            // collapse to one entry: HttpHeader.GetSingleValue throws on two.
+            foreach (var group in raw.Headers.GroupBy(h => h.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                headers.Add(group.Key, string.Join(";", group.Select(h => h.Value)));
+            }
+
             foreach (var (name, value) in raw.Headers)
             {
-                headers.Add(name, value);
-
                 if (name.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase))
                 {
                     try
