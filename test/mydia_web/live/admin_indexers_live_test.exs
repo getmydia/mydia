@@ -562,6 +562,112 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     end
   end
 
+  describe "Cardigann engine section" do
+    alias Mydia.Indexers.Cardigann.{EngineSwitcher, Wasm}
+
+    setup %{conn: conn, token: token} do
+      features = Application.get_env(:mydia, :features, [])
+      runtime = Application.get_env(:mydia, :runtime_config)
+      Application.put_env(:mydia, :features, Keyword.put(features, :cardigann_enabled, true))
+      Application.put_env(:mydia, :fake_wasm_engine_pid, self())
+      Repo.delete_all(ConfigSetting)
+      {:ok, _} = Mydia.Config.Loader.reload()
+      start_supervised!(Mydia.Indexers.Health)
+      # A fresh switcher owned by this test, under the default name the
+      # LiveView calls. The application's one (if Cardigann was on at boot)
+      # is stopped and restored afterwards.
+      Supervisor.terminate_child(Mydia.Supervisor, EngineSwitcher)
+      start_supervised!(EngineSwitcher)
+
+      on_exit(fn ->
+        Supervisor.restart_child(Mydia.Supervisor, EngineSwitcher)
+        Application.put_env(:mydia, :features, features)
+        Application.put_env(:mydia, :runtime_config, runtime)
+        Application.delete_env(:mydia, :fake_wasm_engine_pid)
+        Application.delete_env(:mydia, :fake_wasm_engine_status)
+        System.delete_env("CARDIGANN_ENGINE")
+        :persistent_term.erase({EngineSwitcher, :active})
+        Mydia.Indexers.register_adapters()
+      end)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn}
+    end
+
+    # Broadcasts as the wasm engine would, then waits for the switcher to
+    # process it and the LiveView to render its re-broadcast.
+    defp engine_event(view, event) do
+      Phoenix.PubSub.broadcast(
+        Mydia.PubSub,
+        Wasm.Engine.topic(),
+        {:cardigann_wasm_engine, event}
+      )
+
+      _ = :sys.get_state(EngineSwitcher)
+      render(view)
+    end
+
+    test "shows both engines with built-in active", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      assert has_element?(view, "#cardigann-engine")
+      assert has_element?(view, "#cardigann-engine-builtin[checked]")
+      refute has_element?(view, "#cardigann-engine-transition")
+    end
+
+    test "choosing Prowlarr shows live progress while built-in keeps serving", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+
+      view |> element("#cardigann-engine-form") |> render_change(%{"engine" => "prowlarr"})
+      assert_receive {:fake_engine, :ensure_started}
+      assert has_element?(view, "#cardigann-engine-transition")
+
+      engine_event(view, {:phase, :fetching})
+      engine_event(view, {:progress, 1_048_576, 4_194_304})
+      assert has_element?(view, "#cardigann-engine-transition", "1.0 / 4.0 MB")
+
+      # A permanent failure schedules no retry, so there is nothing to retry.
+      engine_event(view, {:unavailable, "the engine download failed: timeout", nil})
+      assert has_element?(view, "#cardigann-engine-transition .alert-warning", "timeout")
+      refute has_element?(view, "#cardigann-engine-retry")
+
+      due = DateTime.add(DateTime.utc_now(), 60, :second)
+      engine_event(view, {:unavailable, "the engine download failed: timeout", due})
+      assert has_element?(view, "#cardigann-engine-transition .alert-warning", "timeout")
+      view |> element("#cardigann-engine-retry") |> render_click()
+      assert_receive {:fake_engine, :retry_now}
+
+      Application.put_env(:mydia, :fake_wasm_engine_status, :ready)
+      engine_event(view, :ready)
+      refute has_element?(view, "#cardigann-engine-transition")
+      assert has_element?(view, "#cardigann-engine-prowlarr[checked]")
+    end
+
+    test "CARDIGANN_ENGINE locks the choice", %{conn: conn} do
+      System.put_env("CARDIGANN_ENGINE", "builtin")
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      assert has_element?(view, "#cardigann-engine-prowlarr[disabled]")
+    end
+
+    test "library rows show verified badges", %{conn: conn} do
+      Mydia.IndexersFixtures.cardigann_definition_fixture(%{
+        indexer_id: "nyaasi",
+        name: "Nyaa",
+        in_library: true,
+        enabled: true
+      })
+
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      assert has_element?(view, "#verified-nyaasi-prowlarr")
+      refute has_element?(view, "#verified-nyaasi-builtin")
+      assert has_element?(view, "#cardigann-engine-only-verified", "Nyaa")
+    end
+  end
+
   describe "Runtime Config Protection" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)

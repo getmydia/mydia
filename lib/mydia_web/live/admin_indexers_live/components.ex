@@ -2,8 +2,15 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
+  alias Mydia.Indexers.Cardigann.EngineSupport
   alias Mydia.Settings
-  alias MydiaWeb.AdminIndexersLive.{FlareSolverrComponents, LoginComponents}
+
+  alias MydiaWeb.AdminIndexersLive.{
+    CardigannEngineComponents,
+    FlareSolverrComponents,
+    LoginComponents
+  }
+
   alias MydiaWeb.IndexerComponents
 
   @doc """
@@ -19,10 +26,13 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :flaresolverr_status, :map, default: %{configured: false, status: :loading}
   attr :retesting_paused, :any, default: MapSet.new()
 
-  def indexers_tab(assigns) do
-    # Task 6 replaces this status line with the EngineSwitcher status.
-    assigns = assign(assigns, :cardigann_engine_status, nil)
+  attr :cardigann_engine, :any,
+    default: nil,
+    doc: "EngineSwitcher.Status, nil when Cardigann is off"
 
+  attr :cardigann_cache_bytes, :integer, default: 0
+
+  def indexers_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
       <FlareSolverrComponents.flaresolverr_row
@@ -30,27 +40,12 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
         flaresolverr_status={@flaresolverr_status}
       />
 
-      <div
-        :if={
-          (@cardigann_enabled and @cardigann_engine_status) &&
-            @cardigann_engine_status.engine == :prowlarr
-        }
-        id="cardigann-engine-status"
-        class={[
-          "text-sm flex items-center gap-2",
-          if(@cardigann_engine_status.state == :ready,
-            do: "text-base-content/60",
-            else: "text-warning"
-          )
-        ]}
-      >
-        <.icon name="hero-cpu-chip" class="w-4 h-4" />
-        <span>
-          Indexer library engine: {@cardigann_engine_status.label}<span :if={
-            @cardigann_engine_status.detail
-          }>, {@cardigann_engine_status.detail}</span>
-        </span>
-      </div>
+      <CardigannEngineComponents.engine_section
+        :if={@cardigann_enabled and @cardigann_engine}
+        status={@cardigann_engine}
+        cache_bytes={@cardigann_cache_bytes}
+        only_verified={only_verified(@library_indexers, @cardigann_engine)}
+      />
 
       <%= if @indexers == [] and @library_indexers == [] do %>
         <div class="alert alert-info">
@@ -100,6 +95,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             <:row :let={indexer}>
               <.library_indexer_row
                 indexer={indexer}
+                active_engine={(@cardigann_engine && @cardigann_engine.active) || :builtin}
                 flaresolverr_available={
                   @flaresolverr_status.configured and @flaresolverr_status.status != :disabled
                 }
@@ -220,6 +216,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
 
   attr :indexer, :any, required: true
   attr :flaresolverr_available, :boolean, required: true
+  attr :active_engine, :atom, default: :builtin
 
   defp library_indexer_row(assigns) do
     ~H"""
@@ -233,6 +230,10 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           {@indexer.type}
         </span>
         <span :if={@indexer.language} class="badge badge-xs badge-ghost">{@indexer.language}</span>
+        <CardigannEngineComponents.verified_badges
+          definition_id={@indexer.indexer_id}
+          active={@active_engine}
+        />
       </:title>
       <:descriptor :if={@indexer.description}>{@indexer.description}</:descriptor>
       <:badges>
@@ -401,6 +402,13 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
       do: true
 
   def needs_library_config?(_), do: false
+
+  # Names of library trackers verified only on the engine that is not active.
+  defp only_verified(library_indexers, status) do
+    other = if status.active == :builtin, do: :prowlarr, else: :builtin
+    ids = EngineSupport.only_on(other, Enum.map(library_indexers, & &1.indexer_id))
+    for i <- library_indexers, i.indexer_id in ids, do: i.name
+  end
 
   defp paused_indexers(health) do
     details = Map.get(health, :details) || %{}
