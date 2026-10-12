@@ -392,7 +392,8 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
       assert count == "2"
     end
 
-    test "a non-collapsible rail renders no toggle and no strip id" do
+    # Every rail strip carries an id now, because the RailWheel hook needs one.
+    test "a non-collapsible rail renders no toggle but still ids its strip" do
       html =
         render_component(&DiscoverComponents.media_rail/1,
           items: [item()],
@@ -402,7 +403,7 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
 
       assert html =~ ~s(id="media-rail")
       refute html =~ ~s(id="media-rail-toggle")
-      refute html =~ ~s(id="media-rail-items")
+      assert html =~ ~s(id="media-rail-items")
       refute html =~ "aria-expanded"
     end
 

@@ -22,7 +22,7 @@ defmodule MydiaWeb.DashboardLive.ShelfComponents do
       <%!-- items-start keeps each wrapper at its content height. A stretched
             flex item has a definite height, so the card's h-full would grow to
             fill the tallest column and push the reason out of view. --%>
-      <.poster_rail class="items-start">
+      <.poster_rail id={"#{@rail.id}-items"} class="items-start">
         <div
           :for={item <- @rail.items}
           id={"#{@rail.id}-item-#{item.shelf_item_id}"}
