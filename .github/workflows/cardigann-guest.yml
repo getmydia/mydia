@@ -129,7 +129,14 @@ jobs:
           sha256sum "$name" | cut -d' ' -f1 > "$name.sha256"
           cp native/cardigann_guest/LICENSE "$name.LICENSE"
           { cat native/cardigann_guest/NOTICE; printf '\nBuilt from %s\n' "$GITHUB_SHA"; } > "$name.NOTICE"
-          if gh release view "$tag" --json isDraft -q .isDraft 2>/dev/null | grep -qx true; then
+          # Re-read inside the concurrency group: two queued runs can build the
+          # same hash, and the first to publish wins.
+          state=$(gh release view "$tag" --json isDraft -q .isDraft 2>/dev/null || true)
+          if [ "$state" = "false" ]; then
+            echo "$tag is already published"
+            exit 0
+          fi
+          if [ "$state" = "true" ]; then
             gh release delete "$tag" --yes
           fi
           gh release create "$tag" --draft --prerelease --latest=false --target "$GITHUB_SHA" \
