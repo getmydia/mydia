@@ -58,13 +58,15 @@ defmodule Mydia.Indexers.CardigannFeatureFlags do
     |> Keyword.get(:cardigann_engine, :builtin)
   end
 
-  @doc "The adapter module that serves `:cardigann` under the configured engine."
+  @doc """
+  The adapter module that serves `:cardigann`: the wasm adapter only when the
+  engine process runs (`wasm_engine?/0`), the built-in one otherwise.
+  """
   @spec adapter() :: module()
   def adapter do
-    case engine() do
-      :prowlarr -> Mydia.Indexers.Cardigann.Wasm.Adapter
-      :builtin -> Mydia.Indexers.Adapter.Cardigann
-    end
+    if wasm_engine?(),
+      do: Mydia.Indexers.Cardigann.Wasm.Adapter,
+      else: Mydia.Indexers.Adapter.Cardigann
   end
 
   @doc """

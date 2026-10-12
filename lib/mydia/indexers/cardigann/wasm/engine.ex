@@ -97,8 +97,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   def status do
     GenServer.call(__MODULE__, :status, 1_000)
   catch
-    # No process: the engine was not selected. A busy one is still starting.
-    :exit, {:timeout, _} -> :compiling
+    # No process: the engine was not selected. The compile runs outside the
+    # server, so a status call that times out means the server itself is stuck.
+    :exit, {:timeout, _} -> {:unavailable, "the engine is not responding"}
     :exit, _ -> :disabled
   end
 

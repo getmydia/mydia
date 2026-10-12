@@ -78,10 +78,17 @@ defmodule Mydia.Indexers.CardigannEngineSelectionTest do
     end
 
     test "registers the wasm adapter under :prowlarr" do
-      put_features(cardigann_engine: :prowlarr)
+      put_features(cardigann_enabled: true, cardigann_engine: :prowlarr)
       Indexers.register_adapters()
 
       assert {:ok, Wasm.Adapter} = Registry.get_adapter(:cardigann)
+    end
+
+    test "keeps the Elixir adapter under :prowlarr when Cardigann is disabled" do
+      put_features(cardigann_enabled: false, cardigann_engine: :prowlarr)
+      Indexers.register_adapters()
+
+      assert {:ok, Mydia.Indexers.Adapter.Cardigann} = Registry.get_adapter(:cardigann)
     end
   end
 

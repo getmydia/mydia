@@ -1,22 +1,22 @@
 defmodule Mix.Tasks.Compile.CardigannGuest do
   @moduledoc """
-  Makes the prebuilt Cardigann wasm guest available during `mix compile`
-  (dev, CI, the Docker image build), by running `mix mydia.cardigann_guest fetch`.
+  Makes the prebuilt Cardigann wasm guest available during a dev `mix compile`
+  that opted in with `CARDIGANN_ENGINE=prowlarr`, by running
+  `mix mydia.cardigann_guest fetch`. Releases download it at runtime instead
+  (`Mydia.Indexers.Cardigann.Wasm.Delivery`), and CI fetches explicitly.
 
   Registered (appended) in `mix.exs` `compilers/0` next to `:plugins`, for the
   same reason: the task module lives in `lib/` and is only loadable after the
   `:elixir` compiler has run. It never fails the build: a missing artifact only
   means Cardigann wasm reports unavailable at runtime. A download whose checksum
-  does not match is reported loudly on stderr. The Docker build runs the `fetch`
-  and `verify` tasks explicitly afterwards, which do fail on a corrupt file.
+  does not match is reported loudly on stderr.
 
   When nothing could be fetched, `priv/cardigann/.unavailable-<hash>` records the
   time and the network is not probed again for an hour, so offline work does not
   pay a timeout on every compile.
 
-  Skipped in the `:test` env, where a network probe on every `mix test` would be
-  noise; CI fetches explicitly. Set `MYDIA_SKIP_CARDIGANN_FETCH=1` to skip it
-  elsewhere (the Nix build does, because it places a hash-pinned copy itself).
+  Skipped outside the `:dev` env and when the engine is not selected. Set
+  `MYDIA_SKIP_CARDIGANN_FETCH=1` to skip it even then.
   """
 
   use Mix.Task.Compiler
@@ -82,6 +82,10 @@ defmodule Mix.Tasks.Compile.CardigannGuest do
 
   defp now, do: System.os_time(:second)
 
+  # Only a dev build that opted in fetches: everyone else would pay a download
+  # for an engine they never start, and releases fetch at runtime instead.
   defp skip?,
-    do: Mix.env() == :test or System.get_env("MYDIA_SKIP_CARDIGANN_FETCH") in ["1", "true"]
+    do:
+      Mix.env() != :dev or System.get_env("CARDIGANN_ENGINE") != "prowlarr" or
+        System.get_env("MYDIA_SKIP_CARDIGANN_FETCH") in ["1", "true"]
 end

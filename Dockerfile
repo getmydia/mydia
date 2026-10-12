@@ -191,11 +191,14 @@ RUN mix deps.patch
 # Compile dependencies
 # Cache cargo registry for Rust NIF compilation (mydia_p2p_core, wasmex).
 # WASMEX_BUILD=1 makes rustler_precompiled build the patched NIF from source.
+# Set as ENV, not a prefix on the command: ci.yml anchors on a bare
+# `mix deps.compile` line.
+ENV WASMEX_BUILD=1
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/app/native/mydia_p2p_core/target,sharing=locked \
     --mount=type=cache,target=/app/deps/wasmex/native/wasmex/target,sharing=locked \
-    WASMEX_BUILD=1 mix deps.compile
+    mix deps.compile
 
 # Prove the Wasmex patch took effect: this fails if the NIF came from Wasmex's
 # precompiled download (which has neither function) instead of the patched source.
@@ -252,15 +255,15 @@ ENV BUILD_COMMIT=${BUILD_COMMIT}
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/app/native/mydia_p2p_core/target,sharing=locked \
-    MYDIA_SKIP_CARDIGANN_FETCH=1 mix compile
+    mix compile
 
 # The Cardigann wasm guest is NOT in the image. Installs that opt in with
 # CARDIGANN_ENGINE=prowlarr download it into their data directory on first boot,
 # verified against a SHA-256 pinned at build time: either
 # native/cardigann_guest/ARTIFACT_SHA256, or the release's `.sha256` sidecar,
 # fetched here (only the 64-character sidecar, never the guest) into
-# priv/cardigann/. The :cardigann_guest compiler's own fetch is skipped
-# (MYDIA_SKIP_CARDIGANN_FETCH on `mix compile`).
+# priv/cardigann/. The :cardigann_guest compiler does not fetch in a
+# prod build.
 #
 # The guest is published after a master push, so a build of a commit that
 # changes it can have no sidecar yet. That is soft by default (the engine then

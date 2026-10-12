@@ -46,9 +46,11 @@ Consumers:
   compile is retried in the background (30 s, doubling, up to 30 min).
   `CARDIGANN_WASM_PATH` points at a local copy for air-gapped installs; that
   file is verified against the same pin.
-- `mix compile` runs `mix mydia.cardigann_guest fetch` (the `:cardigann_guest`
-  compiler; skipped in the test env, and with `MYDIA_SKIP_CARDIGANN_FETCH=1`,
-  which the Docker and Nix builds set). It is the development and CI path:
+- A dev `mix compile` with `CARDIGANN_ENGINE=prowlarr` set runs
+  `mix mydia.cardigann_guest fetch` (the `:cardigann_guest` compiler; skipped in
+  every other env, when the engine is not selected, and with
+  `MYDIA_SKIP_CARDIGANN_FETCH=1`). CI runs `fetch` explicitly. This is the
+  development and CI path:
   `fetch` downloads the asset into `priv/cardigann/`, or, when none is
   published, copies `out/cardigann.wasm` from a local build. With neither it
   warns and carries on; Cardigann wasm then reports unavailable.
