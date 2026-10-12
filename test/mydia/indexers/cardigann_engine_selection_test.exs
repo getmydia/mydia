@@ -4,6 +4,7 @@ defmodule Mydia.Indexers.CardigannEngineSelectionTest do
 
   alias Mydia.Indexers
   alias Mydia.Indexers.Cardigann.Wasm
+  alias Mydia.Indexers.CardigannFeatureFlags
 
   setup do
     features = Application.get_env(:mydia, :features, [])
@@ -22,6 +23,33 @@ defmodule Mydia.Indexers.CardigannEngineSelectionTest do
 
   defp restore(name, nil), do: System.delete_env(name)
   defp restore(name, value), do: System.put_env(name, value)
+
+  defp put_features(overrides) do
+    features = Application.get_env(:mydia, :features, [])
+    Application.put_env(:mydia, :features, Keyword.merge(features, overrides))
+  end
+
+  describe "adapter/0" do
+    setup do
+      on_exit(fn ->
+        :persistent_term.erase({Mydia.Indexers.Cardigann.EngineSwitcher, :active})
+      end)
+    end
+
+    test "serves the built-in adapter until the wasm engine is active" do
+      put_features(cardigann_enabled: true)
+      assert CardigannFeatureFlags.adapter() == Mydia.Indexers.Adapter.Cardigann
+
+      :persistent_term.put({Mydia.Indexers.Cardigann.EngineSwitcher, :active}, :prowlarr)
+      assert CardigannFeatureFlags.adapter() == Wasm.Adapter
+    end
+
+    test "Cardigann off means the built-in adapter whatever is active" do
+      put_features(cardigann_enabled: false)
+      :persistent_term.put({Mydia.Indexers.Cardigann.EngineSwitcher, :active}, :prowlarr)
+      assert CardigannFeatureFlags.adapter() == Mydia.Indexers.Adapter.Cardigann
+    end
+  end
 
   describe "engine process" do
     test "is not running in the test application" do

@@ -229,3 +229,7 @@ config :mydia, :cardigann_wasm_eager, false
 config :mydia,
   cardigann_cache_dir: Path.expand("../tmp/cardigann-test-cache", __DIR__),
   cardigann_guest_base_url: "http://127.0.0.1:1/cardigann-guest"
+
+# The engine switcher drives this stand-in, so the application's own switcher
+# never starts a real wasm engine during the suite.
+config :mydia, :cardigann_wasm_engine_module, Mydia.Indexers.Cardigann.FakeWasmEngine

@@ -225,7 +225,7 @@ defmodule Mydia.Application do
       Mydia.Player.children() ++
       client_health_children() ++
       indexer_health_children() ++
-      cardigann_wasm_children() ++
+      cardigann_engine_children() ++
       media_server_health_children() ++
       plugin_instance_health_children() ++
       oban_children(oban_config) ++
@@ -246,16 +246,13 @@ defmodule Mydia.Application do
     :ok
   end
 
-  # The wasm engine exists only for installs that opted in with
-  # CARDIGANN_ENGINE=prowlarr: otherwise no process, no compile, no memory. It
-  # prepares the guest after boot (handle_continue); a missing artifact leaves
-  # it unavailable, it never fails startup.
-  defp cardigann_wasm_children do
-    if Mydia.Indexers.CardigannFeatureFlags.wasm_engine?() do
-      [Mydia.Indexers.Cardigann.Wasm.Engine]
-    else
-      []
-    end
+  # The switcher decides whether the Prowlarr wasm engine runs, and starts it
+  # after boot when it was chosen; the built-in engine serves until it is
+  # ready. Nothing is started when Cardigann is off.
+  defp cardigann_engine_children do
+    if Mydia.Indexers.CardigannFeatureFlags.enabled?(),
+      do: [Mydia.Indexers.Cardigann.EngineSwitcher],
+      else: []
   end
 
   defp client_health_children do

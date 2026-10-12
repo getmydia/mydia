@@ -52,75 +52,15 @@ defmodule Mydia.Indexers.CardigannFeatureFlags do
   @spec engine() :: :builtin | :prowlarr
   def engine, do: Mydia.Indexers.Cardigann.EngineSetting.setting()
 
-  @doc """
-  The adapter module that serves `:cardigann`: the wasm adapter only when the
-  engine process runs (`wasm_engine?/0`), the built-in one otherwise.
-  """
+  @doc "The engine serving searches now. It lags `engine/0` while a switch to Prowlarr prepares."
+  @spec active_engine() :: :builtin | :prowlarr
+  def active_engine, do: Mydia.Indexers.Cardigann.EngineSwitcher.active()
+
+  @doc "The adapter that serves `:cardigann` for the active engine."
   @spec adapter() :: module()
   def adapter do
-    if wasm_engine?(),
+    if enabled?() and active_engine() == :prowlarr,
       do: Mydia.Indexers.Cardigann.Wasm.Adapter,
       else: Mydia.Indexers.Adapter.Cardigann
-  end
-
-  @doc """
-  True when the wasm engine is both selected and Cardigann is enabled: the only
-  case in which the engine process starts, fetches or compiles anything.
-  """
-  @spec wasm_engine?() :: boolean()
-  def wasm_engine?, do: enabled?() and engine() == :prowlarr
-
-  @doc """
-  The active engine and whether it can serve searches, for status displays.
-
-  `state` is `:ready`, `:starting` (selected, still being prepared) or
-  `:unavailable`; `detail` names the reason when it is not ready.
-  """
-  @spec engine_status() :: %{
-          engine: :builtin | :prowlarr,
-          label: String.t(),
-          state: :ready | :starting | :unavailable,
-          detail: String.t() | nil
-        }
-  def engine_status do
-    case engine() do
-      :builtin ->
-        %{engine: :builtin, label: "Built-in engine", state: :ready, detail: nil}
-
-      :prowlarr ->
-        label = "Prowlarr engine (wasm)"
-
-        case Mydia.Indexers.Cardigann.Wasm.Engine.status() do
-          :ready ->
-            %{engine: :prowlarr, label: label, state: :ready, detail: nil}
-
-          :fetching ->
-            %{
-              engine: :prowlarr,
-              label: label,
-              state: :starting,
-              detail: "downloading the engine (about 40 MB), searches fail until it is ready"
-            }
-
-          status when status in [:pending, :compiling] ->
-            %{
-              engine: :prowlarr,
-              label: label,
-              state: :starting,
-              detail: "still being prepared, searches fail until it is ready"
-            }
-
-          :disabled ->
-            %{
-              engine: :prowlarr,
-              label: label,
-              state: :unavailable,
-              detail: "the engine is not running"
-            }
-
-          {:unavailable, reason} ->
-            %{engine: :prowlarr, label: label, state: :unavailable, detail: reason}
-        end
-    end
   end
 end

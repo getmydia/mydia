@@ -2,7 +2,6 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
-  alias Mydia.Indexers.CardigannFeatureFlags
   alias Mydia.Settings
   alias MydiaWeb.AdminIndexersLive.{FlareSolverrComponents, LoginComponents}
   alias MydiaWeb.IndexerComponents
@@ -21,8 +20,8 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :retesting_paused, :any, default: MapSet.new()
 
   def indexers_tab(assigns) do
-    # Read on every render rather than at mount, so any re-render shows the current engine state.
-    assigns = assign(assigns, :cardigann_engine_status, CardigannFeatureFlags.engine_status())
+    # Task 6 replaces this status line with the EngineSwitcher status.
+    assigns = assign(assigns, :cardigann_engine_status, nil)
 
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
