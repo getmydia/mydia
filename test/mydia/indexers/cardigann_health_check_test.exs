@@ -227,6 +227,30 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert chosen == live_url
     end
 
+    test "records a blocked page and moves on to the next mirror", %{
+      live_url: live_url,
+      live: live
+    } do
+      blocked = Bypass.open()
+      blocked_url = "http://localhost:#{blocked.port}"
+
+      Bypass.expect(blocked, "GET", "/", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><head><title>This website is blocked</title></head></html>"
+        )
+      end)
+
+      Bypass.expect(live, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "ok") end)
+      parsed = %Parsed{links: [blocked_url, live_url], legacylinks: []}
+
+      assert {:ok, chosen, status} = CardigannHealthCheck.probe_candidates(parsed, %{})
+      assert chosen == live_url
+      assert status[blocked_url]["ok"] == false
+      assert status[blocked_url]["error"] =~ "Blocked page:"
+    end
+
     test "returns an error when every candidate fails", %{dead_url: dead_url} do
       parsed = %Parsed{links: [dead_url], legacylinks: []}
 
@@ -646,6 +670,53 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       assert {:ok, 0, ^url} = CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
     end
 
+    test "reports degraded when rows matched but none had a download" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<table><tr><td>Copper Lantern</td></tr><tr><td>Paper Harbor</td></tr></table>"
+        )
+      end)
+
+      url = "http://localhost:#{bypass.port}"
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:error, message} =
+                   CardigannHealthCheck.probe_search(parsed_for(url), %{}, url)
+
+          assert message =~ "none usable"
+          assert message =~ "2 rows matched"
+          assert message =~ "missing download"
+        end)
+
+      assert log =~ "2 rows matched, 2 dropped"
+    end
+
+    test "is not degraded when andmatch filtered rows and one other row lacked a download" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<table><tr><td>Copper Lantern</td></tr><tr><td>Paper Harbor<a href=\"/d/2\">d</a></td></tr></table>"
+        )
+      end)
+
+      url = "http://localhost:#{bypass.port}"
+      parsed = parsed_for(url)
+      fields = %{parsed.search.fields | title: %{selector: "td", filters: [%{name: "andmatch"}]}}
+      parsed = %{parsed | search: %{parsed.search | fields: fields}}
+
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:ok, 0, ^url} = CardigannHealthCheck.probe_search(parsed, %{}, url)
+      end)
+    end
+
     test "reports an error when the search 404s even though the homepage is fine" do
       # A homepage probe passes here. This is exactly the false green.
       bypass = Bypass.open()
@@ -667,7 +738,12 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
     defp capture_path(bypass, test_pid) do
       Bypass.stub(bypass, "GET", "/search/:term", fn conn ->
         send(test_pid, {:request_path, conn.request_path})
-        Plug.Conn.resp(conn, 200, "<html><body><table><tr><td>x</td></tr></table></body></html>")
+
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>x<a href=\"/d/1\">d</a></td></tr></table></body></html>"
+        )
       end)
     end
 

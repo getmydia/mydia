@@ -266,3 +266,29 @@ probe (`sessions.list`) does not go through the gate because it opens no tab.
 
 No sessions (`sessions.create`): each keeps a Chrome instance resident, which
 is the resource the gate exists to protect.
+
+## Cardigann HTML runs on lexbor, not Floki
+
+Definitions are written against goquery (Jackett) and AngleSharp (Prowlarr),
+which build an HTML5 tree and implement modern CSS. Floki's mochiweb parser
+inserts no implied `<tbody>`, and its selector engine mis-evaluates nested
+`:has()` and `:not(:has())`. On 2026-10-11 that alone left five public trackers
+with zero or wrong rows.
+
+`Mydia.Indexers.Cardigann.Selector` parses with LazyHTML (lexbor) and evaluates
+every standard selector natively. Cardigann's only non-standard pseudo-class,
+`:contains()`, is precomputed: `Selector.parse/2` takes the selectors the caller
+will use, marks each element whose text contains a needle with a
+`data-mydia-cN` attribute, and `find/3` rewrites `:contains(...)` to that
+attribute. A `:contains` that was not declared at parse time raises. Nothing
+under `lib/mydia/indexers/cardigann*` calls Floki.
+
+## Measuring live compatibility
+
+`mix mydia.cardigann_compat` scores YAML features statically and reads about 99%
+for public definitions. It cannot see runtime failures. `mix
+mydia.cardigann_health --from-cache <dir> --type public` runs each definition
+through the real search path and buckets the result (`ok`, `ok_empty_query`,
+`rows_dropped`, `blocked_page`, `parse_error`, ...). It talks to real trackers:
+run it by hand, never in CI. `--capture tmp/cardigann_captures` saves raw pages;
+committed fixtures are reduced from them with invented titles, never copied.

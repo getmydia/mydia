@@ -17,6 +17,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   import Ecto.Query, only: [from: 2]
 
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Cardigann.BlockPage
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.Cardigann.SessionManager
@@ -228,7 +229,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
          # argument below.
          winner = served_by(base_url),
          :ok <- CardigannSearchEngine.validate_response(response),
-         {:ok, results} <- parse_probe_results(parsed, response, winner, opts) do
+         {:ok, results, stats} <- parse_probe_results(parsed, response, winner, opts),
+         :ok <- ensure_usable(results, stats) do
       {:ok, length(results), winner}
     else
       {:error, %Error{message: message}} -> classify_probe_error(message)
@@ -272,13 +274,31 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
   defp parse_probe_results(parsed, response, base_url, opts) do
     with {:ok, search_path} <- CardigannSearchEngine.select_search_path(parsed, opts) do
-      CardigannResultParser.parse_results(parsed, response, parsed.name,
+      CardigannResultParser.parse_results_with_stats(parsed, response, parsed.name,
         template_context: TemplateContext.build(parsed, opts),
         base_url: base_url,
         search_path: search_path
       )
     end
   end
+
+  # Rows the selector matched but that were all discarded for a missing title or
+  # download are a broken definition, not an empty search. Report them as an
+  # error so the definition is marked degraded instead of healthy with zero.
+  # Only when the drops alone explain the empty result: rows removed on purpose
+  # by `andmatch` mean the search simply had nothing relevant.
+  defp ensure_usable([], %{
+         dropped: dropped,
+         filtered: 0,
+         matched: matched,
+         first_missing: missing
+       })
+       when dropped > 0 do
+    {:error,
+     Error.search_failed("#{matched} rows matched, none usable (missing #{missing || "unknown"})")}
+  end
+
+  defp ensure_usable(_results, _stats), do: :ok
 
   @doc """
   True when `candidate` may become the definition's sticky `active_link`.
@@ -297,7 +317,12 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
   def promotable?(_parsed, _user_config, _candidate), do: false
 
-  defp probe_query(%Parsed{capabilities: capabilities}) do
+  @doc """
+  The query a probe search sends: a movie title for movie-search definitions, a
+  series for tv-search, otherwise a generic term.
+  """
+  @spec probe_query(Parsed.t()) :: String.t()
+  def probe_query(%Parsed{capabilities: capabilities}) do
     # Map.get/3's default only applies when the key is ABSENT. A parsed
     # definition can have `modes: nil` (key present, value nil), in which case
     # Map.get(capabilities, :modes, %{}) returns nil, not %{}, and the
@@ -505,42 +530,41 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   defp test_homepage(nil, _user_config), do: {:error, "No base URL configured"}
 
   defp test_homepage(base_url, user_config) do
-    req_opts = [
-      receive_timeout: 30_000,
-      redirect: true,
-      retry: false
-    ]
+    base_url
+    |> Req.get(homepage_request_opts(user_config))
+    |> classify_homepage()
+  end
+
+  defp homepage_request_opts(user_config) do
+    opts = [receive_timeout: 30_000, redirect: true, retry: false]
 
     # Add cookies if present in user config
-    req_opts =
-      case Map.get(user_config, "cookie") do
-        nil ->
-          req_opts
+    case Map.get(user_config, "cookie") do
+      cookie when is_binary(cookie) and cookie != "" ->
+        Keyword.put(opts, :headers, [{"Cookie", cookie}])
 
-        cookie when is_binary(cookie) and cookie != "" ->
-          Keyword.put(req_opts, :headers, [{"Cookie", cookie}])
-
-        _ ->
-          req_opts
-      end
-
-    case Req.get(base_url, req_opts) do
-      {:ok, %Req.Response{status: status}} when status in 200..399 ->
-        {:ok, status}
-
-      {:ok, %Req.Response{status: status}} ->
-        {:error, "HTTP #{status}"}
-
-      {:error, %Req.TransportError{reason: :timeout}} ->
-        {:error, "Request timeout"}
-
-      {:error, %Req.TransportError{reason: reason}} ->
-        {:error, "Connection failed: #{inspect(reason)}"}
-
-      {:error, reason} ->
-        {:error, "Request failed: #{inspect(reason)}"}
+      _ ->
+        opts
     end
   end
+
+  defp classify_homepage({:ok, %Req.Response{status: status, body: body}})
+       when status in 200..399 do
+    case BlockPage.fingerprint(body) do
+      nil -> {:ok, status}
+      title -> {:error, "Blocked page: #{title}"}
+    end
+  end
+
+  defp classify_homepage({:ok, %Req.Response{status: status}}), do: {:error, "HTTP #{status}"}
+
+  defp classify_homepage({:error, %Req.TransportError{reason: :timeout}}),
+    do: {:error, "Request timeout"}
+
+  defp classify_homepage({:error, %Req.TransportError{reason: reason}}),
+    do: {:error, "Connection failed: #{inspect(reason)}"}
+
+  defp classify_homepage({:error, reason}), do: {:error, "Request failed: #{inspect(reason)}"}
 
   defp determine_health_status(definition, success, response_time) do
     cond do

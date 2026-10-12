@@ -252,6 +252,122 @@ defmodule Mydia.Indexers.CardigannDownloadTest do
     end
   end
 
+  describe "resolve/3 with selectors only lexbor understands" do
+    defp definition_with_selector(port, selector, encoding \\ "UTF-8") do
+      yaml =
+        @selector_definition
+        |> String.replace("a.download-link", selector)
+        |> String.replace("encoding: UTF-8", "encoding: #{encoding}")
+
+      {:ok, parsed} = CardigannParser.parse_definition(yaml)
+      %{parsed | links: ["http://localhost:#{port}/"]}
+    end
+
+    test "matches a :contains() selector" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/info/1", fn conn ->
+        Plug.Conn.resp(conn, 200, @landing_page)
+      end)
+
+      definition = definition_with_selector(bypass.port, ~s|a:contains("download")|)
+      url = "http://localhost:#{bypass.port}/info/1"
+
+      assert {:ok, {:link, link}} = CardigannDownload.resolve(definition, url)
+      assert link == "http://localhost:#{bypass.port}/get/24845983.torrent"
+    end
+
+    # `[href*=""]` matches nothing in CSS, so an unrendered `.Config` value
+    # would leave the selector empty. Limetorrents and torrentdownloads pick
+    # their link this way.
+    test "renders .Config in a selector, using the setting default" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/info/1", fn conn ->
+        Plug.Conn.resp(conn, 200, @landing_page)
+      end)
+
+      definition =
+        bypass.port
+        |> definition_with_selector(~s|a[href*="{{ .Config.pick }}"]|)
+        |> Map.put(:settings, [%{name: "pick", type: "select", default: "/get/"}])
+
+      url = "http://localhost:#{bypass.port}/info/1"
+
+      assert {:ok, {:link, link}} = CardigannDownload.resolve(definition, url)
+      assert link == "http://localhost:#{bypass.port}/get/24845983.torrent"
+
+      # The operator's own value wins over the default.
+      assert {:error, {:cardigann_download, _}} =
+               CardigannDownload.resolve(definition, url, %{config: %{"pick" => "/nowhere/"}})
+    end
+
+    test ".Config in a selector exposes operator settings but not credentials" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/info/1", fn conn ->
+        Plug.Conn.resp(conn, 200, @landing_page)
+      end)
+
+      url = "http://localhost:#{bypass.port}/info/1"
+      user_config = %{config: %{"pick" => "/get/"}, cookie: "hunter2", password: "hunter2"}
+
+      # A normal setting is reachable.
+      definition = definition_with_selector(bypass.port, ~s|a[href*="{{ .Config.pick }}"]|)
+      assert {:ok, {:link, _}} = CardigannDownload.resolve(definition, url, user_config)
+
+      # A credential key is not: it renders empty, so `[href*=""]` matches nothing.
+      for key <- ["cookie", "password"] do
+        definition = definition_with_selector(bypass.port, ~s|a[href*="{{ .Config.#{key} }}"]|)
+
+        assert {:error, {:cardigann_download, _}} =
+                 CardigannDownload.resolve(definition, url, user_config)
+      end
+    end
+
+    test "decodes a windows-1251 details page before matching" do
+      bypass = Bypass.open()
+      needle = "Скачать"
+
+      page =
+        Mydia.Indexers.Cardigann.Charset.encode(
+          ~s(<html><body><a href="/get/1.torrent">#{needle}</a></body></html>),
+          "windows-1251"
+        )
+
+      Bypass.expect_once(bypass, "GET", "/info/1", fn conn ->
+        Plug.Conn.resp(conn, 200, page)
+      end)
+
+      definition =
+        definition_with_selector(bypass.port, ~s|a:contains("#{needle}")|, "windows-1251")
+
+      url = "http://localhost:#{bypass.port}/info/1"
+
+      assert {:ok, {:link, link}} = CardigannDownload.resolve(definition, url)
+      assert link == "http://localhost:#{bypass.port}/get/1.torrent"
+    end
+
+    test "returns an error, rather than raising, for a selector lexbor rejects" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/info/1", fn conn ->
+        Plug.Conn.resp(conn, 200, @landing_page)
+      end)
+
+      definition = definition_with_selector(bypass.port, "a[")
+      url = "http://localhost:#{bypass.port}/info/1"
+
+      assert {:error, {:cardigann_download, message}} =
+               CardigannDownload.resolve(definition, url)
+
+      assert message =~ "Invalid selector"
+      assert message =~ "selectortest"
+      assert message =~ ~s(invalid selector "a[")
+      refute message =~ "no download selector matched"
+    end
+  end
+
   describe "resolve/3 when there is nothing to resolve" do
     test "returns :not_applicable for a definition with no download block" do
       definition = %Parsed{

@@ -71,6 +71,35 @@ defmodule Mydia.Indexers.CardigannFilterImplTest do
       assert String.contains?(result, "2024-01-15")
     end
 
+    test "parses an RFC 1123 date written as a .NET layout" do
+      assert {:ok, "2031-01-03T01:27:58Z"} =
+               apply_filter(
+                 "Sat, 03 Jan 2031 01:27:58 +00:00",
+                 %{name: "dateparse", args: "ddd, dd MMM yyyy HH:mm:ss zzz"}
+               )
+    end
+
+    test "parses a short .NET layout with a one digit day and a two digit year" do
+      assert {:ok, "2026-10-12T00:00:00+03:00"} =
+               apply_filter("12 Oct 26 +03:00", %{name: "dateparse", args: "d MMM yy zzz"})
+    end
+
+    test "treats a non-breaking space in the value as a space" do
+      assert {:ok, "2026-10-12T00:00:00+03:00"} =
+               apply_filter("12\u00A0Oct\u00A026 +03:00", %{
+                 name: "dateparse",
+                 args: "d MMM yy zzz"
+               })
+    end
+
+    test "parses a .NET layout with no separator before the time" do
+      assert {:ok, "2031-02-03T04:05:06Z"} =
+               apply_filter("2031-02-0304:05:06", %{
+                 name: "dateparse",
+                 args: "yyyy-MM-ddHH:mm:ss"
+               })
+    end
+
     test "timeparse is an alias for dateparse" do
       assert {:ok, result} =
                apply_filter("2024-01-15", %{name: "timeparse", args: ["2006-01-02"]})

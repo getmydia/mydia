@@ -301,7 +301,7 @@ defmodule Mydia.Indexers.CardigannFilters do
 
   # dateparse - parse date with Go format layout
   defp apply_dateparse(value, layout) do
-    normalized = value |> String.trim() |> String.replace(~r/\s+/, " ")
+    normalized = value |> String.trim() |> String.replace(~r/[\s\x{00A0}]+/u, " ")
 
     result =
       case parse_with_go_layout(normalized, layout) do
@@ -407,10 +407,56 @@ defmodule Mydia.Indexers.CardigannFilters do
                     regex
                   )
 
+  # Most Cardigann definitions (about nine in ten date filters in the public set)
+  # write the layout in .NET style (`yyyy-MM-dd HH:mm:ss zzz`), because Jackett
+  # and Prowlarr run them through .NET date parsing. Go layouts never contain
+  # `yy`, so that marks a .NET layout. Longest token first, same as above.
+  @dotnet_token_map %{
+    "yyyy" => "%Y",
+    "yy" => "%y",
+    "MMMM" => "%B",
+    "MMM" => "%b",
+    "MM" => "%m",
+    "M" => "%-m",
+    "dddd" => "%A",
+    "ddd" => "%a",
+    "dd" => "%d",
+    "d" => "%-d",
+    "HH" => "%H",
+    "H" => "%-H",
+    "hh" => "%I",
+    "h" => "%-I",
+    "mm" => "%M",
+    "m" => "%-M",
+    "ss" => "%S",
+    "s" => "%-S",
+    "tt" => "%p",
+    "zzz" => "%:z",
+    "zz" => "%z",
+    "z" => "%z"
+  }
+
+  @dotnet_token_regex (
+                        tokens =
+                          @dotnet_token_map
+                          |> Map.keys()
+                          |> Enum.sort_by(&byte_size/1, :desc)
+                          |> Enum.map_join("|", &Regex.escape/1)
+
+                        {:ok, regex} = Regex.compile(tokens)
+                        regex
+                      )
+
   defp go_layout_to_strftime(layout) do
-    Regex.replace(@go_token_regex, layout, fn match ->
-      Map.get(@go_token_map, match, match)
-    end)
+    if String.contains?(layout, "yy") do
+      Regex.replace(@dotnet_token_regex, layout, fn match ->
+        Map.get(@dotnet_token_map, match, match)
+      end)
+    else
+      Regex.replace(@go_token_regex, layout, fn match ->
+        Map.get(@go_token_map, match, match)
+      end)
+    end
   end
 
   # timeago - parse relative time strings

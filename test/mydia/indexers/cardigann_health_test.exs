@@ -45,13 +45,17 @@ defmodule Mydia.Indexers.CardigannHealthTest do
       bypass = Bypass.open()
       Bypass.stub(bypass, "GET", "/", fn conn -> Plug.Conn.resp(conn, 200, "<html/>") end)
 
+      Bypass.stub(bypass, "GET", "/download/1", fn conn ->
+        Plug.Conn.resp(conn, 200, "d8:announce3:url4:infod4:name4:testee")
+      end)
+
       Bypass.stub(bypass, "GET", "/search", fn conn ->
         Plug.Conn.resp(
           conn,
           200,
           ~s"""
           <html><body><table class="results">
-          <tr><td class="title">Some Release</td>
+          <tr><td class="title">Copper Lantern S01E02</td>
           <td class="download"><a href="/download/1">grab</a></td></tr>
           </table></body></html>
           """
@@ -65,14 +69,11 @@ defmodule Mydia.Indexers.CardigannHealthTest do
           Mix.Tasks.Mydia.CardigannHealth.run(["--indexer", definition.indexer_id, "--json"])
         end)
 
-      # --json still shares the "Testing N indexer(s)..." preamble that
-      # print_results/1 prints, so the JSON document is everything from the
-      # first "{" on.
-      json_text = output |> String.split("{", parts: 2) |> Enum.at(1) |> then(&("{" <> &1))
-      assert {:ok, json} = Jason.decode(json_text)
+      assert {:ok, json} = Jason.decode(output)
       assert [result] = json["results"]
 
       assert result["status"] == "ok"
+      assert result["bucket"] == "ok"
       assert result["result_count"] == 1
       assert result["error"] == nil
     end

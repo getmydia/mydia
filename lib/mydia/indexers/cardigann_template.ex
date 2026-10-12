@@ -47,6 +47,9 @@ defmodule Mydia.Indexers.CardigannTemplate do
   import NimbleParsec
   require Logger
 
+  alias Mydia.Indexers.Cardigann.Charset
+  alias Mydia.Indexers.Cardigann.TemplateFunctions
+
   @type context :: %{
           optional(:keywords) => String.t() | nil,
           optional(:config) => map(),
@@ -76,16 +79,18 @@ defmodule Mydia.Indexers.CardigannTemplate do
     |> ignore(string("\""))
     |> reduce({List, :to_string, []})
 
-  # Field path: .Field or .Field.Nested
+  # Field path: .Field or .Field.Nested. Segments may contain '-' after their
+  # first character: Cardigann setting names such as cat-id and api-url are
+  # referenced as .Config.cat-id. A '-' after whitespace is a trim marker and is
+  # never reached here, because whitespace ends the segment.
+  field_segment =
+    ascii_char([?a..?z, ?A..?Z, ?0..?9, ?_])
+    |> optional(ascii_string([?a..?z, ?A..?Z, ?0..?9, ?_, ?-], min: 1))
+    |> reduce({List, :to_string, []})
+
   field_path =
     string(".")
-    |> optional(
-      ascii_string([?a..?z, ?A..?Z, ?0..?9, ?_], min: 1)
-      |> repeat(
-        ignore(string("."))
-        |> ascii_string([?a..?z, ?A..?Z, ?0..?9, ?_], min: 1)
-      )
-    )
+    |> optional(field_segment |> repeat(ignore(string(".")) |> concat(field_segment)))
     |> reduce(:build_field_path)
 
   # Integer literal (for index function)
@@ -258,10 +263,22 @@ defmodule Mydia.Indexers.CardigannTemplate do
 
   @doc """
   Renders a Cardigann template string with the given context.
+
+  Options:
+
+    * `:url_encode` - percent-encode interpolated values (default `true`)
+    * `:charset` - a definition's `encoding:`; when URL-encoding, values are
+      first converted from UTF-8 to that charset so the percent-escapes carry
+      the site's bytes (e.g. `%CF` for "П" in windows-1251). The context itself
+      stays UTF-8.
   """
   @spec render(String.t(), context(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def render(template, context, opts \\ []) when is_binary(template) do
-    url_encode? = Keyword.get(opts, :url_encode, true)
+    url_encode? =
+      case {Keyword.get(opts, :url_encode, true), Keyword.get(opts, :charset)} do
+        {true, charset} when is_binary(charset) -> {:charset, charset}
+        {flag, _} -> flag
+      end
 
     case parse_template(template) do
       {:ok, tokens, "", _, _, _} ->
@@ -824,23 +841,8 @@ defmodule Mydia.Indexers.CardigannTemplate do
 
   defp call_function("print", args, _ctx), do: Enum.map_join(args, " ", &to_string/1)
 
-  defp call_function("printf", [fmt | args], _ctx) when is_binary(fmt) do
-    # Convert Go-style format specifiers to Erlang style
-    # %s -> ~s (strings), %d -> ~B (integers), %v -> ~p (any value)
-    erlang_fmt =
-      fmt
-      |> String.replace("%s", "~s")
-      |> String.replace("%d", "~B")
-      |> String.replace("%v", "~p")
-      |> String.replace("%f", "~f")
-      |> String.replace("%%", "~%")
-
-    :io_lib.format(to_charlist(erlang_fmt), args) |> IO.iodata_to_binary()
-  rescue
-    e ->
-      Logger.debug("printf error: #{inspect(e)}, fmt=#{fmt}, args=#{inspect(args)}")
-      ""
-  end
+  defp call_function("printf", [fmt | args], _ctx) when is_binary(fmt),
+    do: TemplateFunctions.printf(fmt, args)
 
   defp call_function("println", args, _ctx), do: Enum.map_join(args, " ", &to_string/1) <> "\n"
 
@@ -858,18 +860,10 @@ defmodule Mydia.Indexers.CardigannTemplate do
 
   defp call_function("join", [value, _], _ctx), do: to_string(value || "")
 
-  # slice - substring extraction: slice(str, start, end)
-  defp call_function("slice", [str, start, stop], _ctx) when is_binary(str) do
-    s = if is_binary(start), do: String.to_integer(start), else: start
-    e = if is_binary(stop), do: String.to_integer(stop), else: stop
-    String.slice(str, s..(e - 1)//1)
-  end
+  defp call_function("slice", [str, start, stop], _ctx),
+    do: TemplateFunctions.slice(str, start, stop)
 
-  defp call_function("slice", [str, start], _ctx) when is_binary(str) do
-    s = if is_binary(start), do: String.to_integer(start), else: start
-    String.slice(str, s..-1//1)
-  end
-
+  defp call_function("slice", [str, start], _ctx), do: TemplateFunctions.slice(str, start)
   defp call_function("slice", _, _ctx), do: ""
 
   defp call_function(name, args, _ctx) do
@@ -890,6 +884,10 @@ defmodule Mydia.Indexers.CardigannTemplate do
   defp format_output(nil, _), do: ""
   defp format_output("", _), do: ""
   defp format_output(v, true) when is_binary(v), do: url_encode(v)
+
+  defp format_output(v, {:charset, encoding}) when is_binary(v),
+    do: v |> Charset.encode(encoding) |> url_encode()
+
   defp format_output(v, false) when is_binary(v), do: v
   defp format_output(v, _) when is_boolean(v), do: to_string(v)
   defp format_output(v, _) when is_number(v), do: to_string(v)

@@ -54,9 +54,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:ok, response} = CardigannSearchEngine.execute_search(definition, opts)
   """
 
+  alias Mydia.Indexers.Cardigann.BlockPage
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
   alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.Cardigann.LoggedOut
   alias Mydia.Indexers.Cardigann.RequestHeaders
   alias Mydia.Indexers.CardigannDefinition.Parsed
@@ -94,7 +96,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   @type http_response :: %{
           status: integer(),
-          body: String.t(),
+          # Req decodes a JSON response into a map or a list.
+          body: String.t() | map() | list(),
           headers: [{String.t(), String.t()}]
         }
 
@@ -206,6 +209,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           )
         end
 
+      result = BlockPage.reject(definition, result)
+
       cond do
         elem(result, 0) == :ok ->
           if candidate != first_tried, do: promote(opts, candidate)
@@ -242,12 +247,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   #
   # Failures that would repeat identically on every candidate stay terminal: a
   # template that will not render, or a request target the client refuses, is
-  # not going to behave differently against another host.
+  # not going to behave differently against another host. A block, parked or
+  # for-sale page is the opposite: it is specific to that mirror, so move on.
   defp retryable_failure?({:error, %Error{type: :connection_failed}}), do: true
 
   defp retryable_failure?({:error, %Error{message: message}}) when is_binary(message) do
     String.contains?(message, "Server error: HTTP 5") or
       String.contains?(message, "HTTP 404") or
+      String.contains?(message, "Blocked page:") or
       String.contains?(message, "Redirected (HTTP 3")
   end
 
@@ -378,7 +385,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     with {:ok, base_url} <- get_base_url(definition, opts),
          {:ok, path_config} <- select_search_path(definition, opts),
          {:ok, path} <- render_template(path_config.path, definition, opts) do
-      url = build_full_url(base_url, path)
+      url = build_full_url(base_url, Links.encode_path_text(path))
       {:ok, url}
     end
   end
@@ -736,7 +743,9 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   # Render a template string using the CardigannTemplate engine
   defp render_template(template, definition, opts) do
     with {:error, reason} <-
-           CardigannTemplate.render(template, build_template_context(definition, opts)) do
+           CardigannTemplate.render(template, build_template_context(definition, opts),
+             charset: definition.encoding
+           ) do
       {:error, Error.search_failed("Search path failed to render: #{inspect(reason)}")}
     end
   end
@@ -775,32 +784,19 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     # Substitute template variables in input values
     # For query params, don't URL-encode (Req will do it)
     Enum.reduce(base_params, %{}, fn {key, value}, acc ->
-      substituted_value =
-        case value do
-          v when is_binary(v) ->
-            # Handle special $raw: prefix (same behavior, just explicit)
-            if String.starts_with?(v, "$raw:") do
-              template = String.replace_prefix(v, "$raw:", "")
+      case TemplateContext.render_input(value, context, definition.encoding) do
+        :render_failed ->
+          Logger.warning(
+            "Cardigann #{definition.id}: input #{key} did not render and was omitted"
+          )
 
-              case CardigannTemplate.render(template, context, url_encode: false) do
-                {:ok, rendered} -> rendered
-                {:error, _} -> v
-              end
-            else
-              case CardigannTemplate.render(v, context, url_encode: false) do
-                {:ok, rendered} -> rendered
-                {:error, _} -> v
-              end
-            end
+          acc
 
-          v ->
-            v
-        end
+        "" when not allow_empty ->
+          acc
 
-      if substituted_value == "" and not allow_empty do
-        acc
-      else
-        Map.put(acc, key, substituted_value)
+        rendered ->
+          Map.put(acc, key, rendered)
       end
     end)
   end

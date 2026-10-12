@@ -1,200 +1,225 @@
 defmodule Mix.Tasks.Mydia.CardigannHealth do
   @moduledoc """
-  Tests the health of enabled Cardigann indexers.
+  Live compatibility sweep over Cardigann definitions.
 
-  Performs a test search against each enabled Cardigann indexer definition
-  and reports success/failure/error status.
+  Each definition goes through the app's real path: mirror probe, a search with
+  failover, an empty-query recheck when the probe query finds nothing, and a grab
+  of the first row. Results land in one bucket each (see
+  `Mydia.Indexers.Cardigann.LiveCheck.Outcome`).
+
+  This talks to real trackers. It is a developer and operator tool and never runs
+  in CI.
 
   ## Usage
 
       mix mydia.cardigann_health [options]
 
+  ## Sources (default: enabled definitions in the database)
+
+      --all               Every definition in the database
+      --from-cache DIR    Every *.yml in DIR (for example the mydia.cardigann_compat cache)
+      --upstream          Fetch the v11 definitions from GitHub
+
   ## Options
 
-      --indexer ID    Test only the specified indexer (by indexer_id)
-      --query TEXT    Custom search query (default: "test")
-      --json          Output results as JSON
-      --timeout MS    Timeout per indexer in milliseconds (default: 15000)
-
-  ## Examples
-
-      mix mydia.cardigann_health
-      mix mydia.cardigann_health --indexer 1337x
-      mix mydia.cardigann_health --json
+      --indexer ID        Only this indexer id
+      --type TYPE         public, private, semi-private or all (default: all)
+      --capture DIR       Write raw responses per definition under DIR (use tmp/cardigann_captures)
+      --no-grab           Skip the grab leg
+      --concurrency N     Parallel definitions (default: 8)
+      --timeout MS        Per-definition timeout (default: 120000)
+      --json              JSON output
   """
 
   use Mix.Task
 
-  @shortdoc "Tests health of enabled Cardigann indexers"
+  import Ecto.Query
 
+  alias Mydia.Indexers.Cardigann.LiveCheck
+  alias Mydia.Indexers.Cardigann.LiveCheck.Outcome
   alias Mydia.Indexers.CardigannDefinition
-  alias Mydia.Indexers.CardigannParser
-  alias Mydia.Indexers.CardigannSearchEngine
-  alias Mydia.Indexers.CardigannResultParser
+  alias Mydia.Indexers.DefinitionSync
   alias Mydia.Repo
 
-  import Ecto.Query
+  @shortdoc "Live compatibility sweep over Cardigann definitions"
+
+  @switches [
+    all: :boolean,
+    from_cache: :string,
+    upstream: :boolean,
+    indexer: :string,
+    type: :string,
+    capture: :string,
+    grab: :boolean,
+    concurrency: :integer,
+    timeout: :integer,
+    json: :boolean
+  ]
 
   @impl Mix.Task
   def run(args) do
-    {opts, _} =
-      OptionParser.parse!(args,
-        strict: [indexer: :string, query: :string, json: :boolean, timeout: :integer]
-      )
-
+    {opts, _} = OptionParser.parse!(args, strict: @switches)
     Mix.Task.run("app.start")
 
-    query = opts[:query] || "test"
-    json = opts[:json] || false
-    timeout = opts[:timeout] || 15_000
+    sources =
+      opts
+      |> load_sources()
+      |> filter_type(Keyword.get(opts, :type, "all"))
+      |> filter_indexer(opts[:indexer])
 
-    definitions = fetch_definitions(opts[:indexer])
-
-    if definitions == [] do
+    if sources == [] do
       Mix.shell().info("No Cardigann indexer definitions found.")
       exit({:shutdown, 0})
     end
 
-    Mix.shell().info("Testing #{length(definitions)} Cardigann indexer(s)...\n")
+    unless opts[:json],
+      do: Mix.shell().info("Testing #{length(sources)} Cardigann indexer(s)...\n")
 
-    results =
-      Enum.map(definitions, fn definition ->
-        test_indexer(definition, query, timeout)
+    check_opts = [capture: opts[:capture], grab: Keyword.get(opts, :grab, true)]
+    timeout = Keyword.get(opts, :timeout, 120_000)
+
+    outcomes =
+      sources
+      |> Task.async_stream(
+        fn {yaml, config} -> LiveCheck.check(yaml, Keyword.put(check_opts, :config, config)) end,
+        max_concurrency: Keyword.get(opts, :concurrency, 8),
+        timeout: timeout,
+        on_timeout: :kill_task,
+        ordered: true
+      )
+      |> Enum.zip(sources)
+      |> Enum.map(fn
+        {{:ok, outcome}, _} ->
+          outcome
+
+        {{:exit, reason}, {yaml, _}} ->
+          %Outcome{
+            id: yaml_id(yaml),
+            bucket: :unreachable,
+            error: "timed out: #{inspect(reason)}"
+          }
       end)
 
-    if json do
-      print_json_results(results)
-    else
-      print_results(results)
+    if opts[:json], do: print_json(outcomes), else: print_table(outcomes)
+  end
+
+  # Each source is {yaml, user_config}.
+  defp load_sources(opts) do
+    cond do
+      dir = opts[:from_cache] ->
+        dir
+        |> Path.join("*.yml")
+        |> Path.wildcard()
+        |> Enum.map(&{File.read!(&1), %{}})
+
+      opts[:upstream] ->
+        files =
+          case DefinitionSync.list_definition_files() do
+            {:ok, files} ->
+              files
+
+            {:error, reason} ->
+              Mix.raise("Could not list upstream definitions: #{inspect(reason)}")
+          end
+
+        sources =
+          files
+          |> Task.async_stream(&DefinitionSync.fetch_definition_file(&1["download_url"]),
+            max_concurrency: 10,
+            timeout: 60_000
+          )
+          |> Enum.flat_map(fn
+            {:ok, {:ok, yaml}} -> [{yaml, %{}}]
+            _ -> []
+          end)
+
+        failed = length(files) - length(sources)
+
+        if failed > 0,
+          do:
+            Mix.shell().info("#{failed} upstream definition fetches failed; totals exclude them")
+
+        sources
+
+      true ->
+        CardigannDefinition
+        |> restrict_to_enabled(opts)
+        |> Repo.all()
+        |> Enum.map(&{&1.definition, &1.config || %{}})
     end
   end
 
-  defp fetch_definitions(nil) do
-    CardigannDefinition
-    |> where([d], d.enabled == true)
-    |> Repo.all()
+  defp restrict_to_enabled(query, opts) do
+    if opts[:all] || opts[:indexer], do: query, else: where(query, [d], d.enabled == true)
   end
 
-  defp fetch_definitions(indexer_id) do
-    CardigannDefinition
-    |> where([d], d.indexer_id == ^indexer_id)
-    |> Repo.all()
+  defp filter_type(sources, "all"), do: sources
+
+  defp filter_type(sources, type) do
+    Enum.filter(sources, fn {yaml, _} ->
+      match?({:ok, %{"type" => ^type}}, YamlElixir.read_from_string(yaml))
+    end)
   end
 
-  defp test_indexer(definition, query, timeout) do
-    start_time = System.monotonic_time(:millisecond)
-    task = Task.async(fn -> do_test_indexer(definition, query) end)
+  defp filter_indexer(sources, nil), do: sources
 
-    result =
-      try do
-        Task.await(task, timeout)
-      rescue
-        e ->
-          %{status: :error, result_count: 0, error: Exception.message(e)}
-      catch
-        :exit, {:timeout, _} ->
-          Task.shutdown(task, :brutal_kill)
-          %{status: :timeout, result_count: 0, error: "Timed out after #{timeout}ms"}
-      end
+  defp filter_indexer(sources, id),
+    do: Enum.filter(sources, fn {yaml, _} -> yaml_id(yaml) == id end)
 
-    duration = System.monotonic_time(:millisecond) - start_time
-
-    Map.merge(result, %{
-      indexer_id: definition.indexer_id,
-      name: definition.name,
-      duration_ms: duration
-    })
-  end
-
-  defp do_test_indexer(definition, query) do
-    with {:ok, parsed} <- CardigannParser.parse_definition(definition.definition),
-         base_url <- List.first(parsed.links) || "",
-         search_opts <- [
-           query: query,
-           categories: [],
-           search_path: List.first(parsed.search.paths)
-         ],
-         {:ok, response} <- run_search(parsed, search_opts),
-         {:ok, results} <-
-           CardigannResultParser.parse_results(parsed, response, definition.name,
-             base_url: base_url
-           ) do
-      %{
-        status: :ok,
-        result_count: length(results),
-        error: nil
-      }
-    else
-      {:error, reason} ->
-        %{
-          status: :error,
-          result_count: 0,
-          error: format_error(reason)
-        }
+  defp yaml_id(yaml) do
+    case YamlElixir.read_from_string(yaml) do
+      {:ok, %{"id" => id}} -> id
+      _ -> nil
     end
   end
 
-  # A solved Cloudflare challenge returns a third element carrying markers for
-  # the adapter; this task has no use for them.
-  defp run_search(parsed, search_opts) do
-    case CardigannSearchEngine.execute_search(parsed, search_opts, %{}) do
-      {:ok, response, _markers} -> {:ok, response}
-      other -> other
-    end
-  end
-
-  defp print_results(results) do
-    successes = Enum.count(results, &(&1.status == :ok))
-    failures = Enum.count(results, &(&1.status != :ok))
-
-    results
-    |> Enum.sort_by(& &1.name)
-    |> Enum.each(fn result ->
-      status_icon =
-        case result.status do
-          :ok -> "OK"
-          :timeout -> "TIMEOUT"
-          :error -> "FAIL"
-        end
-
-      line =
-        "  [#{status_icon}] #{String.pad_trailing(result.name, 30)} " <>
-          "#{String.pad_leading(to_string(result.result_count), 4)} results  " <>
-          "#{result.duration_ms}ms"
-
-      error_line = if result.error, do: "         #{result.error}", else: nil
-
-      Mix.shell().info(line)
-      if error_line, do: Mix.shell().info(error_line)
+  defp print_table(outcomes) do
+    outcomes
+    |> Enum.sort_by(&{to_string(&1.bucket), &1.id})
+    |> Enum.each(fn o ->
+      Mix.shell().info(
+        "  #{String.pad_trailing(to_string(o.bucket), 16)} #{String.pad_trailing(o.id || "?", 24)} " <>
+          "#{String.pad_leading(to_string(o.rows), 4)} rows  #{o.ms}ms  #{o.error || ""}"
+      )
     end)
 
-    Mix.shell().info("")
-    Mix.shell().info(String.duplicate("-", 60))
-    Mix.shell().info("  Total: #{length(results)}  OK: #{successes}  Failed: #{failures}")
-    Mix.shell().info("")
+    Mix.shell().info("\n" <> String.duplicate("-", 60))
+
+    outcomes
+    |> Enum.frequencies_by(& &1.bucket)
+    |> Enum.sort_by(fn {_, n} -> -n end)
+    |> Enum.each(fn {bucket, n} ->
+      Mix.shell().info("  #{String.pad_trailing(to_string(bucket), 24)} #{n}")
+    end)
+
+    working = Enum.count(outcomes, &Outcome.working?/1)
+    Mix.shell().info("\n  Working: #{working} of #{length(outcomes)}\n")
   end
 
-  defp print_json_results(results) do
-    json_data = %{
-      total: length(results),
-      ok: Enum.count(results, &(&1.status == :ok)),
-      failed: Enum.count(results, &(&1.status != :ok)),
-      results:
-        Enum.map(results, fn r ->
-          %{
-            indexer_id: r.indexer_id,
-            name: r.name,
-            status: r.status,
-            result_count: r.result_count,
-            duration_ms: r.duration_ms,
-            error: r.error
-          }
-        end)
-    }
-
-    Mix.shell().info(Jason.encode!(json_data, pretty: true))
+  defp print_json(outcomes) do
+    Mix.shell().info(
+      Jason.encode!(
+        %{
+          total: length(outcomes),
+          ok: Enum.count(outcomes, &Outcome.working?/1),
+          failed: Enum.count(outcomes, &(not Outcome.working?(&1))),
+          results:
+            Enum.map(outcomes, fn o ->
+              %{
+                indexer_id: o.id,
+                name: o.name,
+                bucket: o.bucket,
+                status: if(Outcome.working?(o), do: "ok", else: "error"),
+                result_count: max(o.rows, o.rows_empty_query || 0),
+                duration_ms: o.ms,
+                base_url: o.base_url,
+                grab: o.grab,
+                error: o.error
+              }
+            end)
+        },
+        pretty: true
+      )
+    )
   end
-
-  defp format_error(%{message: msg}), do: msg
-  defp format_error(reason), do: inspect(reason)
 end

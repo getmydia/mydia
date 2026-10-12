@@ -22,6 +22,16 @@ defmodule Mydia.Indexers.Cardigann.Links do
     |> Enum.uniq()
   end
 
+  # Rendered keywords are already percent-encoded; static text in a path template
+  # is not. Encode only what a request target cannot carry (space, controls,
+  # non-ASCII bytes, and characters like '"', '<', '>', '{', '}', '|', '\\', '^'
+  # and the backtick, which Mint's request target validation rejects). Reserved
+  # and unreserved characters and '%' are left alone so existing escapes and
+  # query strings survive.
+  @doc false
+  @spec encode_path_text(String.t()) :: String.t()
+  def encode_path_text(path), do: URI.encode(path, &(URI.char_unescaped?(&1) or &1 == ?%))
+
   defp normalize_list(list) when is_list(list) do
     list
     |> Enum.filter(&is_binary/1)

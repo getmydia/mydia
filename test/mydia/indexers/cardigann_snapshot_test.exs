@@ -17,7 +17,8 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Indexers.CardigannResultParser
 
-  import Mydia.CardigannSnapshotHelper, only: [run_snapshot: 2, run_download_snapshot: 1]
+  import Mydia.CardigannSnapshotHelper,
+    only: [run_snapshot: 2, run_download_snapshot: 1, run_download_snapshot: 2]
 
   @fixtures_base "test/fixtures/cardigann"
 
@@ -299,8 +300,13 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
   describe "showRSS snapshot" do
     @tag :snapshot
     test "parses captured XML RSS feed without error" do
-      {result, _definition} = load_and_parse("showrss")
-      assert {:ok, _results} = result
+      {{result, _definition}, _log} =
+        ExUnit.CaptureLog.with_log(fn -> load_and_parse("showrss") end)
+
+      # The feed names its title element `tv:raw_title`; the definition selects
+      # it as `raw_title`, as a CSS type selector matches by local name.
+      assert {:ok, [_ | _] = results} = result
+      assert Enum.all?(results, &(is_binary(&1.title) and &1.title != ""))
     end
   end
 
@@ -349,6 +355,20 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
   end
 
   # ============================================================================
+  # MegaPeer - windows-1251 response body
+  # ============================================================================
+
+  describe "MegaPeer snapshot" do
+    @tag :snapshot
+    test "megapeer: windows-1251 page parses" do
+      run_snapshot(Path.join(@fixtures_base, "megapeer"),
+        min_results: 2,
+        assertions: fn [first | _] -> assert String.valid?(first.title) end
+      )
+    end
+  end
+
+  # ============================================================================
   # Definition-only tests (no response fixture - just validate parsing)
   # ============================================================================
 
@@ -367,6 +387,101 @@ defmodule Mydia.Indexers.CardigannSnapshotTest do
           assert definition.search.fields != nil
           assert Map.has_key?(definition.search.fields, :title)
         end
+      end
+    end
+  end
+
+  describe "CrackingPatching snapshot" do
+    @tag :snapshot
+    test "crackingpatching: search rows parse" do
+      run_snapshot("test/fixtures/cardigann/crackingpatching", min_results: 2)
+    end
+
+    # The magnet in download_response.html is synthetic. This only proves that the
+    # magnet selector resolves on a details page shaped like the site's. The live
+    # crackingpatching page currently carries no magnet (known site drift, its
+    # definition's selector cannot match), so this does not cover the live grab.
+    @tag :snapshot
+    test "crackingpatching: magnet selector resolves on a details page with a synthetic magnet" do
+      run_download_snapshot("test/fixtures/cardigann/crackingpatching", expect: :magnet)
+    end
+  end
+
+  describe "InternetArchive snapshot" do
+    @tag :snapshot
+    test "internetarchive: JSON text fields render .Result values" do
+      run_snapshot("test/fixtures/cardigann/internetarchive",
+        min_results: 2,
+        assertions: fn [first, second | _] ->
+          # With the infohash rendered, the magnet is preferred over the .torrent path.
+          assert first.download_url =~ "magnet:?xt=urn:btih:" <> String.duplicate("1", 40)
+          assert second.download_url =~ "magnet:?xt=urn:btih:" <> String.duplicate("2", 40)
+          assert first.info_url =~ "/details/copper-lantern-1931"
+        end
+      )
+    end
+
+    @tag :snapshot
+    test "internetarchive: noMagnet builds the .torrent URL from .Result values" do
+      run_snapshot("test/fixtures/cardigann/internetarchive",
+        min_results: 2,
+        template_context: %{
+          keywords: "Copper Lantern",
+          config: %{"noMagnet" => true, "titleOnly" => true},
+          categories: [],
+          settings: [],
+          query: %{}
+        },
+        assertions: fn [first | _] ->
+          assert first.download_url =~
+                   "/download/copper-lantern-1931/copper-lantern-1931_archive.torrent"
+        end
+      )
+    end
+  end
+
+  describe "XML bare attribute selectors" do
+    @tag :snapshot
+    test "nekobt: torznab attributes parse" do
+      run_snapshot("test/fixtures/cardigann/nekobt",
+        min_results: 2,
+        assertions: fn [first, second | _] ->
+          assert first.seeders == 12
+          assert second.seeders == 7
+          assert first.leechers == 3
+        end
+      )
+    end
+  end
+
+  # These trackers returned zero or wrong rows while the HTML path ran on Floki,
+  # which builds no implied <tbody>, mis-evaluates nested :has()/:not(:has()) and
+  # has no :scope. Each fixture is a reduction of a live capture.
+  describe "HTML5 tree and modern CSS" do
+    # Rows match for the skipped id too; the remaining cause is outside the
+    # selector engine:
+    # - ebookbay: the live page puts the title in div.poststuff and the download
+    #   link in the sibling div.entry, but each row selector alternative matches only
+    #   one of them, so no row has both (definition/site drift).
+    @skipped %{
+      "ebookbay" => "title and download live in sibling elements; definition drift"
+    }
+
+    for id <-
+          ~w(acgrip torrentkitty rutor byrutor torrentdownloads torrentproject2 world-torrent ebookbay) do
+      @id id
+      if reason = @skipped[id], do: @tag(skip: reason)
+
+      test "#{id} yields rows with a title and a download" do
+        run_snapshot("test/fixtures/cardigann/#{@id}",
+          min_results: 2,
+          assertions: fn results ->
+            for r <- results do
+              assert r.title != ""
+              assert is_binary(r.download_url) and r.download_url != ""
+            end
+          end
+        )
       end
     end
   end
