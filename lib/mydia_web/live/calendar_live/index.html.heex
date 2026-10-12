@@ -9,18 +9,23 @@
         </p>
       </div>
 
-      <%!-- Filter controls --%>
-      <div class="flex items-center gap-2">
+      <%!-- Filter controls. LiveView only sends phx-change from inside a form. --%>
+      <.form
+        for={%{}}
+        id="calendar-filter-form"
+        phx-change="filter"
+        class="flex items-center gap-2"
+      >
         <select
           name="type"
-          phx-change="filter"
+          aria-label="Filter by media type"
           class="select select-bordered select-sm"
         >
           <option value="all" selected={is_nil(@filter_type)}>All Media</option>
           <option value="tv_show" selected={@filter_type == "tv_show"}>TV Shows</option>
           <option value="movie" selected={@filter_type == "movie"}>Movies</option>
         </select>
-      </div>
+      </.form>
     </div>
 
     <%!-- Month navigation --%>
