@@ -400,7 +400,8 @@ defmodule Mydia.Indexers.CardigannDownload do
   # Cardigann exposes the row's link to templates as `.DownloadUri`, which is
   # how a `before` block derives its inputs from the landing page URL.
   #
-  # `.Config.<name>` is available too, falling back to the setting's default:
+  # `.Config.<name>` is available too, scoped to the operator's settings (never
+  # the cookies or credentials riding in `user_config`), falling back to the setting's default:
   # limetorrents and torrentdownloads pick their link with
   # `a[href*="{{ .Config.primarydownloadlink }}"]`. Left empty it becomes
   # `[href*=""]`, which CSS defines as matching nothing.
@@ -416,7 +417,7 @@ defmodule Mydia.Indexers.CardigannDownload do
         "Query" => uri.query || "",
         "PathAndQuery" => path_and_query(uri)
       },
-      config: user_config || %{},
+      config: scope_config(user_config),
       settings: definition.settings || []
     }
   end

@@ -145,6 +145,22 @@ defmodule Mydia.Indexers.Cardigann.SelectorTest do
       assert inner |> then(&Selector.find(doc, &1, ":scope > span")) |> Selector.text() == "two"
     end
 
+    test "leaves :scope inside a quoted attribute value alone" do
+      html = ~s(<div><a href="x:scope">hit</a><a href="y">miss</a></div>)
+      selector = ~S|a[href*=":scope"]|
+      doc = Selector.parse(html, [selector])
+      [row] = Selector.find(doc, :root, "div")
+
+      assert doc |> Selector.find(row, selector) |> Selector.text() == "hit"
+      assert doc |> Selector.find(row, ~S|:scope > a[href*=":scope"]|) |> length() == 1
+    end
+
+    test "does not rewrite a longer identifier that starts with scope" do
+      html = ~s(<div><scopeless>x</scopeless></div>)
+      doc = Selector.parse(html, ["scopeless"])
+      assert doc |> Selector.find(:root, "scopeless") |> length() == 1
+    end
+
     test "combines with :contains() and comma alternatives" do
       html = ~s(<div><span>a ago</span><span>b</span></div>)
       selector = ~S|:scope > span:contains("ago"), :scope > i|

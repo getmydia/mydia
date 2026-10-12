@@ -155,7 +155,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
   defp grab(_parsed, _config, %{download_url: "magnet:" <> _ = magnet}), do: {:magnet, magnet}
 
   defp grab(parsed, config, %{download_url: url}) when is_binary(url) do
-    case CardigannDownload.resolve(parsed, url, config) do
+    case CardigannDownload.resolve(parsed, url, %{config: config}) do
       {:ok, {:magnet, magnet}} -> {:magnet, magnet}
       {:ok, {:link, link}} -> fetch_torrent(link, @max_grab_hops)
       :not_applicable -> fetch_torrent(url, @max_grab_hops)
@@ -168,6 +168,12 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
   defp fetch_torrent(_url, 0), do: {:error, "too many redirects"}
 
   defp fetch_torrent(url, hops) do
+    if URI.parse(url).scheme in ["http", "https"],
+      do: request_torrent(url, hops),
+      else: {:error, "unsupported scheme"}
+  end
+
+  defp request_torrent(url, hops) do
     case Req.get(url,
            redirect: false,
            retry: false,

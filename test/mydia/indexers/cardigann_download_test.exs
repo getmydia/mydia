@@ -299,7 +299,30 @@ defmodule Mydia.Indexers.CardigannDownloadTest do
 
       # The operator's own value wins over the default.
       assert {:error, {:cardigann_download, _}} =
-               CardigannDownload.resolve(definition, url, %{"pick" => "/nowhere/"})
+               CardigannDownload.resolve(definition, url, %{config: %{"pick" => "/nowhere/"}})
+    end
+
+    test ".Config in a selector exposes operator settings but not credentials" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/info/1", fn conn ->
+        Plug.Conn.resp(conn, 200, @landing_page)
+      end)
+
+      url = "http://localhost:#{bypass.port}/info/1"
+      user_config = %{config: %{"pick" => "/get/"}, cookie: "hunter2", password: "hunter2"}
+
+      # A normal setting is reachable.
+      definition = definition_with_selector(bypass.port, ~s|a[href*="{{ .Config.pick }}"]|)
+      assert {:ok, {:link, _}} = CardigannDownload.resolve(definition, url, user_config)
+
+      # A credential key is not: it renders empty, so `[href*=""]` matches nothing.
+      for key <- ["cookie", "password"] do
+        definition = definition_with_selector(bypass.port, ~s|a[href*="{{ .Config.#{key} }}"]|)
+
+        assert {:error, {:cardigann_download, _}} =
+                 CardigannDownload.resolve(definition, url, user_config)
+      end
     end
 
     test "decodes a windows-1251 details page before matching" do

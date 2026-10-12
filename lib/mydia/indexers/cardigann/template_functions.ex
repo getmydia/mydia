@@ -28,13 +28,32 @@ defmodule Mydia.Indexers.Cardigann.TemplateFunctions do
   @spec slice(term(), term(), term()) :: String.t()
   def slice(str, start, stop \\ nil)
 
-  def slice(str, start, nil) when is_binary(str), do: String.slice(str, to_int(start)..-1//1)
+  def slice(str, start, nil) when is_binary(str) do
+    case parse_int(start) do
+      {:ok, from} -> String.slice(str, from..-1//1)
+      :error -> ""
+    end
+  end
 
-  def slice(str, start, stop) when is_binary(str),
-    do: String.slice(str, to_int(start)..(to_int(stop) - 1)//1)
+  def slice(str, start, stop) when is_binary(str) do
+    with {:ok, from} <- parse_int(start),
+         {:ok, to} <- parse_int(stop) do
+      String.slice(str, from..(to - 1)//1)
+    else
+      :error -> ""
+    end
+  end
 
   def slice(_str, _start, _stop), do: ""
 
-  defp to_int(value) when is_binary(value), do: String.to_integer(value)
-  defp to_int(value), do: value
+  defp parse_int(value) when is_integer(value), do: {:ok, value}
+
+  defp parse_int(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {int, ""} -> {:ok, int}
+      _ -> :error
+    end
+  end
+
+  defp parse_int(_value), do: :error
 end

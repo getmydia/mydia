@@ -113,17 +113,33 @@ defmodule Mix.Tasks.Mydia.CardigannHealth do
         |> Enum.map(&{File.read!(&1), %{}})
 
       opts[:upstream] ->
-        {:ok, files} = DefinitionSync.list_definition_files()
+        files =
+          case DefinitionSync.list_definition_files() do
+            {:ok, files} ->
+              files
 
-        files
-        |> Task.async_stream(&DefinitionSync.fetch_definition_file(&1["download_url"]),
-          max_concurrency: 10,
-          timeout: 60_000
-        )
-        |> Enum.flat_map(fn
-          {:ok, {:ok, yaml}} -> [{yaml, %{}}]
-          _ -> []
-        end)
+            {:error, reason} ->
+              Mix.raise("Could not list upstream definitions: #{inspect(reason)}")
+          end
+
+        sources =
+          files
+          |> Task.async_stream(&DefinitionSync.fetch_definition_file(&1["download_url"]),
+            max_concurrency: 10,
+            timeout: 60_000
+          )
+          |> Enum.flat_map(fn
+            {:ok, {:ok, yaml}} -> [{yaml, %{}}]
+            _ -> []
+          end)
+
+        failed = length(files) - length(sources)
+
+        if failed > 0,
+          do:
+            Mix.shell().info("#{failed} upstream definition fetches failed; totals exclude them")
+
+        sources
 
       true ->
         CardigannDefinition

@@ -148,6 +148,20 @@ defmodule Mydia.Indexers.Cardigann.LiveCheckTest do
       assert outcome.rows == 1
     end
 
+    test "a download link with a non-http scheme is not fetched", %{bypass: bypass, yaml: yaml} do
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, """
+        <html><body><table class="results">
+        <tr><td class="title">Copper Lantern S01E02</td><td class="download"><a href="ftp://files.invalid/1.torrent">get</a></td></tr>
+        </table></body></html>
+        """)
+      end)
+
+      outcome = LiveCheck.check(yaml)
+      assert outcome.bucket == :grab_failed
+      assert outcome.grab =~ "unsupported scheme"
+    end
+
     test "rows matched without a download link is rows_dropped", %{bypass: bypass, yaml: yaml} do
       Bypass.stub(bypass, "GET", "/search", fn conn ->
         Plug.Conn.resp(conn, 200, """

@@ -145,11 +145,43 @@ defmodule Mydia.Indexers.Cardigann.Selector do
           [] -> ":root"
         end
 
-      String.replace(selector, ":scope", replacement)
+      replace_scope(selector, replacement, "", nil)
     else
       selector
     end
   end
+
+  # Walks the selector once, swapping the `:scope` pseudo-class token for the
+  # replacement but leaving quoted strings (`a[href*=":scope"]`) alone. The token
+  # ends at a non-identifier character or at the end of input.
+  defp replace_scope("", _replacement, acc, _quote), do: acc
+
+  defp replace_scope(<<"\\", c::utf8, rest::binary>>, replacement, acc, quote),
+    do: replace_scope(rest, replacement, <<acc::binary, "\\", c::utf8>>, quote)
+
+  defp replace_scope(<<c::utf8, rest::binary>>, replacement, acc, quote) when quote != nil do
+    next = if c == quote, do: nil, else: quote
+    replace_scope(rest, replacement, <<acc::binary, c::utf8>>, next)
+  end
+
+  defp replace_scope(<<c::utf8, rest::binary>>, replacement, acc, nil) when c in [?", ?'],
+    do: replace_scope(rest, replacement, <<acc::binary, c::utf8>>, c)
+
+  defp replace_scope(<<":scope", rest::binary>> = input, replacement, acc, nil) do
+    if scope_token_end?(rest),
+      do: replace_scope(rest, replacement, acc <> replacement, nil),
+      else: copy_char(input, replacement, acc)
+  end
+
+  defp replace_scope(input, replacement, acc, nil), do: copy_char(input, replacement, acc)
+
+  defp copy_char(<<c::utf8, rest::binary>>, replacement, acc),
+    do: replace_scope(rest, replacement, <<acc::binary, c::utf8>>, nil)
+
+  defp scope_token_end?(""), do: true
+
+  defp scope_token_end?(<<c::utf8, _::binary>>),
+    do: not (c in ?a..?z or c in ?A..?Z or c in ?0..?9 or c in [?-, ?_])
 
   # -- tree annotation ----------------------------------------------------------
 
