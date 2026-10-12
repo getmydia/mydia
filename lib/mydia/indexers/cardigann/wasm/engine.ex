@@ -561,8 +561,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     # Test seam: lets a test observe a call that gives up while compiling.
     Process.sleep(Application.get_env(:mydia, :cardigann_wasm_compile_delay_ms, 0))
 
-    with engine = Wasmex.Engine.default(),
-         {:ok, store} <- Components.Store.new_wasi(wasi(), nil, engine),
+    engine = Wasmex.Engine.default()
+
+    with {:ok, store} <- Components.Store.new_wasi(wasi(), nil, engine),
          {:ok, component, how} <- load_component(store) do
       # The compile store stays referenced alongside the component.
       :persistent_term.put(@key, %{engine: engine, component: component, store: store})

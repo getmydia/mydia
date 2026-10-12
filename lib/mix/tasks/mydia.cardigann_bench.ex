@@ -75,29 +75,8 @@ defmodule Mix.Tasks.Mydia.CardigannBench do
 
     Mix.shell().info("Bench database: #{database}")
 
-    # The application starts the engine only under CARDIGANN_ENGINE=prowlarr.
-    :ok = Engine.ensure_started()
-
-    unless Engine.available?() do
-      Mix.raise(
-        "The wasm engine is not available. Build and fetch the guest: " <>
-          "native/cardigann_guest/build.sh wasm && ./dev mix mydia.cardigann_guest fetch"
-      )
-    end
-
-    corpus_opts =
-      [cache_dir: cache_dir, credentials: credentials]
-      |> put_opt(:limit, opts[:limit])
-      |> put_opt(:ref, opts[:ref])
-      |> put_opt(:only, opts[:only] && String.split(opts[:only], ",", trim: true))
-
-    {definitions, meta} =
-      case Corpus.load(corpus_opts) do
-        {:ok, defs, meta} -> {defs, meta}
-        {:error, reason} -> Mix.raise("Could not load the corpus: #{inspect(reason)}")
-      end
-
-    if definitions == [], do: Mix.raise("The corpus is empty")
+    ensure_engine!()
+    {definitions, meta} = load_corpus!(opts, cache_dir, credentials)
 
     prowlarr_url = opts[:prowlarr_url] || "http://127.0.0.1:9696"
     oracle = Oracle.new(prowlarr_url, api_key, retry: false, receive_timeout: 58_000)
@@ -129,6 +108,35 @@ defmodule Mix.Tasks.Mydia.CardigannBench do
     {:ok, paths} = Report.write(metrics, results, meta, out)
 
     Mix.shell().info("Wrote #{paths.md}\nWrote #{paths.json}")
+  end
+
+  # The application starts the engine only under CARDIGANN_ENGINE=prowlarr.
+  defp ensure_engine! do
+    :ok = Engine.ensure_started()
+
+    unless Engine.available?() do
+      Mix.raise(
+        "The wasm engine is not available. Build and fetch the guest: " <>
+          "native/cardigann_guest/build.sh wasm && ./dev mix mydia.cardigann_guest fetch"
+      )
+    end
+  end
+
+  defp load_corpus!(opts, cache_dir, credentials) do
+    corpus_opts =
+      [cache_dir: cache_dir, credentials: credentials]
+      |> put_opt(:limit, opts[:limit])
+      |> put_opt(:ref, opts[:ref])
+      |> put_opt(:only, opts[:only] && String.split(opts[:only], ",", trim: true))
+
+    {definitions, meta} =
+      case Corpus.load(corpus_opts) do
+        {:ok, defs, meta} -> {defs, meta}
+        {:error, reason} -> Mix.raise("Could not load the corpus: #{inspect(reason)}")
+      end
+
+    if definitions == [], do: Mix.raise("The corpus is empty")
+    {definitions, meta}
   end
 
   # -- database ---------------------------------------------------------------------

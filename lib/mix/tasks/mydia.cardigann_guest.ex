@@ -38,34 +38,37 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
     Mix.Task.run("loadconfig")
     {:ok, _} = Application.ensure_all_started(:req)
 
-    case args do
-      ["hash"] ->
-        Mix.shell().info(Artifact.source_hash())
+    command(args, opts)
+  end
 
-      ["fetch"] ->
-        case fetch() do
-          :ok -> :ok
-          {:unavailable, _} -> :ok
-          {:error, reason} -> Mix.raise("Cardigann guest fetch failed: #{inspect(reason)}")
-        end
+  defp command(["hash"], _opts), do: Mix.shell().info(Artifact.source_hash())
 
-      ["verify"] ->
-        case verify(Keyword.get(opts, :allow_missing, false)) do
-          :ok -> Mix.shell().info("Cardigann guest verified: #{target()}")
-          {:error, reason} -> Mix.raise("Cardigann guest #{reason}: #{target()}")
-        end
-
-      ["pin"] ->
-        case pin(Keyword.get(opts, :require, false)) do
-          :ok -> :ok
-          {:error, reason} -> Mix.raise("Cardigann guest pin: #{reason}")
-        end
-
-      _ ->
-        Mix.raise(
-          "usage: mix mydia.cardigann_guest hash | fetch | pin [--require] | verify [--allow-missing]"
-        )
+  defp command(["fetch"], _opts) do
+    case fetch() do
+      :ok -> :ok
+      {:unavailable, _} -> :ok
+      {:error, reason} -> Mix.raise("Cardigann guest fetch failed: #{inspect(reason)}")
     end
+  end
+
+  defp command(["verify"], opts) do
+    case verify(Keyword.get(opts, :allow_missing, false)) do
+      :ok -> Mix.shell().info("Cardigann guest verified: #{target()}")
+      {:error, reason} -> Mix.raise("Cardigann guest #{reason}: #{target()}")
+    end
+  end
+
+  defp command(["pin"], opts) do
+    case pin(Keyword.get(opts, :require, false)) do
+      :ok -> :ok
+      {:error, reason} -> Mix.raise("Cardigann guest pin: #{reason}")
+    end
+  end
+
+  defp command(_args, _opts) do
+    Mix.raise(
+      "usage: mix mydia.cardigann_guest hash | fetch | pin [--require] | verify [--allow-missing]"
+    )
   end
 
   @doc """

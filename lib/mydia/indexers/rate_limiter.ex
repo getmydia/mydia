@@ -126,19 +126,21 @@ defmodule Mydia.Indexers.RateLimiter do
     now = System.monotonic_time(:millisecond)
 
     case :ets.lookup(@table_name, key) do
-      [{^key, next}] ->
-        slot = max(next, now)
-        spec = [{{key, next}, [], [{{{:const, key}, slot + delay_ms}}]}]
+      [{^key, next}] -> claim_slot(key, next, now, delay_ms)
+      [] -> throttle(elem(key, 1), delay_ms)
+    end
+  end
 
-        if :ets.select_replace(@table_name, spec) == 1 do
-          if slot > now, do: Process.sleep(slot - now)
-          :ok
-        else
-          reserve_slot(key, delay_ms)
-        end
+  # Takes the slot after `next` if nobody else did in the meantime, else tries again.
+  defp claim_slot(key, next, now, delay_ms) do
+    slot = max(next, now)
+    spec = [{{key, next}, [], [{{{:const, key}, slot + delay_ms}}]}]
 
-      [] ->
-        throttle(elem(key, 1), delay_ms)
+    if :ets.select_replace(@table_name, spec) == 1 do
+      if slot > now, do: Process.sleep(slot - now)
+      :ok
+    else
+      reserve_slot(key, delay_ms)
     end
   end
 

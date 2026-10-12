@@ -65,14 +65,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SourceHash do
 
   defp walk(dir) do
     case File.ls(dir) do
-      {:ok, entries} ->
-        Enum.flat_map(entries, fn e ->
-          path = Path.join(dir, e)
-          if File.dir?(path), do: walk(path), else: [path]
-        end)
-
-      {:error, _} ->
-        []
+      {:ok, entries} -> Enum.flat_map(entries, &walk_entry(Path.join(dir, &1)))
+      {:error, _} -> []
     end
   end
+
+  defp walk_entry(path), do: if(File.dir?(path), do: walk(path), else: [path])
 end

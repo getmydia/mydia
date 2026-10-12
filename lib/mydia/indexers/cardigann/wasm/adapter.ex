@@ -128,16 +128,20 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   @impl true
   def search(config, query, opts \\ []) do
     if CardigannFeatureFlags.enabled?() do
-      with {:ok, definition, doc} <- load(config),
-           :ok <- check_login_needed(definition, doc),
-           session = stored_session(definition),
-           {:ok, out} <- search_with_failover(definition, config, doc, query, session, opts) do
-        if out.session_changed, do: persist_session(definition, out.session, session)
-        {:ok, apply_search_filters(out.releases, opts)}
-      end
+      run_search(config, query, opts)
     else
       Logger.debug("Cardigann search skipped - feature disabled")
       {:ok, []}
+    end
+  end
+
+  defp run_search(config, query, opts) do
+    with {:ok, definition, doc} <- load(config),
+         :ok <- check_login_needed(definition, doc),
+         session = stored_session(definition),
+         {:ok, out} <- search_with_failover(definition, config, doc, query, session, opts) do
+      if out.session_changed, do: persist_session(definition, out.session, session)
+      {:ok, apply_search_filters(out.releases, opts)}
     end
   end
 
@@ -183,22 +187,26 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
           | {:error, Error.t()}
   def login(config, captcha_answer, opts \\ []) do
     if CardigannFeatureFlags.enabled?() do
-      with {:ok, definition, doc} <- load(config),
-           call =
-             {:login, definition.definition, mirror_settings(definition, config, doc),
-              @empty_session, normalize_answer(captcha_answer)},
-           {:ok, result} <- run(call, definition, config, doc, opts) do
-        case result do
-          {:ok, session} ->
-            persist_session(definition, session, @empty_session)
-            {:ok, session}
-
-          {:captcha, _challenge} = captcha ->
-            captcha
-        end
-      end
+      run_login(config, captcha_answer, opts)
     else
       {:error, Error.invalid_config("Cardigann feature is disabled")}
+    end
+  end
+
+  defp run_login(config, captcha_answer, opts) do
+    with {:ok, definition, doc} <- load(config),
+         call =
+           {:login, definition.definition, mirror_settings(definition, config, doc),
+            @empty_session, normalize_answer(captcha_answer)},
+         {:ok, result} <- run(call, definition, config, doc, opts) do
+      case result do
+        {:ok, session} ->
+          persist_session(definition, session, @empty_session)
+          {:ok, session}
+
+        {:captcha, _challenge} = captcha ->
+          captcha
+      end
     end
   end
 
@@ -233,13 +241,19 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
           attempt.(nil)
 
         [first | _] = candidates ->
-          try_mirrors(candidates, attempt, deadline, fn winner ->
-            if winner != first,
-              do: AdapterSupport.promote_active_link(parsed, definition, winner)
-          end)
+          try_mirrors(
+            candidates,
+            attempt,
+            deadline,
+            &promote_winner(&1, first, parsed, definition)
+          )
       end
 
     surface_failure(result)
+  end
+
+  defp promote_winner(winner, first, parsed, definition) do
+    if winner != first, do: AdapterSupport.promote_active_link(parsed, definition, winner)
   end
 
   # The last mirror's answer stands when every mirror failed, as the Elixir

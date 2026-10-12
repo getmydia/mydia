@@ -86,14 +86,7 @@ defmodule Mydia.Indexers.Cardigann.Bench.Corpus do
       |> Stream.chunk_every(@fetch_concurrency)
       |> Enum.reduce_while({[], []}, fn chunk, {defs, skipped} ->
         entries = fetch_chunk(chunk, ref_dir, fetch_fn)
-
-        {defs, skipped} =
-          Enum.reduce(entries, {defs, skipped}, fn entry, {d, s} ->
-            case to_definition(entry, credentials) do
-              {:ok, definition} -> {[definition | d], s}
-              {:skip, info} -> {d, [info | s]}
-            end
-          end)
+        {defs, skipped} = Enum.reduce(entries, {defs, skipped}, &collect(&1, &2, credentials))
 
         if limit && length(defs) >= limit,
           do: {:halt, {defs, skipped}},
@@ -102,6 +95,13 @@ defmodule Mydia.Indexers.Cardigann.Bench.Corpus do
 
     defs = defs |> Enum.reverse() |> Enum.sort_by(& &1.id) |> maybe_take(limit)
     {defs, Enum.reverse(skipped)}
+  end
+
+  defp collect(entry, {defs, skipped}, credentials) do
+    case to_definition(entry, credentials) do
+      {:ok, definition} -> {[definition | defs], skipped}
+      {:skip, info} -> {defs, [info | skipped]}
+    end
   end
 
   defp maybe_take(defs, nil), do: defs
@@ -145,28 +145,29 @@ defmodule Mydia.Indexers.Cardigann.Bench.Corpus do
 
   defp to_definition({file_id, {:ok, yaml}}, credentials) do
     case YamlElixir.read_from_string(yaml) do
-      {:ok, %{} = doc} ->
-        id = to_string(doc["id"] || file_id)
-        type = to_string(doc["type"] || "public")
-        settings = Map.get(credentials, id) || Map.get(credentials, file_id)
+      {:ok, %{} = doc} -> from_document(doc, file_id, yaml, credentials)
+      _ -> {:skip, %{id: file_id, reason: :unparseable}}
+    end
+  end
 
-        if type != "public" and settings == nil do
-          {:skip, %{id: id, reason: :no_credentials}}
-        else
-          {:ok,
-           %{
-             id: id,
-             name: to_string(doc["name"] || id),
-             yaml: yaml,
-             type: type,
-             queries: queries(doc),
-             settings: settings || %{},
-             credentials?: settings not in [nil, %{}]
-           }}
-        end
+  defp from_document(doc, file_id, yaml, credentials) do
+    id = to_string(doc["id"] || file_id)
+    type = to_string(doc["type"] || "public")
+    settings = Map.get(credentials, id) || Map.get(credentials, file_id)
 
-      _ ->
-        {:skip, %{id: file_id, reason: :unparseable}}
+    if type != "public" and settings == nil do
+      {:skip, %{id: id, reason: :no_credentials}}
+    else
+      {:ok,
+       %{
+         id: id,
+         name: to_string(doc["name"] || id),
+         yaml: yaml,
+         type: type,
+         queries: queries(doc),
+         settings: settings || %{},
+         credentials?: settings not in [nil, %{}]
+       }}
     end
   end
 

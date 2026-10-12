@@ -2,6 +2,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
+  alias Mydia.Indexers.CardigannFeatureFlags
   alias Mydia.Settings
   alias MydiaWeb.AdminIndexersLive.{FlareSolverrComponents, LoginComponents}
   alias MydiaWeb.IndexerComponents
@@ -15,12 +16,14 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :library_indexers, :list, required: true
   attr :library_indexer_stats, :map, required: true
   attr :cardigann_enabled, :boolean, required: true
-  attr :cardigann_engine_status, :map, default: nil
   attr :flaresolverr, :map, default: %{enabled: false, url: nil, configured: false, env?: false}
   attr :flaresolverr_status, :map, default: %{configured: false, status: :loading}
   attr :retesting_paused, :any, default: MapSet.new()
 
   def indexers_tab(assigns) do
+    # Read on every render so the line follows the engine from "downloading" to ready.
+    assigns = assign(assigns, :cardigann_engine_status, CardigannFeatureFlags.engine_status())
+
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
       <FlareSolverrComponents.flaresolverr_row

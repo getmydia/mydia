@@ -125,27 +125,11 @@ defmodule Mydia.Indexers.Cardigann.Bench.Runner do
     prowlarr_id = ensure_prowlarr(oracle, definition)
 
     for query <- definition.queries do
+      search = %{sup: sup, definition: definition, oracle: oracle, query: query}
+
       engines =
-        Enum.reduce(rotation(index), %{}, fn engine, acc ->
-          result =
-            case {engine, local, prowlarr_id} do
-              {:prowlarr, _, {:ok, id}} ->
-                timed(sup, definition, :prowlarr, fn -> prowlarr_search(oracle, id, query) end)
-
-              {:prowlarr, _, {:error, reason}} ->
-                error_result({:indexer, reason})
-
-              {_, {:error, reason}, _} ->
-                error_result({:local_definition, reason})
-
-              {:elixir, :ok, _} ->
-                timed(sup, definition, :elixir, fn -> elixir_search(definition, query) end)
-
-              {:wasm, :ok, _} ->
-                timed(sup, definition, :wasm, fn -> wasm_search(definition, query) end)
-            end
-
-          Map.put(acc, engine, result)
+        Map.new(rotation(index), fn engine ->
+          {engine, engine_result(engine, local, prowlarr_id, search)}
         end)
 
       %{
@@ -158,6 +142,30 @@ defmodule Mydia.Indexers.Cardigann.Bench.Runner do
         engines: engines
       }
     end
+  end
+
+  defp engine_result(:prowlarr, _local, {:ok, id}, search) do
+    timed(search.sup, search.definition, :prowlarr, fn ->
+      prowlarr_search(search.oracle, id, search.query)
+    end)
+  end
+
+  defp engine_result(:prowlarr, _local, {:error, reason}, _search),
+    do: error_result({:indexer, reason})
+
+  defp engine_result(_engine, {:error, reason}, _prowlarr_id, _search),
+    do: error_result({:local_definition, reason})
+
+  defp engine_result(:elixir, :ok, _prowlarr_id, search) do
+    timed(search.sup, search.definition, :elixir, fn ->
+      elixir_search(search.definition, search.query)
+    end)
+  end
+
+  defp engine_result(:wasm, :ok, _prowlarr_id, search) do
+    timed(search.sup, search.definition, :wasm, fn ->
+      wasm_search(search.definition, search.query)
+    end)
   end
 
   defp request_delay_ms(yaml) do

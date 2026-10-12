@@ -11,6 +11,7 @@ name: Cardigann guest
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "native/cardigann_guest/**"
       - ".github/workflows/cardigann-guest.yml"

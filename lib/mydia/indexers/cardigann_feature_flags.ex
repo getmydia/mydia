@@ -58,6 +58,15 @@ defmodule Mydia.Indexers.CardigannFeatureFlags do
     |> Keyword.get(:cardigann_engine, :builtin)
   end
 
+  @doc "The adapter module that serves `:cardigann` under the configured engine."
+  @spec adapter() :: module()
+  def adapter do
+    case engine() do
+      :prowlarr -> Mydia.Indexers.Cardigann.Wasm.Adapter
+      :builtin -> Mydia.Indexers.Adapter.Cardigann
+    end
+  end
+
   @doc """
   True when the wasm engine is both selected and Cardigann is enabled: the only
   case in which the engine process starts, fetches or compiles anything.
@@ -94,7 +103,7 @@ defmodule Mydia.Indexers.CardigannFeatureFlags do
               engine: :prowlarr,
               label: label,
               state: :starting,
-              detail: "downloading the engine (about 75 MB), searches fail until it is ready"
+              detail: "downloading the engine (about 40 MB), searches fail until it is ready"
             }
 
           status when status in [:pending, :compiling] ->

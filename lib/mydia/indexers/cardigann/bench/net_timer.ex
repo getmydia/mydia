@@ -57,21 +57,22 @@ defmodule Mydia.Indexers.Cardigann.Bench.NetTimer do
   end
 
   defp record(micros) do
-    if :ets.whereis(@table) != :undefined do
-      candidates = [self() | Process.get(:"$callers", [])]
-
-      Enum.find_value(candidates, fn pid ->
-        case :ets.lookup(@table, pid) do
-          [{^pid, counter}] -> counter
-          [] -> nil
-        end
-      end)
-      |> case do
-        nil -> :ok
-        counter -> :atomics.add(counter, 1, max(micros, 0))
-      end
+    with true <- :ets.whereis(@table) != :undefined,
+         counter when counter != nil <- find_counter() do
+      :atomics.add(counter, 1, max(micros, 0))
     end
 
     :ok
+  end
+
+  defp find_counter do
+    Enum.find_value([self() | Process.get(:"$callers", [])], &lookup_counter/1)
+  end
+
+  defp lookup_counter(pid) do
+    case :ets.lookup(@table, pid) do
+      [{^pid, counter}] -> counter
+      [] -> nil
+    end
   end
 end

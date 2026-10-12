@@ -71,19 +71,24 @@ defmodule Mydia.Indexers.Cardigann.Bench.Matcher do
   end
 
   defp evidence_matches?(a, b, lenient?) do
-    hash_a = hash(a)
-    hash_b = hash(b)
-    size_a = size(a)
-    size_b = size(b)
+    {hash_a, hash_b, size_a, size_b} = {hash(a), hash(b), size(a), size(b)}
 
-    cond do
-      hash_a != nil and hash_a == hash_b -> true
-      size_a != nil and size_b != nil and sizes_close?(size_a, size_b) -> true
-      hash_a == nil and hash_b == nil and size_a == nil and size_b == nil -> true
-      lenient? and (size_a == nil or size_b == nil) -> true
-      true -> false
-    end
+    same_hash?(hash_a, hash_b) or size_evidence?(size_a, size_b, lenient?) or
+      no_evidence?(hash_a, hash_b, size_a, size_b)
   end
+
+  defp same_hash?(hash, hash) when hash != nil, do: true
+  defp same_hash?(_a, _b), do: false
+
+  # Two known sizes must be close. With one unknown, only the lenient rule accepts.
+  defp size_evidence?(a, b, _lenient?) when is_integer(a) and is_integer(b),
+    do: sizes_close?(a, b)
+
+  defp size_evidence?(_a, _b, lenient?), do: lenient?
+
+  # Neither side says anything about hash or size.
+  defp no_evidence?(nil, nil, nil, nil), do: true
+  defp no_evidence?(_hash_a, _hash_b, _size_a, _size_b), do: false
 
   defp sizes_close?(a, b), do: abs(a - b) <= max(a, b) * @size_tolerance
 
