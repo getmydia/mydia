@@ -374,10 +374,6 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
       {:error, %{__exception__: true} = e} ->
         Logger.error("Failed to parse Cardigann definition: #{Exception.message(e)}")
         {:error, Error.search_failed("Invalid definition")}
-
-      {:error, _reason} ->
-        Logger.error("Failed to parse Cardigann definition: YAML syntax error")
-        {:error, Error.search_failed("Invalid definition")}
     end
   end
 
@@ -443,34 +439,29 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   end
 
   defp ctx(definition, config, doc) do
-    base = %{
+    %{
       definition_id: definition.id,
       request_delay_ms: request_delay_ms(doc["requestDelay"] || doc["requestdelay"]),
       flaresolverr: AdapterSupport.build_flaresolverr_opts(definition),
-      indexer_name: setting(config, :name) || definition.name
+      indexer_name: setting(config, :name) || definition.name,
+      gate_opts: gate_opts()
     }
-
-    case gate_opts() do
-      [] -> base
-      gate_opts -> Map.put(base, :gate_opts, gate_opts)
-    end
   end
-
-  @test_env? Application.compile_env(:mydia, :env) == :test
 
   @doc false
   # Test seam so Bypass on localhost passes the SSRF gate. HostHttp merges these
   # over the gate defaults, so outside the test env they are ignored, and even
   # there only the one relaxation the tests need is taken.
+  # Chosen at compile time, so a release has no code path that reads them.
   @spec gate_opts() :: keyword()
-  def gate_opts do
-    if @test_env? do
+  if Application.compile_env(:mydia, :env) == :test do
+    def gate_opts do
       :mydia
       |> Application.get_env(:cardigann_wasm_gate_opts, [])
       |> Keyword.take([:allow_private_except_link_local])
-    else
-      []
     end
+  else
+    def gate_opts, do: []
   end
 
   @doc """

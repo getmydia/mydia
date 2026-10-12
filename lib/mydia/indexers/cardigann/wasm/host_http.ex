@@ -38,9 +38,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
           required(:definition_id) => String.t(),
           required(:request_delay_ms) => non_neg_integer(),
           required(:flaresolverr) => map() | nil,
+          # labels the releases a search returns; defaults to definition_id
+          optional(:indexer_name) => String.t(),
           # test-only: allow localhost Bypass (e.g. allow_private_except_link_local: true)
           optional(:gate_opts) => keyword(),
-          # Task 7: index 1 accumulates the exchanges' wall-clock microseconds
+          # benchmark only: index 1 accumulates the exchanges' wall-clock microseconds
           optional(:network) => :atomics.atomics_ref()
         }
 

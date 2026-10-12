@@ -399,16 +399,18 @@ jobs:
           echo "::error::devenv environment failed to materialize after 3 attempts"
           exit 1
 
-      # Keyed on the toolchain and lock: the core PLT only changes when Elixir,
-      # OTP or a dependency does. restore-keys lets a lock change rebuild the
-      # project PLT incrementally from the previous one.
+      # Keyed on the toolchain, lock and dependency patches: the core PLT only
+      # changes when Elixir, OTP or a dependency does, and a patch adds functions
+      # (patches/wasmex) that a PLT built from unpatched source lacks. v2 drops
+      # the PLTs cached before patches/ was in the key. restore-keys lets a lock
+      # change rebuild the project PLT incrementally from the previous one.
       - name: Cache Dialyzer PLTs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: priv/plts
-          key: ${{ runner.os }}-plts-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('**/mix.lock') }}
+          key: ${{ runner.os }}-plts-v2-${{ hashFiles('.elixir-version', '.otp-version') }}-${{ hashFiles('**/mix.lock', 'patches/**') }}
           restore-keys: |
-            ${{ runner.os }}-plts-${{ hashFiles('.elixir-version', '.otp-version') }}-
+            ${{ runner.os }}-plts-v2-${{ hashFiles('.elixir-version', '.otp-version') }}-
 
       - name: Dialyzer under devenv
         run: |
