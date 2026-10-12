@@ -38,17 +38,19 @@ defmodule Mydia.Indexers.Cardigann.Bench.Release do
   @doc """
   Maps one decoded Prowlarr `ReleaseResource` JSON object (string keys) into a
   release. Field names follow `ReleaseResource.cs`.
+
+  The oracle side carries no comparable URL: Prowlarr's `SearchController`
+  rewrites `downloadUrl` and `magnetUrl` into proxy links that embed its API key
+  and an encrypted target, so `download_url` is always nil and the info hash
+  comes only from `infoHash`. Size 0 (Prowlarr's "unknown") becomes nil.
   """
   @spec from_prowlarr(map()) :: t()
   def from_prowlarr(%{} = json) do
-    magnet = blank_to_nil(json["magnetUrl"])
-    download = blank_to_nil(json["downloadUrl"])
-
     %__MODULE__{
       title: json["title"],
-      size: json["size"],
-      info_hash: normalize_hash(json["infoHash"]) || hash_from_magnet(magnet),
-      download_url: download || magnet,
+      size: nonzero(json["size"]),
+      info_hash: normalize_hash(json["infoHash"]),
+      download_url: nil,
       seeders: json["seeders"],
       peers: json["leechers"],
       publish_date: parse_date(json["publishDate"])
@@ -68,11 +70,30 @@ defmodule Mydia.Indexers.Cardigann.Bench.Release do
 
   defp hash_from_magnet(_), do: nil
 
-  defp normalize_hash(hash) when is_binary(hash) and hash != "", do: String.downcase(hash)
+  # 40-char hex is downcased; 32-char base32 (A-Z2-7) is decoded and re-encoded
+  # as lowercase hex, so both btih spellings compare equal.
+  defp normalize_hash(hash) when is_binary(hash) do
+    hash = String.trim(hash)
+
+    cond do
+      Regex.match?(~r/\A[0-9a-fA-F]{40}\z/, hash) ->
+        String.downcase(hash)
+
+      Regex.match?(~r/\A[A-Za-z2-7]{32}\z/, hash) ->
+        case Base.decode32(hash, case: :mixed, padding: false) do
+          {:ok, bin} -> Base.encode16(bin, case: :lower)
+          :error -> nil
+        end
+
+      true ->
+        nil
+    end
+  end
+
   defp normalize_hash(_), do: nil
 
-  defp blank_to_nil(value) when is_binary(value) and value != "", do: value
-  defp blank_to_nil(_), do: nil
+  defp nonzero(n) when is_integer(n) and n > 0, do: n
+  defp nonzero(_), do: nil
 
   defp parse_date(value) when is_binary(value) do
     case DateTime.from_iso8601(value) do

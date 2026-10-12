@@ -5,6 +5,7 @@ defmodule Mydia.Indexers.Cardigann.Bench.OracleTest do
   alias Mydia.Indexers.SearchResult
 
   @hash "0123456789abcdef0123456789abcdef01234567"
+  @proxied "http://localhost:9696/3/download?apikey=SECRETKEY&link=ZW5jcnlwdGVk&file=Film"
 
   setup do
     bypass = Bypass.open()
@@ -122,7 +123,7 @@ defmodule Mydia.Indexers.Cardigann.Bench.OracleTest do
             "title" => "Ubuntu 24.04",
             "size" => 5_000,
             "infoHash" => String.upcase(@hash),
-            "downloadUrl" => "http://prowlarr/3/download?link=x",
+            "downloadUrl" => @proxied,
             "magnetUrl" => nil,
             "seeders" => 10,
             "leechers" => 2,
@@ -137,11 +138,13 @@ defmodule Mydia.Indexers.Cardigann.Bench.OracleTest do
                title: "Ubuntu 24.04",
                size: 5_000,
                info_hash: @hash,
-               download_url: "http://prowlarr/3/download?link=x",
+               download_url: nil,
                seeders: 10,
                peers: 2,
                publish_date: ~U[2026-01-02 03:04:05Z]
              } = release
+
+      refute inspect(release) =~ "SECRETKEY"
     end
 
     test "maps tv kind to tvsearch with ids and categories", %{bypass: bypass, oracle: oracle} do
@@ -180,10 +183,10 @@ defmodule Mydia.Indexers.Cardigann.Bench.OracleTest do
         json(conn, 200, [
           %{
             "title" => "Film",
-            "size" => 1,
+            "size" => 0,
             "infoHash" => nil,
             "downloadUrl" => nil,
-            "magnetUrl" => "magnet:?xt=urn:btih:#{@hash}&dn=Film",
+            "magnetUrl" => @proxied,
             "seeders" => nil,
             "leechers" => nil,
             "publishDate" => nil
@@ -193,8 +196,10 @@ defmodule Mydia.Indexers.Cardigann.Bench.OracleTest do
 
       query = codec_query(%{kind: :movie, term: "film", imdb_id: "tt0133093"})
       assert {:ok, [release]} = Oracle.search(oracle, 3, query)
-      assert release.info_hash == @hash
-      assert release.download_url =~ "magnet:"
+      assert release.info_hash == nil
+      assert release.download_url == nil
+      assert release.size == nil
+      refute inspect(release) =~ "SECRETKEY"
       assert release.seeders == nil
     end
 
@@ -208,6 +213,25 @@ defmodule Mydia.Indexers.Cardigann.Bench.OracleTest do
   end
 
   describe "Release" do
+    test "base32 and hex btih normalise to the same lowercase hex on both sides" do
+      b32 = @hash |> Base.decode16!(case: :lower) |> Base.encode32(padding: false)
+      assert byte_size(b32) == 32
+
+      for form <- [b32, String.downcase(b32), String.upcase(@hash), @hash] do
+        sr = %SearchResult{
+          title: "T",
+          size: 1,
+          seeders: 1,
+          leechers: 0,
+          download_url: "magnet:?xt=urn:btih:#{form}",
+          indexer: "x"
+        }
+
+        assert Release.from_search_result(sr).info_hash == @hash
+        assert Release.from_prowlarr(%{"infoHash" => form}).info_hash == @hash
+      end
+    end
+
     test "from_search_result/1 derives the hash from a magnet link" do
       result = %SearchResult{
         title: "T",

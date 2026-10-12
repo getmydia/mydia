@@ -26,6 +26,9 @@ defmodule Mydia.Indexers.Cardigann.Bench.Oracle do
   @doc """
   Returns the id of the indexer for `definition_name`, creating it from
   Prowlarr's schema (with `settings` filled into `fields`) when absent.
+
+  An existing indexer is returned as is: `settings` are NOT applied to it. Delete
+  the indexer in Prowlarr to change its settings.
   """
   @spec ensure_indexer(t(), String.t(), map()) :: {:ok, integer()} | {:error, term()}
   def ensure_indexer(%__MODULE__{} = o, definition_name, settings) do
@@ -108,6 +111,7 @@ defmodule Mydia.Indexers.Cardigann.Bench.Oracle do
   defp query_text(%{kind: :search} = q), do: q.term || ""
 
   defp query_text(%{kind: kind} = q) do
+    # tvdb_id is dropped for :movie: upstream's movie regex has no tvdbid token.
     tokens =
       [imdbid: q[:imdb_id], tmdbid: q[:tmdb_id]] ++
         if(kind == :tv,
