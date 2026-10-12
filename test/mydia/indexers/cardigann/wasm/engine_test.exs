@@ -205,6 +205,14 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
       assert release.title == "Привет Мир 2031 1080p WEB-DL x264"
     end
 
+    test "a definition with a byte order mark loads", %{bypass: b, ctx: ctx} do
+      respond(b, "GET", "/search", 200, body("lantern-search.html"))
+      yaml = "﻿" <> yaml("lantern-public.yml", b)
+
+      assert {:ok, %{releases: [_, _]}} =
+               Engine.call({:search, yaml, %{}, q("harbor"), @empty}, ctx, @call_timeout)
+    end
+
     test "a stored session skips login", %{bypass: b, ctx: ctx} do
       test_pid = self()
 

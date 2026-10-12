@@ -239,5 +239,16 @@ namespace Mydia.CardigannGuest.Tests
             var release = Assert.Single(result.Releases);
             Assert.Equal("Привет Мир 2031 1080p WEB-DL x264", release.Title);
         }
+
+        [Fact]
+        public void A_definition_with_a_byte_order_mark_loads()
+        {
+            // Upstream reads definitions with File.ReadAllText, which drops the BOM.
+            var http = new FakeExchange().On("GET", "/search", _ => FakeExchange.Html(Fixture("lantern-search.html")));
+
+            var result = Runner.Search("﻿" + Fixture("lantern-public.yml"), new Dictionary<string, string>(), Query("harbor"), Empty, http);
+
+            Assert.Equal(2, result.Releases.Count);
+        }
     }
 }

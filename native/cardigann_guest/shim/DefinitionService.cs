@@ -28,6 +28,14 @@ namespace NzbDrone.Core.IndexerVersions
 
         public SingleDefinitionService(string yaml)
         {
+            // Upstream reads definitions with File.ReadAllText, which drops a
+            // leading byte order mark. The host hands over the decoded text with
+            // the mark intact, and YamlDotNet rejects it.
+            if (yaml.Length > 0 && yaml[0] == '﻿')
+            {
+                yaml = yaml.Substring(1);
+            }
+
             _definition = Deserializer.Deserialize<CardigannDefinition>(yaml);
         }
 
