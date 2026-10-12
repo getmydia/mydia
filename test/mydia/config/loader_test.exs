@@ -1438,6 +1438,36 @@ defmodule Mydia.Config.LoaderTest do
     end
   end
 
+  describe "cardigann" do
+    setup do
+      on_exit(fn -> System.delete_env("CARDIGANN_ENGINE") end)
+    end
+
+    test "defaults to the built-in engine" do
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.cardigann.engine == :builtin
+    end
+
+    test "CARDIGANN_ENGINE selects the engine" do
+      System.put_env("CARDIGANN_ENGINE", "prowlarr")
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.cardigann.engine == :prowlarr
+    end
+
+    test "an empty CARDIGANN_ENGINE is treated as unset" do
+      System.put_env("CARDIGANN_ENGINE", "")
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.cardigann.engine == :builtin
+    end
+
+    test "an unknown CARDIGANN_ENGINE fails validation instead of defaulting" do
+      System.put_env("CARDIGANN_ENGINE", "wasm")
+
+      assert {:error, %Ecto.Changeset{valid?: false}} =
+               Loader.load(config_file: "nonexistent.yml")
+    end
+  end
+
   describe "subtitle language acquisition and playback keys" do
     setup do
       # Config settings left behind by another test would otherwise merge into

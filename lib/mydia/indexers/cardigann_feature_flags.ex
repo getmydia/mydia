@@ -46,17 +46,11 @@ defmodule Mydia.Indexers.CardigannFeatureFlags do
   end
 
   @doc """
-  Returns which engine runs Cardigann definitions: `:builtin` (the Elixir
-  engine, the default) or `:prowlarr` (Prowlarr's engine compiled to wasm).
-
-  Set via `CARDIGANN_ENGINE=builtin|prowlarr`. `ENABLE_CARDIGANN=false`
-  disables Cardigann whatever the engine is.
+  The engine the admin chose (or `CARDIGANN_ENGINE` pins): `:builtin` or
+  `:prowlarr`. What actually serves searches is `adapter/0`.
   """
   @spec engine() :: :builtin | :prowlarr
-  def engine do
-    Application.get_env(:mydia, :features, [])
-    |> Keyword.get(:cardigann_engine, :builtin)
-  end
+  def engine, do: Mydia.Indexers.Cardigann.EngineSetting.setting()
 
   @doc """
   The adapter module that serves `:cardigann`: the wasm adapter only when the

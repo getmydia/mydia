@@ -77,7 +77,8 @@ defmodule Mydia.Settings.ConfigSetting do
     :feedback,
     :general,
     :flaresolverr,
-    :remote_access
+    :remote_access,
+    :cardigann
   ]
 
   schema "config_settings" do

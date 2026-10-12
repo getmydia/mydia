@@ -385,7 +385,8 @@ defmodule MydiaWeb.Api.ConfigController do
       "media.movies_path" => "MOVIES_PATH",
       "media.tv_path" => "TV_PATH",
       "logging.level" => "LOG_LEVEL",
-      "remote_access.enabled" => "ENABLE_REMOTE_ACCESS"
+      "remote_access.enabled" => "ENABLE_REMOTE_ACCESS",
+      "cardigann.engine" => "CARDIGANN_ENGINE"
     }
 
     Map.get(mapping, key)

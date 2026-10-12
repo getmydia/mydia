@@ -59,6 +59,7 @@ defmodule Mydia.Config.Schema do
           oban: __MODULE__.Oban.t() | nil,
           plugins: __MODULE__.Plugins.t() | nil,
           flaresolverr: __MODULE__.FlareSolverr.t() | nil,
+          cardigann: __MODULE__.Cardigann.t() | nil,
           remote_access: __MODULE__.RemoteAccess.t() | nil,
           download_clients: [__MODULE__.DownloadClient.t()],
           indexers: [__MODULE__.Indexer.t()],
@@ -327,6 +328,13 @@ defmodule Mydia.Config.Schema do
       field :max_concurrent_requests, :integer, default: 1
     end
 
+    # Which engine runs Cardigann definitions: the Elixir one, or Prowlarr's
+    # compiled to wasm. Editable on the Indexers tab; CARDIGANN_ENGINE locks it.
+    embeds_one :cardigann, Cardigann, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
+      field :engine, Ecto.Enum, values: [:builtin, :prowlarr], default: :builtin
+    end
+
     # Whether this server runs its p2p node and accepts pairing. It only counts
     # while the player is on, and that switch (ENABLE_PLAYER) is not part of
     # this schema on purpose: see Mydia.Player. ENABLE_REMOTE_ACCESS overrides
@@ -491,6 +499,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:oban, with: &oban_changeset/2)
     |> cast_embed(:plugins, with: &plugins_changeset/2)
     |> cast_embed(:flaresolverr, with: &flaresolverr_changeset/2)
+    |> cast_embed(:cardigann, with: &cardigann_changeset/2)
     |> cast_embed(:remote_access, with: &remote_access_changeset/2)
     |> cast_embed(:download_clients, with: &download_client_changeset/2)
     |> cast_embed(:indexers, with: &indexer_changeset/2)
@@ -790,6 +799,8 @@ defmodule Mydia.Config.Schema do
   defp https?(_), do: false
 
   defp remote_access_changeset(schema, attrs), do: cast(schema, attrs, [:enabled])
+
+  defp cardigann_changeset(schema, attrs), do: cast(schema, attrs, [:engine])
 
   defp flaresolverr_changeset(schema, attrs) do
     schema
@@ -1162,6 +1173,7 @@ defmodule Mydia.Config.Schema do
       oban: %__MODULE__.Oban{},
       plugins: %__MODULE__.Plugins{},
       flaresolverr: %__MODULE__.FlareSolverr{},
+      cardigann: %__MODULE__.Cardigann{},
       remote_access: %__MODULE__.RemoteAccess{},
       download_clients: [],
       indexers: [],

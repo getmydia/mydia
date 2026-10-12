@@ -261,6 +261,7 @@ defmodule Mydia.Config.Loader do
       logging: load_logging_env(),
       oban: load_oban_env(),
       flaresolverr: load_flaresolverr_env(),
+      cardigann: load_cardigann_env(),
       remote_access: load_remote_access_env(),
       download_clients: load_download_clients_env(),
       indexers: load_indexers_env(),
@@ -402,6 +403,10 @@ defmodule Mydia.Config.Loader do
     %{}
     |> put_if_present(:poll_interval, System.get_env("OBAN_POLL_INTERVAL"), &parse_integer/1)
     |> put_if_present(:max_age_days, System.get_env("OBAN_MAX_AGE_DAYS"), &parse_integer/1)
+  end
+
+  defp load_cardigann_env do
+    load_env_table(engine: {"CARDIGANN_ENGINE", &parse_cardigann_engine/1})
   end
 
   defp load_flaresolverr_env do
@@ -958,6 +963,17 @@ defmodule Mydia.Config.Loader do
   # this setting exists to remove. :invalid is not a member of the Ecto.Enum,
   # so config validation rejects it by name. That matches how a bad
   # DOWNLOAD_CLIENT_<N>_TYPE already behaves, minus the atom leak.
+  # A dedicated fixed-enum parser (parse_atom/1 mints atoms). An unknown value
+  # becomes :invalid so validation rejects it by name instead of the setting
+  # silently falling back to :builtin.
+  defp parse_cardigann_engine(value) when is_binary(value) do
+    case value |> String.trim() |> String.downcase() do
+      "builtin" -> {:ok, :builtin}
+      "prowlarr" -> {:ok, :prowlarr}
+      _unrecognised -> {:ok, :invalid}
+    end
+  end
+
   defp parse_external_torrents(value) when is_atom(value), do: {:ok, value}
 
   defp parse_external_torrents(value) when is_binary(value) do

@@ -280,26 +280,6 @@ if config_env() == :prod do
       _ -> Application.get_env(:mydia, :features)[:cardigann_enabled] || false
     end
 
-  # builtin (default) runs the Elixir engine; prowlarr runs Prowlarr's engine
-  # compiled to wasm. Anything else is a typo worth failing the boot over.
-  cardigann_engine =
-    case System.get_env("CARDIGANN_ENGINE") do
-      nil ->
-        Application.get_env(:mydia, :features)[:cardigann_engine] || :builtin
-
-      "" ->
-        Application.get_env(:mydia, :features)[:cardigann_engine] || :builtin
-
-      "builtin" ->
-        :builtin
-
-      "prowlarr" ->
-        :prowlarr
-
-      other ->
-        raise "CARDIGANN_ENGINE must be \"builtin\" or \"prowlarr\", got: #{inspect(other)}"
-    end
-
   import_lists_enabled =
     case System.get_env("ENABLE_IMPORT_LISTS") do
       "true" ->
@@ -321,7 +301,6 @@ if config_env() == :prod do
 
   config :mydia, :features,
     cardigann_enabled: cardigann_enabled,
-    cardigann_engine: cardigann_engine,
     import_lists_enabled: import_lists_enabled
 
   # Enable/disable public IP detection via external services
@@ -462,26 +441,6 @@ if config_env() in [:dev, :test] do
       _ -> Application.get_env(:mydia, :features)[:cardigann_enabled] || false
     end
 
-  # builtin (default) runs the Elixir engine; prowlarr runs Prowlarr's engine
-  # compiled to wasm. Anything else is a typo worth failing the boot over.
-  cardigann_engine =
-    case System.get_env("CARDIGANN_ENGINE") do
-      nil ->
-        Application.get_env(:mydia, :features)[:cardigann_engine] || :builtin
-
-      "" ->
-        Application.get_env(:mydia, :features)[:cardigann_engine] || :builtin
-
-      "builtin" ->
-        :builtin
-
-      "prowlarr" ->
-        :prowlarr
-
-      other ->
-        raise "CARDIGANN_ENGINE must be \"builtin\" or \"prowlarr\", got: #{inspect(other)}"
-    end
-
   import_lists_enabled =
     case System.get_env("ENABLE_IMPORT_LISTS") do
       "true" ->
@@ -503,7 +462,6 @@ if config_env() in [:dev, :test] do
 
   config :mydia, :features,
     cardigann_enabled: cardigann_enabled,
-    cardigann_engine: cardigann_engine,
     import_lists_enabled: import_lists_enabled
 end
 
