@@ -36,7 +36,8 @@ Print it with `mix mydia.cardigann_guest hash`.
 Consumers:
 
 - The release (Docker image, Nix package) does not contain the guest. An
-  install that sets `CARDIGANN_ENGINE=prowlarr` downloads
+  install that picks Prowlarr's engine (`CARDIGANN_ENGINE=prowlarr` or the
+  Indexers page) downloads
   `cardigann-<hash>.wasm` on first boot into `cardigann/` under
   `MYDIA_DATA_DIR`, or next to the database file when that is unset (`/config`
   in the image) (`Mydia.Indexers.Cardigann.Wasm.Delivery`). It checks the file

@@ -285,8 +285,9 @@ under `lib/mydia/indexers/cardigann*` calls Floki.
 
 ## Cardigann engines: built-in and Prowlarr's
 
-Two engines can run Cardigann definitions, chosen at boot with
-`CARDIGANN_ENGINE` (config key `config :mydia, :features, cardigann_engine:`):
+Two engines can run Cardigann definitions, chosen by the layered setting
+`cardigann.engine` (env `CARDIGANN_ENGINE` pins it and locks the admin UI;
+otherwise the Indexers tab writes it):
 
 - `builtin` (the default): the Elixir engine under `lib/mydia/indexers/cardigann*`.
   Costs nothing extra: no download, no compile, no memory.
@@ -307,8 +308,8 @@ and remembers the one that worked. What it costs, measured on the Alpine image
   into the build (a mismatch is an error, never a fallback), compiles it once and
   caches the compiled form. The compile takes about 18 s on Alpine and peaks near
   1.6 GB of resident memory, then settles at about 500 MB. Until it is done,
-  Cardigann searches fail with a message saying why, and the indexer status line
-  shows it; the rest of Mydia boots normally. A failed download or compile retries
+  the built-in engine keeps serving searches and the Indexers tab shows progress;
+  the rest of Mydia boots normally. A failed download or compile retries
   in the background, 30 s doubling to 30 min.
 - **Where it lives.** `cardigann/` under `MYDIA_DATA_DIR`, or next to the database
   file when that is unset (`/config` in the image). It holds the `.wasm` (39 MB) and
@@ -340,6 +341,24 @@ and remembers the one that worked. What it costs, measured on the Alpine image
 - **LAN trackers are refused** (the host's SSRF gate), and Brotli responses are
   not decoded. The benchmark covers public definitions only; private-tracker
   logins were not measured.
+
+### Switching at runtime
+
+`Mydia.Indexers.Cardigann.EngineSwitcher` applies the setting without a restart
+(boot uses the same path). Switching to `prowlarr` starts `Wasm.Engine` while the
+built-in adapter keeps serving; once the engine reports ready, the switcher
+cuts over by re-registering `:cardigann`. Switching back re-registers the
+built-in adapter, then stops the engine, which frees the compiled component. The
+cache on disk is kept; `remove_cache/1` deletes it. If the engine stops being
+ready after the cutover, the switcher falls back to built-in until it is ready
+again. `CardigannFeatureFlags.active_engine/0` reads the active engine.
+
+### Verified badges
+
+The Indexers tab shows which engines each definition is verified on, from
+`Mydia.Indexers.Cardigann.EngineSupport`. To refresh it, run
+`mix mydia.cardigann_bench` and paste the map at the end of its `bench.md` over
+`@verified`, then update `@verified_on`.
 
 The gate that decided this: fidelity, coverage and regressions pass, latency
 passes with 24 ms to spare, the first-boot compile time and the memory under load
