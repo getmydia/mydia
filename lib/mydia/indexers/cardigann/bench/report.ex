@@ -133,9 +133,44 @@ defmodule Mydia.Indexers.Cardigann.Bench.Report do
     | M1 Fidelity (agree with Prowlarr, Jaccard >= 0.95 on every query) | #{ea}/#{en} (#{pct(ea, en)}) | #{wa}/#{wn} (#{pct(wa, wn)}) | wasm > Elixir | #{verdict(m.gate.m1)} |
     | M2 Coverage (>= 1 release) | #{m.coverage.elixir}/#{m.definitions} | #{m.coverage.wasm}/#{m.definitions} | wasm >= Elixir | #{verdict(m.gate.m2)} |
     | M3 Regressions (Elixir agrees, wasm does not) | | #{length(m.regressions)} | zero unexplained | #{verdict(m.gate.m3)} |
-    | M4 Engine overhead p50 / p95 (ms, no requestDelay) | #{ms(m.overhead.elixir.p50)} / #{ms(m.overhead.elixir.p95)} (n=#{m.overhead.elixir.n}) | #{ms(m.overhead.wasm.p50)} / #{ms(m.overhead.wasm.p95)} (n=#{m.overhead.wasm.n}) | wasm p95 <= max(2x Elixir, 50 ms) | #{verdict(m.gate.m4)} |
+    | M4 Engine overhead p50 / p95 (ms), paired searches, n=#{m.paired_n} | #{ms(m.overhead.elixir.p50)} / #{ms(m.overhead.elixir.p95)} | #{ms(m.overhead.wasm.p50)} / #{ms(m.overhead.wasm.p95)} | wasm p95 <= max(2x Elixir, 50 ms); under 10 paired searches the verdict is insufficient sample | #{verdict(m.gate.m4)} (paired n=#{m.paired_n}) |
 
     The M1 denominator is the #{elem(m.fidelity.elixir, 1)} definitions on which Prowlarr returned results; #{length(m.prowlarr_failed)} definitions where Prowlarr errored or returned nothing are excluded from it and listed under Engine health.
+
+    M1 and M3 above use the spec matching rule: same normalised title and (same info hash or sizes within 1%). A release whose size is unknown on one side only does not match.
+
+    Diagnostic, lenient rule (a size known on one side only counts as a size match; not gating):
+
+    | | Elixir | Wasm |
+    |---|---|---|
+    | M1 Fidelity, lenient | #{fid(m.fidelity_lenient.elixir)} | #{fid(m.fidelity_lenient.wasm)} |
+    | M3 Regressions, lenient | | #{length(m.regressions_lenient)} #{id_list_paren(m.regressions_lenient)} |
+
+    #{rule_differences(m.rule_differences)}
+    """
+  end
+
+  defp fid({a, b}), do: "#{a}/#{b} (#{pct(a, b)})"
+
+  defp id_list_paren([]), do: ""
+  defp id_list_paren(ids), do: "(" <> Enum.join(ids, ", ") <> ")"
+
+  defp rule_differences([]),
+    do:
+      "No definition's agreement changes between the strict and the lenient rule, so the gate does not hinge on missing sizes."
+
+  defp rule_differences(diffs) do
+    rows =
+      for d <- diffs do
+        "| #{d.id} | #{d.engine} | #{if d.strict, do: "agrees", else: "does not agree"} | #{if d.lenient, do: "agrees", else: "does not agree"} |"
+      end
+
+    """
+    Definitions whose agreement with Prowlarr differs between the two rules (the gate hinges on missing sizes for these):
+
+    | Definition | Engine | Strict (gating) | Lenient |
+    |---|---|---|---|
+    #{Enum.join(rows, "\n")}
     """
   end
 
@@ -144,22 +179,14 @@ defmodule Mydia.Indexers.Cardigann.Bench.Report do
 
     ### How M4 was measured
 
-    Overhead is `wall - network` per ok search, as nearest-rank percentiles. Wall time is the elapsed time of the adapter call in the task that made it.
+    Overhead is `wall - network` per search, as nearest-rank percentiles. Wall time is the elapsed time of the adapter call in the task that made it. The gating figure is over **paired searches** only: (definition, query) pairs on definitions without a `requestDelay` where Prowlarr, Elixir and wasm all returned results, so both engines are timed on the same searches (n=#{m.paired_n}; under 10 the verdict is "insufficient sample"). For the gating run use `--concurrency 1`: with parallel definitions the searches contend for CPU and the database, which inflates overhead.
 
-    - **Wasm**: network is the sum of the host `http-request` import durations, recorded by the host (`HostHttp.exchange`, after the rate-limit throttle) and reported through the `[:mydia, :cardigann, :wasm, :call]` telemetry event, which fires in the calling task. Wall includes waiting for the component to compile, definition parsing, session reads and writes, and the guest's own work.
+    - **Wasm**: network is the sum of the host `http-request` import durations, recorded by the host (`HostHttp.exchange`, after the rate-limit throttle) and reported through the `[:mydia, :cardigann, :wasm, :call]` telemetry event, which fires in the calling task. Before timing starts the run waits for the component to compile and makes one capabilities call (a warm-up, discarded), so compilation is not in the numbers. Wall includes definition parsing, session reads and writes, and the guest's own work.
     - **Elixir**: network is the time inside the `Req.Finch` adapter step, measured by `Bench.NetTimer` installed as the Req `:adapter` through `Req.default_options/1` for the run (Req 0.7.4 emits no telemetry). It is attributed to the calling task and its `$callers`. Req's own request and response steps (decompression, redirects, retry sleeps) and FlareSolverr round trips made outside Req are outside it and count as overhead.
     - **Prowlarr**: only wall time is available. It is not part of M4.
-    - Both Mydia engines sleep for a definition's `requestDelay` outside the timed network call. The figure above uses only searches on definitions without a `requestDelay`. Including them: Elixir #{ms(m.overhead_all.elixir.p50)} / #{ms(m.overhead_all.elixir.p95)} ms (n=#{m.overhead_all.elixir.n}), wasm #{ms(m.overhead_all.wasm.p50)} / #{ms(m.overhead_all.wasm.p95)} ms (n=#{m.overhead_all.wasm.n}).
-    #{unmeasured_note(m)}
+    - **`requestDelay`**: Prowlarr and the wasm engine honour a definition's `requestDelay` (the wasm host sleeps in its rate limiter, outside the timed network call). The Elixir engine does not honour it in practice: `CardigannSearchEngine.apply_rate_limit/1` sleeps for `request_delay`, but `CardigannParser` fills that field from the YAML key `requestdelay` (lower case) and every definition spells it `requestDelay`, so the field is always nil and Elixir never sleeps. That is a behavioural difference from Prowlarr (Elixir hits trackers faster than the definition allows). Paired M4 excludes delayed definitions because the delay would count as overhead for wasm only.
+    - Diagnostics (not gating). Unpaired, delay-free, every ok search: Elixir #{ms(m.overhead_unpaired.elixir.p50)} / #{ms(m.overhead_unpaired.elixir.p95)} ms (n=#{m.overhead_unpaired.elixir.n}), wasm #{ms(m.overhead_unpaired.wasm.p50)} / #{ms(m.overhead_unpaired.wasm.p95)} ms (n=#{m.overhead_unpaired.wasm.n}). Every ok search including delayed definitions: Elixir #{ms(m.overhead_all.elixir.p50)} / #{ms(m.overhead_all.elixir.p95)} ms (n=#{m.overhead_all.elixir.n}), wasm #{ms(m.overhead_all.wasm.p50)} / #{ms(m.overhead_all.wasm.p95)} ms (n=#{m.overhead_all.wasm.n}).
     """
-  end
-
-  defp unmeasured_note(m) do
-    if m.overhead.elixir.n == 0 do
-      "- **The Elixir engine's network time could not be measured in this run (no request went through the timed adapter), so M4 for Elixir is unavailable and the gate falls back to the 50 ms absolute limit.**"
-    else
-      ""
-    end
   end
 
   defp health_section(m, results) do
@@ -187,7 +214,7 @@ defmodule Mydia.Indexers.Cardigann.Bench.Report do
 
     "Empty with no HTTP request made" counts ok-but-empty searches whose measured network time is zero: the engine answered without contacting the tracker (Elixir and wasm only), which usually means it gave up before the request.
 
-    `empty_with_credentials` is a private definition with credentials configured that returned no results. Prowlarr and the wasm engine swallow a failed login during search and return an empty list, so this is a possible silent login failure and not a genuine "no results". It is not counted as an error anywhere else.
+    `empty_with_credentials` counts rows (a definition and query): a private or semi-private definition with credentials configured that returned no results. Prowlarr and the wasm engine swallow a failed login during search and return an empty list, so this is a possible silent login failure and not a genuine "no results". It is not counted as an error anywhere else.
 
     Definitions Prowlarr errored or returned nothing on (excluded from M1): #{id_list(m.prowlarr_failed)}
     """
@@ -311,6 +338,7 @@ defmodule Mydia.Indexers.Cardigann.Bench.Report do
 
   defp verdict(:pass), do: "PASS"
   defp verdict(:fail), do: "FAIL"
+  defp verdict(:insufficient), do: "INSUFFICIENT SAMPLE"
   defp verdict(:unmeasured), do: "UNMEASURED"
 
   defp pct(_a, 0), do: "n/a"

@@ -19,8 +19,14 @@ defmodule Mydia.Indexers.Cardigann.Bench.Metrics do
   Jaccard similarity of at least 0.95. A definition with no such query is
   excluded from the fidelity denominator.
 
-  A row may carry `:request_delay_ms`; M4 is computed over rows without one
-  (`overhead`, which the gate uses) and over all rows (`overhead_all`).
+  The gate uses the strict matcher rule. `fidelity_lenient`,
+  `regressions_lenient` and `rule_differences` are diagnostics under the lenient
+  rule (a size known on one side only counts as a size match).
+
+  A row may carry `:request_delay_ms`. The gating M4 (`overhead`) is computed
+  over paired searches only: no request delay, and Prowlarr, Elixir and wasm all
+  ok with results. Under 10 such searches the verdict is `:insufficient`.
+  `overhead_unpaired` (every delay-free row) and `overhead_all` are diagnostics.
 
   M5 (resources) and M6 (maintenance) are not computed here.
   """
@@ -42,16 +48,16 @@ defmodule Mydia.Indexers.Cardigann.Bench.Metrics do
     judged = for {id, rs} <- by_def, j <- [judged_rows(rs)], j != [], do: {id, j}
     prowlarr_failed = for {id, rs} <- by_def, judged_rows(rs) == [], do: id
 
-    fidelity =
-      Map.new(@engines, fn engine ->
-        agreeing = Enum.count(judged, fn {_id, j} -> agrees?(j, engine) end)
-        {engine, {agreeing, length(judged)}}
-      end)
+    fidelity = fidelity(judged, [])
+    fidelity_lenient = fidelity(judged, lenient: true)
 
     coverage = Map.new(@engines, fn e -> {e, Enum.count(by_def, &covered?(&1, e))} end)
 
-    regressions =
-      for {id, j} <- judged, agrees?(j, :elixir), not agrees?(j, :wasm), do: id
+    regressions = regressions(judged, [])
+    regressions_lenient = regressions(judged, lenient: true)
+
+    delay_free = Enum.filter(rows, &no_delay?/1)
+    paired = Enum.filter(delay_free, &paired?/1)
 
     metrics = %{
       definitions: length(by_def),
@@ -60,8 +66,13 @@ defmodule Mydia.Indexers.Cardigann.Bench.Metrics do
       fidelity: fidelity,
       coverage: coverage,
       regressions: regressions,
+      fidelity_lenient: fidelity_lenient,
+      regressions_lenient: regressions_lenient,
+      rule_differences: rule_differences(judged),
       empty_with_credentials: empty_with_credentials(rows),
-      overhead: Map.new(@engines, fn e -> {e, overhead(Enum.filter(rows, &no_delay?/1), e)} end),
+      paired_n: length(paired),
+      overhead: Map.new(@engines, fn e -> {e, overhead(paired, e)} end),
+      overhead_unpaired: Map.new(@engines, fn e -> {e, overhead(delay_free, e)} end),
       overhead_all: Map.new(@engines, fn e -> {e, overhead(rows, e)} end),
       disagreements: disagreements(rows, 20)
     }
@@ -70,9 +81,32 @@ defmodule Mydia.Indexers.Cardigann.Bench.Metrics do
   end
 
   @doc "Jaccard similarity of the engine's releases against Prowlarr's for one row."
-  @spec similarity(map(), atom()) :: float()
-  def similarity(row, engine) do
-    Matcher.jaccard(row.engines.prowlarr.releases, row.engines[engine].releases)
+  @spec similarity(map(), atom(), keyword()) :: float()
+  def similarity(row, engine, opts \\ []) do
+    Matcher.jaccard(row.engines.prowlarr.releases, row.engines[engine].releases, opts)
+  end
+
+  defp fidelity(judged, opts) do
+    Map.new(@engines, fn engine ->
+      agreeing = Enum.count(judged, fn {_id, j} -> agrees?(j, engine, opts) end)
+      {engine, {agreeing, length(judged)}}
+    end)
+  end
+
+  defp regressions(judged, opts) do
+    for {id, j} <- judged, agrees?(j, :elixir, opts), not agrees?(j, :wasm, opts), do: id
+  end
+
+  # Definitions whose agreement with Prowlarr differs between the strict
+  # (gating) and the lenient matcher rule, per engine.
+  defp rule_differences(judged) do
+    for {id, j} <- judged,
+        engine <- @engines,
+        strict <- [agrees?(j, engine, [])],
+        lenient <- [agrees?(j, engine, lenient: true)],
+        strict != lenient do
+      %{id: id, engine: engine, strict: strict, lenient: lenient}
+    end
   end
 
   # Prowlarr succeeded: ok with at least one release.
@@ -83,10 +117,10 @@ defmodule Mydia.Indexers.Cardigann.Bench.Metrics do
     end)
   end
 
-  defp agrees?(judged, engine) do
+  defp agrees?(judged, engine, opts) do
     Enum.all?(judged, fn r ->
       result = r.engines[engine]
-      result.status == :ok and similarity(r, engine) >= @agree_threshold
+      result.status == :ok and similarity(r, engine, opts) >= @agree_threshold
     end)
   end
 
@@ -107,11 +141,26 @@ defmodule Mydia.Indexers.Cardigann.Bench.Metrics do
 
   # -- M4 ------------------------------------------------------------------
 
-  # A definition's `requestDelay` makes both Elixir (Process.sleep) and the wasm
-  # host (RateLimiter) sleep outside the timed network call, so that sleep lands
-  # in "wall minus network" for both engines. The gating figure therefore uses
-  # only rows without a request delay; `overhead_all` keeps the raw figure.
+  # A definition's `requestDelay` makes the wasm host (RateLimiter) sleep outside
+  # the timed network call, so that sleep lands in "wall minus network" for wasm.
+  # The Elixir engine never honours it (its parser reads the key `requestdelay`,
+  # and every definition spells it `requestDelay`), so the delay would bias M4
+  # against wasm only. Rows with a delay are therefore excluded from the gating
+  # figure; `overhead_all` keeps the raw figure.
   defp no_delay?(row), do: (row[:request_delay_ms] || 0) == 0
+
+  # The gating M4 sample: one (definition, query) where all three engines
+  # answered with results, so both engines are timed on the same searches.
+  defp paired?(row) do
+    Enum.all?(@all_engines, fn e ->
+      r = row.engines[e]
+      r.status == :ok and r.releases != []
+    end) and
+      Enum.all?(@engines, fn e ->
+        r = row.engines[e]
+        is_number(r[:wall_ms]) and is_number(r[:network_ms])
+      end)
+  end
 
   defp overhead(rows, engine) do
     samples =
@@ -168,9 +217,11 @@ defmodule Mydia.Indexers.Cardigann.Bench.Metrics do
       m1: gate_m1(m.fidelity),
       m2: if(m.coverage.wasm >= m.coverage.elixir, do: :pass, else: :fail),
       m3: if(m.regressions == [], do: :pass, else: :fail),
-      m4: gate_m4(m.overhead)
+      m4: gate_m4(m.overhead, m.paired_n)
     }
   end
+
+  @min_paired 10
 
   defp gate_m1(%{elixir: {ea, en}, wasm: {wa, wn}}) when en > 0 and wn > 0 do
     # wa/wn > ea/en without division
@@ -179,11 +230,14 @@ defmodule Mydia.Indexers.Cardigann.Bench.Metrics do
 
   defp gate_m1(_), do: :unmeasured
 
-  defp gate_m4(%{wasm: %{p95: nil}}), do: :unmeasured
+  # Fewer than @min_paired paired searches is not evidence either way. Paired
+  # samples always carry both engines' network time, so an unmeasured Elixir
+  # p95 cannot occur once the sample is large enough.
+  defp gate_m4(_overhead, paired_n) when paired_n < @min_paired, do: :insufficient
 
-  defp gate_m4(%{wasm: %{p95: wasm}, elixir: %{p95: nil}}),
-    do: if(wasm <= @overhead_floor_ms, do: :pass, else: :unmeasured)
+  defp gate_m4(%{wasm: %{p95: wasm}, elixir: %{p95: elixir}}, _paired_n)
+       when is_number(wasm) and is_number(elixir),
+       do: if(wasm <= max(2 * elixir, @overhead_floor_ms), do: :pass, else: :fail)
 
-  defp gate_m4(%{wasm: %{p95: wasm}, elixir: %{p95: elixir}}),
-    do: if(wasm <= max(2 * elixir, @overhead_floor_ms), do: :pass, else: :fail)
+  defp gate_m4(_overhead, _paired_n), do: :insufficient
 end

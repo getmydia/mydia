@@ -11,44 +11,50 @@ defmodule Mydia.Indexers.Cardigann.Bench.Matcher do
   Size 0 means "unknown" on the oracle side and 0 on the Mydia side, so 0 is
   normalised to nil on both. When neither side carries a hash or a size there is
   nothing that could contradict the title, and the title alone matches.
+
+  This is the strict rule, the one the merge gate uses. With `lenient: true` a
+  size known on only one side also counts as a size match. That is a diagnostic:
+  it shows where agreement hinges on an engine not reporting a size.
   """
 
   alias Mydia.Indexers.Cardigann.Bench.Release
 
   @size_tolerance 0.01
 
-  @spec same?(Release.t(), Release.t()) :: boolean()
-  def same?(%Release{} = a, %Release{} = b) do
-    normalize_title(a.title) == normalize_title(b.title) and evidence_matches?(a, b)
+  @spec same?(Release.t(), Release.t(), keyword()) :: boolean()
+  def same?(%Release{} = a, %Release{} = b, opts \\ []) do
+    normalize_title(a.title) == normalize_title(b.title) and
+      evidence_matches?(a, b, Keyword.get(opts, :lenient, false))
   end
 
   @doc """
   Jaccard similarity of two release lists under greedy one-to-one matching:
   `matched / (|a| + |b| - matched)`. Two empty lists are identical (1.0).
   """
-  @spec jaccard([Release.t()], [Release.t()]) :: float()
-  def jaccard([], []), do: 1.0
+  @spec jaccard([Release.t()], [Release.t()], keyword()) :: float()
+  def jaccard(a, b, opts \\ [])
+  def jaccard([], [], _opts), do: 1.0
 
-  def jaccard(a, b) do
-    %{matched: matched, only_left: left, only_right: right} = pair(a, b)
+  def jaccard(a, b, opts) do
+    %{matched: matched, only_left: left, only_right: right} = pair(a, b, opts)
     union = matched + length(left) + length(right)
     matched / union
   end
 
   @doc "The releases present on only one side after one-to-one matching."
-  @spec diff([Release.t()], [Release.t()]) :: %{
+  @spec diff([Release.t()], [Release.t()], keyword()) :: %{
           only_left: [Release.t()],
           only_right: [Release.t()]
         }
-  def diff(a, b) do
-    %{only_left: left, only_right: right} = pair(a, b)
+  def diff(a, b, opts \\ []) do
+    %{only_left: left, only_right: right} = pair(a, b, opts)
     %{only_left: left, only_right: right}
   end
 
-  defp pair(left, right) do
+  defp pair(left, right, opts) do
     {pool, matched, unmatched_left} =
       Enum.reduce(left, {right, 0, []}, fn release, {pool, count, lonely} ->
-        case take_match(pool, release) do
+        case take_match(pool, release, opts) do
           {:ok, rest} -> {rest, count + 1, lonely}
           :error -> {pool, count, [release | lonely]}
         end
@@ -57,14 +63,14 @@ defmodule Mydia.Indexers.Cardigann.Bench.Matcher do
     %{matched: matched, only_left: Enum.reverse(unmatched_left), only_right: pool}
   end
 
-  defp take_match(pool, release) do
-    case Enum.find_index(pool, &same?(release, &1)) do
+  defp take_match(pool, release, opts) do
+    case Enum.find_index(pool, &same?(release, &1, opts)) do
       nil -> :error
       index -> {:ok, List.delete_at(pool, index)}
     end
   end
 
-  defp evidence_matches?(a, b) do
+  defp evidence_matches?(a, b, lenient?) do
     hash_a = hash(a)
     hash_b = hash(b)
     size_a = size(a)
@@ -74,6 +80,7 @@ defmodule Mydia.Indexers.Cardigann.Bench.Matcher do
       hash_a != nil and hash_a == hash_b -> true
       size_a != nil and size_b != nil and sizes_close?(size_a, size_b) -> true
       hash_a == nil and hash_b == nil and size_a == nil and size_b == nil -> true
+      lenient? and (size_a == nil or size_b == nil) -> true
       true -> false
     end
   end

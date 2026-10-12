@@ -60,6 +60,8 @@ defmodule Mydia.Indexers.Cardigann.Bench.Runner do
     {:ok, sup} = Task.Supervisor.start_link()
 
     try do
+      warm_up(definitions)
+
       definitions
       |> Enum.with_index()
       |> Task.async_stream(
@@ -79,6 +81,23 @@ defmodule Mydia.Indexers.Cardigann.Bench.Runner do
       Application.put_env(:mydia, :features, previous_flags)
     end
   end
+
+  # Waits for the wasm component to be compiled and runs one capabilities call
+  # (no HTTP) on the first definition, so the first timed search does not pay
+  # for compilation or first-instantiation costs. The result is discarded.
+  defp warm_up([definition | _]) do
+    _ = Mydia.Indexers.Cardigann.Wasm.Engine.available?()
+
+    with :ok <- prepare_row(definition) do
+      WasmAdapter.get_capabilities(adapter_config(definition))
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  defp warm_up([]), do: :ok
 
   @doc "Engines in the order they run for the definition at `index`."
   @spec rotation(non_neg_integer()) :: [atom()]

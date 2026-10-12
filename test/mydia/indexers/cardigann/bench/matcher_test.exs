@@ -33,6 +33,20 @@ defmodule Mydia.Indexers.Cardigann.Bench.MatcherTest do
     refute Matcher.same?(r("Tin Meadow", size: 100), r("Tin Meadow", size: nil))
   end
 
+  test "lenient rule accepts a size known on one side only" do
+    a = r("Tin Meadow", size: 100)
+    b = r("Tin Meadow", size: nil)
+    refute Matcher.same?(a, b)
+    assert Matcher.same?(a, b, lenient: true)
+    assert_in_delta Matcher.jaccard([a], [b], lenient: true), 1.0, 0.0001
+    assert Matcher.jaccard([a], [b]) == 0.0
+  end
+
+  test "lenient rule still rejects differing sizes and titles" do
+    refute Matcher.same?(r("A", size: 100), r("A", size: 500), lenient: true)
+    refute Matcher.same?(r("A", size: 100), r("B", size: nil), lenient: true)
+  end
+
   test "hash match wins over a differing size" do
     assert Matcher.same?(
              r("Tin Meadow", size: 1, info_hash: "abc"),

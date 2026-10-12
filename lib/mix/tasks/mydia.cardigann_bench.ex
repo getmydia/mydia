@@ -26,6 +26,9 @@ defmodule Mix.Tasks.Mydia.CardigannBench do
       --prowlarr-api-key K default $PROWLARR_API_KEY, else bench/cardigann/data/config.xml
       --ref REF            Prowlarr/Indexers commit to pin (default: head of master)
       --cache-dir DIR      definition cache (default ~/.cache/mydia-cardigann-bench)
+      --concurrency N      definitions run in parallel (default 4). Use 1 for the
+                           gating run: parallel searches contend for CPU and the
+                           database, which inflates the M4 overhead figures.
 
   ## Database isolation
 
@@ -51,7 +54,8 @@ defmodule Mix.Tasks.Mydia.CardigannBench do
     prowlarr_url: :string,
     prowlarr_api_key: :string,
     ref: :string,
-    cache_dir: :string
+    cache_dir: :string,
+    concurrency: :integer
   ]
 
   @impl Mix.Task
@@ -105,7 +109,7 @@ defmodule Mix.Tasks.Mydia.CardigannBench do
     results =
       Runner.run(definitions,
         oracle: oracle,
-        concurrency: 4,
+        concurrency: max(opts[:concurrency] || 4, 1),
         on_definition: fn {definition, rows} ->
           :counters.add(counter, 1, 1)
           n = :counters.get(counter, 1)
@@ -155,6 +159,9 @@ defmodule Mix.Tasks.Mydia.CardigannBench do
     # and probe on its own.
     oban = Application.get_env(:mydia, Oban, [])
     Application.put_env(:mydia, Oban, Keyword.merge(oban, queues: false, plugins: false))
+
+    # Never migrate anything but the bench file.
+    verify_database!(database)
 
     # The app skips migrations outside releases, so run them on the bench file.
     {:ok, _, _} =

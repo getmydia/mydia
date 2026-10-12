@@ -109,7 +109,84 @@ defmodule Mydia.Indexers.Cardigann.Bench.MetricsTest do
     assert gate.m1 == :pass
     assert gate.m2 == :pass
     assert gate.m3 == :pass
-    assert gate.m4 == :unmeasured
+    assert gate.m4 == :insufficient
+  end
+
+  defp paired_rows(n, wasm_overhead, elixir_overhead) do
+    for i <- 1..n do
+      timed = fn overhead -> ok(["x"], %{wall_ms: 100.0 + overhead, network_ms: 100.0}) end
+
+      row("p#{i}",
+        prowlarr: ok(["x"]),
+        elixir: timed.(elixir_overhead),
+        wasm: timed.(wasm_overhead)
+      )
+    end
+  end
+
+  test "m4 gates on paired searches only, and reports n" do
+    m = Metrics.compute(paired_rows(10, 20.0, 10.0))
+    assert m.paired_n == 10
+    assert m.gate.m4 == :pass
+    assert Metrics.compute(paired_rows(10, 120.0, 10.0)).gate.m4 == :fail
+  end
+
+  test "m4 is insufficient under 10 paired searches, even when wasm is slow" do
+    m = Metrics.compute(paired_rows(9, 500.0, 10.0))
+    assert m.paired_n == 9
+    assert m.gate.m4 == :insufficient
+  end
+
+  test "searches where prowlarr or an engine returned nothing are not paired" do
+    timed = ok(["x"], %{wall_ms: 10.0, network_ms: 5.0})
+
+    rows =
+      paired_rows(10, 20.0, 10.0) ++
+        [
+          row("e",
+            prowlarr: ok(["x"]),
+            elixir: ok([], %{wall_ms: 1.0, network_ms: 0.0}),
+            wasm: timed
+          ),
+          row("f", prowlarr: ok([]), elixir: timed, wasm: timed),
+          row("g", [prowlarr: ok(["x"]), elixir: timed, wasm: timed], type: "public")
+          |> Map.put(:request_delay_ms, 2000)
+        ]
+
+    m = Metrics.compute(rows)
+    assert m.paired_n == 10
+    # the unpaired diagnostic still sees every delay-free ok search
+    assert m.overhead_unpaired.wasm.n == 12
+    assert m.overhead_all.wasm.n == 13
+  end
+
+  describe "lenient matcher rule" do
+    defp sized(title, size), do: %Release{title: title, size: size}
+
+    defp srow(id, prowlarr_size, engine_size) do
+      p = %{status: :ok, releases: [sized("x", prowlarr_size)]}
+      e = %{status: :ok, releases: [sized("x", engine_size)]}
+      row(id, prowlarr: p, elixir: e, wasm: p)
+    end
+
+    test "a size missing on one side fails strictly and agrees leniently" do
+      m = Metrics.compute([srow("a", 1000, nil), srow("b", 1000, 1000)])
+      assert m.fidelity.elixir == {1, 2}
+      assert m.fidelity_lenient.elixir == {2, 2}
+      assert m.fidelity.wasm == {2, 2}
+      assert m.rule_differences == [%{id: "a", engine: :elixir, strict: false, lenient: true}]
+    end
+
+    test "regressions are also reported under the lenient rule" do
+      p = %{status: :ok, releases: [sized("x", 1000)]}
+
+      strict_regression =
+        row("r", prowlarr: p, wasm: %{p | releases: [sized("x", nil)]}, elixir: p)
+
+      m = Metrics.compute([strict_regression])
+      assert m.regressions == ["r"]
+      assert m.regressions_lenient == []
+    end
   end
 
   test "gate fails when wasm fidelity does not exceed elixir" do
