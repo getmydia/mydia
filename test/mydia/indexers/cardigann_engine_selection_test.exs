@@ -55,7 +55,7 @@ defmodule Mydia.Indexers.CardigannEngineSelectionTest do
       assert {:error, %{type: :engine_unavailable, message: message}} =
                Wasm.Engine.call({:search, "id: x", %{}, query, empty}, ctx, 1_000)
 
-      assert message =~ "CARDIGANN_ENGINE=prowlarr"
+      assert message =~ "Indexers page"
     end
   end
 end
