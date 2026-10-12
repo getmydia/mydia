@@ -22,6 +22,7 @@ defmodule Mydia.Media.MediaItem do
           tvdb_id: integer() | nil,
           imdb_id: String.t() | nil,
           metadata_source: atom() | nil,
+          metadata_source_pinned: boolean(),
           season_order: :official | :dvd | :absolute | nil,
           metadata: Mydia.Metadata.Structs.MediaMetadata.t() | nil,
           content_rating_age: integer() | nil,
@@ -59,6 +60,11 @@ defmodule Mydia.Media.MediaItem do
     # (tv_show only; movies stay nil). Source of truth for provider-aware
     # refresh — not inferred from tvdb_id/tmdb_id presence.
     field :metadata_source, Ecto.Enum, values: [:tvdb, :tmdb]
+    # True when an operator put this show on `metadata_source` on purpose and it
+    # differs from its library's provider. Refresh then re-fetches it in place
+    # instead of re-identifying it onto the library's provider. Written only by
+    # `Mydia.Media.ProviderSwitch.pin_for/2` callers.
+    field :metadata_source_pinned, :boolean, default: false
     # Which TVDB season ordering this show uses. nil means the user has never
     # been asked and the show behaves as :official; an explicit :official
     # means they were offered a split and chose aired order. That distinction
@@ -119,6 +125,7 @@ defmodule Mydia.Media.MediaItem do
       :tvdb_id,
       :imdb_id,
       :metadata_source,
+      :metadata_source_pinned,
       :season_order,
       :metadata,
       :monitored,

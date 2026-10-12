@@ -38,6 +38,12 @@ defmodule Mydia.Library.BatchMatcherTest do
     Cache.clear()
     on_exit(fn -> Cache.clear() end)
 
+    # A TV title the library's provider does not find is retried on the other
+    # one, so the tests that use TMDB need an (empty) TVDB search behind it.
+    Bypass.stub(bypass, "GET", "/tvdb/search", fn conn ->
+      json(conn, %{"data" => []})
+    end)
+
     {:ok, bypass: bypass, config: config, counter: counter}
   end
 

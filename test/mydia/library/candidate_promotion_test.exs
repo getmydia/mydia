@@ -714,4 +714,51 @@ defmodule Mydia.Library.CandidatePromotionTest do
       assert {:error, :queued} = CandidatePromotion.attach(candidate, movie, [])
     end
   end
+
+  describe "provider pin on create" do
+    for {library_provider, pinned?} <- [tvdb: true, tmdb: false] do
+      @tag :tmp_dir
+      test "a TMDB match in a #{library_provider} library creates a show with pinned=#{pinned?}",
+           %{tmp_dir: tmp_dir} do
+        library_path =
+          library_path_fixture(%{
+            type: "series",
+            path: tmp_dir,
+            tv_metadata_source: unquote(library_provider)
+          })
+
+        relative_path = "Stub Series/Season 01/Stub.Series.S01E01.mkv"
+        File.mkdir_p!(Path.dirname(Path.join(tmp_dir, relative_path)))
+        File.write!(Path.join(tmp_dir, relative_path), "episode")
+
+        candidate =
+          import_candidate_fixture(%{
+            library_path_id: library_path.id,
+            relative_path: relative_path,
+            media_type: "tv_show",
+            parsed_info: %{"type" => "tv_show", "season" => 1, "episodes" => [1]}
+          })
+
+        match = %{
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tmdb_id()),
+          provider_type: :tmdb,
+          title: Mydia.MetadataStubProvider.tmdb_series_title(),
+          year: nil,
+          match_confidence: 1.0,
+          parsed_info: %{type: :tv_show, season: 1, episodes: [1]}
+        }
+
+        assert {:ok, [file | _]} =
+                 CandidatePromotion.promote_group([candidate], match,
+                   config: stub_config(),
+                   allow_episode_creation: true
+                 )
+
+        episode = Repo.get!(Episode, file.episode_id)
+        item = Repo.get!(MediaItem, episode.media_item_id)
+        assert item.metadata_source == :tmdb
+        assert item.metadata_source_pinned == unquote(pinned?)
+      end
+    end
+  end
 end

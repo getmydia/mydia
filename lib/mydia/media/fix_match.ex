@@ -8,9 +8,9 @@ defmodule Mydia.Media.FixMatch do
   item's stored title is the wrong one and searching by it is how the bad
   match was made.
 
-  Changing provider is not this module's job: the library's provider setting
-  and `Mydia.Media.ProviderSwitch` own that. A show is fixed on its library's
-  provider, so the next Refresh does not re-identify it away from the fix.
+  Changing provider is the Fix Match provider toggle's job (see `adopt/5`); a
+  show fixed onto a provider its library does not use is pinned there, so the
+  next Refresh does not re-identify it away from the fix.
   """
 
   import Ecto.Query, only: [from: 2]
@@ -24,13 +24,17 @@ defmodule Mydia.Media.FixMatch do
   @doc """
   The provider a fix-match searches and adopts from.
 
-  Movies use TMDB. A show uses its library's provider, so a fix lands where
+  Movies use TMDB. A pinned show uses its stored source. Otherwise a show uses
+  its library's provider, so a fix lands where
   `ProviderSwitch.provider_refresh_decision/1` already expects it and Refresh
   will not re-identify it away. With no single library provider it falls back
   to the show's stored source, then TMDB.
   """
   @spec provider_for(MediaItem.t()) :: :tmdb | :tvdb
   def provider_for(%MediaItem{type: "movie"}), do: :tmdb
+
+  def provider_for(%MediaItem{type: "tv_show", metadata_source_pinned: true} = item),
+    do: stored_provider(item)
 
   def provider_for(%MediaItem{id: nil} = item), do: stored_provider(item)
 
@@ -59,15 +63,15 @@ defmodule Mydia.Media.FixMatch do
   end
 
   @doc """
-  Searches the item's provider for `query`, retrying without `year` when the
-  year filter finds nothing. Results a restricted `scope` may not see are
-  dropped.
+  Searches `query` on the item's provider, or on `opts[:provider]` for a show
+  when the operator picked one, retrying without `year` when the year filter
+  finds nothing. Results a restricted `scope` may not see are dropped.
   """
-  @spec search(MediaItem.t(), String.t(), integer() | nil, Scope.t(), map() | nil) ::
+  @spec search(MediaItem.t(), String.t(), integer() | nil, Scope.t(), map() | nil, keyword()) ::
           {:ok, [SearchResult.t()]} | {:error, term()}
-  def search(%MediaItem{} = item, query, year, %Scope{} = scope, config \\ nil) do
+  def search(%MediaItem{} = item, query, year, %Scope{} = scope, config \\ nil, opts \\ []) do
     config = config || Metadata.default_relay_config()
-    base_opts = [media_type: media_type(item), provider: provider_for(item)]
+    base_opts = [media_type: media_type(item), provider: target_provider(item, opts)]
 
     with {:ok, results} <- search_with_year_fallback(config, query, year, base_opts) do
       {:ok, RemoteFilter.filter(results, scope, config: config)}
@@ -85,19 +89,21 @@ defmodule Mydia.Media.FixMatch do
   end
 
   @doc """
-  Re-points `item` at `candidate` on the item's own provider.
+  Re-points `item` at `candidate` on the item's provider, or on
+  `opts[:provider]` for a show.
 
   A movie is rewritten in place and keeps its files. A show goes through
   `ProviderSwitch.adopt_provider_switch/5`, which rebuilds its episodes from
-  the new id and sends their files back through import. Refuses with
+  the new id and sends their files back through import. It pins the show when
+  the new provider is not its library's. Refuses with
   `{:already_in_library, other}` when another item already holds that id,
   because merging two items is not something this does.
   """
-  @spec adopt(Scope.t(), MediaItem.t(), struct(), map() | nil) ::
+  @spec adopt(Scope.t(), MediaItem.t(), struct(), map() | nil, keyword()) ::
           {:ok, MediaItem.t()} | {:error, {:already_in_library, MediaItem.t()} | term()}
-  def adopt(%Scope{} = scope, %MediaItem{} = item, candidate, config \\ nil) do
+  def adopt(%Scope{} = scope, %MediaItem{} = item, candidate, config \\ nil, opts \\ []) do
     config = config || Metadata.default_relay_config()
-    provider = provider_for(item)
+    provider = target_provider(item, opts)
     new_id = String.to_integer(to_string(candidate.provider_id))
 
     cond do
@@ -115,7 +121,7 @@ defmodule Mydia.Media.FixMatch do
   # An id is only meaningful on the provider that issued it. A candidate from a
   # search made before the item's library changed provider would otherwise be
   # written into the wrong id column. Results that do not name a concrete
-  # provider are trusted, since they came from `search/5` for this item.
+  # provider are trusted, since they came from `search/6` for this item.
   defp candidate_from?(%{provider: p}, provider) when p in [:tmdb, :tvdb], do: p == provider
   defp candidate_from?(_candidate, _provider), do: true
 
@@ -152,6 +158,16 @@ defmodule Mydia.Media.FixMatch do
           where: m.type == ^type and m.tvdb_id == ^new_id and m.id != ^id,
           limit: 1
       )
+
+  # The operator's provider toggle applies to shows only; a movie is always TMDB.
+  defp target_provider(%MediaItem{type: "tv_show"} = item, opts) do
+    case Keyword.get(opts, :provider) do
+      provider when provider in [:tvdb, :tmdb] -> provider
+      _ -> provider_for(item)
+    end
+  end
+
+  defp target_provider(%MediaItem{} = item, _opts), do: provider_for(item)
 
   defp media_type(%MediaItem{type: "tv_show"}), do: :tv_show
   defp media_type(%MediaItem{}), do: :movie
