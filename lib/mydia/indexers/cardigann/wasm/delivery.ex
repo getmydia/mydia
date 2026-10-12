@@ -145,7 +145,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Delivery do
   """
   @spec write_atomically(Path.t(), binary()) :: :ok | {:error, {:write_failed, term()}}
   def write_atomically(target, bytes) do
-    tmp = "#{target}.part-#{System.unique_integer([:positive])}"
+    tmp = "#{target}.part-#{Base.url_encode64(:crypto.strong_rand_bytes(6), padding: false)}"
 
     with :ok <- ensure_dir(Path.dirname(target)),
          :ok <- File.write(tmp, ""),

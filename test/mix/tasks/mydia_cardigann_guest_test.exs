@@ -9,7 +9,13 @@ defmodule Mix.Tasks.Mydia.CardigannGuestTest do
 
   setup do
     bypass = Bypass.open()
-    dir = Path.join(System.tmp_dir!(), "cg-task-#{System.unique_integer([:positive])}")
+
+    dir =
+      Path.join(
+        System.tmp_dir!(),
+        "cg-task-#{Base.url_encode64(:crypto.strong_rand_bytes(8), padding: false)}"
+      )
+
     File.mkdir_p!(dir)
 
     prior = for k <- @keys, do: {k, Application.fetch_env(:mydia, k)}

@@ -307,7 +307,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   def init(opts) do
     :persistent_term.erase(@key)
     eager = Keyword.get(opts, :eager, Application.get_env(:mydia, :cardigann_wasm_eager, true))
-    state = %{status: :pending, waiters: [], task: nil, failures: 0, timer: nil}
+    state = %{status: :pending, waiters: [], task: nil, failures: 0, timer: nil, last_reason: nil}
 
     if eager,
       do: {:ok, %{state | status: :compiling}, {:continue, :compile}},
@@ -374,6 +374,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
           state
           | status: {:unavailable, "#{reason} (next attempt #{DateTime.to_iso8601(due)})"},
             failures: state.failures + 1,
+            last_reason: reason,
             timer: Process.send_after(self(), :retry, delay)
         }
     end
@@ -385,7 +386,18 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   end
 
   @impl true
+  # During a background retry the engine is still unavailable: say so, and say why.
+  def handle_call(:status, _from, %{failures: failures, status: status} = state)
+      when failures > 0 and status in [:compiling, :fetching],
+      do: {:reply, {:unavailable, "#{state.last_reason} (retrying now)"}, state}
+
   def handle_call(:status, _from, state), do: {:reply, state.status, state}
+
+  # A caller does not wait out a retry: the last attempt failed, so it gets the
+  # unavailable answer at once rather than after its whole timeout.
+  def handle_call(:available, _from, %{failures: failures, status: status} = state)
+      when failures > 0 and status in [:compiling, :fetching],
+      do: {:reply, false, state}
 
   def handle_call(:available, from, %{status: :pending} = state),
     do: {:noreply, %{state | status: :compiling, waiters: [from]}, {:continue, :compile}}
@@ -481,7 +493,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   # written or loaded (a Wasmex without the patch, a read only data directory):
   # the caller compiles in memory instead.
   defp build_cached(store, cwasm, bytes) do
-    tmp = "#{cwasm}.part-#{System.unique_integer([:positive])}"
+    tmp = "#{cwasm}.part-#{Base.url_encode64(:crypto.strong_rand_bytes(6), padding: false)}"
 
     with :ok <- Delivery.ensure_dir(Path.dirname(cwasm)),
          :ok <- Wasmex.Engine.precompile_component_to_file(Wasmex.Engine.default(), bytes, tmp),

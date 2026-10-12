@@ -23,7 +23,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineCacheTest do
 
     {:ok, bytes} = Artifact.load()
     sha = Artifact.sha256(bytes)
-    dir = Path.join(System.tmp_dir!(), "cardigann-cache-#{System.unique_integer([:positive])}")
+
+    dir =
+      Path.join(
+        System.tmp_dir!(),
+        "cardigann-cache-#{Base.url_encode64(:crypto.strong_rand_bytes(8), padding: false)}"
+      )
+
     File.mkdir_p!(dir)
 
     keys = [:cardigann_cache_dir, :cardigann_pinned_sha256]

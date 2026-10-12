@@ -11,7 +11,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
     previous = Application.fetch_env(:mydia, :cardigann_wasm_path)
 
     missing =
-      Path.join(System.tmp_dir!(), "no-such-cardigann-#{System.unique_integer([:positive])}.wasm")
+      Path.join(
+        System.tmp_dir!(),
+        "no-such-cardigann-#{Base.url_encode64(:crypto.strong_rand_bytes(8), padding: false)}.wasm"
+      )
 
     Application.put_env(:mydia, :cardigann_wasm_path, missing)
 
@@ -109,6 +112,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
 
     @tag :capture_log
     test "a failed attempt is retried in the background until it works" do
+      # A long timer, so the retries below happen only when the test sends them.
+      Application.put_env(:mydia, :cardigann_wasm_retry_ms, 600_000)
       attempts = :counters.new(1, [])
 
       Application.put_env(:mydia, :cardigann_wasm_compile_fun, fn ->
@@ -126,8 +131,46 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
       assert reason =~ "econnrefused"
       assert reason =~ ~r/next attempt \d{4}-\d\d-\d\dT/
 
-      assert wait_for(fn -> Engine.status() == :ready end)
-      assert :counters.get(attempts, 1) == 3
+      for attempt <- 2..3 do
+        send(Engine, :retry)
+        assert wait_for(fn -> :counters.get(attempts, 1) == attempt and settled?() end)
+      end
+
+      assert Engine.status() == :ready
+    end
+
+    @tag :capture_log
+    test "a caller during a retry gets the unavailable answer at once" do
+      Application.put_env(:mydia, :cardigann_wasm_retry_ms, 600_000)
+      attempts = :counters.new(1, [])
+
+      Application.put_env(:mydia, :cardigann_wasm_compile_fun, fn ->
+        :counters.add(attempts, 1, 1)
+
+        if :counters.get(attempts, 1) == 1 do
+          {:unavailable, "the engine download failed: timeout"}
+        else
+          Process.sleep(3_000)
+          :ready
+        end
+      end)
+
+      restart_engine()
+      refute Engine.available?()
+
+      send(Engine, :retry)
+      assert wait_for(fn -> match?({:unavailable, "" <> r} when r != "", Engine.status()) end)
+      assert {:unavailable, reason} = Engine.status()
+      assert reason =~ "retrying now"
+
+      ctx = %{definition_id: "retry", request_delay_ms: 0, flaresolverr: nil}
+
+      {micros, result} =
+        :timer.tc(fn -> Engine.call({:search, "id: x", %{}, query(), @empty}, ctx, 10_000) end)
+
+      assert {:error, %{type: :engine_unavailable, message: message}} = result
+      assert message =~ "timeout"
+      assert micros < 1_000_000
     end
 
     @tag :capture_log
@@ -159,6 +202,15 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
       assert {:unavailable, reason} = Engine.status()
       assert reason == "does not match the checksum pinned in this build"
       assert :counters.get(attempts, 1) == 1
+    end
+  end
+
+  # Not mid-attempt: unavailable without "retrying now", or ready.
+  defp settled? do
+    case Engine.status() do
+      :ready -> true
+      {:unavailable, reason} -> not String.contains?(reason, "retrying now")
+      _ -> false
     end
   end
 

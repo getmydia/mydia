@@ -17,7 +17,12 @@ defmodule Mydia.Indexers.Cardigann.Wasm.DeliveryTest do
     previous = Enum.map(@keys, &{&1, Application.fetch_env(:mydia, &1)})
     previous_env = System.get_env("CARDIGANN_WASM_PATH")
 
-    dir = Path.join(System.tmp_dir!(), "cardigann-delivery-#{System.unique_integer([:positive])}")
+    dir =
+      Path.join(
+        System.tmp_dir!(),
+        "cardigann-delivery-#{Base.url_encode64(:crypto.strong_rand_bytes(8), padding: false)}"
+      )
+
     File.mkdir_p!(dir)
     bypass = Bypass.open()
 
