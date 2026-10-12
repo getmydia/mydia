@@ -35,22 +35,33 @@ Print it with `mix mydia.cardigann_guest hash`.
 
 Consumers:
 
+- The release (Docker image, Nix package) does not contain the guest. An
+  install that sets `CARDIGANN_ENGINE=prowlarr` downloads
+  `cardigann-<hash>.wasm` into `<data dir>/cardigann/` on first boot
+  (`Mydia.Indexers.Cardigann.Wasm.Delivery`), checks it against the SHA-256 in
+  `ARTIFACT_SHA256`, which the build compiles in, compiles it once and caches
+  the result as `cardigann-<hash>-wasmtime<version>-<arch>.cwasm` beside it.
+  `CARDIGANN_WASM_PATH` points at a local copy for air-gapped installs; that
+  file is verified against the same pin.
 - `mix compile` runs `mix mydia.cardigann_guest fetch` (the `:cardigann_guest`
-  compiler; skipped in the test env, and with `MYDIA_SKIP_CARDIGANN_FETCH=1`).
+  compiler; skipped in the test env, and with `MYDIA_SKIP_CARDIGANN_FETCH=1`,
+  which the Docker and Nix builds set). It is the development and CI path:
   `fetch` downloads the asset into `priv/cardigann/`, or, when none is
   published, copies `out/cardigann.wasm` from a local build. With neither it
   warns and carries on; Cardigann wasm then reports unavailable.
-- The Docker build runs `mix mydia.cardigann_guest verify --allow-missing`: a
-  missing file is fine, a file with a wrong checksum fails the image.
-- The Nix package fetches the asset with a fixed-output `fetchurl`, using the
-  pin below.
+- The cached `.cwasm` and the memory saving need the patched Wasmex
+  (`patches/wasmex`, applied by `mix deps.patch`) built from source with
+  `WASMEX_BUILD=1`: the Dockerfile and the Nix package do. Without it the
+  engine still works, compiling in memory on every start and keeping the
+  compiler's heap.
 
-## Updating the Nix pin
+## Updating the pin
 
 `ARTIFACT_SHA256` holds `<source-hash> <sha256>` on one line. It is the only
-place the hash is copied, because Nix cannot compute it and needs the asset's
-content hash for a fixed-output fetch. Any other content (it ships as
-`unpublished`) makes the Nix build skip the fetch with a warning.
+place the checksum is copied: a release cannot verify a download without it.
+Any other content (it ships as `unpublished`), or a hash that is not the
+current source hash, means the build has no pin, and the engine then reports
+that it cannot download or verify the guest.
 
 A PR that changes the guest therefore takes two steps:
 
@@ -59,8 +70,7 @@ A PR that changes the guest therefore takes two steps:
 2. In a follow-up commit, set `ARTIFACT_SHA256` to
    `<mix mydia.cardigann_guest hash> <contents of the .sha256 file>`.
 
-Until step 2 lands the Nix package builds without the guest (a stale pin names a
-different file than the sources expect, which the runtime treats as missing).
+Until step 2 lands, builds from master ship without a usable pin.
 
 ## CI gap: the main CI often has no wasm
 

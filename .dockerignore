@@ -51,9 +51,12 @@ metadata-relay/.nix-mix
 screenshots
 *.log
 
-# Prebuilt Cardigann wasm guest: fetched by hash during `mix compile` in the image.
+# The Cardigann wasm guest is never part of the image: opted-in installs
+# download it at runtime. Keep local copies out of the build context.
 priv/cardigann/*.wasm
 priv/cardigann/*.wasm.sha256
+priv/cardigann/*.cwasm
+priv/cardigann/*.wasm.cwasm
 native/cardigann_guest/out
 native/cardigann_guest/obj
 native/cardigann_guest/bin

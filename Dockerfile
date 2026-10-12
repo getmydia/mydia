@@ -179,14 +179,27 @@ COPY patches/ueberauth_oidcc_request.ex ./deps/ueberauth_oidcc/lib/ueberauth_oid
 # skipped in the deps.get layer above, which has no patches/ yet. It stops the
 # build on any Exqlite version but the one the patch targets.
 COPY patches/exqlite ./patches/exqlite
+# Wasmex gets the same treatment: a patch that adds precompile-to-file and
+# deserialize-file, which the opt-in Cardigann engine uses to keep one compiled
+# copy of its 75 MB guest on disk instead of a GB of compiler heap
+# (native/cardigann_guest/BENCH.md, "Memory spike"). The patch lives in the Rust
+# half of the NIF, so Wasmex is built from source below instead of downloading
+# its precompiled NIF.
+COPY patches/wasmex ./patches/wasmex
 RUN mix deps.patch
 
 # Compile dependencies
-# Cache cargo registry for Rust NIF compilation (mydia_p2p_core)
+# Cache cargo registry for Rust NIF compilation (mydia_p2p_core, wasmex).
+# WASMEX_BUILD=1 makes rustler_precompiled build the patched NIF from source.
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/app/native/mydia_p2p_core/target,sharing=locked \
-    mix deps.compile
+    WASMEX_BUILD=1 mix deps.compile
+
+# Prove the Wasmex patch took effect: this fails if the NIF came from Wasmex's
+# precompiled download (which has neither function) instead of the patched source.
+RUN elixir -pa "_build/prod/lib/*/ebin" \
+      -e 'true = is_boolean(Wasmex.Engine.malloc_trim()); IO.puts("wasmex NIF is patched")'
 
 # Prove the Exqlite patch took effect. This fails if the NIF came from Exqlite's
 # precompiled download instead of the patched source, or if it still stalls.
@@ -238,13 +251,13 @@ ENV BUILD_COMMIT=${BUILD_COMMIT}
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/app/native/mydia_p2p_core/target,sharing=locked \
-    mix compile
+    MYDIA_SKIP_CARDIGANN_FETCH=1 mix compile
 
-# The Cardigann wasm guest is downloaded by hash during `mix compile` (the
-# :cardigann_guest compiler). A guest that is not published yet only leaves
-# Cardigann wasm unavailable at runtime, so "not published" stays soft here; a
-# download or file with a wrong checksum fails the build (fetch raises on it).
-RUN mix mydia.cardigann_guest fetch && mix mydia.cardigann_guest verify --allow-missing
+# The Cardigann wasm guest is NOT in the image. Installs that opt in with
+# CARDIGANN_ENGINE=prowlarr download it into their data directory on first boot,
+# verified against the SHA-256 compiled into this build. The :cardigann_guest
+# compiler's fetch is skipped (MYDIA_SKIP_CARDIGANN_FETCH on `mix compile`), so
+# nothing lands in priv/ and the release.
 
 # Fail the build if a bundled plugin's wasm artifact was not produced (the
 # :plugins compiler graceful-skips a missing toolchain, so this is the guard
