@@ -69,6 +69,10 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineEvents do
     end
   end
 
+  # Only a forged event gets here; the page offers only the two engines.
+  defp handle_event("switch_cardigann_engine", _params, socket),
+    do: {:halt, put_flash(socket, :error, "Unknown engine")}
+
   defp handle_event("retry_cardigann_engine", _params, socket) do
     EngineSwitcher.retry_now()
     {:halt, socket}

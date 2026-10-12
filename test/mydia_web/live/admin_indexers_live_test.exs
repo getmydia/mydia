@@ -687,6 +687,15 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert has_element?(view, "#cardigann-engine-prowlarr[disabled]")
     end
 
+    test "an unknown engine value is refused without crashing", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+
+      render_hook(view, "switch_cardigann_engine", %{"engine" => "wasm"})
+
+      refute_received {:fake_engine, :ensure_started}
+      assert has_element?(view, "#cardigann-engine-builtin[checked]")
+    end
+
     test "library rows show verified badges", %{conn: conn} do
       Mydia.IndexersFixtures.cardigann_definition_fixture(%{
         indexer_id: "nyaasi",
