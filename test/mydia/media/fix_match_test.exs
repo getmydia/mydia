@@ -4,11 +4,14 @@ defmodule Mydia.Media.FixMatchTest do
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
+  import Mydia.MetadataStub
   import Mydia.MetadataCacheHelpers, only: [unique_provider_id: 0, warm_remote_signals: 3]
 
   alias Mydia.Accounts.Scope
   alias Mydia.Media.FixMatch
   alias Mydia.Media.RemoteSignals
+  alias Mydia.Metadata.Structs.SearchResult
+  alias Mydia.MetadataStubProvider
 
   setup do
     bypass = Bypass.open()
@@ -325,6 +328,53 @@ defmodule Mydia.Media.FixMatchTest do
                library_path_id: lib.id,
                relative_path: file.relative_path
              )
+    end
+  end
+
+  describe "provider override" do
+    setup :setup_metadata_stub
+
+    test "adopt with provider: :tmdb switches a TVDB-library show to TMDB and pins it" do
+      library = library_path_fixture(%{type: "series", tv_metadata_source: :tvdb})
+
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Quiet Orchard",
+          tvdb_id: 70_201,
+          metadata_source: :tvdb
+        })
+
+      episode = episode_fixture(%{media_item_id: item.id})
+      media_file_fixture(%{episode_id: episode.id, library_path_id: library.id})
+      item = Mydia.Repo.get!(Mydia.Media.MediaItem, item.id)
+
+      candidate = %SearchResult{
+        provider: :tmdb,
+        provider_id: MetadataStubProvider.series_tmdb_id(),
+        title: MetadataStubProvider.tmdb_series_title(),
+        media_type: :tv_show
+      }
+
+      assert {:ok, updated} =
+               FixMatch.adopt(Scope.unrestricted(), item, candidate, nil, provider: :tmdb)
+
+      assert updated.metadata_source == :tmdb
+      assert updated.metadata_source_pinned
+    end
+
+    test "a movie ignores the provider override" do
+      movie = media_item_fixture(%{type: "movie", title: "Paper Kite", tmdb_id: 70_202})
+
+      candidate = %SearchResult{
+        provider: :tvdb,
+        provider_id: 1,
+        title: "x",
+        media_type: :movie
+      }
+
+      assert {:error, {:provider_mismatch, :tvdb, :tmdb}} =
+               FixMatch.adopt(Scope.unrestricted(), movie, candidate, nil, provider: :tvdb)
     end
   end
 end

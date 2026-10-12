@@ -38,10 +38,22 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEventsTest do
     {:noreply, s} = FixMatchEvents.open(%{}, socket(item))
 
     {:noreply, s} =
-      FixMatchEvents.handle_search_async({:ok, {:ok, [result(42, "Velvet Comet")]}}, s)
+      FixMatchEvents.handle_search_async({:ok, {:tmdb, {:ok, [result(42, "Velvet Comet")]}}}, s)
 
     assert %{step: :search, searching?: false, results: [%{provider_id: "42"}]} =
              s.assigns.fix_match
+  end
+
+  test "a result tagged with the other provider is dropped", _ do
+    item = media_item_fixture(%{type: "movie", title: "Wrong Pick", tmdb_id: 46})
+    {:noreply, s} = FixMatchEvents.open(%{}, socket(item))
+    before = s.assigns.fix_match
+
+    {:noreply, s} =
+      FixMatchEvents.handle_search_async({:ok, {:tvdb, {:ok, [result(46, "Velvet Comet")]}}}, s)
+
+    assert %{results: [], searching?: searching?} = s.assigns.fix_match
+    assert searching? == before.searching?
   end
 
   test "the current match cannot be picked", _ do
@@ -49,7 +61,7 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEventsTest do
     {:noreply, s} = FixMatchEvents.open(%{}, socket(item))
 
     {:noreply, s} =
-      FixMatchEvents.handle_search_async({:ok, {:ok, [result(43, "Wrong Pick")]}}, s)
+      FixMatchEvents.handle_search_async({:ok, {:tmdb, {:ok, [result(43, "Wrong Pick")]}}}, s)
 
     {:noreply, s} = FixMatchEvents.pick(%{"provider_id" => "43"}, s)
     assert s.assigns.fix_match.step == :search
@@ -60,7 +72,7 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEventsTest do
     {:noreply, s} = FixMatchEvents.open(%{}, socket(item))
 
     {:noreply, s} =
-      FixMatchEvents.handle_search_async({:ok, {:ok, [result(45, "Velvet Comet")]}}, s)
+      FixMatchEvents.handle_search_async({:ok, {:tmdb, {:ok, [result(45, "Velvet Comet")]}}}, s)
 
     {:noreply, s} = FixMatchEvents.pick(%{"provider_id" => "45"}, s)
     assert %{step: :confirm, picked: %{provider_id: "45"}} = s.assigns.fix_match
@@ -73,13 +85,13 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEventsTest do
 
     test "a late search result is ignored", %{socket: s} do
       {:noreply, s} =
-        FixMatchEvents.handle_search_async({:ok, {:ok, [result(51, "Velvet Comet")]}}, s)
+        FixMatchEvents.handle_search_async({:ok, {:tmdb, {:ok, [result(51, "Velvet Comet")]}}}, s)
 
       assert s.assigns.fix_match == nil
     end
 
     test "a late search error is ignored", %{socket: s} do
-      {:noreply, s} = FixMatchEvents.handle_search_async({:ok, {:error, :boom}}, s)
+      {:noreply, s} = FixMatchEvents.handle_search_async({:ok, {:tmdb, {:error, :boom}}}, s)
       assert s.assigns.fix_match == nil
     end
 
@@ -138,7 +150,7 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEventsTest do
     {:noreply, s} = FixMatchEvents.open(%{}, socket(item))
 
     {:noreply, s} =
-      FixMatchEvents.handle_search_async({:ok, {:ok, [result(54, "Velvet Comet")]}}, s)
+      FixMatchEvents.handle_search_async({:ok, {:tmdb, {:ok, [result(54, "Velvet Comet")]}}}, s)
 
     {:noreply, s} = FixMatchEvents.pick(%{"provider_id" => "54"}, s)
     s = %{s | transport_pid: self()}

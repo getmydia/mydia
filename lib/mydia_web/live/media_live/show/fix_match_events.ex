@@ -7,6 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
   use MydiaWeb, :verified_routes
 
   alias Mydia.Media.FixMatch
+  alias Mydia.Metadata.TvProvider
   alias MydiaWeb.Live.Authorization
 
   require Logger
@@ -24,7 +25,8 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
            searching?: false,
            error: nil,
            picked: nil,
-           adopting?: false
+           adopting?: false,
+           provider: FixMatch.provider_for(item)
          })}
 
       {:unauthorized, socket} ->
@@ -34,12 +36,20 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
 
   def close(_params, socket), do: {:noreply, assign(socket, :fix_match, nil)}
 
+  @doc "Routes a `fix_match_<action>` event from `MydiaWeb.MediaLive.Show`."
+  def handle_event("search", params, socket), do: search(params, socket)
+  def handle_event("provider", params, socket), do: provider(params, socket)
+  def handle_event("pick", params, socket), do: pick(params, socket)
+  def handle_event("back", params, socket), do: back(params, socket)
+  def handle_event("confirm", params, socket), do: confirm(params, socket)
+
   def search(_params, %{assigns: %{fix_match: nil}} = socket), do: {:noreply, socket}
 
   def search(%{"fix_match" => %{"query" => query} = params}, socket) when is_binary(query) do
     item = socket.assigns.media_item
     scope = socket.assigns.current_scope
     config = socket.assigns[:metadata_config]
+    provider = socket.assigns.fix_match.provider
     year = parse_year(params["year"])
     trimmed = String.trim(query)
 
@@ -50,24 +60,34 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
        socket
        |> update_fix_match(form: form(query, year), searching?: true, error: nil)
        |> start_async(:fix_match_search, fn ->
-         FixMatch.search(item, trimmed, year, scope, config)
+         {provider, FixMatch.search(item, trimmed, year, scope, config, provider: provider)}
        end)}
     end
   end
 
   def search(_params, socket), do: {:noreply, socket}
 
-  def handle_search_async({:ok, {:ok, results}}, socket),
-    do: {:noreply, update_fix_match(socket, results: results, searching?: false)}
-
-  def handle_search_async({:ok, {:error, reason}}, socket) do
-    {:noreply,
-     update_fix_match(socket, searching?: false, error: "Search failed: #{inspect(reason)}")}
+  # A result tagged with a provider the modal has since toggled away from is
+  # dropped: painting it would show the old provider's ids under the new one.
+  # `searching?` stays on, the newer search is still in flight.
+  def handle_search_async({:ok, {provider, outcome}}, socket) do
+    case socket.assigns.fix_match do
+      %{provider: ^provider} -> apply_search_outcome(outcome, socket)
+      _ -> {:noreply, socket}
+    end
   end
 
   def handle_search_async({:exit, reason}, socket) do
     Logger.error("Fix match search crashed: #{inspect(reason)}")
     {:noreply, update_fix_match(socket, searching?: false, error: "Search failed unexpectedly")}
+  end
+
+  defp apply_search_outcome({:ok, results}, socket),
+    do: {:noreply, update_fix_match(socket, results: results, searching?: false)}
+
+  defp apply_search_outcome({:error, reason}, socket) do
+    {:noreply,
+     update_fix_match(socket, searching?: false, error: "Search failed: #{inspect(reason)}")}
   end
 
   def pick(_params, %{assigns: %{fix_match: nil}} = socket), do: {:noreply, socket}
@@ -78,10 +98,35 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
     picked =
       Enum.find(socket.assigns.fix_match.results, &(to_string(&1.provider_id) == provider_id))
 
-    if picked && provider_id != current do
+    same_identity? =
+      provider_id == current and
+        socket.assigns.fix_match.provider == FixMatch.provider_for(socket.assigns.media_item)
+
+    if picked && not same_identity? do
       {:noreply, update_fix_match(socket, step: :confirm, picked: picked)}
     else
       {:noreply, socket}
+    end
+  end
+
+  def provider(_params, %{assigns: %{fix_match: nil}} = socket), do: {:noreply, socket}
+
+  def provider(%{"provider" => value}, socket) do
+    case TvProvider.parse(value) do
+      nil ->
+        {:noreply, socket}
+
+      provider ->
+        socket =
+          update_fix_match(socket, provider: provider, results: [], step: :search, picked: nil)
+
+        params = socket.assigns.fix_match.form.params
+
+        if String.trim(params["query"] || "") != "" do
+          search(%{"fix_match" => params}, socket)
+        else
+          {:noreply, socket}
+        end
     end
   end
 
@@ -94,11 +139,14 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
       item = socket.assigns.media_item
       scope = socket.assigns.current_scope
       config = socket.assigns[:metadata_config]
+      provider = socket.assigns.fix_match.provider
 
       {:noreply,
        socket
        |> update_fix_match(adopting?: true)
-       |> start_async(:fix_match_adopt, fn -> FixMatch.adopt(scope, item, picked, config) end)}
+       |> start_async(:fix_match_adopt, fn ->
+         FixMatch.adopt(scope, item, picked, config, provider: provider)
+       end)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
       _ -> {:noreply, socket}

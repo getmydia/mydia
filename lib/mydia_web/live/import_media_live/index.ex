@@ -13,15 +13,13 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   """
   use MydiaWeb, :live_view
 
-  require Logger
-
-  alias Mydia.{Library, Metadata, Settings}
+  alias Mydia.{Library, Settings}
   alias Mydia.ImportCandidates
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
-  alias Mydia.Media.RemoteFilter
   alias Mydia.Library.{ImportCandidate, ImportCandidateGroup, ImportRun, SelectionScope}
+  alias Mydia.Metadata.TvProvider
   alias MydiaWeb.Live.Authorization
-  alias MydiaWeb.ImportMediaLive.{Components, RunControl}
+  alias MydiaWeb.ImportMediaLive.{Components, MatchSearch, MatchSearchModal, RunControl}
 
   # `phx-value-band` is client-controlled, so the atom it names is looked up
   # rather than converted. An unknown value is a silent no-op because there is
@@ -660,33 +658,15 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         {:noreply, put_flash(socket, :error, "That group is no longer available.")}
 
       group ->
-        query = group.suggested_title || group.display_title || ""
-
-        state = %{
-          anchor_key: group.anchor_key,
-          media_type: group.media_type,
-          query: query,
-          results: [],
-          searching: true,
-          error: nil
-        }
-
-        {:noreply, socket |> assign(:match_search, state) |> run_match_search(query)}
+        {:noreply, MatchSearch.open(socket, group)}
     end
   end
 
-  def handle_event("match_search_query", %{"q" => query}, socket) do
-    case socket.assigns.match_search do
-      nil ->
-        {:noreply, socket}
+  def handle_event("match_search_query", %{"q" => query}, socket),
+    do: {:noreply, MatchSearch.change_query(socket, query)}
 
-      state ->
-        {:noreply,
-         socket
-         |> assign(:match_search, %{state | query: query, searching: true, error: nil})
-         |> run_match_search(query)}
-    end
-  end
+  def handle_event("match_search_provider", %{"provider" => provider}, socket),
+    do: {:noreply, MatchSearch.change_provider(socket, provider)}
 
   def handle_event("close_match_search", _params, socket) do
     {:noreply, assign(socket, :match_search, nil)}
@@ -729,33 +709,11 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   @impl true
-  def handle_async(:group_match_search, {:ok, {token, anchor_key, result}}, socket) do
-    if stale_match_search?(socket, token, anchor_key) do
-      {:noreply, socket}
-    else
-      {:noreply,
-       assign(socket, :match_search, apply_search_result(socket.assigns.match_search, result))}
-    end
-  end
+  def handle_async(:group_match_search, {:ok, payload}, socket),
+    do: {:noreply, MatchSearch.apply_result(socket, payload)}
 
-  def handle_async(:group_match_search, {:exit, reason}, socket) do
-    Logger.warning("Group match search crashed", reason: inspect(reason))
-
-    socket =
-      case socket.assigns.match_search do
-        nil ->
-          socket
-
-        state ->
-          assign(socket, :match_search, %{
-            state
-            | searching: false,
-              error: "Search failed. Try again."
-          })
-      end
-
-    {:noreply, socket}
-  end
+  def handle_async(:group_match_search, {:exit, reason}, socket),
+    do: {:noreply, MatchSearch.crashed(socket, reason)}
 
   @impl true
   def handle_info({:import_run_progress, run}, socket) do
@@ -1162,87 +1120,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         |> assign(:delete_confirm, nil)
         |> put_flash(:error, "Could not queue the delete: #{inspect(reason)}")
     end
-  end
-
-  # Fires (or re-fires) the group match search asynchronously -- the page
-  # this replaced ran two synchronous relay calls inline in a keystroke
-  # handler and froze while they were in flight, which is exactly what
-  # `start_async/3` exists to avoid. `phx-debounce="300"` on the modal's
-  # input (see Components.match_search_modal/1) keeps every keystroke from
-  # spawning its own request; the token here is what keeps a slow response
-  # from an earlier one from clobbering a newer one that already landed.
-  #
-  # A blank query (the group's own display title, `PathAnchor`'s
-  # "Loose files" fallback, or an emptied search box) is refused before
-  # spawning a task at all: `Metadata.search/3`'s relay adapter treats an
-  # empty query as invalid, so there is nothing useful to send.
-  defp run_match_search(socket, query) do
-    if String.trim(query) == "" do
-      assign(socket, :match_search, %{socket.assigns.match_search | results: [], searching: false})
-    else
-      token = socket.assigns.match_search_token + 1
-      anchor_key = socket.assigns.match_search.anchor_key
-      media_type_hint = socket.assigns.match_search.media_type
-
-      library_path =
-        Enum.find(
-          socket.assigns.library_paths,
-          &(&1.id == socket.assigns.selected_library_path_id)
-        )
-
-      media_type = search_media_type(library_path, media_type_hint)
-      provider = library_path && library_path.tv_metadata_source
-      config = Metadata.default_relay_config()
-      scope = socket.assigns.current_scope
-
-      socket
-      |> assign(:match_search_token, token)
-      |> start_async(:group_match_search, fn ->
-        opts =
-          if media_type == :tv_show do
-            [media_type: media_type, provider: provider]
-          else
-            [media_type: media_type]
-          end
-
-        result =
-          with {:ok, results} <- Metadata.search(config, query, opts) do
-            {:ok, RemoteFilter.filter(results, scope)}
-          end
-
-        {token, anchor_key, result}
-      end)
-    end
-  end
-
-  # Scopes the search to the library's own media type where one is knowable,
-  # per the design note this feature shipped against: a series library
-  # should never offer movie results. A `:mixed` library has no single type
-  # to scope by, so this falls back to the group's own `media_type` (already
-  # known from its rollup) when the group has one, and otherwise leaves the
-  # search unscoped -- `Metadata.search/3` defaults an unscoped query to a
-  # movie search.
-  defp search_media_type(%{type: :movies}, _hint), do: :movie
-  defp search_media_type(%{type: :series}, _hint), do: :tv_show
-  defp search_media_type(%{type: :mixed}, "tv_show"), do: :tv_show
-  defp search_media_type(%{type: :mixed}, "movie"), do: :movie
-  defp search_media_type(_library_path, _hint), do: nil
-
-  defp stale_match_search?(socket, token, anchor_key) do
-    case socket.assigns.match_search do
-      nil -> true
-      %{anchor_key: ^anchor_key} -> socket.assigns.match_search_token != token
-      _different_group -> true
-    end
-  end
-
-  defp apply_search_result(state, {:ok, results}) do
-    %{state | results: results, searching: false, error: nil}
-  end
-
-  defp apply_search_result(state, {:error, reason}) do
-    Logger.warning("Group match search failed", reason: inspect(reason))
-    %{state | results: [], searching: false, error: "Search failed. Try again."}
   end
 
   defp apply_selected_match(socket, anchor_key, result) do

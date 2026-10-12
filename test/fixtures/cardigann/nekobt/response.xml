@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <title>nekoBT</title>
+    <item>
+      <title>[Paper Harbor] Copper Lantern - 02 [1080p] {Tags: example}</title>
+      <guid>https://example.invalid/torrents/1</guid>
+      <comments>https://example.invalid/torrents/1</comments>
+      <pubDate>Sat, 03 Jan 2026 01:27:58 GMT</pubDate>
+      <size>1468006400</size>
+      <enclosure url="magnet:?xt=urn:btih:1111111111111111111111111111111111111111" length="1468006400" type="application/x-bittorrent"/>
+      <torznab:attr name="category" value="5070"/>
+      <torznab:attr name="seeders" value="12"/>
+      <torznab:attr name="leechers" value="3"/>
+      <torznab:attr name="grabs" value="40"/>
+    </item>
+    <item>
+      <title>[Paper Harbor] Copper Lantern - 01 [1080p] {Tags: example}</title>
+      <guid>https://example.invalid/torrents/2</guid>
+      <comments>https://example.invalid/torrents/2</comments>
+      <pubDate>Fri, 02 Jan 2026 01:27:58 GMT</pubDate>
+      <size>1363148800</size>
+      <enclosure url="magnet:?xt=urn:btih:2222222222222222222222222222222222222222" length="1363148800" type="application/x-bittorrent"/>
+      <torznab:attr name="category" value="5070"/>
+      <torznab:attr name="seeders" value="7"/>
+      <torznab:attr name="leechers" value="1"/>
+      <torznab:attr name="grabs" value="22"/>
+    </item>
+  </channel>
+</rss>

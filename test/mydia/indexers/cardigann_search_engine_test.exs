@@ -20,6 +20,87 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
   end
 
   describe "build_search_url/2" do
+    test "keywords are percent-encoded in the definition's charset" do
+      definition = %Parsed{
+        id: "cp1251-test",
+        name: "cp1251",
+        links: ["https://example.invalid"],
+        encoding: "windows-1251",
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "/s/{{ .Keywords }}"}],
+          inputs: %{},
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, "https://example.invalid/s/%CF%F0%E8%E2%E5%F2"} =
+               CardigannSearchEngine.build_search_url(definition, query: "Привет")
+    end
+
+    test "literal spaces in a path template are percent-encoded, existing escapes are kept" do
+      definition = %Parsed{
+        id: "path-test",
+        name: "path",
+        links: ["https://example.invalid"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "search/node/{{ .Keywords }} type:story%2Fx"}],
+          inputs: %{},
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, "https://example.invalid/search/node/a%20b%20type:story%2Fx"} =
+               CardigannSearchEngine.build_search_url(definition, query: "a b")
+    end
+
+    test "characters Mint rejects in a request target are percent-encoded in static text" do
+      definition = %Parsed{
+        id: "path-unsafe-test",
+        name: "path",
+        links: ["https://example.invalid"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "s/\"{{ .Keywords }}\"<x>|y?q=1&r=2"}],
+          inputs: %{},
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, "https://example.invalid/s/%22ab%22%3Cx%3E%7Cy?q=1&r=2"} =
+               CardigannSearchEngine.build_search_url(definition, query: "ab")
+    end
+
+    test "query inputs carry the definition's charset bytes" do
+      definition = %Parsed{
+        id: "cp1251-inputs",
+        name: "cp1251",
+        links: ["https://example.invalid"],
+        encoding: "windows-1251",
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{"search" => "{{ .Keywords }}", "cat" => "0"},
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, %{query_params: params}} =
+               CardigannSearchEngine.build_request_params(definition, query: "Привет")
+
+      assert params["search"] == <<0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2>>
+      assert params["cat"] == "0"
+    end
+
     test "builds URL with simple keyword substitution" do
       definition = %Parsed{
         id: "test",
@@ -1691,6 +1772,102 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
 
       assert {:ok, parsed} = Mydia.Indexers.CardigannParser.parse_definition(yaml)
       assert parsed.follow_redirect == true
+    end
+  end
+
+  describe "build_request_params/2 with a failing input template" do
+    test "an input whose template fails to render is omitted, not sent raw" do
+      definition = %Parsed{
+        id: "input-test",
+        name: "input",
+        links: ["https://example.invalid"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "/"}],
+          inputs: %{"q" => "{{ .Keywords }}", "bad" => "{{ if .Keywords"},
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, %{query_params: params}} =
+               CardigannSearchEngine.build_request_params(definition, query: "x")
+
+      assert params["q"] == "x"
+      refute Map.has_key?(params, "bad")
+    end
+  end
+
+  describe "block page failover" do
+    defp failover_definition(links) do
+      %Parsed{
+        id: "failover",
+        name: "failover",
+        description: "",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: links,
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: [%{path: "/search"}],
+          inputs: %{},
+          rows: %{selector: "tr.r"},
+          fields: %{}
+        },
+        login: nil,
+        download: nil,
+        settings: [],
+        request_delay: nil,
+        follow_redirect: false
+      }
+    end
+
+    test "a block page on the first mirror fails over to the second" do
+      blocked = Bypass.open()
+      live = Bypass.open()
+
+      Bypass.stub(blocked, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, File.read!("test/fixtures/cardigann/block_page/response.html"))
+      end)
+
+      Bypass.stub(live, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, ~s(<table><tr class=r><td>Copper Lantern</td></tr></table>))
+      end)
+
+      definition =
+        failover_definition([
+          "http://localhost:#{blocked.port}",
+          "http://localhost:#{live.port}"
+        ])
+
+      test_pid = self()
+
+      assert {:ok, response} =
+               CardigannSearchEngine.execute_search(
+                 definition,
+                 [query: "x", categories: [], on_promote: &send(test_pid, {:promoted, &1})],
+                 %{}
+               )
+
+      assert response.body =~ "Copper Lantern"
+      assert_received {:promoted, "http://localhost:" <> _}
+    end
+
+    test "a block page on the only mirror is reported as a blocked page" do
+      blocked = Bypass.open()
+
+      Bypass.stub(blocked, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, File.read!("test/fixtures/cardigann/block_page/response.html"))
+      end)
+
+      definition = failover_definition(["http://localhost:#{blocked.port}"])
+
+      assert {:error, %{message: "Blocked page: " <> title}} =
+               CardigannSearchEngine.execute_search(definition, [query: "x", categories: []], %{})
+
+      assert title =~ "Blocked"
     end
   end
 end

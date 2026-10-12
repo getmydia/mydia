@@ -186,9 +186,15 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       response = %{status: 200, body: html_body}
 
-      assert {:ok, results} = CardigannResultParser.parse_results(definition, response, "Test")
+      {parsed, log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          CardigannResultParser.parse_results(definition, response, "Test")
+        end)
+
+      assert {:ok, results} = parsed
       assert length(results) == 1
       assert hd(results).title == "Complete Release"
+      assert log =~ "[Test] 3 rows matched, 2 dropped"
     end
   end
 
@@ -547,9 +553,34 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       response = %{status: 200, body: "not valid json {"}
 
-      # Invalid JSON that looks like JSON will be treated as HTML
-      # and return empty results since no HTML elements match
-      assert {:ok, []} = CardigannResultParser.parse_results(definition, response, "Test")
+      # Invalid JSON that looks like JSON is treated as HTML. "$.results" is not a
+      # CSS selector, so the failure is structured and names the selector.
+      assert {:error, %{type: :search_failed, message: message}} =
+               CardigannResultParser.parse_results(definition, response, "Test")
+
+      assert message =~ "$.results"
+    end
+
+    test "an unparseable HTML selector returns a search_failed error naming the indexer and selector" do
+      definition = %Parsed{
+        id: "bad-selector",
+        name: "Bad Selector",
+        search: %{
+          rows: %{selector: "tr[[["},
+          fields: %{"title" => %{selector: "td"}, "download" => %{selector: "a"}}
+        }
+      }
+
+      response = %{
+        status: 200,
+        body: "<html><body><table><tr><td>x</td></tr></table></body></html>"
+      }
+
+      assert {:error, %{type: :search_failed, message: message}} =
+               CardigannResultParser.parse_results(definition, response, "Bad Selector")
+
+      assert message =~ "Bad Selector"
+      assert message =~ "tr[[["
     end
 
     test "navigates dotted JSON paths without $. prefix" do
@@ -865,7 +896,98 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
     end
   end
 
+  describe "relative links" do
+    @relative_definition %Parsed{
+      id: "test",
+      name: "Test",
+      capabilities: %{modes: %{"search" => ["q"]}, categorymappings: []},
+      search: %{
+        rows: %{selector: "tr.item"},
+        fields: %{
+          :title => %{selector: "td.t"},
+          :download => %{selector: "a.d", attribute: "href"},
+          :details => %{selector: "a.i", attribute: "href"}
+        }
+      }
+    }
+
+    @relative_page """
+    <table><tr class="item"><td class="t">Copper Lantern S01E02</td>
+    <td><a class="d" href="download.php?id=7">d</a><a class="i" href="/view/7">i</a></td></tr></table>
+    """
+
+    defp parse_relative(opts) do
+      {:ok, [result]} =
+        CardigannResultParser.parse_results(
+          @relative_definition,
+          %{status: 200, body: @relative_page},
+          "Test",
+          opts
+        )
+
+      result
+    end
+
+    test "resolve against the search page when the search path is known" do
+      result =
+        parse_relative(
+          base_url: "https://example.invalid",
+          search_path: %{path: "forum/tracker.php"},
+          template_context: %{keywords: "x", config: %{}}
+        )
+
+      assert result.download_url == "https://example.invalid/forum/download.php?id=7"
+      assert result.info_url == "https://example.invalid/view/7"
+    end
+
+    test "join onto the base URL without a search path" do
+      result = parse_relative(base_url: "https://example.invalid")
+
+      assert result.download_url == "https://example.invalid/download.php?id=7"
+    end
+  end
+
   describe "HTML field extraction" do
+    test "renders a template in a field selector before evaluating it" do
+      definition = %Parsed{
+        id: "test",
+        name: "Test",
+        capabilities: %{modes: %{"search" => ["q"]}, categorymappings: []},
+        search: %{
+          rows: %{selector: "tr.item"},
+          fields: %{
+            :title => %{selector: "td:nth-child(1)"},
+            :download => %{selector: "a", attribute: "href"},
+            :size => %{
+              selector: "{{ if .Keywords }}td:nth-child(3){{ else }}td:nth-child(2){{ end }}"
+            }
+          }
+        }
+      }
+
+      html_body = """
+      <table><tr class="item">
+        <td>Copper Lantern S01E02</td><td>1 GB</td><td>2 GB</td>
+        <td><a href="magnet:?xt=urn:btih:1111111111111111111111111111111111111111">x</a></td>
+      </tr></table>
+      """
+
+      parse = fn keywords ->
+        {:ok, [result]} =
+          CardigannResultParser.parse_results(
+            definition,
+            %{status: 200, body: html_body},
+            "Test",
+            template_context: %{config: %{}, keywords: keywords}
+          )
+
+        result
+      end
+
+      assert parse.("copper").size == 2 * 1024 * 1024 * 1024
+      assert parse.("").size == 1024 * 1024 * 1024
+    end
+
     test "extracts text content from elements" do
       definition = %Parsed{
         id: "test",
@@ -1011,6 +1133,81 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
   end
 
   describe "text field type with templates" do
+    @chained_text_fields %{
+      # Alphabetical order puts :title first, so a map-order pass would render it
+      # before the fields it reads.
+      :title => %{text: "{{ .Result.title_b }}"},
+      :title_b => %{text: "{{ .Result.title_a }} [b]"},
+      :title_a => %{text: "{{ .Result.name }} [a]"}
+    }
+
+    test "computes text fields after the text fields they read (HTML)" do
+      definition = %Parsed{
+        id: "test",
+        name: "Test",
+        capabilities: %{modes: %{"search" => ["q"]}, categorymappings: []},
+        search: %{
+          rows: %{selector: "div.item"},
+          fields:
+            Map.merge(@chained_text_fields, %{
+              :name => %{selector: "div.title"},
+              :download => %{selector: "a.download", attribute: "href"}
+            })
+        }
+      }
+
+      html_body = """
+      <div class="item">
+        <div class="title">Copper Lantern S01E02</div>
+        <a class="download" href="magnet:?xt=urn:btih:1111111111111111111111111111111111111111">x</a>
+      </div>
+      """
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: html_body},
+                 "Test"
+               )
+
+      assert result.title == "Copper Lantern S01E02 [a] [b]"
+    end
+
+    test "computes text fields after the text fields they read (JSON)" do
+      definition = %Parsed{
+        id: "test",
+        name: "Test",
+        capabilities: %{modes: %{"search" => ["q"]}, categorymappings: []},
+        search: %{
+          rows: %{selector: "results"},
+          fields:
+            Map.merge(@chained_text_fields, %{
+              :name => %{selector: "name"},
+              :download => %{selector: "magnet"}
+            })
+        }
+      }
+
+      body =
+        Jason.encode!(%{
+          "results" => [
+            %{
+              "name" => "Paper Harbor 2031",
+              "magnet" => "magnet:?xt=urn:btih:2222222222222222222222222222222222222222"
+            }
+          ]
+        })
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: body},
+                 "Test"
+               )
+
+      assert result.title == "Paper Harbor 2031 [a] [b]"
+    end
+
     test "extracts category using text field referencing extracted values" do
       definition = %Parsed{
         id: "test",
@@ -1262,7 +1459,7 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       }
     end
 
-    @html ~s|<html><body><table><tr><td class="title">Ubuntu</td><a href="magnet:?xt=urn:btih:AAA">d</a></tr></table></body></html>|
+    @html ~s|<html><body><table><tr><td class="title">Ubuntu</td><td><a href="magnet:?xt=urn:btih:AAA">d</a></td></tr></table></body></html>|
 
     test "uses the default when an optional selector misses" do
       definition = default_definition(%{selector: "td.seeders", optional: true, default: 5})
@@ -1281,7 +1478,7 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
     test "ignores the default when the selector matches" do
       html =
-        "<html><body><table><tr><td class=\"title\">Ubuntu</td><td class=\"seeders\">42</td><a href=\"magnet:?xt=urn:btih:AAA\">d</a></tr></table></body></html>"
+        "<html><body><table><tr><td class=\"title\">Ubuntu</td><td class=\"seeders\">42</td><td><a href=\"magnet:?xt=urn:btih:AAA\">d</a></td></tr></table></body></html>"
 
       definition = default_definition(%{selector: "td.seeders", optional: true, default: 0})
 
@@ -1340,8 +1537,8 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       html =
         ~s|<html><body><table>| <>
-          ~s|<tr><td class="title">The Matrix 1999</td><a class="dl" href="magnet:?xt=urn:btih:AAA">d</a></tr>| <>
-          ~s|<tr><td class="title">The Matrix</td><a class="dl" href="magnet:?xt=urn:btih:BBB">d</a></tr>| <>
+          ~s|<tr><td class="title">The Matrix 1999</td><td><a class="dl" href="magnet:?xt=urn:btih:AAA">d</a></td></tr>| <>
+          ~s|<tr><td class="title">The Matrix</td><td><a class="dl" href="magnet:?xt=urn:btih:BBB">d</a></td></tr>| <>
           ~s|</table></body></html>|
 
       assert {:ok, filtered_results} =
@@ -1366,6 +1563,51 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       assert length(unfiltered_results) == 1
       assert hd(unfiltered_results).title == "The Matrix 1999"
+    end
+  end
+
+  describe "andmatch with a non-UTF-8 definition" do
+    test "matches a Cyrillic query against the decoded windows-1251 titles" do
+      definition = %Parsed{
+        id: "andmatch-cp1251",
+        name: "Andmatch cp1251",
+        type: "public",
+        links: ["https://example.invalid"],
+        encoding: "windows-1251",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/s"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td.title", filters: [%{name: "andmatch"}]},
+            "download" => %{selector: "a.dl", attribute: "href"}
+          }
+        }
+      }
+
+      html =
+        ~s|<html><body><table>| <>
+          ~s|<tr><td class="title">Медный фонарь 2031</td><td><a class="dl" href="magnet:?xt=urn:btih:AAA">d</a></td></tr>| <>
+          ~s|<tr><td class="title">Бумажная гавань</td><td><a class="dl" href="magnet:?xt=urn:btih:BBB">d</a></td></tr>| <>
+          ~s|</table></body></html>|
+
+      body = Mydia.Indexers.Cardigann.Charset.encode(html, "windows-1251")
+      context = Mydia.Indexers.Cardigann.TemplateContext.build(definition, query: "Медный фонарь")
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: body},
+                 "Andmatch cp1251",
+                 template_context: context,
+                 base_url: "https://example.invalid"
+               )
+
+      assert result.title == "Медный фонарь 2031"
     end
   end
 
@@ -1398,7 +1640,7 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       ~s|<html><body><table><tr>| <>
         ~s|<td class="title">Ubuntu</td>| <>
         ~s|<td class="cat"><a href="/browse?cat=#{cat}">#{cat}</a></td>| <>
-        ~s|<a class="dl" href="magnet:?xt=urn:btih:AAA">d</a>| <>
+        ~s|<td><a class="dl" href="magnet:?xt=urn:btih:AAA">d</a></td>| <>
         ~s|</tr></table></body></html>|
     end
 
@@ -1653,7 +1895,9 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       response = %{status: 200, body: xml}
 
-      assert {:ok, []} =
+      # The html path runs the XML row selector through the CSS engine, which
+      # rejects it; Floki used to swallow that and return no rows.
+      assert {:error, %{type: :search_failed}} =
                CardigannResultParser.parse_results(
                  definition,
                  response,
@@ -1717,6 +1961,194 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       assert result.title == "Debian 12 ISO"
     end
+
+    test "bare attribute selectors match torznab:attr elements" do
+      xml = """
+      <?xml version="1.0"?>
+      <rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel>
+        <item><title>Copper Lantern S01E02</title><link>magnet:?xt=urn:btih:1111111111111111111111111111111111111111</link>
+          <torznab:attr name="seeders" value="12"/></item>
+      </channel></rss>
+      """
+
+      definition = %Parsed{
+        id: "xml-attr",
+        name: "XML Attr",
+        type: "public",
+        links: ["https://example.invalid"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/rss", response: %{type: "xml"}}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "rss > channel > item"},
+          fields: %{
+            "title" => %{selector: "title"},
+            "download" => %{selector: "link"},
+            "seeders" => %{selector: "[name=seeders]", attribute: "value"}
+          }
+        }
+      }
+
+      assert {:ok, [result]} =
+               CardigannResultParser.parse_results(
+                 definition,
+                 %{status: 200, body: xml},
+                 "XML Attr",
+                 template_context: %{},
+                 base_url: "https://example.invalid"
+               )
+
+      assert result.seeders == 12
+    end
+  end
+
+  describe "parse_results_with_stats/4" do
+    defp stats_definition do
+      %Parsed{
+        id: "stats",
+        name: "Stats",
+        type: "public",
+        links: ["https://example.invalid"],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{
+            "title" => %{selector: "td.t"},
+            "download" => %{selector: "a.d", attribute: "href"}
+          }
+        }
+      }
+    end
+
+    defp parse_with_log(definition, body) do
+      ExUnit.CaptureLog.with_log(fn ->
+        CardigannResultParser.parse_results_with_stats(
+          definition,
+          %{status: 200, body: body},
+          "Stats",
+          base_url: "https://example.invalid"
+        )
+      end)
+    end
+
+    test "counts rows dropped for a missing download and names the field" do
+      html = """
+      <table><tr><td class="t">Copper Lantern</td></tr><tr><td class="t">Paper Harbor</td><td><a class="d" href="/1">d</a></td></tr></table>
+      """
+
+      {result, log} = parse_with_log(stats_definition(), html)
+
+      assert {:ok, [_one],
+              %Mydia.Indexers.Cardigann.ParseStats{
+                matched: 2,
+                dropped: 1,
+                first_missing: "download"
+              }} = result
+
+      assert log =~ "[Stats] 2 rows matched, 1 dropped (first missing: download)"
+    end
+
+    test "names title when the title is missing" do
+      html = ~s(<table><tr><td><a class="d" href="/1">d</a></td></tr></table>)
+
+      {result, _log} = parse_with_log(stats_definition(), html)
+      assert {:ok, [], %{matched: 1, dropped: 1, first_missing: "title"}} = result
+    end
+
+    test "does not log when nothing was dropped" do
+      html =
+        ~s(<table><tr><td class="t">Copper Lantern</td><td><a class="d" href="/1">d</a></td></tr></table>)
+
+      {result, log} = parse_with_log(stats_definition(), html)
+      assert {:ok, [_one], %{matched: 1, dropped: 0}} = result
+      refute log =~ "rows matched"
+    end
+
+    test "andmatch removals are counted as filtered, not dropped" do
+      definition =
+        put_in(stats_definition().search.fields["title"], %{
+          selector: "td.t",
+          filters: [%{name: "andmatch"}]
+        })
+
+      html =
+        ~s(<table>) <>
+          ~s(<tr><td class="t">Copper Lantern</td><td><a class="d" href="/1">d</a></td></tr>) <>
+          ~s(<tr><td class="t">Paper Harbor</td><td><a class="d" href="/2">d</a></td></tr>) <>
+          ~s(<tr><td class="t">Paper Harbor Two</td></tr>) <>
+          ~s(</table>)
+
+      {result, _log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          CardigannResultParser.parse_results_with_stats(
+            definition,
+            %{status: 200, body: html},
+            "Stats",
+            template_context: %{keywords: "Copper Lantern"},
+            base_url: "https://example.invalid"
+          )
+        end)
+
+      assert {:ok, [_one], %{matched: 3, filtered: 1, dropped: 1, first_missing: "download"}} =
+               result
+    end
+
+    test "counts dropped XML rows" do
+      xml = """
+      <?xml version="1.0"?>
+      <rss><channel>
+        <item><title>Copper Lantern</title></item>
+        <item><title>Paper Harbor</title><link>magnet:?xt=urn:btih:1111111111111111111111111111111111111111</link></item>
+      </channel></rss>
+      """
+
+      definition = %{
+        stats_definition()
+        | search: %{
+            paths: [%{path: "/rss", response: %{type: "xml"}}],
+            rows: %{selector: "rss/channel/item"},
+            fields: %{"title" => %{selector: "title"}, "download" => %{selector: "link"}}
+          }
+      }
+
+      {result, _log} = parse_with_log(definition, xml)
+      assert {:ok, [_one], %{matched: 2, dropped: 1, first_missing: "download"}} = result
+    end
+
+    test "counts dropped JSON rows" do
+      definition = %{
+        stats_definition()
+        | search: %{
+            paths: [%{path: "/", response: %{type: "json"}}],
+            rows: %{selector: "items"},
+            fields: %{"title" => %{selector: "name"}, "download" => %{selector: "url"}}
+          }
+      }
+
+      body = ~s({"items": [{"name": "Copper Lantern"}, {"name": "Paper Harbor", "url": "/1"}]})
+
+      {result, _log} = parse_with_log(definition, body)
+      assert {:ok, [_one], %{matched: 2, dropped: 1, first_missing: "download"}} = result
+    end
+
+    test "an empty body yields empty stats" do
+      assert {:ok, [], %{matched: 0, dropped: 0}} =
+               CardigannResultParser.parse_results_with_stats(
+                 stats_definition(),
+                 %{status: 200, body: ""},
+                 "Stats"
+               )
+    end
   end
 
   describe "rows.missingAttributeEqualsNoResults" do
@@ -1754,6 +2186,33 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
                  template_context: %{},
                  base_url: "https://example.com"
                )
+    end
+  end
+
+  describe "html_parse_failure/2" do
+    import ExUnit.CaptureLog
+
+    test "labels a lexbor selector error as an invalid selector" do
+      error = %ArgumentError{message: ~s(invalid selector "a[")}
+
+      capture_log(fn ->
+        assert {:error, e} = CardigannResultParser.html_parse_failure(error, "demo")
+        assert Exception.message(e) =~ "Invalid selector in the demo definition"
+      end)
+    end
+
+    test "does not label an unrelated ArgumentError as an invalid selector" do
+      error = %ArgumentError{message: "errors were found at the given arguments"}
+
+      log =
+        capture_log(fn ->
+          assert {:error, e} = CardigannResultParser.html_parse_failure(error, "demo")
+          message = Exception.message(e)
+          refute message =~ "Invalid selector"
+          assert message =~ "Failed to parse HTML response"
+        end)
+
+      refute log =~ "Invalid selector"
     end
   end
 end

@@ -19,6 +19,7 @@ defmodule Mydia.CardigannSnapshotHelper do
       end
   """
 
+  alias Mydia.Indexers.Cardigann.Selector
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Indexers.CardigannResultParser
   alias Mydia.Downloads.TorrentHash
@@ -30,7 +31,7 @@ defmodule Mydia.CardigannSnapshotHelper do
 
   The directory must contain:
   - `definition.yml` - The Cardigann YAML definition
-  - `response.html` or `response.json` - The saved search response
+  - `response.html`, `response.json` or `response.xml` - The saved search response
 
   Optionally:
   - `metadata.json` - Query metadata (keywords, expected count, etc.)
@@ -171,12 +172,10 @@ defmodule Mydia.CardigannSnapshotHelper do
   defp usable_infohash?(_), do: false
 
   defp resolve_selector_value(selectors, page) do
-    document = Floki.parse_document!(page)
-
     selectors
     |> List.wrap()
     |> Enum.find_value(fn config ->
-      case extract_selector_value(document, config, %{}) do
+      case extract_selector_value(page, config, %{}) do
         {:ok, v} when is_binary(v) and v != "" -> v
         _ -> nil
       end
@@ -228,11 +227,12 @@ defmodule Mydia.CardigannSnapshotHelper do
     end
   end
 
-  defp extract_selector_value(document, config, variables) do
+  defp extract_selector_value(page, config, variables) do
     filters = Map.get(config, :filters) || []
 
     with {:ok, selector_text} <- render_template(Map.get(config, :selector), variables),
-         {:ok, raw} <- extract_from_document(document, selector_text, Map.get(config, :attribute)),
+         {:ok, raw} <-
+           extract_from_page(page, selector_text, Map.get(config, :attribute), "download link"),
          {:ok, value} <- CardigannResultParser.apply_filters(raw, filters, variables) do
       trimmed = String.trim(value)
       if trimmed == "", do: {:error, :empty}, else: {:ok, trimmed}
@@ -245,35 +245,24 @@ defmodule Mydia.CardigannSnapshotHelper do
   end
 
   defp extract_from_page(page, selector_text, attribute, label) do
-    with {:ok, document} <- Floki.parse_document(page) do
-      extract_from_document(document, selector_text, attribute)
-    else
-      {:error, reason} -> {:error, "could not parse #{label} response: #{inspect(reason)}"}
-    end
-  end
+    document = Selector.parse(page, [selector_text])
 
-  defp extract_from_document(document, selector_text, _attribute)
-       when selector_text in @whole_document_selectors do
-    {:ok, Floki.raw_html(document)}
-  end
-
-  defp extract_from_document(document, selector_text, attribute) do
-    case Floki.find(document, selector_text) do
+    case Selector.find(document, :root, selector_text) do
       [] ->
         {:error, :no_match}
 
       elements ->
         value =
           case attribute do
-            nil ->
-              elements |> Floki.text() |> String.trim()
-
-            attr ->
-              elements |> Floki.attribute(attr) |> List.first() |> Kernel.||("") |> String.trim()
+            nil -> elements |> Selector.text() |> String.trim()
+            attr -> (Selector.attribute(elements, attr) || "") |> String.trim()
           end
 
         {:ok, value}
     end
+  rescue
+    error in ArgumentError ->
+      {:error, "could not match #{label} selector: #{Exception.message(error)}"}
   end
 
   defp render_template(nil, _variables), do: {:ok, ""}
@@ -334,10 +323,12 @@ defmodule Mydia.CardigannSnapshotHelper do
   defp load_response_fixture(fixture_dir) do
     html_path = Path.join(fixture_dir, "response.html")
     json_path = Path.join(fixture_dir, "response.json")
+    xml_path = Path.join(fixture_dir, "response.xml")
 
     cond do
       File.exists?(html_path) -> {File.read!(html_path), :html}
       File.exists?(json_path) -> {File.read!(json_path), :json}
+      File.exists?(xml_path) -> {File.read!(xml_path), :xml}
       true -> raise "No response fixture found in #{fixture_dir}"
     end
   end

@@ -101,6 +101,7 @@
               id={dom_id}
               group={group}
               band={ImportCandidates.band(group)}
+              library_provider={TvProvider.for_library(@selected_library_path)}
               selected={SelectionScope.selected?(@selection, group.id)}
               expanded={MapSet.member?(@expanded_ids, group.id)}
               members={if @expanded_group_id == group.id, do: @streams.members, else: []}
@@ -129,7 +130,7 @@
       </div>
     </section>
 
-    <Components.match_search_modal state={@match_search} />
+    <MatchSearchModal.match_search_modal state={@match_search} />
     <Components.delete_files_modal state={@delete_confirm} />
   </div>
 </Layouts.app>

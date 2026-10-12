@@ -2,6 +2,7 @@ defmodule Mydia.Library.FileIngestTest do
   use Mydia.DataCase, async: false
 
   import Mydia.MediaFixtures
+  import Mydia.MetadataStub
   import Mydia.SettingsFixtures
 
   alias Mydia.Library.{FileIngest, ImportCandidate, MediaFile}
@@ -214,5 +215,68 @@ defmodule Mydia.Library.FileIngestTest do
 
     assert %ImportCandidate{attempts: 1} = Repo.get!(ImportCandidate, candidate.id)
     refute Repo.exists?(MediaFile)
+  end
+
+  describe "cross-provider TV matches" do
+    setup :setup_metadata_stub
+
+    defp tv_candidate(library_provider) do
+      library_path =
+        library_path_fixture(%{type: "series", tv_metadata_source: library_provider})
+
+      import_candidate_fixture(%{
+        library_path_id: library_path.id,
+        media_type: "tv_show",
+        parsed_info: %{"type" => "tv_show", "season" => 1, "episodes" => [1]}
+      })
+    end
+
+    defp tv_match(provider_type, extra \\ %{}) do
+      Map.merge(
+        %{
+          provider_id: "880101",
+          provider_type: provider_type,
+          title: "Harbor Lights",
+          year: 2021,
+          match_confidence: 1.0,
+          parsed_info: %{type: :tv_show, season: 1, episodes: [1]}
+        },
+        extra
+      )
+    end
+
+    test "a confident TMDB match in a TVDB library stays a candidate" do
+      candidate = tv_candidate(:tvdb)
+
+      assert {:candidate, %ImportCandidate{}} =
+               FileIngest.ingest(candidate, tv_match(:tmdb), policy: :unattended)
+
+      refute Repo.exists?(MediaFile)
+    end
+
+    test "the guard does not touch a same-provider match" do
+      candidate = tv_candidate(:tmdb)
+
+      match =
+        tv_match(:tmdb, %{
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tmdb_id()),
+          title: Mydia.MetadataStubProvider.tmdb_series_title()
+        })
+
+      assert {:promoted, _} = FileIngest.ingest(candidate, match, policy: :unattended)
+    end
+
+    test "a cross-provider match from the local database is not held for review" do
+      candidate = tv_candidate(:tvdb)
+
+      match =
+        tv_match(:tmdb, %{
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tmdb_id()),
+          title: Mydia.MetadataStubProvider.tmdb_series_title(),
+          from_local_db: true
+        })
+
+      assert {:promoted, _} = FileIngest.ingest(candidate, match, policy: :unattended)
+    end
   end
 end

@@ -198,8 +198,9 @@ defmodule Mydia.MetadataStubProvider do
     if :persistent_term.get(@search_failure_key, false) do
       {:error, Error.connection_failed("stubbed search failure")}
     else
-      case Keyword.get(opts, :media_type) do
-        :tv_show -> {:ok, [series_search_result()]}
+      case {Keyword.get(opts, :media_type), Keyword.get(opts, :provider)} do
+        {:tv_show, :tmdb} -> {:ok, [tmdb_series_search_result()]}
+        {:tv_show, _} -> {:ok, [series_search_result()]}
         _ -> {:ok, [movie_search_result()]}
       end
     end
@@ -343,6 +344,24 @@ defmodule Mydia.MetadataStubProvider do
       overview: "A stub series used by the guest request tests.",
       poster_path: "/stub-series-poster.jpg",
       vote_average: 9.0
+    }
+  end
+
+  # The TMDB counterpart of `series_search_result/0`, returned when a TV search
+  # is scoped to the TMDB provider.
+  defp tmdb_series_search_result do
+    %SearchResult{
+      provider_id: to_string(@series_tmdb_id),
+      provider: :tmdb,
+      media_type: :tv_show,
+      id: @series_tmdb_id,
+      title: @tmdb_series_title,
+      name: @tmdb_series_title,
+      original_name: @tmdb_series_title,
+      first_air_date: "2016-05-04",
+      overview: "A TMDB-sourced stub series search result.",
+      poster_path: "/stub-tmdb-series-poster.jpg",
+      vote_average: 7.5
     }
   end
 

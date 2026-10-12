@@ -37,6 +37,29 @@ defmodule Mydia.Media.ProviderSwitch do
     end
   end
 
+  @doc """
+  The single library provider a show lives under, or `nil` when it is in no
+  series/mixed library or its libraries disagree.
+  """
+  @spec library_provider(MediaItem.t()) :: :tvdb | :tmdb | nil
+  def library_provider(%MediaItem{} = media_item) do
+    case resolve_library_provider(media_item) do
+      {:ok, provider} -> provider
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Whether a show on `provider` should be pinned there: only when its library has
+  one provider and it is a different one. With no single library provider there
+  is no library choice to diverge from.
+  """
+  @spec pin_for(atom(), atom() | nil) :: boolean()
+  def pin_for(provider, library_provider) when library_provider in [:tvdb, :tmdb],
+    do: provider != library_provider
+
+  def pin_for(_provider, _library_provider), do: false
+
   defp library_providers_for_item(%MediaItem{id: id}) do
     direct =
       from mf in MediaFile,
@@ -69,6 +92,17 @@ defmodule Mydia.Media.ProviderSwitch do
   `target`.
   """
   @spec provider_refresh_decision(MediaItem.t()) :: :refetch | {:reidentify, atom()}
+  # A pinned show was put on its provider on purpose. Re-identifying it onto
+  # the library's provider would undo that choice, and for a show the library's
+  # provider does not carry it would open an empty picker.
+  def provider_refresh_decision(%MediaItem{
+        type: "tv_show",
+        metadata_source_pinned: true,
+        metadata_source: source
+      })
+      when source in [:tvdb, :tmdb],
+      do: :refetch
+
   def provider_refresh_decision(%MediaItem{type: "tv_show"} = media_item) do
     case resolve_library_provider(media_item) do
       {:ok, lib_provider} ->
@@ -223,6 +257,7 @@ defmodule Mydia.Media.ProviderSwitch do
       ) do
     config = config || Mydia.Metadata.default_relay_config()
     new_id = to_string(candidate.provider_id)
+    pinned? = pin_for(target_provider, library_provider(item))
 
     # Step 1 + 2 (no mutation): validate the new show metadata and pre-fetch all
     # season episode data into memory.
@@ -299,7 +334,8 @@ defmodule Mydia.Media.ProviderSwitch do
             case Media.update_media_item(
                    scope,
                    item,
-                   provider_switch_attrs(target_provider, new_id, metadata),
+                   provider_switch_attrs(target_provider, new_id, metadata)
+                   |> Map.put(:metadata_source_pinned, pinned?),
                    reason: "Provider switched to #{target_provider}"
                  ) do
               {:ok, updated} -> updated

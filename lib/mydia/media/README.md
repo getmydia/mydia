@@ -571,3 +571,25 @@ cannot disagree.
   `RemoteFilter`. The check is file-granular: one `RemoteFilter` call anywhere
   in a file satisfies it, so it catches a forgotten surface and not a single
   unfiltered call path inside a filtered file.
+
+## A show can be pinned to a provider its library does not use
+
+`media_items.metadata_source_pinned` marks a TV show whose `metadata_source`
+was chosen on purpose and differs from its library's `tv_metadata_source` (a
+TMDB show in a TVDB library, or the reverse). `ProviderSwitch.pin_for/2` is the
+only rule that sets it; `adopt_provider_switch/5` and
+`CandidatePromotion.promote_group/3` call it.
+
+A pinned show is re-fetched in place by Refresh (`provider_refresh_decision/1`
+returns `:refetch`), and Fix Match searches its own provider. An unpinned show
+still follows its library, so a library-wide provider change migrates it on the
+next Refresh.
+
+A show with no files in any series or mixed library has no library provider, so
+`pin_for/2` returns false and a Fix Match switch on such a show is not pinned.
+If its files later land in a library on the other provider, the next Refresh
+offers to re-identify it.
+
+The importer's `MetadataMatcher` searches the other provider when the library's
+finds nothing, and `FileIngest` never auto-promotes such a match under the
+unattended policy: it always waits in review.

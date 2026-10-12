@@ -1,0 +1,117 @@
+---
+id: torrentproject2
+name: TorrentProject2
+description: "TorrentProject2 is a Public torrent meta-search engine"
+language: en-US
+type: public
+encoding: UTF-8
+requestDelay: 2
+links:
+  - https://torrentproject2.net/
+  - https://torrentproject2.org/
+  - https://torrentproject.info/
+  - https://torrentproject.biz/
+  - https://torrentproject.xyz/
+  - https://torrentproject.cc/
+legacylinks:
+  - https://torrentproject2.se/
+  - https://torrentproject2.com/
+  - https://torrentproject.torrentbay.st/
+
+caps:
+  categorymappings:
+    - {id: Other, cat: Other, desc: Other}
+
+  modes:
+    search: [q]
+    tv-search: [q, season, ep]
+    movie-search: [q]
+    music-search: [q]
+    book-search: [q]
+
+settings:
+  - name: filter-verified
+    type: checkbox
+    label: "Only include verifed content in results"
+    default: false
+  - name: sort
+    type: select
+    label: Sort requested from site
+    default: latest
+    options:
+      latest: "created desc"
+      oldest: "created asc"
+      seeders: seeders
+      size: size
+  - name: info_category_8000
+    type: info_category_8000
+
+download:
+  selectors:
+    - selector: "#download > div:nth-child(2) > div:nth-child(1) > a"
+      attribute: href
+      filters:
+        - name: replace
+          args: ["https://mylink.me.uk/?url=", ""]
+        - name: replace
+          args: ["https://mylink.cx/?url=", ""]
+        - name: replace
+          args: ["https://mylink.cloud/?url=", ""]
+        - name: urldecode
+
+search:
+  paths:
+    # browse for latest, / for keywords, 50 rows per page
+    - path: "{{ if .Keywords }}/{{ else }}browse{{ end }}"
+    - path: "{{ if .Keywords }}/{{ else }}browse{{ end }}"
+      inputs:
+        p: 1
+  inputs:
+    t: "{{ .Keywords }}"
+    orderby: "{{ if .Keywords }}{{ .Config.sort }}{{ else }}{{ end }}"
+    safe: "{{ if and .Keywords .Config.filter-verified }}on{{ else }}{{ end }}"
+
+  headers:
+    User-Agent: ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36 Edg/115.0.1901.203"]
+
+  rows:
+    selector: "#similarfiles div:has(a[href^=\"/t\"])"
+
+  fields:
+    category:
+      # while browse has cats the search does not (atm) so we wont support cats for now.
+      text: Other
+    title:
+      selector: :scope > span > a
+    details:
+      selector: :scope > span > a
+      attribute: href
+    download:
+      selector: :scope > span > a
+      attribute: href
+    date_ago:
+      # 7 years ago
+      selector: :scope > span:nth-child(4):contains("ago")
+      optional: true
+    date_time:
+      # 2020-11-05 07:34:44
+      selector: :scope > span:nth-child(4):contains(":")
+      optional: true
+      filters:
+        - name: append
+          args: " -07:00" # PDT
+        - name: dateparse
+          args: "yyyy-MM-dd HH:mm:ss zzz"
+    date:
+      text: "{{ if or .Result.date_ago .Result.date_time }}{{ or .Result.date_ago .Result.date_time }}{{ else }}now{{ end }}"
+    size:
+      selector: :scope > span:nth-child(5)
+    seeders:
+      selector: :scope > span:nth-child(2)
+    leechers:
+      selector: :scope > span:nth-child(3)
+    downloadvolumefactor:
+      text: 0
+    uploadvolumefactor:
+      text: 1
+# engine n/a

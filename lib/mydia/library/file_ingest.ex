@@ -1,11 +1,12 @@
 defmodule Mydia.Library.FileIngest do
   @moduledoc "Decides whether a durable import candidate stays in review or is promoted."
 
-  import Ecto.Query, only: [lock: 2, where: 3]
+  import Ecto.Query, only: [from: 2, lock: 2, where: 3]
 
   alias Mydia.DB
   alias Mydia.Library.{CandidatePromotion, ImportCandidate, MediaFile}
   alias Mydia.Repo
+  alias Mydia.Settings.LibraryPath
 
   @default_threshold Mydia.ImportCandidates.auto_accept_threshold()
   @retry_backoff_seconds [300, 1_800, 7_200, 21_600, 86_400]
@@ -81,6 +82,7 @@ defmodule Mydia.Library.FileIngest do
   defp decide(candidate, match, :unattended, threshold) do
     cond do
       extra?(candidate, match) -> :candidate
+      cross_provider_tv?(candidate, match) -> :candidate
       (Map.get(match, :match_confidence) || 0.0) >= threshold -> :promote
       true -> :candidate
     end
@@ -101,6 +103,29 @@ defmodule Mydia.Library.FileIngest do
       parsed_value(parsed, :is_trailer) == true or
       parsed_value(parsed, :is_extra) == true
   end
+
+  # A show found on the provider its library does not use (MetadataMatcher's
+  # fallback) waits for a person whatever its score: the library's provider
+  # may list it under another title, and accepting it pins the show to the
+  # other provider. A match against a show already in the library is exempt,
+  # since the operator already accepted that show, pinned or not.
+  defp cross_provider_tv?(_candidate, %{from_local_db: true}), do: false
+
+  defp cross_provider_tv?(
+         %ImportCandidate{library_path_id: id} = candidate,
+         %{provider_type: provider} = match
+       )
+       when provider in [:tvdb, :tmdb] do
+    tv? = parsed_value(match_parsed_info(candidate, match), :type) in [:tv_show, "tv_show"]
+
+    tv? and
+      case Repo.one(from lp in LibraryPath, where: lp.id == ^id, select: lp.tv_metadata_source) do
+        library_provider when library_provider in [:tvdb, :tmdb] -> library_provider != provider
+        _ -> false
+      end
+  end
+
+  defp cross_provider_tv?(_candidate, _match), do: false
 
   defp match_parsed_info(candidate, match) do
     case match && Map.get(match, :parsed_info) do

@@ -18,6 +18,8 @@ defmodule Mydia.Library.MetadataMatcher do
   alias Mydia.Library.ReleaseParser.TargetContext
   alias Mydia.Library.Structs.MatchResult
   alias Mydia.Library.Text
+  alias Mydia.Metadata.TvProvider
+  import Mydia.Library.MatchScoring
   alias Mydia.Media.MediaItem
   alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.MediaMetadata
@@ -497,7 +499,7 @@ defmodule Mydia.Library.MetadataMatcher do
 
         {:error, :no_local_match} ->
           # No local match, search external metadata provider
-          search_external_tv_show(parsed, config, opts)
+          search_external_tv_show_with_fallback(parsed, config, opts)
       end
     else
       {:error, :no_title_extracted}
@@ -551,6 +553,27 @@ defmodule Mydia.Library.MetadataMatcher do
       {:error, reason} = error ->
         Logger.error("Metadata search failed", title: parsed.title, reason: reason)
         error
+    end
+  end
+
+  # A show the library's provider does not carry may still be on the other
+  # one. Only a clean "nothing found" falls through: a relay error stays an
+  # error, so an outage on one provider cannot quietly re-match a library onto
+  # the other. The result keeps its own `provider_type`, and
+  # `Mydia.Library.FileIngest` refuses to auto-promote a match whose provider
+  # differs from the library's, so this only ever produces a suggestion.
+  defp search_external_tv_show_with_fallback(parsed, config, opts) do
+    with {:error, :no_matches_found} <- search_external_tv_show(parsed, config, opts),
+         other when not is_nil(other) <- TvProvider.other(Keyword.get(opts, :provider)) do
+      Logger.debug("No match on library provider, trying the other one",
+        title: parsed.title,
+        provider: other
+      )
+
+      search_external_tv_show(parsed, config, Keyword.put(opts, :provider, other))
+    else
+      nil -> {:error, :no_matches_found}
+      result -> result
     end
   end
 
@@ -979,104 +1002,6 @@ defmodule Mydia.Library.MetadataMatcher do
 
     min(score, 1.0)
   end
-
-  defp add_score(current, true, amount), do: current + amount
-  defp add_score(current, score, amount) when is_float(score), do: current + score * amount
-  defp add_score(current, _false_or_nil, _amount), do: current
-
-  # Normalized popularity score using logarithmic scaling
-  # Returns 0.0 to 1.0 based on TMDB popularity (typically 0-1000+)
-  # Main shows like "Bluey" have popularity ~200+, spin-offs are typically <50
-  defp popularity_score(nil), do: 0.0
-  defp popularity_score(popularity) when popularity <= 0, do: 0.0
-
-  defp popularity_score(popularity) do
-    # Log scale: popularity of 10 = 0.25, 50 = 0.5, 200 = 0.75, 1000 = 1.0
-    # Formula: min(log10(popularity) / 3, 1.0)
-    min(:math.log10(popularity) / 3, 1.0)
-  end
-
-  # Check if the result title exactly matches the search query (after normalization)
-  defp exact_title_match?(result_title, search_title)
-       when is_binary(result_title) and is_binary(search_title) do
-    norm_result = normalize_title(result_title)
-    norm_search = normalize_title(search_title)
-    norm_result == norm_search
-  end
-
-  defp exact_title_match?(_result_title, _search_title), do: false
-
-  # Calculate penalty for derivative titles
-  # When searching for "Bluey" and result is "Bluey Cookalongs", we want to prefer "Bluey"
-  # Returns a negative value (penalty) when result title is longer than search query
-  # and search query is a substring of result title
-  defp title_derivative_penalty(result_title, search_title)
-       when is_binary(result_title) and is_binary(search_title) do
-    norm_result = String.downcase(result_title) |> String.trim()
-    norm_search = String.downcase(search_title) |> String.trim()
-
-    # Only apply penalty if search is a proper substring of result
-    # (i.e., result is "Bluey Cookalongs" and search is "Bluey")
-    if norm_result != norm_search and String.contains?(norm_result, norm_search) do
-      # Penalty proportional to how much extra content is in the result title
-      # "Bluey" (5 chars) vs "Bluey Cookalongs" (16 chars) = penalty
-      search_len = String.length(norm_search)
-      result_len = String.length(norm_result)
-      extra_ratio = (result_len - search_len) / result_len
-
-      # Scale to -0.15 max penalty (negative because we want to reduce score)
-      -extra_ratio * 0.15
-    else
-      0.0
-    end
-  end
-
-  defp title_derivative_penalty(_result_title, _search_title), do: 0.0
-
-  defp title_similarity(title1, title2) when is_binary(title1) and is_binary(title2) do
-    Text.title_similarity(title1, title2)
-  end
-
-  defp title_similarity(_title1, _title2), do: 0.0
-
-  # Delegates to `Mydia.Library.Text.normalize_title/1` — the shared
-  # title-normalization helper (promoted in V3 parser Unit 7).
-  defp normalize_title(title), do: Text.normalize_title(title)
-
-  defp year_match?(result_year, nil), do: result_year != nil
-  defp year_match?(nil, _parsed_year), do: false
-
-  defp year_match?(result_year, parsed_year) when is_integer(result_year) do
-    # Allow ±1 year difference (for release date variations)
-    abs(result_year - parsed_year) <= 1
-  end
-
-  defp year_match?(_result_year, _parsed_year), do: false
-
-  # True only when both years are known and disagree by more than the ±1
-  # release-date slack `year_match?/2` allows. Deliberately narrower than
-  # `not year_match?/2`: a year missing from either side is an absence of
-  # evidence and must stay unpenalised, or every show whose folder carries no
-  # year would be pushed into review.
-  defp year_contradiction?(result_year, parsed_year)
-       when is_integer(result_year) and is_integer(parsed_year) do
-    abs(result_year - parsed_year) > 1
-  end
-
-  defp year_contradiction?(_result_year, _parsed_year), do: false
-
-  # Splits a provider's disambiguating year suffix off a title:
-  # "Passe-Partout (2019)" -> {"Passe-Partout", 2019}, "Bluey" -> {"Bluey", nil}.
-  # Only a trailing parenthesised four-digit year is treated this way, so a
-  # genuine parenthetical ("The Office (US)") is left intact.
-  defp split_title_year(title) when is_binary(title) do
-    case Regex.run(~r/^(.*?)\s*\((\d{4})\)\s*$/u, title) do
-      [_, bare, year] when bare != "" -> {bare, String.to_integer(year)}
-      _ -> {title, nil}
-    end
-  end
-
-  defp split_title_year(title), do: {title, nil}
 
   # Convert database metadata to MediaMetadata struct
   # If metadata is nil, create a minimal struct from the media item
