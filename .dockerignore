@@ -57,6 +57,7 @@ priv/cardigann/*.wasm
 priv/cardigann/*.wasm.sha256
 priv/cardigann/*.cwasm
 priv/cardigann/*.wasm.cwasm
+priv/data/cardigann
 native/cardigann_guest/out
 native/cardigann_guest/obj
 native/cardigann_guest/bin

@@ -14,8 +14,8 @@ Everything runs in Docker, so no .NET or Rust toolchain is needed on the host.
 A cold `wasm` build takes several minutes. Caches live in
 `~/.cache/mydia-cardigann-nuget`, `~/.cache/mydia-cardigann-nuget-wasi-sdk` and
 `~/.cache/mydia-cardigann-cargo`. Only `out/cardigann.wasm` (composed, with
-`wasi:http` and `wasi:sockets` removed) is the artifact; `out/cardigann-raw.wasm`
-is an intermediate.
+`wasi:http` and `wasi:sockets` removed, debug sections stripped, 39 MB) is the
+artifact; `out/cardigann-raw.wasm` is an intermediate.
 
 ## The published artifact
 

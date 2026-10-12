@@ -45,7 +45,13 @@ case "${1:-}" in
       if grep -E "import wasi:(http|sockets)" <<<"$wit"; then
         echo "build.sh: composed component still imports wasi:http or wasi:sockets" >&2
         exit 1
-      fi'
+      fi
+      # The build leaves about 35 MB of DWARF in the component (about half of its
+      # size) and users download the file. `strip` drops it and keeps the name
+      # section, so a trap still carries function names.
+      wasm-tools strip out/cardigann.wasm -o out/cardigann.stripped.wasm
+      wasm-tools validate out/cardigann.stripped.wasm
+      mv out/cardigann.stripped.wasm out/cardigann.wasm'
     ;;
   *) echo "usage: build.sh check|test|wasm" >&2; exit 2 ;;
 esac
