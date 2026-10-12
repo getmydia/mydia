@@ -3,11 +3,8 @@ defmodule Mydia.Indexers.CardigannEngineSelectionTest do
   use ExUnit.Case, async: false
 
   alias Mydia.Indexers
-  alias Mydia.Indexers.Adapter.Registry
-  alias Mydia.Indexers.CardigannFeatureFlags
   alias Mydia.Indexers.Cardigann.Wasm
-
-  @runtime Path.expand("../../../config/runtime.exs", __DIR__)
+  alias Mydia.Indexers.CardigannFeatureFlags
 
   setup do
     features = Application.get_env(:mydia, :features, [])
@@ -32,82 +29,29 @@ defmodule Mydia.Indexers.CardigannEngineSelectionTest do
     Application.put_env(:mydia, :features, Keyword.merge(features, overrides))
   end
 
-  defp runtime_engine(value) do
-    if value,
-      do: System.put_env("CARDIGANN_ENGINE", value),
-      else: System.delete_env("CARDIGANN_ENGINE")
-
-    @runtime
-    |> Config.Reader.read!(env: :test)
-    |> Keyword.fetch!(:mydia)
-    |> Keyword.fetch!(:features)
-    |> Keyword.fetch!(:cardigann_engine)
-  end
-
-  describe "CARDIGANN_ENGINE parsing in config/runtime.exs" do
-    test "defaults to the built-in engine" do
-      assert runtime_engine(nil) == :builtin
-      assert runtime_engine("") == :builtin
+  describe "adapter/0" do
+    setup do
+      on_exit(fn ->
+        :persistent_term.erase({Mydia.Indexers.Cardigann.EngineSwitcher, :active})
+      end)
     end
 
-    test "accepts builtin and prowlarr" do
-      assert runtime_engine("builtin") == :builtin
-      assert runtime_engine("prowlarr") == :prowlarr
+    test "serves the built-in adapter until the wasm engine is active" do
+      put_features(cardigann_enabled: true)
+      assert CardigannFeatureFlags.adapter() == Mydia.Indexers.Adapter.Cardigann
+
+      :persistent_term.put({Mydia.Indexers.Cardigann.EngineSwitcher, :active}, :prowlarr)
+      assert CardigannFeatureFlags.adapter() == Wasm.Adapter
     end
 
-    test "raises on any other value, naming the valid ones" do
-      error = assert_raise RuntimeError, fn -> runtime_engine("wasm") end
-      assert error.message =~ "builtin"
-      assert error.message =~ "prowlarr"
-      assert error.message =~ "wasm"
-    end
-  end
-
-  test "the shipped default is the built-in engine" do
-    assert :builtin ==
-             Config.Reader.read!(Path.expand("config.exs", Path.dirname(@runtime)), env: :test)
-             |> get_in([:mydia, :features, :cardigann_engine])
-  end
-
-  describe "adapter registry" do
-    test "registers the Elixir adapter under :builtin" do
-      put_features(cardigann_engine: :builtin)
-      Indexers.register_adapters()
-
-      assert {:ok, Mydia.Indexers.Adapter.Cardigann} = Registry.get_adapter(:cardigann)
-    end
-
-    test "registers the wasm adapter under :prowlarr" do
-      put_features(cardigann_enabled: true, cardigann_engine: :prowlarr)
-      Indexers.register_adapters()
-
-      assert {:ok, Wasm.Adapter} = Registry.get_adapter(:cardigann)
-    end
-
-    test "keeps the Elixir adapter under :prowlarr when Cardigann is disabled" do
-      put_features(cardigann_enabled: false, cardigann_engine: :prowlarr)
-      Indexers.register_adapters()
-
-      assert {:ok, Mydia.Indexers.Adapter.Cardigann} = Registry.get_adapter(:cardigann)
+    test "Cardigann off means the built-in adapter whatever is active" do
+      put_features(cardigann_enabled: false)
+      :persistent_term.put({Mydia.Indexers.Cardigann.EngineSwitcher, :active}, :prowlarr)
+      assert CardigannFeatureFlags.adapter() == Mydia.Indexers.Adapter.Cardigann
     end
   end
 
   describe "engine process" do
-    test "is not among the application's children under :builtin" do
-      put_features(cardigann_enabled: true, cardigann_engine: :builtin)
-      refute Wasm.Engine in Mydia.Application.children()
-    end
-
-    test "is among them under :prowlarr" do
-      put_features(cardigann_enabled: true, cardigann_engine: :prowlarr)
-      assert Wasm.Engine in Mydia.Application.children()
-    end
-
-    test "is not started under :prowlarr when Cardigann is disabled" do
-      put_features(cardigann_enabled: false, cardigann_engine: :prowlarr)
-      refute Wasm.Engine in Mydia.Application.children()
-    end
-
     test "is not running in the test application" do
       assert Process.whereis(Wasm.Engine) == nil
       assert Wasm.Engine.status() == :disabled
@@ -115,20 +59,6 @@ defmodule Mydia.Indexers.CardigannEngineSelectionTest do
   end
 
   describe "status" do
-    test "reports the built-in engine as ready" do
-      put_features(cardigann_engine: :builtin)
-      assert %{engine: :builtin, state: :ready} = CardigannFeatureFlags.engine_status()
-    end
-
-    test "reports a selected but absent wasm engine as unavailable" do
-      put_features(cardigann_engine: :prowlarr)
-
-      assert %{engine: :prowlarr, state: :unavailable, detail: detail} =
-               CardigannFeatureFlags.engine_status()
-
-      assert detail =~ "not running"
-    end
-
     test "a search against a stopped wasm engine names the reason" do
       # A wasm test that ran earlier in this VM can leave the compiled component
       # behind; a stopped engine has none.
@@ -153,7 +83,7 @@ defmodule Mydia.Indexers.CardigannEngineSelectionTest do
       assert {:error, %{type: :engine_unavailable, message: message}} =
                Wasm.Engine.call({:search, "id: x", %{}, query, empty}, ctx, 1_000)
 
-      assert message =~ "CARDIGANN_ENGINE=prowlarr"
+      assert message =~ "Indexers page"
     end
   end
 end

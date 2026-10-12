@@ -100,6 +100,31 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
     assert Process.whereis(Engine) == pid
   end
 
+  @tag :capture_log
+  test "broadcasts the failure with the next attempt time" do
+    # With a pin the unreadable artifact is retryable; without one it is permanent.
+    previous = Application.fetch_env(:mydia, :cardigann_pinned_sha256)
+    Application.put_env(:mydia, :cardigann_pinned_sha256, String.duplicate("a", 64))
+
+    on_exit(fn ->
+      case previous do
+        {:ok, value} -> Application.put_env(:mydia, :cardigann_pinned_sha256, value)
+        :error -> Application.delete_env(:mydia, :cardigann_pinned_sha256)
+      end
+    end)
+
+    Phoenix.PubSub.subscribe(Mydia.PubSub, Engine.topic())
+    Engine.retry_now()
+
+    assert_receive {:cardigann_wasm_engine, {:unavailable, reason, %DateTime{}}}, 5_000
+    assert is_binary(reason)
+  end
+
+  test "stop/0 stops the process and status reads disabled" do
+    assert :ok = Engine.stop()
+    assert Engine.status() == :disabled
+  end
+
   describe "retry" do
     setup do
       Application.put_env(:mydia, :cardigann_wasm_retry_ms, 50)

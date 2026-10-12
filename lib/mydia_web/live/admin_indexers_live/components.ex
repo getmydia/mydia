@@ -2,9 +2,15 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
-  alias Mydia.Indexers.CardigannFeatureFlags
+  alias Mydia.Indexers.Cardigann.EngineSupport
   alias Mydia.Settings
-  alias MydiaWeb.AdminIndexersLive.{FlareSolverrComponents, LoginComponents}
+
+  alias MydiaWeb.AdminIndexersLive.{
+    CardigannEngineComponents,
+    FlareSolverrComponents,
+    LoginComponents
+  }
+
   alias MydiaWeb.IndexerComponents
 
   @doc """
@@ -20,10 +26,13 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :flaresolverr_status, :map, default: %{configured: false, status: :loading}
   attr :retesting_paused, :any, default: MapSet.new()
 
-  def indexers_tab(assigns) do
-    # Read on every render rather than at mount, so any re-render shows the current engine state.
-    assigns = assign(assigns, :cardigann_engine_status, CardigannFeatureFlags.engine_status())
+  attr :cardigann_engine, :any,
+    default: nil,
+    doc: "EngineSwitcher.Status, nil when Cardigann is off"
 
+  attr :cardigann_cache_bytes, :integer, default: 0
+
+  def indexers_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
       <FlareSolverrComponents.flaresolverr_row
@@ -31,27 +40,12 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
         flaresolverr_status={@flaresolverr_status}
       />
 
-      <div
-        :if={
-          (@cardigann_enabled and @cardigann_engine_status) &&
-            @cardigann_engine_status.engine == :prowlarr
-        }
-        id="cardigann-engine-status"
-        class={[
-          "text-sm flex items-center gap-2",
-          if(@cardigann_engine_status.state == :ready,
-            do: "text-base-content/60",
-            else: "text-warning"
-          )
-        ]}
-      >
-        <.icon name="hero-cpu-chip" class="w-4 h-4" />
-        <span>
-          Indexer library engine: {@cardigann_engine_status.label}<span :if={
-            @cardigann_engine_status.detail
-          }>, {@cardigann_engine_status.detail}</span>
-        </span>
-      </div>
+      <CardigannEngineComponents.engine_section
+        :if={@cardigann_enabled and @cardigann_engine}
+        status={@cardigann_engine}
+        cache_bytes={@cardigann_cache_bytes}
+        only_verified={only_verified(@library_indexers, @cardigann_engine)}
+      />
 
       <%= if @indexers == [] and @library_indexers == [] do %>
         <div class="alert alert-info">
@@ -101,6 +95,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             <:row :let={indexer}>
               <.library_indexer_row
                 indexer={indexer}
+                active_engine={(@cardigann_engine && @cardigann_engine.active) || :builtin}
                 flaresolverr_available={
                   @flaresolverr_status.configured and @flaresolverr_status.status != :disabled
                 }
@@ -221,6 +216,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
 
   attr :indexer, :any, required: true
   attr :flaresolverr_available, :boolean, required: true
+  attr :active_engine, :atom, default: :builtin
 
   defp library_indexer_row(assigns) do
     ~H"""
@@ -234,6 +230,10 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           {@indexer.type}
         </span>
         <span :if={@indexer.language} class="badge badge-xs badge-ghost">{@indexer.language}</span>
+        <CardigannEngineComponents.verified_badges
+          definition_id={@indexer.indexer_id}
+          active={@active_engine}
+        />
       </:title>
       <:descriptor :if={@indexer.description}>{@indexer.description}</:descriptor>
       <:badges>
@@ -367,6 +367,51 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
     """
   end
 
+  @doc "The page modals, shown from the LiveView assigns."
+  def modals(assigns) do
+    ~H"""
+    <%= if assigns[:show_flaresolverr_modal] do %>
+      <MydiaWeb.AdminIndexersLive.FlareSolverrComponents.flaresolverr_modal
+        form={@flaresolverr_form}
+        sources={@flaresolverr_sources}
+      />
+    <% end %>
+    <%= if assigns[:show_indexer_modal] do %>
+      <MydiaWeb.AdminIndexersLive.ModalComponents.indexer_modal
+        indexer_form={@indexer_form}
+        indexer_mode={@indexer_mode}
+        testing_indexer_connection={assigns[:testing_indexer_connection] || false}
+        available_env_indexers={assigns[:available_env_indexers] || []}
+        prowlarr_indexers={assigns[:prowlarr_indexers]}
+        fetching_prowlarr_indexers={assigns[:fetching_prowlarr_indexers] || false}
+        prowlarr_indexers_error={assigns[:prowlarr_indexers_error]}
+        selected_prowlarr_indexer_ids={assigns[:selected_prowlarr_indexer_ids] || MapSet.new()}
+      />
+    <% end %>
+    <%= if assigns[:show_indexer_library_modal] and @cardigann_enabled do %>
+      <MydiaWeb.AdminIndexersLive.LibraryBrowserComponents.indexer_library_modal
+        definitions={@library_definitions}
+        available_languages={@library_available_languages}
+        filter_type={@library_filter_type}
+        filter_language={@library_filter_language}
+        filter_added={@library_filter_added}
+        search_query={@library_search_query}
+        syncing={@library_syncing}
+        configuring_definition={@library_configuring_definition}
+        config_form={@library_config_form}
+      />
+    <% end %>
+    <%= if assigns[:show_library_config_modal] and assigns[:configuring_library_indexer] do %>
+      <MydiaWeb.AdminIndexersLive.LibraryConfigComponents.library_config_modal
+        configuring_library_indexer={@configuring_library_indexer}
+        settings={@library_indexer_settings}
+        testing={assigns[:library_config_testing] || false}
+        test_result={assigns[:library_config_test_result]}
+      />
+    <% end %>
+    """
+  end
+
   # Display helpers shared with the library modals (LibraryConfigComponents,
   # LibraryBrowserComponents).
 
@@ -402,6 +447,13 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
       do: true
 
   def needs_library_config?(_), do: false
+
+  # Names of library trackers verified only on the engine that is not active.
+  defp only_verified(library_indexers, status) do
+    other = if status.active == :builtin, do: :prowlarr, else: :builtin
+    ids = EngineSupport.only_on(other, Enum.map(library_indexers, & &1.indexer_id))
+    for i <- library_indexers, i.indexer_id in ids, do: i.name
+  end
 
   defp paused_indexers(health) do
     details = Map.get(health, :details) || %{}

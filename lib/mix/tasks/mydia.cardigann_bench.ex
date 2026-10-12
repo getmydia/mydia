@@ -110,7 +110,7 @@ defmodule Mix.Tasks.Mydia.CardigannBench do
     Mix.shell().info("Wrote #{paths.md}\nWrote #{paths.json}")
   end
 
-  # The application starts the engine only under CARDIGANN_ENGINE=prowlarr.
+  # The switcher starts the engine only when it is chosen; the bench starts it itself.
   defp ensure_engine! do
     :ok = Engine.ensure_started()
 

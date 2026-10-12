@@ -14,6 +14,7 @@ defmodule MydiaWeb.Api.ConfigController do
 
   use MydiaWeb, :controller
 
+  alias Mydia.Indexers.Cardigann.{EngineSetting, EngineSwitcher}
   alias Mydia.Settings
   require Logger
 
@@ -119,7 +120,12 @@ defmodule MydiaWeb.Api.ConfigController do
       true ->
         # Schemaless: a field the request left out is absent, not nil.
         validated_data = Ecto.Changeset.apply_changes(changeset)
-        perform_update(conn, key, validated_data.value, Map.get(validated_data, :description))
+
+        if key == EngineSetting.setting_key() do
+          update_cardigann_engine(conn, validated_data.value)
+        else
+          perform_update(conn, key, validated_data.value, Map.get(validated_data, :description))
+        end
     end
   end
 
@@ -146,40 +152,48 @@ defmodule MydiaWeb.Api.ConfigController do
             "Remove the environment variable to allow UI/API configuration."
       })
     else
-      case Settings.get_config_setting_by_key(key) do
-        nil ->
-          conn
-          |> put_status(:not_found)
-          |> json(%{error: "No database override exists for this setting"})
-
-        setting ->
-          case Settings.delete_config_setting(setting) do
-            {:ok, _deleted} ->
-              Logger.info("Configuration setting override removed", key: key)
-
-              # Get the new value after deletion (will fall back to YAML/default)
-              path = parse_config_key(key)
-              runtime_config = Settings.get_runtime_config()
-              fallback_value = get_in(runtime_config, path_to_access_keys(path))
-
-              json(conn, %{
-                message: "Database override removed, setting will use YAML config or default",
-                key: key,
-                new_value: serialize_value(fallback_value),
-                new_source: "yaml_or_default"
-              })
-
-            {:error, reason} ->
-              Logger.error("Failed to delete config setting",
-                key: key,
-                reason: inspect(reason)
-              )
-
-              conn
-              |> put_status(:unprocessable_entity)
-              |> json(%{error: "Failed to delete setting: #{inspect(reason)}"})
-          end
+      if key == EngineSetting.setting_key() do
+        reset_cardigann_engine(conn)
+      else
+        delete_config_override(conn, key)
       end
+    end
+  end
+
+  defp delete_config_override(conn, key) do
+    case Settings.get_config_setting_by_key(key) do
+      nil ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "No database override exists for this setting"})
+
+      setting ->
+        case Settings.delete_config_setting(setting) do
+          {:ok, _deleted} ->
+            Logger.info("Configuration setting override removed", key: key)
+
+            # Get the new value after deletion (will fall back to YAML/default)
+            path = parse_config_key(key)
+            runtime_config = Settings.get_runtime_config()
+            fallback_value = get_in(runtime_config, path_to_access_keys(path))
+
+            json(conn, %{
+              message: "Database override removed, setting will use YAML config or default",
+              key: key,
+              new_value: serialize_value(fallback_value),
+              new_source: "yaml_or_default"
+            })
+
+          {:error, reason} ->
+            Logger.error("Failed to delete config setting",
+              key: key,
+              reason: inspect(reason)
+            )
+
+            conn
+            |> put_status(:unprocessable_entity)
+            |> json(%{error: "Failed to delete setting: #{inspect(reason)}"})
+        end
     end
   end
 
@@ -212,6 +226,65 @@ defmodule MydiaWeb.Api.ConfigController do
   end
 
   ## Private Functions
+
+  # The engine choice only takes effect through the switcher, which saves the
+  # row and applies it at runtime; a plain row write would wait for a restart.
+  defp update_cardigann_engine(conn, value) do
+    case parse_cardigann_engine(value) do
+      {:ok, engine} ->
+        user = Guardian.Plug.current_resource(conn)
+        apply_cardigann_engine(conn, engine, updated_by_id: user && user.id)
+
+      :error ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{
+          error: "Validation failed",
+          details: %{value: ["must be one of: builtin, prowlarr"]}
+        })
+    end
+  end
+
+  # Resets to the default engine. The switcher keeps a "builtin" row rather
+  # than deleting it, so the runtime and the stored choice stay in step.
+  defp reset_cardigann_engine(conn), do: apply_cardigann_engine(conn, :builtin, [])
+
+  defp apply_cardigann_engine(conn, engine, opts) do
+    case EngineSwitcher.switch(engine, opts) do
+      :ok ->
+        Logger.info("Cardigann engine switched", engine: engine)
+
+        json(conn, %{
+          message: "Cardigann engine set to #{engine}",
+          data: %{
+            key: EngineSetting.setting_key(),
+            value: Atom.to_string(engine),
+            category: :cardigann,
+            source: "database"
+          }
+        })
+
+      {:error, :env_locked} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{
+          error:
+            "Cannot update setting controlled by environment variable. " <>
+              "Remove the environment variable to allow UI/API configuration."
+        })
+
+      {:error, reason} ->
+        Logger.error("Failed to switch Cardigann engine", reason: inspect(reason))
+
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "Failed to switch engine"})
+    end
+  end
+
+  defp parse_cardigann_engine("builtin"), do: {:ok, :builtin}
+  defp parse_cardigann_engine("prowlarr"), do: {:ok, :prowlarr}
+  defp parse_cardigann_engine(_), do: :error
 
   defp perform_update(conn, key, value, description) do
     path = parse_config_key(key)
@@ -385,7 +458,8 @@ defmodule MydiaWeb.Api.ConfigController do
       "media.movies_path" => "MOVIES_PATH",
       "media.tv_path" => "TV_PATH",
       "logging.level" => "LOG_LEVEL",
-      "remote_access.enabled" => "ENABLE_REMOTE_ACCESS"
+      "remote_access.enabled" => "ENABLE_REMOTE_ACCESS",
+      "cardigann.engine" => "CARDIGANN_ENGINE"
     }
 
     Map.get(mapping, key)
@@ -409,7 +483,8 @@ defmodule MydiaWeb.Api.ConfigController do
          :database,
          :logging,
          :oban,
-         :remote_access
+         :remote_access,
+         :cardigann
        ] do
       category_atom
     else

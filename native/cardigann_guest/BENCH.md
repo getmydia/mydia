@@ -187,6 +187,9 @@ here is softened; the same list is in the user docs.
 |---|---|
 | M6 Elixir lines deleted at cutover vs C# shim lines added | The cutover (old Task 12) was cancelled: the Elixir engine stays. The first run counted up to **6,338** lines of `lib/` it would have deleted against **2,422** lines of C# the guest adds. Both engines now ship, so the Elixir code is not removed |
 
+The harness report (`bench.md`) ends with the `EngineSupport` map; paste it into
+`lib/mydia/indexers/cardigann/engine_support.ex` to refresh the "verified" badges.
+
 ## Methods (first run, still current for the harness)
 
 - **Per-call overhead of the engine.** Without a network, a `capabilities` call

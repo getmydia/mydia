@@ -389,7 +389,7 @@
           npmRoot = "assets";
 
           # The Cardigann guest is not part of the package: installs that opt in
-          # with CARDIGANN_ENGINE=prowlarr download it at runtime, verified
+          # (CARDIGANN_ENGINE=prowlarr or the Indexers page) download it at runtime, verified
           # against native/cardigann_guest/ARTIFACT_SHA256, which the build
           # compiles in. The compiler step that fetches it for development is
           # skipped.

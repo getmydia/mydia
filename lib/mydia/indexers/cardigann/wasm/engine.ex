@@ -43,10 +43,35 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   @interface "mydia:cardigann/engine@1.0.0"
   @memory_limit 512 * 1024 * 1024
   @key {__MODULE__, :compiled}
+  @topic "cardigann_wasm_engine"
 
   # ── Client API ────────────────────────────────────────────────────────────
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+
+  @doc "PubSub topic for phase, progress and readiness events."
+  @spec topic() :: String.t()
+  def topic, do: @topic
+
+  @doc "Stops the engine and frees the compiled component. Cached files stay on disk."
+  @spec stop() :: :ok
+  def stop do
+    case Supervisor.terminate_child(Mydia.Supervisor, __MODULE__) do
+      :ok -> :ok
+      {:error, :not_found} -> :ok
+    end
+  end
+
+  @doc "Runs the next attempt now instead of waiting out the backoff."
+  @spec retry_now() :: :ok
+  def retry_now do
+    GenServer.cast(__MODULE__, :retry_now)
+  catch
+    :exit, _ -> :ok
+  end
+
+  defp broadcast(event),
+    do: Phoenix.PubSub.broadcast(Mydia.PubSub, @topic, {:cardigann_wasm_engine, event})
 
   @doc """
   True once the guest is compiled and callable. Never blocks on a compile that
@@ -65,7 +90,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   @doc """
   Starts the engine under the application supervisor when it is not running.
 
-  The application starts it only for `CARDIGANN_ENGINE=prowlarr`; the bench task
+  `Mydia.Indexers.Cardigann.EngineSwitcher` starts and stops it; the bench task
   and the engine tests use this to run it regardless.
   """
   @spec ensure_started() :: :ok | {:error, term()}
@@ -161,7 +186,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
   defp unavailable(:disabled) do
     Error.engine_unavailable(
-      "The Prowlarr Cardigann engine is not running: set CARDIGANN_ENGINE=prowlarr to enable it",
+      "The Prowlarr Cardigann engine is not running: choose it on the Indexers page to enable it",
       %{reason: :disabled}
     )
   end
@@ -352,7 +377,21 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   def handle_info(_message, state), do: {:noreply, state}
 
   @impl true
-  def terminate(_reason, _state) do
+  def handle_cast(:retry_now, %{status: {:unavailable, _}, timer: timer} = state)
+      when timer != nil do
+    Process.cancel_timer(timer)
+    {:noreply, %{state | status: :compiling, timer: nil}, {:continue, :compile}}
+  end
+
+  def handle_cast(:retry_now, %{status: :pending} = state),
+    do: {:noreply, %{state | status: :compiling}, {:continue, :compile}}
+
+  def handle_cast(:retry_now, state), do: {:noreply, state}
+
+  @impl true
+  def terminate(_reason, state) do
+    with {pid, _ref} <- state.task, do: Process.exit(pid, :kill)
+    if state.timer, do: Process.cancel_timer(state.timer)
     :persistent_term.erase(@key)
     :ok
   end
@@ -369,9 +408,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
     case status do
       :ready ->
+        broadcast(:ready)
         %{state | status: :ready, failures: 0}
 
       {:unavailable, reason, :permanent} ->
+        broadcast({:unavailable, reason, nil})
         %{state | status: {:unavailable, reason}}
 
       {:unavailable, reason} ->
@@ -379,6 +420,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
         due =
           DateTime.utc_now() |> DateTime.add(delay, :millisecond) |> DateTime.truncate(:second)
+
+        broadcast({:unavailable, reason, due})
 
         %{
           state
@@ -430,7 +473,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   defp load_component(store) do
     send_phase(:fetching)
 
-    with {:ok, _path, bytes} <- Delivery.ensure() do
+    with {:ok, _path, bytes} <- Delivery.ensure(progress: &broadcast({:progress, &1, &2})) do
       send_phase(:compiling)
       sha = Artifact.sha256(bytes)
       cwasm = Artifact.cwasm_path(sha)
@@ -538,6 +581,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
   defp send_phase(phase) do
     if server = Process.whereis(__MODULE__), do: send(server, {:phase, phase})
+    broadcast({:phase, phase})
     :ok
   end
 

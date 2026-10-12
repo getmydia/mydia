@@ -261,6 +261,7 @@ defmodule Mydia.Config.Loader do
       logging: load_logging_env(),
       oban: load_oban_env(),
       flaresolverr: load_flaresolverr_env(),
+      cardigann: Mydia.Config.Env.CardigannEnv.load(),
       remote_access: load_remote_access_env(),
       download_clients: load_download_clients_env(),
       indexers: load_indexers_env(),
@@ -426,12 +427,7 @@ defmodule Mydia.Config.Loader do
   # listener on the internet, so a typo has to fail validation by name instead
   # of falling back to the default, which is on.
   defp load_remote_access_env do
-    %{}
-    |> put_if_present(
-      :enabled,
-      System.get_env("ENABLE_REMOTE_ACCESS"),
-      &parse_boolean_or_invalid/1
-    )
+    load_env_table(enabled: {"ENABLE_REMOTE_ACCESS", &parse_boolean_or_invalid/1})
   end
 
   defp load_download_clients_env do

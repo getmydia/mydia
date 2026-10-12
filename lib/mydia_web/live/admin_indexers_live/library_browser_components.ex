@@ -2,7 +2,8 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
   @moduledoc false
   use MydiaWeb, :html
 
-  alias MydiaWeb.AdminIndexersLive.Components
+  alias Mydia.Indexers.CardigannFeatureFlags
+  alias MydiaWeb.AdminIndexersLive.{CardigannEngineComponents, Components}
 
   @doc """
   Renders the indexer library modal for browsing and enabling indexer definitions.
@@ -205,6 +206,10 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
         <span :if={@definition.language} class="badge badge-sm badge-ghost">
           {@definition.language}
         </span>
+        <CardigannEngineComponents.verified_badges
+          definition_id={@definition.indexer_id}
+          active={CardigannFeatureFlags.active_engine()}
+        />
       </:title>
       <:descriptor :if={@definition.description}>{@definition.description}</:descriptor>
       <:badges>

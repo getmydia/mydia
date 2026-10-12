@@ -258,7 +258,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     mix compile
 
 # The Cardigann wasm guest is NOT in the image. Installs that opt in with
-# CARDIGANN_ENGINE=prowlarr download it into their data directory on first boot,
+# Prowlarr's engine (CARDIGANN_ENGINE=prowlarr, or the Indexers page) download it into their data directory on first boot,
 # verified against a SHA-256 pinned at build time: either
 # native/cardigann_guest/ARTIFACT_SHA256, or the release's `.sha256` sidecar,
 # fetched here (only the 64-character sidecar, never the guest) into

@@ -58,6 +58,53 @@ defmodule Mydia.Indexers.Cardigann.Wasm.DeliveryTest do
   end
 
   describe "download" do
+    test "reports progress with the content length and ends on the full size", ctx do
+      serve(ctx.bypass, @bytes)
+      test = self()
+
+      assert {:ok, _path, @bytes} =
+               Delivery.ensure(
+                 progress: fn bytes, total -> send(test, {:progress, bytes, total}) end
+               )
+
+      size = byte_size(@bytes)
+      assert_received {:progress, ^size, ^size}
+    end
+
+    test "a chunked body reports no total and ends on the full size", ctx do
+      name = "/dl/" <> Artifact.file_name()
+
+      Bypass.expect_once(ctx.bypass, "GET", name, fn conn ->
+        conn = Plug.Conn.send_chunked(conn, 200)
+        half = div(byte_size(@bytes), 2)
+        {a, b} = :erlang.split_binary(@bytes, half)
+        {:ok, conn} = Plug.Conn.chunk(conn, a)
+        {:ok, conn} = Plug.Conn.chunk(conn, b)
+        conn
+      end)
+
+      test = self()
+
+      assert {:ok, _path, @bytes} =
+               Delivery.ensure(
+                 progress: fn bytes, total -> send(test, {:progress, bytes, total}) end
+               )
+
+      size = byte_size(@bytes)
+      assert_received {:progress, ^size, nil}
+    end
+
+    test "a cache hit reports no progress", ctx do
+      File.mkdir_p!(Path.dirname(ctx.cached))
+      File.write!(ctx.cached, @bytes)
+      test = self()
+
+      assert {:ok, _, @bytes} =
+               Delivery.ensure(progress: fn b, t -> send(test, {:progress, b, t}) end)
+
+      refute_received {:progress, _, _}
+    end
+
     test "fetches the pinned file, verifies it and writes it atomically", ctx do
       serve(ctx.bypass, @bytes)
 

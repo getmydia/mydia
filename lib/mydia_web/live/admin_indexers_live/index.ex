@@ -10,7 +10,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
-  alias MydiaWeb.AdminIndexersLive.LoginFlow
+  alias MydiaWeb.AdminIndexersLive.{CardigannEngineEvents, ErrorMessages, LoginFlow}
   alias MydiaWeb.IndexerComponents
 
   @impl true
@@ -27,6 +27,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> assign(:retesting_paused, MapSet.new())
      |> load_data()
      |> maybe_load_flaresolverr_status()
+     |> CardigannEngineEvents.attach()
      |> LoginFlow.attach()}
   end
 
@@ -60,7 +61,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
           socket
           |> assign(:library_syncing, false)
-          |> put_flash(:error, "Sync failed: #{format_sync_error(reason)}")
+          |> put_flash(:error, "Sync failed: #{ErrorMessages.format_sync_error(reason)}")
       end
 
     {:noreply, reload_library_indexers(socket)}
@@ -1166,7 +1167,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     put_flash(
       socket,
       :error,
-      "FlareSolverr connection failed: #{format_transport_reason(reason)}"
+      "FlareSolverr connection failed: #{ErrorMessages.format_transport_reason(reason)}"
     )
   end
 
@@ -1182,11 +1183,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
     put_flash(socket, :error, "FlareSolverr test failed: #{inspect(reason)}")
   end
-
-  # Transport reasons are usually atoms (:econnrefused, :timeout) but can be
-  # tuples, such as a TLS alert, which string interpolation cannot render.
-  defp format_transport_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
-  defp format_transport_reason(reason), do: inspect(reason)
 
   defp init_library_assigns(socket) do
     socket
@@ -1359,14 +1355,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         end
     end
   end
-
-  defp format_sync_error(:rate_limit_exceeded),
-    do: "GitHub API rate limit exceeded. Try again later."
-
-  defp format_sync_error(:not_found), do: "Repository or definitions path not found."
-  defp format_sync_error({:unexpected_status, status}), do: "Unexpected HTTP status: #{status}"
-  defp format_sync_error(reason) when is_binary(reason), do: reason
-  defp format_sync_error(reason), do: inspect(reason)
 
   # A search that reached the site but parsed nothing is neither a success nor
   # an outage, and flattening it into "Connection successful" is what let five

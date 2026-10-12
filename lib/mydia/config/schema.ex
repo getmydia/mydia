@@ -59,6 +59,7 @@ defmodule Mydia.Config.Schema do
           oban: __MODULE__.Oban.t() | nil,
           plugins: __MODULE__.Plugins.t() | nil,
           flaresolverr: __MODULE__.FlareSolverr.t() | nil,
+          cardigann: __MODULE__.Cardigann.t() | nil,
           remote_access: __MODULE__.RemoteAccess.t() | nil,
           download_clients: [__MODULE__.DownloadClient.t()],
           indexers: [__MODULE__.Indexer.t()],
@@ -317,15 +318,8 @@ defmodule Mydia.Config.Schema do
       field :override_dir, :string
     end
 
-    embeds_one :flaresolverr, FlareSolverr, on_replace: :update, primary_key: false do
-      @type t :: %__MODULE__{}
-      field :enabled, :boolean, default: false
-      field :url, :string
-      field :timeout, :integer, default: 60_000
-      field :max_timeout, :integer, default: 120_000
-      # Why the default is 1: see "Concurrency" in Mydia.Indexers.FlareSolverr.
-      field :max_concurrent_requests, :integer, default: 1
-    end
+    embeds_one :flaresolverr, Mydia.Config.Schema.FlareSolverr, on_replace: :update
+    embeds_one :cardigann, Mydia.Config.Schema.Cardigann, on_replace: :update
 
     # Whether this server runs its p2p node and accepts pairing. It only counts
     # while the player is on, and that switch (ENABLE_PLAYER) is not part of
@@ -490,7 +484,8 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:logging, with: &logging_changeset/2)
     |> cast_embed(:oban, with: &oban_changeset/2)
     |> cast_embed(:plugins, with: &plugins_changeset/2)
-    |> cast_embed(:flaresolverr, with: &flaresolverr_changeset/2)
+    |> cast_embed(:flaresolverr)
+    |> cast_embed(:cardigann)
     |> cast_embed(:remote_access, with: &remote_access_changeset/2)
     |> cast_embed(:download_clients, with: &download_client_changeset/2)
     |> cast_embed(:indexers, with: &indexer_changeset/2)
@@ -791,26 +786,8 @@ defmodule Mydia.Config.Schema do
 
   defp remote_access_changeset(schema, attrs), do: cast(schema, attrs, [:enabled])
 
-  defp flaresolverr_changeset(schema, attrs) do
-    schema
-    |> cast(attrs, [:enabled, :url, :timeout, :max_timeout, :max_concurrent_requests])
-    |> validate_flaresolverr_url()
-    |> validate_positive([:timeout, :max_timeout, :max_concurrent_requests])
-  end
-
   defp validate_positive(changeset, fields),
     do: Enum.reduce(fields, changeset, &validate_number(&2, &1, greater_than: 0))
-
-  defp validate_flaresolverr_url(changeset) do
-    enabled = get_field(changeset, :enabled)
-    url = get_field(changeset, :url)
-
-    if enabled && (is_nil(url) || url == "") do
-      add_error(changeset, :url, "is required when FlareSolverr is enabled")
-    else
-      changeset
-    end
-  end
 
   defp download_client_changeset(schema, attrs) do
     schema
@@ -1162,6 +1139,7 @@ defmodule Mydia.Config.Schema do
       oban: %__MODULE__.Oban{},
       plugins: %__MODULE__.Plugins{},
       flaresolverr: %__MODULE__.FlareSolverr{},
+      cardigann: %__MODULE__.Cardigann{},
       remote_access: %__MODULE__.RemoteAccess{},
       download_clients: [],
       indexers: [],

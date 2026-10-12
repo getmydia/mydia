@@ -34,14 +34,39 @@ ENABLE_CARDIGANN=false
 
 ## Using Prowlarr's engine (experimental)
 
-Mydia can run Prowlarr's own Cardigann engine instead of its built-in one:
+Mydia can run Prowlarr's own Cardigann engine instead of its built-in one.
+Choose the engine under **Configuration > Indexers**, in the **Indexer library
+engine** section, which shows a Built-in and a Prowlarr card. The default is
+Built-in. Switching takes effect without a restart.
+
+The first time you switch to Prowlarr, Mydia downloads and compiles the engine
+while the built-in engine keeps serving your searches, and the page shows
+progress. When it is ready, searches move over by themselves. If something goes
+wrong, the page shows the reason. Problems that can pass, such as a network
+failure, are retried in the background (use **Retry now** to try again at once).
+Permanent ones, such as a checksum mismatch or a Mydia version with no published
+engine, need the cause fixed first. If the Prowlarr engine stops being ready
+later, for example if the engine crashes and restarts, the built-in engine serves searches again
+until it is.
+
+Switching back to Built-in frees the engine's memory but keeps the downloaded
+and compiled files, so switching to Prowlarr again takes about a second. Use
+**Remove cached Prowlarr engine** on the same page to delete them. The button
+appears while Built-in is selected.
+
+A "verified" badge on a tracker means that engine returned results for it that
+matched Prowlarr's in our benchmark. No badge means "not verified", not
+"broken".
+
+To pin the choice instead, for example in a Docker Compose file, set:
 
 ```bash
 CARDIGANN_ENGINE=prowlarr
 ```
 
-The default is `builtin`, and anything else stops Mydia at startup with a message
-naming the two valid values. With `prowlarr`, definitions are read by the same
+The variable wins over the page and locks the choice there. Use `builtin` or
+`prowlarr`; anything else stops Mydia at startup with a message naming the two
+valid values. With `prowlarr`, definitions are read by the same
 code Prowlarr uses, so results match Prowlarr's, and a search that hits a dead or
 blocked mirror moves on to the next link the definition lists. Against Prowlarr on
 the 44 public trackers where Prowlarr returned results, it matched on all of them,
@@ -52,8 +77,8 @@ It is opt-in because it costs something. Read this before turning it on:
 - **The first start downloads about 39 MB from GitHub and compiles it.** The
   compile takes about 18 s on the Alpine image and uses up to about 1.6 GB of
   memory while it runs, then settles at about 500 MB. A container limited to
-  less than about 2 GB can be killed during it. Cardigann searches fail with a message
-  saying why until it finishes; the rest of Mydia is not held up. If the download
+  less than about 2 GB can be killed during it. The built-in engine
+  keeps serving searches meanwhile, and the rest of Mydia is not held up. If the download
   fails, Mydia retries in the background.
 - **Later starts load the compiled copy in under a second.** It is kept in a
   `cardigann` folder in your data directory (`MYDIA_DATA_DIR`, or next to the
