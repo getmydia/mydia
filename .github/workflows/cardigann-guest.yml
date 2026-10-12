@@ -48,12 +48,13 @@ jobs:
         id: hash
         run: echo "hash=$(native/cardigann_guest/scripts/source-hash.sh)" >> "$GITHUB_OUTPUT"
 
-      # The .wasm is uploaded last, so its presence means the release is complete.
+      # Each hash has its own release, published only once every asset is on it,
+      # so a non-draft release means this hash is done. A draft is a failed run.
       - name: Skip if published
         id: exists
         run: |
-          if gh release view cardigann-guest --json assets -q '.assets[].name' 2>/dev/null \
-            | grep -qx "cardigann-${{ steps.hash.outputs.hash }}.wasm"; then
+          if gh release view "cardigann-guest-${{ steps.hash.outputs.hash }}" --json isDraft -q .isDraft 2>/dev/null \
+            | grep -qx false; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           fi
         env:
@@ -113,21 +114,37 @@ jobs:
           name: cardigann-guest
           path: out
 
-      # Sidecars first, the .wasm last: the build job treats the .wasm as proof
-      # that a release is complete, so a partial upload is retried, not skipped.
+      # Immutable releases are on for this repo: a published release takes no
+      # uploads, and its assets can never be replaced. So each source hash gets
+      # its own release, built as a draft holding every asset and published last
+      # (the draft-first pattern in .github/ci.md). A draft left by a failed run
+      # is deleted and rebuilt. --latest=false keeps Mydia's own release as
+      # "Latest".
       - name: Publish
         run: |
-          name="cardigann-${{ needs.build.outputs.hash }}.wasm"
+          hash="${{ needs.build.outputs.hash }}"
+          tag="cardigann-guest-$hash"
+          name="cardigann-$hash.wasm"
           cp out/cardigann.wasm "$name"
           sha256sum "$name" | cut -d' ' -f1 > "$name.sha256"
           cp native/cardigann_guest/LICENSE "$name.LICENSE"
           { cat native/cardigann_guest/NOTICE; printf '\nBuilt from %s\n' "$GITHUB_SHA"; } > "$name.NOTICE"
-          gh release view cardigann-guest >/dev/null 2>&1 || \
-            gh release create cardigann-guest --prerelease --title "Cardigann guest builds" \
-              --notes "Prebuilt Cardigann wasm guests, named by source hash. Source: native/cardigann_guest at the commit that published each asset."
-          gh release upload cardigann-guest --clobber "$name.sha256" "$name.LICENSE" "$name.NOTICE"
-          gh release upload cardigann-guest --clobber "$name"
-          echo "Published $name"
+          # Re-read inside the concurrency group: two queued runs can build the
+          # same hash, and the first to publish wins.
+          state=$(gh release view "$tag" --json isDraft -q .isDraft 2>/dev/null || true)
+          if [ "$state" = "false" ]; then
+            echo "$tag is already published"
+            exit 0
+          fi
+          if [ "$state" = "true" ]; then
+            gh release delete "$tag" --yes
+          fi
+          gh release create "$tag" --draft --prerelease --latest=false --target "$GITHUB_SHA" \
+            --title "Cardigann guest $hash" \
+            --notes "Prebuilt Cardigann wasm guest for source hash $hash, built from native/cardigann_guest at $GITHUB_SHA." \
+            "$name" "$name.sha256" "$name.LICENSE" "$name.NOTICE"
+          gh release edit "$tag" --draft=false --prerelease --latest=false
+          echo "Published $tag/$name"
           echo "Pin for nix: $(cat "$name.sha256")"
         env:
           GH_TOKEN: ${{ github.token }}
