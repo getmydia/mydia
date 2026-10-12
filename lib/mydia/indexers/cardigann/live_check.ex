@@ -108,7 +108,6 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
       {:ok, results, winner, response, stats}
     else
       {:error, %Error{message: message}} -> CardigannHealthCheck.classify_probe_error(message)
-      {:error, other} -> {:error, inspect(other)}
     end
   end
 

@@ -80,7 +80,9 @@ defmodule Mydia.Indexers.CardigannResultParser do
   @type parse_result :: {:ok, [SearchResult.t()]} | {:error, Error.t()}
   @type http_response :: %{
           required(:status) => integer(),
-          required(:body) => String.t(),
+          # Req decodes a JSON response into a map or a list; parse_body/4
+          # handles all three shapes.
+          required(:body) => String.t() | map() | list(),
           optional(:headers) => [{term(), term()}]
         }
 

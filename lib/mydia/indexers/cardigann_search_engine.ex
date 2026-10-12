@@ -96,7 +96,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   @type http_response :: %{
           status: integer(),
-          body: String.t(),
+          # Req decodes a JSON response into a map or a list.
+          body: String.t() | map() | list(),
           headers: [{String.t(), String.t()}]
         }
 
