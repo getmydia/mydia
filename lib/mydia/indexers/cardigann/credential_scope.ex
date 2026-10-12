@@ -30,7 +30,18 @@ defmodule Mydia.Indexers.Cardigann.CredentialScope do
   # Read under both spellings. `definition.config` is a
   # `Mydia.Settings.JsonMapType` and comes back string-keyed from
   # `Jason.decode/1`, while a session map built in code is atom-keyed.
-  @credential_keys [:cookies, :cookie, :username, :password, :api_key, :apikey, :passkey]
+  @credential_keys [
+    :cookies,
+    :cookie,
+    :username,
+    :password,
+    :api_key,
+    :apikey,
+    :passkey,
+    :pin,
+    :captcha,
+    :"2facode"
+  ]
 
   @doc """
   Returns the normalized `"host:port"` origins this definition's credentials

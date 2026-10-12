@@ -1,0 +1,43 @@
+---
+id: login-get-tracker
+name: Login Get Tracker
+description: "Invented tracker exercising the get login method"
+language: en-US
+encoding: UTF-8
+type: private
+links:
+  - https://tracker.example/
+caps:
+  categorymappings:
+    - {id: 1, cat: Movies, desc: "Movies"}
+  modes:
+    search: [q]
+settings:
+  - {name: username, type: text, label: Username}
+  - {name: password, type: password, label: Password}
+search:
+  paths:
+    - path: browse.php
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: tr.row
+  fields:
+    title:
+      selector: td.title
+    download:
+      selector: a.dl
+      attribute: href
+    size:
+      selector: td.size
+    seeders:
+      selector: td.seeders
+
+login:
+  method: get
+  path: login.php
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+  test:
+    path: index.php

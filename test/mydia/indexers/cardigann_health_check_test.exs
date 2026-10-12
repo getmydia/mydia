@@ -9,6 +9,7 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Repo
 
+  import Ecto.Query
   import Mydia.IndexersFixtures
 
   describe "test_connection/2" do
@@ -87,6 +88,63 @@ defmodule Mydia.Indexers.CardigannHealthCheckTest do
       updated_definition = Repo.get!(CardigannDefinition, definition.id)
       assert updated_definition.last_health_check_at != nil
       assert updated_definition.health_status in ["healthy", "degraded", "unhealthy", "unknown"]
+    end
+
+    test "keeps needs_login intact and sends no request" do
+      definition = cardigann_definition_fixture(%{enabled: true})
+      bypass = Bypass.open()
+
+      yaml =
+        String.replace(
+          definition.definition,
+          "search:\n",
+          "login:\n  method: cookie\n  inputs:\n    cookie: \"{{ .Config.cookie }}\"\n  test:\n    path: /\n    selector: a\nsearch:\n"
+        )
+
+      {:ok, definition} =
+        definition
+        |> Ecto.Changeset.change(%{definition: yaml, health_status: "needs_login"})
+        |> Repo.update()
+
+      # Bypass fails the test on exit if any request reaches it.
+      definition = put_link(definition, "http://localhost:#{bypass.port}")
+
+      assert {:ok, %{status: "needs_login", success: false}} =
+               CardigannHealthCheck.execute_health_check(definition)
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      assert reloaded.health_status == "needs_login"
+      assert reloaded.consecutive_failures in [0, nil]
+    end
+
+    test "a probe result never overwrites a needs_login set while it ran" do
+      definition = cardigann_definition_fixture(%{enabled: true})
+
+      # The struct was loaded before the probe; a concurrent search then parks the row.
+      Repo.update_all(
+        from(d in CardigannDefinition, where: d.id == ^definition.id),
+        set: [health_status: "needs_login"]
+      )
+
+      result = %{success: true, status: "healthy"}
+      CardigannHealthCheck.update_health_status(definition, result)
+
+      reloaded = Repo.get!(CardigannDefinition, definition.id)
+      assert reloaded.health_status == "needs_login"
+      assert reloaded.last_health_check_at == nil
+    end
+
+    test "a probe result still updates a definition that is not parked" do
+      definition = cardigann_definition_fixture(%{enabled: true})
+
+      assert {:ok, updated} =
+               CardigannHealthCheck.update_health_status(definition, %{
+                 success: true,
+                 status: "healthy"
+               })
+
+      assert updated.health_status == "healthy"
+      assert Repo.get!(CardigannDefinition, definition.id).health_status == "healthy"
     end
 
     test "tracks consecutive failures" do

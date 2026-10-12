@@ -14,9 +14,12 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   - Consecutive failure tracking
   """
 
+  import Ecto.Query, only: [from: 2]
+
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Indexers.Cardigann.SessionManager
   alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.CardigannDefinition
   alias Mydia.Indexers.CardigannDefinition.Parsed
@@ -313,8 +316,39 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
   defp perform_test_search(definition, parsed_definition) do
     start_time = System.monotonic_time(:millisecond)
-    user_config = definition.config || %{}
 
+    case SessionManager.user_config(parsed_definition, definition) do
+      {:ok, session_config} ->
+        user_config = Map.merge(definition.config || %{}, session_config)
+        probe_with_session(definition, parsed_definition, user_config, start_time)
+
+      {:error, %Error{type: :login_required}} ->
+        # Nothing is persisted: needs_login is cleared only by a real login, so
+        # a check must neither overwrite it nor count as a failure.
+        {:ok,
+         %{
+           success: false,
+           status: "needs_login",
+           message: "Needs login",
+           response_time_ms: nil,
+           error: nil
+         }}
+
+      {:error, %Error{message: message}} ->
+        result = %{
+          success: false,
+          status: determine_health_status(definition, false, 0),
+          message: "Login failed",
+          response_time_ms: nil,
+          error: message
+        }
+
+        update_health_status(definition, result)
+        {:ok, result}
+    end
+  end
+
+  defp probe_with_session(definition, parsed_definition, user_config, start_time) do
     result =
       case probe_candidates(parsed_definition, user_config) do
         {:ok, active_link, link_status} ->
@@ -527,7 +561,8 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
     end
   end
 
-  defp update_health_status(definition, result) do
+  @doc false
+  def update_health_status(definition, result) do
     now = DateTime.utc_now()
 
     attrs =
@@ -546,9 +581,24 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
         }
       end
 
-    definition
-    |> CardigannDefinition.health_check_changeset(attrs)
-    |> Repo.update()
+    changeset = CardigannDefinition.health_check_changeset(definition, attrs)
+
+    # The probe takes seconds and works on a struct loaded before it started. A
+    # search may have set needs_login meanwhile, and only a login clears it, so
+    # the write is conditional on the row's current status, not the struct's.
+    with true <- changeset.valid?,
+         {1, _} <-
+           Repo.update_all(
+             from(d in CardigannDefinition,
+               where: d.id == ^definition.id and d.health_status != "needs_login"
+             ),
+             set: Map.to_list(changeset.changes)
+           ) do
+      {:ok, Repo.get!(CardigannDefinition, definition.id)}
+    else
+      false -> {:error, changeset}
+      {0, _} -> {:ok, Repo.get!(CardigannDefinition, definition.id)}
+    end
   end
 
   defp ok_entry(http_status) do

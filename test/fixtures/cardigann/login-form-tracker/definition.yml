@@ -1,0 +1,65 @@
+---
+id: login-form-tracker
+name: Login Form Tracker
+description: "Invented tracker exercising the form login: captcha, 2FA, selectors and header options"
+language: en-US
+encoding: UTF-8
+type: private
+links:
+  - https://tracker.example/
+caps:
+  categorymappings:
+    - {id: 1, cat: Movies, desc: "Movies"}
+  modes:
+    search: [q]
+settings:
+  - {name: username, type: text, label: Username}
+  - {name: password, type: password, label: Password}
+search:
+  paths:
+    - path: browse.php
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: tr.row
+  fields:
+    title:
+      selector: td.title
+    download:
+      selector: a.dl
+      attribute: href
+    size:
+      selector: td.size
+    seeders:
+      selector: td.seeders
+
+login:
+  method: form
+  path: login.php
+  submitpath: takelogin.php
+  form: form#login
+  selectors: true
+  headers:
+    X-Requested-With: [XMLHttpRequest]
+  cookies:
+    - "lang=en"
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+    otp: "{{ .Config.2facode }}"
+  selectorinputs:
+    csrf:
+      selector: input[name=csrf]
+      attribute: value
+  getselectorinputs:
+    nonce:
+      selector: span#nonce
+      attribute: data-v
+  captcha:
+    type: image
+    selector: img.captcha
+    input: captcha
+  error:
+    - selector: div.error
+  test:
+    path: index.php
