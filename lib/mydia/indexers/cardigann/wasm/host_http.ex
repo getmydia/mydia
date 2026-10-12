@@ -30,7 +30,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   @namespace "mydia:cardigann/host@1.0.0"
 
   @max_response_bytes 32 * 1024 * 1024
-  @default_timeout_ms 30_000
+  # Prowlarr's HttpClient gives a request 100 s (ManagedHttpDispatcher). Slow
+  # trackers (archive.org takes 30 to 50 s) answer Prowlarr and must answer here.
+  @default_timeout_ms 100_000
 
   @type ctx :: %{
           required(:definition_id) => String.t(),
@@ -121,6 +123,12 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   end
 
   # ── Plain layer ───────────────────────────────────────────────────────────
+
+  @doc """
+  The request deadline when `:cardigann_http_timeout_ms` is not configured.
+  """
+  @spec default_timeout_ms() :: pos_integer()
+  def default_timeout_ms, do: @default_timeout_ms
 
   @doc """
   Performs one gated HTTP exchange for the guest.

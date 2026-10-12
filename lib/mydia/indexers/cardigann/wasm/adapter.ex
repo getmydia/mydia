@@ -56,7 +56,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   import AdapterSupport,
     only: [apply_search_filters: 2, blank?: 1, fetch_definition: 1, setting: 2]
 
-  @default_timeout_ms 60_000
+  # Above the 100 s host request deadline (HostHttp), so a slow tracker is a host
+  # timeout, not a guest kill.
+  @default_timeout_ms 120_000
   @empty_session %{cookies: %{}, expires_at: nil}
 
   @impl true

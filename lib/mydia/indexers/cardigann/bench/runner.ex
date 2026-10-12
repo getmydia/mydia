@@ -35,8 +35,8 @@ defmodule Mydia.Indexers.Cardigann.Bench.Runner do
   alias Mydia.Repo
 
   @engines [:prowlarr, :elixir, :wasm]
-  @call_timeout_ms 60_000
-  @wasm_timeout_ms 55_000
+  @call_timeout_ms 130_000
+  @wasm_timeout_ms 120_000
   @result_limit 1000
   @telemetry_id "mydia-cardigann-bench-wasm-network"
   @wasm_event [:mydia, :cardigann, :wasm, :call]

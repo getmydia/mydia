@@ -136,6 +136,12 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
       assert %{name: "content-encoding", value: "gzip"} in headers
     end
 
+    test "gives a request the 100 s Prowlarr's HTTP client allows" do
+      # archive.org takes 30 to 50 s to answer Prowlarr's requests; a shorter
+      # deadline made the wasm engine return nothing where Prowlarr succeeds.
+      assert HostHttp.default_timeout_ms() == 100_000
+    end
+
     test "blocks egress the gate refuses", %{ctx: ctx} do
       assert {:error, {:blocked, _}} =
                HostHttp.exchange(ctx, req("GET", "http://169.254.169.254/latest/meta-data"))
