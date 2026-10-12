@@ -37,6 +37,19 @@ defmodule Mydia.Indexers.Cardigann.Bench.MetricsTest do
     assert m.prowlarr_failed == ["d"]
   end
 
+  test "verified names the engines that agreed with prowlarr, in app terms" do
+    results = [
+      row("a", prowlarr: ok(["x"]), elixir: ok(["x"]), wasm: ok(["x"])),
+      row("b", prowlarr: ok(["x"]), elixir: ok(["y"]), wasm: ok(["x"])),
+      row("c", prowlarr: ok([]), elixir: ok(["x"]), wasm: ok(["x"]))
+    ]
+
+    assert Metrics.compute(results).verified == %{
+             "a" => [:builtin, :prowlarr],
+             "b" => [:prowlarr]
+           }
+  end
+
   test "a definition agrees only if every query agrees" do
     results = [
       row("a", [prowlarr: ok(["x"]), elixir: ok(["x"]), wasm: ok(["x"])], query: "q1"),

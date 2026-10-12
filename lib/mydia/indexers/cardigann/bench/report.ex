@@ -37,7 +37,8 @@ defmodule Mydia.Indexers.Cardigann.Bench.Report do
       regressions_section(m, results),
       disagreements_section(m),
       resources_section(),
-      per_query_section(results)
+      per_query_section(results),
+      engine_support_section(info, m)
     ]
     |> Enum.join("\n")
   end
@@ -335,6 +336,27 @@ defmodule Mydia.Indexers.Cardigann.Bench.Report do
   end
 
   # -- formatting -----------------------------------------------------------------
+
+  defp engine_support_section(info, m) do
+    entries =
+      m.verified
+      |> Enum.sort()
+      |> Enum.map_join(",\n", fn {id, engines} -> "    #{inspect(id)} => #{inspect(engines)}" end)
+
+    """
+
+    ## EngineSupport map
+
+    Paste over `@verified` in `Mydia.Indexers.Cardigann.EngineSupport`, and set
+    `@verified_on` to `~D[#{info.date}]`.
+
+    ```elixir
+      @verified %{
+    #{entries}
+      }
+    ```
+    """
+  end
 
   defp verdict(:pass), do: "PASS"
   defp verdict(:fail), do: "FAIL"

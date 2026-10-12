@@ -74,7 +74,8 @@ defmodule Mydia.Indexers.Cardigann.Bench.Metrics do
       overhead: Map.new(@engines, fn e -> {e, overhead(paired, e)} end),
       overhead_unpaired: Map.new(@engines, fn e -> {e, overhead(delay_free, e)} end),
       overhead_all: Map.new(@engines, fn e -> {e, overhead(rows, e)} end),
-      disagreements: disagreements(rows, 20)
+      disagreements: disagreements(rows, 20),
+      verified: verified(judged)
     }
 
     Map.put(metrics, :gate, gate(metrics))
@@ -95,6 +96,18 @@ defmodule Mydia.Indexers.Cardigann.Bench.Metrics do
 
   defp regressions(judged, opts) do
     for {id, j} <- judged, agrees?(j, :elixir, opts), not agrees?(j, :wasm, opts), do: id
+  end
+
+  @engine_names %{elixir: :builtin, wasm: :prowlarr}
+
+  # Per definition, the engines that agreed with Prowlarr on every judged query,
+  # named as the app names them. Printed for Mydia.Indexers.Cardigann.EngineSupport.
+  defp verified(judged) do
+    for {id, j} <- judged,
+        engines = for(e <- @engines, agrees?(j, e, []), do: @engine_names[e]),
+        engines != [],
+        into: %{},
+        do: {id, engines}
   end
 
   # Definitions whose agreement with Prowlarr differs between the strict
