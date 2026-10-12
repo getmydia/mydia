@@ -254,22 +254,21 @@ defmodule Mydia.WatchSync.Engine do
   # incremental run never unwatches a multi-copy item through a partial
   # listing; only a full listing (first sync) can.
   #
-  # A listed copy that looks never played (unwatched, no position, no date) is
-  # treated exactly like an absent one while the snapshot is watched. A re-ided
-  # or freshly mapped copy reports blank, and a full listing (which a new
-  # mapping triggers) would otherwise read that as an unwatch and delete the
-  # local history. No path has ever propagated an undated unwatch, so this
-  # keeps that boundary.
+  # A listed copy that looks never played (unwatched, no position, no date)
+  # carries no state of its own while the snapshot is watched, so it is left
+  # out of the merge. A re-ided or freshly mapped copy reports blank, and a
+  # full listing (which a new mapping triggers) would otherwise read that as an
+  # unwatch and delete the local history. It still counts as listed: when every
+  # copy is listed, a dated unwatch on the others is the whole truth.
   defp remote_side(copies, remote_ids, state_row) do
-    copies = drop_blank_copies(copies, state_row)
+    listed = copies |> Enum.map(& &1.remote_id) |> Enum.uniq() |> length()
 
-    case copies do
+    case drop_blank_copies(copies, state_row) do
       [] ->
         snapshot_side(state_row)
 
-      _ ->
-        merged = Reconciler.merge_remotes(copies)
-        listed = copies |> Enum.map(& &1.remote_id) |> Enum.uniq() |> length()
+      informative ->
+        merged = Reconciler.merge_remotes(informative)
 
         if state_row && listed < length(remote_ids),
           do: %{merged | watched: merged.watched or state_row.synced_watched},

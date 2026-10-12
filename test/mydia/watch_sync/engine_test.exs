@@ -558,6 +558,32 @@ defmodule Mydia.WatchSync.EngineTest do
       # An unwatch is a delete in Mydia.
       assert Playback.get_progress(user.id, media_item_id: movie.id) == nil
     end
+
+    test "a dated unwatch propagates when the other listed copy is blank",
+         %{user: user, movie: movie} do
+      two_days_ago = DateTime.utc_now() |> DateTime.add(-2, :day) |> DateTime.truncate(:second)
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      blank = %{remote_id: "rk-4k", watched: false, position_seconds: nil, at: nil}
+      watched = %{remote_id: "rk-1080", watched: true, position_seconds: 0, at: two_days_ago}
+
+      {:ok, _} =
+        WatchSync.sync(StubProvider, two_copies([watched, blank]), scope(user), provider: "stub")
+
+      assert %{watched: true} = Playback.get_progress(user.id, media_item_id: movie.id)
+
+      # Both copies are listed and neither is watched any more, so the blank
+      # copy must not be mistaken for an absent one that still holds the watch.
+      unwatched = %{remote_id: "rk-1080", watched: false, position_seconds: 120, at: now}
+
+      {:ok, counts} =
+        WatchSync.sync(StubProvider, two_copies([unwatched, blank]), scope(user),
+          provider: "stub"
+        )
+
+      assert_received {:listed_since, nil}
+      assert counts.imported == 1
+      assert Playback.get_progress(user.id, media_item_id: movie.id) == nil
+    end
   end
 
   defp scope(user), do: %{user_id: user.id, access_token: nil}
