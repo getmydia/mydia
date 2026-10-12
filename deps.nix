@@ -164,6 +164,19 @@ let
       beamDeps = [];
     };
 
+    codepagex = buildMix rec {
+      name = "codepagex";
+      version = "0.1.13";
+
+      src = fetchHex {
+        pkg = "codepagex";
+        version = "${version}";
+        sha256 = "c328170767e3ec04682193e7a07a8074c934a995a903d1836777c0ca5edf0d46";
+      };
+
+      beamDeps = [];
+    };
+
     combine = buildMix rec {
       name = "combine";
       version = "0.10.0";
