@@ -165,7 +165,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
 
     case Gate.request(req.url, opts) do
       {:ok, %{status: status, headers: headers, body: body}} ->
-        {:ok, %{status: status, headers: normalize_headers(headers), body: body}}
+        {headers, body} = headers |> normalize_headers() |> decompress(body)
+        {:ok, %{status: status, headers: headers, body: body}}
 
       {:error, %GateError{} = error} ->
         {:error, map_error(error)}
@@ -196,6 +197,48 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
   defp normalize_headers(headers) do
     for {name, values} <- headers, value <- List.wrap(values) do
       %{name: String.downcase(to_string(name)), value: to_string(value)}
+    end
+  end
+
+  # The gate hands the body back as it came off the wire. Prowlarr's HTTP client
+  # decompresses gzip itself (and drops Content-Encoding and Content-Length), and
+  # some trackers compress even when the request sent no Accept-Encoding, so a
+  # gzip body is inflated here. Any other encoding, or a body that does not
+  # inflate within the response cap, is passed through untouched.
+  defp decompress(headers, body) do
+    encodings =
+      for %{name: "content-encoding", value: v} <- headers, do: String.downcase(String.trim(v))
+
+    with [encoding] <- encodings,
+         true <- encoding in ["gzip", "x-gzip"],
+         {:ok, inflated} <- gunzip(body) do
+      {Enum.reject(headers, &(&1.name in ["content-encoding", "content-length"])), inflated}
+    else
+      _ -> {headers, body}
+    end
+  end
+
+  defp gunzip(body) do
+    z = :zlib.open()
+
+    try do
+      :ok = :zlib.inflateInit(z, 31)
+      inflate(z, :zlib.safeInflate(z, body), [], 0)
+    catch
+      _, _ -> :error
+    after
+      :zlib.close(z)
+    end
+  end
+
+  defp inflate(z, {state, chunk}, acc, size) do
+    size = size + IO.iodata_length(chunk)
+    acc = [acc | chunk]
+
+    cond do
+      size > @max_response_bytes -> :error
+      state == :finished -> {:ok, IO.iodata_to_binary(acc)}
+      true -> inflate(z, :zlib.safeInflate(z, []), acc, size)
     end
   end
 

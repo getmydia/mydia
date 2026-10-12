@@ -101,6 +101,41 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttpTest do
       assert {:ok, %{body: ^json}} = HostHttp.exchange(ctx, req("GET", base <> "/j"))
     end
 
+    test "inflates a gzip body the server sent unasked and drops its encoding headers", %{
+      bypass: bypass,
+      ctx: ctx,
+      base: base
+    } do
+      html = "<html>" <> String.duplicate("row ", 500) <> "</html>"
+      gz = :zlib.gzip(html)
+
+      Bypass.expect_once(bypass, "GET", "/z", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("content-encoding", "gzip")
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.resp(200, gz)
+      end)
+
+      assert {:ok, %{body: ^html, headers: headers}} =
+               HostHttp.exchange(ctx, req("GET", base <> "/z"))
+
+      refute Enum.any?(headers, &(&1.name in ["content-encoding", "content-length"]))
+      assert Enum.any?(headers, &(&1.name == "content-type"))
+    end
+
+    test "passes a body through whose gzip is corrupt", %{bypass: bypass, ctx: ctx, base: base} do
+      Bypass.expect_once(bypass, "GET", "/bad", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("content-encoding", "gzip")
+        |> Plug.Conn.resp(200, "not gzip at all")
+      end)
+
+      assert {:ok, %{body: "not gzip at all", headers: headers}} =
+               HostHttp.exchange(ctx, req("GET", base <> "/bad"))
+
+      assert %{name: "content-encoding", value: "gzip"} in headers
+    end
+
     test "blocks egress the gate refuses", %{ctx: ctx} do
       assert {:error, {:blocked, _}} =
                HostHttp.exchange(ctx, req("GET", "http://169.254.169.254/latest/meta-data"))
