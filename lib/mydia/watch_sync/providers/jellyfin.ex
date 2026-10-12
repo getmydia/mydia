@@ -24,7 +24,9 @@ defmodule Mydia.WatchSync.Providers.Jellyfin do
   unwatch is silently skipped. It is not lost forever: the next full
   `refresh_mappings/2` crawl (first sync for a mapping, or an explicit forced
   refresh) re-establishes every item, and any subsequent watch/resume on that
-  item stamps a fresh `LastPlayedDate` and is picked up normally.
+  item stamps a fresh `LastPlayedDate` and is picked up normally. A full
+  listing likewise does not propagate a blank (never-played-looking) copy as an
+  unwatch while the snapshot is watched; the engine treats it as an absent copy.
 
   The same date filter would hide a copy mapped after its watch was listed:
   its `LastPlayedDate` predates every later cursor. The engine covers that by

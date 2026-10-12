@@ -18,7 +18,8 @@ defmodule Mydia.WatchSync.EngineTest do
     def refresh_mappings(instance, _opts), do: {:ok, instance.mappings}
 
     # Filters the way Providers.Jellyfin.changed_since?/2 does: dated changes
-    # older than the cursor are dropped, undated ones are always listed.
+    # older than the cursor are dropped, and undated ones are listed only when
+    # they carry something (watched or a resume position).
     @impl true
     def list_changes(instance, _scope, since) do
       send(instance.test_pid, {:listed_since, since})
@@ -26,7 +27,10 @@ defmodule Mydia.WatchSync.EngineTest do
     end
 
     defp listed_since?(_change, nil), do: true
-    defp listed_since?(%{at: nil}, _since), do: true
+
+    defp listed_since?(%{at: nil} = change, _since),
+      do: change.watched or (change.position_seconds || 0) > 0
+
     defp listed_since?(%{at: at}, since), do: DateTime.compare(at, since) != :lt
 
     @impl true
@@ -483,6 +487,77 @@ defmodule Mydia.WatchSync.EngineTest do
 
       assert_received {:listed_since, nil}
     end
+
+    test "a re-ided copy that reports never played does not unwatch",
+         %{user: user, movie: movie} do
+      two_days_ago = DateTime.utc_now() |> DateTime.add(-2, :day) |> DateTime.truncate(:second)
+      old = %{remote_id: "rk-old", watched: true, position_seconds: 0, at: two_days_ago}
+
+      {:ok, first} =
+        WatchSync.sync(
+          StubProvider,
+          two_copies([old], %{mappings: [copy("rk-old")]}),
+          scope(user),
+          provider: "stub"
+        )
+
+      assert first.imported == 1
+      assert_received {:listed_since, nil}
+      settle_history(user, "inst-copies")
+      age_last_seen("inst-copies")
+
+      # The server re-scanned the item under a new id; the new copy has no play
+      # data yet and the old id is pruned by the crawl.
+      blank = %{remote_id: "rk-new", watched: false, position_seconds: nil, at: nil}
+
+      {:ok, counts} =
+        WatchSync.sync(
+          StubProvider,
+          two_copies([blank], %{mappings: [copy("rk-new")]}),
+          scope(user),
+          provider: "stub",
+          refresh_mappings: :force
+        )
+
+      assert mapped_remote_ids("inst-copies") == ["rk-new"]
+      assert_received {:listed_since, nil}
+      assert counts.imported == 0
+      assert %{watched: true} = Playback.get_progress(user.id, media_item_id: movie.id)
+    end
+
+    test "a dated unwatch on a copy still propagates on a full listing",
+         %{user: user, movie: movie} do
+      two_days_ago = DateTime.utc_now() |> DateTime.add(-2, :day) |> DateTime.truncate(:second)
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      watched = %{remote_id: "rk-1080", watched: true, position_seconds: 0, at: two_days_ago}
+
+      {:ok, _} =
+        WatchSync.sync(
+          StubProvider,
+          two_copies([watched], %{mappings: [copy("rk-1080")]}),
+          scope(user),
+          provider: "stub"
+        )
+
+      assert %{watched: true} = Playback.get_progress(user.id, media_item_id: movie.id)
+
+      # No finished run is recorded, so the next listing is a full one.
+      unwatched = %{remote_id: "rk-1080", watched: false, position_seconds: 120, at: now}
+
+      {:ok, counts} =
+        WatchSync.sync(
+          StubProvider,
+          two_copies([unwatched], %{mappings: [copy("rk-1080")]}),
+          scope(user),
+          provider: "stub",
+          refresh_mappings: :force
+        )
+
+      assert_received {:listed_since, nil}
+      assert counts.imported == 1
+      # An unwatch is a delete in Mydia.
+      assert Playback.get_progress(user.id, media_item_id: movie.id) == nil
+    end
   end
 
   defp scope(user), do: %{user_id: user.id, access_token: nil}
@@ -544,5 +619,13 @@ defmodule Mydia.WatchSync.EngineTest do
     Mapping
     |> where([m], m.provider_instance_id == ^instance_id)
     |> Repo.update_all(set: [inserted_at: an_hour_ago])
+  end
+
+  defp age_last_seen(instance_id) do
+    an_hour_ago = DateTime.utc_now() |> DateTime.add(-3600) |> DateTime.truncate(:second)
+
+    Mapping
+    |> where([m], m.provider_instance_id == ^instance_id)
+    |> Repo.update_all(set: [last_seen_at: an_hour_ago])
   end
 end

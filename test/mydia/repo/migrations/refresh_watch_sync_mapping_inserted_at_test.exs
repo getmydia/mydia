@@ -31,11 +31,11 @@ defmodule Mydia.Repo.Migrations.RefreshWatchSyncMappingInsertedAtTest do
         updated_at: a_week_ago
       })
 
-    before = DateTime.utc_now() |> DateTime.truncate(:second)
     assert :ok = RefreshWatchSyncMappingInsertedAt.backfill()
 
     reloaded = Repo.get!(Mapping, mapping.id)
-    assert DateTime.compare(reloaded.inserted_at, before) != :lt
+    assert DateTime.compare(reloaded.inserted_at, a_week_ago) == :gt
+    assert DateTime.diff(DateTime.utc_now(), reloaded.inserted_at) < 60
     assert reloaded.last_seen_at == a_week_ago
   end
 end
