@@ -40,6 +40,14 @@ namespace Mydia.CardigannGuest
         // CardigannRequestGenerator reads the captcha answer under this exact key.
         private const string CaptchaSettingKey = "CAPTCHA";
 
+        // Prowlarr registers the code page encodings at startup (Bootstrap.cs);
+        // trackers declare windows-1251, gb2312, shift_jis and similar. Without
+        // the provider, Encoding.GetEncoding throws for every one of them.
+        static Runner()
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        }
+
         private sealed class Graph
         {
             public Cardigann Indexer;

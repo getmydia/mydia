@@ -224,5 +224,20 @@ namespace Mydia.CardigannGuest.Tests
 
             Assert.Equal(2, result.Releases.Count);
         }
+
+        [Fact]
+        public void A_windows_1251_tracker_is_queried_and_read_in_that_encoding()
+        {
+            var cp1251 = System.Text.CodePagesEncodingProvider.Instance.GetEncoding(1251);
+            var http = new FakeExchange().On("GET", "/search", _ => new RawResponse(200,
+                new[] { ("Content-Type", "text/html; charset=windows-1251") },
+                cp1251.GetBytes(Fixture("willow-search.html"))));
+
+            var result = Runner.Search(Fixture("willow-1251.yml"), new Dictionary<string, string>(), Query("привет"), Empty, http);
+
+            Assert.Contains("q=%EF%F0%E8%E2%E5%F2", http.Seen[0].Url);
+            var release = Assert.Single(result.Releases);
+            Assert.Equal("Привет Мир 2031 1080p WEB-DL x264", release.Title);
+        }
     }
 }

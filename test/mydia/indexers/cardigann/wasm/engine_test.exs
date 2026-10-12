@@ -169,6 +169,42 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
       assert release.size == 2_684_354_560
     end
 
+    test "a header the server repeats is read as one value", %{bypass: b, ctx: ctx} do
+      # The guest's Cloudflare detection reads Vary on every response from a
+      # Cloudflare or DDoS-Guard server and used to throw on a second Vary.
+      Bypass.stub(b, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.prepend_resp_headers([
+          {"server", "cloudflare"},
+          {"vary", "Accept-Encoding"},
+          {"vary", "Cookie"}
+        ])
+        |> Plug.Conn.resp(200, body("lantern-search.html"))
+      end)
+
+      assert {:ok, %{releases: [_, _]}} = search("lantern-public.yml", b, ctx, "harbor")
+    end
+
+    test "a windows-1251 tracker is read in that encoding", %{bypass: b, ctx: ctx} do
+      # Erlang has no windows-1251 codec: "Привет Мир" spelled out in that code page.
+      # (The query is ASCII: Bypass's router rejects the percent-encoded
+      # windows-1251 bytes of a Cyrillic term as invalid UTF-8. The .NET fixture
+      # test covers the encoded query.)
+      cp1251 = <<0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2, 0x20, 0xCC, 0xE8, 0xF0>>
+
+      respond(
+        b,
+        "GET",
+        "/search",
+        200,
+        String.replace(body("willow-search.html"), "Привет Мир", cp1251)
+      )
+
+      assert {:ok, %{releases: [release]}} = search("willow-1251.yml", b, ctx, "x")
+
+      assert release.title == "Привет Мир 2031 1080p WEB-DL x264"
+    end
+
     test "a stored session skips login", %{bypass: b, ctx: ctx} do
       test_pid = self()
 
