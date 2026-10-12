@@ -4305,6 +4305,16 @@ name as <code>s3://&lt;name&gt;/&lt;prefix&gt;</code>.</p>
 <td><code>true</code></td>
 </tr>
 <tr>
+<td><code>CARDIGANN_ENGINE</code></td>
+<td>Which engine runs Cardigann definitions: <code>builtin</code> (Mydia's own) or <code>prowlarr</code> (Prowlarr's engine, experimental: downloads about 39 MB and compiles on first start, uses more memory; see <a href="../../how-to/cardigann-indexers/#using-prowlarrs-engine-experimental">Cardigann Indexers</a>). Any other value stops startup</td>
+<td><code>builtin</code></td>
+</tr>
+<tr>
+<td><code>CARDIGANN_WASM_PATH</code></td>
+<td>With <code>CARDIGANN_ENGINE=prowlarr</code>: path to a local <code>cardigann-&lt;hash&gt;.wasm</code>, for servers without internet access. Checked against the checksum built into the release</td>
+<td>(unset)</td>
+</tr>
+<tr>
 <td><code>ENABLE_IMPORT_LISTS</code></td>
 <td>Enable import lists for syncing external lists (TMDB watchlists, popular, etc.)</td>
 <td><code>true</code></td>

@@ -906,6 +906,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#using-prowlarrs-engine-experimental" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using Prowlarr's engine (experimental)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#supported-indexers" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3528,6 +3539,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#using-prowlarrs-engine-experimental" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using Prowlarr's engine (experimental)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#supported-indexers" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3766,6 +3788,50 @@ running fewer services.</p>
 <p>To disable:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">ENABLE_CARDIGANN</span><span class="o">=</span><span class="nb">false</span>
 </code></pre></div>
+<h2 id="using-prowlarrs-engine-experimental">Using Prowlarr's engine (experimental)</h2>
+<p>Mydia can run Prowlarr's own Cardigann engine instead of its built-in one:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">CARDIGANN_ENGINE</span><span class="o">=</span>prowlarr
+</code></pre></div>
+<p>The default is <code>builtin</code>, and anything else stops Mydia at startup with a message
+naming the two valid values. With <code>prowlarr</code>, definitions are read by the same
+code Prowlarr uses, so results match Prowlarr's, and a search that hits a dead or
+blocked mirror moves on to the next link the definition lists. Against Prowlarr on
+the 44 public trackers where Prowlarr returned results, it matched on all of them,
+and the built-in engine on 28.</p>
+<p>It is opt-in because it costs something. Read this before turning it on:</p>
+<ul>
+<li><strong>The first start downloads about 39 MB from GitHub and compiles it.</strong> The
+  compile takes about 18 s on the Alpine image and uses up to about 1.6 GB of
+  memory while it runs, then settles at about 500 MB. A container limited to
+  less than about 2 GB can be killed during it. Cardigann searches fail with a message
+  saying why until it finishes; the rest of Mydia is not held up. If the download
+  fails, Mydia retries in the background.</li>
+<li><strong>Later starts load the compiled copy in under a second.</strong> It is kept in a
+  <code>cardigann</code> folder in your data directory (<code>MYDIA_DATA_DIR</code>, or next to the
+  database file, which is <code>/config</code> in the Docker image): 39 MB for the download
+  and 119 MB for the compiled copy. Keep that folder on a volume. Without one,
+  every container recreate downloads and compiles again.</li>
+<li><strong>Memory.</strong> About 65 MB more than the built-in engine when idle, and about
+  290 MB more while four searches run at once.</li>
+<li><strong>Speed.</strong> About 60 ms slower per search at the median, 110 ms at the 95th
+  percentile, not counting the tracker's own response time.</li>
+<li><strong>Errors are Prowlarr's wording</strong>, such as an HTTP status, "Cloudflare protection
+  detected" or "No answer from the tracker". In the benchmark, 20 of 81 public
+  trackers ended in one of these; Prowlarr could not search any of those 20 either.
+  FlareSolverr still applies.</li>
+<li><strong>It cannot reach trackers on your local network</strong>, and it is only measured
+  against public trackers. Private-tracker logins are untested.</li>
+<li><strong>It is built with an experimental toolchain</strong> (a pre-release .NET compiled to
+  WebAssembly). Expect rough edges, and report them.</li>
+</ul>
+<p>Without internet access on the server, download <code>cardigann-&lt;hash&gt;.wasm</code> for your
+Mydia version yourself, put it on the server and point Mydia at it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">CARDIGANN_WASM_PATH</span><span class="o">=</span>/path/to/cardigann-&lt;hash&gt;.wasm
+</code></pre></div>
+<p>Mydia checks the file against the checksum built into your version and refuses
+one that does not match. Nothing is downloaded, and the compiled copy is still
+cached in the data directory.</p>
+<p>If you set <code>ENABLE_CARDIGANN=false</code>, Cardigann is off whichever engine you pick.</p>
 <h2 id="supported-indexers">Supported Indexers</h2>
 <p>Mydia syncs the full upstream definition catalogue. Coverage is strongest for
 public trackers.</p>
@@ -3792,7 +3858,7 @@ behaviour, so an upstream site change can break them silently. Private trackers
 in particular are likely to fail at login.</p>
 <p>To see what the engine actually supports against the current upstream
 catalogue, run the compatibility report:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>mix<span class="w"> </span>mydia.cardigann_compat<span class="w"> </span>--type<span class="w"> </span>public
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mix<span class="w"> </span>mydia.cardigann_compat<span class="w"> </span>--type<span class="w"> </span>public
 </code></pre></div>
 <p>It lists, per unsupported feature, how many definitions that feature blocks.</p>
 <h3 id="dead-and-moved-domains">Dead and moved domains</h3>
@@ -3825,11 +3891,11 @@ next candidate and remembers the new one. No configuration is involved.</p>
 <li>Run a FlareSolverr instance (e.g., via Docker)</li>
 <li>Configure the following environment variables:</li>
 </ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">FLARESOLVERR_URL</span><span class="o">=</span>http://flaresolverr:8191
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># FLARESOLVERR_ENABLED is auto-enabled when URL is set</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># FLARESOLVERR_TIMEOUT=60000</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># FLARESOLVERR_MAX_TIMEOUT=120000</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># FLARESOLVERR_MAX_CONCURRENT_REQUESTS=1</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">FLARESOLVERR_URL</span><span class="o">=</span>http://flaresolverr:8191
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="c1"># FLARESOLVERR_ENABLED is auto-enabled when URL is set</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1"># FLARESOLVERR_TIMEOUT=60000</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># FLARESOLVERR_MAX_TIMEOUT=120000</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="c1"># FLARESOLVERR_MAX_CONCURRENT_REQUESTS=1</span>
 </code></pre></div>
 <p>See <a href="../../reference/environment-variables/#flaresolverr">Environment Variables</a> for the full reference.</p>
 <h2 id="limitations">Limitations</h2>
