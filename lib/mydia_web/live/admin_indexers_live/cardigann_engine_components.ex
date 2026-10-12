@@ -195,7 +195,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
   attr :definition_id, :string, required: true
   attr :active, :atom, required: true
 
-  @doc "\"Built-in\" / \"Prowlarr\" badges for the engines a definition was verified on."
+  @doc ~s("Built-in" / "Prowlarr" badges for the engines a definition was verified on.)
   def verified_badges(assigns) do
     assigns =
       assign(assigns,
