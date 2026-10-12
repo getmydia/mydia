@@ -29,6 +29,15 @@ defmodule Mydia.Indexers.Cardigann.EngineSettingTest do
     assert EngineSetting.setting() == :builtin
   end
 
+  test "save/2 rolls the row back when the reload fails" do
+    reload = fn -> {:error, :invalid_config} end
+
+    assert {:error, :invalid_config} =
+             EngineSetting.save(:prowlarr, getenv: @unset, reload: reload)
+
+    assert Repo.get_by(ConfigSetting, key: "cardigann.engine") == nil
+  end
+
   test "save/2 is refused while CARDIGANN_ENGINE is set" do
     getenv = fn "CARDIGANN_ENGINE" -> "builtin" end
     assert {:error, :env_locked} = EngineSetting.save(:prowlarr, getenv: getenv)

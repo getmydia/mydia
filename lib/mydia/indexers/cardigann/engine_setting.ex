@@ -8,6 +8,7 @@ defmodule Mydia.Indexers.Cardigann.EngineSetting do
   """
 
   alias Mydia.Config.Loader
+  alias Mydia.Repo
   alias Mydia.Settings
 
   @env_var "CARDIGANN_ENGINE"
@@ -34,7 +35,14 @@ defmodule Mydia.Indexers.Cardigann.EngineSetting do
   @spec env_locked?((String.t() -> String.t() | nil)) :: boolean()
   def env_locked?(getenv \\ &System.get_env/1), do: Settings.env_var_set?(@env_var, getenv)
 
-  @doc "Saves the admin choice and reloads the runtime config."
+  @doc """
+  Saves the admin choice and reloads the runtime config.
+
+  The upsert and the reload share a transaction, so a reload that fails (another
+  stored setting is invalid) leaves no row behind to change the engine on the
+  next boot. The reload reads `config_settings` in the same process, so it sees
+  the uncommitted row. `:reload` replaces `Loader.reload/0` in tests.
+  """
   @spec save(engine(), keyword()) :: :ok | {:error, term()}
   def save(engine, opts \\ []) when engine in [:builtin, :prowlarr] do
     if env_locked?(Keyword.get(opts, :getenv, &System.get_env/1)) do
@@ -47,9 +55,21 @@ defmodule Mydia.Indexers.Cardigann.EngineSetting do
         updated_by_id: Keyword.get(opts, :updated_by_id)
       }
 
-      with {:ok, _setting} <- Settings.upsert_config_setting(attrs),
-           {:ok, _config} <- Loader.reload() do
-        :ok
+      reload = Keyword.get(opts, :reload, &Loader.reload/0)
+
+      result =
+        Repo.transaction(fn ->
+          with {:ok, _setting} <- Settings.upsert_config_setting(attrs),
+               {:ok, _config} <- reload.() do
+            :ok
+          else
+            {:error, reason} -> Repo.rollback(reason)
+          end
+        end)
+
+      case result do
+        {:ok, :ok} -> :ok
+        {:error, reason} -> {:error, reason}
       end
     end
   end

@@ -177,8 +177,16 @@ defmodule Mydia.Indexers.Cardigann.EngineSwitcher do
 
   # Applying
 
-  defp apply_engine(%{active: :prowlarr, transition: nil} = state, :prowlarr),
-    do: %{state | desired: :prowlarr}
+  defp apply_engine(%{active: :prowlarr, transition: nil} = state, :prowlarr) do
+    # The engine can have stopped without an event; then the wasm adapter would
+    # answer engine_unavailable. Drop to built-in and take the general path,
+    # which restarts the engine (active is :builtin now, so this cannot loop).
+    if state.engine.status() == :ready do
+      %{state | desired: :prowlarr}
+    else
+      state |> set_active(:builtin) |> apply_engine(:prowlarr)
+    end
+  end
 
   defp apply_engine(%{transition: %Transition{}} = state, :prowlarr),
     do: %{state | desired: :prowlarr}

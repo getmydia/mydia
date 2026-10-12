@@ -105,6 +105,22 @@ defmodule Mydia.Indexers.Cardigann.EngineSwitcherTest do
     assert Registry.get_adapter!(:cardigann) == Wasm.Adapter
   end
 
+  test "selecting prowlarr again restarts an engine that stopped without an event" do
+    Application.put_env(:mydia, :fake_wasm_engine_status, :ready)
+    switch(:prowlarr)
+    assert_receive {:fake_engine, :ensure_started}
+    assert %Status{active: :prowlarr, transition: nil} = EngineSwitcher.status(@server)
+
+    Application.put_env(:mydia, :fake_wasm_engine_status, :disabled)
+    assert :ok = switch(:prowlarr)
+    assert_receive {:fake_engine, :ensure_started}
+
+    assert %Status{active: :builtin, desired: :prowlarr, transition: %Transition{}} =
+             EngineSwitcher.status(@server)
+
+    assert Registry.get_adapter!(:cardigann) == Mydia.Indexers.Adapter.Cardigann
+  end
+
   test "an engine that is already ready cuts over at once" do
     Application.put_env(:mydia, :fake_wasm_engine_status, :ready)
     assert :ok = switch(:prowlarr)
