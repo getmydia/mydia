@@ -16,6 +16,12 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
   setup do
     :ok = Engine.ensure_started()
 
+    # The application starts the engine only under CARDIGANN_ENGINE=prowlarr.
+    on_exit(fn ->
+      Supervisor.terminate_child(Mydia.Supervisor, Engine)
+      Supervisor.delete_child(Mydia.Supervisor, Engine)
+    end)
+
     unless Engine.available?() do
       flunk(
         "cardigann.wasm unavailable (#{inspect(Artifact.load())}): " <>

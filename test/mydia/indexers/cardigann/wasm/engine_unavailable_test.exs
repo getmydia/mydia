@@ -56,6 +56,27 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
              Engine.call({:search, "id: x", %{}, query(), @empty}, ctx, 200)
   end
 
+  test "status answers while a slow compile runs, and waiters still settle" do
+    Application.put_env(:mydia, :cardigann_wasm_compile_fun, fn ->
+      Process.sleep(2_500)
+      {:unavailable, "slow compile finished"}
+    end)
+
+    on_exit(fn -> Application.delete_env(:mydia, :cardigann_wasm_compile_fun) end)
+
+    restart_engine()
+
+    waiter = Task.async(fn -> Engine.available?() end)
+    Process.sleep(100)
+
+    {micros, status} = :timer.tc(&Engine.status/0)
+    assert status == :compiling
+    assert micros < 500_000
+
+    refute Task.await(waiter, 10_000)
+    assert Engine.status() == {:unavailable, "slow compile finished"}
+  end
+
   # The application starts the engine only under CARDIGANN_ENGINE=prowlarr, so
   # these tests start (and afterwards remove) it themselves.
   defp stop_engine do

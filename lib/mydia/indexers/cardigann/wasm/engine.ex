@@ -95,6 +95,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   def status do
     GenServer.call(__MODULE__, :status, 1_000)
   catch
+    # No process: the engine was not selected. A busy one is still starting.
+    :exit, {:timeout, _} -> :compiling
     :exit, _ -> :disabled
   end
 
@@ -305,18 +307,35 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   def init(opts) do
     :persistent_term.erase(@key)
     eager = Keyword.get(opts, :eager, Application.get_env(:mydia, :cardigann_wasm_eager, true))
-    state = %{status: :pending, waiters: []}
+    state = %{status: :pending, waiters: [], task: nil}
 
     if eager,
       do: {:ok, %{state | status: :compiling}, {:continue, :compile}},
       else: {:ok, state}
   end
 
+  # The compile (several seconds) runs in a task, so the server keeps answering
+  # status/0 and queueing waiters while it works.
   @impl true
   def handle_continue(:compile, state) do
-    status = compile()
+    fun = Application.get_env(:mydia, :cardigann_wasm_compile_fun, &compile/0)
+    {:noreply, %{state | task: Task.async(fun)}}
+  end
+
+  @impl true
+  def handle_info({ref, status}, %{task: %Task{ref: ref}} = state) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, settle(state, status)}
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{task: %Task{ref: ref}} = state),
+    do: {:noreply, settle(state, {:unavailable, "compile crashed: #{inspect(reason)}"})}
+
+  def handle_info(_message, state), do: {:noreply, state}
+
+  defp settle(state, status) do
     for from <- state.waiters, do: GenServer.reply(from, status == :ready)
-    {:noreply, %{state | status: status, waiters: []}}
+    %{state | status: status, waiters: [], task: nil}
   end
 
   @impl true
