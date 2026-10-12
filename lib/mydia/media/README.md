@@ -585,6 +585,11 @@ returns `:refetch`), and Fix Match searches its own provider. An unpinned show
 still follows its library, so a library-wide provider change migrates it on the
 next Refresh.
 
+A show with no files in any series or mixed library has no library provider, so
+`pin_for/2` returns false and a Fix Match switch on such a show is not pinned.
+If its files later land in a library on the other provider, the next Refresh
+offers to re-identify it.
+
 The importer's `MetadataMatcher` searches the other provider when the library's
 finds nothing, and `FileIngest` never auto-promotes such a match under the
 unattended policy: it always waits in review.

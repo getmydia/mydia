@@ -121,7 +121,7 @@ defmodule Mydia.Media.FixMatch do
   # An id is only meaningful on the provider that issued it. A candidate from a
   # search made before the item's library changed provider would otherwise be
   # written into the wrong id column. Results that do not name a concrete
-  # provider are trusted, since they came from `search/5` for this item.
+  # provider are trusted, since they came from `search/6` for this item.
   defp candidate_from?(%{provider: p}, provider) when p in [:tmdb, :tvdb], do: p == provider
   defp candidate_from?(_candidate, _provider), do: true
 

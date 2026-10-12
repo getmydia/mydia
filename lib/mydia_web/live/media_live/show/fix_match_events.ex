@@ -52,24 +52,34 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
        socket
        |> update_fix_match(form: form(query, year), searching?: true, error: nil)
        |> start_async(:fix_match_search, fn ->
-         FixMatch.search(item, trimmed, year, scope, config, provider: provider)
+         {provider, FixMatch.search(item, trimmed, year, scope, config, provider: provider)}
        end)}
     end
   end
 
   def search(_params, socket), do: {:noreply, socket}
 
-  def handle_search_async({:ok, {:ok, results}}, socket),
-    do: {:noreply, update_fix_match(socket, results: results, searching?: false)}
-
-  def handle_search_async({:ok, {:error, reason}}, socket) do
-    {:noreply,
-     update_fix_match(socket, searching?: false, error: "Search failed: #{inspect(reason)}")}
+  # A result tagged with a provider the modal has since toggled away from is
+  # dropped: painting it would show the old provider's ids under the new one.
+  # `searching?` stays on, the newer search is still in flight.
+  def handle_search_async({:ok, {provider, outcome}}, socket) do
+    case socket.assigns.fix_match do
+      %{provider: ^provider} -> apply_search_outcome(outcome, socket)
+      _ -> {:noreply, socket}
+    end
   end
 
   def handle_search_async({:exit, reason}, socket) do
     Logger.error("Fix match search crashed: #{inspect(reason)}")
     {:noreply, update_fix_match(socket, searching?: false, error: "Search failed unexpectedly")}
+  end
+
+  defp apply_search_outcome({:ok, results}, socket),
+    do: {:noreply, update_fix_match(socket, results: results, searching?: false)}
+
+  defp apply_search_outcome({:error, reason}, socket) do
+    {:noreply,
+     update_fix_match(socket, searching?: false, error: "Search failed: #{inspect(reason)}")}
   end
 
   def pick(_params, %{assigns: %{fix_match: nil}} = socket), do: {:noreply, socket}
