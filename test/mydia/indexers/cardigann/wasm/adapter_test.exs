@@ -397,6 +397,18 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
     end
   end
 
+  describe "gate options" do
+    test "only the localhost relaxation is taken from app env" do
+      Application.put_env(:mydia, :cardigann_wasm_gate_opts,
+        allow_private_except_link_local: true,
+        allowed_hosts: ["evil.example"],
+        anything_else: 1
+      )
+
+      assert Adapter.gate_opts() == [allow_private_except_link_local: true]
+    end
+  end
+
   describe "request delay" do
     test "mirrors CardigannSearchEngine.apply_rate_limit" do
       assert Adapter.request_delay_ms(nil) == 0

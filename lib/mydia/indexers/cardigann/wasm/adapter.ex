@@ -26,6 +26,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   a changed session on every search; the row is written only when the cookies or
   expiry actually differ from what was passed in.
 
+  ## Failed logins
+
+  When a login fails during `search/3`, Prowlarr's engine swallows it and the
+  search returns `{:ok, []}`. The Elixir adapter returns an authentication error
+  instead. `login/2` is where the failure surfaces
+  (`{:error, %Error{type: :authentication_failed}}`).
+
   Setting values are credentials and are never logged.
   """
 
@@ -172,14 +179,19 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
       {:ok, %{} = doc} ->
         {:ok, doc}
 
-      other ->
-        Logger.error("Failed to parse Cardigann definition: #{inspect(elem_or(other))}")
+      {:ok, _not_a_map} ->
+        Logger.error("Failed to parse Cardigann definition: not a YAML mapping")
+        {:error, Error.search_failed("Invalid definition")}
+
+      {:error, %{__exception__: true} = e} ->
+        Logger.error("Failed to parse Cardigann definition: #{Exception.message(e)}")
+        {:error, Error.search_failed("Invalid definition")}
+
+      {:error, _reason} ->
+        Logger.error("Failed to parse Cardigann definition: YAML syntax error")
         {:error, Error.search_failed("Invalid definition")}
     end
   end
-
-  defp elem_or({:error, reason}), do: reason
-  defp elem_or(other), do: other
 
   @doc false
   # Settings for the guest from the adapter config (its `user_settings` over the
@@ -250,9 +262,26 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
       indexer_name: setting(config, :name) || definition.name
     }
 
-    case Application.get_env(:mydia, :cardigann_wasm_gate_opts) do
-      nil -> base
+    case gate_opts() do
+      [] -> base
       gate_opts -> Map.put(base, :gate_opts, gate_opts)
+    end
+  end
+
+  @test_env? Application.compile_env(:mydia, :env) == :test
+
+  @doc false
+  # Test seam so Bypass on localhost passes the SSRF gate. HostHttp merges these
+  # over the gate defaults, so outside the test env they are ignored, and even
+  # there only the one relaxation the tests need is taken.
+  @spec gate_opts() :: keyword()
+  def gate_opts do
+    if @test_env? do
+      :mydia
+      |> Application.get_env(:cardigann_wasm_gate_opts, [])
+      |> Keyword.take([:allow_private_except_link_local])
+    else
+      []
     end
   end
 
@@ -357,6 +386,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   end
 
   defp session_changed?(%{cookies: new_cookies} = new, %{cookies: old_cookies} = old) do
+    # A nil expiry from the guest means "no expiry of its own", not "changed":
+    # the stored row always has one (the default lifetime), so only a concrete
+    # expiry that differs counts.
     new_cookies != old_cookies or
       (new.expires_at != nil and not same_instant?(new.expires_at, old.expires_at))
   end
