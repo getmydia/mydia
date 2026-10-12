@@ -30,6 +30,22 @@ These have no upstream counterpart because upstream wires them with dependency i
 | shim/ManagedSha1.cs | SHA-1 for the category ids above. |
 | shim/ExchangeDispatcher.cs, shim/RequestMapping.cs | Test seam and mapping for the HTTP exchange, replacing `ManagedHttpDispatcher`'s socket code. `RequestMapping` mirrors its Cookie header, Set-Cookie and response header handling (repeated response headers collapse to one value joined by ";", as `HttpHeaders.ToNameValueCollection` does). One deliberate difference: the default User-Agent is a desktop browser string, not `Prowlarr/<version> (<os>)`, because Cloudflare refuses the latter on trackers that serve a browser (found by the gating benchmark: megapeer, 0magnet and 52bt answered Prowlarr's string with a 403 or a block page and a browser string with results; kickasstorrents-ws, magnetcat and torrentsome stayed blocked after the change); a definition's own User-Agent header still wins. |
 
+## Behaviour added around unmodified upstream code
+
+- `shim/ExchangeDispatcher.cs` records, per call, whether any request failed (a
+  transport error, a status of 400 or more, or `CloudFlareDetectionService`
+  reporting a challenge); `Runner.Search` reports it as `request-failed`. Upstream
+  swallows a failed search request as an empty page, so this is the only way the
+  host can tell a block from "no results".
+- The same dispatcher raises a 5xx or 408 response as an `HttpRequestException`
+  naming the status. Upstream retries these behind a Polly timer delay, which
+  throws `PlatformNotSupportedException` on wasi-wasm (no event loop). The retry
+  would only repeat the request the host just made.
+- `Runner.Build` maps the `baseUrl` setting onto `CardigannSettings.BaseUrl`, the
+  property upstream's `ResolveSiteLink` reads, so the host picks the mirror.
+  Upstream rewrites a `legacylinks` entry to the first link, so the host offers
+  only `links:`.
+
 ## Compile-time resources
 
 `EnsureThat/Resources/ExceptionMessages.resx` is embedded from `.prowlarr/` by `CardigannGuest.csproj` with the logical name the upstream designer file expects.

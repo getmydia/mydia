@@ -38,7 +38,8 @@ namespace CardigannWorld.wit.Exports.mydia.cardigann.v1_0_0
                 return new T.SearchOut(
                     output.Releases.Select(ToRelease).ToList(),
                     FromSession(output.Session),
-                    output.SessionChanged);
+                    output.SessionChanged,
+                    output.RequestFailed);
             });
 
         public static T.DownloadOut Download(string defYaml, List<T.Setting> settings, string link, T.Session s) =>

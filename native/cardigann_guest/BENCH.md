@@ -152,15 +152,25 @@ iteration runs, and what it was:
 
 ### Known wasm defects left open
 
-- **A 5xx response ends in `PlatformNotSupportedException`.** Upstream retries a
-  server error twice through Polly with a real delay, and the guest has no event
-  loop, so the blocking wait on a pending timer task throws. Affects any tracker
-  that answers 500 to 504 (seen on anisource, which Prowlarr and the Elixir engine
-  also fail on). The result is an `engine_error` with an unhelpful message instead
-  of a clean "tracker unavailable". Not fixed: it needs a substitution of
-  `HttpIndexerBase.cs` (the retry pipeline is built inside it) or a synchronous
-  `TimeProvider`.
-- **No mirror failover** (see M2 above).
+- **Fixed after the gating run: a 5xx response ended in
+  `PlatformNotSupportedException`.** Upstream retries a server error twice through
+  Polly with a real delay, and the guest has no event loop, so the blocking wait
+  on a pending timer task throws. `shim/ExchangeDispatcher.cs` now raises the
+  status as an `HttpRequestException` before upstream's retry can start, and a
+  search left with nothing but a server error returns an `http` engine error
+  reading "Tracker answered HTTP 503" (a native test per status, and one that the
+  request is made once). Upstream files stay unmodified.
+- **Fixed after the gating run: no mirror failover** (see M2 above). The `search`
+  result carries a `request-failed` flag (a transport error, an HTTP status of 400
+  or more, or a Cloudflare challenge on any request of the search), and the
+  adapter repeats an empty, failed search against the next entry of `links:`,
+  remembering the winner as `active_link` as the Elixir engine does. A live run
+  against the two confirmed cases, wasm engine and Elixir engine side by side
+  (Prowlarr answered both with a Cloudflare block): kickasstorrents-ws now returns
+  60 and 50 releases, the same counts as the Elixir engine; magnetcat returns none
+  on either engine, because every mirror was dead or blocked that day (the Elixir
+  engine ends on HTTP 410, the wasm engine logged all three mirrors failing). The
+  gate table above is the pre-fix run and has not been re-run.
 - **LAN trackers are refused.** The wasm host goes through `Plugins.Net.Gate`,
   which rejects private addresses; the Elixir engine does not. Not exercised by
   the public corpus.

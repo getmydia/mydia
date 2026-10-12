@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using Mydia.CardigannGuest.Shim;
 using Newtonsoft.Json;
@@ -22,7 +23,7 @@ namespace Mydia.CardigannGuest
     public sealed record QueryInput(string Kind, string Term, int[] Categories, string ImdbId, int? TmdbId,
                                     int? TvdbId, int? Season, string Episode, int? Limit, int? Offset);
 
-    public sealed record SearchOutput(IList<ReleaseInfo> Releases, Session Session, bool SessionChanged);
+    public sealed record SearchOutput(IList<ReleaseInfo> Releases, Session Session, bool SessionChanged, bool RequestFailed);
 
     public sealed record DownloadOutput(byte[] Bytes, string MagnetOrUrl, Session Session);
 
@@ -40,6 +41,10 @@ namespace Mydia.CardigannGuest
         // CardigannRequestGenerator reads the captcha answer under this exact key.
         private const string CaptchaSettingKey = "CAPTCHA";
 
+        // The host picks the tracker mirror with this setting. It is Prowlarr's
+        // own BaseUrl setting (read by ResolveSiteLink), not a definition field.
+        public const string BaseUrlSettingKey = "baseUrl";
+
         // Prowlarr registers the code page encodings at startup (Bootstrap.cs);
         // trackers declare windows-1251, gb2312, shift_jis and similar. Without
         // the provider, Encoding.GetEncoding throws for every one of them.
@@ -55,6 +60,7 @@ namespace Mydia.CardigannGuest
             public CallIndexerStatusService Status;
             public SingleDefinitionService Defs;
             public CacheManager Cache;
+            public RequestOutcome Outcome;
         }
 
         private sealed class ThrowingExchange : IExchange
@@ -71,12 +77,13 @@ namespace Mydia.CardigannGuest
             var status = new CallIndexerStatusService(
                 new Dictionary<string, string>(session?.Cookies ?? new Dictionary<string, string>()),
                 session?.Expires);
+            var outcome = new RequestOutcome();
             var client = new IndexerHttpClient(
                 new NoProxyFactory(),
                 Array.Empty<IHttpRequestInterceptor>(),
                 cache,
                 new NoRateLimitService(),
-                new ExchangeDispatcher(http),
+                new ExchangeDispatcher(http, outcome),
                 logger);
 
             var indexer = new Cardigann(defs, client, new NullEventAggregator(), status, new CallConfigService(), cache, logger);
@@ -89,13 +96,19 @@ namespace Mydia.CardigannGuest
             var fields = defs.GetCachedDefinition(defs.FileKey).Settings ?? new List<SettingsField>();
             foreach (var (key, value) in settings ?? new Dictionary<string, string>())
             {
+                if (key == BaseUrlSettingKey)
+                {
+                    ((CardigannSettings)definition.Settings).BaseUrl = value;
+                    continue;
+                }
+
                 var field = fields.FirstOrDefault(f => f.Name == key);
                 extra[key] = field?.Type == "select" ? SelectIndex(field, value) : value;
             }
 
             indexer.Definition = definition;
 
-            return new Graph { Indexer = indexer, Status = status, Defs = defs, Cache = cache, Client = client };
+            return new Graph { Indexer = indexer, Status = status, Defs = defs, Cache = cache, Client = client, Outcome = outcome };
         }
 
         // CardigannBase.GetBaseTemplateVariables reads a select value as the long
@@ -145,7 +158,15 @@ namespace Mydia.CardigannGuest
             var g = Build(yaml, settings, s, http);
             var result = Fetch(g.Indexer, ToCriteria(q)).GetAwaiter().GetResult();
 
-            return new SearchOutput(result.Releases, SessionOf(g), g.Status.Changed);
+            // Upstream logs a failed request and returns an empty page. A server
+            // error that left nothing to show is the tracker's answer, so it is
+            // reported as that rather than as "no results".
+            if (result.Releases.Count == 0 && g.Outcome.ServerErrorStatus is int status)
+            {
+                throw new HttpRequestException($"Tracker answered HTTP {status}", null, (HttpStatusCode)status);
+            }
+
+            return new SearchOutput(result.Releases, SessionOf(g), g.Status.Changed, g.Outcome.Failed);
         }
 
         private static System.Threading.Tasks.Task<IndexerPageableQueryResult> Fetch(Cardigann indexer, SearchCriteriaBase criteria) =>

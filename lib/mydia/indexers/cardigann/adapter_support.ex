@@ -10,8 +10,13 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupport do
   require Logger
 
   alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Indexers.CardigannDefinition
+  alias Mydia.Indexers.Cardigann.Links
+  alias Mydia.Indexers.{CardigannDefinition, CardigannHealthCheck}
+  alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Repo
+
+  # How many mirrors one search tries before giving up.
+  @max_search_candidates 3
 
   @doc "Loads the definition row named by `config.indexer_id`."
   @spec fetch_definition(map()) :: {:ok, CardigannDefinition.t()} | {:error, Error.t()}
@@ -92,6 +97,39 @@ defmodule Mydia.Indexers.Cardigann.AdapterSupport do
       enabled: CardigannDefinition.use_flaresolverr?(definition),
       definition_id: definition.id
     }
+  end
+
+  @doc """
+  The base URLs a search tries, in order: the definition's sticky `active_link`,
+  then its `links` and `legacylinks`, at most three. `legacy: false` leaves the
+  `legacylinks` out.
+  """
+  @spec search_candidates(Parsed.t(), String.t() | nil, keyword()) :: [String.t()]
+  def search_candidates(%Parsed{} = parsed, active_link, opts \\ []) do
+    listed =
+      if Keyword.get(opts, :legacy, true),
+        do: Links.candidates(parsed),
+        else: Links.current(parsed)
+
+    (Enum.map(List.wrap(active_link), &String.trim_trailing(&1, "/")) ++ listed)
+    |> Enum.uniq()
+    |> Enum.take(@max_search_candidates)
+  end
+
+  @doc """
+  Stores a mirror that answered after another had failed as the definition's
+  sticky `active_link`, unless it is a legacy mirror that would readmit a host
+  the credential scope excludes (see `CardigannHealthCheck.promotable?/3`).
+  """
+  @spec promote_active_link(Parsed.t(), CardigannDefinition.t(), String.t()) :: term()
+  def promote_active_link(%Parsed{} = parsed, %CardigannDefinition{} = definition, winning_url) do
+    if CardigannHealthCheck.promotable?(parsed, definition.config || %{}, winning_url) do
+      definition
+      |> Ecto.Changeset.change(%{active_link: winning_url})
+      |> Repo.update()
+    else
+      :ok
+    end
   end
 
   @doc "Flags the definition when a challenge was solved for it."

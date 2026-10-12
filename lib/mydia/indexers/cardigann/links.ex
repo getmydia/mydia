@@ -22,6 +22,14 @@ defmodule Mydia.Indexers.Cardigann.Links do
     |> Enum.uniq()
   end
 
+  @doc """
+  The definition's own `links` in order, without the `legacylinks` that
+  `candidates/1` appends. Prowlarr's engine rewrites a legacy link to the first
+  link, so a legacy candidate is no alternative to it.
+  """
+  @spec current(Parsed.t()) :: [String.t()]
+  def current(%Parsed{} = parsed), do: parsed.links |> normalize_list() |> Enum.uniq()
+
   # Rendered keywords are already percent-encoded; static text in a path template
   # is not. Encode only what a request target cannot carry (space, controls,
   # non-ASCII bytes, and characters like '"', '<', '>', '{', '}', '|', '\\', '^'

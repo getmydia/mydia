@@ -32,6 +32,19 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   adapter skips it; `login/2` is exempt, and storing a session through it moves
   the definition back to healthy.
 
+  ## Mirror failover
+
+  Prowlarr has no mirror failover: it searches the one base URL and turns a
+  failed request into an empty page. `search/3` adds the failover Mydia's Elixir
+  engine has. When a search comes back empty with the guest's `request-failed`
+  signal (a transport error, an HTTP status of 400 or more, a Cloudflare
+  challenge), or the tracker answered only with a server error, the same search
+  is repeated against the next entry of the definition's `links:` (the stored
+  `active_link` first, at most three in all). A mirror that answers after another
+  failed is stored as the definition's `active_link`, with the Elixir engine's
+  rule for which mirrors may be stored. An empty answer without the signal is
+  "no results" and is final.
+
   ## Failed logins
 
   When a login fails during `search/3`, Prowlarr's engine swallows it and the
@@ -47,9 +60,16 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   require Logger
 
   alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Indexers.Cardigann.AdapterSupport
+  alias Mydia.Indexers.Cardigann.{AdapterSupport, Links}
   alias Mydia.Indexers.Cardigann.Wasm.Engine
-  alias Mydia.Indexers.{CardigannAuth, CardigannDefinition, CardigannFeatureFlags}
+
+  alias Mydia.Indexers.{
+    CardigannAuth,
+    CardigannDefinition,
+    CardigannFeatureFlags,
+    CardigannParser
+  }
+
   alias Mydia.Indexers.Cardigann.SessionManager
   alias Mydia.Repo
 
@@ -97,10 +117,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
       with {:ok, definition, doc} <- load(config),
            :ok <- check_login_needed(definition, doc),
            session = stored_session(definition),
-           call =
-             {:search, definition.definition, guest_settings(definition, config, doc),
-              build_query(query, opts), session},
-           {:ok, out} <- run(call, definition, config, doc, opts) do
+           {:ok, out} <- search_with_failover(definition, config, doc, query, session, opts) do
         if out.session_changed, do: persist_session(definition, out.session, session)
         {:ok, apply_search_filters(out.releases, opts)}
       end
@@ -170,6 +187,90 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
       {:error, Error.invalid_config("Cardigann feature is disabled")}
     end
   end
+
+  # ── Mirror failover ───────────────────────────────────────────────────────
+
+  # Prowlarr's engine searches one base URL and, when a request fails, returns an
+  # empty page. Mydia's Elixir engine moves on to the definition's next mirror, so
+  # this does too: on a failed search the same call is repeated against the next
+  # entry of `links:` (at most three tried, the definition's sticky `active_link`
+  # first), and a mirror that answers after another failed becomes the new
+  # `active_link`, as `AdapterSupport.promote_active_link/3` does for the Elixir
+  # engine. `legacylinks` are not tried: the guest rewrites a legacy base URL back
+  # to the first link, so they would repeat the first attempt.
+  defp search_with_failover(definition, config, doc, query, session, opts) do
+    settings = guest_settings(definition, config, doc)
+    guest_query = build_query(query, opts)
+    parsed = parse_links(definition)
+
+    attempt = fn base_url ->
+      call =
+        {:search, definition.definition, put_base_url(settings, base_url), guest_query, session}
+
+      run(call, definition, config, doc, opts)
+    end
+
+    case mirror_candidates(parsed, definition) do
+      [] ->
+        attempt.(nil)
+
+      [first | _] = candidates ->
+        try_mirrors(candidates, attempt, fn winner ->
+          if winner != first,
+            do: AdapterSupport.promote_active_link(parsed, definition, winner)
+        end)
+    end
+  end
+
+  # The last mirror's answer stands when every mirror failed, as the Elixir
+  # engine returns its last error.
+  defp try_mirrors([candidate | rest], attempt, on_win) do
+    result = attempt.(candidate)
+
+    cond do
+      not failed_search?(result) ->
+        on_win.(candidate)
+        result
+
+      rest == [] ->
+        result
+
+      true ->
+        Logger.info("Cardigann search failed on #{candidate}, trying the next mirror")
+        try_mirrors(rest, attempt, on_win)
+    end
+  end
+
+  # An empty answer that came with a failed request (a block, a dead mirror, a
+  # transport error), or a tracker that answered only with a server error.
+  defp failed_search?({:ok, %{releases: [], request_failed: true}}), do: true
+  defp failed_search?({:error, %Error{details: %{tracker_status: _status}}}), do: true
+  defp failed_search?({:error, %Error{details: %{cloudflare: true}}}), do: true
+  defp failed_search?(_result), do: false
+
+  defp parse_links(%CardigannDefinition{definition: yaml}) do
+    case CardigannParser.parse_definition(yaml || "") do
+      {:ok, parsed} -> parsed
+      {:error, _reason} -> nil
+    end
+  end
+
+  defp mirror_candidates(nil, _definition), do: []
+
+  defp mirror_candidates(parsed, definition) do
+    links = Links.current(parsed)
+    active = definition.active_link && String.trim_trailing(definition.active_link, "/")
+    active = if active in links, do: active
+
+    AdapterSupport.search_candidates(parsed, active, legacy: false)
+  end
+
+  defp put_base_url(settings, nil), do: settings
+
+  # With the trailing slash the definition's own links carry: Prowlarr resolves
+  # the search path against it, which drops the last segment of a link that has a
+  # path and no slash.
+  defp put_base_url(settings, base_url), do: Map.put(settings, "baseUrl", base_url <> "/")
 
   # ── Definition and settings ───────────────────────────────────────────────
 

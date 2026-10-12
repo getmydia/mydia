@@ -392,6 +392,151 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
     end
   end
 
+  describe "mirror failover" do
+    @cloudflare_page "<html><head><title>Just a moment...</title></head><body></body></html>"
+
+    # A lantern definition whose `links:` are the given Bypass instances, in order.
+    defp insert_mirrored(bypasses, attrs \\ %{}) do
+      links = Enum.map_join(bypasses, "\n", &"  - http://localhost:#{&1.port}/")
+
+      yaml =
+        "lantern-public.yml"
+        |> fixture()
+        |> String.replace("  - https://lantern.invalid/", links)
+
+      insert_definition("lantern-public.yml", hd(bypasses), Map.merge(%{definition: yaml}, attrs))
+    end
+
+    defp mirror(label) do
+      bypass = Bypass.open()
+      test_pid = self()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        send(test_pid, {:hit, label})
+        answer(conn, label)
+      end)
+
+      bypass
+    end
+
+    # The behaviour of each mirror is chosen by its label.
+    defp answer(conn, :good), do: Plug.Conn.resp(conn, 200, fixture("lantern-search.html"))
+    defp answer(conn, :empty), do: Plug.Conn.resp(conn, 200, "<html><body></body></html>")
+    defp answer(conn, :not_found), do: Plug.Conn.resp(conn, 404, "gone")
+    defp answer(conn, :unavailable), do: Plug.Conn.resp(conn, 503, "down")
+
+    defp answer(conn, :cloudflare) do
+      conn
+      |> Plug.Conn.put_resp_header("server", "cloudflare")
+      |> Plug.Conn.resp(403, @cloudflare_page)
+    end
+
+    defp hits(acc \\ []) do
+      receive do
+        {:hit, label} -> hits([label | acc])
+      after
+        0 -> Enum.reverse(acc)
+      end
+    end
+
+    test "a Cloudflare block on the first link moves on to the next and remembers it" do
+      first = mirror(:cloudflare)
+      second = mirror(:good)
+      definition = insert_mirrored([first, second])
+
+      assert {:ok, [_, _]} = Adapter.search(config(definition), "harbor")
+      assert hits() == [:cloudflare, :good]
+      assert Repo.reload!(definition).active_link == "http://localhost:#{second.port}"
+
+      # The working mirror is tried first from now on.
+      assert {:ok, [_, _]} = Adapter.search(config(definition), "harbor")
+      assert hits() == [:good]
+    end
+
+    test "a 404 and a dead host are failed requests too" do
+      {:ok, listener} = :gen_tcp.listen(0, [])
+      {:ok, dead_port} = :inet.port(listener)
+      :ok = :gen_tcp.close(listener)
+      dead = %{port: dead_port}
+      missing = mirror(:not_found)
+      good = mirror(:good)
+      definition = insert_mirrored([dead, missing, good])
+
+      assert {:ok, [_, _]} = Adapter.search(config(definition), "harbor")
+      assert hits() == [:not_found, :good]
+      assert Repo.reload!(definition).active_link == "http://localhost:#{good.port}"
+    end
+
+    test "a server error on the first link moves on to the next" do
+      first = mirror(:unavailable)
+      second = mirror(:good)
+      definition = insert_mirrored([first, second])
+
+      assert {:ok, [_, _]} = Adapter.search(config(definition), "harbor")
+      assert hits() == [:unavailable, :good]
+    end
+
+    test "an empty answer without a failed request is final" do
+      first = mirror(:empty)
+      second = mirror(:good)
+      definition = insert_mirrored([first, second])
+
+      assert {:ok, []} = Adapter.search(config(definition), "harbor")
+      assert hits() == [:empty]
+      assert Repo.reload!(definition).active_link == nil
+    end
+
+    test "when every mirror is blocked the search is empty and no link is stored" do
+      first = mirror(:cloudflare)
+      second = mirror(:cloudflare)
+      definition = insert_mirrored([first, second])
+
+      assert {:ok, []} = Adapter.search(config(definition), "harbor")
+      assert hits() == [:cloudflare, :cloudflare]
+      assert Repo.reload!(definition).active_link == nil
+    end
+
+    test "at most three links are tried" do
+      mirrors = for _ <- 1..4, do: mirror(:cloudflare)
+      definition = insert_mirrored(mirrors)
+
+      assert {:ok, []} = Adapter.search(config(definition), "harbor")
+      assert length(hits()) == 3
+    end
+
+    test "a stored active_link is tried first and a failure there falls back to links" do
+      first = mirror(:good)
+      second = mirror(:cloudflare)
+      definition = insert_mirrored([first, second])
+
+      definition
+      |> Ecto.Changeset.change(%{active_link: "http://localhost:#{second.port}"})
+      |> Repo.update!()
+
+      assert {:ok, [_, _]} = Adapter.search(config(Repo.reload!(definition)), "harbor")
+      assert hits() == [:cloudflare, :good]
+      assert Repo.reload!(definition).active_link == "http://localhost:#{first.port}"
+    end
+
+    test "a tracker that answers only with a server error is an error naming the status" do
+      only = mirror(:unavailable)
+      definition = insert_mirrored([only])
+
+      assert {:error, %Error{message: message, details: %{tracker_status: 503}}} =
+               Adapter.search(config(definition), "harbor")
+
+      assert message =~ "503"
+      assert hits() == [:unavailable]
+    end
+
+    test "a single blocked link keeps the upstream behaviour of an empty list" do
+      only = mirror(:cloudflare)
+      definition = insert_mirrored([only])
+
+      assert {:ok, []} = Adapter.search(config(definition), "harbor")
+    end
+  end
+
   describe "test_connection/1 and get_capabilities/1" do
     test "test_connection returns the Elixir adapter's shape", %{bypass: b} do
       respond(b, "GET", "/search", fixture("lantern-search.html"))

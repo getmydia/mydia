@@ -71,6 +71,10 @@ interface types {
     releases: list<release>,
     session: session,
     session-changed: bool,
+    /// A request of this search failed: a transport error, an HTTP status of
+    /// 400 or more, or a Cloudflare challenge. Upstream turns that into an
+    /// empty page, so alongside no releases it tells "blocked" from "no results".
+    request-failed: bool,
   }
 
   variant download-payload {

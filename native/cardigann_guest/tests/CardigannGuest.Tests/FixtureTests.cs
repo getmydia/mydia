@@ -43,7 +43,7 @@ namespace Mydia.CardigannGuest.Tests
         [InlineData(200, "application/json", "{not json")]
         [InlineData(200, "application/json", "{\"data\":{\"items\":\"oops\"}}")]
         [InlineData(200, "application/json", "")]
-        [InlineData(500, "text/html", "boom")]
+        [InlineData(404, "text/html", "boom")]
         public void A_response_that_cannot_be_read_yields_no_releases(int status, string contentType, string text)
         {
             // Upstream logs the failure and returns an empty page rather than throwing.
