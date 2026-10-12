@@ -4,134 +4,232 @@ Prowlarr's Cardigann engine compiled to wasm (the "wasm" engine) against Mydia's
 Elixir engine, judged against a real Prowlarr v2.6.5.5623 in Docker, over every
 public definition at Prowlarr/Indexers `d34bddc56cfd6a55f75a9f69dcc2df9eb591662c`
 (81 definitions, 162 queries; 498 definitions left out because they need
-credentials). Single-session run, `--concurrency 1`, fresh Prowlarr data directory.
+credentials). Single-session runs, `--concurrency 1`, fresh Prowlarr data directory.
 
-## Gate result: FAIL
+The engine ships as an opt-in (`CARDIGANN_ENGINE=prowlarr`); the Elixir engine
+stays the default. The gate therefore decides whether the engine is offered at all,
+and every item it still fails is a caveat a user has to be told about. The caveats
+are listed under "Caveats for users" and are repeated in
+`lib/mydia/indexers/README.md` and `docs/using/how-to/cardigann-indexers.md`.
 
-| Gate item | Required | Measured | Pass |
-|---|---|---|---|
-| M1 fidelity | wasm > elixir | wasm 44/44 (100.0%), elixir 29/44 (65.9%) | PASS |
-| M2 coverage | wasm >= elixir | wasm 54/81, elixir 55/81 | **FAIL** (one definition short; see below) |
-| M3 regressions | 0 unexplained | 0 | PASS |
-| M4 p95 overhead | <= max(2x elixir, 50 ms) | wasm 243.9 ms vs elixir 126.0 ms (limit 252.0 ms), paired n=66 | marginal PASS, within run-to-run noise (one run; an earlier run of the same code would have failed; fails if Elixir p95 is 121 ms or less) |
-| M5 RSS | <= 200 MB | +955 MB (median of 3; a lower bound for a loaded server) | **FAIL** |
-| M5 cold start | <= 5 s | 3.8 s (component compile only, not boot to available; runs in the background at boot) | PASS |
-| M5 image size | <= 60 MB | +75.1 MB (71.6 MiB) | **FAIL** |
+## Gate result for the opt-in: items 1 to 3 pass, M5 does not
 
-Items 1 to 3 are not negotiable and item 2 failed, so the gate fails and the branch
-stays unmerged. M5 fails twice on its own.
+Second run, 2026-10-12, Mydia `10d19901f` (after the mirror failover and the retry
+fixes), next to the first run, 2026-10-11, `7118d17f7`.
 
-### Reading the failures
+| Gate item | Required | First run (`7118d17f7`) | This run (`10d19901f`) | This run passes |
+|---|---|---|---|---|
+| M1 fidelity | wasm > elixir | wasm 44/44 (100.0%), elixir 29/44 (65.9%) | wasm 44/44 (100.0%), elixir 28/44 (63.6%) | PASS |
+| M2 coverage | wasm >= elixir | wasm 54/81, elixir 55/81: **FAIL** | wasm 55/81, elixir 54/81 | PASS (by one definition; see below) |
+| M3 regressions | 0 unexplained | 0 | 0 | PASS |
+| M4 p95 overhead | <= max(2x elixir, 50 ms) | wasm 243.9 ms vs elixir 126.0 ms (limit 252.0), paired n=66 | wasm 248.6 ms vs elixir 136.1 ms (limit 272.2), paired n=67 | PASS, with 23.6 ms of headroom; one run, treat as unstable (see below) |
+| M5 RSS, pool warm | <= 200 MB | +955 MB glibc, compile at boot, no trim: **FAIL** | +64 MB steady state (538 to 543 MB against 475 MB for the default engine), Alpine image, precompiled `.cwasm` | PASS at steady state; **FAIL under load**: 762 to 770 MB during 4 concurrent searches, +288 to +295 MB over the default engine |
+| M5 cold start | <= 5 s | 3.8 s, glibc, compile only | first boot 18.2 to 18.6 s of compile on Alpine (22.8 to 23.5 s from container start to engine available, with the database migrating); second boot 0.58 to 0.71 s to load, 2.2 to 2.4 s from container start | **FAIL** on a first boot (it runs in the background and does not delay the rest of boot); PASS on every later boot |
+| M5 image size | <= 60 MB | +75.1 MB in the image: **FAIL** | -6.7 MB in the image (728.9 MB against 735.6 MB); a 38.9 MB download (stripped; 75.1 MB before stripping) plus 119.0 MB of cache in the data directory | PASS for the image and for the download. 158 MB of disk per install |
 
-**M2 (54 vs 55).** Three definitions give the Elixir engine results and the wasm
-engine none: kickasstorrents-ws, magnetcat and torrentsome. For kickasstorrents-ws
-and magnetcat the logs show the first link in `links:` answering with a Cloudflare
-403 (the wasm guest logs "Cloudflare protection detected"), and the Elixir engine
-logging the challenge and then parsing results from the next mirror
-(`kickasstorrents.bz` for the first). For torrentsome the Elixir log shows no
-Cloudflare hit: it got 0 rows for the movie query and 20 for the rss query without a
-block, while the wasm guest logged a Cloudflare 403 on both queries. Why the Elixir
-engine was not blocked there was not established. That the wasm engine stops at the
-first mirror is inferred from the design (the adapter passes no alternative link and
-the guest uses the first one), not separately demonstrated. Prowlarr has no mirror
-failover (the user picks the base URL), so for the two confirmed cases this is a Mydia
-feature the wasm adapter does not have rather than a fidelity defect. The wasm engine
-returns more elsewhere (pandacd, where the Elixir engine gets an HTTP 400, and
-anisource, whose DNS resolves only some of the time from this host), which is why the
-gap is one and not three. The margin is thin, and the previous gating run, made
-before the User-Agent change below, was 46 vs 51. Failover is not possible in the
-adapter without extra requests or a new field across the WIT boundary: the guest
-swallows a failed request as an empty page exactly as upstream does, so the adapter
-cannot tell "blocked" from "no results"; it could instead retry the definition's other
-links on every empty result, at the cost of an extra round trip each time.
+Items 1 to 3 pass this time, so the engine is offered, behind the flag. What the
+table does not hide:
 
-**M4 (marginal pass, 8 ms, within run-to-run noise).** The wasm p50 is 76 ms against 27 ms and the p95 244 ms
-against 126 ms. A fresh instance per call costs about 31 ms with no network
-involved (measured below); the rest is definition parsing and session reads. The
-Elixir p95 is not stable between runs: the non-gating `--concurrency 1` runs made
-earlier the same day measured Elixir p95 values of 69 ms (wasm 175 ms, which would
-FAIL) and 126 ms. With Elixir at 121 ms or less the wasm engine fails this item.
-This is one run; treat M4 as unstable, not as a pass with headroom.
+- **M5 cold start fails on a first boot**, by a factor of 3.6 on Alpine, and the
+  first boot also peaks at about 1.55 to 1.59 GB of resident memory (`VmHWM`)
+  while it compiles, then falls back to 490 to 500 MB. A container limited to
+  1 GB or 1.5 GB can be killed on that first boot. This is a caveat, not a gate
+  item; the old gate did not measure the peak.
+- **M5 RSS fails under load.** Four concurrent searches take the BEAM from
+  541 MB to 762 to 770 MB. The gate figure (steady state, pool warm) passes.
+- **M2 passes by one definition**, and the single definition on which the Elixir
+  engine still wins (torrentsome) is a Cloudflare 403 that Prowlarr hits as well.
+  The wasm-only wins are not robust: anisource resolves only some of the time from
+  this host and pandacd is an HTTP 400 for the Elixir engine. The first run was one
+  short the other way. Read M2 as parity, not as a win.
+- **M4 passes with 23.6 ms to spare** (p95 248.6 ms against a limit of 272.2 ms),
+  and the Elixir p95 has been as low as 69 ms in other runs, which would put the
+  wasm engine over the limit. The p50 is 89.0 ms against 29.5 ms: a search through
+  the wasm engine costs about 60 ms more at the median. A fresh sandboxed instance
+  per call costs about 31 ms with no network involved.
 
-**M5 RSS (+955 MB).** After the component is compiled the BEAM holds about
-955 MB more resident memory, and it does not change once the pool is warm
-(20 sequential searches add nothing measurable on top). The Elixir engine adds 12 MB
-after 20 searches. `smaps` of the BEAM process shows about 1.14 GB of anonymous
-memory, mostly in mappings of roughly 64 MB that look like malloc arenas, and an
-executable mapping of only about 64 MB. The cause is undiagnosed: it has not been
-shown to be compiled code, module data or allocator memory retained from the
-compile, and no tuning was tried. The figure is a lower bound for a loaded server:
-the 20 searches were sequential (one instance at a time) against a tiny fixture, in
-a script process without the rest of the application.
+### Reading the first run's failures
 
-**M5 image (+75.1 MB).** The artifact is 74.9 MB and is stored once in the image
-(`priv/cardigann/cardigann-<hash>.wasm`). It would need to be under 60 MB.
+These are kept as written for the first run; the failover and 5xx items were fixed
+afterwards (see "Known wasm defects" below) and this run's table is above.
 
-## M5 and M6 measurements
+**M2 (54 vs 55 in the first run).** Three definitions gave the Elixir engine
+results and the wasm engine none: kickasstorrents-ws, magnetcat and torrentsome.
+For kickasstorrents-ws and magnetcat the logs showed the first link in `links:`
+answering with a Cloudflare 403 and the Elixir engine parsing results from the
+next mirror. Prowlarr has no mirror failover, so for those two it was a Mydia
+feature the wasm adapter lacked. The adapter now fails over (see below):
+kickasstorrents-ws returns 60 and 50 releases, the same counts as the Elixir
+engine. magnetcat returns nothing on either engine this time (HTTP 410 on every
+mirror). torrentsome is a Cloudflare 403 for the wasm engine and for Prowlarr; why
+the Elixir engine is not blocked there was never established.
 
-| Item | Gate | Result |
+**M5 (first run).** The +955 MB was Cranelift's compile memory held by glibc malloc;
+see the memory spike below. The 75.1 MB was the `.wasm` baked into the image.
+
+## M5 re-measured for the opt-in (Alpine image, 2026-10-12)
+
+All numbers are from the production Alpine image of this branch, run as a
+container with `CARDIGANN_ENGINE=prowlarr`, a fresh `/config` volume, and the
+locally built component mounted through `CARDIGANN_WASM_PATH` with a temporary local
+pin (the asset is not published, so a download from GitHub was not measured; the
+size of the download is the file size). The pin was reverted and is not committed.
+RSS is `VmRSS` of the BEAM process read inside the container. The measurements
+before the strip below used the unstripped component; the container measurements
+were repeated with the stripped one and agree.
+
+| Item | Result |
+|---|---|
+| Image size, branch vs `origin/master` (`272ef9447`) | **728,900,297 B vs 735,603,871 B: -6,703,574 B (-6.7 MB)**. The branch image contains no guest. Both are `docker image inspect` sizes (the branch built from the working tree with a stray `priv/data/cardigann` removed, see below; master from a `git archive`) |
+| First boot, fresh volume | engine available 22.8 s after container start (unstripped) and 23.5 s (stripped): 18.2 s and 18.6 s of compile ("compiled and cached in N ms"), the rest is the application booting and migrating a fresh database. `/config/cardigann/` then holds the `.cwasm` (118,975,992 B, 0600) and its `.sha256` |
+| RSS after the first boot | 488 to 499 MB (493 MB stripped). Peak during the compile: `VmHWM` 1,585 MB (1,549 MB stripped). `malloc_trim` is a no-op on musl, but the heap does fall back |
+| Second boot (restart, same volume) | engine available 2.35 s after container start (2.2 s stripped), "loaded precompiled in 714 ms" (576 ms stripped). RSS 548 MB (510 MB stripped) 20 s after ready; `VmHWM` 614 MB |
+| RSS during 4 concurrent searches | 4 workers x 25 searches against a local fixture tracker inside the container (100 searches in 1.4 s), sampled every 20 ms: peak **769.7 and 769.3 MB (762.4 MB stripped)**, from 541.5 MB before. After the burst: 541 to 543 MB (538 MB stripped) |
+| Default engine, branch vs master, idle | branch 474.9, 475.1, 466.8 MB (median 474.9); master 454.5, 461.2, 466.0 MB (median 461.2), three fresh containers each, 75 s after start. **+13.7 MB** at the median, ranges overlapping at the edges (466.8 vs 466.0). The plan expected about 0; the cause of the 14 MB was not established (the branch carries other code, and a source-built, patched Wasmex NIF) |
+| Container cgroup memory (`docker stats`) | 373 to 401 MiB with the engine ready; `VmRSS` counts the file-backed pages of the mapped `.cwasm`, the cgroup figure counts them differently |
+
+Method notes.
+
+- **Fixture tracker.** The wasm host refuses private addresses, loopback included,
+  outside the test environment, so a loopback fixture does not work in a release.
+  The fixture server listens on 198.51.100.7 (TEST-NET-2), added to the container's
+  `lo` with `docker exec --privileged -u root ... ip addr add`, and serves the
+  `lantern` fixture definition and page that the test suite uses. No real tracker
+  was contacted by the memory measurements. The script runs through
+  `bin/mydia rpc` inside the container.
+- **Image sizes.** `docker build` of this branch (with the temporary pin and the
+  locally built component mounted in at run time, not in the build) and of a
+  `git archive` of `origin/master`. A first branch build came out at 847.9 MB
+  because the build context included a developer's `priv/data/cardigann` (a cached
+  `.cwasm`, 116 MB, written by running the dev server in the same worktree).
+  `.dockerignore` now excludes `priv/data/cardigann`, and the figure above is the
+  rebuild.
+- **Second boot** restarts the same container (`docker restart`), so the volume
+  and the cached `.cwasm` are the ones the first boot wrote.
+
+### Shrinking the component
+
+Cheap, so done. The component the build produced had about 35 MB of DWARF debug
+sections (`.debug_info`, `.debug_str`, `.debug_line`, ...) inside 75.1 MB.
+`wasm-tools strip` (already in the pinned toolchain image) removes them in a
+second; `build.sh wasm` now runs it as its last step, after the import check, and
+validates the result.
+
+| Variant | `.wasm` bytes | gzip -9 |
 |---|---|---|
-| M5 steady-state BEAM RSS delta, pool warm | <= 200 MB | **+955.0 MB** (runs: 955.0, 953.0, 964.2; baseline about 226 MB, 1,180 to 1,192 MB after compile, unchanged after 20 searches). Elixir engine: +12.2 MB (runs: 13.2, 12.2, 10.6) |
-| M5 cold start (component compile at boot) | <= 5 s | **3.8 s**, compile only, not boot to available (runs: 3,857, 3,826, 3,792 ms; the first dev boot logged 4,120 ms). The compile runs in the engine's `handle_continue`, so it does not delay the rest of boot: it delays the engine becoming available |
-| M5 Docker image size delta | <= 60 MB | **+75,116,476 B (75.1 MB, 71.6 MiB)**: `mydia:wasm` 810,719,991 B vs `mydia:master` 735,603,515 B |
-| M6 Elixir lines deleted at cutover vs C# shim lines added | report | Task 12 deletes up to **6,338** lines of `lib/` (`cardigann_parser`, `_template`, `_filters`, `_result_parser`, `_compat`, `_overrides`, `cardigann/{features,template_context,json_path}`, `cardigann_search_engine`, `cardigann_auth`, `mix/tasks/mydia.cardigann_compat`; the figure counts the parts of `cardigann_search_engine` and `cardigann_auth` that Task 12 keeps, so it is an upper bound) plus their tests and fixtures. The guest adds **2,422** lines of C# (`shim/*.cs` and `exports/*.cs`; the vendored Prowlarr sources are excluded) |
+| as built (`cardigann.wasm`, previous) | 75,071,873 | 16,486,724 |
+| `wasm-tools strip` (kept; name section retained, so a trap names its functions) | 38,945,911 | n/a |
+| `wasm-tools strip --all` (not used) | 29,172,950 | 8,321,622 |
 
-Methods.
+The stripped component validates, exposes the same imports and exports, and
+compiles to the same `.cwasm` (118,975,960 B against 118,975,992 B), so the memory
+and load figures do not change. No `wasm-opt` is in the toolchain image and none
+was tried. The download is 38.9 MB. GitHub serves release assets without
+compression, so the gzip column is for reference only. `--all` would save a
+further 9.8 MB at the cost of function names in traps.
 
-- **RSS.** A `mix run --no-start` script in the test environment (the wasm
-  adapter's SSRF gate only admits loopback there) on a copy of the bench database:
-  start the app with `cardigann_wasm_eager: false`, read `VmRSS` from
-  `/proc/self/status` (baseline), force the component compile with
-  `Engine.available?/0` and read again, run 20 searches through
-  `Wasm.Adapter.search/3` (or `Adapter.Cardigann.search/3` for the Elixir engine)
-  against a local fixture server, wait 500 ms and read again. Three fresh processes
-  per engine, median reported. This is not `./dev up -d` with the whole application
-  idling: the baseline is the application booted without the engine, which is the
-  quantity the gate asks about (the delta the engine adds).
-- **Cold start.** The engine's own log line, "compiled in N ms", and the time
-  `Engine.available?/0` blocks in the script above.
-- **Image size.** `docker build` of clean detached checkouts of this branch (HEAD
-  `3fe2dd49c`, before the User-Agent change, which does not move the size) and of
-  `origin/master` (`272ef9447`), then `docker image inspect -f '{{.Size}}'`. The
-  branch checkout had the locally built `cardigann.wasm` copied into
-  `priv/cardigann/` under its hashed name, with the two `.dockerignore` lines that
-  exclude `priv/cardigann/*.wasm` removed in that scratch checkout, so the size
-  includes the engine as a published release would ship it (the asset is not
-  published). The image build also needed a fix to `mix mydia.cardigann_guest`
-  (committed), which crashed on `config/runtime.exs` in a prod image build.
+## Caveats for users
+
+Every remaining failure of this run, stated as a user would meet it. Nothing
+here is softened; the same list is in the user docs.
+
+1. **First boot compiles for 18 to 19 s on Alpine, with a 1.5 to 1.6 GB memory
+   peak.** The engine is unavailable meanwhile (searches report why), and a
+   container capped below roughly 2 GB can be killed during it. Later boots load
+   the cached `.cwasm` in under a second. The cache lives in the data directory
+   and must survive restarts, or every restart pays the compile.
+2. **Memory.** A warm engine adds about 64 to 67 MB over the default at rest and
+   about 288 to 295 MB at the peak of four concurrent searches. Both are measured on a tiny
+   fixture page; real result pages are larger.
+3. **Disk and download.** A 38.9 MB download from GitHub on first boot and 158 MB
+   in the data directory (the component and its precompiled form).
+4. **Latency.** About 60 ms more per search at the median (89.0 against 29.5
+   ms) and 112 ms more at p95 (248.6 against 136.1 ms), engine overhead only,
+   excluding the network. Definitions with a `requestDelay` wait as Prowlarr
+   does (the Elixir engine ignores it), so their searches are slower: the unpaired
+   p95 over every successful search is 1.3 s for the wasm engine.
+5. **Cloudflare and dead trackers.** 20 of the 81 public definitions end in an
+   error on the wasm engine: 12 in HTTP 403 (1337x, btetree, damagnet, eztv,
+   pornrips, sexypics, skidrowrepack, torrentbyte, torrentcore, torrentsome,
+   uindex, xxxclub; a Cloudflare block where the guest logged one), 2 in HTTP 410
+   on every mirror (52bt, magnetcat), and 6 in "No answer from the tracker"
+   (acgrip, ebookbay, newstudio, postman, torrentby, torrentproject2, which also
+   timed out once at 17.9 s). Prowlarr returned nothing on all 20 as well. The
+   Elixir engine got results from torrentsome, where the wasm engine does not;
+   FlareSolverr is the way through a Cloudflare block for either engine.
+6. **Queries where the Elixir engine returns more.** pctorrent and plugintorrent
+   (the generic query) and showrss-yml (the tv query) give the Elixir engine
+   results and the wasm engine none; Prowlarr returned nothing on the first two
+   and an error on the third. Treat them as differences in how the two engines read
+   those trackers, not as established defects of either.
+7. **Experimental toolchain.** The component is built with a pre-release .NET
+   (`componentize-dotnet`, NativeAOT-LLVM, `wasm32-wasip2`) and run with a patched
+   Wasmex. Expect the occasional runtime trap or an engine upgrade that changes
+   behaviour.
+8. **Error messages come from the C# engine.** A failed search reports Prowlarr's
+   message (for example "Cloudflare protection detected", an HTTP status, "No
+   answer from the tracker"), not the Elixir engine's wording.
+9. **LAN trackers are refused** by the wasm host's SSRF gate; the Elixir engine
+   connects to them. **Brotli** responses are not decoded (gzip is).
+10. **Private trackers.** The gate corpus is public definitions only. Whether the
+    wasm engine logs into private trackers was not measured.
+11. **Build and platform.** Needs the patched Wasmex NIF (a source build); the
+    `.cwasm` is tied to the CPU architecture and wasmtime version of the host that
+    wrote it. A different machine or a wasmtime upgrade recompiles once.
+12. **Docker defaults.** The image's data directory is `/config` (next to the
+    database) unless `MYDIA_DATA_DIR` is set. Both are volumes in the image
+    contract; a container without a volume there repeats the download and the
+    compile on every recreate.
+
+## M6 maintenance
+
+| Item | Result |
+|---|---|
+| M6 Elixir lines deleted at cutover vs C# shim lines added | The cutover (old Task 12) was cancelled: the Elixir engine stays. The first run counted up to **6,338** lines of `lib/` it would have deleted against **2,422** lines of C# the guest adds. Both engines now ship, so the Elixir code is not removed |
+
+## Methods (first run, still current for the harness)
+
 - **Per-call overhead of the engine.** Without a network, a `capabilities` call
   takes a median 32.7 ms and a one-request `search` 31.0 ms on an idle machine:
   that is the cost of a fresh sandboxed instance per call.
+- **RSS (first run).** A `mix run --no-start` script in the test environment on a
+  copy of the bench database: start the app with `cardigann_wasm_eager: false`,
+  read `VmRSS` from `/proc/self/status`, force the compile with
+  `Engine.available?/0`, run 20 searches through `Wasm.Adapter.search/3` against a
+  local fixture server. Three fresh processes per engine, median reported. Replaced
+  by the container measurements above for the opt-in.
+- **Cold start (first run).** The engine's own log line, "compiled in N ms", on
+  glibc; the opt-in figures above are from Alpine.
 
 ## Memory spike
 
-The M5 RSS cause (undiagnosed above) is transient Cranelift compile memory that
-glibc malloc keeps: the component compile peaks at about 1.1 GB and `malloc_trim(0)`
-afterwards returns about 880 MB of it. Full numbers and method:
-`.superpowers/sdd/2026-10-11-cardigann-wasm-engine/memory-spike-report.md`.
+The first run's M5 RSS cause (undiagnosed at the time) is transient Cranelift
+compile memory that glibc malloc keeps: the component compile peaks at about 1.1
+GB and `malloc_trim(0)` afterwards returns about 880 MB of it. Full numbers and
+method: `.superpowers/sdd/2026-10-11-cardigann-wasm-engine/memory-spike-report.md`.
 
 | Variant (BEAM, `m5.exs`, 3 runs, 20 searches) | Delta MB, runs | Median |
 | --- | --- | --- |
-| `Component.new`, no trim (the gating setup, re-measured) | 954.4, 951.0, 964.7 | 954.4 |
+| `Component.new`, no trim (the first gating setup, re-measured) | 954.4, 951.0, 964.7 | 954.4 |
 | `Component.new` + `malloc_trim(0)` | 180.0, 183.1, 180.4 | 180.4 |
 | precompiled `.cwasm` via `Component::deserialize_file` + trim | 114.0, 112.0, 113.9 | 113.9 |
 
 Standalone wasmtime 47.0.2, a fresh process loading the `.cwasm`: 21.9 MB RSS (4.8 MB
 anonymous) after `deserialize_file` (7.8 ms), 72.4 MB after 20 search cycles, almost
-all of it file-backed code pages. The `.cwasm` is 119,052,152 B against the 74,938,817 B
-`.wasm`. Compile at boot takes 3.8 s on glibc and 18 s on musl (standalone binary);
-loading the `.cwasm` takes 83-92 ms in the BEAM.
+all of it file-backed code pages. The `.cwasm` is 119 MB against the 75 MB (now 39
+MB) `.wasm`. Compile at boot takes 3.8 s on glibc and 18 s on musl (standalone
+binary, and the same in the Alpine image: 18.2 to 18.6 s); loading the `.cwasm`
+takes 83 to 92 ms in a glibc BEAM and 576 to 714 ms in the Alpine image.
 
-Wasmex 0.15.1 has no component precompile or deserialize, so this spike carries
+Wasmex 0.15.1 has no component precompile or deserialize, so the build carries
 `patches/wasmex/component-precompile-and-deserialize.patch` (`@dep_patches` in
-`mix.exs`; it needs a source build of Wasmex, `WASMEX_BUILD=1`). `Engine` loads
-`<artifact>.cwasm` when present (`mix mydia.cardigann_guest precompile` writes it),
-falls back to compiling, then trims. The `.cwasm` is tied to the wasmtime version, the
-architecture and the CPU features of the machine that built it, so it must be built
-where the image runs (the Dockerfile builder stage, per architecture), never shipped as
-a release asset. It adds 119 MB to the image on top of the 75 MB `.wasm` (M5 image item
-is worse, not better). The production image is Alpine (musl), where `malloc_trim` does
-not exist and the BEAM was not measured.
+`mix.exs`; it needs a source build of Wasmex, `WASMEX_BUILD=1`). `Engine` loads the
+cached `.cwasm` when present, otherwise compiles once, serializes it into the data
+directory and loads that. The `.cwasm` is tied to the wasmtime version, the
+architecture and the CPU features of the machine that built it, so it is built on
+the host that runs it, never shipped. The Alpine BEAM was measured in the section
+above: `malloc_trim` does not exist on musl, and the container figures stand
+without it.
 
 ## Triage record
 
@@ -150,9 +248,9 @@ iteration runs, and what it was:
 | filemood (rss), limetorrents (rss), ehentai (rss) | differing release sets | tracker drift: a rate limit hit by the previous query, a live feed that moved between engines, a 4-release difference at Jaccard 0.96 | not a defect; agrees on rerun or inside the 0.95 bound |
 | opensharing, torrent-pirat (generic) | slow tracker, 24 to 41 s | tracker slowness; agrees after the deadline change | none |
 
-### Known wasm defects left open
+### Known wasm defects
 
-- **Fixed after the gating run: a 5xx response ended in
+- **Fixed after the first gating run: a 5xx response ended in
   `PlatformNotSupportedException`.** Upstream retries a server error twice through
   Polly with a real delay, and the guest has no event loop, so the blocking wait
   on a pending timer task threw. `shim/HttpIndexerBase.cs` (one line changed, see
@@ -160,19 +258,15 @@ iteration runs, and what it was:
   `Thread.Sleep` and fire at once. The retries now happen as upstream's do (three
   requests, the delays of `RateLimit`), a transient 503 followed by a good answer
   returns results, and a final 5xx is swallowed into an empty page with
-  `request-failed` and the status set. Native tests cover each case and a Bypass
-  test runs the retries inside the wasm component.
-- **Fixed after the gating run: no mirror failover** (see M2 above). The `search`
-  result carries a `request-failed` flag (a transport error, an HTTP status of 400
-  or more, or a Cloudflare challenge on any request of the search), and the
-  adapter repeats an empty, failed search against the next entry of `links:`,
-  remembering the winner as `active_link` as the Elixir engine does. A live run
-  against the two confirmed cases, wasm engine and Elixir engine side by side
-  (Prowlarr answered both with a Cloudflare block): kickasstorrents-ws now returns
-  60 and 50 releases, the same counts as the Elixir engine; magnetcat returns none
-  on either engine, because every mirror was dead or blocked that day (the Elixir
-  engine ends on HTTP 410, the wasm engine logged all three mirrors failing). The
-  gate table above is the pre-fix run and has not been re-run.
+  `request-failed` and the status set.
+- **Fixed after the first gating run: no mirror failover.** The `search` result
+  carries a `request-failed` flag (a transport error, an HTTP status of 400 or
+  more, or a Cloudflare challenge on any request of the search), and the adapter
+  repeats an empty, failed search against the next entry of `links:`, remembering
+  the winner as `active_link` as the Elixir engine does. The second gating run
+  above includes it: kickasstorrents-ws and megapeer return what the Elixir engine
+  returns. A search whose every request failed now ends in an error naming the
+  status or "No answer from the tracker" instead of an empty page.
 - **LAN trackers are refused.** The wasm host goes through `Plugins.Net.Gate`,
   which rejects private addresses; the Elixir engine does not. Not exercised by
   the public corpus.
@@ -184,44 +278,47 @@ iteration runs, and what it was:
 - The trackers are live and the three engines run seconds apart, not at the same
   instant. Rotating the order spreads the effect but does not remove it.
 - Prowlarr's own state degrades across runs (it disables indexers that fail), so
-  the gating run used a fresh data directory. 37 of 81 definitions return nothing
+  both gating runs used a fresh data directory. 37 of 81 definitions return nothing
   on Prowlarr (Cloudflare, dead mirrors), which leaves M1 with 44 definitions.
-- Two gating-style runs differ in M2 (46 vs 51 before the User-Agent change, 54 vs
-  55 after) and in the Elixir p95 (126 ms against 69 ms in an earlier run). The
-  Elixir engine changed under the branch twice (two `origin/master` merges), and
-  its numbers are what master ships at `272ef9447`.
+- Two runs of the same gate differ in M2 (54 vs 55 first run, 55 vs 54 this run)
+  and in the Elixir p95 (126.0 ms, 136.1 ms; 69 ms in an earlier non-gating run).
+  Both M2 and M4 sit inside run-to-run noise.
+- This run's component (75 MB, unstripped) is what the gate ran; the stripped
+  component was checked by the test suites and by the container measurements, not
+  by a second 25-minute gate run. Stripping removes debug sections only.
 - M4 compares `wall - network` with the network time measured differently per
   engine (see the method below). The Elixir figure includes Req's own steps.
-- The M5 RSS figure comes from a script process in the test environment, not from
-  a running `./dev up` stack, and the image size from an image built without the
-  published asset (the asset is not released yet).
+- The container measurements use a mounted local component with a temporary pin, not
+  a download from the (unpublished) release. The fixture is a tiny page; real pages
+  allocate more per search. Idle RSS was read 20 s (engine) and 75 s (default engine)
+  after start, so the idle comparison favours the default engine slightly.
 
-Command: `./dev mix mydia.cardigann_bench --concurrency 1 --prowlarr-url http://127.0.0.1:19696 --out <dir>` at `7118d17f7`.
+Command: `PROWLARR_API_KEY=<key> ./dev mix mydia.cardigann_bench --concurrency 1 --prowlarr-url http://127.0.0.1:19696 --ref d34bddc56cfd6a55f75a9f69dcc2df9eb591662c --database <scratch>.db --out <dir>` at `10d19901f`, against `bench/cardigann/docker-compose.yml` with the port changed to 19696 and an empty data directory, torn down afterwards.
 
-## Harness report (`mix mydia.cardigann_bench`)
+## Harness report (`mix mydia.cardigann_bench`), second run
 
 | | |
 |---|---|
-| Mydia commit | `7118d17f71e81adc17c78d924283db961bb40e3f` (worktree-cardigann-wasm-engine) |
+| Mydia commit | `10d19901f2834a0c44a11b142ccba72d0b80da01` (worktree-cardigann-wasm-engine) |
 | Rebased on origin/master | `272ef9447130ce54bf9f7dee751e8efe2df01edf` (origin/master tip `272ef9447130ce54bf9f7dee751e8efe2df01edf`) |
 | Prowlarr tag (oracle and guest) | `v2.6.5.5623` |
 | Prowlarr/Indexers ref | `d34bddc56cfd6a55f75a9f69dcc2df9eb591662c` |
 | Date | 2026-10-12 |
 | Definitions | 81 (162 queries) |
 | Left out of the corpus | 498 (498 no_credentials) |
-| Upstream files substituted by shims | 12 (`native/cardigann_guest/SUBSTITUTIONS.md`) |
+| Upstream files substituted by shims | 13 (`native/cardigann_guest/SUBSTITUTIONS.md`) |
 
-Harness verdicts: M1 PASS, M2 FAIL, M3 PASS, M4 PASS. M5 and M6 are measured by hand and recorded above.
+Gate verdicts: M1 PASS, M2 PASS, M3 PASS, M4 PASS. M5 and M6 are measured by hand and recorded above.
 
 
 ### Metrics
 
 | Metric | Elixir | Wasm | Gate | Verdict |
 |---|---|---|---|---|
-| M1 Fidelity (agree with Prowlarr, Jaccard >= 0.95 on every query) | 29/44 (65.9%) | 44/44 (100.0%) | wasm > Elixir | PASS |
-| M2 Coverage (>= 1 release) | 55/81 | 54/81 | wasm >= Elixir | FAIL |
+| M1 Fidelity (agree with Prowlarr, Jaccard >= 0.95 on every query) | 28/44 (63.6%) | 44/44 (100.0%) | wasm > Elixir | PASS |
+| M2 Coverage (>= 1 release) | 54/81 | 55/81 | wasm >= Elixir | PASS |
 | M3 Regressions (Elixir agrees, wasm does not) | | 0 | zero unexplained | PASS |
-| M4 Engine overhead p50 / p95 (ms), paired searches, n=66 | 27.0 / 126.0 | 76.2 / 243.9 | wasm p95 <= max(2x Elixir, 50 ms); under 10 paired searches the verdict is insufficient sample | PASS (paired n=66) |
+| M4 Engine overhead p50 / p95 (ms), paired searches, n=67 | 29.5 / 136.1 | 89.0 / 248.6 | wasm p95 <= max(2x Elixir, 50 ms); under 10 paired searches the verdict is insufficient sample | PASS (paired n=67) |
 
 The M1 denominator is the 44 definitions on which Prowlarr returned results; 37 definitions where Prowlarr errored or returned nothing are excluded from it and listed under Engine health.
 
@@ -231,7 +328,7 @@ Diagnostic, lenient rule (a size known on one side only counts as a size match; 
 
 | | Elixir | Wasm |
 |---|---|---|
-| M1 Fidelity, lenient | 29/44 (65.9%) | 44/44 (100.0%) |
+| M1 Fidelity, lenient | 28/44 (63.6%) | 44/44 (100.0%) |
 | M3 Regressions, lenient | | 0  |
 
 No definition's agreement changes between the strict and the lenient rule, so the gate does not hinge on missing sizes.
@@ -239,28 +336,28 @@ No definition's agreement changes between the strict and the lenient rule, so th
 
 #### How M4 was measured
 
-Overhead is `wall - network` per search, as nearest-rank percentiles. Wall time is the elapsed time of the adapter call in the task that made it. The gating figure is over **paired searches** only: (definition, query) pairs on definitions without a `requestDelay` where Prowlarr, Elixir and wasm all returned results, so both engines are timed on the same searches (n=66; under 10 the verdict is "insufficient sample"). For the gating run use `--concurrency 1`: with parallel definitions the searches contend for CPU and the database, which inflates overhead.
+Overhead is `wall - network` per search, as nearest-rank percentiles. Wall time is the elapsed time of the adapter call in the task that made it. The gating figure is over **paired searches** only: (definition, query) pairs on definitions without a `requestDelay` where Prowlarr, Elixir and wasm all returned results, so both engines are timed on the same searches (n=67; under 10 the verdict is "insufficient sample"). For the gating run use `--concurrency 1`: with parallel definitions the searches contend for CPU and the database, which inflates overhead.
 
 - **Wasm**: network is the sum of the host `http-request` import durations, recorded by the host (`HostHttp.exchange`, after the rate-limit throttle) and reported through the `[:mydia, :cardigann, :wasm, :call]` telemetry event, which fires in the calling task. Before timing starts the run waits for the component to compile and makes one capabilities call (a warm-up, discarded), so compilation is not in the numbers. Wall includes definition parsing, session reads and writes, and the guest's own work.
 - **Elixir**: network is the time inside the `Req.Finch` adapter step, measured by `Bench.NetTimer` installed as the Req `:adapter` through `Req.default_options/1` for the run (Req 0.7.4 emits no telemetry). It is attributed to the calling task and its `$callers`. Req's own request and response steps (decompression, redirects, retry sleeps) and FlareSolverr round trips made outside Req are outside it and count as overhead.
 - **Prowlarr**: only wall time is available. It is not part of M4.
 - **`requestDelay`**: Prowlarr and the wasm engine honour a definition's `requestDelay` (the wasm host sleeps in its rate limiter, outside the timed network call). The Elixir engine does not honour it in practice: `CardigannSearchEngine.apply_rate_limit/1` sleeps for `request_delay`, but `CardigannParser` fills that field from the YAML key `requestdelay` (lower case) and every definition spells it `requestDelay`, so the field is always nil and Elixir never sleeps. That is a behavioural difference from Prowlarr (Elixir hits trackers faster than the definition allows). Paired M4 excludes delayed definitions because the delay would count as overhead for wasm only.
-- Diagnostics (not gating). Unpaired, delay-free, every ok search: Elixir 26.8 / 103.4 ms (n=90), wasm 69.0 / 206.8 ms (n=116). Every ok search including delayed definitions: Elixir 24.6 / 104.2 ms (n=113), wasm 70.1 / 1748.9 ms (n=162).
+- Diagnostics (not gating). Unpaired, delay-free, every ok search: Elixir 29.4 / 116.2 ms (n=91), wasm 84.7 / 226.3 ms (n=100). Every ok search including delayed definitions: Elixir 27.0 / 98.7 ms (n=110), wasm 89.0 / 1311.6 ms (n=122).
 
 
 ### Engine health
 
 | Engine | ok searches | ok but empty | empty with no HTTP request made | of which empty_with_credentials | errors by kind |
 |---|---|---|---|---|---|
-| prowlarr | 91 | 11 | 0 | 0 | prowlarr x3, indexer x68 |
-| elixir | 113 | 10 | 0 | 0 | rate_limited x1, search_failed x9, connection_failed x39 |
-| wasm | 162 | 66 | 0 | 0 | none |
+| prowlarr | 90 | 9 | 0 | 0 | prowlarr x2, indexer x70 |
+| elixir | 110 | 10 | 0 | 0 | rate_limited x1, connection_failed x39, search_failed x12 |
+| wasm | 122 | 21 | 0 | 0 | timeout x1, connection_failed x11, search_failed x28 |
 
 "Empty with no HTTP request made" counts ok-but-empty searches whose measured network time is zero: the engine answered without contacting the tracker (Elixir and wasm only), which usually means it gave up before the request.
 
 `empty_with_credentials` counts rows (a definition and query): a private or semi-private definition with credentials configured that returned no results. Prowlarr and the wasm engine swallow a failed login during search and return an empty list, so this is a possible silent login failure and not a genuine "no results". It is not counted as an error anywhere else.
 
-Definitions Prowlarr errored or returned nothing on (excluded from M1): 0magnet, 1337x, 52bt, acgrip, anisource, btdirectory, btetree, damagnet, dmhy, ebookbay, extratorrent-st, eztv, filemood, gamestorrents, internetarchive, kickasstorrents-to, kickasstorrents-ws, mactorrentsdownload, magnetcat, megapeer, newstudio, pornrips, postman, sexypics, showrss-yml, skidrowrepack, tokyotosho, torrent9, torrentby, torrentbyte, torrentcore, torrentproject2, torrentsome, torrenttip, uindex, vsthouse, xxxclub
+Definitions Prowlarr errored or returned nothing on (excluded from M1): 0magnet, 1337x, 52bt, acgrip, anisource, btdirectory, btetree, damagnet, ebookbay, extratorrent-st, eztv, filemood, gamestorrents, kickasstorrents-to, kickasstorrents-ws, mactorrentsdownload, magnetcat, magnetdownload, megapeer, newstudio, nipponsei, pornrips, postman, sexypics, showrss-yml, skidrowrepack, tokyotosho, torrent9, torrentby, torrentbyte, torrentcore, torrentproject2, torrentsome, torrenttip, uindex, vsthouse, xxxclub
 
 
 ### Errors
@@ -271,14 +368,22 @@ Definitions Prowlarr errored or returned nothing on (excluded from M1): 0magnet,
 | 0magnet | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access 16mag.net, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
 | 1337x | movie | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access 1337x.to, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
 | 1337x | movie | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
+| 1337x | movie | wasm | {:search_failed, "HTTP 403"} |
 | 1337x | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access 1337x.to, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
 | 1337x | rss | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
-| 52bt | movie | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to connect to indexer. Unexpected response status Forbidden code from indexer request", "isWarning"  |
-| 52bt | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to connect to indexer. Unexpected response status Forbidden code from indexer request", "isWarning"  |
+| 1337x | rss | wasm | {:search_failed, "HTTP 403"} |
+| 52bt | movie | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to connect to indexer. Redirected to https://www.52btbt.icu/ from indexer request", "isWarning" => f |
+| 52bt | movie | elixir | {:search_failed, "HTTP 410"} |
+| 52bt | movie | wasm | {:search_failed, "HTTP 410"} |
+| 52bt | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to connect to indexer. Redirected to https://www.52btbt.icu/ from indexer request", "isWarning" => f |
+| 52bt | rss | elixir | {:search_failed, "HTTP 410"} |
+| 52bt | rss | wasm | {:search_failed, "HTTP 410"} |
 | acgrip | tv | prowlarr | {:indexer, {:http_status, 400, [%{"detailedDescription" => "One or more errors occurred. (Connection refused)", "errorMessage" => "Unable to connect to indexer. |
 | acgrip | tv | elixir | {:connection_failed, "Connection failed: :econnrefused"} |
+| acgrip | tv | wasm | {:connection_failed, "No answer from the tracker"} |
 | acgrip | rss | prowlarr | {:indexer, {:http_status, 400, [%{"detailedDescription" => "One or more errors occurred. (Connection refused)", "errorMessage" => "Unable to connect to indexer. |
 | acgrip | rss | elixir | {:connection_failed, "Connection failed: :econnrefused"} |
+| acgrip | rss | wasm | {:connection_failed, "No answer from the tracker"} |
 | anisource | tv | prowlarr | {:indexer, {:http_status, 400, [%{"detailedDescription" => "One or more errors occurred. (Network unreachable)", "errorMessage" => "Unable to connect to indexer |
 | anisource | tv | elixir | {:connection_failed, "Connection failed: :nxdomain"} |
 | anisource | rss | prowlarr | {:indexer, {:http_status, 400, [%{"detailedDescription" => "One or more errors occurred. (Network unreachable)", "errorMessage" => "Unable to connect to indexer |
@@ -289,45 +394,37 @@ Definitions Prowlarr errored or returned nothing on (excluded from M1): 0magnet,
 | btdirectory | rss | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
 | btetree | generic | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access bt.etree.org, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
 | btetree | generic | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
+| btetree | generic | wasm | {:search_failed, "HTTP 403"} |
 | btetree | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access bt.etree.org, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
 | btetree | rss | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
+| btetree | rss | wasm | {:search_failed, "HTTP 403"} |
 | damagnet | movie | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access damag.net, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
 | damagnet | movie | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
+| damagnet | movie | wasm | {:search_failed, "HTTP 403"} |
 | damagnet | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access damag.net, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
 | damagnet | rss | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
-| dmhy | movie | prowlarr | {:indexer, %Req.TransportError{reason: :timeout}} |
-| dmhy | movie | elixir | {:connection_failed, "Request timeout"} |
-| dmhy | rss | prowlarr | {:indexer, %Req.TransportError{reason: :timeout}} |
-| dmhy | rss | elixir | {:connection_failed, "Request timeout"} |
+| damagnet | rss | wasm | {:search_failed, "HTTP 403"} |
 | ebookbay | generic | prowlarr | {:indexer, {:http_status, 400, [%{"detailedDescription" => "The remote certificate was rejected by the provided RemoteCertificateValidationCallback.", "errorMes |
+| ebookbay | generic | wasm | {:connection_failed, "No answer from the tracker"} |
 | ebookbay | rss | prowlarr | {:indexer, {:http_status, 400, [%{"detailedDescription" => "The remote certificate was rejected by the provided RemoteCertificateValidationCallback.", "errorMes |
+| ebookbay | rss | wasm | {:connection_failed, "No answer from the tracker"} |
 | extratorrent-st | movie | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access extratorrent.st, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
 | extratorrent-st | movie | elixir | {:search_failed, "Blocked page: 🚫 This Website is Blocked 🚫"} |
 | extratorrent-st | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access extratorrent.st, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
-| extratorrent-st | rss | elixir | {:search_failed, "Blocked page: 🚫 This Website is Blocked 🚫"} |
+| extratorrent-st | rss | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
 | eztv | tv | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access eztvx.to, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
 | eztv | tv | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
+| eztv | tv | wasm | {:search_failed, "HTTP 403"} |
 | eztv | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access eztvx.to, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
 | eztv | rss | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
+| eztv | rss | wasm | {:search_failed, "HTTP 403"} |
+| filemood | movie | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to connect to indexer, check the log above the ValidationFailure for more details. HTTP request fail |
 | filemood | movie | elixir | {:rate_limited, "Rate limit exceeded"} |
-| filemood | rss | prowlarr | {:prowlarr, "{:http_status, 400, %{\"description\" => \"NzbDrone.Core.Exceptions.NzbDroneClientException: Search failed due to all selected indexers being unava |
+| filemood | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to connect to indexer, check the log above the ValidationFailure for more details. HTTP request fail |
 | gamestorrents | generic | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to connect to indexer. Redirected to https://www.gamestorrents.app/juegos-pc/ from indexer request", |
 | gamestorrents | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to connect to indexer. Redirected to https://www.gamestorrents.app/juegos-pc/ from indexer request", |
-| internetarchive | movie | prowlarr | {:indexer, %Req.TransportError{reason: :timeout}} |
-| internetarchive | rss | prowlarr | {:indexer, %Req.TransportError{reason: :timeout}} |
 | kickasstorrents-to | movie | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access kickass.torrentbay.st, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
-| kickasstorrents-to | movie | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
-| kickasstorrents-to | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access kickass.torrentbay.st, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
-| kickasstorrents-to | rss | elixir | {:connection_failed, "Cloudflare protection detected. Configure FlareSolverr to access this indexer."} |
-| kickasstorrents-ws | movie | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access kickass.ws, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
-| kickasstorrents-ws | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access kickass.ws, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
-| mactorrentsdownload | rss | prowlarr | {:prowlarr, "{:http_status, 400, %{\"description\" => \"NzbDrone.Core.Exceptions.NzbDroneClientException: Search failed due to all selected indexers being unava |
-| magnetcat | movie | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access magnetcatcat.com, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
-| magnetcat | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access magnetcatcat.com, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
-| megapeer | movie | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access megapeer.vip, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
-| megapeer | rss | prowlarr | {:indexer, {:http_status, 400, [%{"errorMessage" => "Unable to access megapeer.vip, blocked by CloudFlare Protection.", "isWarning" => false, ...}]}} |
-| newstudio | tv | prowlarr | {:indexer, %Req.TransportError{reason: :timeout}} |
-(60 more in bench.json)
+(104 more in bench.json)
 
 
 ### Regressions
@@ -348,12 +445,12 @@ Cell: releases, or the error kind. `!` marks empty_with_credentials. Jaccard is 
 |---|---|---|---|---|---|---|---|
 | 0magnet | public | generic | err:indexer | 50 | 42 | n/a | n/a |
 | 0magnet | public | rss | err:indexer | 50 | 50 | n/a | n/a |
-| 1337x | public | movie | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| 1337x | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| 52bt | public | movie | err:indexer | 20 | 40 | n/a | n/a |
-| 52bt | public | rss | err:indexer | 20 | 40 | n/a | n/a |
-| acgrip | public | tv | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| acgrip | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
+| 1337x | public | movie | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| 1337x | public | rss | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| 52bt | public | movie | err:indexer | err:search_failed | err:search_failed | n/a | n/a |
+| 52bt | public | rss | err:indexer | err:search_failed | err:search_failed | n/a | n/a |
+| acgrip | public | tv | err:indexer | err:connection_failed | err:connection_failed | n/a | n/a |
+| acgrip | public | rss | err:indexer | err:connection_failed | err:connection_failed | n/a | n/a |
 | anibt | public | tv | 100 | 100 | 100 | 1.00 | 1.00 |
 | anibt | public | rss | 100 | 100 | 100 | 1.00 | 1.00 |
 | animetosho-xyz | public | movie | 100 | 100 | 100 | 1.00 | 1.00 |
@@ -363,70 +460,70 @@ Cell: releases, or the error kind. `!` marks empty_with_credentials. Jaccard is 
 | bangumi-moe | public | movie | 30 | 30 | 30 | 1.00 | 1.00 |
 | bangumi-moe | public | rss | 30 | 30 | 30 | 1.00 | 1.00 |
 | bigfangroup | public | movie | 30 | 30 | 30 | 0.00 | 1.00 |
-| bigfangroup | public | rss | 30 | 30 | 30 | 0.00 | 1.00 |
+| bigfangroup | public | rss | 30 | 30 | 30 | 0.02 | 1.00 |
 | blueroms | public | generic | 0 | 0 | 0 | n/a | n/a |
 | blueroms | public | rss | 60 | 60 | 60 | 0.00 | 1.00 |
 | btdirectory | public | movie | err:indexer | err:connection_failed | 0 | n/a | n/a |
 | btdirectory | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| btetree | public | generic | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| btetree | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
+| btetree | public | generic | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| btetree | public | rss | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
 | byrutor | public | generic | 0 | 0 | 0 | n/a | n/a |
 | byrutor | public | rss | 12 | 12 | 12 | 0.00 | 1.00 |
 | catorrent | public | generic | 20 | 20 | 20 | 1.00 | 1.00 |
 | catorrent | public | rss | 20 | 20 | 20 | 1.00 | 1.00 |
 | crackingpatching | public | generic | 9 | 15 | 9 | 0.60 | 1.00 |
 | crackingpatching | public | rss | 31 | 31 | 31 | 1.00 | 1.00 |
-| damagnet | public | movie | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| damagnet | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| dmhy | public | movie | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| dmhy | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| ebookbay | public | generic | err:indexer | 0 | 0 | n/a | n/a |
-| ebookbay | public | rss | err:indexer | 0 | 0 | n/a | n/a |
+| damagnet | public | movie | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| damagnet | public | rss | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| dmhy | public | movie | 79 | 79 | 79 | 1.00 | 1.00 |
+| dmhy | public | rss | 80 | 80 | 80 | 1.00 | 1.00 |
+| ebookbay | public | generic | err:indexer | 0 | err:connection_failed | n/a | n/a |
+| ebookbay | public | rss | err:indexer | 0 | err:connection_failed | n/a | n/a |
 | ehentai | public | tv | 0 | 0 | 0 | n/a | n/a |
-| ehentai | public | rss | 100 | 50 | 100 | 0.50 | 1.00 |
+| ehentai | public | rss | 99 | 50 | 99 | 0.51 | 1.00 |
 | extratorrent-st | public | movie | err:indexer | err:search_failed | 0 | n/a | n/a |
-| extratorrent-st | public | rss | err:indexer | err:search_failed | 0 | n/a | n/a |
-| eztv | public | tv | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| eztv | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| filemood | public | movie | 0 | err:rate_limited | 20 | n/a | n/a |
-| filemood | public | rss | err:prowlarr | 20 | 20 | n/a | n/a |
+| extratorrent-st | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
+| eztv | public | tv | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| eztv | public | rss | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| filemood | public | movie | err:indexer | err:rate_limited | 20 | n/a | n/a |
+| filemood | public | rss | err:indexer | 20 | 20 | n/a | n/a |
 | freejavtorrent | public | generic | 60 | 60 | 60 | 1.00 | 1.00 |
 | freejavtorrent | public | rss | 60 | 60 | 60 | 1.00 | 1.00 |
 | gamestorrents | public | generic | err:indexer | 0 | 0 | n/a | n/a |
 | gamestorrents | public | rss | err:indexer | 0 | 0 | n/a | n/a |
-| internetarchive | public | movie | err:indexer | 100 | 100 | n/a | n/a |
-| internetarchive | public | rss | err:indexer | 100 | 100 | n/a | n/a |
+| internetarchive | public | movie | 100 | 100 | 100 | 1.00 | 1.00 |
+| internetarchive | public | rss | 100 | 100 | 100 | 1.00 | 1.00 |
 | kickasstorrents-to | public | movie | err:indexer | err:connection_failed | 0 | n/a | n/a |
 | kickasstorrents-to | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| kickasstorrents-ws | public | movie | err:indexer | 60 | 0 | n/a | n/a |
-| kickasstorrents-ws | public | rss | err:indexer | 50 | 0 | n/a | n/a |
+| kickasstorrents-ws | public | movie | err:indexer | 60 | 60 | n/a | n/a |
+| kickasstorrents-ws | public | rss | err:indexer | 50 | 50 | n/a | n/a |
 | limetorrents | public | movie | 40 | 40 | 40 | 1.00 | 1.00 |
 | limetorrents | public | rss | 150 | 150 | 150 | 1.00 | 1.00 |
 | linuxtracker | public | generic | 25 | 25 | 25 | 1.00 | 1.00 |
 | linuxtracker | public | rss | 25 | 25 | 25 | 1.00 | 1.00 |
 | mactorrentsdownload | public | generic | 0 | 20 | 20 | n/a | n/a |
 | mactorrentsdownload | public | rss | err:prowlarr | 20 | 20 | n/a | n/a |
-| magnetcat | public | movie | err:indexer | 20 | 0 | n/a | n/a |
-| magnetcat | public | rss | err:indexer | 20 | 0 | n/a | n/a |
-| magnetdownload | public | movie | 10 | 10 | 10 | 1.00 | 1.00 |
-| magnetdownload | public | rss | 10 | 10 | 10 | 1.00 | 1.00 |
+| magnetcat | public | movie | err:indexer | err:search_failed | err:search_failed | n/a | n/a |
+| magnetcat | public | rss | err:indexer | err:search_failed | err:search_failed | n/a | n/a |
+| magnetdownload | public | movie | err:indexer | err:connection_failed | 10 | n/a | n/a |
+| magnetdownload | public | rss | err:indexer | 10 | 10 | n/a | n/a |
 | megapeer | public | movie | err:indexer | 50 | 50 | n/a | n/a |
 | megapeer | public | rss | err:indexer | 50 | 50 | n/a | n/a |
 | mikan | public | tv | 130 | 130 | 130 | 0.98 | 1.00 |
-| mikan | public | rss | 100 | 100 | 100 | 1.00 | 1.00 |
+| mikan | public | rss | 99 | 99 | 99 | 1.00 | 1.00 |
 | mixtapetorrent | public | generic | 1 | 9 | 1 | 0.11 | 1.00 |
 | mixtapetorrent | public | rss | 10 | 9 | 10 | 0.90 | 1.00 |
 | mypornclub | public | generic | 39 | 40 | 39 | 0.00 | 1.00 |
 | mypornclub | public | rss | 40 | 40 | 40 | 0.00 | 1.00 |
 | nekobt | public | movie | 100 | 100 | 100 | 1.00 | 1.00 |
 | nekobt | public | rss | 100 | 100 | 100 | 1.00 | 1.00 |
-| newstudio | public | tv | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| newstudio | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| nipponsei | public | generic | 2 | 2 | 2 | 1.00 | 1.00 |
-| nipponsei | public | rss | 30 | 30 | 30 | 0.00 | 1.00 |
-| noname-club | public | movie | 50 | 50 | 50 | 0.75 | 1.00 |
-| noname-club | public | rss | 50 | 50 | 50 | 0.61 | 1.00 |
-| nyaasi | public | movie | 75 | 75 | 75 | 0.72 | 1.00 |
+| newstudio | public | tv | err:indexer | err:connection_failed | err:connection_failed | n/a | n/a |
+| newstudio | public | rss | err:indexer | err:connection_failed | err:connection_failed | n/a | n/a |
+| nipponsei | public | generic | err:indexer | 2 | 2 | n/a | n/a |
+| nipponsei | public | rss | err:indexer | 30 | 30 | n/a | n/a |
+| noname-club | public | movie | 50 | 50 | 50 | 0.72 | 1.00 |
+| noname-club | public | rss | 50 | 50 | 50 | 0.79 | 1.00 |
+| nyaasi | public | movie | 75 | 75 | 75 | 0.50 | 1.00 |
 | nyaasi | public | rss | 150 | 75 | 150 | 0.50 | 1.00 |
 | onejav | public | generic | 20 | 10 | 20 | 0.50 | 1.00 |
 | onejav | public | rss | 20 | 10 | 20 | 0.50 | 1.00 |
@@ -440,58 +537,58 @@ Cell: releases, or the error kind. `!` marks empty_with_credentials. Jaccard is 
 | plugintorrent | public | rss | 30 | 30 | 30 | 1.00 | 1.00 |
 | pornotorrent | public | movie | 100 | 100 | 100 | 1.00 | 1.00 |
 | pornotorrent | public | rss | 100 | 100 | 100 | 1.00 | 1.00 |
-| pornrips | public | generic | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| pornrips | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
+| pornrips | public | generic | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| pornrips | public | rss | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
 | pornxlab | public | generic | 60 | 60 | 60 | 1.00 | 1.00 |
 | pornxlab | public | rss | 60 | 60 | 60 | 1.00 | 1.00 |
-| postman | public | movie | err:indexer | err:search_failed | 0 | n/a | n/a |
-| postman | public | rss | err:indexer | err:search_failed | 0 | n/a | n/a |
+| postman | public | movie | err:indexer | err:search_failed | err:connection_failed | n/a | n/a |
+| postman | public | rss | err:indexer | err:search_failed | err:connection_failed | n/a | n/a |
 | rintornet | public | generic | 10 | 10 | 10 | 1.00 | 1.00 |
 | rintornet | public | rss | 10 | 10 | 10 | 1.00 | 1.00 |
-| rutor | public | movie | 100 | 100 | 100 | 0.89 | 1.00 |
-| rutor | public | rss | 153 | 153 | 153 | 0.90 | 1.00 |
-| sexypics | public | generic | err:indexer | err:search_failed | 0 | n/a | n/a |
-| sexypics | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| shanaproject | public | tv | 50 | 50 | 50 | 1.00 | 1.00 |
-| shanaproject | public | rss | 50 | 50 | 50 | 1.00 | 1.00 |
+| rutor | public | movie | 100 | 100 | 100 | 0.87 | 1.00 |
+| rutor | public | rss | 128 | 128 | 128 | 0.86 | 1.00 |
+| sexypics | public | generic | err:indexer | err:search_failed | err:search_failed | n/a | n/a |
+| sexypics | public | rss | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| shanaproject | public | tv | 50 | 50 | 50 | 0.85 | 1.00 |
+| shanaproject | public | rss | 50 | 50 | 50 | 0.85 | 1.00 |
 | showrss-yml | public | tv | err:indexer | 100 | 0 | n/a | n/a |
 | showrss-yml | public | rss | err:indexer | 100 | 100 | n/a | n/a |
-| skidrowrepack | public | generic | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| skidrowrepack | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
+| skidrowrepack | public | generic | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| skidrowrepack | public | rss | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
 | sosulki | public | generic | 0 | 0 | 0 | n/a | n/a |
 | sosulki | public | rss | 34 | 34 | 34 | 1.00 | 1.00 |
 | sukebeinyaasi | public | generic | 75 | 75 | 75 | 1.00 | 1.00 |
 | sukebeinyaasi | public | rss | 75 | 75 | 75 | 1.00 | 1.00 |
 | thepiratebay | public | movie | 100 | 100 | 100 | 1.00 | 1.00 |
 | thepiratebay | public | rss | 50 | 50 | 50 | 1.00 | 1.00 |
-| tokyotosho | public | tv | 0 | 48 | 0 | n/a | n/a |
+| tokyotosho | public | tv | 0 | 48 | 45 | n/a | n/a |
 | tokyotosho | public | rss | err:prowlarr | 74 | 75 | n/a | n/a |
 | torrent-pirat | public | generic | 25 | 25 | 25 | 1.00 | 1.00 |
 | torrent-pirat | public | rss | 23 | 23 | 23 | 1.00 | 1.00 |
 | torrent9 | public | movie | err:indexer | 20 | 20 | n/a | n/a |
-| torrent9 | public | rss | err:indexer | 105 | 0 | n/a | n/a |
-| torrentby | public | movie | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| torrentby | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| torrentbyte | public | movie | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| torrentbyte | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| torrentcore | public | movie | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| torrentcore | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| torrentdownload | public | movie | 48 | 48 | 48 | 1.00 | 1.00 |
+| torrent9 | public | rss | err:indexer | 105 | 105 | n/a | n/a |
+| torrentby | public | movie | err:indexer | err:connection_failed | err:connection_failed | n/a | n/a |
+| torrentby | public | rss | err:indexer | err:connection_failed | err:connection_failed | n/a | n/a |
+| torrentbyte | public | movie | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| torrentbyte | public | rss | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| torrentcore | public | movie | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| torrentcore | public | rss | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| torrentdownload | public | movie | 50 | 50 | 50 | 1.00 | 1.00 |
 | torrentdownload | public | rss | 66 | 70 | 66 | 0.94 | 1.00 |
 | torrentdownloads | public | movie | 50 | 50 | 50 | 1.00 | 1.00 |
 | torrentdownloads | public | rss | 50 | 50 | 50 | 1.00 | 1.00 |
 | torrentkitty | public | movie | 20 | 20 | 20 | 1.00 | 1.00 |
 | torrentkitty | public | rss | 20 | 20 | 20 | 1.00 | 1.00 |
-| torrentproject2 | public | movie | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| torrentproject2 | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| torrentsome | public | movie | err:indexer | 0 | 0 | n/a | n/a |
-| torrentsome | public | rss | err:indexer | 20 | 0 | n/a | n/a |
+| torrentproject2 | public | movie | err:indexer | err:connection_failed | err:timeout | n/a | n/a |
+| torrentproject2 | public | rss | err:indexer | err:connection_failed | err:connection_failed | n/a | n/a |
+| torrentsome | public | movie | err:indexer | 0 | err:search_failed | n/a | n/a |
+| torrentsome | public | rss | err:indexer | 20 | err:search_failed | n/a | n/a |
 | torrenttip | public | movie | err:indexer | err:search_failed | 0 | n/a | n/a |
 | torrenttip | public | rss | err:indexer | err:search_failed | 0 | n/a | n/a |
-| u3c3 | public | movie | 0 | 60 | 0 | n/a | n/a |
+| u3c3 | public | movie | 1 | 60 | 1 | 0.02 | 1.00 |
 | u3c3 | public | rss | 60 | 60 | 60 | 1.00 | 1.00 |
-| uindex | public | movie | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| uindex | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
+| uindex | public | movie | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| uindex | public | rss | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
 | vsthouse | public | generic | err:indexer | err:connection_failed | 0 | n/a | n/a |
 | vsthouse | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
 | vstorrent | public | generic | 19 | 30 | 19 | 0.63 | 1.00 |
@@ -500,11 +597,11 @@ Cell: releases, or the error kind. `!` marks empty_with_credentials. Jaccard is 
 | vsttorrents | public | rss | 12 | 12 | 12 | 1.00 | 1.00 |
 | world-torrent | public | movie | 50 | 50 | 50 | 1.00 | 1.00 |
 | world-torrent | public | rss | 50 | 50 | 50 | 1.00 | 1.00 |
-| xxxclub | public | generic | err:indexer | err:connection_failed | 0 | n/a | n/a |
-| xxxclub | public | rss | err:indexer | err:connection_failed | 0 | n/a | n/a |
+| xxxclub | public | generic | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
+| xxxclub | public | rss | err:indexer | err:connection_failed | err:search_failed | n/a | n/a |
 | xxxtor | public | generic | 50 | 50 | 50 | 1.00 | 1.00 |
 | xxxtor | public | rss | 50 | 50 | 50 | 1.00 | 1.00 |
 | yts | public | movie | 0 | 0 | 0 | n/a | n/a |
-| yts | public | rss | 104 | 104 | 104 | 1.00 | 1.00 |
+| yts | public | rss | 105 | 105 | 105 | 1.00 | 1.00 |
 | zamundalife | public | movie | 50 | 50 | 50 | 1.00 | 1.00 |
 | zamundalife | public | rss | 50 | 50 | 50 | 1.00 | 1.00 |
