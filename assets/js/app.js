@@ -38,6 +38,7 @@ import {
   initPasskeySecondFactor,
 } from "./hooks/passkey.mjs";
 import { LoadMoreSentinel } from "./hooks/load_more_sentinel.mjs";
+import { RailWheel } from "./hooks/rail_wheel.mjs";
 import {
   MediaSelection,
   setAllSelected,
@@ -450,6 +451,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     BatchSelect,
     MediaSelection,
     LoadMoreSentinel,
+    RailWheel,
     PasskeyRegister,
     PluginFrame,
   },

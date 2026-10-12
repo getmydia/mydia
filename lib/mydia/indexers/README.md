@@ -304,7 +304,7 @@ and remembers the one that worked. What it costs, measured on the Alpine image
 (`native/cardigann_guest/BENCH.md` has the method and every number):
 
 - **First boot.** The engine is not in the image. It downloads about 39 MB from the
-  `cardigann-guest` GitHub release, verifies it against a SHA-256 that is compiled
+  `cardigann-guest-<hash>` GitHub release, verifies it against a SHA-256 that is compiled
   into the build (a mismatch is an error, never a fallback), compiles it once and
   caches the compiled form. The compile takes about 18 s on Alpine and peaks near
   1.6 GB of resident memory, then settles at about 500 MB. Until it is done,

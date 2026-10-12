@@ -53,7 +53,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Artifact do
                          "unknown"
                      end)
 
-  @default_base_url "https://github.com/getmydia/mydia/releases/download/cardigann-guest"
+  # One release per source hash: the repo has immutable releases, so a published
+  # release takes no further uploads and its assets can never be replaced.
+  @default_base_url "https://github.com/getmydia/mydia/releases/download/cardigann-guest-#{@pinned_hash}"
 
   @prowlarr_tag (case @root |> Path.join("native/cardigann_guest/PROWLARR_REF") |> File.read() do
                    {:ok, ref} -> ref |> String.split() |> List.first()

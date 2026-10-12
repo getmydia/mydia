@@ -261,7 +261,7 @@ defmodule MydiaWeb.DiscoverComponents do
         <div :if={@badge != []} class="flex-shrink-0">{render_slot(@badge)}</div>
       </div>
 
-      <.poster_rail :if={@open?} id={if @collapsible, do: "#{@id}-items"}>
+      <.poster_rail :if={@open?} id={"#{@id}-items"}>
         <div
           :for={item <- @items}
           id={rail_item_id(@id, item, @media_type)}

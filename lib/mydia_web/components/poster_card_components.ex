@@ -81,12 +81,19 @@ defmodule MydiaWeb.PosterCardComponents do
   heading, and the bottom keeps exactly the 8px the old `pb-2` reserved for
   the scrollbar. `scroll-px-3` keeps a snapped card clear of the side padding.
 
+  It also mounts the `RailWheel` hook (`assets/js/hooks/rail_wheel.mjs`), so a
+  plain vertical mouse wheel scrolls the rail sideways. The hook hands the
+  wheel back to the page while a page scroll is passing over the rail and at
+  either end, so scrolling down a page of rails never stalls on one. LiveView
+  only mounts a hook on an element with an id, hence the required `id`.
+
   ## Example
 
       <.poster_rail id="my-rail">
         <div :for={item <- @items} class="snap-start flex-shrink-0 w-36">...</div>
       </.poster_rail>
   """
+  attr :id, :string, required: true
   attr :class, :any, default: nil
   attr :rest, :global
 
@@ -95,6 +102,8 @@ defmodule MydiaWeb.PosterCardComponents do
   def poster_rail(assigns) do
     ~H"""
     <div
+      id={@id}
+      phx-hook="RailWheel"
       class={[
         "flex gap-3 overflow-x-auto snap-x scroll-smooth scroll-px-3 p-3 -mx-3 -mt-3 -mb-1",
         @class
@@ -164,7 +173,7 @@ defmodule MydiaWeb.PosterCardComponents do
   @doc """
   Renders a single horizontal rail of placeholder cards shaped like a `media_rail/1` card.
   """
-  attr :id, :string, default: nil
+  attr :id, :string, required: true
   attr :count, :integer, default: 10
 
   def poster_card_rail_skeleton(assigns) do

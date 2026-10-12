@@ -21,8 +21,11 @@ artifact; `out/cardigann-raw.wasm` is an intermediate.
 
 Nobody has to build the guest to run Mydia. CI
 (`.github/workflows/cardigann-guest.yml`) builds it on every change under this
-directory and, on a push to master, publishes it to the `cardigann-guest`
-release as `cardigann-<hash>.wasm` plus `.sha256`, `.LICENSE` and `.NOTICE`.
+directory and, on a push to master, publishes it as its own release,
+`cardigann-guest-<hash>`, holding `cardigann-<hash>.wasm` plus `.sha256`,
+`.LICENSE` and `.NOTICE`. The repo has immutable releases, so the release is
+built as a draft and published once every asset is on it, and a published
+asset can never be replaced.
 
 `<hash>` is the first 16 hex characters of a SHA-256 over every tracked file
 under `native/cardigann_guest`, as `path NUL contents` in byte-sorted path

@@ -198,25 +198,6 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
   defp setting_value_control(assigns) do
     ~H"""
     <%= cond do %>
-      <% @setting.type == :select -> %>
-        <%= if @editable do %>
-          <select
-            class="select select-sm select-bordered w-full sm:w-56"
-            phx-change="update_select_setting"
-            phx-value-key={@setting.key}
-            phx-value-category={@category}
-            name="value"
-          >
-            <%= for {value, label} <- @setting.options do %>
-              <option value={value || ""} selected={@setting.value == value}>
-                {label}
-              </option>
-            <% end %>
-          </select>
-        <% else %>
-          <% label = Enum.find_value(@setting.options, fn {v, l} -> v == @setting.value && l end) %>
-          <kbd class="kbd kbd-sm font-mono">{label || "Not set"}</kbd>
-        <% end %>
       <% is_boolean(@setting.value) -> %>
         <%= if @editable do %>
           <label class="label cursor-pointer gap-2">

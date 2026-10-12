@@ -215,4 +215,30 @@ defmodule MydiaWeb.AdminUsersLiveTest do
       assert has_element?(view, "#reset-password-form", "must be at least 8 characters")
     end
   end
+
+  describe "role filter" do
+    setup do
+      %{guest: user_fixture(%{username: "quillon", role: "guest"})}
+    end
+
+    test "the select sits inside a form, so the browser can send its change", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/users")
+
+      assert has_element?(view, "#users-role-filter-form select#users-role-filter")
+    end
+
+    test "picking a role hides users with other roles", %{
+      conn: conn,
+      admin: admin,
+      guest: guest
+    } do
+      {:ok, view, _html} = live(conn, ~p"/admin/users")
+
+      view |> element("#users-role-filter-form") |> render_change(%{"role" => "admin"})
+
+      assert_patch(view, ~p"/admin/users?role=admin")
+      assert has_element?(view, "#user-#{admin.id}")
+      refute has_element?(view, "#user-#{guest.id}")
+    end
+  end
 end

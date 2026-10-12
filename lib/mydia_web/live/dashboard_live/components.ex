@@ -34,7 +34,7 @@ defmodule MydiaWeb.DashboardLive.Components do
         <h2 class="text-2xl font-bold truncate">{@title}</h2>
       </div>
 
-      <.poster_rail>
+      <.poster_rail id={"#{@id}-items"}>
         <div
           :for={{entry, index} <- Enum.with_index(@entries)}
           id={"#{@id}-item-#{entry.media_item.id}"}

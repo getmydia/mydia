@@ -43,12 +43,28 @@ defmodule MydiaWeb.PosterRailTest do
     assert html =~ "card"
   end
 
+  # #1085: a plain mouse wheel scrolls the rail. LiveView only mounts a hook on
+  # an element with an id, which is why id is required.
+  test "mounts the RailWheel hook on the scroller" do
+    assigns = %{}
+
+    html =
+      rendered_to_string(~H"""
+      <.poster_rail id="rail">x</.poster_rail>
+      """)
+
+    [scroller] = html |> LazyHTML.from_fragment() |> LazyHTML.query("#rail") |> Enum.to_list()
+    assert LazyHTML.attribute(scroller, "phx-hook") == ["RailWheel"]
+  end
+
   test "appends caller classes and passes global attributes through" do
     assigns = %{}
 
     html =
       rendered_to_string(~H"""
-      <.poster_rail class="items-start" role="status" aria-label="Loading titles">x</.poster_rail>
+      <.poster_rail id="rail" class="items-start" role="status" aria-label="Loading titles">
+        x
+      </.poster_rail>
       """)
 
     assert "items-start" in scroller_classes(html)
