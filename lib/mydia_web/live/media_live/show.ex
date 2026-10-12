@@ -18,6 +18,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
   alias MydiaWeb.MediaLive.Show.FileEvents
   alias MydiaWeb.MediaLive.Show.FixMatchEvents
+  alias MydiaWeb.MediaLive.Show.FixMatchModal
   alias MydiaWeb.MediaLive.Show.FindFileComponents
   alias MydiaWeb.MediaLive.Show.FindFileEvents
   alias MydiaWeb.MediaLive.Show.RenameEvents
@@ -284,16 +285,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("open_fix_match", params, socket), do: FixMatchEvents.open(params, socket)
   def handle_event("close_fix_match", params, socket), do: FixMatchEvents.close(params, socket)
-  def handle_event("fix_match_search", params, socket), do: FixMatchEvents.search(params, socket)
 
-  def handle_event("fix_match_provider", params, socket),
-    do: FixMatchEvents.provider(params, socket)
-
-  def handle_event("fix_match_pick", params, socket), do: FixMatchEvents.pick(params, socket)
-  def handle_event("fix_match_back", params, socket), do: FixMatchEvents.back(params, socket)
-
-  def handle_event("fix_match_confirm", params, socket),
-    do: FixMatchEvents.confirm(params, socket)
+  def handle_event("fix_match_" <> action, params, socket),
+    do: FixMatchEvents.handle_event(action, params, socket)
 
   def handle_event("refresh_all_file_metadata", params, socket),
     do: FileEvents.refresh_all_file_metadata(params, socket)

@@ -46,7 +46,7 @@ defmodule MydiaWeb.MediaLive.FixMatchTest do
       {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
       view |> element("#fix-match-button") |> render_click()
       assert has_element?(view, "#fix-match-provider-toggle")
-      assert has_element?(view, "#fix-match-provider-tvdb[checked]")
+      assert has_element?(view, "#fix-match-provider-tvdb[aria-pressed=true]")
 
       movie = media_item_fixture(%{type: "movie", title: "Paper Kite", year: 2001})
       {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")

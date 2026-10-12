@@ -7,6 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
   use MydiaWeb, :verified_routes
 
   alias Mydia.Media.FixMatch
+  alias Mydia.Metadata.TvProvider
   alias MydiaWeb.Live.Authorization
 
   require Logger
@@ -34,6 +35,13 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
   end
 
   def close(_params, socket), do: {:noreply, assign(socket, :fix_match, nil)}
+
+  @doc "Routes a `fix_match_<action>` event from `MydiaWeb.MediaLive.Show`."
+  def handle_event("search", params, socket), do: search(params, socket)
+  def handle_event("provider", params, socket), do: provider(params, socket)
+  def handle_event("pick", params, socket), do: pick(params, socket)
+  def handle_event("back", params, socket), do: back(params, socket)
+  def handle_event("confirm", params, socket), do: confirm(params, socket)
 
   def search(_params, %{assigns: %{fix_match: nil}} = socket), do: {:noreply, socket}
 
@@ -104,7 +112,7 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
   def provider(_params, %{assigns: %{fix_match: nil}} = socket), do: {:noreply, socket}
 
   def provider(%{"provider" => value}, socket) do
-    case tv_provider(value) do
+    case TvProvider.parse(value) do
       nil ->
         {:noreply, socket}
 
@@ -121,10 +129,6 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
         end
     end
   end
-
-  defp tv_provider("tvdb"), do: :tvdb
-  defp tv_provider("tmdb"), do: :tmdb
-  defp tv_provider(_), do: nil
 
   def back(_params, socket),
     do: {:noreply, update_fix_match(socket, step: :search, picked: nil)}

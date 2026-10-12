@@ -64,7 +64,7 @@ defmodule MydiaWeb.ImportMediaProviderToggleTest do
     open_match_search(view, lp, "Harbor Lights")
 
     assert has_element?(view, "#match-provider-toggle")
-    assert has_element?(view, "#match-provider-tvdb[checked]")
+    assert has_element?(view, "#match-provider-tvdb[aria-pressed=true]")
 
     view |> element("#match-provider-tmdb") |> render_click()
 

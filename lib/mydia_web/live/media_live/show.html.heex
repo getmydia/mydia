@@ -451,7 +451,7 @@
     <Modals.reidentify_modal provider={@reidentify_provider} candidates={@reidentify_candidates} />
   <% end %>
   <%= if @fix_match do %>
-    <Modals.fix_match_modal fix_match={@fix_match} media_item={@media_item} />
+    <FixMatchModal.fix_match_modal fix_match={@fix_match} media_item={@media_item} />
   <% end %>
   <%= if @find_file_target do %>
     <FindFileComponents.find_file_modal
