@@ -92,4 +92,41 @@ defmodule Mydia.SyncTest do
       assert Mydia.Sync.last_run("plugin:plex", "inst-1").id == run.id
     end
   end
+
+  describe "last_successful_run_started_at/3" do
+    setup do
+      {:ok,
+       user: Mydia.AccountsFixtures.user_fixture(), other: Mydia.AccountsFixtures.user_fixture()}
+    end
+
+    defp finished(user, status, started_at) do
+      {:ok, _} =
+        Sync.record_run(%{
+          provider: "jellyfin",
+          provider_instance_id: @instance,
+          user_id: user.id,
+          status: status,
+          started_at: started_at,
+          finished_at: started_at
+        })
+    end
+
+    test "is the newest finished :ok run for that user", %{user: user, other: other} do
+      older = ~U[2026-10-01 10:00:00Z]
+      newer = ~U[2026-10-02 10:00:00Z]
+      finished(user, :ok, older)
+      finished(user, :ok, newer)
+      finished(user, :error, ~U[2026-10-03 10:00:00Z])
+      finished(other, :ok, ~U[2026-10-04 10:00:00Z])
+
+      assert Sync.last_successful_run_started_at("jellyfin", @instance, user.id) == newer
+    end
+
+    test "ignores a run that has not finished", %{user: user} do
+      {:ok, _} =
+        Sync.start_run(%{provider: "jellyfin", provider_instance_id: @instance, user_id: user.id})
+
+      assert Sync.last_successful_run_started_at("jellyfin", @instance, user.id) == nil
+    end
+  end
 end

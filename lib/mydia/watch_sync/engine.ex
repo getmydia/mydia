@@ -29,8 +29,8 @@ defmodule Mydia.WatchSync.Engine do
     direction = Keyword.get(opts, :direction, :bidirectional)
 
     with :ok <- maybe_refresh(provider_mod, instance, provider, instance_id, opts),
-         cursor = cursor(user_scope.user_id, provider, instance_id),
-         {:ok, changes} <- provider_mod.list_changes(instance, user_scope, cursor) do
+         since = listing_since(user_scope.user_id, provider, instance_id),
+         {:ok, changes} <- provider_mod.list_changes(instance, user_scope, since) do
       {by_remote, by_content} = mapping_index(provider, instance_id)
       {mapped, unmapped} = Enum.split_with(changes, &Map.has_key?(by_remote, &1.remote_id))
       context = {provider, instance_id, origin, direction}
@@ -253,14 +253,36 @@ defmodule Mydia.WatchSync.Engine do
   # state, so a snapshot of watched keeps the item watched. Consequence: an
   # incremental run never unwatches a multi-copy item through a partial
   # listing; only a full listing (first sync) can.
+  #
+  # A listed copy that looks never played (unwatched, no position, no date)
+  # carries no state of its own while the snapshot is watched, so it is left
+  # out of the merge. A re-ided or freshly mapped copy reports blank, and a
+  # full listing (which a new mapping triggers) would otherwise read that as an
+  # unwatch and delete the local history. It still counts as listed: when every
+  # copy is listed, a dated unwatch on the others is the whole truth.
   defp remote_side(copies, remote_ids, state_row) do
-    merged = Reconciler.merge_remotes(copies)
     listed = copies |> Enum.map(& &1.remote_id) |> Enum.uniq() |> length()
 
-    if state_row && listed < length(remote_ids),
-      do: %{merged | watched: merged.watched or state_row.synced_watched},
-      else: merged
+    case drop_blank_copies(copies, state_row) do
+      [] ->
+        snapshot_side(state_row)
+
+      informative ->
+        merged = Reconciler.merge_remotes(informative)
+
+        if state_row && listed < length(remote_ids),
+          do: %{merged | watched: merged.watched or state_row.synced_watched},
+          else: merged
+    end
   end
+
+  defp drop_blank_copies(copies, %State{synced_watched: true}),
+    do: Enum.reject(copies, &blank_copy?/1)
+
+  defp drop_blank_copies(copies, _state_row), do: copies
+
+  defp blank_copy?(copy),
+    do: copy.watched == false and (copy.position_seconds || 0) == 0 and is_nil(copy.at)
 
   defp push_to_copies(provider_mod, instance, user_scope, remote_ids, resolved) do
     Enum.flat_map(remote_ids, fn remote_id ->
@@ -391,6 +413,33 @@ defmodule Mydia.WatchSync.Engine do
     (existing || %State{})
     |> State.changeset(attrs)
     |> Repo.insert_or_update()
+  end
+
+  # A copy mapped after its watch was listed counted as not_found on that run,
+  # and its watch date predates every later cursor, so an incremental listing
+  # never returns it again (#1097). Any mapping added since this user's last
+  # finished, successful run therefore forces one full listing. The marker is
+  # that run's start, not the cursor: the cursor only moves when a run writes
+  # state, so on a quiet library it would force a full listing every run. Using
+  # the start also catches mappings a concurrent crawl inserted mid-run, at the
+  # cost of one redundant full listing after any crawl that added mappings.
+  defp listing_since(user_id, provider, instance_id) do
+    case Mydia.Sync.last_successful_run_started_at(provider, instance_id, user_id) do
+      nil ->
+        nil
+
+      marker ->
+        if mappings_added_since?(provider, instance_id, marker),
+          do: nil,
+          else: cursor(user_id, provider, instance_id)
+    end
+  end
+
+  defp mappings_added_since?(provider, instance_id, marker) do
+    Mapping
+    |> where([m], m.provider == ^provider and m.provider_instance_id == ^instance_id)
+    |> where([m], m.inserted_at >= ^marker)
+    |> Repo.exists?()
   end
 
   # Overlap window applied to the incremental cursor.

@@ -53,6 +53,24 @@ defmodule Mydia.WatchSync.IncrementalTest do
     {:ok, _} = WatchSync.sync(CountingProvider, instance, scope, provider: "counting")
     assert_received {:since, nil}
 
+    # The job records a finished run per sync; the incremental listing keys off
+    # it, so settle one after the mappings it already knew about.
+    an_hour_ago = DateTime.utc_now() |> DateTime.add(-3600) |> DateTime.truncate(:second)
+    half_an_hour_ago = DateTime.add(an_hour_ago, 1800)
+
+    Mydia.WatchSync.Mapping
+    |> Mydia.Repo.update_all(set: [inserted_at: an_hour_ago])
+
+    {:ok, _} =
+      Mydia.Sync.record_run(%{
+        provider: "counting",
+        provider_instance_id: "inst-1",
+        user_id: user.id,
+        status: :ok,
+        started_at: half_an_hour_ago,
+        finished_at: half_an_hour_ago
+      })
+
     {:ok, _} = WatchSync.sync(CountingProvider, instance, scope, provider: "counting")
     # The second run asks only for changes since the last sync, and does not
     # re-crawl the library.
