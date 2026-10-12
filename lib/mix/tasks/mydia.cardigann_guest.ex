@@ -31,7 +31,12 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
   @impl Mix.Task
   def run(argv) do
     {opts, args} = OptionParser.parse!(argv, strict: [allow_missing: :boolean])
-    Mix.Task.run("app.config")
+    # Not app.config: that evaluates config/runtime.exs, which in a prod image
+    # build raises for the deployment variables (DATABASE_PATH, SECRET_KEY_BASE)
+    # a build has no value for. This task needs the code paths and the compile
+    # time config only.
+    Mix.Task.run("loadpaths")
+    Mix.Task.run("loadconfig")
     {:ok, _} = Application.ensure_all_started(:req)
 
     case args do
