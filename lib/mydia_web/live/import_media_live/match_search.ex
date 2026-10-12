@@ -113,13 +113,14 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearch do
       scope = socket.assigns.current_scope
 
       start_async(socket, :group_match_search, fn ->
-        result =
-          with {:ok, results} <- Metadata.search(config, query, opts) do
-            {:ok, RemoteFilter.filter(results, scope)}
-          end
-
-        {token, state.anchor_key, result}
+        {token, state.anchor_key, search(config, query, opts, scope)}
       end)
+    end
+  end
+
+  defp search(config, query, opts, scope) do
+    with {:ok, results} <- Metadata.search(config, query, opts) do
+      {:ok, RemoteFilter.filter(results, scope)}
     end
   end
 
