@@ -342,6 +342,12 @@ and remembers the one that worked. What it costs, measured on the Alpine image
   not decoded. The benchmark covers public definitions only; private-tracker
   logins were not measured.
 
+The gate that decided this: fidelity, coverage and regressions pass, latency
+passes with 24 ms to spare, the first-boot compile time and the memory under load
+do not, which is why it is opt-in. Builds from a commit whose guest has not been
+published yet have no pin; the engine then reports "no published Cardigann engine
+for this build" and the default engine is unaffected.
+
 ### Switching at runtime
 
 `Mydia.Indexers.Cardigann.EngineSwitcher` applies the setting without a restart
@@ -359,12 +365,6 @@ The Indexers tab shows which engines each definition is verified on, from
 `Mydia.Indexers.Cardigann.EngineSupport`. To refresh it, run
 `mix mydia.cardigann_bench` and paste the map at the end of its `bench.md` over
 `@verified`, then update `@verified_on`.
-
-The gate that decided this: fidelity, coverage and regressions pass, latency
-passes with 24 ms to spare, the first-boot compile time and the memory under load
-do not, which is why it is opt-in. Builds from a commit whose guest has not been
-published yet have no pin; the engine then reports "no published Cardigann engine
-for this build" and the default engine is unaffected.
 
 ## Measuring live compatibility
 

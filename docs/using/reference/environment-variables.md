@@ -117,7 +117,7 @@ name as `s3://<name>/<prefix>`.
 | `ENABLE_PLAYER` | Everything that serves the Mydia player: p2p remote access and pairing, streaming, offline downloads, intro and credits detection, and the player's pages and buttons | `true` |
 | `ENABLE_CARDIGANN` | Enable native Cardigann indexer support | `true` |
 | `CARDIGANN_ENGINE` | Pins which engine runs Cardigann definitions, `builtin` or `prowlarr`, and locks the choice on the Indexers page. Unset, the choice is made there (default `builtin`). Prowlarr's engine is experimental: it downloads about 39 MB and compiles, and uses more memory; see [Cardigann Indexers](../how-to/cardigann-indexers.md#using-prowlarrs-engine-experimental). Any other value stops startup | (unset) |
-| `CARDIGANN_WASM_PATH` | With `CARDIGANN_ENGINE=prowlarr`: path to a local `cardigann-<hash>.wasm`, for servers without internet access. Checked against the checksum built into the release | (unset) |
+| `CARDIGANN_WASM_PATH` | When the Prowlarr engine is selected (on the Indexers page or with `CARDIGANN_ENGINE=prowlarr`): path to a local `cardigann-<hash>.wasm`, for servers without internet access. Checked against the checksum built into the release | (unset) |
 | `ENABLE_IMPORT_LISTS` | Enable import lists for syncing external lists (TMDB watchlists, popular, etc.) | `true` |
 | `ENABLE_REMOTE_ACCESS` | P2P remote access for the player. Also a toggle under **Admin › System › Remote Access**; when the variable is set it wins and the toggle is locked | `true` |
 
