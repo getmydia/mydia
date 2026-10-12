@@ -21,7 +21,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :retesting_paused, :any, default: MapSet.new()
 
   def indexers_tab(assigns) do
-    # Read on every render so the line follows the engine from "downloading" to ready.
+    # Read on every render rather than at mount, so any re-render shows the current engine state.
     assigns = assign(assigns, :cardigann_engine_status, CardigannFeatureFlags.engine_status())
 
     ~H"""

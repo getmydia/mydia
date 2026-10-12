@@ -33,7 +33,7 @@ table does not hide:
 - **M5 cold start fails on a first boot**, by a factor of 3.6 on Alpine, and the
   first boot also peaks at about 1.55 to 1.59 GB of resident memory (`VmHWM`)
   while it compiles, then falls back to 490 to 500 MB. A container limited to
-  1 GB or 1.5 GB can be killed on that first boot. This is a caveat, not a gate
+  less than about 2 GB can be killed on that first boot. This is a caveat, not a gate
   item; the old gate did not measure the peak.
 - **M5 RSS fails under load.** Four concurrent searches take the BEAM from
   541 MB to 762 to 770 MB. The gate figure (steady state, pool warm) passes.
@@ -205,8 +205,7 @@ here is softened; the same list is in the user docs.
 
 The first run's M5 RSS cause (undiagnosed at the time) is transient Cranelift
 compile memory that glibc malloc keeps: the component compile peaks at about 1.1
-GB and `malloc_trim(0)` afterwards returns about 880 MB of it. Full numbers and
-method: `.superpowers/sdd/2026-10-11-cardigann-wasm-engine/memory-spike-report.md`.
+GB and `malloc_trim(0)` afterwards returns about 880 MB of it.
 
 | Variant (BEAM, `m5.exs`, 3 runs, 20 searches) | Delta MB, runs | Median |
 | --- | --- | --- |

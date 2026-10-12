@@ -52,7 +52,7 @@ It is opt-in because it costs something. Read this before turning it on:
 - **The first start downloads about 39 MB from GitHub and compiles it.** The
   compile takes about 18 s on the Alpine image and uses up to about 1.6 GB of
   memory while it runs, then settles at about 500 MB. A container limited to
-  1.5 GB or less can be killed during it. Cardigann searches fail with a message
+  less than about 2 GB can be killed during it. Cardigann searches fail with a message
   saying why until it finishes; the rest of Mydia is not held up. If the download
   fails, Mydia retries in the background.
 - **Later starts load the compiled copy in under a second.** It is kept in a
