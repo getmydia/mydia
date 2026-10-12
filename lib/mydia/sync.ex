@@ -85,6 +85,21 @@ defmodule Mydia.Sync do
     |> Repo.one()
   end
 
+  @doc """
+  When this user's newest finished, successful run on the instance started.
+
+  A run is inserted as `:ok` before it does any work, so an unfinished row
+  is excluded: it says nothing about what the sync has seen yet.
+  """
+  @spec last_successful_run_started_at(String.t(), String.t(), binary()) :: DateTime.t() | nil
+  def last_successful_run_started_at(provider, instance_id, user_id) do
+    Run
+    |> where([r], r.provider == ^provider and r.provider_instance_id == ^instance_id)
+    |> where([r], r.user_id == ^user_id and r.status == :ok and not is_nil(r.finished_at))
+    |> select([r], max(r.started_at))
+    |> Repo.one()
+  end
+
   @spec prune(pos_integer()) :: {integer(), nil}
   def prune(older_than_days) do
     cutoff =

@@ -25,6 +25,11 @@ defmodule Mydia.WatchSync.Providers.Jellyfin do
   `refresh_mappings/2` crawl (first sync for a mapping, or an explicit forced
   refresh) re-establishes every item, and any subsequent watch/resume on that
   item stamps a fresh `LastPlayedDate` and is picked up normally.
+
+  The same date filter would hide a copy mapped after its watch was listed:
+  its `LastPlayedDate` predates every later cursor. The engine covers that by
+  passing `since = nil` whenever mappings were added since the user's last
+  successful run (see `Mydia.WatchSync.Engine`).
   """
 
   @behaviour Mydia.WatchSync.Provider

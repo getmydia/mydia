@@ -29,8 +29,8 @@ defmodule Mydia.WatchSync.Engine do
     direction = Keyword.get(opts, :direction, :bidirectional)
 
     with :ok <- maybe_refresh(provider_mod, instance, provider, instance_id, opts),
-         cursor = cursor(user_scope.user_id, provider, instance_id),
-         {:ok, changes} <- provider_mod.list_changes(instance, user_scope, cursor) do
+         since = listing_since(user_scope.user_id, provider, instance_id),
+         {:ok, changes} <- provider_mod.list_changes(instance, user_scope, since) do
       {by_remote, by_content} = mapping_index(provider, instance_id)
       {mapped, unmapped} = Enum.split_with(changes, &Map.has_key?(by_remote, &1.remote_id))
       context = {provider, instance_id, origin, direction}
@@ -391,6 +391,33 @@ defmodule Mydia.WatchSync.Engine do
     (existing || %State{})
     |> State.changeset(attrs)
     |> Repo.insert_or_update()
+  end
+
+  # A copy mapped after its watch was listed counted as not_found on that run,
+  # and its watch date predates every later cursor, so an incremental listing
+  # never returns it again (#1097). Any mapping added since this user's last
+  # finished, successful run therefore forces one full listing. The marker is
+  # that run's start, not the cursor: the cursor only moves when a run writes
+  # state, so on a quiet library it would force a full listing every run. Using
+  # the start also catches mappings a concurrent crawl inserted mid-run, at the
+  # cost of one redundant full listing after any crawl that added mappings.
+  defp listing_since(user_id, provider, instance_id) do
+    case Mydia.Sync.last_successful_run_started_at(provider, instance_id, user_id) do
+      nil ->
+        nil
+
+      marker ->
+        if mappings_added_since?(provider, instance_id, marker),
+          do: nil,
+          else: cursor(user_id, provider, instance_id)
+    end
+  end
+
+  defp mappings_added_since?(provider, instance_id, marker) do
+    Mapping
+    |> where([m], m.provider == ^provider and m.provider_instance_id == ^instance_id)
+    |> where([m], m.inserted_at >= ^marker)
+    |> Repo.exists?()
   end
 
   # Overlap window applied to the incremental cursor.
