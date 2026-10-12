@@ -305,6 +305,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
   @impl true
   def init(opts) do
+    # Trapping exits makes a supervisor shutdown run terminate/2, which drops the
+    # compiled component: a stopped engine serves nothing.
+    Process.flag(:trap_exit, true)
     :persistent_term.erase(@key)
     eager = Keyword.get(opts, :eager, Application.get_env(:mydia, :cardigann_wasm_eager, true))
     state = %{status: :pending, waiters: [], task: nil, failures: 0, timer: nil, last_reason: nil}
@@ -346,6 +349,12 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     do: {:noreply, %{state | status: :compiling, timer: nil}, {:continue, :compile}}
 
   def handle_info(_message, state), do: {:noreply, state}
+
+  @impl true
+  def terminate(_reason, _state) do
+    :persistent_term.erase(@key)
+    :ok
+  end
 
   # A failed fetch or compile is tried again in the background, 30 s after the
   # first failure, doubling up to 30 minutes, until it works. A result tagged

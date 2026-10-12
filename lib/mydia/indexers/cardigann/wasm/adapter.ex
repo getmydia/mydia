@@ -93,10 +93,6 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   @deadline_margin_ms 2_000
   # A mirror is not started with less than this left of the deadline.
   @min_attempt_ms 2_000
-  # Left unspent of the search deadline, for persisting the result and replying.
-  @deadline_margin_ms 2_000
-  # A mirror is not started with less than this left of the deadline.
-  @min_attempt_ms 2_000
   @empty_session %{cookies: %{}, expires_at: nil}
 
   @impl true

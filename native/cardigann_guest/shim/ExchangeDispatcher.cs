@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using NzbDrone.Common.Http;
@@ -23,22 +25,30 @@ namespace Mydia.CardigannGuest.Shim
     // "the tracker has nothing" from "the tracker could not be asked".
     public sealed class RequestOutcome
     {
-        public bool Failed { get; private set; }
+        // Requests whose latest answer was a failure, in the order they failed. A
+        // request that is retried and then succeeds is taken off the list: only
+        // what upstream ends up swallowing counts.
+        private readonly List<(string Key, int? Status, bool Cloudflare)> _failures = new();
 
-        // The status of the last response of 400 or more, null when none was
-        // received (a transport failure, or no failure at all).
-        public int? FailedStatus { get; private set; }
+        public bool Failed => _failures.Count > 0;
+
+        // The status of the last failed response of 400 or more, null when none
+        // was received (a transport failure, or no failure at all).
+        public int? FailedStatus => _failures.LastOrDefault(f => f.Status.HasValue).Status;
 
         // A response that upstream's CloudFlareDetectionService calls a challenge.
-        public bool Cloudflare { get; private set; }
+        public bool Cloudflare => _failures.Any(f => f.Cloudflare);
 
-        public void MarkFailed() => Failed = true;
+        public void MarkFailed(string key) => Replace(key, null, false);
 
-        public void MarkResponse(int status, bool cloudflare)
+        public void MarkResponse(string key, int status, bool cloudflare) => Replace(key, status, cloudflare);
+
+        public void MarkSucceeded(string key) => _failures.RemoveAll(f => f.Key == key);
+
+        private void Replace(string key, int? status, bool cloudflare)
         {
-            Failed = true;
-            FailedStatus = status;
-            Cloudflare |= cloudflare;
+            MarkSucceeded(key);
+            _failures.Add((key, status, cloudflare));
         }
     }
 
@@ -55,6 +65,7 @@ namespace Mydia.CardigannGuest.Shim
 
         public Task<HttpResponse> GetResponseAsync(HttpRequest request, CookieContainer cookies)
         {
+            var key = request.Method + " " + request.Url.FullUri;
             RawResponse raw;
             try
             {
@@ -62,7 +73,7 @@ namespace Mydia.CardigannGuest.Shim
             }
             catch (Exception)
             {
-                _outcome.MarkFailed();
+                _outcome.MarkFailed(key);
                 throw;
             }
 
@@ -73,7 +84,11 @@ namespace Mydia.CardigannGuest.Shim
             // server error, raise a Cloudflare challenge, read a login error).
             if (raw.Status >= 400 || cloudflare)
             {
-                _outcome.MarkResponse(raw.Status, cloudflare);
+                _outcome.MarkResponse(key, raw.Status, cloudflare);
+            }
+            else
+            {
+                _outcome.MarkSucceeded(key);
             }
 
             return Task.FromResult(response);

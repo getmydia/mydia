@@ -490,6 +490,28 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
       assert Repo.reload!(definition).active_link == nil
     end
 
+    test "a transient 503 followed by an empty 200 is no results and does not fail over" do
+      test_pid = self()
+      calls = :counters.new(1, [])
+      first = Bypass.open()
+
+      Bypass.stub(first, "GET", "/search", fn conn ->
+        :counters.add(calls, 1, 1)
+        send(test_pid, {:hit, :flaky})
+
+        if :counters.get(calls, 1) == 1,
+          do: answer(conn, :unavailable),
+          else: answer(conn, :empty)
+      end)
+
+      second = mirror(:good)
+      definition = insert_mirrored([first, second])
+
+      assert {:ok, []} = Adapter.search(config(definition), "harbor")
+      assert hits() == [:flaky, :flaky]
+      assert Repo.reload!(definition).active_link == nil
+    end
+
     test "when every mirror is blocked the search is empty and no link is stored" do
       first = mirror(:cloudflare)
       second = mirror(:cloudflare)

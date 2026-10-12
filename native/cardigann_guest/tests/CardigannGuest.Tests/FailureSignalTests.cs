@@ -110,8 +110,24 @@ namespace Mydia.CardigannGuest.Tests
 
             Assert.Equal(2, result.Releases.Count);
             Assert.Equal(2, http.Seen.Count);
-            // The server error was seen, so the call reports it even though the retry worked.
-            Assert.Equal(503, result.FailedStatus);
+            // The retry worked, so nothing was swallowed.
+            Assert.False(result.RequestFailed);
+            Assert.Null(result.FailedStatus);
+        }
+
+        [Fact]
+        public void A_transient_503_followed_by_an_empty_200_is_no_results_not_a_failure()
+        {
+            var calls = 0;
+            var http = new FakeExchange().On("GET", "/search", _ =>
+                ++calls == 1 ? Status(503, "busy") : FakeExchange.Html("<html><body></body></html>"));
+
+            var result = Search(http);
+
+            Assert.Empty(result.Releases);
+            Assert.False(result.RequestFailed);
+            Assert.Null(result.FailedStatus);
+            Assert.Equal(2, http.Seen.Count);
         }
 
         [Fact]
