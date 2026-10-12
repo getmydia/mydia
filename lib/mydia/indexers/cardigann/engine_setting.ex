@@ -48,29 +48,32 @@ defmodule Mydia.Indexers.Cardigann.EngineSetting do
     if env_locked?(Keyword.get(opts, :getenv, &System.get_env/1)) do
       {:error, :env_locked}
     else
-      attrs = %{
-        key: @setting_key,
-        value: Atom.to_string(engine),
-        category: :cardigann,
-        updated_by_id: Keyword.get(opts, :updated_by_id)
-      }
+      persist(engine, opts)
+    end
+  end
 
-      reload = Keyword.get(opts, :reload, &Loader.reload/0)
+  defp persist(engine, opts) do
+    attrs = %{
+      key: @setting_key,
+      value: Atom.to_string(engine),
+      category: :cardigann,
+      updated_by_id: Keyword.get(opts, :updated_by_id)
+    }
 
-      result =
-        Repo.transaction(fn ->
-          with {:ok, _setting} <- Settings.upsert_config_setting(attrs),
-               {:ok, _config} <- reload.() do
-            :ok
-          else
-            {:error, reason} -> Repo.rollback(reason)
-          end
-        end)
+    reload = Keyword.get(opts, :reload, &Loader.reload/0)
 
-      case result do
-        {:ok, :ok} -> :ok
-        {:error, reason} -> {:error, reason}
-      end
+    case Repo.transaction(fn -> upsert_and_reload(attrs, reload) end) do
+      {:ok, :ok} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp upsert_and_reload(attrs, reload) do
+    with {:ok, _setting} <- Settings.upsert_config_setting(attrs),
+         {:ok, _config} <- reload.() do
+      :ok
+    else
+      {:error, reason} -> Repo.rollback(reason)
     end
   end
 end

@@ -261,7 +261,7 @@ defmodule Mydia.Config.Loader do
       logging: load_logging_env(),
       oban: load_oban_env(),
       flaresolverr: load_flaresolverr_env(),
-      cardigann: load_cardigann_env(),
+      cardigann: Mydia.Config.Env.CardigannEnv.load(),
       remote_access: load_remote_access_env(),
       download_clients: load_download_clients_env(),
       indexers: load_indexers_env(),
@@ -405,10 +405,6 @@ defmodule Mydia.Config.Loader do
     |> put_if_present(:max_age_days, System.get_env("OBAN_MAX_AGE_DAYS"), &parse_integer/1)
   end
 
-  defp load_cardigann_env do
-    load_env_table(engine: {"CARDIGANN_ENGINE", &parse_cardigann_engine/1})
-  end
-
   defp load_flaresolverr_env do
     load_env_table(
       enabled: {"FLARESOLVERR_ENABLED", &parse_boolean/1},
@@ -431,12 +427,7 @@ defmodule Mydia.Config.Loader do
   # listener on the internet, so a typo has to fail validation by name instead
   # of falling back to the default, which is on.
   defp load_remote_access_env do
-    %{}
-    |> put_if_present(
-      :enabled,
-      System.get_env("ENABLE_REMOTE_ACCESS"),
-      &parse_boolean_or_invalid/1
-    )
+    load_env_table(enabled: {"ENABLE_REMOTE_ACCESS", &parse_boolean_or_invalid/1})
   end
 
   defp load_download_clients_env do
@@ -950,17 +941,6 @@ defmodule Mydia.Config.Loader do
   end
 
   defp parse_atom(_), do: :error
-
-  # A dedicated fixed-enum parser (parse_atom/1 mints atoms). An unknown value
-  # becomes :invalid so validation rejects it by name instead of the setting
-  # silently falling back to :builtin.
-  defp parse_cardigann_engine(value) when is_binary(value) do
-    case value |> String.trim() |> String.downcase() do
-      "builtin" -> {:ok, :builtin}
-      "prowlarr" -> {:ok, :prowlarr}
-      _unrecognised -> {:ok, :invalid}
-    end
-  end
 
   # A fixed enum rather than parse_atom/1, which falls back to
   # String.to_atom/1 and would mint an atom from an environment variable.

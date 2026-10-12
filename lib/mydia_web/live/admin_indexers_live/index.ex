@@ -6,25 +6,19 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   alias Mydia.Indexers
   alias Mydia.Indexers.Health, as: IndexerHealth
   alias Mydia.Indexers.CardigannFeatureFlags
-  alias Mydia.Indexers.Cardigann.EngineSwitcher
   alias Mydia.Indexers.FlareSolverr
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
-  alias MydiaWeb.AdminIndexersLive.CardigannEngineComponents
-  alias MydiaWeb.AdminIndexersLive.LoginFlow
+  alias MydiaWeb.AdminIndexersLive.{CardigannEngineEvents, ErrorMessages, LoginFlow}
   alias MydiaWeb.IndexerComponents
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket) and CardigannFeatureFlags.enabled?(),
-      do: Phoenix.PubSub.subscribe(Mydia.PubSub, EngineSwitcher.topic())
-
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Indexers")
      |> assign(:cardigann_enabled, CardigannFeatureFlags.enabled?())
-     |> load_cardigann_engine()
      |> assign(:flaresolverr_status, %{configured: false, status: :loading})
      |> assign(:show_flaresolverr_modal, false)
      |> assign(:flaresolverr_sources, %{})
@@ -33,22 +27,13 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> assign(:retesting_paused, MapSet.new())
      |> load_data()
      |> maybe_load_flaresolverr_status()
+     |> CardigannEngineEvents.attach()
      |> LoginFlow.attach()}
   end
 
   @impl true
   def handle_params(_params, _url, socket) do
     {:noreply, socket}
-  end
-
-  defp load_cardigann_engine(socket) do
-    if socket.assigns.cardigann_enabled do
-      socket
-      |> assign(:cardigann_engine, EngineSwitcher.status())
-      |> assign(:cardigann_cache_bytes, EngineSwitcher.cache_bytes())
-    else
-      assign(socket, cardigann_engine: nil, cardigann_cache_bytes: 0)
-    end
   end
 
   ## Handle info callbacks
@@ -76,7 +61,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
           socket
           |> assign(:library_syncing, false)
-          |> put_flash(:error, "Sync failed: #{format_sync_error(reason)}")
+          |> put_flash(:error, "Sync failed: #{ErrorMessages.format_sync_error(reason)}")
       end
 
     {:noreply, reload_library_indexers(socket)}
@@ -110,14 +95,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   end
 
   @impl true
-  def handle_info({:cardigann_engine, status}, socket) do
-    {:noreply,
-     socket
-     |> assign(:cardigann_engine, status)
-     |> assign(:cardigann_cache_bytes, EngineSwitcher.cache_bytes())}
-  end
-
-  @impl true
   def handle_async({:retest_paused, id}, {:ok, result}, socket) do
     {kind, message} = IndexerComponents.retest_flash(result)
     {:noreply, finish_retest(socket, id) |> put_flash(kind, message)}
@@ -134,58 +111,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     # Only the list and health: a retest can run for many seconds, and a full
     # load_data/1 would close any modal the user opened meanwhile.
     |> assign_indexers_and_health()
-  end
-
-  ## Cardigann engine events
-
-  @cardigann_engine_events [
-    "switch_cardigann_engine",
-    "retry_cardigann_engine",
-    "remove_cardigann_engine_cache"
-  ]
-
-  @impl true
-  # The switcher is not started while Cardigann is disabled, so a stray event is ignored.
-  def handle_event(event, _params, %{assigns: %{cardigann_enabled: false}} = socket)
-      when event in @cardigann_engine_events do
-    {:noreply, socket}
-  end
-
-  def handle_event("switch_cardigann_engine", %{"engine" => engine}, socket)
-      when engine in ["builtin", "prowlarr"] do
-    engine = String.to_existing_atom(engine)
-
-    case EngineSwitcher.switch(engine, updated_by_id: socket.assigns.current_user.id) do
-      :ok ->
-        {:noreply, load_cardigann_engine(socket)}
-
-      {:error, :env_locked} ->
-        {:noreply, put_flash(socket, :error, "The engine is set by CARDIGANN_ENGINE")}
-
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Could not switch engine: #{inspect(reason)}")}
-    end
-  end
-
-  def handle_event("retry_cardigann_engine", _params, socket) do
-    EngineSwitcher.retry_now()
-    {:noreply, socket}
-  end
-
-  def handle_event("remove_cardigann_engine_cache", _params, socket) do
-    case EngineSwitcher.remove_cache() do
-      {:ok, bytes} ->
-        {:noreply,
-         socket
-         |> put_flash(
-           :info,
-           "Removed the cached Prowlarr engine (#{CardigannEngineComponents.format_mb(bytes)})"
-         )
-         |> load_cardigann_engine()}
-
-      {:error, :in_use} ->
-        {:noreply, put_flash(socket, :error, "The Prowlarr engine is in use")}
-    end
   end
 
   ## Indexer Events
@@ -1242,7 +1167,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     put_flash(
       socket,
       :error,
-      "FlareSolverr connection failed: #{format_transport_reason(reason)}"
+      "FlareSolverr connection failed: #{ErrorMessages.format_transport_reason(reason)}"
     )
   end
 
@@ -1258,11 +1183,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
     put_flash(socket, :error, "FlareSolverr test failed: #{inspect(reason)}")
   end
-
-  # Transport reasons are usually atoms (:econnrefused, :timeout) but can be
-  # tuples, such as a TLS alert, which string interpolation cannot render.
-  defp format_transport_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
-  defp format_transport_reason(reason), do: inspect(reason)
 
   defp init_library_assigns(socket) do
     socket
@@ -1435,14 +1355,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         end
     end
   end
-
-  defp format_sync_error(:rate_limit_exceeded),
-    do: "GitHub API rate limit exceeded. Try again later."
-
-  defp format_sync_error(:not_found), do: "Repository or definitions path not found."
-  defp format_sync_error({:unexpected_status, status}), do: "Unexpected HTTP status: #{status}"
-  defp format_sync_error(reason) when is_binary(reason), do: reason
-  defp format_sync_error(reason), do: inspect(reason)
 
   # A search that reached the site but parsed nothing is neither a success nor
   # an outage, and flattening it into "Connection successful" is what let five
