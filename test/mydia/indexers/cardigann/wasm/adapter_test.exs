@@ -205,7 +205,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
                Repo.all(CardigannSearchSession)
 
       assert row.cardigann_definition_id == definition.id
-      assert row.expires_at
+      assert row.expires_at == nil
 
       assert {:ok, [_]} = Adapter.search(config(definition, creds), "copper")
       refute_received :login_page
@@ -242,8 +242,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
       assert {:ok, [_]} = Adapter.search(config(definition, creds), "copper")
       refute_received {:session_write, _}
 
-      # An expired stored session is replaced by a fresh login: a write, and
-      # in place rather than a second row.
+      # An expired stored session (one the Elixir engine would also drop) is
+      # replaced by a fresh login: an upsert, in place rather than a second row.
       [row] = Repo.all(CardigannSearchSession)
 
       row
@@ -253,10 +253,38 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
       |> Repo.update!()
 
       assert {:ok, [_]} = Adapter.search(config(definition, creds), "copper")
-      assert_received {:session_write, "UPDATE"}
+      assert_received {:session_write, "INSERT"}
       assert_received :login_page
-      assert [%{expires_at: expires_at}] = Repo.all(CardigannSearchSession)
-      assert DateTime.compare(expires_at, DateTime.utc_now()) == :gt
+      assert [%{expires_at: nil}] = Repo.all(CardigannSearchSession)
+    end
+
+    test "a needs_login definition is skipped, and a stored login clears it", %{bypass: b} do
+      stub_quill(b)
+      definition = insert_definition("quill-login.yml", b)
+
+      {:ok, definition} =
+        definition
+        |> CardigannDefinition.health_check_changeset(%{health_status: "needs_login"})
+        |> Repo.update()
+
+      creds = %{"username" => "reader", "password" => "secret"}
+
+      for result <- [
+            ElixirAdapter.search(config(definition, creds), "copper"),
+            Adapter.search(config(definition, creds), "copper"),
+            Adapter.download(config(definition, creds), "http://localhost/x")
+          ] do
+        assert {:error, %Error{type: :login_required}} = result
+      end
+
+      assert {:error, %Error{type: :login_required}} =
+               Adapter.test_connection(config(definition, creds))
+
+      assert Repo.all(CardigannSearchSession) == []
+
+      assert {:ok, _} = Adapter.login(config(definition, creds), nil)
+      assert Repo.get!(CardigannDefinition, definition.id).health_status == "healthy"
+      assert {:ok, [_]} = Adapter.search(config(definition, creds), "copper")
     end
 
     test "a failed login stores nothing", %{bypass: b} do

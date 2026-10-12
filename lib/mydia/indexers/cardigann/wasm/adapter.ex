@@ -20,11 +20,17 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   ## Sessions
 
   The guest keeps its cookies in a session handed in and out of each call. The
-  stored session is the latest `cardigann_search_sessions` row (the same row the
-  Elixir path and `CardigannAuth.get_stored_session/1` read: `"name=value"`
-  strings). Prowlarr updates its cookies after every fetch, so the guest reports
-  a changed session on every search; the row is written only when the cookies or
-  expiry actually differ from what was passed in.
+  stored session is the definition's single `cardigann_search_sessions` row, read
+  and written only through `CardigannAuth.get_stored_session/1` and
+  `store_session/3` (`"name=value"` strings; the Elixir engine reads the same
+  row). There is no fixed expiry: the row is stored with a nil expiry.
+  Prowlarr updates its cookies after every fetch, so the guest reports a changed
+  session on every search; the row is written only when the cookies or expiry
+  differ from what was passed in (the guest's rolling expiry is ignored). A definition in `needs_login` (set by the
+  Elixir engine when a login needs a person) is skipped with a `:login_required`
+  error by `search/3`, `test_connection/1` and `download/3`, as the Elixir
+  adapter skips it; `login/2` is exempt, and storing a session through it moves
+  the definition back to healthy.
 
   ## Failed logins
 
@@ -44,24 +50,20 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   alias Mydia.Indexers.Cardigann.AdapterSupport
   alias Mydia.Indexers.Cardigann.Wasm.Engine
   alias Mydia.Indexers.{CardigannAuth, CardigannDefinition, CardigannFeatureFlags}
-  alias Mydia.Indexers.CardigannSearchSession
+  alias Mydia.Indexers.Cardigann.SessionManager
   alias Mydia.Repo
 
   import AdapterSupport,
     only: [apply_search_filters: 2, blank?: 1, fetch_definition: 1, setting: 2]
 
-  import Ecto.Query, only: [from: 2]
-
   @default_timeout_ms 60_000
-  # CardigannAuth's default session lifetime, for a session whose cookies carry
-  # no expiry of their own.
-  @default_session_ttl 7 * 24 * 60 * 60
   @empty_session %{cookies: %{}, expires_at: nil}
 
   @impl true
   def test_connection(config) do
     if CardigannFeatureFlags.enabled?() do
       with {:ok, definition, doc} <- load(config),
+           :ok <- check_login_needed(definition, doc),
            session = stored_session(definition),
            {:ok, new_session} <-
              run(
@@ -91,6 +93,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   def search(config, query, opts \\ []) do
     if CardigannFeatureFlags.enabled?() do
       with {:ok, definition, doc} <- load(config),
+           :ok <- check_login_needed(definition, doc),
            session = stored_session(definition),
            call =
              {:search, definition.definition, guest_settings(definition, config, doc),
@@ -123,6 +126,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   def download(config, link, opts \\ []) do
     if CardigannFeatureFlags.enabled?() do
       with {:ok, definition, doc} <- load(config),
+           :ok <- check_login_needed(definition, doc),
            session = stored_session(definition),
            call =
              {:download, definition.definition, guest_settings(definition, config, doc), link,
@@ -385,41 +389,61 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
       :ok
   end
 
-  defp session_changed?(%{cookies: new_cookies} = new, %{cookies: old_cookies} = old) do
-    # A nil expiry from the guest means "no expiry of its own", not "changed":
-    # the stored row always has one (the default lifetime), so only a concrete
-    # expiry that differs counts.
-    new_cookies != old_cookies or
-      (new.expires_at != nil and not same_instant?(new.expires_at, old.expires_at))
-  end
-
-  defp same_instant?(_a, nil), do: false
-  defp same_instant?(a, b), do: DateTime.compare(a, b) == :eq
+  # Only the cookies count. Prowlarr hands back a rolling expiry (now plus its
+  # default lifetime) on every fetch, so comparing expiries would rewrite the row
+  # on every search; and Mydia keeps no fixed expiry, so none is stored.
+  defp session_changed?(%{cookies: new_cookies}, %{cookies: old_cookies}),
+    do: new_cookies != old_cookies
 
   defp write_session(_definition, %{cookies: cookies}) when map_size(cookies) == 0, do: :ok
 
-  defp write_session(definition, %{cookies: cookies, expires_at: expires_at}) do
+  # One row per definition, no fixed expiry: `store_session/3` upserts with a nil
+  # expiry, so the session lives until the tracker stops honoring it. A definition waiting on a
+  # person (`needs_login`) is moved back to healthy, as `SessionManager.store/2`
+  # does for the Elixir engine.
+  defp write_session(definition, %{cookies: cookies}) do
     pairs = cookies |> Enum.sort() |> Enum.map(fn {name, value} -> "#{name}=#{value}" end)
 
-    case latest_session_row(definition.id) do
-      nil ->
-        CardigannAuth.store_session(definition.id, pairs, expires_at)
+    case CardigannAuth.store_session(definition.id, pairs, nil) do
+      {:ok, _row} ->
+        clear_needs_login(definition)
 
-      %CardigannSearchSession{} = row ->
-        expires_at = expires_at || DateTime.add(DateTime.utc_now(), @default_session_ttl, :second)
-
-        row
-        |> CardigannSearchSession.changeset(%{cookies: pairs, expires_at: expires_at})
-        |> Repo.update()
+      {:error, _changeset} ->
+        Logger.warning("Cardigann #{definition.indexer_id}: could not save the login session")
+        :ok
     end
   end
 
-  defp latest_session_row(definition_id) do
-    Repo.one(
-      from s in CardigannSearchSession,
-        where: s.cardigann_definition_id == ^definition_id,
-        order_by: [desc: s.updated_at],
-        limit: 1
+  defp clear_needs_login(%CardigannDefinition{health_status: "needs_login"} = definition) do
+    definition
+    |> CardigannDefinition.health_check_changeset(%{
+      health_status: "healthy",
+      last_health_check_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+    |> Repo.update()
+
+    Phoenix.PubSub.broadcast(
+      Mydia.PubSub,
+      SessionManager.topic(),
+      {:cardigann_health_changed, definition.id}
     )
+
+    :ok
   end
+
+  defp clear_needs_login(_definition), do: :ok
+
+  # Same gate the Elixir engine applies in `SessionManager.user_config/2`: a
+  # definition with a login block that is waiting on a person is skipped, not
+  # searched anonymously.
+  defp check_login_needed(%CardigannDefinition{health_status: "needs_login"} = definition, doc) do
+    if is_map(doc["login"]) do
+      {:error,
+       Error.login_required("#{definition.name} needs someone to log in from the Indexers page")}
+    else
+      :ok
+    end
+  end
+
+  defp check_login_needed(_definition, _doc), do: :ok
 end
