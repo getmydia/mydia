@@ -161,43 +161,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
   end
 
   @impl true
-  def handle_event(
-        "update_select_setting",
-        %{"key" => key, "category" => category, "value" => value},
-        socket
-      ) do
-    category_atom = category_string_to_atom(category)
-
-    changeset =
-      validate_config_setting(%{
-        key: key,
-        value: value,
-        category: category_atom
-      })
-
-    if changeset.valid? do
-      validated_data = Ecto.Changeset.apply_changes(changeset)
-
-      validated_data_with_user =
-        Map.put(validated_data, :updated_by_id, socket.assigns.current_user.id)
-
-      case Settings.upsert_config_setting(validated_data_with_user) do
-        {:ok, _setting} ->
-          {:noreply, after_config_write(socket, "Setting updated successfully")}
-
-        {:error, _changeset} ->
-          {:noreply,
-           socket
-           |> put_flash(:error, "Failed to update setting")}
-      end
-    else
-      {:noreply,
-       socket
-       |> put_flash(:error, "Invalid setting value")}
-    end
-  end
-
-  @impl true
   def handle_event("save_language_settings", params, socket) do
     case LanguageSettings.save(params, socket.assigns.current_user.id) do
       {:ok, []} ->
