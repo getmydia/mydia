@@ -1,0 +1,162 @@
+diff -ru a/lib/wasmex/components/component.ex b/lib/wasmex/components/component.ex
+--- a/lib/wasmex/components/component.ex
++++ b/lib/wasmex/components/component.ex
+@@ -45,4 +45,18 @@
+       resource -> {:ok, __wrap_resource__(resource)}
+     end
+   end
++
++  @doc """
++  Mydia patch: loads a component serialized by `Wasmex.Engine.precompile_component_to_file/3`
++  by mmapping `path`. `component_bytes` is the original component, read only for its WIT shape.
++  The file must come from the same wasmtime version, architecture, CPU features and engine config.
++  """
++  def deserialize_file(store_or_caller, path, component_bytes) do
++    %{resource: store_or_caller_resource} = store_or_caller
++
++    case Wasmex.Native.component_deserialize_file(store_or_caller_resource, path, component_bytes) do
++      {:error, err} -> {:error, err}
++      resource -> {:ok, __wrap_resource__(resource)}
++    end
++  end
+ end
+diff -ru a/lib/wasmex/engine.ex b/lib/wasmex/engine.ex
+--- a/lib/wasmex/engine.ex
++++ b/lib/wasmex/engine.ex
+@@ -66,6 +66,25 @@
+     engine
+   end
+ 
++  @doc """
++  Mydia patch: returns freed heap pages to the OS (glibc `malloc_trim(0)`).
++  False where that is not available (musl, non-Linux) or nothing was released.
++  """
++  @spec malloc_trim() :: boolean()
++  def malloc_trim, do: Wasmex.Native.malloc_trim()
++
++  @doc """
++  Mydia patch: AOT-compiles a component and writes the serialized artifact to `out_path`.
++  Load it with `Wasmex.Components.Component.deserialize_file/3`.
++  """
++  @spec precompile_component_to_file(__MODULE__.t(), binary(), Path.t()) :: :ok | {:error, binary()}
++  def precompile_component_to_file(%__MODULE__{resource: resource}, bytes, out_path) do
++    case Wasmex.Native.engine_precompile_component_to_file(resource, bytes, out_path) do
++      {:error, err} -> {:error, err}
++      :ok -> :ok
++    end
++  end
++
+   @doc ~S"""
+   Ahead-of-time (AOT) compiles a WebAssembly module.
+ 
+diff -ru a/lib/wasmex/native.ex b/lib/wasmex/native.ex
+--- a/lib/wasmex/native.ex
++++ b/lib/wasmex/native.ex
+@@ -28,6 +28,8 @@
+ 
+   def engine_new(_engine_config), do: error()
+   def engine_precompile_module(_engine_resource, _bytes), do: error()
++  def malloc_trim(), do: error()
++  def engine_precompile_component_to_file(_engine_resource, _bytes, _out_path), do: error()
+ 
+   def module_compile(_store_or_caller_resource, _bytes), do: error()
+   def module_exports(_module_resource), do: error()
+@@ -109,6 +111,7 @@
+   def store_or_caller_set_fuel(_store_or_caller_resource, _fuel, _from), do: error()
+ 
+   def component_new(_store, _component_bytes), do: error()
++  def component_deserialize_file(_store, _path, _component_bytes), do: error()
+   def component_instance_new(_store, _component, _imports, _from), do: error()
+ 
+   def component_call_function(
+diff -ru a/native/wasmex/Cargo.toml b/native/wasmex/Cargo.toml
+--- a/native/wasmex/Cargo.toml
++++ b/native/wasmex/Cargo.toml
+@@ -23,3 +23,6 @@
+ wasmtime-wasi-http = "47.0.2"
+ wat = "1.254.0"
+ wit-parser = "0.255.0"
++
++[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
++libc = "0.2"
+diff -ru a/native/wasmex/src/component.rs b/native/wasmex/src/component.rs
+--- a/native/wasmex/src/component.rs
++++ b/native/wasmex/src/component.rs
+@@ -47,3 +47,33 @@
+         parsed: Arc::new(parsed_component),
+     }))
+ }
++
++fn parse_component(bytes: &[u8]) -> NifResult<ParsedComponent> {
++    let decoded_wasm = wit_parser::decoding::decode(bytes)
++        .map_err(|e| Error::Term(Box::new(format!("Unable to decode WASM: {e}"))))?;
++    match decoded_wasm {
++        DecodedWasm::WitPackage(_, _) => Err(rustler::Error::RaiseAtom("Only components are supported")),
++        DecodedWasm::Component(resolve, world_id) => Ok(ParsedComponent { world_id, resolve }),
++    }
++}
++
++/// Mydia patch: loads a component serialized by `engine_precompile_component`
++/// by mmapping the file. `component_binary` is the original component, read
++/// only for its WIT shape; it is not compiled.
++#[rustler::nif(name = "component_deserialize_file", schedule = "DirtyCpu")]
++pub fn deserialize_component_file(
++    store_or_caller_resource: ResourceArc<ComponentStoreResource>,
++    path: String,
++    component_binary: Binary,
++) -> NifResult<ResourceArc<ComponentResource>> {
++    let executor = store_or_caller_resource.executor()?;
++    let parsed_component = parse_component(component_binary.as_slice())?;
++    // SAFETY: the caller promises the file was produced by precompile with a compatible engine config.
++    let component = unsafe { Component::deserialize_file(executor.engine(), &path) }
++        .map_err(|err| rustler::Error::Term(Box::new(err.to_string())))?;
++
++    Ok(ResourceArc::new(ComponentResource {
++        inner: Mutex::new(component),
++        parsed: Arc::new(parsed_component),
++    }))
++}
+diff -ru a/native/wasmex/src/engine.rs b/native/wasmex/src/engine.rs
+--- a/native/wasmex/src/engine.rs
++++ b/native/wasmex/src/engine.rs
+@@ -104,6 +104,40 @@
+     Ok(binary.release(env))
+ }
+ 
++/// Mydia patch: asks glibc to return freed heap pages to the OS. Compiling a
++/// large component leaves the process holding about a GB of freed arena memory.
++#[rustler::nif(name = "malloc_trim")]
++pub fn malloc_trim() -> bool {
++    #[cfg(all(target_os = "linux", target_env = "gnu"))]
++    {
++        unsafe { libc::malloc_trim(0) != 0 }
++    }
++    #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
++    {
++        false
++    }
++}
++
++/// Mydia patch: AOT-compiles a component and writes the serialized artifact to `out_path`.
++#[rustler::nif(name = "engine_precompile_component_to_file", schedule = "DirtyCpu")]
++pub fn precompile_component_to_file(
++    engine_resource: ResourceArc<EngineResource>,
++    binary: Binary,
++    out_path: String,
++) -> Result<rustler::Atom, rustler::Error> {
++    let engine: Engine = engine_resource
++        .inner
++        .lock()
++        .map_err(|e| rustler::Error::Term(Box::new(format!("Could not unlock engine resource: {e}"))))?
++        .clone();
++    let serialized = engine
++        .precompile_component(binary.as_slice())
++        .map_err(|err| rustler::Error::Term(Box::new(format!("Could not precompile component: {err}"))))?;
++    std::fs::write(&out_path, &serialized)
++        .map_err(|err| rustler::Error::Term(Box::new(format!("Could not write {out_path}: {err}"))))?;
++    Ok(rustler::types::atom::ok())
++}
++
+ pub(crate) fn engine_config(engine_config: ExEngineConfig) -> Config {
+     let backtrace_details = match engine_config.wasm_backtrace_details {
+         true => WasmBacktraceDetails::Enable,

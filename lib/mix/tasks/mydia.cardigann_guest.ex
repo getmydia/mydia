@@ -56,8 +56,16 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
           {:error, reason} -> Mix.raise("Cardigann guest #{reason}: #{target()}")
         end
 
+      ["precompile"] ->
+        case precompile() do
+          :ok -> Mix.shell().info("Cardigann guest precompiled: #{target()}.cwasm")
+          {:error, reason} -> Mix.raise("Cardigann guest precompile failed: #{inspect(reason)}")
+        end
+
       _ ->
-        Mix.raise("usage: mix mydia.cardigann_guest hash | fetch | verify [--allow-missing]")
+        Mix.raise(
+          "usage: mix mydia.cardigann_guest hash | fetch | precompile | verify [--allow-missing]"
+        )
     end
   end
 
@@ -72,6 +80,24 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
     case Artifact.load(target) do
       {:ok, _} -> :ok
       _ -> download_or_copy(target)
+    end
+  end
+
+  @doc """
+  Writes `<artifact>.cwasm`, the artifact compiled ahead of time for this
+  machine's wasmtime, CPU and the engine's default config, which
+  `Mydia.Indexers.Cardigann.Wasm.Engine` loads instead of compiling. Run it
+  where the artifact will run (the Docker build does): it is not portable.
+  """
+  def precompile do
+    target = target()
+
+    with {:ok, bytes} <- Artifact.load(target) do
+      Wasmex.Engine.precompile_component_to_file(
+        Wasmex.Engine.default(),
+        bytes,
+        target <> ".cwasm"
+      )
     end
   end
 

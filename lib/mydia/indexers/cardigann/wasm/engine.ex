@@ -279,20 +279,48 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   def handle_call(:available, _from, %{status: status} = state),
     do: {:reply, status == :ready, state}
 
+  # Prefers the precompiled `<artifact>.cwasm` (mmapped, no Cranelift run) and
+  # falls back to compiling the .wasm when it is absent or rejected: it is tied
+  # to the wasmtime version, CPU architecture and engine config. Its own
+  # function, so the 75 MB artifact binary is out of every frame afterwards.
+  defp load_component(store) do
+    with {:ok, bytes} <- Artifact.load() do
+      cwasm = Artifact.path() <> ".cwasm"
+
+      with true <- Application.get_env(:mydia, :cardigann_wasm_precompiled, true),
+           true <- File.regular?(cwasm),
+           {:ok, component} <- Components.Component.deserialize_file(store, cwasm, bytes) do
+        {:ok, component, "loaded precompiled"}
+      else
+        _ ->
+          with {:ok, component} <- Components.Component.new(store, bytes),
+               do: {:ok, component, "compiled"}
+      end
+    end
+  end
+
+  # Compiling leaves about a GB of freed memory in glibc's arenas, which glibc
+  # does not hand back by itself (native/cardigann_guest/BENCH.md, "Memory spike").
+  defp release_build_memory do
+    :erlang.garbage_collect()
+    if Application.get_env(:mydia, :cardigann_wasm_trim, true), do: Wasmex.Engine.malloc_trim()
+    :ok
+  end
+
   defp compile do
     started = System.monotonic_time()
     # Test seam: lets a test observe a call that gives up while compiling.
     Process.sleep(Application.get_env(:mydia, :cardigann_wasm_compile_delay_ms, 0))
 
-    with {:ok, bytes} <- Artifact.load(),
-         engine = Wasmex.Engine.default(),
+    with engine = Wasmex.Engine.default(),
          {:ok, store} <- Components.Store.new_wasi(wasi(), nil, engine),
-         {:ok, component} <- Components.Component.new(store, bytes) do
+         {:ok, component, how} <- load_component(store) do
       # The compile store stays referenced alongside the component.
       :persistent_term.put(@key, %{engine: engine, component: component, store: store})
+      release_build_memory()
 
       Logger.info(
-        "Cardigann wasm engine ready (compiled in #{native_to_ms(System.monotonic_time() - started)} ms)"
+        "Cardigann wasm engine ready (#{how} in #{native_to_ms(System.monotonic_time() - started)} ms)"
       )
 
       :ready

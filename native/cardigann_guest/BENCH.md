@@ -103,6 +103,36 @@ Methods.
   takes a median 32.7 ms and a one-request `search` 31.0 ms on an idle machine:
   that is the cost of a fresh sandboxed instance per call.
 
+## Memory spike
+
+The M5 RSS cause (undiagnosed above) is transient Cranelift compile memory that
+glibc malloc keeps: the component compile peaks at about 1.1 GB and `malloc_trim(0)`
+afterwards returns about 880 MB of it. Full numbers and method:
+`.superpowers/sdd/2026-10-11-cardigann-wasm-engine/memory-spike-report.md`.
+
+| Variant (BEAM, `m5.exs`, 3 runs, 20 searches) | Delta MB, runs | Median |
+| --- | --- | --- |
+| `Component.new`, no trim (the gating setup, re-measured) | 954.4, 951.0, 964.7 | 954.4 |
+| `Component.new` + `malloc_trim(0)` | 180.0, 183.1, 180.4 | 180.4 |
+| precompiled `.cwasm` via `Component::deserialize_file` + trim | 114.0, 112.0, 113.9 | 113.9 |
+
+Standalone wasmtime 47.0.2, a fresh process loading the `.cwasm`: 21.9 MB RSS (4.8 MB
+anonymous) after `deserialize_file` (7.8 ms), 72.4 MB after 20 search cycles, almost
+all of it file-backed code pages. The `.cwasm` is 119,052,152 B against the 74,938,817 B
+`.wasm`. Compile at boot takes 3.8 s on glibc and 18 s on musl (standalone binary);
+loading the `.cwasm` takes 83-92 ms in the BEAM.
+
+Wasmex 0.15.1 has no component precompile or deserialize, so this spike carries
+`patches/wasmex/component-precompile-and-deserialize.patch` (`@dep_patches` in
+`mix.exs`; it needs a source build of Wasmex, `WASMEX_BUILD=1`). `Engine` loads
+`<artifact>.cwasm` when present (`mix mydia.cardigann_guest precompile` writes it),
+falls back to compiling, then trims. The `.cwasm` is tied to the wasmtime version, the
+architecture and the CPU features of the machine that built it, so it must be built
+where the image runs (the Dockerfile builder stage, per architecture), never shipped as
+a release asset. It adds 119 MB to the image on top of the 75 MB `.wasm` (M5 image item
+is worse, not better). The production image is Alpine (musl), where `malloc_trim` does
+not exist and the BEAM was not measured.
+
 ## Triage record
 
 Every definition on which the wasm engine disagreed with Prowlarr in the
