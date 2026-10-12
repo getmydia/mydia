@@ -15,8 +15,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
 
     Application.put_env(:mydia, :cardigann_wasm_path, missing)
 
-    :ok = Supervisor.terminate_child(Mydia.Supervisor, Engine)
-    {:ok, _} = Supervisor.restart_child(Mydia.Supervisor, Engine)
+    restart_engine()
 
     on_exit(fn ->
       case previous do
@@ -24,8 +23,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
         :error -> Application.delete_env(:mydia, :cardigann_wasm_path)
       end
 
-      Supervisor.terminate_child(Mydia.Supervisor, Engine)
-      Supervisor.restart_child(Mydia.Supervisor, Engine)
+      stop_engine()
     end)
 
     {:ok, missing: missing}
@@ -50,13 +48,24 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
     Application.put_env(:mydia, :cardigann_wasm_compile_delay_ms, 1_500)
     on_exit(fn -> Application.delete_env(:mydia, :cardigann_wasm_compile_delay_ms) end)
 
-    :ok = Supervisor.terminate_child(Mydia.Supervisor, Engine)
-    {:ok, _} = Supervisor.restart_child(Mydia.Supervisor, Engine)
+    restart_engine()
 
     ctx = %{definition_id: "slow", request_delay_ms: 0, flaresolverr: nil}
 
     assert {:error, %{type: :timeout, details: %{compiling: true}}} =
              Engine.call({:search, "id: x", %{}, query(), @empty}, ctx, 200)
+  end
+
+  # The application starts the engine only under CARDIGANN_ENGINE=prowlarr, so
+  # these tests start (and afterwards remove) it themselves.
+  defp stop_engine do
+    Supervisor.terminate_child(Mydia.Supervisor, Engine)
+    Supervisor.delete_child(Mydia.Supervisor, Engine)
+  end
+
+  defp restart_engine do
+    stop_engine()
+    :ok = Engine.ensure_started()
   end
 
   defp query,

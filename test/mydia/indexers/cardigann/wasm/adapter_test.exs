@@ -16,6 +16,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
   @torrent "d4:infod6:lengthi5e4:name1:a12:piece lengthi16384e6:pieces20:AAAAAAAAAAAAAAAAAAAAee"
 
   setup do
+    :ok = Engine.ensure_started()
+
     unless Engine.available?() do
       flunk(
         "cardigann.wasm unavailable (#{inspect(Artifact.load())}): " <>

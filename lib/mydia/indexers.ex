@@ -28,6 +28,7 @@ defmodule Mydia.Indexers do
   alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.CardigannDefinition
+  alias Mydia.Indexers.CardigannFeatureFlags
   alias Mydia.Indexers.CardigannAuth
   alias Mydia.Indexers.CardigannDownload
   alias Mydia.Indexers.CardigannParser
@@ -50,7 +51,8 @@ defmodule Mydia.Indexers do
     - `:prowlarr` - Prowlarr indexer aggregator
     - `:jackett` - Jackett indexer proxy
     - `:newznab` - Generic Newznab Usenet indexer (including NZBHydra2)
-    - `:cardigann` - Native Cardigann definition support
+    - `:cardigann` - Native Cardigann definition support. The Elixir engine
+      by default; with `CARDIGANN_ENGINE=prowlarr`, Prowlarr's engine under wasm
   """
   @spec register_adapters() :: :ok
   def register_adapters do
@@ -60,10 +62,19 @@ defmodule Mydia.Indexers do
     Adapter.Registry.register(:prowlarr, Mydia.Indexers.Adapter.Prowlarr)
     Adapter.Registry.register(:jackett, Mydia.Indexers.Adapter.Jackett)
     Adapter.Registry.register(:newznab, Mydia.Indexers.Adapter.Newznab)
-    Adapter.Registry.register(:cardigann, Mydia.Indexers.Adapter.Cardigann)
+    Adapter.Registry.register(:cardigann, cardigann_adapter())
 
     Logger.info("Indexer adapter registration complete")
     :ok
+  end
+
+  @doc "The adapter module serving `:cardigann` under the configured engine."
+  @spec cardigann_adapter() :: module()
+  def cardigann_adapter do
+    case CardigannFeatureFlags.engine() do
+      :prowlarr -> Mydia.Indexers.Cardigann.Wasm.Adapter
+      :builtin -> Mydia.Indexers.Adapter.Cardigann
+    end
   end
 
   @doc """

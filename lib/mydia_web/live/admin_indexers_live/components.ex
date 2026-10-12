@@ -15,6 +15,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :library_indexers, :list, required: true
   attr :library_indexer_stats, :map, required: true
   attr :cardigann_enabled, :boolean, required: true
+  attr :cardigann_engine_status, :map, default: nil
   attr :flaresolverr, :map, default: %{enabled: false, url: nil, configured: false, env?: false}
   attr :flaresolverr_status, :map, default: %{configured: false, status: :loading}
   attr :retesting_paused, :any, default: MapSet.new()
@@ -26,6 +27,28 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
         flaresolverr={@flaresolverr}
         flaresolverr_status={@flaresolverr_status}
       />
+
+      <div
+        :if={
+          (@cardigann_enabled and @cardigann_engine_status) &&
+            @cardigann_engine_status.engine == :prowlarr
+        }
+        id="cardigann-engine-status"
+        class={[
+          "text-sm flex items-center gap-2",
+          if(@cardigann_engine_status.state == :ready,
+            do: "text-base-content/60",
+            else: "text-warning"
+          )
+        ]}
+      >
+        <.icon name="hero-cpu-chip" class="w-4 h-4" />
+        <span>
+          Indexer library engine: {@cardigann_engine_status.label}<span :if={
+            @cardigann_engine_status.detail
+          }>, {@cardigann_engine_status.detail}</span>
+        </span>
+      </div>
 
       <%= if @indexers == [] and @library_indexers == [] do %>
         <div class="alert alert-info">

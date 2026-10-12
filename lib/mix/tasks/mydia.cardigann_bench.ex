@@ -75,6 +75,9 @@ defmodule Mix.Tasks.Mydia.CardigannBench do
 
     Mix.shell().info("Bench database: #{database}")
 
+    # The application starts the engine only under CARDIGANN_ENGINE=prowlarr.
+    :ok = Engine.ensure_started()
+
     unless Engine.available?() do
       Mix.raise(
         "The wasm engine is not available. Build and fetch the guest: " <>

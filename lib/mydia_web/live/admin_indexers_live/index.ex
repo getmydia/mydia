@@ -19,6 +19,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      socket
      |> assign(:page_title, "Configuration - Indexers")
      |> assign(:cardigann_enabled, CardigannFeatureFlags.enabled?())
+     |> assign(:cardigann_engine_status, CardigannFeatureFlags.engine_status())
      |> assign(:flaresolverr_status, %{configured: false, status: :loading})
      |> assign(:show_flaresolverr_modal, false)
      |> assign(:flaresolverr_sources, %{})

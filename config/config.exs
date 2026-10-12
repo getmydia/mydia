@@ -469,6 +469,10 @@ config :mydia, :features,
   # Set to false to disable Cardigann indexers
   # Can be overridden via ENABLE_CARDIGANN environment variable
   cardigann_enabled: true,
+  # Which engine runs Cardigann definitions: :builtin (the Elixir engine) or
+  # :prowlarr (Prowlarr's engine compiled to wasm, opt-in).
+  # Can be overridden via the CARDIGANN_ENGINE environment variable
+  cardigann_engine: :builtin,
   # Enable/disable Import Lists feature
   # When enabled, runs the Import Lists UI and scheduled sync for external
   # lists (TMDB watchlists, etc.); when disabled, the admin route redirects

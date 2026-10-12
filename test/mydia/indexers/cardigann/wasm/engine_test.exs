@@ -14,6 +14,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
   @call_timeout 30_000
 
   setup do
+    :ok = Engine.ensure_started()
+
     unless Engine.available?() do
       flunk(
         "cardigann.wasm unavailable (#{inspect(Artifact.load())}): " <>

@@ -62,6 +62,42 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     end
   end
 
+  @doc """
+  Starts the engine under the application supervisor when it is not running.
+
+  The application starts it only for `CARDIGANN_ENGINE=prowlarr`; the bench task
+  and the engine tests use this to run it regardless.
+  """
+  @spec ensure_started() :: :ok | {:error, term()}
+  def ensure_started do
+    case Supervisor.start_child(Mydia.Supervisor, __MODULE__) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+      {:error, :already_present} -> restart()
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp restart do
+    case Supervisor.restart_child(Mydia.Supervisor, __MODULE__) do
+      {:ok, _pid} -> :ok
+      {:error, :running} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  The engine's state, without waiting: `:disabled` (not selected, so the process
+  does not run), `:pending`, `:compiling`, `:ready`, or `{:unavailable, reason}`
+  with a printable reason.
+  """
+  @spec status() :: :disabled | :pending | :compiling | :ready | {:unavailable, String.t()}
+  def status do
+    GenServer.call(__MODULE__, :status, 1_000)
+  catch
+    :exit, _ -> :disabled
+  end
+
   @doc "Runs one engine call in a fresh, sandboxed instance."
   @spec call(call(), HostHttp.ctx(), pos_integer()) :: {:ok, term()} | {:error, Error.t()}
   def call(call, ctx, timeout_ms) do
@@ -81,7 +117,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
         finish(export, ctx, started, nil, {:error, error})
 
       :unavailable ->
-        finish(export, ctx, started, nil, {:error, unavailable()})
+        finish(export, ctx, started, nil, {:error, unavailable(status())})
     end
   end
 
@@ -118,8 +154,22 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     :exit, _ -> :down
   end
 
-  defp unavailable do
-    Error.engine_unavailable("The Cardigann engine is not available", %{
+  defp unavailable(:disabled) do
+    Error.engine_unavailable(
+      "The Prowlarr Cardigann engine is not running: set CARDIGANN_ENGINE=prowlarr to enable it",
+      %{reason: :disabled}
+    )
+  end
+
+  defp unavailable({:unavailable, reason}) do
+    Error.engine_unavailable(
+      "The Prowlarr Cardigann engine is not available: #{reason}",
+      %{reason: reason, hint: "run mix mydia.cardigann_guest fetch"}
+    )
+  end
+
+  defp unavailable(_other) do
+    Error.engine_unavailable("The Prowlarr Cardigann engine is not available", %{
       hint: "run mix mydia.cardigann_guest fetch"
     })
   end
@@ -270,6 +320,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   end
 
   @impl true
+  def handle_call(:status, _from, state), do: {:reply, state.status, state}
+
   def handle_call(:available, from, %{status: :pending} = state),
     do: {:noreply, %{state | status: :compiling, waiters: [from]}, {:continue, :compile}}
 
@@ -331,11 +383,14 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
             "(run mix mydia.cardigann_guest fetch)"
         )
 
-        :unavailable
+        {:unavailable, describe(reason)}
     end
   rescue
     e ->
       Logger.warning("Cardigann wasm engine failed to compile: #{Exception.message(e)}")
-      :unavailable
+      {:unavailable, "compile failed: #{Exception.message(e)}"}
   end
+
+  defp describe(:missing), do: "the engine artifact is missing"
+  defp describe(reason), do: inspect(reason)
 end
