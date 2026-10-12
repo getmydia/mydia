@@ -13,9 +13,9 @@ credentials). Single-session run, `--concurrency 1`, fresh Prowlarr data directo
 | M1 fidelity | wasm > elixir | wasm 44/44 (100.0%), elixir 29/44 (65.9%) | PASS |
 | M2 coverage | wasm >= elixir | wasm 54/81, elixir 55/81 | **FAIL** (one definition short; see below) |
 | M3 regressions | 0 unexplained | 0 | PASS |
-| M4 p95 overhead | <= max(2x elixir, 50 ms) | wasm 243.9 ms vs elixir 126.0 ms (limit 252.0 ms), paired n=66 | PASS (by 8 ms; see the caveat) |
-| M5 RSS | <= 200 MB | +955 MB (median of 3) | **FAIL** |
-| M5 cold start | <= 5 s | 3.8 s (component compile, in the background at boot) | PASS |
+| M4 p95 overhead | <= max(2x elixir, 50 ms) | wasm 243.9 ms vs elixir 126.0 ms (limit 252.0 ms), paired n=66 | marginal PASS, within run-to-run noise (one run; an earlier run of the same code would have failed; fails if Elixir p95 is 121 ms or less) |
+| M5 RSS | <= 200 MB | +955 MB (median of 3; a lower bound for a loaded server) | **FAIL** |
+| M5 cold start | <= 5 s | 3.8 s (component compile only, not boot to available; runs in the background at boot) | PASS |
 | M5 image size | <= 60 MB | +75.1 MB (71.6 MiB) | **FAIL** |
 
 Items 1 to 3 are not negotiable and item 2 failed, so the gate fails and the branch
@@ -24,33 +24,45 @@ stays unmerged. M5 fails twice on its own.
 ### Reading the failures
 
 **M2 (54 vs 55).** Three definitions give the Elixir engine results and the wasm
-engine none: kickasstorrents-ws, magnetcat and torrentsome. All three answer the
-first link in their `links:` list with a Cloudflare 403. Prowlarr (the oracle) and
-the wasm engine, which is Prowlarr's code, stop there. The Elixir engine moves on to
-the next mirror (`kickasstorrents.bz` and so on) and gets 20 to 60 releases.
-Prowlarr has no mirror failover (the user picks the base URL), so this is a Mydia
-feature the wasm adapter does not have, not a fidelity defect: the wasm engine
-agrees with Prowlarr on every one of them. The wasm engine returns more elsewhere
-(pandacd, where the Elixir engine gets an HTTP 400, and anisource, whose DNS
-resolves only some of the time from this host), which is why the gap is one and not three. The
-margin is thin, and the previous gating run, made before the User-Agent fix below,
-was 46 vs 51. Failover cannot be added in the adapter alone: the guest swallows a
-failed request as an empty page exactly as upstream does, so the adapter cannot tell
-"blocked" from "no results" without a new field across the WIT boundary.
+engine none: kickasstorrents-ws, magnetcat and torrentsome. For kickasstorrents-ws
+and magnetcat the logs show the first link in `links:` answering with a Cloudflare
+403 (the wasm guest logs "Cloudflare protection detected"), and the Elixir engine
+logging the challenge and then parsing results from the next mirror
+(`kickasstorrents.bz` for the first). For torrentsome the Elixir log shows no
+Cloudflare hit: it got 0 rows for the movie query and 20 for the rss query without a
+block, while the wasm guest logged a Cloudflare 403 on both queries. Why the Elixir
+engine was not blocked there was not established. That the wasm engine stops at the
+first mirror is inferred from the design (the adapter passes no alternative link and
+the guest uses the first one), not separately demonstrated. Prowlarr has no mirror
+failover (the user picks the base URL), so for the two confirmed cases this is a Mydia
+feature the wasm adapter does not have rather than a fidelity defect. The wasm engine
+returns more elsewhere (pandacd, where the Elixir engine gets an HTTP 400, and
+anisource, whose DNS resolves only some of the time from this host), which is why the
+gap is one and not three. The margin is thin, and the previous gating run, made
+before the User-Agent change below, was 46 vs 51. Failover is not possible in the
+adapter without extra requests or a new field across the WIT boundary: the guest
+swallows a failed request as an empty page exactly as upstream does, so the adapter
+cannot tell "blocked" from "no results"; it could instead retry the definition's other
+links on every empty result, at the cost of an extra round trip each time.
 
-**M4 (passes by 8 ms).** The wasm p50 is 76 ms against 27 ms and the p95 244 ms
+**M4 (marginal pass, 8 ms, within run-to-run noise).** The wasm p50 is 76 ms against 27 ms and the p95 244 ms
 against 126 ms. A fresh instance per call costs about 31 ms with no network
 involved (measured below); the rest is definition parsing and session reads. The
 Elixir p95 is not stable between runs: the non-gating `--concurrency 1` runs made
 earlier the same day measured Elixir p95 values of 69 ms (wasm 175 ms, which would
 FAIL) and 126 ms. With Elixir at 121 ms or less the wasm engine fails this item.
-Treat M4 as borderline, not as comfortable headroom.
+This is one run; treat M4 as unstable, not as a pass with headroom.
 
-**M5 RSS (+955 MB).** Compiling the 75 MB component with Wasmtime leaves about
-955 MB resident in the BEAM and it does not shrink after the pool is warm
-(20 searches add nothing measurable on top). The Elixir engine adds 12 MB after
-20 searches. No tuning was attempted: a precompiled, memory-mapped artifact might
-cut this, but that is a design change, not a bug fix.
+**M5 RSS (+955 MB).** After the component is compiled the BEAM holds about
+955 MB more resident memory, and it does not change once the pool is warm
+(20 sequential searches add nothing measurable on top). The Elixir engine adds 12 MB
+after 20 searches. `smaps` of the BEAM process shows about 1.14 GB of anonymous
+memory, mostly in mappings of roughly 64 MB that look like malloc arenas, and an
+executable mapping of only about 64 MB. The cause is undiagnosed: it has not been
+shown to be compiled code, module data or allocator memory retained from the
+compile, and no tuning was tried. The figure is a lower bound for a loaded server:
+the 20 searches were sequential (one instance at a time) against a tiny fixture, in
+a script process without the rest of the application.
 
 **M5 image (+75.1 MB).** The artifact is 74.9 MB and is stored once in the image
 (`priv/cardigann/cardigann-<hash>.wasm`). It would need to be under 60 MB.
@@ -60,7 +72,7 @@ cut this, but that is a design change, not a bug fix.
 | Item | Gate | Result |
 |---|---|---|
 | M5 steady-state BEAM RSS delta, pool warm | <= 200 MB | **+955.0 MB** (runs: 955.0, 953.0, 964.2; baseline about 226 MB, 1,180 to 1,192 MB after compile, unchanged after 20 searches). Elixir engine: +12.2 MB (runs: 13.2, 12.2, 10.6) |
-| M5 cold start (component compile at boot) | <= 5 s | **3.8 s** (runs: 3,857, 3,826, 3,792 ms; the first dev boot logged 4,120 ms). The compile runs in the engine's `handle_continue`, so it does not delay the rest of boot: it delays the engine becoming available |
+| M5 cold start (component compile at boot) | <= 5 s | **3.8 s**, compile only, not boot to available (runs: 3,857, 3,826, 3,792 ms; the first dev boot logged 4,120 ms). The compile runs in the engine's `handle_continue`, so it does not delay the rest of boot: it delays the engine becoming available |
 | M5 Docker image size delta | <= 60 MB | **+75,116,476 B (75.1 MB, 71.6 MiB)**: `mydia:wasm` 810,719,991 B vs `mydia:master` 735,603,515 B |
 | M6 Elixir lines deleted at cutover vs C# shim lines added | report | Task 12 deletes up to **6,338** lines of `lib/` (`cardigann_parser`, `_template`, `_filters`, `_result_parser`, `_compat`, `_overrides`, `cardigann/{features,template_context,json_path}`, `cardigann_search_engine`, `cardigann_auth`, `mix/tasks/mydia.cardigann_compat`; the figure counts the parts of `cardigann_search_engine` and `cardigann_auth` that Task 12 keeps, so it is an upper bound) plus their tests and fixtures. The guest adds **2,422** lines of C# (`shim/*.cs` and `exports/*.cs`; the vendored Prowlarr sources are excluded) |
 
@@ -103,7 +115,7 @@ iteration runs, and what it was:
 | torrent-pirat | `YamlDotNet ... multiline plain scalar` | the definition file starts with a byte order mark that upstream's `File.ReadAllText` drops | fixed in `shim/DefinitionService.cs`; tests in both suites |
 | nyaasi, sukebeinyaasi | 0 releases for the keywordless query | host HTTP: the server sends a gzip body without being asked; the gate returns bodies undecoded | fixed in `HostHttp` (inflate gzip, drop `Content-Encoding` and `Content-Length`, capped); two Bypass tests |
 | internetarchive | 0 releases on a 30 to 50 s answer | host HTTP: 30 s deadline against Prowlarr's 100 s | `HostHttp` default 100 s, adapter call default 120 s |
-| megapeer, 0magnet, 52bt | Cloudflare 403 for the wasm engine and Prowlarr, 200 for a browser | host HTTP: upstream's `Prowlarr/<version> (linux)` User-Agent is refused | default User-Agent changed to the Chrome string the Elixir engine already sends (a definition's own header still wins); the one deliberate difference from upstream, recorded in `SUBSTITUTIONS.md` |
+| megapeer, 0magnet, 52bt | Cloudflare 403 for the wasm engine and Prowlarr, 200 for a browser | host HTTP: upstream's `Prowlarr/<version> (linux)` User-Agent is refused. kickasstorrents-ws, magnetcat and torrentsome stayed blocked after this change | default User-Agent changed to the Chrome string the Elixir engine already sends (a definition's own header still wins); the one deliberate difference from upstream, recorded in `SUBSTITUTIONS.md` |
 | image build | `mix mydia.cardigann_guest fetch` raised `DATABASE_PATH is missing` | task ran `app.config`, which evaluates `runtime.exs` | task now runs `loadpaths` and `loadconfig` |
 | filemood (rss), limetorrents (rss), ehentai (rss) | differing release sets | tracker drift: a rate limit hit by the previous query, a live feed that moved between engines, a 4-release difference at Jaccard 0.96 | not a defect; agrees on rerun or inside the 0.95 bound |
 | opensharing, torrent-pirat (generic) | slow tracker, 24 to 41 s | tracker slowness; agrees after the deadline change | none |

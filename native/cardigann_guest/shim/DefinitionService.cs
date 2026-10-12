@@ -31,7 +31,7 @@ namespace NzbDrone.Core.IndexerVersions
             // Upstream reads definitions with File.ReadAllText, which drops a
             // leading byte order mark. The host hands over the decoded text with
             // the mark intact, and YamlDotNet rejects it.
-            if (yaml.Length > 0 && yaml[0] == '﻿')
+            if (yaml.Length > 0 && yaml[0] == '\uFEFF')
             {
                 yaml = yaml.Substring(1);
             }

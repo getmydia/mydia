@@ -12,8 +12,10 @@ defmodule Mydia.Indexers.Cardigann.RequestHeaders do
   alias Mydia.Indexers.FlareSolverr.ClearanceCache
 
   # Req's own "req/x.y" user-agent is refused or served a different page by
-  # some public trackers. Prowlarr sends a desktop browser's string by default,
-  # and a definition's own user-agent header still takes precedence.
+  # some public trackers. Prowlarr's own default is "Prowlarr/<version> (<os>)",
+  # which Cloudflare refuses on some of them, so a desktop browser's string is
+  # sent instead, and a definition's own user-agent header still takes
+  # precedence.
   @default_user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " <>
                         "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
 
