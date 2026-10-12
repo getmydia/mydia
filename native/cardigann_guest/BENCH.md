@@ -155,11 +155,13 @@ iteration runs, and what it was:
 - **Fixed after the gating run: a 5xx response ended in
   `PlatformNotSupportedException`.** Upstream retries a server error twice through
   Polly with a real delay, and the guest has no event loop, so the blocking wait
-  on a pending timer task throws. `shim/ExchangeDispatcher.cs` now raises the
-  status as an `HttpRequestException` before upstream's retry can start, and a
-  search left with nothing but a server error returns an `http` engine error
-  reading "Tracker answered HTTP 503" (a native test per status, and one that the
-  request is made once). Upstream files stay unmodified.
+  on a pending timer task threw. `shim/HttpIndexerBase.cs` (one line changed, see
+  `SUBSTITUTIONS.md`) gives the retry pipeline a `TimeProvider` whose timers
+  `Thread.Sleep` and fire at once. The retries now happen as upstream's do (three
+  requests, the delays of `RateLimit`), a transient 503 followed by a good answer
+  returns results, and a final 5xx is swallowed into an empty page with
+  `request-failed` and the status set. Native tests cover each case and a Bypass
+  test runs the retries inside the wasm component.
 - **Fixed after the gating run: no mirror failover** (see M2 above). The `search`
   result carries a `request-failed` flag (a transport error, an HTTP status of 400
   or more, or a Cloudflare challenge on any request of the search), and the

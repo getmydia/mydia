@@ -11,7 +11,6 @@ src/NzbDrone.Core/Indexers/Definitions/Cardigann/Exceptions/CardigannConfigExcep
 src/NzbDrone.Core/Indexers/Definitions/Cardigann/Exceptions/CardigannException.cs
 # Indexer base classes
 src/NzbDrone.Core/Indexers/IndexerBase.cs
-src/NzbDrone.Core/Indexers/HttpIndexerBase.cs
 # HTTP stack: Prowlarr's own client keeps cookies, redirects and headers
 src/NzbDrone.Common/Http/Dispatchers/IHttpDispatcher.cs
 src/NzbDrone.Common/Http/HttpRequest.cs

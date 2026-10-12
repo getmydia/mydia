@@ -75,6 +75,8 @@ interface types {
     /// 400 or more, or a Cloudflare challenge. Upstream turns that into an
     /// empty page, so alongside no releases it tells "blocked" from "no results".
     request-failed: bool,
+    /// The status of the last response of 400 or more, when one came back.
+    failed-status: option<u16>,
   }
 
   variant download-payload {

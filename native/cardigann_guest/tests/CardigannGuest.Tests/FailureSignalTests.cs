@@ -87,15 +87,93 @@ namespace Mydia.CardigannGuest.Tests
         [InlineData(502)]
         [InlineData(503)]
         [InlineData(504)]
-        public void A_server_error_is_a_clean_error_naming_the_status_and_is_not_retried(int status)
+        public void A_persistent_server_error_is_retried_then_swallowed_as_upstream_does(int status)
         {
             var http = new FakeExchange().On("GET", "/search", _ => Status(status, "down"));
 
-            var error = Assert.Throws<HttpRequestException>(() => Search(http));
+            var result = Search(http);
 
-            Assert.Contains($"HTTP {status}", error.Message);
-            Assert.IsNotType<PlatformNotSupportedException>(error);
-            Assert.Single(http.Seen);
+            Assert.Empty(result.Releases);
+            Assert.True(result.RequestFailed);
+            Assert.Equal(status, result.FailedStatus);
+            Assert.Equal(3, http.Seen.Count);
+        }
+
+        [Fact]
+        public void A_transient_503_followed_by_a_good_answer_returns_results()
+        {
+            var calls = 0;
+            var http = new FakeExchange().On("GET", "/search", _ =>
+                ++calls == 1 ? Status(503, "busy") : FakeExchange.Html(Fixture("lantern-search.html")));
+
+            var result = Search(http);
+
+            Assert.Equal(2, result.Releases.Count);
+            Assert.Equal(2, http.Seen.Count);
+            // The server error was seen, so the call reports it even though the retry worked.
+            Assert.Equal(503, result.FailedStatus);
+        }
+
+        [Fact]
+        public void The_retry_waits_between_attempts()
+        {
+            var waits = new List<TimeSpan>();
+            var before = BlockingTimeProvider.Sleep;
+            BlockingTimeProvider.Sleep = waits.Add;
+            try
+            {
+                Search(new FakeExchange().On("GET", "/search", _ => Status(503, "down")));
+            }
+            finally
+            {
+                BlockingTimeProvider.Sleep = before;
+            }
+
+            Assert.Equal(2, waits.Count);
+            Assert.All(waits, w => Assert.True(w > TimeSpan.Zero));
+        }
+
+        [Fact]
+        public void A_cloudflare_challenge_served_as_503_is_detected_as_cloudflare()
+        {
+            var outcome = new RequestOutcome();
+            var http = new FakeExchange().On("GET", "/search", _ => Status(503,
+                "<html><head><title>Just a moment...</title></head></html>", ("Server", "cloudflare")));
+            var request = new NzbDrone.Common.Http.HttpRequest("https://lantern.invalid/search");
+
+            new ExchangeDispatcher(http, outcome).GetResponseAsync(request, new System.Net.CookieContainer())
+                .GetAwaiter().GetResult();
+
+            Assert.True(outcome.Cloudflare);
+            Assert.Equal(503, outcome.FailedStatus);
+        }
+
+        [Fact]
+        public void A_cloudflare_challenge_served_as_503_ends_the_search_empty_and_failed()
+        {
+            var http = new FakeExchange().On("GET", "/search", _ => Status(503,
+                "<html><head><title>Just a moment...</title></head></html>", ("Server", "cloudflare")));
+
+            var result = Search(http);
+
+            Assert.Empty(result.Releases);
+            Assert.True(result.RequestFailed);
+            Assert.Equal(503, result.FailedStatus);
+        }
+
+        [Fact]
+        public void A_login_answered_with_a_server_error_is_read_for_its_error_selector()
+        {
+            var http = new FakeExchange()
+                .On("GET", "/login.php", _ => FakeExchange.Html(Fixture("quill-login-page.html")))
+                .On("POST", "/takelogin.php", _ => Status(500, "<div class=\"error\">Server busy</div>"));
+            var settings = new Dictionary<string, string> { ["username"] = "reader", ["password"] = "secret" };
+
+            var ex = Assert.Throws<NzbDrone.Core.Indexers.Definitions.Cardigann.Exceptions.CardigannConfigException>(
+                () => Runner.Login(Fixture("quill-login.yml"), settings, Empty, null, null, http));
+
+            Assert.Contains("Server busy", ex.Message);
+            Assert.Single(http.Seen, r => r.Method == "POST");
         }
 
         [Fact]

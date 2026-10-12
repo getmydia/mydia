@@ -123,6 +123,10 @@ defmodule Mydia.Indexers.CardigannEngineSelectionTest do
     end
 
     test "a search against a stopped wasm engine names the reason" do
+      # A wasm test that ran earlier in this VM can leave the compiled component
+      # behind; a stopped engine has none.
+      :persistent_term.erase({Wasm.Engine, :compiled})
+
       ctx = %{definition_id: "none", request_delay_ms: 0, flaresolverr: nil}
       empty = %{cookies: %{}, expires_at: nil}
 

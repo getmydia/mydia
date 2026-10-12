@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
 using System.Text;
 using Mydia.CardigannGuest.Shim;
 using Newtonsoft.Json;
@@ -23,7 +22,7 @@ namespace Mydia.CardigannGuest
     public sealed record QueryInput(string Kind, string Term, int[] Categories, string ImdbId, int? TmdbId,
                                     int? TvdbId, int? Season, string Episode, int? Limit, int? Offset);
 
-    public sealed record SearchOutput(IList<ReleaseInfo> Releases, Session Session, bool SessionChanged, bool RequestFailed);
+    public sealed record SearchOutput(IList<ReleaseInfo> Releases, Session Session, bool SessionChanged, bool RequestFailed, int? FailedStatus);
 
     public sealed record DownloadOutput(byte[] Bytes, string MagnetOrUrl, Session Session);
 
@@ -158,15 +157,7 @@ namespace Mydia.CardigannGuest
             var g = Build(yaml, settings, s, http);
             var result = Fetch(g.Indexer, ToCriteria(q)).GetAwaiter().GetResult();
 
-            // Upstream logs a failed request and returns an empty page. A server
-            // error that left nothing to show is the tracker's answer, so it is
-            // reported as that rather than as "no results".
-            if (result.Releases.Count == 0 && g.Outcome.ServerErrorStatus is int status)
-            {
-                throw new HttpRequestException($"Tracker answered HTTP {status}", null, (HttpStatusCode)status);
-            }
-
-            return new SearchOutput(result.Releases, SessionOf(g), g.Status.Changed, g.Outcome.Failed);
+            return new SearchOutput(result.Releases, SessionOf(g), g.Status.Changed, g.Outcome.Failed, g.Outcome.FailedStatus);
         }
 
         private static System.Threading.Tasks.Task<IndexerPageableQueryResult> Fetch(Cardigann indexer, SearchCriteriaBase criteria) =>

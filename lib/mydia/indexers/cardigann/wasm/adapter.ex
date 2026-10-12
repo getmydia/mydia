@@ -38,12 +38,22 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   failed request into an empty page. `search/3` adds the failover Mydia's Elixir
   engine has. When a search comes back empty with the guest's `request-failed`
   signal (a transport error, an HTTP status of 400 or more, a Cloudflare
-  challenge), or the tracker answered only with a server error, the same search
-  is repeated against the next entry of the definition's `links:` (the stored
-  `active_link` first, at most three in all). A mirror that answers after another
-  failed is stored as the definition's `active_link`, with the Elixir engine's
-  rule for which mirrors may be stored. An empty answer without the signal is
-  "no results" and is final.
+  challenge), the same search is repeated against the next entry of the
+  definition's `links:` (the stored `active_link` first, at most three in all).
+  A mirror that answers after another failed is stored as the definition's
+  `active_link`, with the Elixir engine's rule for which mirrors may be stored.
+  An empty answer without the signal is "no results" and is final. Login,
+  download and the connection test go to the stored `active_link` too.
+
+  The attempts share one deadline, the caller's `:timeout` or else the indexer
+  search deadline (`Mydia.Indexers.search_deadline_ms/1`) less a small margin,
+  and no further mirror is started when too little of it is left.
+
+  When every mirror ends empty with the signal, the search is an error shaped as
+  the Elixir engine's HTTP failures are (`search_failed`, "Server error: HTTP 503"
+  or "HTTP 403", with `details.tracker_status`), or `connection_failed` when no
+  response came back at all. The guest itself returns the empty page, as
+  Prowlarr does.
 
   ## Failed logins
 
@@ -79,6 +89,14 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   # Above the 100 s host request deadline (HostHttp), so a slow tracker is a host
   # timeout, not a guest kill.
   @default_timeout_ms 120_000
+  # Left unspent of the search deadline, for persisting the result and replying.
+  @deadline_margin_ms 2_000
+  # A mirror is not started with less than this left of the deadline.
+  @min_attempt_ms 2_000
+  # Left unspent of the search deadline, for persisting the result and replying.
+  @deadline_margin_ms 2_000
+  # A mirror is not started with less than this left of the deadline.
+  @min_attempt_ms 2_000
   @empty_session %{cookies: %{}, expires_at: nil}
 
   @impl true
@@ -89,7 +107,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
            session = stored_session(definition),
            {:ok, new_session} <-
              run(
-               {:test, definition.definition, guest_settings(definition, config, doc), session},
+               {:test, definition.definition, mirror_settings(definition, config, doc), session},
                definition,
                config,
                doc,
@@ -148,7 +166,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
            :ok <- check_login_needed(definition, doc),
            session = stored_session(definition),
            call =
-             {:download, definition.definition, guest_settings(definition, config, doc), link,
+             {:download, definition.definition, mirror_settings(definition, config, doc), link,
               session},
            {:ok, out} <- run(call, definition, config, doc, opts) do
         persist_session(definition, out.session, session)
@@ -171,7 +189,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
     if CardigannFeatureFlags.enabled?() do
       with {:ok, definition, doc} <- load(config),
            call =
-             {:login, definition.definition, guest_settings(definition, config, doc),
+             {:login, definition.definition, mirror_settings(definition, config, doc),
               @empty_session, normalize_answer(captcha_answer)},
            {:ok, result} <- run(call, definition, config, doc, opts) do
         case result do
@@ -202,51 +220,91 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
     settings = guest_settings(definition, config, doc)
     guest_query = build_query(query, opts)
     parsed = parse_links(definition)
+    deadline = System.monotonic_time(:millisecond) + search_budget_ms(opts)
 
     attempt = fn base_url ->
+      remaining = max(deadline - System.monotonic_time(:millisecond), 1)
+
       call =
         {:search, definition.definition, put_base_url(settings, base_url), guest_query, session}
 
-      run(call, definition, config, doc, opts)
+      run(call, definition, config, doc, Keyword.put(opts, :timeout, remaining))
     end
 
-    case mirror_candidates(parsed, definition) do
-      [] ->
-        attempt.(nil)
+    result =
+      case mirror_candidates(parsed, definition) do
+        [] ->
+          attempt.(nil)
 
-      [first | _] = candidates ->
-        try_mirrors(candidates, attempt, fn winner ->
-          if winner != first,
-            do: AdapterSupport.promote_active_link(parsed, definition, winner)
-        end)
-    end
+        [first | _] = candidates ->
+          try_mirrors(candidates, attempt, deadline, fn winner ->
+            if winner != first,
+              do: AdapterSupport.promote_active_link(parsed, definition, winner)
+          end)
+      end
+
+    surface_failure(result)
   end
 
   # The last mirror's answer stands when every mirror failed, as the Elixir
-  # engine returns its last error.
-  defp try_mirrors([candidate | rest], attempt, on_win) do
+  # engine returns its last error. Only a search that succeeded (an answer without
+  # the failed-request signal) promotes its mirror, never an error such as a
+  # failed login.
+  defp try_mirrors([candidate | rest], attempt, deadline, on_win) do
     result = attempt.(candidate)
 
     cond do
       not failed_search?(result) ->
-        on_win.(candidate)
+        if match?({:ok, _}, result), do: on_win.(candidate)
         result
 
       rest == [] ->
         result
 
+      deadline - System.monotonic_time(:millisecond) < @min_attempt_ms ->
+        Logger.info("Cardigann search failed on #{candidate}, no time left for another mirror")
+        result
+
       true ->
         Logger.info("Cardigann search failed on #{candidate}, trying the next mirror")
-        try_mirrors(rest, attempt, on_win)
+        try_mirrors(rest, attempt, deadline, on_win)
+    end
+  end
+
+  # The budget for all attempts together: an explicit `:timeout`, else what the
+  # indexer search task is allowed (it is killed at that deadline) less a margin.
+  defp search_budget_ms(opts) do
+    case Keyword.get(opts, :timeout) do
+      timeout when is_integer(timeout) and timeout > 0 ->
+        timeout
+
+      _ ->
+        max(Mydia.Indexers.search_deadline_ms(opts) - @deadline_margin_ms, @min_attempt_ms)
     end
   end
 
   # An empty answer that came with a failed request (a block, a dead mirror, a
-  # transport error), or a tracker that answered only with a server error.
+  # transport error).
   defp failed_search?({:ok, %{releases: [], request_failed: true}}), do: true
-  defp failed_search?({:error, %Error{details: %{tracker_status: _status}}}), do: true
   defp failed_search?({:error, %Error{details: %{cloudflare: true}}}), do: true
   defp failed_search?(_result), do: false
+
+  # Where every attempt ended empty and failed, the search is an error shaped like
+  # the Elixir engine's HTTP failures, so the UI and the health tracking treat
+  # both engines alike. The guest returns the empty page; this is presentation.
+  defp surface_failure({:ok, %{releases: [], request_failed: true} = out}),
+    do: {:error, failure_error(out.failed_status)}
+
+  defp surface_failure(result), do: result
+
+  defp failure_error(nil),
+    do: Error.connection_failed("No answer from the tracker", %{request_failed: true})
+
+  defp failure_error(status) when status >= 500,
+    do: Error.search_failed("Server error: HTTP #{status}", %{tracker_status: status})
+
+  defp failure_error(status),
+    do: Error.search_failed("HTTP #{status}", %{tracker_status: status})
 
   defp parse_links(%CardigannDefinition{definition: yaml}) do
     case CardigannParser.parse_definition(yaml || "") do
@@ -258,12 +316,25 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Adapter do
   defp mirror_candidates(nil, _definition), do: []
 
   defp mirror_candidates(parsed, definition) do
-    links = Links.current(parsed)
-    active = definition.active_link && String.trim_trailing(definition.active_link, "/")
-    active = if active in links, do: active
-
-    AdapterSupport.search_candidates(parsed, active, legacy: false)
+    AdapterSupport.search_candidates(parsed, active_mirror(parsed, definition), legacy: false)
   end
+
+  # Login, download and the connection test use the mirror search settled on.
+  defp mirror_settings(definition, config, doc) do
+    settings = guest_settings(definition, config, doc)
+
+    case parse_links(definition) do
+      nil -> settings
+      parsed -> put_base_url(settings, active_mirror(parsed, definition))
+    end
+  end
+
+  defp active_mirror(parsed, %CardigannDefinition{active_link: active}) when is_binary(active) do
+    active = String.trim_trailing(active, "/")
+    if active in Links.current(parsed), do: active
+  end
+
+  defp active_mirror(_parsed, _definition), do: nil
 
   defp put_base_url(settings, nil), do: settings
 

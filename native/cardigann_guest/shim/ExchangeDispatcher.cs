@@ -1,6 +1,5 @@
 using System;
 using System.Net;
-using System.Net.Http;
 using System.Threading.Tasks;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Http.Dispatchers;
@@ -26,15 +25,20 @@ namespace Mydia.CardigannGuest.Shim
     {
         public bool Failed { get; private set; }
 
-        // The first server error (5xx or 408) seen, which upstream would retry.
-        public int? ServerErrorStatus { get; private set; }
+        // The status of the last response of 400 or more, null when none was
+        // received (a transport failure, or no failure at all).
+        public int? FailedStatus { get; private set; }
+
+        // A response that upstream's CloudFlareDetectionService calls a challenge.
+        public bool Cloudflare { get; private set; }
 
         public void MarkFailed() => Failed = true;
 
-        public void MarkServerError(int status)
+        public void MarkResponse(int status, bool cloudflare)
         {
             Failed = true;
-            ServerErrorStatus ??= status;
+            FailedStatus = status;
+            Cloudflare |= cloudflare;
         }
     }
 
@@ -63,22 +67,13 @@ namespace Mydia.CardigannGuest.Shim
             }
 
             var response = RequestMapping.FromRaw(request, raw, cookies);
+            var cloudflare = CloudFlareDetectionService.IsCloudflareProtected(response);
 
-            // Upstream retries a server error twice behind a timer delay, and the
-            // guest has no event loop to wake that wait (it ends in a
-            // PlatformNotSupportedException). The retry would only repeat the
-            // request the host just made, so the status is raised as the error
-            // it is, naming the status, and upstream's own handling takes over.
-            if (raw.Status >= 500 || raw.Status == (int)HttpStatusCode.RequestTimeout)
+            // Recorded only: upstream decides what a bad response means (retry a
+            // server error, raise a Cloudflare challenge, read a login error).
+            if (raw.Status >= 400 || cloudflare)
             {
-                _outcome.MarkServerError(raw.Status);
-                throw new HttpRequestException(
-                    $"Tracker answered HTTP {raw.Status} for {request.Url.Host}", null, (HttpStatusCode)raw.Status);
-            }
-
-            if (raw.Status >= 400 || CloudFlareDetectionService.IsCloudflareProtected(response))
-            {
-                _outcome.MarkFailed();
+                _outcome.MarkResponse(raw.Status, cloudflare);
             }
 
             return Task.FromResult(response);

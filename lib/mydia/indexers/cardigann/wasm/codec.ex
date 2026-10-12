@@ -93,7 +93,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Codec do
           releases: [SearchResult.t()],
           session: session(),
           session_changed: boolean(),
-          request_failed: boolean()
+          request_failed: boolean(),
+          failed_status: non_neg_integer() | nil
         }
   def decode_search(out, indexer_name) do
     %{
@@ -101,7 +102,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Codec do
         out |> field(:releases) |> List.wrap() |> Enum.map(&decode_release(&1, indexer_name)),
       session: out |> field(:session) |> decode_session(),
       session_changed: field(out, :"session-changed") == true,
-      request_failed: field(out, :"request-failed") == true
+      request_failed: field(out, :"request-failed") == true,
+      failed_status: out |> field(:"failed-status") |> unoption()
     }
   end
 
@@ -213,11 +215,6 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Codec do
   # the message from being read as a case.
   defp decode_http_error(message) do
     cond do
-      # A search that got only a server error (shim/ExchangeDispatcher.cs).
-      match = Regex.run(~r/\ATracker answered HTTP (\d{3})/, message) ->
-        [_all, status] = match
-        Error.network_error(message, %{tracker_status: String.to_integer(status)})
-
       String.starts_with?(message, "timeout: ") ->
         Error.timeout(message)
 

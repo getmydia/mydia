@@ -425,6 +425,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
     defp answer(conn, :not_found), do: Plug.Conn.resp(conn, 404, "gone")
     defp answer(conn, :unavailable), do: Plug.Conn.resp(conn, 503, "down")
 
+    defp answer(conn, :slow_cloudflare) do
+      Process.sleep(1_500)
+      answer(conn, :cloudflare)
+    end
+
     defp answer(conn, :cloudflare) do
       conn
       |> Plug.Conn.put_resp_header("server", "cloudflare")
@@ -454,10 +459,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
     end
 
     test "a 404 and a dead host are failed requests too" do
-      {:ok, listener} = :gen_tcp.listen(0, [])
-      {:ok, dead_port} = :inet.port(listener)
-      :ok = :gen_tcp.close(listener)
-      dead = %{port: dead_port}
+      # Nothing listens on port 1: the connection is refused.
+      dead = %{port: 1}
       missing = mirror(:not_found)
       good = mirror(:good)
       definition = insert_mirrored([dead, missing, good])
@@ -473,7 +476,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
       definition = insert_mirrored([first, second])
 
       assert {:ok, [_, _]} = Adapter.search(config(definition), "harbor")
-      assert hits() == [:unavailable, :good]
+      # Prowlarr's engine retries a server error twice before giving up on it.
+      assert hits() == [:unavailable, :unavailable, :unavailable, :good]
     end
 
     test "an empty answer without a failed request is final" do
@@ -491,7 +495,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
       second = mirror(:cloudflare)
       definition = insert_mirrored([first, second])
 
-      assert {:ok, []} = Adapter.search(config(definition), "harbor")
+      assert {:error,
+              %Error{type: :search_failed, message: "HTTP 403", details: %{tracker_status: 403}}} =
+               Adapter.search(config(definition), "harbor")
+
       assert hits() == [:cloudflare, :cloudflare]
       assert Repo.reload!(definition).active_link == nil
     end
@@ -500,7 +507,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
       mirrors = for _ <- 1..4, do: mirror(:cloudflare)
       definition = insert_mirrored(mirrors)
 
-      assert {:ok, []} = Adapter.search(config(definition), "harbor")
+      assert {:error, %Error{type: :search_failed}} = Adapter.search(config(definition), "harbor")
       assert length(hits()) == 3
     end
 
@@ -522,18 +529,79 @@ defmodule Mydia.Indexers.Cardigann.Wasm.AdapterTest do
       only = mirror(:unavailable)
       definition = insert_mirrored([only])
 
-      assert {:error, %Error{message: message, details: %{tracker_status: 503}}} =
-               Adapter.search(config(definition), "harbor")
+      assert {:error,
+              %Error{
+                type: :search_failed,
+                message: "Server error: HTTP 503",
+                details: %{tracker_status: 503}
+              }} = Adapter.search(config(definition), "harbor")
 
-      assert message =~ "503"
-      assert hits() == [:unavailable]
+      # Upstream's retry: the request is made three times.
+      assert hits() == [:unavailable, :unavailable, :unavailable]
     end
 
-    test "a single blocked link keeps the upstream behaviour of an empty list" do
+    test "a host nothing answers on is a connection failure" do
+      definition = insert_mirrored([%{port: 1}])
+
+      assert {:error, %Error{type: :connection_failed}} =
+               Adapter.search(config(definition), "harbor")
+    end
+
+    test "a single blocked link is an error shaped like the Elixir engine's" do
       only = mirror(:cloudflare)
       definition = insert_mirrored([only])
 
-      assert {:ok, []} = Adapter.search(config(definition), "harbor")
+      assert {:error, %Error{type: :search_failed, message: "HTTP 403"}} =
+               Adapter.search(config(definition), "harbor")
+    end
+
+    test "the next mirror is still tried when the first was slow but the budget allows it" do
+      first = mirror(:slow_cloudflare)
+      second = mirror(:good)
+      definition = insert_mirrored([first, second])
+
+      assert {:ok, [_, _]} = Adapter.search(config(definition), "harbor", timeout: 8_000)
+      assert hits() == [:slow_cloudflare, :good]
+    end
+
+    test "no further mirror is started when the budget is nearly spent" do
+      first = mirror(:slow_cloudflare)
+      second = mirror(:good)
+      definition = insert_mirrored([first, second])
+
+      started = System.monotonic_time(:millisecond)
+
+      assert {:error, %Error{type: :search_failed, message: "HTTP 403"}} =
+               Adapter.search(config(definition), "harbor", timeout: 3_000)
+
+      assert hits() == [:slow_cloudflare]
+      assert System.monotonic_time(:millisecond) - started < 3_500
+      assert Repo.reload!(definition).active_link == nil
+    end
+
+    test "a slower first mirror than the whole budget ends the search cleanly" do
+      first = mirror(:slow_cloudflare)
+      second = mirror(:good)
+      definition = insert_mirrored([first, second])
+
+      assert {:error, %Error{type: :timeout}} =
+               Adapter.search(config(definition), "harbor", timeout: 800)
+
+      refute :good in hits()
+    end
+
+    test "test_connection and download use the stored active_link" do
+      first = mirror(:good)
+      second = mirror(:good)
+      definition = insert_mirrored([first, second])
+
+      definition
+      |> Ecto.Changeset.change(%{active_link: "http://localhost:#{second.port}"})
+      |> Repo.update!()
+
+      assert {:ok, _} = Adapter.test_connection(config(Repo.reload!(definition)))
+      assert Enum.all?(hits(), &(&1 == :good))
+      refute_received {:hit, _}
     end
   end
 

@@ -634,7 +634,10 @@ defmodule Mydia.Indexers do
   # 4x a normal 30s response. Generous on purpose: indexers here are legitimately
   # slow and do eventually answer, so this is a backstop against a wedged
   # connection rather than a latency budget.
-  defp search_deadline_ms(opts) do
+  @doc false
+  # Also read by the Cardigann wasm adapter, which spends it across mirrors.
+  @spec search_deadline_ms(keyword()) :: pos_integer()
+  def search_deadline_ms(opts) do
     Keyword.get(opts, :deadline_ms) ||
       Application.get_env(:mydia, :indexer_search, [])[:deadline_ms] ||
       120_000

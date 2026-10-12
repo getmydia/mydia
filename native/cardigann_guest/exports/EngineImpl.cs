@@ -39,7 +39,8 @@ namespace CardigannWorld.wit.Exports.mydia.cardigann.v1_0_0
                     output.Releases.Select(ToRelease).ToList(),
                     FromSession(output.Session),
                     output.SessionChanged,
-                    output.RequestFailed);
+                    output.RequestFailed,
+                    output.FailedStatus.HasValue ? (ushort)output.FailedStatus.Value : null);
             });
 
         public static T.DownloadOut Download(string defYaml, List<T.Setting> settings, string link, T.Session s) =>

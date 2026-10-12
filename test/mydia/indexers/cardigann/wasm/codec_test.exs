@@ -165,18 +165,6 @@ defmodule Mydia.Indexers.Cardigann.Wasm.CodecTest do
              Codec.decode_error({:http, "Download failed: timeout: x"})
   end
 
-  test "a tracker server error carries its status" do
-    assert %{
-             type: :network_error,
-             message: "Tracker answered HTTP 503",
-             details: %{tracker_status: 503}
-           } =
-             Codec.decode_error({:http, "Tracker answered HTTP 503"})
-
-    assert %{details: nil} =
-             Codec.decode_error({:http, "Download failed: Tracker answered HTTP 503"})
-  end
-
   test "a search record carries the failed-request signal" do
     base = %{
       releases: [],

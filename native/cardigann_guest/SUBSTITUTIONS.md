@@ -18,6 +18,7 @@ namespace and the members the vendored code uses.
 | src/NzbDrone.Core/Indexers/IndexerCapabilitiesCategories.cs | shim/IndexerCapabilitiesCategories.cs | Verbatim copy except one call: `SHA1.Create().ComputeHash(...)` becomes `ManagedSha1.Hash(...)`. `System.Security.Cryptography` throws `PlatformNotSupportedException` on wasi-wasm, and every string tracker category with a description reaches that line. The id must equal Prowlarr's, so `shim/ManagedSha1.cs` is a plain SHA-1, tested against the BCL. Found by the Engine fixtures (Task 7). |
 | src/NzbDrone.Core/Indexers/Definitions/Cardigann/CardigannDefinition.cs | shim/CardigannDefinition.cs | Verbatim copy except `FilterBlock.Args`, which is `dynamic` upstream and `FilterArgs` here. Upstream indexes it (`(string)filter.Args[0]`), and the C# runtime binder cannot index anything under NativeAOT: a `List<object>` fails with "Cannot apply indexing with []" (trimmed reflection metadata), and a type with its own indexer or an array fails with an `ArgumentNullException` in the binder's expression rewriter. Every filter with more than one argument (`re_replace`, `replace`, `split`, ...) then failed on wasm and silently dropped its field or request. Found by the Engine fixtures (Task 7). |
 | src/NzbDrone.Core/Indexers/TorrentIndexerBase.cs | shim/TorrentIndexerBase.cs | Verbatim copy except `ValidateDownloadData`: upstream calls MonoTorrent's `Torrent.Load`, which SHA-1 hashes the info dictionary and so throws on wasi-wasm, failing every torrent download. The shim makes the checks `Torrent.Load` 3.0.2 makes, minus the hash, for a v1 torrent: the bencode decodes to a dictionary with an `info` dictionary; `info` has an integer `piece length` and a `pieces` byte string whose length is a multiple of 20; it has `files` (a list of dictionaries, each entry with a `path` needing an integer `length`) or an integer `length`; the total size is not zero. `name` is not required (Torrent.Load leaves it empty). Not checked: path validity, hybrid v1/v2 consistency, optional metadata. A v2-only torrent is rejected. Found by the Engine fixtures (Task 7). |
+| src/NzbDrone.Core/Indexers/HttpIndexerBase.cs | shim/HttpIndexerBase.cs | Verbatim copy except one line: the retry `ResiliencePipelineBuilder` gets `TimeProvider = BlockingTimeProvider.Instance`. Upstream retries a server error (5xx, 408) twice behind a Polly delay built on `TimeProvider.Delay`; the guest has no event loop or second thread, so the timer never fires and the blocking wait on the pending delay throws `PlatformNotSupportedException`. `shim/BlockingTimeProvider.cs` makes a timer sleep the thread for its due time (`Thread.Sleep`, which wasi supports) and then run its callback before `CreateTimer` returns, so the delay is as long as upstream's and already complete when awaited. Retry count, delays and outcomes are upstream's. |
 
 ## Added, not substituted
 
@@ -34,17 +35,18 @@ These have no upstream counterpart because upstream wires them with dependency i
 
 - `shim/ExchangeDispatcher.cs` records, per call, whether any request failed (a
   transport error, a status of 400 or more, or `CloudFlareDetectionService`
-  reporting a challenge); `Runner.Search` reports it as `request-failed`. Upstream
-  swallows a failed search request as an empty page, so this is the only way the
-  host can tell a block from "no results".
-- The same dispatcher raises a 5xx or 408 response as an `HttpRequestException`
-  naming the status. Upstream retries these behind a Polly timer delay, which
-  throws `PlatformNotSupportedException` on wasi-wasm (no event loop). The retry
-  would only repeat the request the host just made.
+  reporting a challenge), the status of the last response of 400 or more and
+  whether a challenge was seen. `Runner.Search` reports them as `request-failed`
+  and `failed-status`. Upstream swallows a failed search request as an empty
+  page, and that is still what the guest returns; the flags are the only way the
+  host can tell a block from "no results". The dispatcher only records: retries,
+  Cloudflare detection, `login.error` selectors and download errors are upstream's.
 - `Runner.Build` maps the `baseUrl` setting onto `CardigannSettings.BaseUrl`, the
   property upstream's `ResolveSiteLink` reads, so the host picks the mirror.
   Upstream rewrites a `legacylinks` entry to the first link, so the host offers
   only `links:`.
+- The default User-Agent (see `RequestMapping.cs`) is the browser string the Elixir
+  engine sends, not `Prowlarr/<version>`.
 
 ## Compile-time resources
 

@@ -78,6 +78,24 @@ To pin a Nix build, after the master push has published the asset, set
 `ARTIFACT_SHA256` in a follow-up commit (the pin file is not part of the source
 hash) to `<mix mydia.cardigann_guest hash> <contents of the .sha256 file>`.
 
+## Host-side behaviour that is not Prowlarr's
+
+The guest behaves as Prowlarr does; what Mydia adds is in
+`Mydia.Indexers.Cardigann.Wasm.Adapter`:
+
+- **Mirror failover.** Prowlarr has none. A search that comes back empty with the
+  guest's `request-failed` flag is repeated against the next entry of `links:`
+  (the stored `active_link` first, three at most), and a mirror that answers after
+  another failed is stored as `active_link`, as the Elixir engine does. Login,
+  download and the connection test go to `active_link` too. The attempts share the
+  search deadline, and no mirror is started with under two seconds left.
+- **Failed searches are errors.** Where every mirror ended empty with the flag, the
+  adapter returns the error shape the Elixir engine returns for HTTP failures
+  (`search_failed`, "Server error: HTTP 503" or "HTTP 403", with
+  `details.tracker_status`; `connection_failed` when no response came back), so the
+  UI and health tracking treat both engines alike. The guest itself returns the
+  empty page.
+
 ## CI gap: the main CI often has no wasm
 
 The `fetch` step in `ci.yml` only finds an asset that is already published. So on
