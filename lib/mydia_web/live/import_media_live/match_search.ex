@@ -80,8 +80,11 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearch do
   def crashed(socket, reason) do
     Logger.warning("Group match search crashed", reason: inspect(reason))
 
+    # A blank query clears `searching` without starting a replacement task, so
+    # an older task's exit can still arrive; it no longer belongs to anything.
     case socket.assigns.match_search do
       nil -> socket
+      %{searching: false} -> socket
       state -> assign(socket, :match_search, %{state | searching: false, error: search_failed()})
     end
   end
