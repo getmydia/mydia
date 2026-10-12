@@ -115,16 +115,46 @@ namespace Mydia.CardigannGuest.Tests
             Assert.Equal("?q=cedars+edge+part+two", new Uri(http.Seen[0].Url).Query);
         }
 
-        [Theory]
-        [InlineData("")]
-        [InlineData("abc")]
-        [InlineData("Movies/HD")]
-        [InlineData("a string of exactly fifty-five characters, give or tak")]
-        [InlineData("a string long enough to need a second 64 byte block of input, yes")]
-        public void Managed_sha1_matches_the_framework(string text)
+        [Fact]
+        public void Managed_sha1_matches_the_framework_for_every_length_up_to_200()
         {
-            var bytes = Encoding.UTF8.GetBytes(text);
-            Assert.Equal(System.Security.Cryptography.SHA1.HashData(bytes), ManagedSha1.Hash(bytes));
+            var random = new Random(7);
+            for (var length = 0; length <= 200; length++)
+            {
+                var bytes = new byte[length];
+                random.NextBytes(bytes);
+                Assert.Equal(System.Security.Cryptography.SHA1.HashData(bytes), ManagedSha1.Hash(bytes));
+            }
+        }
+
+        [Theory]
+        [InlineData("d4:infod6:lengthi5e4:name1:a12:piece lengthi16384e" + "6:pieces20:AAAAAAAAAAAAAAAAAAAAee", true)]
+        [InlineData("d4:infod5:filesld6:lengthi5e4:pathl1:aeee4:name1:d12:piece lengthi16384e" + "6:pieces20:AAAAAAAAAAAAAAAAAAAAee", true)]
+        [InlineData("d4:infod6:lengthi5e12:piece lengthi16384e" + "6:pieces20:AAAAAAAAAAAAAAAAAAAAee", true)] // no name: Torrent.Load accepts it
+        [InlineData("d4:infod6:lengthi5e4:name1:a12:piece lengthi16384eee", false)] // no pieces
+        [InlineData("d4:infod6:lengthi5e4:name1:a12:piece lengthi16384e" + "6:pieces19:AAAAAAAAAAAAAAAAAAAee", false)] // pieces not a multiple of 20
+        [InlineData("d4:infod6:lengthi5e4:name1:a6:pieces20:AAAAAAAAAAAAAAAAAAAAee", false)] // no piece length
+        [InlineData("d4:infod4:name1:a12:piece lengthi16384e" + "6:pieces20:AAAAAAAAAAAAAAAAAAAAee", false)] // no length or files
+        [InlineData("d4:infod6:lengthi0e4:name1:a12:piece lengthi16384e" + "6:pieces20:AAAAAAAAAAAAAAAAAAAAee", false)] // nothing to download
+        [InlineData("d4:infod5:filesld6:lengthi5eeee4:name1:d12:piece lengthi16384e" + "6:pieces20:AAAAAAAAAAAAAAAAAAAAee", false)] // the only file has no path, so it is skipped and nothing is left
+        [InlineData("d3:fooi1ee", false)] // no info
+        public void Torrent_validation_mirrors_what_torrent_load_requires(string bencode, bool valid)
+        {
+            var http = new FakeExchange().On("GET", "/dl/1.torrent", _ => new RawResponse(200,
+                new[] { ("Content-Type", "application/x-bittorrent") }, Encoding.ASCII.GetBytes(bencode)));
+
+            Exception thrown = Record.Exception(() => Runner.Download(Fixture("lantern-public.yml"),
+                new Dictionary<string, string>(), "https://lantern.invalid/dl/1.torrent", Empty, http));
+
+            if (valid)
+            {
+                Assert.Null(thrown);
+            }
+            else
+            {
+                Assert.NotNull(thrown);
+                Assert.Contains("Invalid torrent file contents", thrown.ToString());
+            }
         }
 
         [Fact]

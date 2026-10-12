@@ -46,6 +46,19 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
              Engine.call({:search, "id: x", %{}, query(), @empty}, ctx, 1_000)
   end
 
+  test "a call that gives up while the engine is compiling is a timeout, not unavailable" do
+    Application.put_env(:mydia, :cardigann_wasm_compile_delay_ms, 1_500)
+    on_exit(fn -> Application.delete_env(:mydia, :cardigann_wasm_compile_delay_ms) end)
+
+    :ok = Supervisor.terminate_child(Mydia.Supervisor, Engine)
+    {:ok, _} = Supervisor.restart_child(Mydia.Supervisor, Engine)
+
+    ctx = %{definition_id: "slow", request_delay_ms: 0, flaresolverr: nil}
+
+    assert {:error, %{type: :timeout, details: %{compiling: true}}} =
+             Engine.call({:search, "id: x", %{}, query(), @empty}, ctx, 200)
+  end
+
   defp query,
     do: %{
       kind: :search,

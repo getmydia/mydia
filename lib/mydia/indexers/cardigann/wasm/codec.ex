@@ -206,14 +206,15 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Codec do
   end
 
   # The guest reports a failed host exchange as an `http` error whose message
-  # starts with the `http-error` case it came from (shim/HostExchange.cs), after
-  # any text upstream put in front of it.
+  # starts with the `http-error` case it came from (shim/HostExchange.cs).
+  # Matching only at the start keeps a host-supplied URL or page text further in
+  # the message from being read as a case.
   defp decode_http_error(message) do
     cond do
-      message =~ "timeout: " -> Error.timeout(message)
-      message =~ "connect: " -> Error.connection_failed(message)
-      message =~ "blocked: " -> Error.network_error(message, %{kind: :blocked})
-      message =~ "other: " -> Error.network_error(message, %{kind: :other})
+      String.starts_with?(message, "timeout: ") -> Error.timeout(message)
+      String.starts_with?(message, "connect: ") -> Error.connection_failed(message)
+      String.starts_with?(message, "blocked: ") -> Error.network_error(message, %{kind: :blocked})
+      String.starts_with?(message, "other: ") -> Error.network_error(message, %{kind: :other})
       true -> Error.network_error(message)
     end
   end

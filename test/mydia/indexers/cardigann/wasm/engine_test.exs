@@ -382,6 +382,27 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
       assert message =~ "html content"
     end
 
+    for {label, bencode} <- [
+          {"without pieces", "d4:infod6:lengthi5e4:name1:a12:piece lengthi16384eee"},
+          {"with a pieces length that is not a multiple of 20",
+           "d4:infod6:lengthi5e4:name1:a12:piece lengthi16384e6:pieces19:AAAAAAAAAAAAAAAAAAAee"}
+        ] do
+      test "a torrent #{label} is a parse error", %{bypass: b, ctx: ctx} do
+        respond(b, "GET", "/dl/1.torrent", 200, unquote(bencode), [
+          {"content-type", "application/x-bittorrent"}
+        ])
+
+        link = "http://localhost:#{b.port}/dl/1.torrent"
+
+        assert {:error, %{type: :parse_error}} =
+                 Engine.call(
+                   {:download, yaml("lantern-public.yml", b), %{}, link, @empty},
+                   ctx,
+                   @call_timeout
+                 )
+      end
+    end
+
     test "a downloaded body that is not a torrent is a parse error", %{bypass: b, ctx: ctx} do
       respond(b, "GET", "/dl/1.torrent", 200, "not a torrent", [
         {"content-type", "application/x-bittorrent"}

@@ -160,6 +160,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.CodecTest do
              Codec.decode_error({:http, "other: x"})
 
     assert %{type: :network_error, details: nil} = Codec.decode_error({:http, "Download failed"})
+
+    assert %{type: :network_error, details: nil} =
+             Codec.decode_error({:http, "Download failed: timeout: x"})
   end
 
   test "engine errors map to adapter errors" do

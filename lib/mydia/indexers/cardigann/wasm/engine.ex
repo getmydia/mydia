@@ -57,7 +57,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   @spec available?() :: boolean()
   def available? do
     case :persistent_term.get(@key, nil) do
-      nil -> ask(:available, 60_000)
+      nil -> ask(:available, 60_000) == {:ok, true}
       _compiled -> true
     end
   end
@@ -76,6 +76,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
         result = run(compiled, call, ctx, remaining)
         finish(export, ctx, started, network, result)
 
+      :compiling ->
+        error = Error.timeout("The Cardigann engine is still compiling", %{compiling: true})
+        finish(export, ctx, started, nil, {:error, error})
+
       :unavailable ->
         finish(export, ctx, started, nil, {:error, unavailable()})
     end
@@ -83,24 +87,35 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
   defp await(timeout_ms) do
     case :persistent_term.get(@key, nil) do
-      nil -> if ask(:available, timeout_ms), do: await_compiled(), else: :unavailable
+      nil -> await_compile(timeout_ms)
       compiled -> {:ok, compiled}
     end
   end
 
-  defp await_compiled do
-    case :persistent_term.get(@key, nil) do
-      nil -> :unavailable
-      compiled -> {:ok, compiled}
+  defp await_compile(timeout_ms) do
+    case ask(:available, timeout_ms) do
+      {:ok, true} ->
+        if compiled = :persistent_term.get(@key, nil), do: {:ok, compiled}, else: :unavailable
+
+      {:ok, false} ->
+        :unavailable
+
+      :timeout ->
+        :compiling
+
+      :down ->
+        :unavailable
     end
   end
 
-  # The server replies once the compile settles. A server that is not running,
-  # or a compile that outlasts the caller's patience, both mean "unavailable".
+  # The server replies once the compile settles. Waiting out the caller's
+  # patience is a timeout (the engine may yet become ready); a server that is
+  # not running is unavailable.
   defp ask(message, timeout_ms) do
-    GenServer.call(__MODULE__, message, timeout_ms)
+    {:ok, GenServer.call(__MODULE__, message, timeout_ms)}
   catch
-    :exit, _ -> false
+    :exit, {:timeout, _} -> :timeout
+    :exit, _ -> :down
   end
 
   defp unavailable do
@@ -266,6 +281,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
   defp compile do
     started = System.monotonic_time()
+    # Test seam: lets a test observe a call that gives up while compiling.
+    Process.sleep(Application.get_env(:mydia, :cardigann_wasm_compile_delay_ms, 0))
 
     with {:ok, bytes} <- Artifact.load(),
          engine = Wasmex.Engine.default(),
