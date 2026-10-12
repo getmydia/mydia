@@ -2,7 +2,6 @@
 src/NzbDrone.Core/Indexers/Definitions/Cardigann/Captcha.cs
 src/NzbDrone.Core/Indexers/Definitions/Cardigann/Cardigann.cs
 src/NzbDrone.Core/Indexers/Definitions/Cardigann/CardigannBase.cs
-src/NzbDrone.Core/Indexers/Definitions/Cardigann/CardigannDefinition.cs
 src/NzbDrone.Core/Indexers/Definitions/Cardigann/CardigannMetaDefinition.cs
 src/NzbDrone.Core/Indexers/Definitions/Cardigann/CardigannParser.cs
 src/NzbDrone.Core/Indexers/Definitions/Cardigann/CardigannRequest.cs
@@ -13,7 +12,6 @@ src/NzbDrone.Core/Indexers/Definitions/Cardigann/Exceptions/CardigannException.c
 # Indexer base classes
 src/NzbDrone.Core/Indexers/IndexerBase.cs
 src/NzbDrone.Core/Indexers/HttpIndexerBase.cs
-src/NzbDrone.Core/Indexers/TorrentIndexerBase.cs
 # HTTP stack: Prowlarr's own client keeps cookies, redirects and headers
 src/NzbDrone.Common/Http/Dispatchers/IHttpDispatcher.cs
 src/NzbDrone.Common/Http/HttpRequest.cs
@@ -49,7 +47,6 @@ src/NzbDrone.Core/Indexers/IProcessIndexerResponse.cs
 src/NzbDrone.Core/Indexers/ITorrentIndexerSettings.cs
 src/NzbDrone.Core/Indexers/IndexerBaseSettings.cs
 src/NzbDrone.Core/Indexers/IndexerCapabilities.cs
-src/NzbDrone.Core/Indexers/IndexerCapabilitiesCategories.cs
 src/NzbDrone.Core/Indexers/IndexerCategory.cs
 src/NzbDrone.Core/Indexers/IndexerDefinition.cs
 src/NzbDrone.Core/Indexers/IndexerDownloadResponse.cs

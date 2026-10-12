@@ -39,7 +39,7 @@ namespace Mydia.CardigannGuest.Shim
             ITypesImports.HttpError.Tags.Timeout => "timeout: " + error.AsTimeout,
             ITypesImports.HttpError.Tags.Connect => "connect: " + error.AsConnect,
             ITypesImports.HttpError.Tags.Blocked => "blocked: " + error.AsBlocked,
-            _ => error.AsOther
+            _ => "other: " + error.AsOther
         };
     }
 }

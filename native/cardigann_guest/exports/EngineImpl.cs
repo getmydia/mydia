@@ -8,6 +8,7 @@ using Mydia.CardigannGuest;
 using Mydia.CardigannGuest.Shim;
 using NLog;
 using NzbDrone.Common.Http;
+using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.Http.CloudFlare;
 using NzbDrone.Core.Indexers.Definitions.Cardigann.Exceptions;
 using NzbDrone.Core.Indexers.Exceptions;
@@ -189,6 +190,15 @@ namespace CardigannWorld.wit.Exports.mydia.cardigann.v1_0_0
                 CloudFlareProtectionException => T.EngineError.Cloudflare(message),
                 CardigannException => T.EngineError.ParseFailed(message),
                 IndexerException => T.EngineError.ParseFailed(message),
+                // A failed download wraps what went wrong: an HTTP status or an
+                // HTML page where a torrent was expected is the site's answer,
+                // anything else (a body that is not a torrent) is unreadable data.
+                ReleaseDownloadException { InnerException: HttpException inner } =>
+                    T.EngineError.Http(message + ": " + inner.Message),
+                ReleaseDownloadException =>
+                    T.EngineError.ParseFailed(message + (ex.InnerException != null ? ": " + ex.InnerException.Message : "")),
+                NotSupportedException when message.StartsWith("Invalid torrent file contents", StringComparison.Ordinal) =>
+                    T.EngineError.ParseFailed(message),
                 HttpRequestException => T.EngineError.Http(message),
                 HttpException => T.EngineError.Http(message),
                 WebException => T.EngineError.Http(message),

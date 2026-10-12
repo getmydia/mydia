@@ -15,6 +15,9 @@ namespace and the members the vendored code uses.
 | src/NzbDrone.Common/EnvironmentInfo/RuntimeInfo.cs | shim/RuntimeInfo.cs | Upstream reads the process, OS and Windows service state and needs Microsoft.Extensions.Hosting. The vendored HTTP code only reads the static `IsProduction`, which the shim fixes to `true` (a released Prowlarr: requests auto redirect). |
 | src/NzbDrone.Common/EnsureThat/EnsureStringExtensions.cs | shim/EnsureStringExtensions.cs | Upstream also has path validators that pull in `PathExtensions`, `IAppFolderInfo` and `OsInfo`. Only `IsNotNullOrWhiteSpace` (the one the vendored cache code uses) is kept, with the upstream message. |
 | src/NzbDrone.Common/Http/HttpClient.cs | shim/HttpClient.cs | Verbatim copy minus one line, `ServicePointManager.DefaultConnectionLimit = 12;`, which throws `PlatformNotSupportedException` on wasi-wasm (System.Net.Requests is not supported there). Found by running the component under Wasmex (Task 4). |
+| src/NzbDrone.Core/Indexers/IndexerCapabilitiesCategories.cs | shim/IndexerCapabilitiesCategories.cs | Verbatim copy except one call: `SHA1.Create().ComputeHash(...)` becomes `ManagedSha1.Hash(...)`. `System.Security.Cryptography` throws `PlatformNotSupportedException` on wasi-wasm, and every string tracker category with a description reaches that line. The id must equal Prowlarr's, so `shim/ManagedSha1.cs` is a plain SHA-1, tested against the BCL. Found by the Engine fixtures (Task 7). |
+| src/NzbDrone.Core/Indexers/Definitions/Cardigann/CardigannDefinition.cs | shim/CardigannDefinition.cs | Verbatim copy except `FilterBlock.Args`, which is `dynamic` upstream and `FilterArgs` here. Upstream indexes it (`(string)filter.Args[0]`), and the C# runtime binder cannot index anything under NativeAOT: a `List<object>` fails with "Cannot apply indexing with []" (trimmed reflection metadata), and a type with its own indexer or an array fails with an `ArgumentNullException` in the binder's expression rewriter. Every filter with more than one argument (`re_replace`, `replace`, `split`, ...) then failed on wasm and silently dropped its field or request. Found by the Engine fixtures (Task 7). |
+| src/NzbDrone.Core/Indexers/TorrentIndexerBase.cs | shim/TorrentIndexerBase.cs | Verbatim copy except `ValidateDownloadData`: upstream calls MonoTorrent's `Torrent.Load`, which SHA-1 hashes the info dictionary and so throws on wasi-wasm, failing every torrent download. The shim decodes the bencode and requires an `info` dictionary. Found by the Engine fixtures (Task 7). |
 
 ## Added, not substituted
 
@@ -23,6 +26,8 @@ These have no upstream counterpart because upstream wires them with dependency i
 | Shim | Purpose |
 |---|---|
 | shim/Services.cs | `NullEventAggregator`, `NoRateLimitService` (the host rate-limits), `NoProxyFactory` (no indexer proxies), `CallConfigService` (Prowlarr's default values). |
+| shim/FilterArgs.cs | The statically typed `FilterBlock.Args` that replaces `dynamic` (see the `CardigannDefinition.cs` row), and the YamlDotNet converter that reads `args: x` and `args: [a, b]` into it. Registered in `shim/DefinitionService.cs`. |
+| shim/ManagedSha1.cs | SHA-1 for the category ids above. |
 | shim/ExchangeDispatcher.cs, shim/RequestMapping.cs | Test seam and mapping for the HTTP exchange, replacing `ManagedHttpDispatcher`'s socket code. `RequestMapping` mirrors its user agent, Cookie header, Set-Cookie and response header handling. |
 
 ## Compile-time resources

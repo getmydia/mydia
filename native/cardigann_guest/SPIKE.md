@@ -217,7 +217,7 @@ Notes:
   Compiled code of a 75 MB component is evidently large; compile once and share.
 - A plain `start_link` per call, as `Mydia.Plugins.Host` does, would cost about 3.3 s each. The
   design must hold a compiled component and instantiate per call (3 ms) or keep instances warm.
-- `publish-unix` came back `:none` for both fixture releases, whose `date` field uses
+- (Resolved, see "What GO does not cover" item 3.) `publish-unix` came back `:none` for both fixture releases, whose `date` field uses
   `dateparse "yyyy-MM-dd"`. Not a spike criterion; it needs a look before Phase 2 (invariant
   globalization or trimmed date parsing under AOT are the likely suspects).
 
@@ -258,6 +258,13 @@ What GO does not cover, to settle before or during Phase 2:
    engine and compiled component. Plugin-host style `start_link` per call is not viable.
 2. The AOT build needed three fixes found only by running it (obstacles 7 to 9); more reflection
    or platform gaps may surface in definitions other than the two fixtures.
-3. `publish-unix` is `:none` for dated rows. This is a wasm-only defect: the native `RunnerTests` assert the parsed
-   date (`2031-04-02`) for this same fixture and pass on plain .NET, so the fixture and `ToRelease` are not at fault.
-   `spike_test.exs` has a `:known_wasm_defect` test asserting the date, excluded by default, so a fix turns it green.
+3. ~~`publish-unix` is `:none` for dated rows.~~ **Fixed in Task 7.** The cause was the C# runtime binder, which
+   cannot bind a `dynamic` operation under NativeAOT: upstream reads every filter argument through the `dynamic`
+   `FilterBlock.Args`, and each such read threw inside `ApplyFilters`, where `ParseFields` swallows the failure and
+   leaves the field empty. The date filter was one of them; multi-argument filters (`re_replace`, `replace`, `split`)
+   failed the same way and silently dropped fields or the whole request. `FilterBlock.Args` is now statically typed
+   (`shim/CardigannDefinition.cs`, `shim/FilterArgs.cs`; see `SUBSTITUTIONS.md`). `engine_test.exs` asserts the dates
+   of the `lantern-public.yml` rows, and the `:known_wasm_defect` spike test was retired.
+4. Task 7's fixtures also found two crypto gaps (`System.Security.Cryptography` is unsupported on wasi-wasm): SHA-1 of
+   string tracker categories in `IndexerCapabilitiesCategories`, and `Torrent.Load` in `TorrentIndexerBase`, which
+   failed every torrent download. Both are substituted; see `SUBSTITUTIONS.md`.

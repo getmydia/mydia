@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Mydia.CardigannGuest.Shim;
 using NzbDrone.Core.Indexers.Definitions.Cardigann;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -15,10 +16,12 @@ namespace NzbDrone.Core.IndexerVersions
     // Holds the one definition the host passed into this call.
     public sealed class SingleDefinitionService : IIndexerDefinitionUpdateService
     {
-        // Copied verbatim from IndexerDefinitionUpdateService at the pinned commit.
+        // Copied from IndexerDefinitionUpdateService at the pinned commit, plus the
+        // FilterArgs converter (shim/FilterArgs.cs).
         private static readonly IDeserializer Deserializer = new DeserializerBuilder()
             .IgnoreUnmatchedProperties()
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
+            .WithTypeConverter(new FilterArgsConverter())
             .Build();
 
         private readonly CardigannDefinition _definition;
