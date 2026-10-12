@@ -307,7 +307,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   def init(opts) do
     :persistent_term.erase(@key)
     eager = Keyword.get(opts, :eager, Application.get_env(:mydia, :cardigann_wasm_eager, true))
-    state = %{status: :pending, waiters: [], task: nil}
+    state = %{status: :pending, waiters: [], task: nil, failures: 0, timer: nil}
 
     if eager,
       do: {:ok, %{state | status: :compiling}, {:continue, :compile}},
@@ -342,11 +342,46 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
       when status in [:compiling, :fetching],
       do: {:noreply, %{state | status: phase}}
 
+  def handle_info(:retry, %{status: {:unavailable, _}} = state),
+    do: {:noreply, %{state | status: :compiling, timer: nil}, {:continue, :compile}}
+
   def handle_info(_message, state), do: {:noreply, state}
+
+  # A failed fetch or compile is tried again in the background, 30 s after the
+  # first failure, doubling up to 30 minutes, until it works. A result tagged
+  # :permanent (a checksum mismatch, a build without a pin) cannot change by
+  # waiting and is not retried. The status names when the next attempt is due.
+  @retry_cap_ms 30 * 60 * 1000
 
   defp settle(state, status) do
     for from <- state.waiters, do: GenServer.reply(from, status == :ready)
-    %{state | status: status, waiters: [], task: nil}
+    state = %{state | waiters: [], task: nil}
+
+    case status do
+      :ready ->
+        %{state | status: :ready, failures: 0}
+
+      {:unavailable, reason, :permanent} ->
+        %{state | status: {:unavailable, reason}}
+
+      {:unavailable, reason} ->
+        delay = retry_delay(state.failures)
+
+        due =
+          DateTime.utc_now() |> DateTime.add(delay, :millisecond) |> DateTime.truncate(:second)
+
+        %{
+          state
+          | status: {:unavailable, "#{reason} (next attempt #{DateTime.to_iso8601(due)})"},
+            failures: state.failures + 1,
+            timer: Process.send_after(self(), :retry, delay)
+        }
+    end
+  end
+
+  defp retry_delay(failures) do
+    base = Application.get_env(:mydia, :cardigann_wasm_retry_ms, 30_000)
+    min(base * Integer.pow(2, failures), max(@retry_cap_ms, base))
   end
 
   @impl true
@@ -373,10 +408,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   defp load_component(store) do
     send_phase(:fetching)
 
-    with {:ok, path} <- Delivery.ensure(),
-         {:ok, bytes} <- read(path) do
+    with {:ok, _path, bytes} <- Delivery.ensure() do
       send_phase(:compiling)
-      cwasm = Artifact.cwasm_path()
+      sha = Artifact.sha256(bytes)
+      cwasm = Artifact.cwasm_path(sha)
 
       result =
         if precompiled?(),
@@ -385,7 +420,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
       case result || compile_component(store, bytes) do
         {:ok, component, how} ->
-          Delivery.prune(Artifact.cache_dir())
+          Delivery.prune(Artifact.cache_dir(), sha)
           {:ok, component, how}
 
         {:error, _} = error ->
@@ -394,19 +429,19 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     end
   end
 
-  defp read(path) do
-    case File.read(path) do
-      {:ok, bytes} -> {:ok, bytes}
-      {:error, :enoent} -> {:error, :missing}
-      {:error, reason} -> {:error, {:env_path_unreadable, "#{path} (#{inspect(reason)})"}}
-    end
-  end
-
   defp precompiled?, do: Application.get_env(:mydia, :cardigann_wasm_precompiled, true)
 
+  # The precompiled component is native code that wasmtime maps without
+  # checking, so it is trusted only with a checksum written when it was
+  # produced, and the file is named by the SHA-256 of the verified .wasm it
+  # came from. Trust model: anyone who can write the data directory can already
+  # replace the database and the app's config, so this guards against
+  # corruption and stale or mismatched files, not against that writer.
+  #
   # nil when there is no usable cached file (a rejected one is removed).
   defp load_cached(store, cwasm, bytes) do
     with true <- File.regular?(cwasm),
+         :ok <- verify_cwasm(cwasm),
          {:ok, component} <- Components.Component.deserialize_file(store, cwasm, bytes) do
       {:ok, component, "loaded precompiled"}
     else
@@ -419,18 +454,40 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
         )
 
         File.rm(cwasm)
+        File.rm(cwasm <> ".sha256")
         nil
     end
   end
 
-  # Compiles once, straight into the cache file, then loads that file. nil when
-  # the cache cannot be written or loaded (a Wasmex without the patch, a read
-  # only data directory): the caller compiles in memory instead.
+  defp verify_cwasm(cwasm) do
+    with {:ok, expected} <- File.read(cwasm <> ".sha256"),
+         true <- file_sha256(cwasm) == String.trim(expected) do
+      :ok
+    else
+      _ -> {:error, :cwasm_checksum_mismatch}
+    end
+  end
+
+  defp file_sha256(path) do
+    path
+    |> File.stream!(1_048_576, [])
+    |> Enum.reduce(:crypto.hash_init(:sha256), &:crypto.hash_update(&2, &1))
+    |> :crypto.hash_final()
+    |> Base.encode16(case: :lower)
+  end
+
+  # Compiles once, straight into the cache file (0600, in a 0700 directory),
+  # records its checksum, then loads that file. nil when the cache cannot be
+  # written or loaded (a Wasmex without the patch, a read only data directory):
+  # the caller compiles in memory instead.
   defp build_cached(store, cwasm, bytes) do
     tmp = "#{cwasm}.part-#{System.unique_integer([:positive])}"
 
-    with :ok <- File.mkdir_p(Path.dirname(cwasm)),
+    with :ok <- Delivery.ensure_dir(Path.dirname(cwasm)),
          :ok <- Wasmex.Engine.precompile_component_to_file(Wasmex.Engine.default(), bytes, tmp),
+         :ok <- File.chmod(tmp, 0o600),
+         :ok <- Delivery.write_atomically(cwasm <> ".sha256", file_sha256(tmp) <> "
+"),
          :ok <- File.rename(tmp, cwasm),
          {:ok, component} <- Components.Component.deserialize_file(store, cwasm, bytes) do
       {:ok, component, "compiled and cached"}
@@ -443,6 +500,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
         File.rm(tmp)
         File.rm(cwasm)
+        File.rm(cwasm <> ".sha256")
         nil
     end
   rescue
@@ -497,7 +555,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     else
       {:error, reason} ->
         Logger.warning("Cardigann wasm engine unavailable: #{describe(reason)}")
-        {:unavailable, describe(reason)}
+
+        if permanent?(reason),
+          do: {:unavailable, describe(reason), :permanent},
+          else: {:unavailable, describe(reason)}
     end
   rescue
     e ->
@@ -505,7 +566,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
       {:unavailable, "compile failed: #{Exception.message(e)}"}
   end
 
-  defp describe(:missing), do: "the engine artifact is missing"
+  # What waiting cannot fix: a file that does not match the pin, and a build
+  # that has no pin at all.
+  defp permanent?(:no_pin), do: true
+  defp permanent?({:checksum_mismatch, _}), do: true
+  defp permanent?(_), do: false
 
   defp describe(reason)
        when reason == :no_pin or

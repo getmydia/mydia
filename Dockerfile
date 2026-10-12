@@ -194,6 +194,7 @@ RUN mix deps.patch
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/app/native/mydia_p2p_core/target,sharing=locked \
+    --mount=type=cache,target=/app/deps/wasmex/native/wasmex/target,sharing=locked \
     WASMEX_BUILD=1 mix deps.compile
 
 # Prove the Wasmex patch took effect: this fails if the NIF came from Wasmex's
@@ -255,9 +256,22 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
 
 # The Cardigann wasm guest is NOT in the image. Installs that opt in with
 # CARDIGANN_ENGINE=prowlarr download it into their data directory on first boot,
-# verified against the SHA-256 compiled into this build. The :cardigann_guest
-# compiler's fetch is skipped (MYDIA_SKIP_CARDIGANN_FETCH on `mix compile`), so
-# nothing lands in priv/ and the release.
+# verified against a SHA-256 pinned at build time: either
+# native/cardigann_guest/ARTIFACT_SHA256, or the release's `.sha256` sidecar,
+# fetched here (only the 64-character sidecar, never the guest) into
+# priv/cardigann/. The :cardigann_guest compiler's own fetch is skipped
+# (MYDIA_SKIP_CARDIGANN_FETCH on `mix compile`).
+#
+# The guest is published after a master push, so a build of a commit that
+# changes it can have no sidecar yet. That is soft by default (the engine then
+# reports "no published Cardigann engine for this build") and fatal for release
+# images, which pass CARDIGANN_REQUIRE_PIN=true.
+ARG CARDIGANN_REQUIRE_PIN=false
+RUN if [ "$CARDIGANN_REQUIRE_PIN" = "true" ]; then \
+      mix mydia.cardigann_guest pin --require; \
+    else \
+      mix mydia.cardigann_guest pin; \
+    fi
 
 # Fail the build if a bundled plugin's wasm artifact was not produced (the
 # :plugins compiler graceful-skips a missing toolchain, so this is the guard

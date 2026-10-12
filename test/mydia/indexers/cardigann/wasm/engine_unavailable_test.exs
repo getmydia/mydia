@@ -74,7 +74,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
     assert micros < 500_000
 
     refute Task.await(waiter, 10_000)
-    assert Engine.status() == {:unavailable, "slow compile finished"}
+    assert {:unavailable, reason} = Engine.status()
+    assert reason =~ "slow compile finished"
+    assert reason =~ "next attempt"
   end
 
   @tag :capture_log
@@ -93,6 +95,79 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
     assert {:unavailable, reason} = Engine.status()
     assert reason =~ "compile crashed"
     assert Process.whereis(Engine) == pid
+  end
+
+  describe "retry" do
+    setup do
+      Application.put_env(:mydia, :cardigann_wasm_retry_ms, 50)
+
+      on_exit(fn ->
+        Application.delete_env(:mydia, :cardigann_wasm_retry_ms)
+        Application.delete_env(:mydia, :cardigann_wasm_compile_fun)
+      end)
+    end
+
+    @tag :capture_log
+    test "a failed attempt is retried in the background until it works" do
+      attempts = :counters.new(1, [])
+
+      Application.put_env(:mydia, :cardigann_wasm_compile_fun, fn ->
+        :counters.add(attempts, 1, 1)
+
+        if :counters.get(attempts, 1) < 3,
+          do: {:unavailable, "the engine download failed: econnrefused"},
+          else: :ready
+      end)
+
+      restart_engine()
+      refute Engine.available?()
+
+      assert {:unavailable, reason} = Engine.status()
+      assert reason =~ "econnrefused"
+      assert reason =~ ~r/next attempt \d{4}-\d\d-\d\dT/
+
+      assert wait_for(fn -> Engine.status() == :ready end)
+      assert :counters.get(attempts, 1) == 3
+    end
+
+    @tag :capture_log
+    test "the wait doubles after each failure" do
+      Application.put_env(:mydia, :cardigann_wasm_retry_ms, 1_000)
+      Application.put_env(:mydia, :cardigann_wasm_compile_fun, fn -> {:unavailable, "no"} end)
+
+      restart_engine()
+      refute Engine.available?()
+
+      state = :sys.get_state(Engine)
+      assert state.failures == 1
+      assert Process.read_timer(state.timer) in 1..1_000
+    end
+
+    @tag :capture_log
+    test "a permanent failure is not retried" do
+      attempts = :counters.new(1, [])
+
+      Application.put_env(:mydia, :cardigann_wasm_compile_fun, fn ->
+        :counters.add(attempts, 1, 1)
+        {:unavailable, "does not match the checksum pinned in this build", :permanent}
+      end)
+
+      restart_engine()
+      refute Engine.available?()
+      Process.sleep(400)
+
+      assert {:unavailable, reason} = Engine.status()
+      assert reason == "does not match the checksum pinned in this build"
+      assert :counters.get(attempts, 1) == 1
+    end
+  end
+
+  defp wait_for(fun, tries \\ 100) do
+    cond do
+      fun.() -> true
+      tries == 0 -> false
+      true -> Process.sleep(50) && wait_for(fun, tries - 1)
+    end
   end
 
   # The application starts the engine only under CARDIGANN_ENGINE=prowlarr, so

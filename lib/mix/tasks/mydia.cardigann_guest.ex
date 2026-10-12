@@ -4,6 +4,7 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
 
       mix mydia.cardigann_guest hash                  # print the source hash
       mix mydia.cardigann_guest fetch                 # download and verify
+      mix mydia.cardigann_guest pin [--require]       # record the published checksum
       mix mydia.cardigann_guest verify [--allow-missing]
 
   `fetch` is a no-op when the file already verifies. Otherwise it downloads
@@ -28,7 +29,7 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
 
   @impl Mix.Task
   def run(argv) do
-    {opts, args} = OptionParser.parse!(argv, strict: [allow_missing: :boolean])
+    {opts, args} = OptionParser.parse!(argv, strict: [allow_missing: :boolean, require: :boolean])
     # Not app.config: that evaluates config/runtime.exs, which in a prod image
     # build raises for the deployment variables (DATABASE_PATH, SECRET_KEY_BASE)
     # a build has no value for. This task needs the code paths and the compile
@@ -54,15 +55,15 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
           {:error, reason} -> Mix.raise("Cardigann guest #{reason}: #{target()}")
         end
 
-      ["precompile"] ->
-        case precompile() do
-          :ok -> Mix.shell().info("Cardigann guest precompiled: #{Artifact.cwasm_path()}")
-          {:error, reason} -> Mix.raise("Cardigann guest precompile failed: #{inspect(reason)}")
+      ["pin"] ->
+        case pin(Keyword.get(opts, :require, false)) do
+          :ok -> :ok
+          {:error, reason} -> Mix.raise("Cardigann guest pin: #{reason}")
         end
 
       _ ->
         Mix.raise(
-          "usage: mix mydia.cardigann_guest hash | fetch | precompile | verify [--allow-missing]"
+          "usage: mix mydia.cardigann_guest hash | fetch | pin [--require] | verify [--allow-missing]"
         )
     end
   end
@@ -82,20 +83,47 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
   end
 
   @doc """
-  Writes `<artifact>.cwasm`, the artifact compiled ahead of time for this
-  machine's wasmtime, CPU and the engine's default config, which
-  `Mydia.Indexers.Cardigann.Wasm.Engine` loads instead of compiling. Run it
-  where the artifact will run (the Docker build does): it is not portable.
+  Records the SHA-256 of the published guest in `<artifact>.sha256` so a release
+  can verify the guest it downloads at runtime. Fetches only that sidecar from
+  the release, never the 75 MB guest. Nothing to do when
+  `native/cardigann_guest/ARTIFACT_SHA256` already pins this source hash. When
+  no sidecar is published for it, `require?` makes that an error (release
+  images); otherwise it is a warning and the engine reports "no published
+  Cardigann engine for this build" at runtime.
   """
-  def precompile do
-    target = target()
+  def pin(require?) do
+    name = Path.basename(target()) <> ".sha256"
 
-    with {:ok, bytes} <- Artifact.load(target) do
-      Wasmex.Engine.precompile_component_to_file(
-        Wasmex.Engine.default(),
-        bytes,
-        Artifact.cwasm_path()
-      )
+    with {:pinned, nil} <- {:pinned, Artifact.compiled_pin()},
+         {:ok, body} <- get(name),
+         sha = String.trim(body),
+         true <- Regex.match?(~r/\A[0-9a-f]{64}\z/, sha) do
+      File.mkdir_p!(Path.dirname(target()))
+      File.write!(target() <> ".sha256", sha <> "\n")
+      Mix.shell().info("Pinned Cardigann guest #{Path.basename(target())} to #{sha}")
+      :ok
+    else
+      {:pinned, _sha} ->
+        Mix.shell().info("Cardigann guest pinned by ARTIFACT_SHA256")
+        :ok
+
+      other ->
+        why =
+          case other do
+            {:unavailable, why} -> why
+            false -> "#{name} is not a SHA-256"
+          end
+
+        if require? do
+          {:error, "no published checksum for #{Path.basename(target())} (#{why})"}
+        else
+          Mix.shell().error(
+            "WARNING: no published Cardigann guest for this source (#{why}); the engine " <>
+              "will report that it is unavailable for this build."
+          )
+
+          :ok
+        end
     end
   end
 

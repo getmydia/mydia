@@ -37,10 +37,13 @@ Consumers:
 
 - The release (Docker image, Nix package) does not contain the guest. An
   install that sets `CARDIGANN_ENGINE=prowlarr` downloads
-  `cardigann-<hash>.wasm` into `<data dir>/cardigann/` on first boot
-  (`Mydia.Indexers.Cardigann.Wasm.Delivery`), checks it against the SHA-256 in
-  `ARTIFACT_SHA256`, which the build compiles in, compiles it once and caches
-  the result as `cardigann-<hash>-wasmtime<version>-<arch>.cwasm` beside it.
+  `cardigann-<hash>.wasm` on first boot into `cardigann/` under
+  `MYDIA_DATA_DIR`, or next to the database file when that is unset (`/config`
+  in the image) (`Mydia.Indexers.Cardigann.Wasm.Delivery`). It checks the file
+  against the pinned SHA-256, compiles it once and caches the result as
+  `cardigann-<wasm sha256>-wasmtime<version>-<arch>.cwasm` beside it, with a
+  `.sha256` of its own that is checked before every load. A failed download or
+  compile is retried in the background (30 s, doubling, up to 30 min).
   `CARDIGANN_WASM_PATH` points at a local copy for air-gapped installs; that
   file is verified against the same pin.
 - `mix compile` runs `mix mydia.cardigann_guest fetch` (the `:cardigann_guest`
@@ -55,22 +58,25 @@ Consumers:
   engine still works, compiling in memory on every start and keeping the
   compiler's heap.
 
-## Updating the pin
+## The pin
 
-`ARTIFACT_SHA256` holds `<source-hash> <sha256>` on one line. It is the only
-place the checksum is copied: a release cannot verify a download without it.
-Any other content (it ships as `unpublished`), or a hash that is not the
-current source hash, means the build has no pin, and the engine then reports
-that it cannot download or verify the guest.
+A release verifies the guest it downloads against a SHA-256 known at build
+time, from the first of:
 
-A PR that changes the guest therefore takes two steps:
+1. `ARTIFACT_SHA256`, `<source-hash> <sha256>` on one line, when its hash is the
+   current source hash. The Nix package has only this.
+2. The `.sha256` sidecar of the published asset, which the Docker build fetches
+   (`mix mydia.cardigann_guest pin`; only the 64-character sidecar, never the
+   guest) into `priv/cardigann/`.
 
-1. Merge it. The master push publishes `cardigann-<hash>.wasm`; the Publish
-   step prints the `.sha256`.
-2. In a follow-up commit, set `ARTIFACT_SHA256` to
-   `<mix mydia.cardigann_guest hash> <contents of the .sha256 file>`.
+With neither, the engine reports "no published Cardigann engine for this
+build". The guest is published after a master push, so a build of a commit that
+changes it can have no sidecar yet: that is soft for PR and CI image builds and
+fatal for release images (`CARDIGANN_REQUIRE_PIN=true` in `release.yml`).
 
-Until step 2 lands, builds from master ship without a usable pin.
+To pin a Nix build, after the master push has published the asset, set
+`ARTIFACT_SHA256` in a follow-up commit (the pin file is not part of the source
+hash) to `<mix mydia.cardigann_guest hash> <contents of the .sha256 file>`.
 
 ## CI gap: the main CI often has no wasm
 

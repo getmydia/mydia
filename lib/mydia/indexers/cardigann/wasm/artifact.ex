@@ -44,7 +44,13 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Artifact do
                           [_, v] <- Regex.run(~r/^wasmtime\s*=\s*"=?([0-9.]+)"/m, toml) do
                        v
                      else
-                       _ -> "unknown"
+                       _ ->
+                         IO.warn(
+                           "could not read the wasmtime version from #{@wasmtime_cargo}; " <>
+                             "cached components are named wasmtimeunknown"
+                         )
+
+                         "unknown"
                      end)
 
   @default_base_url "https://github.com/getmydia/mydia/releases/download/cardigann-guest"
@@ -76,30 +82,60 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Artifact do
       path_in(Application.app_dir(:mydia, ["priv", "cardigann"]))
   end
 
-  @doc "SHA-256 (hex) the published artifact must have, or nil when none is pinned for these sources."
-  def pinned_sha256, do: Application.get_env(:mydia, :cardigann_pinned_sha256, @pinned_sha256)
+  @doc """
+  SHA-256 (hex) the published artifact must have, or nil when none is known.
+
+  In order: `native/cardigann_guest/ARTIFACT_SHA256` compiled into the build
+  (Nix has only that), else the `.sha256` sidecar the Docker build fetched
+  into `priv/cardigann/` (`mix mydia.cardigann_guest pin`), which needs the
+  guest to have been published by the time the image is built.
+  """
+  def pinned_sha256 do
+    case Application.fetch_env(:mydia, :cardigann_pinned_sha256) do
+      {:ok, override} -> override
+      :error -> compiled_pin() || baked_pin()
+    end
+  end
+
+  @doc "The pin from `ARTIFACT_SHA256` alone, nil when it is not set for these sources."
+  def compiled_pin, do: Application.get_env(:mydia, :cardigann_compiled_pin, @pinned_sha256)
+
+  defp baked_pin do
+    with {:ok, body} <- File.read(path() <> ".sha256"),
+         sha = String.trim(body),
+         true <- Regex.match?(~r/\A[0-9a-f]{64}\z/, sha) do
+      sha
+    else
+      _ -> nil
+    end
+  end
 
   @doc "Where the guest is published. The `:cardigann_guest_base_url` application env overrides it."
   def base_url, do: Application.get_env(:mydia, :cardigann_guest_base_url, @default_base_url)
 
   @doc """
-  Directory for the runtime-fetched guest and its precompiled form: under the
-  data directory (`MYDIA_DATA_DIR`), so it survives upgrades when that is a
-  volume. The `:cardigann_cache_dir` application env overrides it.
+  Directory for the runtime-fetched guest and its precompiled form: `cardigann/`
+  under `MYDIA_DATA_DIR`, or when that is unset next to the database file
+  (`/config` in the image, already a volume). The `:cardigann_cache_dir`
+  application env overrides it.
   """
   def cache_dir do
     Application.get_env(:mydia, :cardigann_cache_dir) ||
       Path.join(Application.get_env(:mydia, :data_dir, "priv/data"), "cardigann")
   end
 
-  @doc "Name of the precompiled component: tied to the wasmtime version and CPU architecture."
-  def cwasm_name do
+  @doc """
+  Name of the precompiled component built from the guest whose SHA-256 is
+  `wasm_sha256`: tied to those exact bytes, the wasmtime version and the CPU
+  architecture. Its own checksum sits beside it in `<name>.sha256`.
+  """
+  def cwasm_name(wasm_sha256) do
     arch = :erlang.system_info(:system_architecture) |> to_string() |> String.split("-") |> hd()
-    "cardigann-#{@pinned_hash}-wasmtime#{@wasmtime_version}-#{arch}.cwasm"
+    "cardigann-#{wasm_sha256}-wasmtime#{@wasmtime_version}-#{arch}.cwasm"
   end
 
-  @doc "Where the precompiled component is cached."
-  def cwasm_path, do: Path.join(cache_dir(), cwasm_name())
+  @doc "Where the precompiled component for `wasm_sha256` is cached."
+  def cwasm_path(wasm_sha256), do: Path.join(cache_dir(), cwasm_name(wasm_sha256))
 
   @doc "File name of the published release asset."
   def file_name, do: "cardigann-#{@pinned_hash}.wasm"

@@ -304,6 +304,7 @@ jobs:
             DATABASE_TYPE=${{ matrix.db }}
             BUILD_VERSION=${{ needs.prepare.outputs.version }}
             BUILD_COMMIT=${{ needs.prepare.outputs.sha }}
+            CARDIGANN_REQUIRE_PIN=true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}${{ matrix.tag_suffix }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

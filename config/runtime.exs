@@ -548,10 +548,17 @@ resolved_p2p_keypair_path =
 
 config :mydia, :p2p_keypair_path, resolved_p2p_keypair_path
 
-# The data directory for state that is safe to lose but costly to rebuild (the
-# Cardigann engine download and its precompiled form). Same default as the
-# certificate store.
-config :mydia, :data_dir, System.get_env("MYDIA_DATA_DIR") || "priv/data"
+# Where state that is safe to lose but costly to rebuild goes (the Cardigann
+# engine download and its precompiled form). MYDIA_DATA_DIR when set, else the
+# directory of the database file, which is a volume in the image, else priv/data.
+data_dir =
+  System.get_env("MYDIA_DATA_DIR") ||
+    case System.get_env("DATABASE_PATH") do
+      path when path in [nil, ""] -> "priv/data"
+      path -> Path.dirname(path)
+    end
+
+config :mydia, :data_dir, data_dir
 
 # Ueberauth OIDC configuration (all environments)
 # This runs at application startup, so environment variables are available

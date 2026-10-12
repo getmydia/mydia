@@ -17,6 +17,10 @@ concurrency:
 
 env:
   MIX_ENV: test
+  # Wasmex carries a local patch in its Rust half (patches/wasmex), so it is
+  # built from source instead of downloading its precompiled NIF. The cached
+  # deps/ and _build/ keys include patches/**.
+  WASMEX_BUILD: "1"
   # Harden Rust crate fetches against transient crates.io flakiness. The Rustler
   # NIF (native/mydia_p2p) is built during `mix compile`; CI intermittently hit
   # "download of … failed / curl failed / [16] Error in the HTTP2 framing layer".

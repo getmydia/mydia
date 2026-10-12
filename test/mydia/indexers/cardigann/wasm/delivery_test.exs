@@ -56,10 +56,15 @@ defmodule Mydia.Indexers.Cardigann.Wasm.DeliveryTest do
     test "fetches the pinned file, verifies it and writes it atomically", ctx do
       serve(ctx.bypass, @bytes)
 
-      assert {:ok, path} = Delivery.ensure()
+      assert {:ok, path, bytes} = Delivery.ensure()
       assert path == ctx.cached
+      assert bytes == @bytes
       assert File.read!(path) == @bytes
       assert Path.wildcard(ctx.cached <> ".part-*") == []
+
+      # Only the app user may read the directory or the file.
+      assert File.stat!(path).mode |> Bitwise.band(0o777) == 0o600
+      assert File.stat!(Path.dirname(path)).mode |> Bitwise.band(0o777) == 0o700
     end
 
     test "a checksum mismatch is an error and nothing is kept", ctx do
@@ -87,7 +92,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.DeliveryTest do
       # Bypass fails the test on an unexpected request.
       assert {:error, :no_pin} = Delivery.ensure()
       refute File.exists?(ctx.cached)
-      assert Delivery.describe(:no_pin) =~ "no pinned checksum"
+      assert Delivery.describe(:no_pin) == "no published Cardigann engine for this build"
     end
   end
 
@@ -97,7 +102,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.DeliveryTest do
       File.write!(ctx.cached, @bytes)
 
       # Bypass has no expectation: a request would fail the test.
-      assert {:ok, path} = Delivery.ensure()
+      assert {:ok, path, _bytes} = Delivery.ensure()
       assert path == ctx.cached
     end
 
@@ -106,7 +111,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.DeliveryTest do
       File.write!(ctx.cached, "truncated")
       serve(ctx.bypass, @bytes)
 
-      assert {:ok, path} = Delivery.ensure()
+      assert {:ok, path, @bytes} = Delivery.ensure()
       assert File.read!(path) == @bytes
     end
 
@@ -117,7 +122,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.DeliveryTest do
       File.write!(mirrored, @bytes)
       System.put_env("CARDIGANN_WASM_PATH", mirrored)
 
-      assert {:ok, ^mirrored} = Delivery.ensure()
+      assert {:ok, ^mirrored, @bytes} = Delivery.ensure()
     end
 
     test "CARDIGANN_WASM_PATH is verified against the pin and never falls back", ctx do
@@ -144,38 +149,102 @@ defmodule Mydia.Indexers.Cardigann.Wasm.DeliveryTest do
       File.write!(dev <> ".sha256", Artifact.sha256("a local build") <> "\n")
       Application.put_env(:mydia, :cardigann_wasm_path, dev)
 
-      assert {:ok, ^dev} = Delivery.ensure()
+      assert {:ok, ^dev, "a local build"} = Delivery.ensure()
     end
   end
 
-  describe "prune/1" do
+  describe "prune/2" do
     test "removes other versions and keeps the current files and unrelated ones", ctx do
       dir = Path.dirname(ctx.cached)
       File.mkdir_p!(dir)
+      sha = Artifact.sha256(@bytes)
+      cwasm = Artifact.cwasm_name(sha)
 
-      keep = [Artifact.file_name(), Artifact.cwasm_name(), "unrelated.txt"]
-      stale = ~w(
-        cardigann-0000000000000000.wasm
-        cardigann-0000000000000000-wasmtime1.0.0-x86_64.cwasm
-        cardigann-#{Artifact.source_hash()}-wasmtime0.0.1-x86_64.cwasm
-        cardigann-#{Artifact.source_hash()}-wasmtime1.0.0-riscv64.cwasm.part-1
-      )
+      keep = [Artifact.file_name(), cwasm, cwasm <> ".sha256", "unrelated.txt"]
+
+      stale = [
+        "cardigann-0000000000000000.wasm",
+        "cardigann-#{String.duplicate("0", 64)}-wasmtime1.0.0-x86_64.cwasm",
+        "cardigann-#{String.duplicate("0", 64)}-wasmtime1.0.0-x86_64.cwasm.sha256",
+        "cardigann-#{sha}-wasmtime0.0.1-x86_64.cwasm"
+      ]
 
       for name <- keep ++ stale, do: File.write!(Path.join(dir, name), "x")
 
-      removed = Delivery.prune(dir)
+      removed = Delivery.prune(dir, sha)
 
       assert Enum.sort(Enum.map(removed, &Path.basename/1)) == Enum.sort(stale)
       assert dir |> File.ls!() |> Enum.sort() == Enum.sort(keep)
     end
 
+    test "leaves a fresh temp file alone and removes an old one", ctx do
+      dir = Path.dirname(ctx.cached)
+      File.mkdir_p!(dir)
+      fresh = Path.join(dir, "cardigann-a.cwasm.part-1")
+      old = Path.join(dir, "cardigann-b.cwasm.part-2")
+      File.write!(fresh, "x")
+      File.write!(old, "x")
+      File.touch!(old, System.os_time(:second) - 7_200)
+
+      assert [^old] = Delivery.prune(dir, Artifact.sha256(@bytes))
+      assert File.exists?(fresh)
+    end
+
     test "a missing directory is nothing to prune", ctx do
-      assert Delivery.prune(Path.join(ctx.dir, "never-created")) == []
+      assert Delivery.prune(Path.join(ctx.dir, "never-created"), Artifact.sha256(@bytes)) == []
     end
   end
 
-  test "the cached component name carries the wasmtime version and the architecture" do
-    assert Artifact.cwasm_name() =~
-             ~r/\Acardigann-[0-9a-f]{16}-wasmtime\d+\.\d+\.\d+-[a-z0-9_]+\.cwasm\z/
+  describe "the pin" do
+    test "a sidecar baked into the build is the pin when ARTIFACT_SHA256 is not set", ctx do
+      baked = Path.join(ctx.dir, "baked.wasm")
+      File.write!(baked <> ".sha256", Artifact.sha256(@bytes) <> "\n")
+      Application.put_env(:mydia, :cardigann_wasm_path, baked)
+      Application.delete_env(:mydia, :cardigann_pinned_sha256)
+      Application.put_env(:mydia, :cardigann_compiled_pin, nil)
+      on_exit(fn -> Application.delete_env(:mydia, :cardigann_compiled_pin) end)
+
+      assert Artifact.pinned_sha256() == Artifact.sha256(@bytes)
+    end
+
+    test "ARTIFACT_SHA256 wins over a baked sidecar", ctx do
+      baked = Path.join(ctx.dir, "baked.wasm")
+      File.write!(baked <> ".sha256", String.duplicate("a", 64) <> "\n")
+      Application.put_env(:mydia, :cardigann_wasm_path, baked)
+      Application.delete_env(:mydia, :cardigann_pinned_sha256)
+      Application.put_env(:mydia, :cardigann_compiled_pin, String.duplicate("b", 64))
+      on_exit(fn -> Application.delete_env(:mydia, :cardigann_compiled_pin) end)
+
+      assert Artifact.pinned_sha256() == String.duplicate("b", 64)
+    end
+
+    test "neither means no pin, and a junk sidecar is not a pin", ctx do
+      baked = Path.join(ctx.dir, "baked.wasm")
+      File.write!(baked <> ".sha256", "not a checksum\n")
+      Application.put_env(:mydia, :cardigann_wasm_path, baked)
+      Application.delete_env(:mydia, :cardigann_pinned_sha256)
+      Application.put_env(:mydia, :cardigann_compiled_pin, nil)
+      on_exit(fn -> Application.delete_env(:mydia, :cardigann_compiled_pin) end)
+
+      assert Artifact.pinned_sha256() == nil
+    end
+  end
+
+  test "the cached component name carries the wasm checksum, wasmtime version and architecture" do
+    sha = String.duplicate("a", 64)
+
+    assert Artifact.cwasm_name(sha) =~
+             ~r/\Acardigann-a{64}-wasmtime\d+\.\d+\.\d+-[a-z0-9_]+\.cwasm\z/
+  end
+
+  test "the wasmtime version in the lock for the Nix build matches the one Wasmex resolves" do
+    root = Path.expand("../../../../..", __DIR__)
+    lock = File.read!(Path.join(root, "nix/wasmex-Cargo.lock"))
+    mix_lock = File.read!(Path.join(root, "mix.lock"))
+    cargo = File.read!(Path.join(root, "deps/wasmex/native/wasmex/Cargo.toml"))
+
+    [_, wasmex] = Regex.run(~r/"wasmex": \{:hex, :wasmex, "([0-9.]+)"/, mix_lock)
+    assert lock =~ ~s(name = "wasmex"\nversion = "#{wasmex}")
+    assert cargo =~ ~s(version = "#{wasmex}")
   end
 end

@@ -144,4 +144,50 @@ defmodule Mix.Tasks.Mydia.CardigannGuestTest do
       assert {:ok, "ok"} = Artifact.load(wasm)
     end
   end
+
+  describe "pin" do
+    setup do
+      Application.put_env(:mydia, :cardigann_compiled_pin, nil)
+      on_exit(fn -> Application.delete_env(:mydia, :cardigann_compiled_pin) end)
+    end
+
+    test "records the published checksum without fetching the guest", %{
+      bypass: bypass,
+      wasm: wasm
+    } do
+      # Only the sidecar is served: a request for the guest would fail the test.
+      serve(bypass, Path.basename(wasm) <> ".sha256", sha("published") <> "\n")
+
+      assert :ok = Task.pin(true)
+      assert File.read!(wasm <> ".sha256") == sha("published") <> "\n"
+      refute File.exists?(wasm)
+    end
+
+    test "an unpublished guest is a warning, and an error with --require", %{
+      bypass: bypass,
+      wasm: wasm
+    } do
+      Bypass.expect(bypass, fn conn -> Plug.Conn.resp(conn, 404, "") end)
+
+      assert :ok = quiet(fn -> Task.pin(false) end)
+      assert {:error, why} = Task.pin(true)
+      assert why =~ "no published checksum"
+      refute File.exists?(wasm <> ".sha256")
+    end
+
+    test "something that is not a checksum is not recorded", %{bypass: bypass, wasm: wasm} do
+      serve(bypass, Path.basename(wasm) <> ".sha256", "<html>nope</html>")
+
+      assert {:error, _} = Task.pin(true)
+      refute File.exists?(wasm <> ".sha256")
+    end
+
+    test "nothing to do when ARTIFACT_SHA256 already pins these sources", %{wasm: wasm} do
+      Application.put_env(:mydia, :cardigann_compiled_pin, String.duplicate("c", 64))
+
+      # No server expectation: any request fails the test.
+      assert :ok = Task.pin(true)
+      refute File.exists?(wasm <> ".sha256")
+    end
+  end
 end
