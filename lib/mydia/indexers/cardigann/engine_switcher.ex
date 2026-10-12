@@ -13,6 +13,10 @@ defmodule Mydia.Indexers.Cardigann.EngineSwitcher do
   session, so a cutover does not log anyone out. In-flight wasm calls run in
   their caller's process with their own store and finish normally.
 
+  If the wasm engine stops being ready after the cutover (a crash and restart,
+  a recompile), the switcher falls back to the built-in adapter and tracks the
+  engine like a new transition until it reports ready again.
+
   The active engine is cached in `:persistent_term` for
   `Mydia.Indexers.CardigannFeatureFlags.active_engine/0`.
   """
@@ -95,6 +99,7 @@ defmodule Mydia.Indexers.Cardigann.EngineSwitcher do
   @impl true
   def handle_continue(:boot, state) do
     state = state |> set_active(:builtin) |> apply_engine(EngineSetting.setting())
+    broadcast(state)
     {:noreply, state}
   end
 
@@ -121,8 +126,12 @@ defmodule Mydia.Indexers.Cardigann.EngineSwitcher do
   def handle_info({:cardigann_wasm_engine, event}, %{transition: %Transition{} = t} = state) do
     state =
       case event do
+        # A stale :ready (from an engine stopped during a quick bounce) must not
+        # cut over early, so ask the engine.
         :ready ->
-          %{set_active(state, :prowlarr) | transition: nil}
+          if state.engine.status() == :ready,
+            do: %{set_active(state, :prowlarr) | transition: nil},
+            else: state
 
         {:phase, phase} ->
           %{
@@ -145,6 +154,21 @@ defmodule Mydia.Indexers.Cardigann.EngineSwitcher do
 
     broadcast(state)
     {:noreply, state}
+  end
+
+  # The engine left the ready state while serving (it crashed and restarted, or
+  # is recompiling): fall back to built-in and track it like a fresh transition.
+  def handle_info(
+        {:cardigann_wasm_engine, event},
+        %{active: :prowlarr, desired: :prowlarr, transition: nil} = state
+      )
+      when elem(event, 0) in [:phase, :unavailable] do
+    state = %{
+      set_active(state, :builtin)
+      | transition: %Transition{phase_started_at: now()}
+    }
+
+    handle_info({:cardigann_wasm_engine, event}, state)
   end
 
   # Events with no transition running (a stopped engine's last words, or a

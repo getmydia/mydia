@@ -31,6 +31,10 @@ defmodule Mydia.Indexers.Cardigann.EngineSwitcherTest do
     end)
 
     start_supervised!({EngineSwitcher, name: @server})
+    # Wait for boot to finish, then drop its :stop so later assertions on :stop
+    # prove a switch stopped the engine.
+    EngineSwitcher.status(@server)
+    assert_receive {:fake_engine, :stop}
     Phoenix.PubSub.subscribe(Mydia.PubSub, EngineSwitcher.topic())
     {:ok, dir: dir}
   end
@@ -64,12 +68,41 @@ defmodule Mydia.Indexers.Cardigann.EngineSwitcherTest do
              EngineSwitcher.status(@server)
 
     engine_event({:phase, :compiling})
+
+    # A :ready the engine does not confirm is stale and changes nothing.
+    engine_event(:ready)
+    assert %Status{active: :builtin} = EngineSwitcher.status(@server)
+
+    Application.put_env(:mydia, :fake_wasm_engine_status, :ready)
     engine_event(:ready)
 
     assert %Status{active: :prowlarr, transition: nil} = EngineSwitcher.status(@server)
     assert Registry.get_adapter!(:cardigann) == Wasm.Adapter
     assert Mydia.Indexers.CardigannFeatureFlags.active_engine() == :prowlarr
     assert_received {:cardigann_engine, %Status{active: :prowlarr}}
+  end
+
+  test "an engine that stops being ready after cutover falls back until it is ready again" do
+    Application.put_env(:mydia, :fake_wasm_engine_status, :ready)
+    switch(:prowlarr)
+    assert %Status{active: :prowlarr, transition: nil} = EngineSwitcher.status(@server)
+
+    Application.put_env(:mydia, :fake_wasm_engine_status, :pending)
+    engine_event({:phase, :compiling})
+
+    assert %Status{
+             active: :builtin,
+             desired: :prowlarr,
+             transition: %Transition{phase: :compiling}
+           } =
+             EngineSwitcher.status(@server)
+
+    assert Registry.get_adapter!(:cardigann) == Mydia.Indexers.Adapter.Cardigann
+
+    Application.put_env(:mydia, :fake_wasm_engine_status, :ready)
+    engine_event(:ready)
+    assert %Status{active: :prowlarr, transition: nil} = EngineSwitcher.status(@server)
+    assert Registry.get_adapter!(:cardigann) == Wasm.Adapter
   end
 
   test "an engine that is already ready cuts over at once" do
