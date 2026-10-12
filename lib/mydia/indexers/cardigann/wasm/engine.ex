@@ -28,7 +28,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   require Logger
 
   alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Indexers.Cardigann.Wasm.{Artifact, Codec, HostHttp}
+  alias Mydia.Indexers.Cardigann.Wasm.{Artifact, Codec, Delivery, HostHttp}
   alias Wasmex.Components
   alias Wasmex.Wasi.WasiP2Options
 
@@ -88,10 +88,12 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
   @doc """
   The engine's state, without waiting: `:disabled` (not selected, so the process
-  does not run), `:pending`, `:compiling`, `:ready`, or `{:unavailable, reason}`
+  does not run), `:pending`, `:fetching` (downloading the artifact),
+  `:compiling` (compiling or loading it), `:ready`, or `{:unavailable, reason}`
   with a printable reason.
   """
-  @spec status() :: :disabled | :pending | :compiling | :ready | {:unavailable, String.t()}
+  @spec status() ::
+          :disabled | :pending | :fetching | :compiling | :ready | {:unavailable, String.t()}
   def status do
     GenServer.call(__MODULE__, :status, 1_000)
   catch
@@ -166,14 +168,12 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   defp unavailable({:unavailable, reason}) do
     Error.engine_unavailable(
       "The Prowlarr Cardigann engine is not available: #{reason}",
-      %{reason: reason, hint: "run mix mydia.cardigann_guest fetch"}
+      %{reason: reason}
     )
   end
 
   defp unavailable(_other) do
-    Error.engine_unavailable("The Prowlarr Cardigann engine is not available", %{
-      hint: "run mix mydia.cardigann_guest fetch"
-    })
+    Error.engine_unavailable("The Prowlarr Cardigann engine is not available")
   end
 
   # ── One call ──────────────────────────────────────────────────────────────
@@ -336,6 +336,12 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{task: {_pid2, ref}} = state),
     do: {:noreply, settle(state, {:unavailable, "compile crashed: #{inspect(reason)}"})}
 
+  # The background process reports which step it is on (download, then compile
+  # or load), for the status line. A late message after the settle is ignored.
+  def handle_info({:phase, phase}, %{status: status} = state)
+      when status in [:compiling, :fetching],
+      do: {:noreply, %{state | status: phase}}
+
   def handle_info(_message, state), do: {:noreply, state}
 
   defp settle(state, status) do
@@ -349,37 +355,125 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   def handle_call(:available, from, %{status: :pending} = state),
     do: {:noreply, %{state | status: :compiling, waiters: [from]}, {:continue, :compile}}
 
-  def handle_call(:available, from, %{status: :compiling} = state),
-    do: {:noreply, %{state | waiters: [from | state.waiters]}}
+  def handle_call(:available, from, %{status: status} = state)
+      when status in [:compiling, :fetching],
+      do: {:noreply, %{state | waiters: [from | state.waiters]}}
 
   def handle_call(:available, _from, %{status: status} = state),
     do: {:reply, status == :ready, state}
 
-  # Prefers the precompiled `<artifact>.cwasm` (mmapped, no Cranelift run) and
-  # falls back to compiling the .wasm when it is absent or rejected: it is tied
-  # to the wasmtime version, CPU architecture and engine config. Its own
-  # function, so the 75 MB artifact binary is out of every frame afterwards.
+  # Resolves and loads the component. The precompiled
+  # `cardigann-<hash>-wasmtime<version>-<arch>.cwasm` is mmapped and skips the
+  # Cranelift run; it is tied to the wasmtime version, CPU features and engine
+  # config, so a file that is rejected is deleted and rebuilt. Without one the
+  # .wasm is compiled once, serialized atomically next to it, and the
+  # serialized form is what gets loaded (about 65 MB less resident than the
+  # freshly compiled component, BENCH.md "Memory spike"). Its own function, so
+  # the 75 MB artifact binary is out of every frame afterwards.
   defp load_component(store) do
-    with {:ok, bytes} <- Artifact.load() do
-      cwasm = Artifact.path() <> ".cwasm"
+    send_phase(:fetching)
 
-      with true <- Application.get_env(:mydia, :cardigann_wasm_precompiled, true),
-           true <- File.regular?(cwasm),
-           {:ok, component} <- Components.Component.deserialize_file(store, cwasm, bytes) do
-        {:ok, component, "loaded precompiled"}
-      else
-        _ ->
-          with {:ok, component} <- Components.Component.new(store, bytes),
-               do: {:ok, component, "compiled"}
+    with {:ok, path} <- Delivery.ensure(),
+         {:ok, bytes} <- read(path) do
+      send_phase(:compiling)
+      cwasm = Artifact.cwasm_path()
+
+      result =
+        if precompiled?(),
+          do: load_cached(store, cwasm, bytes) || build_cached(store, cwasm, bytes),
+          else: nil
+
+      case result || compile_component(store, bytes) do
+        {:ok, component, how} ->
+          Delivery.prune(Artifact.cache_dir())
+          {:ok, component, how}
+
+        {:error, _} = error ->
+          error
       end
     end
+  end
+
+  defp read(path) do
+    case File.read(path) do
+      {:ok, bytes} -> {:ok, bytes}
+      {:error, :enoent} -> {:error, :missing}
+      {:error, reason} -> {:error, {:env_path_unreadable, "#{path} (#{inspect(reason)})"}}
+    end
+  end
+
+  defp precompiled?, do: Application.get_env(:mydia, :cardigann_wasm_precompiled, true)
+
+  # nil when there is no usable cached file (a rejected one is removed).
+  defp load_cached(store, cwasm, bytes) do
+    with true <- File.regular?(cwasm),
+         {:ok, component} <- Components.Component.deserialize_file(store, cwasm, bytes) do
+      {:ok, component, "loaded precompiled"}
+    else
+      false ->
+        nil
+
+      error ->
+        Logger.warning(
+          "Cardigann wasm engine: discarding #{cwasm} (#{inspect(error)}), compiling again"
+        )
+
+        File.rm(cwasm)
+        nil
+    end
+  end
+
+  # Compiles once, straight into the cache file, then loads that file. nil when
+  # the cache cannot be written or loaded (a Wasmex without the patch, a read
+  # only data directory): the caller compiles in memory instead.
+  defp build_cached(store, cwasm, bytes) do
+    tmp = "#{cwasm}.part-#{System.unique_integer([:positive])}"
+
+    with :ok <- File.mkdir_p(Path.dirname(cwasm)),
+         :ok <- Wasmex.Engine.precompile_component_to_file(Wasmex.Engine.default(), bytes, tmp),
+         :ok <- File.rename(tmp, cwasm),
+         {:ok, component} <- Components.Component.deserialize_file(store, cwasm, bytes) do
+      {:ok, component, "compiled and cached"}
+    else
+      error ->
+        Logger.warning(
+          "Cardigann wasm engine: could not cache the precompiled component " <>
+            "(#{inspect(error)}), compiling in memory"
+        )
+
+        File.rm(tmp)
+        File.rm(cwasm)
+        nil
+    end
+  rescue
+    e in ErlangError ->
+      Logger.warning("Cardigann wasm engine: precompile unsupported (#{Exception.message(e)})")
+      nil
+  end
+
+  defp compile_component(store, bytes) do
+    with {:ok, component} <- Components.Component.new(store, bytes),
+         do: {:ok, component, "compiled"}
+  end
+
+  defp send_phase(phase) do
+    if server = Process.whereis(__MODULE__), do: send(server, {:phase, phase})
+    :ok
   end
 
   # Compiling leaves about a GB of freed memory in glibc's arenas, which glibc
   # does not hand back by itself (native/cardigann_guest/BENCH.md, "Memory spike").
   defp release_build_memory do
     :erlang.garbage_collect()
-    if Application.get_env(:mydia, :cardigann_wasm_trim, true), do: Wasmex.Engine.malloc_trim()
+
+    if Application.get_env(:mydia, :cardigann_wasm_trim, true) do
+      try do
+        Wasmex.Engine.malloc_trim()
+      rescue
+        ErlangError -> false
+      end
+    end
+
     :ok
   end
 
@@ -402,11 +496,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
       :ready
     else
       {:error, reason} ->
-        Logger.warning(
-          "Cardigann wasm engine unavailable: #{inspect(reason)} " <>
-            "(run mix mydia.cardigann_guest fetch)"
-        )
-
+        Logger.warning("Cardigann wasm engine unavailable: #{describe(reason)}")
         {:unavailable, describe(reason)}
     end
   rescue
@@ -416,5 +506,17 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   end
 
   defp describe(:missing), do: "the engine artifact is missing"
+
+  defp describe(reason)
+       when reason == :no_pin or
+              (is_tuple(reason) and
+                 elem(reason, 0) in [
+                   :env_path_unreadable,
+                   :checksum_mismatch,
+                   :download_failed,
+                   :write_failed
+                 ]),
+       do: Delivery.describe(reason)
+
   defp describe(reason), do: inspect(reason)
 end

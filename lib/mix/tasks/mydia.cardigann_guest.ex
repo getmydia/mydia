@@ -26,8 +26,6 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
 
   @shortdoc "Fetches and verifies the prebuilt Cardigann wasm guest"
 
-  @default_base "https://github.com/getmydia/mydia/releases/download/cardigann-guest"
-
   @impl Mix.Task
   def run(argv) do
     {opts, args} = OptionParser.parse!(argv, strict: [allow_missing: :boolean])
@@ -58,7 +56,7 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
 
       ["precompile"] ->
         case precompile() do
-          :ok -> Mix.shell().info("Cardigann guest precompiled: #{target()}.cwasm")
+          :ok -> Mix.shell().info("Cardigann guest precompiled: #{Artifact.cwasm_path()}")
           {:error, reason} -> Mix.raise("Cardigann guest precompile failed: #{inspect(reason)}")
         end
 
@@ -96,7 +94,7 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
       Wasmex.Engine.precompile_component_to_file(
         Wasmex.Engine.default(),
         bytes,
-        target <> ".cwasm"
+        Artifact.cwasm_path()
       )
     end
   end
@@ -182,7 +180,7 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
     end
   end
 
-  defp base_url, do: Application.get_env(:mydia, :cardigann_guest_base_url, @default_base)
+  defp base_url, do: Artifact.base_url()
 
   defp local_build do
     Application.get_env(:mydia, :cardigann_guest_local) ||

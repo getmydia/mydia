@@ -89,6 +89,14 @@ defmodule Mydia.Indexers.CardigannFeatureFlags do
           :ready ->
             %{engine: :prowlarr, label: label, state: :ready, detail: nil}
 
+          :fetching ->
+            %{
+              engine: :prowlarr,
+              label: label,
+              state: :starting,
+              detail: "downloading the engine (about 75 MB), searches fail until it is ready"
+            }
+
           status when status in [:pending, :compiling] ->
             %{
               engine: :prowlarr,
