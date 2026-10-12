@@ -81,47 +81,6 @@ A LiveComponent for manual metadata search when automatic parsing or matching fa
 
 ---
 
-### `MetadataSearchForm`
-
-A function component that provides an autocomplete-style search input with live TMDB results.
-
-**Location:** `lib/mydia_web/live/components/metadata_search_form.ex`
-
-**Usage:**
-
-```heex
-<.metadata_search_form
-  title_value={@edit_form["title"]}
-  search_results={@search_results}
-  on_search="search_series"
-  on_select="select_search_result"
-  placeholder="Search by title..."
-  input_name="edit_form[title]"
-  input_class="input input-bordered w-full"
-/>
-```
-
-**Props:**
-
-- `title_value` (string, required) - Current value of search input
-- `search_results` (list, required) - List of search results to display in dropdown
-- `on_search` (string, required) - Event to trigger when user types (phx-change)
-- `on_select` (string, required) - Event to trigger when user clicks a result
-- `placeholder` (string, optional, default: "Search by title...") - Input placeholder text
-- `input_name` (string, optional, default: "title") - Name attribute for the input field
-- `input_class` (string, optional) - CSS classes for styling the input
-- `show_no_results` (boolean, optional, default: false) - Whether to show "no results" helper text
-
-**Features:**
-
-- Debounced search input (300ms)
-- Dropdown with results (max height 64px with scroll)
-- Each result shows: poster image, title, year, and media type badge
-- Handles missing poster images
-- Emits complete result data via phx-value attributes
-
----
-
 ## Implementation Notes
 
 ### Event Handling

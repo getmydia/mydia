@@ -50,19 +50,20 @@ defmodule MydiaWeb.AdminUsersLive.Components do
             class="input input-bordered w-full"
           />
         </.form>
-        <select
-          id="users-role-filter"
-          phx-change="filter_users"
-          name="role"
-          aria-label="Filter by role"
-          class="select select-bordered"
-        >
-          <option value="all" selected={@filter_role == "all"}>All Roles</option>
-          <option value="admin" selected={@filter_role == "admin"}>Admin</option>
-          <option value="user" selected={@filter_role == "user"}>User</option>
-          <option value="readonly" selected={@filter_role == "readonly"}>Read Only</option>
-          <option value="guest" selected={@filter_role == "guest"}>Guest</option>
-        </select>
+        <.form for={%{}} id="users-role-filter-form" phx-change="filter_users">
+          <select
+            id="users-role-filter"
+            name="role"
+            aria-label="Filter by role"
+            class="select select-bordered"
+          >
+            <option value="all" selected={@filter_role == "all"}>All Roles</option>
+            <option value="admin" selected={@filter_role == "admin"}>Admin</option>
+            <option value="user" selected={@filter_role == "user"}>User</option>
+            <option value="readonly" selected={@filter_role == "readonly"}>Read Only</option>
+            <option value="guest" selected={@filter_role == "guest"}>Guest</option>
+          </select>
+        </.form>
       </div>
 
       <.admin_table id="users" rows={@users} row_id={&"user-#{&1.user.id}"}>
