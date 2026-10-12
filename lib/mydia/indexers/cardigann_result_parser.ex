@@ -296,17 +296,30 @@ defmodule Mydia.Indexers.CardigannResultParser do
   rescue
     # lexbor rejected a selector in the definition. Selector.find/3 names it in
     # the message; add the indexer so the failure is traceable to a definition.
-    error in ArgumentError ->
+    error ->
+      html_parse_failure(error, indexer_name)
+  end
+
+  @doc false
+  @spec html_parse_failure(Exception.t(), String.t()) :: {:error, Error.t()}
+  def html_parse_failure(%ArgumentError{} = error, indexer_name) do
+    if Selector.selector_error?(error) do
       Logger.error("Invalid selector in #{indexer_name} definition: #{Exception.message(error)}")
 
       {:error,
        Error.search_failed(
          "Invalid selector in the #{indexer_name} definition: #{Exception.message(error)}"
        )}
+    else
+      generic_html_failure(error, indexer_name)
+    end
+  end
 
-    error ->
-      Logger.error("HTML parsing error for #{indexer_name}: #{inspect(error)}")
-      {:error, Error.search_failed("Failed to parse HTML response: #{inspect(error)}")}
+  def html_parse_failure(error, indexer_name), do: generic_html_failure(error, indexer_name)
+
+  defp generic_html_failure(error, indexer_name) do
+    Logger.error("HTML parsing error for #{indexer_name}: #{inspect(error)}")
+    {:error, Error.search_failed("Failed to parse HTML response: #{inspect(error)}")}
   end
 
   @doc """

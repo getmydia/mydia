@@ -47,7 +47,7 @@ defmodule Mydia.Indexers.Cardigann.SelectorTest do
       assert count(html, ~S|li:contains("beta")|) == 1
     end
 
-    test "inside :not, as 0magnet uses it" do
+    test "inside :not with an apostrophe in the needle" do
       html =
         "<table><tbody><tr><td>row</td></tr><tr><td>We couldn't find anything for x</td></tr></tbody></table>"
 

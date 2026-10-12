@@ -3,6 +3,23 @@ defmodule Mydia.Indexers.Cardigann.LiveCheckTest do
 
   alias Mydia.Indexers.Cardigann.LiveCheck
 
+  describe "safe_dirname/1" do
+    test "keeps ordinary ids" do
+      assert LiveCheck.safe_dirname("my-tracker_2.v1") == "my-tracker_2.v1"
+    end
+
+    test "neutralises path separators and traversal" do
+      refute LiveCheck.safe_dirname("../../etc/passwd") =~ "/"
+      assert LiveCheck.safe_dirname("a/b\\c") == "a_b_c"
+    end
+
+    test "never returns a dot-only name" do
+      for id <- ["", ".", "..", "..."] do
+        refute LiveCheck.safe_dirname(id) in ["", ".", ".."]
+      end
+    end
+  end
+
   describe "classify/1" do
     test "rows on the probe query and a magnet grab is ok" do
       assert LiveCheck.classify(%{

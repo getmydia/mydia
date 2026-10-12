@@ -923,7 +923,7 @@ defmodule Mydia.Indexers.CardigannTemplateTest do
                )
     end
 
-    test "a trim marker after a name still trims" do
+    test "a trim marker after a name still parses" do
       # Whitespace trimming is parsed but not applied by the evaluator, so only
       # assert that the marker no longer breaks the parse after a name.
       assert {:ok, out} =

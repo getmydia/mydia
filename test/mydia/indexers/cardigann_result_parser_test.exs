@@ -2188,4 +2188,31 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
                )
     end
   end
+
+  describe "html_parse_failure/2" do
+    import ExUnit.CaptureLog
+
+    test "labels a lexbor selector error as an invalid selector" do
+      error = %ArgumentError{message: ~s(invalid selector "a[")}
+
+      capture_log(fn ->
+        assert {:error, e} = CardigannResultParser.html_parse_failure(error, "demo")
+        assert Exception.message(e) =~ "Invalid selector in the demo definition"
+      end)
+    end
+
+    test "does not label an unrelated ArgumentError as an invalid selector" do
+      error = %ArgumentError{message: "errors were found at the given arguments"}
+
+      log =
+        capture_log(fn ->
+          assert {:error, e} = CardigannResultParser.html_parse_failure(error, "demo")
+          message = Exception.message(e)
+          refute message =~ "Invalid selector"
+          assert message =~ "Failed to parse HTML response"
+        end)
+
+      refute log =~ "Invalid selector"
+    end
+  end
 end

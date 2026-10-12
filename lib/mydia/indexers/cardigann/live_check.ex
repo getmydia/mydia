@@ -238,7 +238,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
   # -- capture ----------------------------------------------------------------
 
   defp capture(dir, parsed, yaml, search, empty, outcome) do
-    target = Path.join(dir, parsed.id)
+    target = Path.join(dir, safe_dirname(parsed.id))
     File.mkdir_p!(target)
     File.write!(Path.join(target, "definition.yml"), yaml)
 
@@ -266,6 +266,17 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
     end
   end
 
+  @doc """
+  Turns a definition id into a single safe directory name. The id comes from
+  remote YAML, so anything outside `[A-Za-z0-9._-]` becomes `_` and a name made
+  only of dots cannot climb out of the capture directory.
+  """
+  @spec safe_dirname(term()) :: String.t()
+  def safe_dirname(id) do
+    name = id |> to_string() |> String.replace(~r/[^A-Za-z0-9._-]/, "_")
+    if name =~ ~r/\A\.*\z/, do: String.replace(name, ".", "_") <> "_", else: name
+  end
+
   defp best_response({:ok, [_ | _], _, response, _}, _empty, query), do: {query, response}
   defp best_response(_search, {:ok, _, _, response, _}, _query), do: {"", response}
   defp best_response({:ok, _, _, response, _}, _empty, query), do: {query, response}
@@ -277,7 +288,7 @@ defmodule Mydia.Indexers.Cardigann.LiveCheck do
     if not String.starts_with?(url, "magnet:") do
       case Req.get(url, retry: false, decode_body: false, receive_timeout: @grab_timeout) do
         {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) ->
-          File.write!(Path.join([dir, id, "download_response.html"]), body)
+          File.write!(Path.join([dir, safe_dirname(id), "download_response.html"]), body)
 
         _ ->
           :ok
