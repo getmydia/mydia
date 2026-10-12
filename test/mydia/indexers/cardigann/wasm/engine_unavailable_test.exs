@@ -77,6 +77,24 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineUnavailableTest do
     assert Engine.status() == {:unavailable, "slow compile finished"}
   end
 
+  @tag :capture_log
+  test "a compile that raises settles as unavailable without restarting the engine" do
+    Application.put_env(:mydia, :cardigann_wasm_compile_fun, fn ->
+      Process.sleep(300)
+      raise "boom"
+    end)
+
+    on_exit(fn -> Application.delete_env(:mydia, :cardigann_wasm_compile_fun) end)
+
+    restart_engine()
+    pid = Process.whereis(Engine)
+
+    refute Engine.available?()
+    assert {:unavailable, reason} = Engine.status()
+    assert reason =~ "compile crashed"
+    assert Process.whereis(Engine) == pid
+  end
+
   # The application starts the engine only under CARDIGANN_ENGINE=prowlarr, so
   # these tests start (and afterwards remove) it themselves.
   defp stop_engine do

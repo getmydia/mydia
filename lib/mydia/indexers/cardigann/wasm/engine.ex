@@ -314,21 +314,26 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
       else: {:ok, state}
   end
 
-  # The compile (several seconds) runs in a task, so the server keeps answering
-  # status/0 and queueing waiters while it works.
+  # The compile (several seconds) runs in its own process, so the server keeps
+  # answering status/0 and queueing waiters while it works. The process is
+  # monitored, not linked: a compile that raises or exits settles the engine as
+  # unavailable instead of taking the server (and, through restarts, the
+  # supervisor) down with it.
   @impl true
   def handle_continue(:compile, state) do
     fun = Application.get_env(:mydia, :cardigann_wasm_compile_fun, &compile/0)
-    {:noreply, %{state | task: Task.async(fun)}}
+    server = self()
+    task = spawn_monitor(fn -> send(server, {:compiled, self(), fun.()}) end)
+    {:noreply, %{state | task: task}}
   end
 
   @impl true
-  def handle_info({ref, status}, %{task: %Task{ref: ref}} = state) do
+  def handle_info({:compiled, pid, status}, %{task: {pid, ref}} = state) do
     Process.demonitor(ref, [:flush])
     {:noreply, settle(state, status)}
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %{task: %Task{ref: ref}} = state),
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{task: {_pid2, ref}} = state),
     do: {:noreply, settle(state, {:unavailable, "compile crashed: #{inspect(reason)}"})}
 
   def handle_info(_message, state), do: {:noreply, state}
