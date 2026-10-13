@@ -56,11 +56,19 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Components do
     </div>
 
     <.admin_table id="blacklist" rows={@rows} row_id={&"blacklist-row-#{&1.id}"}>
-      <:col :let={row} label="Title" class="font-mono text-xs max-w-md truncate">
+      <:col
+        :let={row}
+        label="Title"
+        class="font-mono text-xs break-all sm:break-normal sm:max-w-md sm:truncate"
+      >
         <span title={row.title}>{row.title}</span>
       </:col>
       <:col :let={row} label="Indexer">{row.indexer}</:col>
-      <:col :let={row} label="GUID" class="font-mono text-xs max-w-xs truncate">
+      <:col
+        :let={row}
+        label="GUID"
+        class="font-mono text-xs break-all sm:break-normal sm:max-w-xs sm:truncate"
+      >
         <span title={row.guid}>{row.guid}</span>
       </:col>
       <:col :let={row} label="Reason">

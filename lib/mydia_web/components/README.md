@@ -345,7 +345,11 @@ and each menu button blurs itself on click so the menu closes.
 
 **Tables.** A page with many rows and several columns (jobs, release
 blacklist, users) uses `<.admin_table id rows row_id>` with `:col`, `:action`
-and `:empty` slots: the same empty state and the same row actions. History
+and `:empty` slots: the same empty state and the same row actions.
+Below `sm` it stacks: each row is a card, each cell a label/value pair labelled
+from its column's `label`, and the first column is the card's title. A `:col`
+`class` that only makes sense in a table (`truncate`, a `max-w-*`) takes an
+`sm:` prefix. History
 tables that page by offset keep their Load More or prev/next controls outside
 `admin_table`.
 
