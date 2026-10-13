@@ -25,6 +25,14 @@ defmodule MydiaWeb.Features.AdminMobileScrollTest do
   }
 
   setup do
+    # The remote access page otherwise reaches icanhazip/ifconfig.me/ipify for real.
+    original_direct_urls_config = Application.get_env(:mydia, :direct_urls, [])
+    Application.put_env(:mydia, :direct_urls, public_ip_enabled: false)
+
+    on_exit(fn ->
+      Application.put_env(:mydia, :direct_urls, original_direct_urls_config)
+    end)
+
     # The Jobs page lists the cron schedule, which needs a running Oban with a
     # Cron plugin. The app skips Oban in test, so start one with a crontab whose
     # entry cannot fire (see test/README.md, "Oban is disabled in test").
