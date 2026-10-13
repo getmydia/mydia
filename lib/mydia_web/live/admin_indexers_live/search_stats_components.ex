@@ -42,8 +42,9 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
         :for={summary <- @summaries}
         type="button"
         id={"indexer-stats-#{@indexer_id}-#{summary.engine || "none"}"}
-        class="flex flex-wrap items-center gap-x-3 gap-y-1 text-left transition-colors hover:text-base-content"
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded text-left transition-colors hover:text-base-content focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         title="Show recent failures"
+        aria-label="Recent failures for this indexer"
         phx-click="show_search_failures"
         phx-value-id={@indexer_id}
       >
