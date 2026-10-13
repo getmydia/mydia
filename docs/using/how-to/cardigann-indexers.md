@@ -32,26 +32,31 @@ To disable:
 ENABLE_CARDIGANN=false
 ```
 
-## Using Prowlarr's engine (experimental)
+## Using the Prowlarr-based engine (experimental)
 
-Mydia can run Prowlarr's own Cardigann engine instead of its built-in one.
-Choose the engine under **Configuration > Indexers**, in the **Indexer library
-engine** section, which shows a Built-in and a Prowlarr card. The default is
-Built-in. Switching takes effect without a restart.
+Mydia can run Prowlarr's own Cardigann code, compiled from C# and built into
+Mydia, instead of its built-in engine. It needs no Prowlarr server and is
+unrelated to adding a Prowlarr connection. It is recommended for private
+trackers, since their logins then follow Prowlarr's code exactly.
 
-The first time you switch to Prowlarr, Mydia downloads and compiles the engine
+Choose the engine under **Configuration > Indexers**, in the **Library
+Indexers** section: **How library indexers run** shows the active engine, and
+**Change** opens a Built-in and a Prowlarr-based card. The default is Built-in.
+Switching takes effect without a restart.
+
+The first time you switch to Prowlarr-based, Mydia downloads and compiles the engine
 while the built-in engine keeps serving your searches, and the page shows
 progress. When it is ready, searches move over by themselves. If something goes
 wrong, the page shows the reason. Problems that can pass, such as a network
 failure, are retried in the background (use **Retry now** to try again at once).
 Permanent ones, such as a checksum mismatch or a Mydia version with no published
-engine, need the cause fixed first. If the Prowlarr engine stops being ready
+engine, need the cause fixed first. If the Prowlarr-based engine stops being ready
 later, for example if the engine crashes and restarts, the built-in engine serves searches again
 until it is.
 
 Switching back to Built-in frees the engine's memory but keeps the downloaded
-and compiled files, so switching to Prowlarr again takes about a second. Use
-**Remove cached Prowlarr engine** on the same page to delete them. The button
+and compiled files, so switching to Prowlarr-based again takes about a second. Use
+**Remove cached Prowlarr-based engine** under **Change** to delete them. The button
 appears while Built-in is selected.
 
 A "verified" badge on a tracker means that engine returned results for it that

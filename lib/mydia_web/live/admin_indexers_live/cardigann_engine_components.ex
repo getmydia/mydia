@@ -40,7 +40,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
     }
   ]
 
-  @docs_url "https://docs.mydia.dev/latest/using/how-to/cardigann-indexers/#using-prowlarrs-engine-experimental"
+  @docs_url "https://docs.mydia.dev/latest/using/how-to/cardigann-indexers/#using-the-prowlarr-based-engine-experimental"
 
   attr :status, Status, required: true
   attr :cache_bytes, :integer, required: true
