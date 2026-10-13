@@ -906,10 +906,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#using-prowlarrs-engine-experimental" class="md-nav__link">
+  <a href="#using-the-prowlarr-based-engine-experimental" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Using Prowlarr's engine (experimental)
+        Using the Prowlarr-based engine (experimental)
       
     </span>
   </a>
@@ -3539,10 +3539,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#using-prowlarrs-engine-experimental" class="md-nav__link">
+  <a href="#using-the-prowlarr-based-engine-experimental" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Using Prowlarr's engine (experimental)
+        Using the Prowlarr-based engine (experimental)
       
     </span>
   </a>
@@ -3788,23 +3788,27 @@ running fewer services.</p>
 <p>To disable:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">ENABLE_CARDIGANN</span><span class="o">=</span><span class="nb">false</span>
 </code></pre></div>
-<h2 id="using-prowlarrs-engine-experimental">Using Prowlarr's engine (experimental)</h2>
-<p>Mydia can run Prowlarr's own Cardigann engine instead of its built-in one.
-Choose the engine under <strong>Configuration &gt; Indexers</strong>, in the <strong>Indexer library
-engine</strong> section, which shows a Built-in and a Prowlarr card. The default is
-Built-in. Switching takes effect without a restart.</p>
-<p>The first time you switch to Prowlarr, Mydia downloads and compiles the engine
+<h2 id="using-the-prowlarr-based-engine-experimental">Using the Prowlarr-based engine (experimental)</h2>
+<p>Mydia can run Prowlarr's own Cardigann code, compiled from C# and built into
+Mydia, instead of its built-in engine. It needs no Prowlarr server and is
+unrelated to adding a Prowlarr connection. It is recommended for private
+trackers, since their logins then follow Prowlarr's code exactly.</p>
+<p>Choose the engine under <strong>Configuration &gt; Indexers</strong>, in the <strong>Library
+Indexers</strong> section: <strong>How library indexers run</strong> shows the active engine, and
+<strong>Change</strong> opens a Built-in and a Prowlarr-based card. The default is Built-in.
+Switching takes effect without a restart.</p>
+<p>The first time you switch to Prowlarr-based, Mydia downloads and compiles the engine
 while the built-in engine keeps serving your searches, and the page shows
 progress. When it is ready, searches move over by themselves. If something goes
 wrong, the page shows the reason. Problems that can pass, such as a network
 failure, are retried in the background (use <strong>Retry now</strong> to try again at once).
 Permanent ones, such as a checksum mismatch or a Mydia version with no published
-engine, need the cause fixed first. If the Prowlarr engine stops being ready
+engine, need the cause fixed first. If the Prowlarr-based engine stops being ready
 later, for example if the engine crashes and restarts, the built-in engine serves searches again
 until it is.</p>
 <p>Switching back to Built-in frees the engine's memory but keeps the downloaded
-and compiled files, so switching to Prowlarr again takes about a second. Use
-<strong>Remove cached Prowlarr engine</strong> on the same page to delete them. The button
+and compiled files, so switching to Prowlarr-based again takes about a second. Use
+<strong>Remove cached Prowlarr-based engine</strong> under <strong>Change</strong> to delete them. The button
 appears while Built-in is selected.</p>
 <p>A "verified" badge on a tracker means that engine returned results for it that
 matched Prowlarr's in our benchmark. No badge means "not verified", not
