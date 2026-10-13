@@ -342,6 +342,8 @@ config :mydia, Oban,
        {"*/30 * * * *", Mydia.Jobs.MediaServerWatchedSync, args: %{"mode" => "all_enabled"}},
        # Purge expired release-blacklist rows daily at 5:30 AM (#123)
        {"30 5 * * *", Mydia.Jobs.BlacklistCleanup},
+       # Prune indexer search metrics past their 14-day retention daily at 4:45 AM
+       {"45 4 * * *", Mydia.Jobs.IndexerStatsCleanup},
        # Analyze media files lacking tech metadata every minute (#131)
        {"* * * * *", Mydia.Jobs.FileAnalysis},
        # Runs behind FileAnalysis: a file needs a duration before it can be
