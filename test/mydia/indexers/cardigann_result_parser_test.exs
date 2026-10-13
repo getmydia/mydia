@@ -945,6 +945,41 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
 
       assert result.download_url == "https://example.invalid/download.php?id=7"
     end
+
+    @same_page_definition %Parsed{
+      id: "test",
+      name: "Test",
+      capabilities: %{modes: %{"search" => ["q"]}, categorymappings: []},
+      search: %{
+        rows: %{selector: "tr.item"},
+        fields: %{
+          :title => %{selector: "td.t"},
+          :download => %{selector: "a.d", attribute: "href"},
+          :details => %{selector: "a.d", attribute: "href"}
+        }
+      }
+    }
+
+    @same_page_html """
+    <table><tr class="item"><td class="t">Copper Lantern 2031 1080p</td>
+    <td><a class="d" href="/copper-lantern-torrent-42.html">t</a></td></tr></table>
+    """
+
+    test "keep a details link that is also the download page" do
+      {:ok, [result]} =
+        CardigannResultParser.parse_results(
+          @same_page_definition,
+          %{status: 200, body: @same_page_html},
+          "Test",
+          base_url: "https://example.invalid"
+        )
+
+      assert result.download_url == "https://example.invalid/copper-lantern-torrent-42.html"
+      assert result.info_url == "https://example.invalid/copper-lantern-torrent-42.html"
+
+      assert SearchResult.info_page_url(result) ==
+               "https://example.invalid/copper-lantern-torrent-42.html"
+    end
   end
 
   describe "HTML field extraction" do

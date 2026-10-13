@@ -378,14 +378,17 @@ defmodule Mydia.Indexers.SearchResultTest do
       assert SearchResult.info_page_url(search_result(info_url: "   ")) == nil
     end
 
-    test "returns nil when info_url is identical to download_url" do
+    test "returns info_url even when it is identical to download_url" do
+      # Cardigann definitions such as LimeTorrents point details and download
+      # at the same page and resolve the magnet from it at grab time. The
+      # torznab adapters drop download-link guids before they get here.
       result =
         search_result(
-          download_url: "https://tracker.example/download/42.torrent",
-          info_url: "https://tracker.example/download/42.torrent"
+          download_url: "https://tracker.example/torrent-42.html",
+          info_url: "https://tracker.example/torrent-42.html"
         )
 
-      assert SearchResult.info_page_url(result) == nil
+      assert SearchResult.info_page_url(result) == "https://tracker.example/torrent-42.html"
     end
   end
 
