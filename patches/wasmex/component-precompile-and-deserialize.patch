@@ -1,6 +1,6 @@
 diff -ru a/lib/wasmex/components/component.ex b/lib/wasmex/components/component.ex
---- a/lib/wasmex/components/component.ex	2026-10-13 18:09:06.000000000 -0400
-+++ b/lib/wasmex/components/component.ex	2026-10-13 18:09:06.295715390 -0400
+--- a/lib/wasmex/components/component.ex
++++ b/lib/wasmex/components/component.ex
 @@ -45,4 +45,18 @@
        resource -> {:ok, __wrap_resource__(resource)}
      end
@@ -21,8 +21,8 @@ diff -ru a/lib/wasmex/components/component.ex b/lib/wasmex/components/component.
 +  end
  end
 diff -ru a/lib/wasmex/engine.ex b/lib/wasmex/engine.ex
---- a/lib/wasmex/engine.ex	2026-10-13 18:09:06.000000000 -0400
-+++ b/lib/wasmex/engine.ex	2026-10-13 18:09:06.295888903 -0400
+--- a/lib/wasmex/engine.ex
++++ b/lib/wasmex/engine.ex
 @@ -66,6 +66,25 @@
      engine
    end
@@ -50,50 +50,40 @@ diff -ru a/lib/wasmex/engine.ex b/lib/wasmex/engine.ex
    Ahead-of-time (AOT) compiles a WebAssembly module.
  
 diff -ru a/lib/wasmex/engine_config.ex b/lib/wasmex/engine_config.ex
---- a/lib/wasmex/engine_config.ex	2026-10-13 18:09:06.000000000 -0400
-+++ b/lib/wasmex/engine_config.ex	2026-10-13 18:09:23.067193610 -0400
-@@ -10,6 +10,8 @@
+--- a/lib/wasmex/engine_config.ex
++++ b/lib/wasmex/engine_config.ex
+@@ -10,6 +10,7 @@
      * `:debug_info` - Configures whether DWARF debug information will be emitted during compilation. This defaults to `false`.
      * `:memory64` - Whether or not to use 64-bit memory. This defaults to `false`.
      * `:wasm_component_model` - Whether or not to use the WebAssembly component model. This defaults to `true`.
-+    * `:parallel_compilation` - Mydia patch. Whether Cranelift compiles functions in parallel. Defaults to `true`.
 +    * `:isa_baseline` - Mydia patch. Compile for the host triple without host CPU feature detection (x86-64-v2 on x86_64, the generic baseline on aarch64), so the artifact loads on any CPU of that architecture. Defaults to `false`.
  
    ## Example
  
-@@ -24,7 +26,9 @@
+@@ -24,7 +25,8 @@
              wasm_backtrace_details: false,
              memory64: false,
              wasm_component_model: true,
 -            debug_info: false
 +            debug_info: false,
-+            parallel_compilation: true,
 +            isa_baseline: false
  
    @type t :: %__MODULE__{
            consume_fuel: boolean(),
-@@ -32,7 +36,9 @@
+@@ -32,7 +34,8 @@
            wasm_backtrace_details: boolean(),
            memory64: boolean(),
            wasm_component_model: boolean(),
 -          debug_info: boolean()
 +          debug_info: boolean(),
-+          parallel_compilation: boolean(),
 +          isa_baseline: boolean()
          }
  
    @doc ~S"""
-@@ -89,6 +95,19 @@
+@@ -89,6 +92,12 @@
      %__MODULE__{config | cranelift_opt_level: cranelift_opt_level}
    end
  
-+  @doc "Mydia patch: whether Cranelift compiles functions in parallel."
-+  @spec parallel_compilation(t(), boolean()) :: t()
-+  def parallel_compilation(%__MODULE__{} = config, parallel_compilation)
-+      when is_boolean(parallel_compilation) do
-+    %__MODULE__{config | parallel_compilation: parallel_compilation}
-+  end
-+
 +  @doc "Mydia patch: compile for a portable ISA baseline instead of the host's CPU features."
 +  @spec isa_baseline(t(), boolean()) :: t()
 +  def isa_baseline(%__MODULE__{} = config, isa_baseline) when is_boolean(isa_baseline) do
@@ -104,8 +94,8 @@ diff -ru a/lib/wasmex/engine_config.ex b/lib/wasmex/engine_config.ex
    Configures whether backtraces in traps will parse debug info in the Wasm
    file to have filename/line number information.
 diff -ru a/lib/wasmex/native.ex b/lib/wasmex/native.ex
---- a/lib/wasmex/native.ex	2026-10-13 18:09:06.000000000 -0400
-+++ b/lib/wasmex/native.ex	2026-10-13 18:09:06.296539887 -0400
+--- a/lib/wasmex/native.ex
++++ b/lib/wasmex/native.ex
 @@ -28,6 +28,8 @@
  
    def engine_new(_engine_config), do: error()
@@ -124,8 +114,8 @@ diff -ru a/lib/wasmex/native.ex b/lib/wasmex/native.ex
  
    def component_call_function(
 diff -ru a/native/wasmex/Cargo.toml b/native/wasmex/Cargo.toml
---- a/native/wasmex/Cargo.toml	2026-10-13 18:09:06.000000000 -0400
-+++ b/native/wasmex/Cargo.toml	2026-10-13 18:09:28.440470087 -0400
+--- a/native/wasmex/Cargo.toml
++++ b/native/wasmex/Cargo.toml
 @@ -18,8 +18,12 @@
  rand = "0.10.2"
  rustler = { version = "0.38.0", features = ["big_integer", "serde"] }
@@ -140,8 +130,8 @@ diff -ru a/native/wasmex/Cargo.toml b/native/wasmex/Cargo.toml
 +[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
 +libc = "0.2"
 diff -ru a/native/wasmex/src/component.rs b/native/wasmex/src/component.rs
---- a/native/wasmex/src/component.rs	2026-10-13 18:09:06.000000000 -0400
-+++ b/native/wasmex/src/component.rs	2026-10-13 18:09:06.296757553 -0400
+--- a/native/wasmex/src/component.rs
++++ b/native/wasmex/src/component.rs
 @@ -47,3 +47,33 @@
          parsed: Arc::new(parsed_component),
      }))
@@ -177,18 +167,17 @@ diff -ru a/native/wasmex/src/component.rs b/native/wasmex/src/component.rs
 +    }))
 +}
 diff -ru a/native/wasmex/src/engine.rs b/native/wasmex/src/engine.rs
---- a/native/wasmex/src/engine.rs	2026-10-13 18:09:06.000000000 -0400
-+++ b/native/wasmex/src/engine.rs	2026-10-13 18:09:27.164404438 -0400
-@@ -29,6 +29,8 @@
+--- a/native/wasmex/src/engine.rs
++++ b/native/wasmex/src/engine.rs
+@@ -29,6 +29,7 @@
      memory64: bool,
      wasm_component_model: bool,
      debug_info: bool,
-+    parallel_compilation: bool,
 +    isa_baseline: bool,
  }
  
  #[rustler::resource_impl()]
-@@ -104,6 +106,40 @@
+@@ -104,6 +105,40 @@
      Ok(binary.release(env))
  }
  
@@ -229,12 +218,10 @@ diff -ru a/native/wasmex/src/engine.rs b/native/wasmex/src/engine.rs
  pub(crate) fn engine_config(engine_config: ExEngineConfig) -> Config {
      let backtrace_details = match engine_config.wasm_backtrace_details {
          true => WasmBacktraceDetails::Enable,
-@@ -125,6 +161,25 @@
-     config.wasm_component_model(engine_config.wasm_component_model);
+@@ -126,6 +161,24 @@
      config.debug_info(engine_config.debug_info);
      config.epoch_interruption(true);
-+    config.parallel_compilation(engine_config.parallel_compilation);
-+
+ 
 +    // Mydia patch: a portable artifact. Naming the host triple explicitly turns
 +    // off host CPU feature detection, so Cranelift starts from the
 +    // architecture's baseline; x86_64 then gets x86-64-v2.
@@ -252,6 +239,7 @@ diff -ru a/native/wasmex/src/engine.rs b/native/wasmex/src/engine.rs
 +            }
 +        }
 +    }
- 
++
      config
  }
+ 
