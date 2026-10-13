@@ -56,6 +56,37 @@ defmodule Mydia.Indexers.SearchStats.EventTest do
     assert event.error_message == nil
   end
 
+  describe "error_message sanitising" do
+    defp with_message(message) do
+      Event.from_telemetry(%{duration: ms(1)}, %{
+        indexer_id: "cfg-3",
+        indexer_name: "Imaginary Relay",
+        indexer_type: :newznab,
+        kind: :search,
+        outcome: :error,
+        error_message: message
+      })
+    end
+
+    test "strips NUL bytes" do
+      assert with_message("bad" <> <<0>> <> "byte").error_message == "badbyte"
+    end
+
+    test "invalid UTF-8 yields a valid string" do
+      message = with_message("caf" <> <<0xFF, 0xFE>> <> "e").error_message
+      assert String.valid?(message)
+      assert message =~ "caf"
+    end
+
+    test "non-binary values become their inspect string" do
+      assert with_message({:timeout, 5}).error_message == "{:timeout, 5}"
+    end
+
+    test "length is still capped at 500" do
+      assert String.length(with_message(String.duplicate("y", 900)).error_message) == 500
+    end
+  end
+
   test "row/1 inserts through Repo.insert_all/3" do
     event =
       Event.from_telemetry(%{duration: ms(5), result_count: 1}, %{

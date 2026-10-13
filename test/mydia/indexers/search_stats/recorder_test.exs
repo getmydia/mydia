@@ -63,6 +63,18 @@ defmodule Mydia.Indexers.SearchStats.RecorderTest do
     assert count() == 1
   end
 
+  test "stray messages and exit signals do not crash the recorder" do
+    pid = start_recorder([])
+    send(pid, :unexpected)
+    send(pid, {:EXIT, self(), :normal})
+    :sys.get_state(pid)
+    assert Process.alive?(pid)
+
+    Recorder.buffer(event(), pid)
+    assert :ok = Recorder.flush(pid)
+    assert count() == 1
+  end
+
   test "stopping the recorder flushes what is left" do
     pid = start_recorder([])
     Recorder.buffer(event(), pid)

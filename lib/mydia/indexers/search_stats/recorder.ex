@@ -11,7 +11,9 @@ defmodule Mydia.Indexers.SearchStats.Recorder do
   one SQLite write transaction per burst instead of one per indexer.
 
   These are metrics, not records. A failed insert logs a warning and drops
-  the batch; a full buffer drops new events. Under the SQL sandbox `record/2`
+  the batch. Flushes are synchronous at `max_batch`, so `max_buffer` only
+  bounds the buffer if `max_batch` is configured above it; under a stalled
+  flush the real backlog is the process mailbox. Under the SQL sandbox `record/2`
   inserts synchronously in the caller, as `Mydia.Events.create_event_async/1`
   does, so tests see their own rows.
 
@@ -112,6 +114,10 @@ defmodule Mydia.Indexers.SearchStats.Recorder do
 
   @impl true
   def handle_info(:flush, state), do: {:noreply, do_flush(%{state | timer: nil})}
+
+  # The process traps exits, so linked-process exits arrive as messages; none
+  # of them is worth crashing the recorder for.
+  def handle_info(_message, state), do: {:noreply, state}
 
   @impl true
   def terminate(_reason, state) do

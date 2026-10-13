@@ -31,9 +31,11 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   alias Mydia.Indexers.CardigannResultParser
   alias Mydia.Indexers.CardigannSearchEngine
   alias Mydia.Indexers.SearchStats
+  alias Mydia.Indexers.SearchStats.Network
   alias Mydia.Repo
 
   @type test_result :: %{
+          optional(:network_ms) => non_neg_integer() | nil,
           success: boolean(),
           status: String.t(),
           message: String.t(),
@@ -357,6 +359,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
       kind: :health,
       outcome: if(result.status == "healthy", do: :ok, else: result.status),
       duration_ms: result.response_time_ms || 0,
+      network_ms: result[:network_ms],
       error_message: result[:error]
     )
   end
@@ -374,11 +377,14 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   defp prowlarr_probe(definition, parsed) do
     start_time = System.monotonic_time(:millisecond)
 
+    Network.reset()
+
     outcome =
       with {:ok, adapter} <- Registry.get_adapter(:cardigann) do
         adapter.search(Indexers.cardigann_config(definition), probe_query(parsed), [])
       end
 
+    network_ms = Network.take_ms()
     elapsed = System.monotonic_time(:millisecond) - start_time
 
     case outcome do
@@ -388,7 +394,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
       outcome ->
         result = prowlarr_result(definition, outcome, elapsed)
         update_health_status(definition, result)
-        {:ok, result}
+        {:ok, Map.put(result, :network_ms, network_ms)}
     end
   end
 

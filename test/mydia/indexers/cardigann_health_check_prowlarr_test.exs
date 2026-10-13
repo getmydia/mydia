@@ -24,6 +24,7 @@ defmodule Mydia.Indexers.CardigannHealthCheckProwlarrTest do
       :persistent_term.erase(@active_key)
       Application.delete_env(:mydia, :stub_cardigann_pid)
       Application.delete_env(:mydia, :stub_cardigann_search)
+      Application.delete_env(:mydia, :stub_cardigann_network_us)
       :telemetry.detach(ref)
       Indexers.register_adapters()
     end)
@@ -52,6 +53,20 @@ defmodule Mydia.Indexers.CardigannHealthCheckProwlarrTest do
     assert id == d.id
     assert is_binary(query) and query != ""
     assert Repo.reload!(d).health_status == "healthy"
+  end
+
+  test "network time the adapter adds reaches the health event and is taken", %{
+    definition: d,
+    ref: ref
+  } do
+    answer({:ok, [release()]})
+    Application.put_env(:mydia, :stub_cardigann_network_us, 1_500_000)
+
+    assert {:ok, %{success: true}} = CardigannHealthCheck.test_connection(d.id)
+
+    assert_receive {[:mydia, :indexers, :search, :stop], ^ref, m, %{kind: :health}}
+    assert m.network == System.convert_time_unit(1_500, :millisecond, :native)
+    assert Mydia.Indexers.SearchStats.Network.take_ms() == nil
   end
 
   test "zero rows is degraded", %{definition: d} do

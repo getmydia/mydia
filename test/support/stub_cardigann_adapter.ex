@@ -6,6 +6,9 @@ defmodule Mydia.Indexers.StubCardigannAdapter do
   """
 
   def search(config, query, _opts) do
+    if microseconds = Application.get_env(:mydia, :stub_cardigann_network_us),
+      do: Mydia.Indexers.SearchStats.Network.add(microseconds)
+
     if pid = Application.get_env(:mydia, :stub_cardigann_pid),
       do: send(pid, {:stub_cardigann_search, query, config.id})
 

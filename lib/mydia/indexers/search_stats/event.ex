@@ -54,7 +54,19 @@ defmodule Mydia.Indexers.SearchStats.Event do
   defp optional_string(value), do: to_string(value)
 
   defp truncate(nil), do: nil
-  defp truncate(message), do: message |> to_string() |> String.slice(0, @max_message)
+
+  defp truncate(message) do
+    message
+    |> text()
+    |> String.replace_invalid()
+    |> String.replace(<<0>>, "")
+    |> String.slice(0, @max_message)
+  end
+
+  # PostgreSQL rejects NUL bytes and invalid UTF-8 in text, which would drop
+  # the whole batch, so the message is made safe before it is stored.
+  defp text(message) when is_binary(message), do: message
+  defp text(message), do: inspect(message)
 
   defp native_to_ms(nil), do: nil
   defp native_to_ms(native), do: System.convert_time_unit(native, :native, :millisecond)
