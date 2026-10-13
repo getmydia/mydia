@@ -116,12 +116,13 @@ defmodule MydiaWeb.AdminPageConventionsTest do
     test "allows a scroller scoped to sm and above, or marked data-scroll-ok" do
       assert violations(~S(<div class="sm:max-h-64 sm:overflow-y-auto">), "x.ex") == []
       assert violations(~S(<div class="md:overflow-x-auto lg:overflow-auto">), "x.ex") == []
+      assert violations(~S(<div class="dark:sm:overflow-y-auto">), "x.ex") == []
       assert violations(~S(<div class="overflow-x-auto" data-scroll-ok="chips">), "x.ex") == []
     end
 
     test "flags a max-sm scroller and every overflow auto or scroll token" do
       for token <-
-            ~w(max-sm:overflow-x-auto overflow-auto overflow-scroll overflow-x-scroll
+            ~w(max-sm:overflow-x-auto dark:overflow-y-auto overflow-auto overflow-scroll overflow-x-scroll
                overflow-y-scroll overflow-x-auto overflow-y-auto) do
         assert ["nested scroller" <> _] = violations(~s(<div class="p-2 #{token}">), "x.ex"),
                "#{token} was not flagged"
@@ -285,9 +286,13 @@ defmodule MydiaWeb.AdminPageConventionsTest do
     flagged? && "nested scroller; scope it with sm: (one scroller per phone screen)"
   end
 
+  # Any variant may carry the breakpoint (`dark:sm:overflow-y-auto`), so check
+  # them all, not just the first.
   defp phone_scroller?(token) do
+    variants = token |> String.split(":") |> Enum.drop(-1)
+
     Regex.match?(@scroller_token, token) and
-      not (token |> String.split(":") |> hd() |> then(&(&1 in @desktop_variants)))
+      not Enum.any?(variants, &(&1 in @desktop_variants))
   end
 
   defp bare_events(content) do
