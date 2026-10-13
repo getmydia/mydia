@@ -282,7 +282,7 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
                   </div>
 
                   <%!-- Indexer Checkboxes --%>
-                  <div class="max-h-64 overflow-y-auto border border-base-300 rounded-lg divide-y divide-base-200">
+                  <div class="sm:max-h-64 sm:overflow-y-auto border border-base-300 rounded-lg divide-y divide-base-200">
                     <%= for indexer <- @prowlarr_indexers do %>
                       <label class={[
                         "flex items-center gap-3 px-4 py-3 hover:bg-base-200/50 cursor-pointer transition-colors",

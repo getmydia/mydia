@@ -11,6 +11,30 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     do: html |> LazyHTML.from_fragment() |> LazyHTML.query(selector) |> Enum.count()
 
   describe "admin_modal/1" do
+    test "fills the screen on phones and lets field labels wrap" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminModalComponents.admin_modal
+          id="m"
+          icon="hero-plus-circle"
+          title="Add"
+          on_close="close_m"
+        >
+          body
+        </AdminModalComponents.admin_modal>
+        """)
+
+      for class <-
+            ~w(max-sm:w-full max-sm:max-w-none max-sm:h-full max-sm:max-h-none max-sm:rounded-none) do
+        assert count(html, ~s(#m .modal-box[class*="#{class}"])) == 1, "missing #{class}"
+      end
+
+      assert count(html, ~s(#m .modal-box[class*="[&_.label]:whitespace-normal"])) == 1
+      assert count(html, "#m .modal-box.max-w-2xl") == 1
+    end
+
     test "renders the standard shell at the default width" do
       assigns = %{}
 

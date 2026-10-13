@@ -349,9 +349,10 @@ and `:empty` slots: the same empty state and the same row actions.
 Below `sm` it stacks: each row is a card, each cell a label/value pair labelled
 from its column's `label`, and the first column is the card's title. A `:col`
 `class` that only makes sense in a table (`truncate`, a `max-w-*`) takes an
-`sm:` prefix. History
-tables that page by offset keep their Load More or prev/next controls outside
-`admin_table`.
+`sm:` prefix.
+
+History tables that page by offset keep their Load More or prev/next controls
+outside `admin_table`.
 
 **Env-sourced rows.** `Settings.runtime_config?/1` rows show `<.env_lock_badge>`
 and their Edit and Delete are `<.row_action disabled disabled_reason=...>`:
@@ -374,6 +375,10 @@ inside; a form whose buttons must be inside the `<form>` renders
 `<.admin_modal_actions>` itself. `tone={:error}` tints the icon tile for a
 destructive confirmation. `on_close={nil}` keeps the backdrop but makes it
 inert, for content a stray click must not dismiss (a one-time API key).
+Below `sm` the box fills the screen, so the dialog is the only thing that
+scrolls; a list inside a dialog caps its own height only from `sm` up
+(`sm:max-h-* sm:overflow-y-auto`). Field labels inside the box wrap, since
+daisyUI's `.label` is `nowrap`.
 
 **Filters.** A `<.segmented_control>` option takes an `id` when a test or a
 link needs to address it.

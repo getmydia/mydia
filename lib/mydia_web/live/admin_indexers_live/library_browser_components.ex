@@ -121,7 +121,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
         </div>
       </div>
       <%!-- Indexer List --%>
-      <div class="overflow-y-auto max-h-[50vh]">
+      <div class="sm:overflow-y-auto sm:max-h-[50vh]">
         <.admin_list id="library-definitions" items={@definitions}>
           <:row :let={definition}>
             <.definition_row definition={definition} />
