@@ -464,6 +464,25 @@ test timeout to `:infinity` (`mix help test`; ExUnit's `max_cases/1` checks
 silently serializes the whole suite, and on both jobs it means a hung test runs
 until the GitHub job timeout instead of failing fast.
 
+## The precompiled Cardigann guest
+
+`cardigann-cwasm.yml` precompiles the published Cardigann guest to a `.cwasm`
+for x86_64 and aarch64, each on a native runner through the Dockerfile's
+`cwasm-out` target, so the artifact is built by the release image's own Wasmex
+and wasmtime. It runs on a guest, Dockerfile, Wasmex pin or engine-config
+change, and again when the `Cardigann guest` workflow completes on master (the
+guest is only downloadable once that has published it). Pull requests build both
+architectures and upload them as run artifacts, but never publish. On master the
+`publish` job creates the immutable release
+`cardigann-cwasm-<hash>-wasmtime<ver>-cfg<n>` holding both `.cwasm.gz` files with
+their `.sha256`, plus `.LICENSE` and `.NOTICE`. It is the only producer of
+`cardigann-cwasm-*` releases; never create one by hand. It is soft: an image
+built before the release exists has no `.cwasm` pin and compiles the guest
+locally on first boot. The wasmtime version in the tag is read from the Wasmex
+crate's `Cargo.toml` on GitHub at the tag matching `mix.lock`, and
+`scripts/cardigann_precompile.exs` fails the build if that disagrees with the
+crate it actually compiled against.
+
 ## Docker tags
 
 `ci-docker.yml` pushes `:master` and `:master-pg` on every master push, which is
