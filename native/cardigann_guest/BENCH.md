@@ -24,7 +24,7 @@ fixes), next to the first run, 2026-10-11, `7118d17f7`.
 | M3 regressions | 0 unexplained | 0 | 0 | PASS |
 | M4 p95 overhead | <= max(2x elixir, 50 ms) | wasm 243.9 ms vs elixir 126.0 ms (limit 252.0), paired n=66 | wasm 248.6 ms vs elixir 136.1 ms (limit 272.2), paired n=67 | PASS, with 23.6 ms of headroom; one run, treat as unstable (see below) |
 | M5 RSS, pool warm | <= 200 MB | +955 MB glibc, compile at boot, no trim: **FAIL** | +64 MB steady state (538 to 543 MB against 475 MB for the default engine), Alpine image, precompiled `.cwasm` | PASS at steady state; **FAIL under load**: 762 to 770 MB during 4 concurrent searches, +288 to +295 MB over the default engine |
-| M5 cold start | <= 5 s | 3.8 s, glibc, compile only | first boot 18.2 to 18.6 s of compile on Alpine (22.8 to 23.5 s from container start to engine available, with the database migrating); second boot 0.58 to 0.71 s to load, 2.2 to 2.4 s from container start | **FAIL** on a first boot (it runs in the background and does not delay the rest of boot); PASS on every later boot |
+| M5 cold start | <= 5 s | 3.8 s, glibc, compile only | first boot 18.2 to 18.6 s of compile on Alpine (22.8 to 23.5 s from container start to engine available, with the database migrating); second boot 0.58 to 0.71 s to load, 2.2 to 2.4 s from container start | **FAIL** on a first boot (it runs in the background and does not delay the rest of boot); PASS on every later boot. **Superseded for first boots by the precompiled download (2026-10-13, below): about 6 s from container start to ready, 633 to 662 MB peak; the local-compile fallback is unchanged** |
 | M5 image size | <= 60 MB | +75.1 MB in the image: **FAIL** | -6.7 MB in the image (728.9 MB against 735.6 MB); a 38.9 MB download (stripped; 75.1 MB before stripping) plus 119.0 MB of cache in the data directory | PASS for the image and for the download. 158 MB of disk per install |
 
 Items 1 to 3 pass this time, so the engine is offered, behind the flag. What the
@@ -34,7 +34,10 @@ table does not hide:
   first boot also peaks at about 1.55 to 1.59 GB of resident memory (`VmHWM`)
   while it compiles, then falls back to 490 to 500 MB. A container limited to
   less than about 2 GB can be killed on that first boot. This is a caveat, not a gate
-  item; the old gate did not measure the peak.
+  item; the old gate did not measure the peak. Since 2026-10-13 a first boot that
+  can download the precompiled guest takes about 6 s with a 633 to 662 MB peak (see
+  "M5 re-measured, precompiled download"); the figures in this bullet now describe
+  only the local-compile fallback.
 - **M5 RSS fails under load.** Four concurrent searches take the BEAM from
   541 MB to 762 to 770 MB. The gate figure (steady state, pool warm) passes.
 - **M2 passes by one definition**, and the single definition on which the Elixir
@@ -150,12 +153,12 @@ what an install gets when no `.cwasm` is published or its pin is missing.
 | Item | Result |
 |---|---|
 | First boot, download | engine ready **5.9 s and 6.05 s** after container start (two fresh volumes); the engine itself reports "downloaded precompiled in 870 ms" and "827 ms" (download, inflate, verify and deserialize, after the `.wasm`). `VmHWM` **633 MB and 662 MB**, `VmRSS` 517 MB and 505 MB. The rest of the time is the application booting and migrating a fresh database |
-| First boot, fallback (no `.cwasm` pin) | engine ready 23.9 s after container start, "compiled and cached in 18,769 ms". `VmHWM` **1,607 MB**, `VmRSS` 546 MB. Unchanged from the previous section (18.2 to 18.6 s, 1,549 to 1,585 MB) |
+| First boot, fallback (no `.cwasm` pin) | engine ready 23.9 s after container start, "compiled and cached in 18,769 ms". `VmHWM` **1,607 MB**, `VmRSS` 546 MB. Within a few percent of the previous section (18.2 to 18.6 s of compile, 1,549 to 1,585 MB) |
 | Second boot (restart, same volume) | engine ready 2.7 s and 2.5 s after container start, "loaded precompiled in 751 ms" and "718 ms". `VmHWM` 597 MB and 562 MB, `VmRSS` 512 MB and 503 MB. The path is the same for both first-boot cases, which write an identical cached file |
 | Download size | `.wasm` 38,945,911 B plus `.cwasm.gz` 28,782,677 B: **67.7 MB**, against 38.9 MB before |
 | Disk per install | 158 MB in `/config/cardigann/` (`.wasm` 38,945,911 B, `.cwasm` 118,975,960 B, a 65 B checksum file), unchanged. The `.gz` is inflated while it downloads and never stored |
 | Image size | 728,947,434 B, against 728,900,297 B for the previous section's branch image (+47 KB, from an unrelated rebuild of the same stages) |
-| Precompile in the Docker stage | 18.1 s on Alpine (4.4 s on the glibc host), 118,975,960 B in both. The two files differ in content, so a pin has to come from the Alpine build CI runs, never from a host build |
+| Precompile in the Docker stage | 18.1 s on Alpine in the Docker stage (Task 7 measurement; 4.4 s for the parallel compile on the 16-core glibc host, Task 2 measurement), 118,975,960 B in both. The two files differ in content, so a pin has to come from the Alpine build CI runs, never from a host build |
 
 What the download case saves: about 18 s of first-boot time and about 1 GB of peak
 memory (633 to 662 MB against 1,607 MB). A container capped near 1 GB is enough for
@@ -176,8 +179,8 @@ application code.
 | parallel | 2 | 4,447 | 191,872 | 1,297,392 |
 
 Serial lowers the peak by about 70 MB (6 %, 1.22 against 1.30 GB) and takes about
-5.7 times as long, so the compile's memory is dominated by single-threaded state and
-not by the worker count. The fallback therefore keeps Wasmex's defaults. **When the
+5.7 times as long, so most of the compile's memory is single-threaded state that
+the worker count barely changes. The fallback therefore keeps Wasmex's defaults. **When the
 download is unavailable the compile still peaks at about 1.3 GB in the compile
 benchmark and 1.6 GB of `VmHWM` in the container, so a container capped below about
 2 GB can still be killed.**
@@ -246,8 +249,10 @@ here is softened; the same list is in the user docs.
 10. **Private trackers.** The gate corpus is public definitions only. Whether the
     wasm engine logs into private trackers was not measured.
 11. **Build and platform.** Needs the patched Wasmex NIF (a source build); the
-    `.cwasm` is tied to the CPU architecture and wasmtime version of the host that
-    wrote it. A wasmtime upgrade fetches the matching published file, or compiles
+    `.cwasm` compiled locally is tied to the architecture, wasmtime version and CPU
+    features of the host that wrote it. The published one targets a baseline CPU
+    and loads on any CPU of its architecture (x86-64-v2 and up for x86_64; aarch64
+    unverified). A wasmtime upgrade fetches the matching published file, or compiles
     once when there is none.
 12. **Docker defaults.** The image's data directory is `/config` (next to the
     database) unless `MYDIA_DATA_DIR` is set. Both are volumes in the image

@@ -44,7 +44,7 @@ Indexers** section: **How library indexers run** shows the active engine, and
 **Change** opens a Built-in and a Prowlarr-based card. The default is Built-in.
 Switching takes effect without a restart.
 
-The first time you switch to Prowlarr-based, Mydia downloads and compiles the engine
+The first time you switch to Prowlarr-based, Mydia downloads the engine and prepares it
 while the built-in engine keeps serving your searches, and the page shows
 progress. When it is ready, searches move over by themselves. If something goes
 wrong, the page shows the reason. Problems that can pass, such as a network
@@ -55,7 +55,7 @@ later, for example if the engine crashes and restarts, the built-in engine serve
 until it is.
 
 Switching back to Built-in frees the engine's memory but keeps the downloaded
-and compiled files, so switching to Prowlarr-based again takes about a second. Use
+and prepared files, so switching to Prowlarr-based again takes about a second. Use
 **Remove cached Prowlarr-based engine** under **Change** to delete them. The button
 appears while Built-in is selected.
 
@@ -113,7 +113,7 @@ CARDIGANN_WASM_PATH=/path/to/cardigann-<hash>.wasm
 ```
 
 Mydia checks the file against the checksum built into your version and refuses
-one that does not match. Nothing is downloaded, and the compiled copy is still
+one that does not match. Nothing is downloaded, and the prepared copy is still
 cached in the data directory.
 
 If you set `ENABLE_CARDIGANN=false`, Cardigann is off whichever engine you pick.
