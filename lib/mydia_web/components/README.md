@@ -395,11 +395,10 @@ download clients do.
 an open dialog, never a region inside either, so `overflow-x-auto` and
 `overflow-y-auto` must be scoped with `sm:` (the conventions test fails on an
 unprefixed one); mark a deliberate exception, such as a non-wrapping segmented
-control, with `data-scroll-ok="reason"` on the same line.
+control, with `data-scroll-ok="reason"` on the same tag.
 
-Every admin page is built this way now;
- `admin_storage_backends_live/` is the
-smallest complete example.
+Every admin page is built this way now; `admin_storage_backends_live/` is the smallest
+complete example.
 
 ## The sidebar
 
