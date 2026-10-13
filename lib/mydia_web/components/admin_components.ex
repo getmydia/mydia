@@ -163,7 +163,7 @@ defmodule MydiaWeb.AdminComponents do
     <nav
       id="admin-page-tabs"
       aria-label={"#{@hub_label} pages"}
-      class="tabs tabs-border flex-nowrap overflow-x-auto mb-6 [scrollbar-width:none]"
+      class="tabs tabs-border flex-wrap mb-6"
     >
       <.link
         :for={tab <- @tabs}

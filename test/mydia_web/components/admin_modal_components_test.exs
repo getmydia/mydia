@@ -136,4 +136,17 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     assert count(html, "#admin-page-hub") == 0
     assert count(html, "#admin-page-tabs") == 0
   end
+
+  test "admin_page/1 wraps the hub tab strip instead of scrolling it" do
+    assigns = %{}
+
+    html =
+      rendered_to_string(~H"""
+      <AdminComponents.admin_page page={:trash}>body</AdminComponents.admin_page>
+      """)
+
+    assert count(html, "nav#admin-page-tabs.tabs.flex-wrap") == 1
+    assert count(html, "nav#admin-page-tabs.overflow-x-auto") == 0
+    assert count(html, "nav#admin-page-tabs.flex-nowrap") == 0
+  end
 end
