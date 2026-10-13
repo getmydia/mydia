@@ -69,7 +69,7 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
       <% else %>
         <div
           id="import-list-items"
-          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 overflow-y-auto max-h-[50vh]"
+          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:overflow-y-auto sm:max-h-[50vh]"
         >
           <.item_tile
             :for={item <- Index.group_items_by_status(@items)}

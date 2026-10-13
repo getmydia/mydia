@@ -255,7 +255,7 @@ defmodule MydiaWeb.JobsLive.Components do
 
         <div>
           <div class="text-sm font-semibold text-base-content/60">Arguments</div>
-          <pre class="bg-base-300 p-3 rounded text-xs overflow-x-auto">{inspect(@job.args, pretty: true)}</pre>
+          <pre class="bg-base-300 p-3 rounded text-xs sm:overflow-x-auto max-sm:whitespace-pre-wrap max-sm:break-all">{inspect(@job.args, pretty: true)}</pre>
         </div>
 
         <%= if @job.errors && @job.errors != [] do %>
@@ -263,7 +263,7 @@ defmodule MydiaWeb.JobsLive.Components do
             <div class="text-sm font-semibold text-base-content/60 mb-2">Errors</div>
             <%= for error <- @job.errors do %>
               <div class="alert alert-error mb-2">
-                <pre class="text-xs overflow-x-auto whitespace-pre-wrap">{inspect(error, pretty: true)}</pre>
+                <pre class="text-xs sm:overflow-x-auto whitespace-pre-wrap max-sm:break-all">{inspect(error, pretty: true)}</pre>
               </div>
             <% end %>
           </div>
