@@ -186,20 +186,20 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
   defp unavailable(:disabled) do
     Error.engine_unavailable(
-      "The Prowlarr Cardigann engine is not running: choose it on the Indexers page to enable it",
+      "The Prowlarr-based Cardigann engine is not running: choose it on the Indexers page to enable it",
       %{reason: :disabled}
     )
   end
 
   defp unavailable({:unavailable, reason}) do
     Error.engine_unavailable(
-      "The Prowlarr Cardigann engine is not available: #{reason}",
+      "The Prowlarr-based Cardigann engine is not available: #{reason}",
       %{reason: reason}
     )
   end
 
   defp unavailable(_other) do
-    Error.engine_unavailable("The Prowlarr Cardigann engine is not available")
+    Error.engine_unavailable("The Prowlarr-based Cardigann engine is not available")
   end
 
   # ── One call ──────────────────────────────────────────────────────────────

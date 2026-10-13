@@ -1,5 +1,5 @@
 defmodule Mydia.Indexers.Cardigann.EngineSwitcher.Transition do
-  @moduledoc "A switch to the Prowlarr engine that has not cut over yet."
+  @moduledoc "A switch to the Prowlarr-based engine that has not cut over yet."
 
   @type t :: %__MODULE__{
           target: :prowlarr,

@@ -253,3 +253,19 @@ Select the columns the migration needs: `select([u], struct(u, ^fields))`, or a
 schemaless `from(u in "users", ...)`. `Mydia.Accounts.UsernameBackfill` is the
 worked example, with a test that drops a newer column inside the sandbox to
 recreate the old table.
+
+## Old installs carry DDL the migrations no longer write
+
+Before the raw-SQL migrations were converted to the Ecto DSL (f9521c0c9), they
+created tables with inline `CHECK` and `UNIQUE` constraints. Several of those
+migrations were later rewritten, so a fresh database (CI, dev, every test) has a
+different schema from an install that ran the original bodies. A constraint
+that exists only on old installs is invisible to the test suite.
+
+Two have bitten so far: the inline `UNIQUE` on `media_items.tmdb_id`
+(`20260906003007`) and `CHECK(category IN (...))` on `config_settings`, which
+rejected every config category added after the original seven. When a write
+works in tests and fails in production with a constraint the schema does not
+declare, read `sqlite_master` on the affected install before anything else.
+Others still exist on old installs (`users.role`, `library_paths.type`); a new
+enum value in either needs the same kind of guarded rebuild.

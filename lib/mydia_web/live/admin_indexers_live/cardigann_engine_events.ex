@@ -16,12 +16,14 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineEvents do
   @events [
     "switch_cardigann_engine",
     "retry_cardigann_engine",
+    "toggle_cardigann_engine",
     "remove_cardigann_engine_cache"
   ]
 
   @spec attach(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def attach(socket) do
     socket
+    |> assign(cardigann_engine_expanded: false)
     |> subscribe()
     |> load()
     |> attach_hook(:cardigann_engine_events, :handle_event, &handle_event/3)
@@ -78,6 +80,10 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineEvents do
     {:halt, socket}
   end
 
+  defp handle_event("toggle_cardigann_engine", _params, socket) do
+    {:halt, assign(socket, cardigann_engine_expanded: !socket.assigns.cardigann_engine_expanded)}
+  end
+
   defp handle_event("remove_cardigann_engine_cache", _params, socket) do
     case EngineSwitcher.remove_cache() do
       {:ok, bytes} ->
@@ -85,12 +91,12 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineEvents do
          socket
          |> put_flash(
            :info,
-           "Removed the cached Prowlarr engine (#{CardigannEngineComponents.format_mb(bytes)})"
+           "Removed the cached Prowlarr-based engine (#{CardigannEngineComponents.format_mb(bytes)})"
          )
          |> load()}
 
       {:error, :in_use} ->
-        {:halt, put_flash(socket, :error, "The Prowlarr engine is in use")}
+        {:halt, put_flash(socket, :error, "The Prowlarr-based engine is in use")}
     end
   end
 

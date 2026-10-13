@@ -283,7 +283,7 @@ will use, marks each element whose text contains a needle with a
 attribute. A `:contains` that was not declared at parse time raises. Nothing
 under `lib/mydia/indexers/cardigann*` calls Floki.
 
-## Cardigann engines: built-in and Prowlarr's
+## Cardigann engines: built-in and Prowlarr-based
 
 Two engines can run Cardigann definitions, chosen by the layered setting
 `cardigann.engine` (env `CARDIGANN_ENGINE` pins it and locks the admin UI;
@@ -296,6 +296,8 @@ otherwise the Indexers tab writes it):
   code that reads them in Prowlarr, so results match Prowlarr's. Anything else
   raises at boot, naming the two valid values. `ENABLE_CARDIGANN=false` turns
   Cardigann off whichever engine is set.
+
+The UI calls the second one Prowlarr-based. It has nothing to do with `Adapter.Prowlarr`, which talks to a Prowlarr server under Indexer Connections; the engine runs Prowlarr's code inside Mydia with no server.
 
 What `prowlarr` gives: on the 44 public definitions where Prowlarr returned
 results, the wasm engine agreed with Prowlarr on all of them (the Elixir engine on
@@ -339,8 +341,9 @@ and remembers the one that worked. What it costs, measured on the Alpine image
   81 public definitions in the benchmark end in such an error; Prowlarr returned
   nothing on all 20 too. FlareSolverr is still the way through a Cloudflare block.
 - **LAN trackers are refused** (the host's SSRF gate), and Brotli responses are
-  not decoded. The benchmark covers public definitions only; private-tracker
-  logins were not measured.
+  not decoded. The Indexers tab recommends it for private trackers because their
+  logins run through Prowlarr's own login code. The benchmark itself covers public
+  definitions only.
 
 The gate that decided this: fidelity, coverage and regressions pass, latency
 passes with 24 ms to spare, the first-boot compile time and the memory under load
