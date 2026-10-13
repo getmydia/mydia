@@ -21,62 +21,60 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
 
   def media_servers_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <PluginInstanceComponents.plex_deprecation_banner declarations={@plex_deprecations} />
+    <PluginInstanceComponents.plex_deprecation_banner declarations={@plex_deprecations} />
 
-      <.admin_list
-        :if={@media_servers != [] or @plugin_instances == []}
-        id="media-servers"
-        items={@media_servers}
-      >
-        <:row :let={server}>
-          <.media_server_row
-            server={server}
-            health={Map.get(@media_server_health, server.id, %{status: :unknown})}
-            last_run={Map.get(@last_runs, server.id)}
-            link_count={Map.get(@link_counts, server.id, 0)}
+    <.admin_list
+      :if={@media_servers != [] or @plugin_instances == []}
+      id="media-servers"
+      items={@media_servers}
+    >
+      <:row :let={server}>
+        <.media_server_row
+          server={server}
+          health={Map.get(@media_server_health, server.id, %{status: :unknown})}
+          last_run={Map.get(@last_runs, server.id)}
+          link_count={Map.get(@link_counts, server.id, 0)}
+        />
+      </:row>
+      <:empty>
+        <span class="block font-semibold">No media servers connected</span>
+        <span class="block mt-1">
+          Connect a server, or add one from the Add server menu, and Mydia
+          refreshes its library as soon as an import finishes, so new episodes show up
+          without waiting for the server's next scheduled scan. Both also sync watched
+          status in both directions, mapped separately for each account on the server
+          so nobody inherits anyone else's history.
+        </span>
+        <button
+          id="media-servers-empty-cta"
+          class="btn btn-sm btn-primary mt-3"
+          phx-click="new_media_server"
+        >
+          <.icon name="hero-plus" class="w-4 h-4" /> Connect a server
+        </button>
+      </:empty>
+    </.admin_list>
+
+    <.admin_section
+      :if={@plugin_instances != []}
+      id="plugin-servers"
+      title="Plugin servers"
+      icon="hero-puzzle-piece"
+      count={length(@plugin_instances)}
+    >
+      <.admin_list id="plugin-media-servers" items={@plugin_instances}>
+        <:row :let={{plugin, instance}}>
+          <PluginInstanceComponents.plugin_instance_row
+            plugin={plugin}
+            instance={instance}
+            health={Map.get(@plugin_instance_health, instance.id, %{status: :unknown})}
+            last_run={Map.get(@plugin_instance_runs, instance.id)}
+            links={Map.get(@plugin_instance_links, instance.id, [])}
           />
         </:row>
-        <:empty>
-          <span class="block font-semibold">No media servers connected</span>
-          <span class="block mt-1">
-            Connect a server, or add one from the Add server menu, and Mydia
-            refreshes its library as soon as an import finishes, so new episodes show up
-            without waiting for the server's next scheduled scan. Both also sync watched
-            status in both directions, mapped separately for each account on the server
-            so nobody inherits anyone else's history.
-          </span>
-          <button
-            id="media-servers-empty-cta"
-            class="btn btn-sm btn-primary mt-3"
-            phx-click="new_media_server"
-          >
-            <.icon name="hero-plus" class="w-4 h-4" /> Connect a server
-          </button>
-        </:empty>
+        <:empty>No plugin servers.</:empty>
       </.admin_list>
-
-      <.admin_section
-        :if={@plugin_instances != []}
-        id="plugin-servers"
-        title="Plugin servers"
-        icon="hero-puzzle-piece"
-        count={length(@plugin_instances)}
-      >
-        <.admin_list id="plugin-media-servers" items={@plugin_instances}>
-          <:row :let={{plugin, instance}}>
-            <PluginInstanceComponents.plugin_instance_row
-              plugin={plugin}
-              instance={instance}
-              health={Map.get(@plugin_instance_health, instance.id, %{status: :unknown})}
-              last_run={Map.get(@plugin_instance_runs, instance.id)}
-              links={Map.get(@plugin_instance_links, instance.id, [])}
-            />
-          </:row>
-          <:empty>No plugin servers.</:empty>
-        </.admin_list>
-      </.admin_section>
-    </div>
+    </.admin_section>
     """
   end
 

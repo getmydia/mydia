@@ -18,190 +18,188 @@ defmodule MydiaWeb.JobsLive.Components do
 
   def jobs_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <.admin_section
-        id="scheduled-jobs"
-        title="Scheduled Jobs"
-        icon="hero-clock"
-        count={length(@cron_jobs)}
-      >
-        <.admin_table id="cron-jobs" rows={@cron_jobs} row_id={&"cron-job-#{cron_job_slug(&1)}"}>
-          <:col :let={job} label="Job">
-            <div class="font-medium">{job.worker_name}</div>
-            <div class="text-xs text-base-content/60">{inspect(job.worker)}</div>
-          </:col>
-          <:col :let={job} label="Schedule">
-            <code class="text-xs bg-base-300 px-2 py-1 rounded">{job.schedule}</code>
-          </:col>
-          <:col :let={job} label="Last Run">
-            <%= if job.latest_job do %>
-              <div>{format_relative_time(job.latest_job.attempted_at)}</div>
-              <div class="text-xs text-base-content/60">
-                {format_datetime(job.latest_job.attempted_at)}
-              </div>
-            <% else %>
-              <span class="text-base-content/50">Never</span>
-            <% end %>
-          </:col>
-          <:col :let={job} label="Next Run">
-            <%= if job.next_run do %>
-              <div>{format_relative_time(job.next_run)}</div>
-              <div class="text-xs text-base-content/60">
-                {format_datetime(job.next_run)}
-              </div>
-            <% else %>
-              <span class="text-base-content/50">N/A</span>
-            <% end %>
-          </:col>
-          <:col :let={job} label="Status">
-            <%= if job.latest_job do %>
-              <span class={["badge badge-sm", state_badge_class(job.latest_job.state)]}>
-                {job.latest_job.state}
-              </span>
-            <% else %>
-              <span class="badge badge-sm badge-ghost">pending</span>
-            <% end %>
-          </:col>
-          <:col :let={job} label="Stats">
-            <div class="text-sm">
-              <div>Success: {job.stats.success_rate}%</div>
-              <div class="text-xs text-base-content/60">
-                {job.stats.completed_count} / {job.stats.total_executions} runs
-              </div>
-              <div class="text-xs text-base-content/60">
-                Avg: {format_job_duration_ms(job.stats.avg_duration_ms)}
-              </div>
-            </div>
-          </:col>
-          <:action :let={job}>
-            <.row_action
-              id={"trigger-#{cron_job_slug(job)}"}
-              icon="hero-play"
-              title="Trigger now"
-              phx-click="confirm_trigger_job"
-              phx-value-worker={inspect(job.worker)}
-            />
-            <.row_action
-              :if={get_route_for_job(job.worker)}
-              id={"view-#{cron_job_slug(job)}"}
-              icon="hero-arrow-top-right-on-square"
-              title="View"
-              phx-click={view_job_click(job.worker)}
-            />
-          </:action>
-          <:empty>No scheduled jobs configured.</:empty>
-        </.admin_table>
-      </.admin_section>
-
-      <.admin_section id="job-history-section" title="Job History" icon="hero-queue-list">
-        <form
-          id="jobs-filter-form"
-          phx-change="filter_job_history"
-          class="grid grid-cols-1 md:grid-cols-2 gap-4"
-        >
-          <div>
-            <label class="label">
-              <span class="label-text">Filter by Job</span>
-            </label>
-            <select name="worker" class="select select-bordered w-full">
-              <option value="">All Jobs</option>
-              <%= for job <- @cron_jobs do %>
-                <option value={inspect(job.worker)} selected={@filter_worker == job.worker}>
-                  {job.worker_name}
-                </option>
-              <% end %>
-            </select>
-          </div>
-          <div>
-            <label class="label">
-              <span class="label-text">Filter by Status</span>
-            </label>
-            <select name="state" class="select select-bordered w-full">
-              <option value="">All States</option>
-              <option value="completed" selected={@filter_state == "completed"}>
-                Completed
-              </option>
-              <option value="failed" selected={@filter_state == "failed"}>Failed</option>
-              <option value="discarded" selected={@filter_state == "discarded"}>
-                Discarded
-              </option>
-              <option value="retryable" selected={@filter_state == "retryable"}>
-                Retryable
-              </option>
-              <option value="executing" selected={@filter_state == "executing"}>
-                Executing
-              </option>
-            </select>
-          </div>
-        </form>
-        <.admin_table
-          id="job-history"
-          rows={@job_history}
-          row_id={fn {dom_id, _job} -> dom_id end}
-        >
-          <:col :let={{_id, job}} label="Job">
-            <div class="font-medium">
-              {job.worker |> String.split(".") |> List.last()}
-            </div>
-            <div class="text-xs text-base-content/60">{job.worker}</div>
-          </:col>
-          <:col :let={{_id, job}} label="Attempted At">
-            <div>{format_relative_time(job.attempted_at)}</div>
+    <.admin_section
+      id="scheduled-jobs"
+      title="Scheduled Jobs"
+      icon="hero-clock"
+      count={length(@cron_jobs)}
+    >
+      <.admin_table id="cron-jobs" rows={@cron_jobs} row_id={&"cron-job-#{cron_job_slug(&1)}"}>
+        <:col :let={job} label="Job">
+          <div class="font-medium">{job.worker_name}</div>
+          <div class="text-xs text-base-content/60">{inspect(job.worker)}</div>
+        </:col>
+        <:col :let={job} label="Schedule">
+          <code class="text-xs bg-base-300 px-2 py-1 rounded">{job.schedule}</code>
+        </:col>
+        <:col :let={job} label="Last Run">
+          <%= if job.latest_job do %>
+            <div>{format_relative_time(job.latest_job.attempted_at)}</div>
             <div class="text-xs text-base-content/60">
-              {format_datetime(job.attempted_at)}
+              {format_datetime(job.latest_job.attempted_at)}
             </div>
-          </:col>
-          <:col :let={{_id, job}} label="Completed At">
-            <%= if job.completed_at do %>
-              <div>{format_relative_time(job.completed_at)}</div>
-              <div class="text-xs text-base-content/60">
-                {format_datetime(job.completed_at)}
-              </div>
-            <% else %>
-              <span class="text-base-content/50">-</span>
+          <% else %>
+            <span class="text-base-content/50">Never</span>
+          <% end %>
+        </:col>
+        <:col :let={job} label="Next Run">
+          <%= if job.next_run do %>
+            <div>{format_relative_time(job.next_run)}</div>
+            <div class="text-xs text-base-content/60">
+              {format_datetime(job.next_run)}
+            </div>
+          <% else %>
+            <span class="text-base-content/50">N/A</span>
+          <% end %>
+        </:col>
+        <:col :let={job} label="Status">
+          <%= if job.latest_job do %>
+            <span class={["badge badge-sm", state_badge_class(job.latest_job.state)]}>
+              {job.latest_job.state}
+            </span>
+          <% else %>
+            <span class="badge badge-sm badge-ghost">pending</span>
+          <% end %>
+        </:col>
+        <:col :let={job} label="Stats">
+          <div class="text-sm">
+            <div>Success: {job.stats.success_rate}%</div>
+            <div class="text-xs text-base-content/60">
+              {job.stats.completed_count} / {job.stats.total_executions} runs
+            </div>
+            <div class="text-xs text-base-content/60">
+              Avg: {format_job_duration_ms(job.stats.avg_duration_ms)}
+            </div>
+          </div>
+        </:col>
+        <:action :let={job}>
+          <.row_action
+            id={"trigger-#{cron_job_slug(job)}"}
+            icon="hero-play"
+            title="Trigger now"
+            phx-click="confirm_trigger_job"
+            phx-value-worker={inspect(job.worker)}
+          />
+          <.row_action
+            :if={get_route_for_job(job.worker)}
+            id={"view-#{cron_job_slug(job)}"}
+            icon="hero-arrow-top-right-on-square"
+            title="View"
+            phx-click={view_job_click(job.worker)}
+          />
+        </:action>
+        <:empty>No scheduled jobs configured.</:empty>
+      </.admin_table>
+    </.admin_section>
+
+    <.admin_section id="job-history-section" title="Job History" icon="hero-queue-list">
+      <form
+        id="jobs-filter-form"
+        phx-change="filter_job_history"
+        class="grid grid-cols-1 md:grid-cols-2 gap-4"
+      >
+        <div>
+          <label class="label">
+            <span class="label-text">Filter by Job</span>
+          </label>
+          <select name="worker" class="select select-bordered w-full">
+            <option value="">All Jobs</option>
+            <%= for job <- @cron_jobs do %>
+              <option value={inspect(job.worker)} selected={@filter_worker == job.worker}>
+                {job.worker_name}
+              </option>
             <% end %>
-          </:col>
-          <:col :let={{_id, job}} label="Duration">
-            {format_job_duration(job.attempted_at, job.completed_at)}
-          </:col>
-          <:col :let={{_id, job}} label="State">
-            <span class={["badge badge-sm", state_badge_class(job.state)]}>
-              {job.state}
-            </span>
-          </:col>
-          <:col :let={{_id, job}} label="Attempt">
-            <span class="text-sm">
-              {job.attempt} / {job.max_attempts}
-            </span>
-          </:col>
-          <:action :let={{_id, job}}>
-            <.row_action
-              id={"job-details-#{job.id}"}
-              icon="hero-eye"
-              title="Details"
-              phx-click="show_job_details"
-              phx-value-id={job.id}
-            />
-            <.row_action
-              :if={job.state in ~w(available scheduled retryable executing)}
-              id={"cancel-job-#{job.id}"}
-              icon="hero-x-mark"
-              title="Cancel job"
-              destructive
-              phx-click="cancel_job"
-              phx-value-id={job.id}
-              data-confirm="Cancel this job?"
-            />
-          </:action>
-          <:empty>No job history found</:empty>
-        </.admin_table>
-        <div :if={@has_more and @job_history != []} class="flex justify-center">
-          <button type="button" class="btn btn-outline btn-sm" phx-click="load_more_job_history">
-            Load More
-          </button>
+          </select>
         </div>
-      </.admin_section>
-    </div>
+        <div>
+          <label class="label">
+            <span class="label-text">Filter by Status</span>
+          </label>
+          <select name="state" class="select select-bordered w-full">
+            <option value="">All States</option>
+            <option value="completed" selected={@filter_state == "completed"}>
+              Completed
+            </option>
+            <option value="failed" selected={@filter_state == "failed"}>Failed</option>
+            <option value="discarded" selected={@filter_state == "discarded"}>
+              Discarded
+            </option>
+            <option value="retryable" selected={@filter_state == "retryable"}>
+              Retryable
+            </option>
+            <option value="executing" selected={@filter_state == "executing"}>
+              Executing
+            </option>
+          </select>
+        </div>
+      </form>
+      <.admin_table
+        id="job-history"
+        rows={@job_history}
+        row_id={fn {dom_id, _job} -> dom_id end}
+      >
+        <:col :let={{_id, job}} label="Job">
+          <div class="font-medium">
+            {job.worker |> String.split(".") |> List.last()}
+          </div>
+          <div class="text-xs text-base-content/60">{job.worker}</div>
+        </:col>
+        <:col :let={{_id, job}} label="Attempted At">
+          <div>{format_relative_time(job.attempted_at)}</div>
+          <div class="text-xs text-base-content/60">
+            {format_datetime(job.attempted_at)}
+          </div>
+        </:col>
+        <:col :let={{_id, job}} label="Completed At">
+          <%= if job.completed_at do %>
+            <div>{format_relative_time(job.completed_at)}</div>
+            <div class="text-xs text-base-content/60">
+              {format_datetime(job.completed_at)}
+            </div>
+          <% else %>
+            <span class="text-base-content/50">-</span>
+          <% end %>
+        </:col>
+        <:col :let={{_id, job}} label="Duration">
+          {format_job_duration(job.attempted_at, job.completed_at)}
+        </:col>
+        <:col :let={{_id, job}} label="State">
+          <span class={["badge badge-sm", state_badge_class(job.state)]}>
+            {job.state}
+          </span>
+        </:col>
+        <:col :let={{_id, job}} label="Attempt">
+          <span class="text-sm">
+            {job.attempt} / {job.max_attempts}
+          </span>
+        </:col>
+        <:action :let={{_id, job}}>
+          <.row_action
+            id={"job-details-#{job.id}"}
+            icon="hero-eye"
+            title="Details"
+            phx-click="show_job_details"
+            phx-value-id={job.id}
+          />
+          <.row_action
+            :if={job.state in ~w(available scheduled retryable executing)}
+            id={"cancel-job-#{job.id}"}
+            icon="hero-x-mark"
+            title="Cancel job"
+            destructive
+            phx-click="cancel_job"
+            phx-value-id={job.id}
+            data-confirm="Cancel this job?"
+          />
+        </:action>
+        <:empty>No job history found</:empty>
+      </.admin_table>
+      <div :if={@has_more and @job_history != []} class="flex justify-center">
+        <button type="button" class="btn btn-outline btn-sm" phx-click="load_more_job_history">
+          Load More
+        </button>
+      </div>
+    </.admin_section>
     """
   end
 

@@ -19,89 +19,85 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
 
   def dashboard_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <.kpi_row
-        active_streams={length(@active_sessions)}
-        plays_today={@plays_today}
-        plays_yesterday={@plays_yesterday}
-        plays_week={@plays_week}
-        plays_prior_week={@plays_prior_week}
-        idle_for={@last_play_at && elapsed_label(@last_play_at)}
-      />
+    <.kpi_row
+      active_streams={length(@active_sessions)}
+      plays_today={@plays_today}
+      plays_yesterday={@plays_yesterday}
+      plays_week={@plays_week}
+      plays_prior_week={@plays_prior_week}
+      idle_for={@last_play_at && elapsed_label(@last_play_at)}
+    />
 
-      <.dash_section
-        id="now-playing"
-        title="Now Playing"
-        icon="hero-play-circle"
-        empty?={@active_sessions == []}
-        empty_text={now_playing_idle_text(@last_play_at)}
-      >
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <.now_playing_card :for={session <- @active_sessions} session={session} />
-        </div>
-      </.dash_section>
+    <.dash_section
+      id="now-playing"
+      title="Now Playing"
+      icon="hero-play-circle"
+      empty?={@active_sessions == []}
+      empty_text={now_playing_idle_text(@last_play_at)}
+    >
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <.now_playing_card :for={session <- @active_sessions} session={session} />
+      </div>
+    </.dash_section>
 
-      <%!--
+    <%!--
       Background transcodes only, never playback. Sessions already appear above
       as now-playing cards, and both session types also insert a TranscodeJob
       row, so listing every active job here would show each viewer twice.
       --%>
-      <.admin_section
-        :if={@background_jobs != []}
-        id="background-transcodes"
-        title="Background transcodes"
-        icon="hero-cog-6-tooth"
-        count={length(@background_jobs)}
-      >
-        <.admin_list id="background-transcodes-list" items={@background_jobs}>
-          <:row :let={job}>
-            <.admin_row id={"transcode-job-#{job.id}"}>
-              <:title>{transcode_job_title(job)}</:title>
-              <:descriptor>
-                {job_type_label(job.type)}<span :if={job.file_size}> · {format_file_size(
-                  job.file_size
-                )}</span>
-              </:descriptor>
-              <:badges>
-                <span class="badge badge-sm badge-outline">{job.status}</span>
-              </:badges>
-              <:actions>
-                <.row_actions>
-                  <.row_action
-                    icon="hero-x-mark"
-                    title="Cancel transcode"
-                    destructive
-                    phx-click="cancel_transcode_job"
-                    phx-value-id={job.id}
-                  />
-                </.row_actions>
-              </:actions>
-            </.admin_row>
-          </:row>
-          <:empty>No background transcodes.</:empty>
-        </.admin_list>
-      </.admin_section>
+    <.admin_section
+      :if={@background_jobs != []}
+      id="background-transcodes"
+      title="Background transcodes"
+      icon="hero-cog-6-tooth"
+      count={length(@background_jobs)}
+    >
+      <.admin_list id="background-transcodes-list" items={@background_jobs}>
+        <:row :let={job}>
+          <.admin_row id={"transcode-job-#{job.id}"}>
+            <:title>{transcode_job_title(job)}</:title>
+            <:descriptor>
+              {job_type_label(job.type)}<span :if={job.file_size}> · {format_file_size(job.file_size)}</span>
+            </:descriptor>
+            <:badges>
+              <span class="badge badge-sm badge-outline">{job.status}</span>
+            </:badges>
+            <:actions>
+              <.row_actions>
+                <.row_action
+                  icon="hero-x-mark"
+                  title="Cancel transcode"
+                  destructive
+                  phx-click="cancel_transcode_job"
+                  phx-value-id={job.id}
+                />
+              </.row_actions>
+            </:actions>
+          </.admin_row>
+        </:row>
+        <:empty>No background transcodes.</:empty>
+      </.admin_list>
+    </.admin_section>
 
-      <PlaysChartComponents.plays_chart days={@days} range={@range_days} />
+    <PlaysChartComponents.plays_chart days={@days} range={@range_days} />
 
-      <.dash_section
-        id="recent-activity"
-        title="Recent Activity"
-        icon="hero-clock"
-        empty?={@recent_activity == []}
-        empty_text="Nothing has happened yet."
-      >
-        <div class="bg-base-200 rounded-box divide-y divide-base-300">
-          <%= for item <- @recent_activity do %>
-            <%= if item.type == :transcode_job do %>
-              <.recent_job_card job={item.data} />
-            <% else %>
-              <.recent_watch_card progress={item.data} />
-            <% end %>
+    <.dash_section
+      id="recent-activity"
+      title="Recent Activity"
+      icon="hero-clock"
+      empty?={@recent_activity == []}
+      empty_text="Nothing has happened yet."
+    >
+      <div class="bg-base-200 rounded-box divide-y divide-base-300">
+        <%= for item <- @recent_activity do %>
+          <%= if item.type == :transcode_job do %>
+            <.recent_job_card job={item.data} />
+          <% else %>
+            <.recent_watch_card progress={item.data} />
           <% end %>
-        </div>
-      </.dash_section>
-    </div>
+        <% end %>
+      </div>
+    </.dash_section>
     """
   end
 

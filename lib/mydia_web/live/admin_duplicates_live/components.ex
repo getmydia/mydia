@@ -40,44 +40,42 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
 
   def duplicates_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <p class="text-sm text-base-content/60">
-        Items holding more than one file, where every copy is proven to be the same content.
-        Each file is set to either <span class="font-medium text-base-content">Keep</span>
-        or <span class="font-medium text-error">Trash</span>; the best copy is listed first and
-        kept, the rest are already marked for trash. Trash one item with its own button, or
-        every item with the button above. Every item always keeps at least one file. Trashed
-        files are held for {@retention_days} days before permanent deletion, and a run can be
-        undone until you leave this page.
-      </p>
+    <p class="text-sm text-base-content/60">
+      Items holding more than one file, where every copy is proven to be the same content.
+      Each file is set to either <span class="font-medium text-base-content">Keep</span>
+      or <span class="font-medium text-error">Trash</span>; the best copy is listed first and
+      kept, the rest are already marked for trash. Trash one item with its own button, or
+      every item with the button above. Every item always keeps at least one file. Trashed
+      files are held for {@retention_days} days before permanent deletion, and a run can be
+      undone until you leave this page.
+    </p>
 
-      <.admin_list id="duplicates-groups" items={@decisions}>
-        <:row :let={decision}>
-          <.decision_row decision={decision} selected={@selected} />
-        </:row>
-        <:empty>
-          <%= if @refusals == [] do %>
-            No item holds more than one file. There are no duplicates to review.
-          <% else %>
-            Nothing can be trashed safely right now. Every item below needs attention first.
-          <% end %>
-        </:empty>
-      </.admin_list>
+    <.admin_list id="duplicates-groups" items={@decisions}>
+      <:row :let={decision}>
+        <.decision_row decision={decision} selected={@selected} />
+      </:row>
+      <:empty>
+        <%= if @refusals == [] do %>
+          No item holds more than one file. There are no duplicates to review.
+        <% else %>
+          Nothing can be trashed safely right now. Every item below needs attention first.
+        <% end %>
+      </:empty>
+    </.admin_list>
 
-      <MydiaWeb.AdminDuplicatesLive.ReviewComponents.needs_attention
-        :if={@refusals != []}
-        refusals={@refusals}
-        suspects={@suspects}
-        returning={@returning}
-        overridden?={@overridden?}
-      />
+    <MydiaWeb.AdminDuplicatesLive.ReviewComponents.needs_attention
+      :if={@refusals != []}
+      refusals={@refusals}
+      suspects={@suspects}
+      returning={@returning}
+      overridden?={@overridden?}
+    />
 
-      <.live_component
-        module={MydiaWeb.AdminDuplicatesLive.MisfiledComponent}
-        id="misfiled"
-        current_scope={@current_scope}
-      />
-    </div>
+    <.live_component
+      module={MydiaWeb.AdminDuplicatesLive.MisfiledComponent}
+      id="misfiled"
+      current_scope={@current_scope}
+    />
     """
   end
 

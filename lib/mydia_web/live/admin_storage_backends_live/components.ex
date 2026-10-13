@@ -19,19 +19,17 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Components do
 
   def storage_backends_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <.admin_list id="storage-backends" items={@backends}>
-        <:row :let={backend}>
-          <.storage_backend_row backend={backend} testing?={MapSet.member?(@testing, backend.name)} />
-        </:row>
-        <:empty>
-          No storage backends yet. Add one to keep a library in an S3-compatible bucket.
-        </:empty>
-      </.admin_list>
-      <p id="storage-backends-help" class="text-sm text-base-content/60">
-        Use <code class="font-mono">s3://&lt;name&gt;/&lt;prefix&gt;</code> as a library path.
-      </p>
-    </div>
+    <.admin_list id="storage-backends" items={@backends}>
+      <:row :let={backend}>
+        <.storage_backend_row backend={backend} testing?={MapSet.member?(@testing, backend.name)} />
+      </:row>
+      <:empty>
+        No storage backends yet. Add one to keep a library in an S3-compatible bucket.
+      </:empty>
+    </.admin_list>
+    <p id="storage-backends-help" class="text-sm text-base-content/60">
+      Use <code class="font-mono">s3://&lt;name&gt;/&lt;prefix&gt;</code> as a library path.
+    </p>
     """
   end
 

@@ -39,7 +39,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   def trash_tab(assigns) do
     ~H"""
-    <div id="trash-content" class="p-4 sm:p-6 space-y-4">
+    <div id="trash-content" class="space-y-4">
       <.summary_bar summary={@summary} retention_days={@retention_days} />
 
       <div :if={@scanning} class="alert">

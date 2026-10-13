@@ -312,7 +312,10 @@ one admin-only page outside the hubs; it renders `<.admin_header>` directly.
 `components.ex`, as `btn-sm` buttons (the primary one `btn-primary`). The body
 never repeats the page name.
 
-**Body.** It opens with `<div class="p-4 sm:p-6 space-y-4">`. A real subsection
+**Body.** `admin_page/1` wraps the body in `div#admin-page-body`
+(`py-4 sm:p-6 space-y-4`: no side padding on phones, where `main` already
+has 12px). A page's `*_tab` component renders its content directly, with no
+padding wrapper of its own; the conventions test flags one. A real subsection
 (Needs Attention, Scheduled Jobs) is `<.admin_section title icon count>`. Its
 `:actions` slot holds what sits beside the heading: a button, a range picker, a
 health badge. One-of-N filters and pickers use `<.segmented_control>` (the

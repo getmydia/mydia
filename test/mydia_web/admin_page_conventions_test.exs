@@ -99,6 +99,13 @@ defmodule MydiaWeb.AdminPageConventionsTest do
       assert violations(~S(<.button_group>x</.button_group>), "x.ex") == []
     end
 
+    test "flags a page-owned body wrapper" do
+      assert ["page-owned body padding" <> _] =
+               violations(~S(<div class="p-4 sm:p-6 space-y-4">), "x.ex")
+
+      assert violations(~S(<div id="trash-content" class="space-y-4">), "x.ex") == []
+    end
+
     test "flags text-gray and <.button" do
       assert ["raw grey" <> _] = violations(~S(<p class="text-gray-500">), "x.ex")
       assert ["<.button>" <> _] = violations(~S(<.button class="btn">Go</.button>), "x.ex")
@@ -159,6 +166,8 @@ defmodule MydiaWeb.AdminPageConventionsTest do
       Regex.match?(~r/class="modal(-box)?[\s"]/, content) &&
         "hand-rolled modal; use <.admin_modal>",
       template_too_long(content, path),
+      content =~ ~s(class="p-4 sm:p-6) &&
+        "page-owned body padding; admin_page/1 supplies the body wrapper",
       content =~ "text-gray-" && "raw grey; use text-base-content/<n>",
       Regex.match?(~r/<\.button[\s>\/]/, content) &&
         "<.button>; use a raw <button> or <.row_action>"

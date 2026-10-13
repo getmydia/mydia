@@ -10,19 +10,17 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
 
   def providers_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <.admin_list id="subtitle-providers" items={@providers}>
-        <:row :let={provider}>
-          <.subtitle_provider_row
-            provider={provider}
-            available?={Map.get(@circuit, provider.id, true)}
-          />
-        </:row>
-        <:empty>
-          No subtitle providers configured yet. Built-in providers appear here on a fresh install.
-        </:empty>
-      </.admin_list>
-    </div>
+    <.admin_list id="subtitle-providers" items={@providers}>
+      <:row :let={provider}>
+        <.subtitle_provider_row
+          provider={provider}
+          available?={Map.get(@circuit, provider.id, true)}
+        />
+      </:row>
+      <:empty>
+        No subtitle providers configured yet. Built-in providers appear here on a fresh install.
+      </:empty>
+    </.admin_list>
     """
   end
 

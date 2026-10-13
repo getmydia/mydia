@@ -68,25 +68,23 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
 
   def plugins_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <p class="text-sm text-base-content/70">
-        Each plugin runs with only the capabilities you approve.
-      </p>
+    <p class="text-sm text-base-content/70">
+      Each plugin runs with only the capabilities you approve.
+    </p>
 
-      <div id="plugins-installed">
-        <.admin_list id="plugins-list" items={@installed}>
-          <:row :let={plugin}>
-            <.plugin_row plugin={plugin} updates={@updates} />
-          </:row>
-          <:empty>No plugins installed yet. Browse the store to add one.</:empty>
-        </.admin_list>
-      </div>
-
-      <.live_component
-        module={MydiaWeb.AdminPluginsLive.SourcesComponent}
-        id="plugin-sources-card"
-      />
+    <div id="plugins-installed">
+      <.admin_list id="plugins-list" items={@installed}>
+        <:row :let={plugin}>
+          <.plugin_row plugin={plugin} updates={@updates} />
+        </:row>
+        <:empty>No plugins installed yet. Browse the store to add one.</:empty>
+      </.admin_list>
     </div>
+
+    <.live_component
+      module={MydiaWeb.AdminPluginsLive.SourcesComponent}
+      id="plugin-sources-card"
+    />
     """
   end
 

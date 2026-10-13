@@ -149,4 +149,20 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     assert count(html, "nav#admin-page-tabs.overflow-x-auto") == 0
     assert count(html, "nav#admin-page-tabs.flex-nowrap") == 0
   end
+
+  test "admin_page/1 supplies the body wrapper, with no side padding on phones" do
+    assigns = %{}
+
+    html =
+      rendered_to_string(~H"""
+      <AdminComponents.admin_page page={:trash}>
+        <p id="inside">x</p>
+      </AdminComponents.admin_page>
+      """)
+
+    assert count(html, "div#admin-page-body.bg-base-100.py-4.space-y-4 #inside") == 1
+    assert count(html, ~s(div#admin-page-body[class*="sm:p-6"])) == 1
+    assert count(html, "div#admin-page-body.p-4") == 0
+    assert count(html, "div#admin-page-body.px-4") == 0
+  end
 end
