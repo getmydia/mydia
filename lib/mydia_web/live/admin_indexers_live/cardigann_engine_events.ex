@@ -85,12 +85,12 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineEvents do
          socket
          |> put_flash(
            :info,
-           "Removed the cached Prowlarr engine (#{CardigannEngineComponents.format_mb(bytes)})"
+           "Removed the cached Prowlarr-based engine (#{CardigannEngineComponents.format_mb(bytes)})"
          )
          |> load()}
 
       {:error, :in_use} ->
-        {:halt, put_flash(socket, :error, "The Prowlarr engine is in use")}
+        {:halt, put_flash(socket, :error, "The Prowlarr-based engine is in use")}
     end
   end
 

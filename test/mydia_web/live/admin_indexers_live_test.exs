@@ -676,9 +676,37 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       {:ok, view, _} = live(conn, ~p"/admin/indexers")
       view |> element("#cardigann-engine-remove-cache") |> render_click()
 
-      assert has_element?(view, "#flash-info", "1.5 MB")
+      assert has_element?(
+               view,
+               "#flash-info",
+               "Removed the cached Prowlarr-based engine (1.5 MB)"
+             )
+
       refute File.exists?(file)
       refute has_element?(view, "#cardigann-engine-remove-cache")
+    end
+
+    # Expands the engine picker. Task 3 makes it collapsed by default.
+    defp open_engine(view), do: view
+
+    test "the wasm engine is called Prowlarr-based and recommended for private trackers",
+         %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      open_engine(view)
+
+      assert has_element?(view, "label[for=cardigann-engine-prowlarr] span", "Prowlarr-based")
+
+      assert has_element?(
+               view,
+               "#cardigann-engine-prowlarr-badge",
+               "Recommended for private trackers"
+             )
+
+      assert has_element?(
+               view,
+               "#cardigann-engine-prowlarr-subline",
+               "No Prowlarr server involved"
+             )
     end
 
     test "CARDIGANN_ENGINE locks the choice", %{conn: conn} do

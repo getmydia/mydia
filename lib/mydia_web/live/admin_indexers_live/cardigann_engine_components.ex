@@ -16,13 +16,19 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
     %{
       id: :builtin,
       name: "Built-in",
+      subline: "Mydia's own Cardigann engine.",
+      badge: nil,
       pros: ["Nothing to download", "No extra memory", "Fastest searches"],
       cons: ["Results can differ from Prowlarr's on some trackers"]
     },
     %{
       id: :prowlarr,
-      name: "Prowlarr",
+      name: "Prowlarr-based",
+      subline:
+        "Prowlarr's Cardigann code, compiled from C# and built into Mydia. No Prowlarr server involved.",
+      badge: "Recommended for private trackers",
       pros: [
+        "Logs in to private trackers with Prowlarr's own code",
         "Runs Prowlarr's own engine, so results match Prowlarr closely",
         "Fails over to a mirror when a tracker's link is down"
       ],
@@ -61,6 +67,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
         <div class="grid gap-3 sm:grid-cols-2">
           <label
             :for={engine <- @engines}
+            for={"cardigann-engine-#{engine.id}"}
             class={[
               "card card-border bg-base-100 cursor-pointer transition-colors hover:border-primary/60",
               engine.id == selected(@status) && "border-primary",
@@ -88,7 +95,17 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
                 >
                   Switching
                 </span>
+                <span
+                  :if={engine.badge}
+                  id={"cardigann-engine-#{engine.id}-badge"}
+                  class="badge badge-primary badge-sm"
+                >
+                  {engine.badge}
+                </span>
               </div>
+              <p id={"cardigann-engine-#{engine.id}-subline"} class="text-xs opacity-70">
+                {engine.subline}
+              </p>
               <ul class="text-sm space-y-1">
                 <li :for={pro <- engine.pros} class="flex gap-2">
                   <.icon name="hero-plus-circle" class="w-4 h-4 text-success shrink-0" />{pro}
@@ -116,7 +133,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
         class="btn btn-ghost btn-xs"
       >
         <.icon name="hero-trash" class="w-3 h-3" />
-        Remove cached Prowlarr engine ({format_mb(@cache_bytes)})
+        Remove cached Prowlarr-based engine ({format_mb(@cache_bytes)})
       </button>
     </section>
     """
@@ -137,7 +154,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
                 Next attempt at {Calendar.strftime(@transition.next_retry_at, "%H:%M")} UTC.
               </p>
               <p :if={is_nil(@transition.next_retry_at)} class="text-xs opacity-80">
-                Fix the cause, then switch to Built-in and back to Prowlarr to try again.
+                Fix the cause, then switch to Built-in and back to Prowlarr-based to try again.
               </p>
             </div>
             <button
@@ -159,12 +176,12 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
           />
           <progress :if={is_nil(@transition.total)} class="progress progress-primary w-full" />
           <p class="text-sm">
-            Downloading the Prowlarr engine {download_label(@transition)}
+            Downloading the Prowlarr-based engine {download_label(@transition)}
           </p>
         <% phase -> %>
           <progress class="progress progress-primary w-full" />
           <p class="text-sm">
-            {if phase == :compiling, do: "Compiling", else: "Preparing"} the Prowlarr engine...
+            {if phase == :compiling, do: "Compiling", else: "Preparing"} the Prowlarr-based engine...
             <span
               id={"cardigann-engine-elapsed-#{phase}"}
               phx-hook=".ElapsedSeconds"
@@ -174,7 +191,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
           </p>
       <% end %>
       <p class="text-xs opacity-70">
-        Built-in keeps serving searches until the Prowlarr engine is ready.
+        Built-in keeps serving searches until the Prowlarr-based engine is ready.
       </p>
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ElapsedSeconds">
         export default {
@@ -195,7 +212,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
   attr :definition_id, :string, required: true
   attr :active, :atom, required: true
 
-  @doc ~s("Built-in" / "Prowlarr" badges for the engines a definition was verified on.)
+  @doc ~s("Built-in" / "Prowlarr-based" badges for the engines a definition was verified on.)
   def verified_badges(assigns) do
     assigns =
       assign(assigns,
@@ -222,7 +239,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
   defp selected(%Status{active: active}), do: active
 
   defp engine_name(:builtin), do: "Built-in"
-  defp engine_name(:prowlarr), do: "Prowlarr"
+  defp engine_name(:prowlarr), do: "Prowlarr-based"
 
   defp other_name(:builtin), do: engine_name(:prowlarr)
   defp other_name(:prowlarr), do: engine_name(:builtin)
