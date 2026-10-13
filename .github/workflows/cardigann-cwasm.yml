@@ -46,7 +46,10 @@ env:
 jobs:
   build:
     name: Build (${{ matrix.arch }})
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     strategy:
       fail-fast: false
       matrix:
@@ -123,6 +126,11 @@ jobs:
             --cache-to "type=gha,mode=max,scope=cwasm-${MATRIX_ARCH}" \
             --output type=local,dest=out .
           ls -l out
+          # A build that exits 0 without both files must not look like "guest
+          # not published yet" to the publish job.
+          for f in out/*.cwasm.gz out/*.cwasm.sha256; do
+            test -s "$f" || { echo "::error::expected build output $f is missing"; exit 1; }
+          done
         env:
           CWASM_ASSET: ${{ steps.names.outputs.asset }}
           MATRIX_ARCH: ${{ matrix.arch }}
@@ -155,6 +163,9 @@ jobs:
         with:
           persist-credentials: false
 
+      # With `pattern:` and no matching artifact the action logs and succeeds
+      # (only `artifact-ids` throws on no match), so no continue-on-error here.
+      # It may not create `out`, hence the mkdir below.
       - name: Download both architectures
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
@@ -164,6 +175,7 @@ jobs:
 
       - name: Publish
         run: |
+          mkdir -p out
           cd out
           count=$(find . -maxdepth 1 -name '*.cwasm.gz' | wc -l)
           if [ "$count" != 2 ]; then
