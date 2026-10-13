@@ -10,7 +10,14 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
-  alias MydiaWeb.AdminIndexersLive.{CardigannEngineEvents, ErrorMessages, LoginFlow}
+
+  alias MydiaWeb.AdminIndexersLive.{
+    CardigannEngineEvents,
+    ErrorMessages,
+    LoginFlow,
+    SearchStatsEvents
+  }
+
   alias MydiaWeb.IndexerComponents
 
   @impl true
@@ -28,6 +35,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> load_data()
      |> maybe_load_flaresolverr_status()
      |> CardigannEngineEvents.attach()
+     |> SearchStatsEvents.attach()
      |> LoginFlow.attach()}
   end
 
