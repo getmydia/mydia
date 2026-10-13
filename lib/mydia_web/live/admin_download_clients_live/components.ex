@@ -12,20 +12,18 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
 
   def download_clients_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <.admin_list id="download-clients" items={@download_clients}>
-        <:empty>
-          No download clients configured yet. Add qBittorrent or Transmission to get started.
-        </:empty>
-        <:row :let={client}>
-          <.download_client_row
-            client={client}
-            health={Map.get(@client_health, client.id, %{status: :unknown})}
-            runtime?={Settings.runtime_config?(client)}
-          />
-        </:row>
-      </.admin_list>
-    </div>
+    <.admin_list id="download-clients" items={@download_clients}>
+      <:empty>
+        No download clients configured yet. Add qBittorrent or Transmission to get started.
+      </:empty>
+      <:row :let={client}>
+        <.download_client_row
+          client={client}
+          health={Map.get(@client_health, client.id, %{status: :unknown})}
+          runtime?={Settings.runtime_config?(client)}
+        />
+      </:row>
+    </.admin_list>
     """
   end
 

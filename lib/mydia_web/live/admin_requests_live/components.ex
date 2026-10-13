@@ -20,33 +20,31 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
 
   def requests_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <.segmented_control
-        id="requests-status-filter"
-        value={@filter_status}
-        event="filter_requests"
-        param="status"
-        label="Filter requests by status"
-      >
-        <:option value="pending" label="Pending" />
-        <:option value="all" label="All" />
-        <:option value="approved" label="Approved" />
-        <:option value="rejected" label="Rejected" />
-      </.segmented_control>
+    <.segmented_control
+      id="requests-status-filter"
+      value={@filter_status}
+      event="filter_requests"
+      param="status"
+      label="Filter requests by status"
+    >
+      <:option value="pending" label="Pending" />
+      <:option value="all" label="All" />
+      <:option value="approved" label="Approved" />
+      <:option value="rejected" label="Rejected" />
+    </.segmented_control>
 
-      <.admin_list id="requests" items={@requests}>
-        <:row :let={request}>
-          <.request_row request={request} />
-        </:row>
-        <:empty>
-          <%= if @filter_status == "pending" do %>
-            No pending requests at this time. Great job keeping up!
-          <% else %>
-            No {status_text(@filter_status)} requests found.
-          <% end %>
-        </:empty>
-      </.admin_list>
-    </div>
+    <.admin_list id="requests" items={@requests}>
+      <:row :let={request}>
+        <.request_row request={request} />
+      </:row>
+      <:empty>
+        <%= if @filter_status == "pending" do %>
+          No pending requests at this time. Great job keeping up!
+        <% else %>
+          No {status_text(@filter_status)} requests found.
+        <% end %>
+      </:empty>
+    </.admin_list>
     """
   end
 

@@ -11,24 +11,22 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
 
   def path_mappings_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <p class="text-sm text-base-content/70">
-        Translate paths reported by download clients into paths Mydia can see.
-        The longest matching prefix wins.
-      </p>
+    <p class="text-sm text-base-content/70">
+      Translate paths reported by download clients into paths Mydia can see.
+      The longest matching prefix wins.
+    </p>
 
-      <.admin_list id="path-mappings" items={@path_mappings}>
-        <:row :let={mapping}>
-          <.path_mapping_row mapping={mapping} runtime?={Settings.runtime_config?(mapping)} />
-        </:row>
-        <:empty>
-          No path mappings configured yet. Add one above, or set the
-          <code class="font-mono">PATH_MAPPING_N_REMOTE</code>
-          / <code class="font-mono">PATH_MAPPING_N_LOCAL</code>
-          environment variables.
-        </:empty>
-      </.admin_list>
-    </div>
+    <.admin_list id="path-mappings" items={@path_mappings}>
+      <:row :let={mapping}>
+        <.path_mapping_row mapping={mapping} runtime?={Settings.runtime_config?(mapping)} />
+      </:row>
+      <:empty>
+        No path mappings configured yet. Add one above, or set the
+        <code class="font-mono">PATH_MAPPING_N_REMOTE</code>
+        / <code class="font-mono">PATH_MAPPING_N_LOCAL</code>
+        environment variables.
+      </:empty>
+    </.admin_list>
     """
   end
 

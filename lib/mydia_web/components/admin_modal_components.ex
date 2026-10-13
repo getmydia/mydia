@@ -40,7 +40,11 @@ defmodule MydiaWeb.AdminModalComponents do
       aria-modal="true"
       aria-labelledby={"#{@id}-title"}
     >
-      <div class={["modal-box", box_width(@size)]}>
+      <div class={[
+        "modal-box max-sm:w-full max-sm:max-w-none max-sm:h-full max-sm:max-h-none max-sm:rounded-none",
+        "[&_.label]:whitespace-normal",
+        box_width(@size)
+      ]}>
         <div class="flex items-center justify-between gap-3 mb-5">
           <div class="flex items-center gap-3 min-w-0">
             <div class={[

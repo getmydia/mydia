@@ -18,7 +18,10 @@ defmodule MydiaWeb.AdminQualityProfilesLive.PresetsComponents do
       subtitle="Start from a community-tested profile"
       on_close="close_quality_profile_presets_modal"
     >
-      <div class="overflow-x-auto mb-4">
+      <div
+        class="overflow-x-auto mb-4"
+        data-scroll-ok="segmented control is a non-wrapping join; scrolls only itself"
+      >
         <.segmented_control
           id="quality-profile-presets-filter"
           value={@selected_category}

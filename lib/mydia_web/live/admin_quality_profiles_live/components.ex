@@ -10,7 +10,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
 
   def quality_profiles_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4" phx-hook="DownloadFile" id="quality-profiles-section">
+    <div class="space-y-4" phx-hook="DownloadFile" id="quality-profiles-section">
       <%!-- Default Quality Profile Setting --%>
       <div class="bg-base-200 rounded-box p-4">
         <div class="flex flex-col sm:flex-row sm:items-center gap-3">

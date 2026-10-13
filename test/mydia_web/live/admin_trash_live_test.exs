@@ -107,7 +107,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
-    assert has_element?(view, "#trash-content.p-4.sm\\:p-6")
+    assert has_element?(view, "#admin-page-body #trash-content")
     refute has_element?(view, "#trash-content h2")
     assert has_element?(view, "#admin-page-count", "1")
   end

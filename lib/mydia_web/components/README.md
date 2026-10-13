@@ -312,7 +312,10 @@ one admin-only page outside the hubs; it renders `<.admin_header>` directly.
 `components.ex`, as `btn-sm` buttons (the primary one `btn-primary`). The body
 never repeats the page name.
 
-**Body.** It opens with `<div class="p-4 sm:p-6 space-y-4">`. A real subsection
+**Body.** `admin_page/1` wraps the body in `div#admin-page-body`
+(`py-4 sm:p-6 space-y-4`: no side padding on phones, where `main` already
+has 12px). A page's `*_tab` component renders its content directly, with no
+padding wrapper of its own; the conventions test flags one. A real subsection
 (Needs Attention, Scheduled Jobs) is `<.admin_section title icon count>`. Its
 `:actions` slot holds what sits beside the heading: a button, a range picker, a
 health badge. One-of-N filters and pickers use `<.segmented_control>` (the
@@ -342,9 +345,14 @@ and each menu button blurs itself on click so the menu closes.
 
 **Tables.** A page with many rows and several columns (jobs, release
 blacklist, users) uses `<.admin_table id rows row_id>` with `:col`, `:action`
-and `:empty` slots: the same empty state and the same row actions. History
-tables that page by offset keep their Load More or prev/next controls outside
-`admin_table`.
+and `:empty` slots: the same empty state and the same row actions.
+Below `sm` it stacks: each row is a card, each cell a label/value pair labelled
+from its column's `label`, and the first column is the card's title. A `:col`
+`class` that only makes sense in a table (`truncate`, a `max-w-*`) takes an
+`sm:` prefix.
+
+History tables that page by offset keep their Load More or prev/next controls
+outside `admin_table`.
 
 **Env-sourced rows.** `Settings.runtime_config?/1` rows show `<.env_lock_badge>`
 and their Edit and Delete are `<.row_action disabled disabled_reason=...>`:
@@ -367,6 +375,10 @@ inside; a form whose buttons must be inside the `<form>` renders
 `<.admin_modal_actions>` itself. `tone={:error}` tints the icon tile for a
 destructive confirmation. `on_close={nil}` keeps the backdrop but makes it
 inert, for content a stray click must not dismiss (a one-time API key).
+Below `sm` the box fills the screen, so the dialog is the only thing that
+scrolls; a list inside a dialog caps its own height only from `sm` up
+(`sm:max-h-* sm:overflow-y-auto`). Field labels inside the box wrap, since
+daisyUI's `.label` is `nowrap`.
 
 **Filters.** A `<.segmented_control>` option takes an `id` when a test or a
 link needs to address it.
@@ -379,8 +391,14 @@ Never bare `new`, `edit`, `save`, `cancel`, `close`, `delete`, `remove`,
 blast radius worth showing, in which case a dedicated confirm modal, as
 download clients do.
 
-Every admin page is built this way now; `admin_storage_backends_live/` is the
-smallest complete example.
+**One scroller per phone screen.** An admin screen scrolls as the page or as
+an open dialog, never a region inside either, so `overflow-x-auto` and
+`overflow-y-auto` must be scoped with `sm:` (the conventions test fails on an
+unprefixed one); mark a deliberate exception, such as a non-wrapping segmented
+control, with `data-scroll-ok="reason"` on the same tag.
+
+Every admin page is built this way now; `admin_storage_backends_live/` is the smallest
+complete example.
 
 ## The sidebar
 

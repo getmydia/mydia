@@ -280,6 +280,33 @@ defmodule MydiaWeb.AdminListComponentsTest do
   end
 
   describe "admin_table/1" do
+    test "stacks rows into labelled cards below sm and scrolls only from sm up" do
+      assigns = %{rows: [%{id: 1, name: "one", role: "admin"}]}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminListComponents.admin_table id="t" rows={@rows} row_id={&"t-row-#{&1.id}"}>
+          <:col :let={r} label="Name">{r.name}</:col>
+          <:col :let={r} label="Role">{r.role}</:col>
+          <:action :let={r}>
+            <AdminListComponents.row_action icon="hero-trash" title="Delete" id={"del-#{r.id}"} />
+          </:action>
+          <:empty>No rows.</:empty>
+        </AdminListComponents.admin_table>
+        """)
+
+      assert count(html, ~s(#t[class*="sm:overflow-x-auto"])) == 1
+      assert count(html, "#t.overflow-x-auto") == 0
+      assert count(html, ~s(#t thead[class*="max-sm:hidden"])) == 1
+      assert count(html, ~s(#t-row-1[class*="max-sm:block"])) == 1
+      assert count(html, ~s(#t-row-1 td[data-label="Name"])) == 1
+
+      assert count(
+               html,
+               ~s|#t-row-1 td[data-label="Role"][class*="max-sm:before:content-[attr(data-label)]"]|
+             ) == 1
+    end
+
     test "renders the empty alert when there are no rows" do
       assigns = %{rows: []}
 

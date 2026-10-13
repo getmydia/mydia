@@ -63,7 +63,7 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
           <div
             id="plugin-logs"
             phx-update="stream"
-            class="text-xs font-mono space-y-1 max-h-[28rem] overflow-y-auto rounded bg-base-200 p-2"
+            class="text-xs font-mono space-y-1 sm:max-h-[28rem] sm:overflow-y-auto rounded bg-base-200 p-2"
           >
             <p id="plugin-logs-empty" class="hidden only:block text-base-content/60">
               No activity yet — add media or use Run test to confirm it works.
@@ -102,17 +102,17 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
             <code class="text-xs">net:http</code>
             allowlist.
           </p>
-          <div class="overflow-x-auto rounded bg-base-200">
+          <div class="sm:overflow-x-auto rounded bg-base-200">
             <table class="table table-xs font-mono">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Method</th>
-                  <th>URL</th>
-                  <th class="text-right">Status</th>
-                  <th class="text-right">Size</th>
-                  <th class="text-right">Time</th>
-                  <th>Outcome</th>
+                  <th class="max-sm:whitespace-normal">Time</th>
+                  <th class="max-sm:hidden">Method</th>
+                  <th class="max-sm:whitespace-normal">URL</th>
+                  <th class="text-right max-sm:whitespace-normal">Status</th>
+                  <th class="text-right max-sm:hidden">Size</th>
+                  <th class="text-right max-sm:hidden">Time</th>
+                  <th class="max-sm:whitespace-normal">Outcome</th>
                 </tr>
               </thead>
               <tbody id="plugin-net" phx-update="stream">
@@ -189,15 +189,27 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
 
     ~H"""
     <tr id={@id} class={net_row_class(@event)}>
-      <td class="whitespace-nowrap opacity-60" title={log_full_time(@event.inserted_at)}>
+      <td
+        class="whitespace-nowrap max-sm:whitespace-normal opacity-60"
+        title={log_full_time(@event.inserted_at)}
+      >
         {log_time(@event.inserted_at)}
       </td>
-      <td class="whitespace-nowrap">{@meta["method"] || "GET"}</td>
-      <td class="max-w-md truncate" title={@meta["url"]}>{net_path(@meta)}</td>
-      <td class="text-right whitespace-nowrap">{@meta["status"] || "—"}</td>
-      <td class="text-right whitespace-nowrap">{format_bytes(@meta["bytes"])}</td>
-      <td class="text-right whitespace-nowrap">{format_ms(@meta["duration_ms"])}</td>
-      <td class="whitespace-nowrap">
+      <td class="whitespace-nowrap max-sm:hidden">{@meta["method"] || "GET"}</td>
+      <td
+        class="max-w-md truncate max-sm:max-w-none max-sm:whitespace-normal max-sm:break-all"
+        title={@meta["url"]}
+      >
+        {net_path(@meta)}
+      </td>
+      <td class="text-right whitespace-nowrap max-sm:whitespace-normal">{@meta["status"] || "—"}</td>
+      <td class="text-right whitespace-nowrap max-sm:hidden">
+        {format_bytes(@meta["bytes"])}
+      </td>
+      <td class="text-right whitespace-nowrap max-sm:hidden">
+        {format_ms(@meta["duration_ms"])}
+      </td>
+      <td class="whitespace-nowrap max-sm:whitespace-normal">
         <span class={["badge badge-xs", net_outcome_class(@meta["outcome"])]}>
           {@meta["outcome"] || "—"}
         </span>

@@ -21,112 +21,110 @@ defmodule MydiaWeb.AdminUsersLive.Components do
 
   def users_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <div class="alert alert-info">
-        <.icon name="hero-information-circle" class="w-6 h-6" />
-        <div>
-          <div class="font-semibold">OIDC Auto-Registration</div>
-          <div class="text-sm">
-            Users authenticating via OIDC will be automatically registered on first login.
-            Use "Create Local User" to manually create users with local authentication.
-          </div>
+    <div class="alert alert-info">
+      <.icon name="hero-information-circle" class="w-6 h-6" />
+      <div>
+        <div class="font-semibold">OIDC Auto-Registration</div>
+        <div class="text-sm">
+          Users authenticating via OIDC will be automatically registered on first login.
+          Use "Create Local User" to manually create users with local authentication.
         </div>
       </div>
-
-      <div class="flex flex-col sm:flex-row gap-2">
-        <.form
-          for={%{}}
-          as={:search}
-          id="users-search-form"
-          phx-change="search_users"
-          class="flex-1"
-        >
-          <input
-            type="text"
-            name="search"
-            value={@search_query}
-            placeholder="Search by username, email, or name..."
-            aria-label="Search users"
-            class="input input-bordered w-full"
-          />
-        </.form>
-        <.form for={%{}} id="users-role-filter-form" phx-change="filter_users">
-          <select
-            id="users-role-filter"
-            name="role"
-            aria-label="Filter by role"
-            class="select select-bordered"
-          >
-            <option value="all" selected={@filter_role == "all"}>All Roles</option>
-            <option value="admin" selected={@filter_role == "admin"}>Admin</option>
-            <option value="user" selected={@filter_role == "user"}>User</option>
-            <option value="readonly" selected={@filter_role == "readonly"}>Read Only</option>
-            <option value="guest" selected={@filter_role == "guest"}>Guest</option>
-          </select>
-        </.form>
-      </div>
-
-      <.admin_table id="users" rows={@users} row_id={&"user-#{&1.user.id}"}>
-        <:col :let={data} label="User">
-          <.user_cell user={data.user} />
-        </:col>
-        <:col :let={data} label="Auth Type">
-          <.auth_cell user={data.user} />
-        </:col>
-        <:col :let={data} label="Role">
-          <span class={"badge #{role_badge_class(data.user.role)} badge-lg"}>
-            {String.capitalize(data.user.role)}
-          </span>
-        </:col>
-        <:col :let={data} label="Last Login">
-          <span class="text-sm">{format_date(data.user.last_login_at)}</span>
-        </:col>
-        <:col :let={data} label="Statistics">
-          <.stats_cell data={data} />
-        </:col>
-        <:action :let={data}>
-          <.row_action
-            icon="hero-pencil"
-            title="Edit role"
-            phx-click="open_edit_role_modal"
-            phx-value-id={data.user.id}
-          />
-          <.row_action
-            :if={!oidc_user?(data.user)}
-            icon="hero-key"
-            title="Reset password"
-            phx-click="open_reset_password_modal"
-            phx-value-id={data.user.id}
-          />
-          <.row_action
-            :if={second_factor_on?(data.user)}
-            id={"reset-2fa-#{data.user.id}"}
-            icon="hero-shield-exclamation"
-            title="Reset two-factor authentication"
-            phx-click="reset_second_factors"
-            phx-value-id={data.user.id}
-            data-confirm="Turn off two-factor authentication for this user? This removes their authenticator app and all their passkeys. They will sign in with only their password until they set it up again."
-          />
-          <.row_action
-            :if={data.user.role != "admin"}
-            id={"open-access-#{data.user.id}"}
-            icon="hero-shield-check"
-            title="Library access"
-            phx-click="open_access_modal"
-            phx-value-id={data.user.id}
-          />
-          <.row_action
-            :if={data.user.id != @current_user.id}
-            icon="hero-trash"
-            title="Delete user"
-            destructive
-            phx-click="open_delete_modal"
-            phx-value-id={data.user.id}
-          />
-        </:action>
-        <:empty>No users found</:empty>
-      </.admin_table>
     </div>
+
+    <div class="flex flex-col sm:flex-row gap-2">
+      <.form
+        for={%{}}
+        as={:search}
+        id="users-search-form"
+        phx-change="search_users"
+        class="flex-1"
+      >
+        <input
+          type="text"
+          name="search"
+          value={@search_query}
+          placeholder="Search by username, email, or name..."
+          aria-label="Search users"
+          class="input input-bordered w-full"
+        />
+      </.form>
+      <.form for={%{}} id="users-role-filter-form" phx-change="filter_users">
+        <select
+          id="users-role-filter"
+          name="role"
+          aria-label="Filter by role"
+          class="select select-bordered"
+        >
+          <option value="all" selected={@filter_role == "all"}>All Roles</option>
+          <option value="admin" selected={@filter_role == "admin"}>Admin</option>
+          <option value="user" selected={@filter_role == "user"}>User</option>
+          <option value="readonly" selected={@filter_role == "readonly"}>Read Only</option>
+          <option value="guest" selected={@filter_role == "guest"}>Guest</option>
+        </select>
+      </.form>
+    </div>
+
+    <.admin_table id="users" rows={@users} row_id={&"user-#{&1.user.id}"}>
+      <:col :let={data} label="User">
+        <.user_cell user={data.user} />
+      </:col>
+      <:col :let={data} label="Auth Type">
+        <.auth_cell user={data.user} />
+      </:col>
+      <:col :let={data} label="Role">
+        <span class={"badge #{role_badge_class(data.user.role)} badge-lg"}>
+          {String.capitalize(data.user.role)}
+        </span>
+      </:col>
+      <:col :let={data} label="Last Login">
+        <span class="text-sm">{format_date(data.user.last_login_at)}</span>
+      </:col>
+      <:col :let={data} label="Statistics">
+        <.stats_cell data={data} />
+      </:col>
+      <:action :let={data}>
+        <.row_action
+          icon="hero-pencil"
+          title="Edit role"
+          phx-click="open_edit_role_modal"
+          phx-value-id={data.user.id}
+        />
+        <.row_action
+          :if={!oidc_user?(data.user)}
+          icon="hero-key"
+          title="Reset password"
+          phx-click="open_reset_password_modal"
+          phx-value-id={data.user.id}
+        />
+        <.row_action
+          :if={second_factor_on?(data.user)}
+          id={"reset-2fa-#{data.user.id}"}
+          icon="hero-shield-exclamation"
+          title="Reset two-factor authentication"
+          phx-click="reset_second_factors"
+          phx-value-id={data.user.id}
+          data-confirm="Turn off two-factor authentication for this user? This removes their authenticator app and all their passkeys. They will sign in with only their password until they set it up again."
+        />
+        <.row_action
+          :if={data.user.role != "admin"}
+          id={"open-access-#{data.user.id}"}
+          icon="hero-shield-check"
+          title="Library access"
+          phx-click="open_access_modal"
+          phx-value-id={data.user.id}
+        />
+        <.row_action
+          :if={data.user.id != @current_user.id}
+          icon="hero-trash"
+          title="Delete user"
+          destructive
+          phx-click="open_delete_modal"
+          phx-value-id={data.user.id}
+        />
+      </:action>
+      <:empty>No users found</:empty>
+    </.admin_table>
     """
   end
 

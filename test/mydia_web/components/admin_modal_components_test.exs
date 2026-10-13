@@ -11,6 +11,30 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     do: html |> LazyHTML.from_fragment() |> LazyHTML.query(selector) |> Enum.count()
 
   describe "admin_modal/1" do
+    test "fills the screen on phones and lets field labels wrap" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminModalComponents.admin_modal
+          id="m"
+          icon="hero-plus-circle"
+          title="Add"
+          on_close="close_m"
+        >
+          body
+        </AdminModalComponents.admin_modal>
+        """)
+
+      for class <-
+            ~w(max-sm:w-full max-sm:max-w-none max-sm:h-full max-sm:max-h-none max-sm:rounded-none) do
+        assert count(html, ~s(#m .modal-box[class*="#{class}"])) == 1, "missing #{class}"
+      end
+
+      assert count(html, ~s(#m .modal-box[class*="[&_.label]:whitespace-normal"])) == 1
+      assert count(html, "#m .modal-box.max-w-2xl") == 1
+    end
+
     test "renders the standard shell at the default width" do
       assigns = %{}
 
@@ -135,5 +159,34 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     assert count(html, "#admin-page-actions #go") == 1
     assert count(html, "#admin-page-hub") == 0
     assert count(html, "#admin-page-tabs") == 0
+  end
+
+  test "admin_page/1 wraps the hub tab strip instead of scrolling it" do
+    assigns = %{}
+
+    html =
+      rendered_to_string(~H"""
+      <AdminComponents.admin_page page={:trash}>body</AdminComponents.admin_page>
+      """)
+
+    assert count(html, "nav#admin-page-tabs.tabs.flex-wrap") == 1
+    assert count(html, "nav#admin-page-tabs.overflow-x-auto") == 0
+    assert count(html, "nav#admin-page-tabs.flex-nowrap") == 0
+  end
+
+  test "admin_page/1 supplies the body wrapper, with no side padding on phones" do
+    assigns = %{}
+
+    html =
+      rendered_to_string(~H"""
+      <AdminComponents.admin_page page={:trash}>
+        <p id="inside">x</p>
+      </AdminComponents.admin_page>
+      """)
+
+    assert count(html, "div#admin-page-body.bg-base-100.py-4.space-y-4 #inside") == 1
+    assert count(html, ~s(div#admin-page-body[class*="sm:p-6"])) == 1
+    assert count(html, "div#admin-page-body.p-4") == 0
+    assert count(html, "div#admin-page-body.px-4") == 0
   end
 end

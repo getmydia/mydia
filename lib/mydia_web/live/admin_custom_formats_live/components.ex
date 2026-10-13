@@ -9,14 +9,12 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
 
   def custom_formats_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <.admin_list id="custom-formats" items={@custom_formats}>
-        <:row :let={format}>
-          <.custom_format_row format={format} />
-        </:row>
-        <:empty>No custom formats yet.</:empty>
-      </.admin_list>
-    </div>
+    <.admin_list id="custom-formats" items={@custom_formats}>
+      <:row :let={format}>
+        <.custom_format_row format={format} />
+      </:row>
+      <:empty>No custom formats yet.</:empty>
+    </.admin_list>
     """
   end
 

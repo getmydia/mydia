@@ -9,27 +9,25 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
 
   def api_keys_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <p class="text-sm text-base-content/70">
-        Keys for the Library API at <code>/api/library/graphql</code>, sent as the
-        <code>x-api-key</code>
-        header. Each key acts as you.
-      </p>
+    <p class="text-sm text-base-content/70">
+      Keys for the Library API at <code>/api/library/graphql</code>, sent as the
+      <code>x-api-key</code>
+      header. Each key acts as you.
+    </p>
 
-      <div :if={@env_key_set} class="bg-base-200 rounded-box">
-        <.admin_row id="env-library-api-key">
-          <:title>LIBRARY_API_KEY <.env_lock_badge /></:title>
-          <:details>
-            Set by LIBRARY_API_KEY. Remove the variable and restart to revoke.
-          </:details>
-        </.admin_row>
-      </div>
-
-      <.admin_list id="api-keys" items={@api_keys}>
-        <:row :let={key}><.api_key_row key={key} /></:row>
-        <:empty>No API keys yet. Create one to use the Library API.</:empty>
-      </.admin_list>
+    <div :if={@env_key_set} class="bg-base-200 rounded-box">
+      <.admin_row id="env-library-api-key">
+        <:title>LIBRARY_API_KEY <.env_lock_badge /></:title>
+        <:details>
+          Set by LIBRARY_API_KEY. Remove the variable and restart to revoke.
+        </:details>
+      </.admin_row>
     </div>
+
+    <.admin_list id="api-keys" items={@api_keys}>
+      <:row :let={key}><.api_key_row key={key} /></:row>
+      <:empty>No API keys yet. Create one to use the Library API.</:empty>
+    </.admin_list>
     """
   end
 

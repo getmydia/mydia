@@ -13,130 +13,128 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
 
   def general_settings_tab(assigns) do
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <div
-        :if={@invalid_config_settings != []}
-        id="invalid-config-settings"
-        class="alert alert-warning"
-      >
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <div>
-          <h3 class="font-bold">Some saved settings are not being applied</h3>
-          <p class="text-sm">
-            These rows name a setting that no longer exists, or hold a value of the
-            wrong type. They are skipped so the rest of your configuration still
-            applies. Removing them is safe.
-          </p>
-          <ul class="mt-3 space-y-2">
-            <li
-              :for={%{setting: setting, reason: reason} <- @invalid_config_settings}
-              id={"invalid-config-setting-#{String.replace(setting.key, ".", "-")}"}
-              class="flex items-center justify-between gap-3"
-            >
-              <span class="font-mono text-sm">{reason}</span>
-              <.row_action
-                id={"delete-invalid-config-setting-#{String.replace(setting.key, ".", "-")}"}
-                icon="hero-trash"
-                title="Remove"
-                destructive
-                phx-click="delete_invalid_config_setting"
-                phx-value-id={setting.id}
-              />
-            </li>
-          </ul>
-        </div>
-      </div>
-
-      <LanguageComponents.language_section
-        settings={@language_settings}
-        player_enabled?={@player_enabled?}
-      />
-
-      <%!-- Settings Categories --%>
-      <%= for {category, settings} <- @config_settings_with_sources do %>
-        <.admin_section
-          id={"settings-#{category_slug(category)}"}
-          title={category}
-          icon={category_icon(category)}
-        >
-          <.admin_list
-            id={"settings-#{category_slug(category)}-list"}
-            items={rows_for(category, settings)}
+    <div
+      :if={@invalid_config_settings != []}
+      id="invalid-config-settings"
+      class="alert alert-warning"
+    >
+      <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+      <div>
+        <h3 class="font-bold">Some saved settings are not being applied</h3>
+        <p class="text-sm">
+          These rows name a setting that no longer exists, or hold a value of the
+          wrong type. They are skipped so the rest of your configuration still
+          applies. Removing them is safe.
+        </p>
+        <ul class="mt-3 space-y-2">
+          <li
+            :for={%{setting: setting, reason: reason} <- @invalid_config_settings}
+            id={"invalid-config-setting-#{String.replace(setting.key, ".", "-")}"}
+            class="flex items-center justify-between gap-3"
           >
-            <:row :let={row}>
-              <%= case row do %>
-                <% :hwaccel -> %>
-                  <.admin_row id="hwaccel-status">
-                    <:title>Hardware transcoding</:title>
-                    <:details>
-                      <div class="text-xs opacity-60">
-                        <%= if @hwaccel.backend == :none do %>
-                          Unavailable: {@hwaccel.reason}
-                        <% else %>
-                          {@hwaccel.backend} on {@hwaccel.device || "unknown device"}
-                          <%= if @hwaccel.decode_profiles != [] do %>
-                            &middot; decodes {Enum.map_join(
-                              @hwaccel.decode_profiles,
-                              ", ",
-                              &to_string/1
-                            )}
-                          <% end %>
-                        <% end %>
-                      </div>
-                    </:details>
-                    <:badges>
-                      <span class={[
-                        "badge",
-                        if(@hwaccel.backend == :none, do: "badge-ghost", else: "badge-success")
-                      ]}>
-                        {if @hwaccel.backend == :none, do: "Software", else: "Accelerated"}
-                      </span>
-                    </:badges>
-                  </.admin_row>
-                <% setting -> %>
-                  <.admin_row id={"setting-#{String.replace(setting.key, ".", "-")}"}>
-                    <:title>
-                      {setting.label} <.config_source_badge source={setting.source} />
-                    </:title>
-                    <:descriptor><span class="font-mono">{setting.key}</span></:descriptor>
-                    <:details :if={Map.get(setting, :description)}>
-                      {setting.description}
-                    </:details>
-                    <:actions>
-                      <.setting_value_control
-                        setting={setting}
-                        category={category}
-                        editable={Map.get(setting, :editable, setting.source != :env)}
-                      />
-                    </:actions>
-                  </.admin_row>
-              <% end %>
-            </:row>
-            <:empty>No settings in this category.</:empty>
-          </.admin_list>
-
-          <.crash_report_stats
-            :if={category == "Crash Reporting" and @crash_report_stats.enabled}
-            stats={@crash_report_stats}
-          />
-        </.admin_section>
-      <% end %>
-
-      <%!-- Legend --%>
-      <div class="text-xs opacity-60 flex flex-wrap gap-3 sm:gap-4 justify-center">
-        <span class="flex items-center gap-1">
-          <span class="badge badge-info badge-xs">ENV</span> Environment (read-only)
-        </span>
-        <span class="flex items-center gap-1">
-          <span class="badge badge-primary badge-xs">DB</span> Database stored
-        </span>
-        <span class="flex items-center gap-1">
-          <.config_source_badge source={:yaml} size="xs" /> Config file
-        </span>
-        <span class="flex items-center gap-1">
-          <span class="badge badge-ghost badge-xs">Default</span> Built-in value
-        </span>
+            <span class="font-mono text-sm">{reason}</span>
+            <.row_action
+              id={"delete-invalid-config-setting-#{String.replace(setting.key, ".", "-")}"}
+              icon="hero-trash"
+              title="Remove"
+              destructive
+              phx-click="delete_invalid_config_setting"
+              phx-value-id={setting.id}
+            />
+          </li>
+        </ul>
       </div>
+    </div>
+
+    <LanguageComponents.language_section
+      settings={@language_settings}
+      player_enabled?={@player_enabled?}
+    />
+
+    <%!-- Settings Categories --%>
+    <%= for {category, settings} <- @config_settings_with_sources do %>
+      <.admin_section
+        id={"settings-#{category_slug(category)}"}
+        title={category}
+        icon={category_icon(category)}
+      >
+        <.admin_list
+          id={"settings-#{category_slug(category)}-list"}
+          items={rows_for(category, settings)}
+        >
+          <:row :let={row}>
+            <%= case row do %>
+              <% :hwaccel -> %>
+                <.admin_row id="hwaccel-status">
+                  <:title>Hardware transcoding</:title>
+                  <:details>
+                    <div class="text-xs opacity-60">
+                      <%= if @hwaccel.backend == :none do %>
+                        Unavailable: {@hwaccel.reason}
+                      <% else %>
+                        {@hwaccel.backend} on {@hwaccel.device || "unknown device"}
+                        <%= if @hwaccel.decode_profiles != [] do %>
+                          &middot; decodes {Enum.map_join(
+                            @hwaccel.decode_profiles,
+                            ", ",
+                            &to_string/1
+                          )}
+                        <% end %>
+                      <% end %>
+                    </div>
+                  </:details>
+                  <:badges>
+                    <span class={[
+                      "badge",
+                      if(@hwaccel.backend == :none, do: "badge-ghost", else: "badge-success")
+                    ]}>
+                      {if @hwaccel.backend == :none, do: "Software", else: "Accelerated"}
+                    </span>
+                  </:badges>
+                </.admin_row>
+              <% setting -> %>
+                <.admin_row id={"setting-#{String.replace(setting.key, ".", "-")}"}>
+                  <:title>
+                    {setting.label} <.config_source_badge source={setting.source} />
+                  </:title>
+                  <:descriptor><span class="font-mono">{setting.key}</span></:descriptor>
+                  <:details :if={Map.get(setting, :description)}>
+                    {setting.description}
+                  </:details>
+                  <:actions>
+                    <.setting_value_control
+                      setting={setting}
+                      category={category}
+                      editable={Map.get(setting, :editable, setting.source != :env)}
+                    />
+                  </:actions>
+                </.admin_row>
+            <% end %>
+          </:row>
+          <:empty>No settings in this category.</:empty>
+        </.admin_list>
+
+        <.crash_report_stats
+          :if={category == "Crash Reporting" and @crash_report_stats.enabled}
+          stats={@crash_report_stats}
+        />
+      </.admin_section>
+    <% end %>
+
+    <%!-- Legend --%>
+    <div class="text-xs opacity-60 flex flex-wrap gap-3 sm:gap-4 justify-center">
+      <span class="flex items-center gap-1">
+        <span class="badge badge-info badge-xs">ENV</span> Environment (read-only)
+      </span>
+      <span class="flex items-center gap-1">
+        <span class="badge badge-primary badge-xs">DB</span> Database stored
+      </span>
+      <span class="flex items-center gap-1">
+        <.config_source_badge source={:yaml} size="xs" /> Config file
+      </span>
+      <span class="flex items-center gap-1">
+        <span class="badge badge-ghost badge-xs">Default</span> Built-in value
+      </span>
     </div>
     """
   end

@@ -192,11 +192,24 @@ defmodule MydiaWeb.AdminListComponents do
   slot :action, doc: "row_action/1 buttons for the row; wrapped in row_actions/1"
   slot :empty, required: true
 
+  # Below sm a table row is a card: each cell is a label/value pair whose label
+  # is drawn from data-label, and the first cell is the card's title with no
+  # label. From sm up these classes do nothing and the table is a table.
+  @stacked_cell ~w|
+    max-sm:flex max-sm:items-start max-sm:justify-between max-sm:gap-3
+    max-sm:px-0 max-sm:py-1 max-sm:text-right
+    max-sm:before:content-[attr(data-label)] max-sm:before:shrink-0
+    max-sm:before:text-left max-sm:before:text-base-content/60
+    max-sm:first:block max-sm:first:text-left max-sm:first:before:hidden
+  |
+
   @doc """
   The table variant of admin_list/1, for pages with many rows and columns.
   Same empty state and the same icon-only actions.
   """
   def admin_table(assigns) do
+    assigns = assign(assigns, :stacked_cell, @stacked_cell)
+
     ~H"""
     <div :if={@rows == []} id={"#{@id}-empty"} class="alert alert-info">
       <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -205,19 +218,28 @@ defmodule MydiaWeb.AdminListComponents do
     <div
       :if={@rows != []}
       id={@id}
-      class="overflow-x-auto rounded-box border border-base-300 bg-base-100"
+      class="sm:overflow-x-auto rounded-box border border-base-300 bg-base-100"
     >
-      <table class="table table-zebra">
-        <thead>
+      <table class="table table-zebra max-sm:block">
+        <thead class="max-sm:hidden">
           <tr>
             <th :for={col <- @col} class={col[:class]}>{col[:label]}</th>
             <th :if={@action != []}><span class="sr-only">Actions</span></th>
           </tr>
         </thead>
-        <tbody>
-          <tr :for={row <- @rows} id={@row_id && @row_id.(row)}>
-            <td :for={col <- @col} class={col[:class]}>{render_slot(col, row)}</td>
-            <td :if={@action != []} class="text-right">
+        <tbody class="max-sm:block">
+          <tr
+            :for={row <- @rows}
+            id={@row_id && @row_id.(row)}
+            class="max-sm:block max-sm:px-3 max-sm:py-2"
+          >
+            <td :for={col <- @col} data-label={col[:label]} class={[@stacked_cell, col[:class]]}>
+              {render_slot(col, row)}
+            </td>
+            <td
+              :if={@action != []}
+              class="text-right max-sm:flex max-sm:justify-end max-sm:px-0 max-sm:py-1"
+            >
               <.row_actions>{render_slot(@action, row)}</.row_actions>
             </td>
           </tr>
