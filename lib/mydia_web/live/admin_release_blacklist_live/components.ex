@@ -72,7 +72,10 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Components do
         <span title={row.guid}>{row.guid}</span>
       </:col>
       <:col :let={row} label="Reason">
-        <span class="badge badge-warning badge-sm" title={row.failure_reason}>
+        <span
+          class="badge badge-warning badge-sm max-sm:h-auto max-sm:shrink max-sm:min-w-0 max-sm:whitespace-normal max-sm:text-left"
+          title={row.failure_reason}
+        >
           {reason_label(row.failure_reason)}
         </span>
       </:col>

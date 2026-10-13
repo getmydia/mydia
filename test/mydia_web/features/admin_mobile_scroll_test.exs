@@ -114,6 +114,23 @@ defmodule MydiaWeb.Features.AdminMobileScrollTest do
     Enum.reject(independent_scrollers(session), &String.contains?(&1, ".modal-box"))
   end
 
+  # Pixels by which the document itself overflows sideways, or 0.
+  defp document_overflow(session) do
+    eval_js(session, """
+    var d = document.documentElement;
+    return d.scrollWidth > d.clientWidth + 1 ? d.scrollWidth - d.clientWidth : 0;
+    """)
+  end
+
+  defp page_offenders(session, path) do
+    visit_liveview(session, path)
+
+    case document_overflow(session) do
+      0 -> independent_scrollers(session)
+      n -> ["document overflows by #{n}px" | independent_scrollers(session)]
+    end
+  end
+
   defp admin_paths do
     AdminNav.pages() |> Enum.filter(&AdminNav.visible?/1) |> Enum.map(& &1.path)
   end
@@ -130,7 +147,7 @@ defmodule MydiaWeb.Features.AdminMobileScrollTest do
 
     offenders =
       for path <- admin_paths(),
-          line <- visit_liveview(session, path) && independent_scrollers(session) do
+          line <- page_offenders(session, path) do
         "  #{path}: #{line}"
       end
 
