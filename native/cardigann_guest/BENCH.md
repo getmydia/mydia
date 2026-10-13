@@ -128,21 +128,93 @@ was tried. The download is 38.9 MB. GitHub serves release assets without
 compression, so the gzip column is for reference only. `--all` would save a
 further 9.8 MB at the cost of function names in traps.
 
+## M5 re-measured, precompiled download (Alpine image, 2026-10-13)
+
+CI now publishes the compiled guest (`.cwasm.gz`) for each architecture, and the
+engine downloads it, checks it against a pin baked into the image and loads it
+instead of compiling. These are container numbers from the production Alpine image
+of this branch (`docker buildx build --load -t mydia-cwasm-bench .`, 728,947,434 B),
+run with `CARDIGANN_ENGINE=prowlarr` and a fresh `/config` volume, on a 16-core host.
+`VmHWM` and `VmRSS` are read from the BEAM process (`/proc/1`) 20 s after the engine
+reported ready.
+
+The `.cwasm.gz` was built with the Dockerfile's own stage (`--target cwasm-out`, the
+same one CI runs) from the published guest, and served from a local HTTP server on the
+Docker bridge, together with the `.wasm`. The pins and base URLs were set at run time
+through `ERL_AFLAGS` (`-mydia cardigann_cwasm_pin ...`), so the image holds no pin and
+nothing was committed. Nothing was fetched from GitHub, so the download time is the
+time to read two files from the local machine; the sizes below say what a real
+download moves. The fallback case is the same image without a `.cwasm` pin, which is
+what an install gets when no `.cwasm` is published or its pin is missing.
+
+| Item | Result |
+|---|---|
+| First boot, download | engine ready **5.9 s and 6.05 s** after container start (two fresh volumes); the engine itself reports "downloaded precompiled in 870 ms" and "827 ms" (download, inflate, verify and deserialize, after the `.wasm`). `VmHWM` **633 MB and 662 MB**, `VmRSS` 517 MB and 505 MB. The rest of the time is the application booting and migrating a fresh database |
+| First boot, fallback (no `.cwasm` pin) | engine ready 23.9 s after container start, "compiled and cached in 18,769 ms". `VmHWM` **1,607 MB**, `VmRSS` 546 MB. Unchanged from the previous section (18.2 to 18.6 s, 1,549 to 1,585 MB) |
+| Second boot (restart, same volume) | engine ready 2.7 s and 2.5 s after container start, "loaded precompiled in 751 ms" and "718 ms". `VmHWM` 597 MB and 562 MB, `VmRSS` 512 MB and 503 MB. The path is the same for both first-boot cases, which write an identical cached file |
+| Download size | `.wasm` 38,945,911 B plus `.cwasm.gz` 28,782,677 B: **67.7 MB**, against 38.9 MB before |
+| Disk per install | 158 MB in `/config/cardigann/` (`.wasm` 38,945,911 B, `.cwasm` 118,975,960 B, a 65 B checksum file), unchanged. The `.gz` is inflated while it downloads and never stored |
+| Image size | 728,947,434 B, against 728,900,297 B for the previous section's branch image (+47 KB, from an unrelated rebuild of the same stages) |
+| Precompile in the Docker stage | 18.1 s on Alpine (4.4 s on the glibc host), 118,975,960 B in both. The two files differ in content, so a pin has to come from the Alpine build CI runs, never from a host build |
+
+What the download case saves: about 18 s of first-boot time and about 1 GB of peak
+memory (633 to 662 MB against 1,607 MB). A container capped near 1 GB is enough for
+it.
+
+### Does the fallback need to be cheaper
+
+Serial compilation was evaluated as a way to cap the fallback's peak, and dropped.
+One compile per OS process, same guest and native ISA, 16 cores; "before" is after
+loading the 39 MB of bytes and creating the engine, so it includes the BEAM and the
+application code.
+
+| Variant | Run | Wall ms | VmHWM before kB | VmHWM after kB |
+|---|---|---|---|---|
+| serial | 1 | 24,883 | 182,844 | 1,223,484 |
+| serial | 2 | 25,244 | 180,688 | 1,224,104 |
+| parallel | 1 | 4,421 | 185,360 | 1,294,368 |
+| parallel | 2 | 4,447 | 191,872 | 1,297,392 |
+
+Serial lowers the peak by about 70 MB (6 %, 1.22 against 1.30 GB) and takes about
+5.7 times as long, so the compile's memory is dominated by single-threaded state and
+not by the worker count. The fallback therefore keeps Wasmex's defaults. **When the
+download is unavailable the compile still peaks at about 1.3 GB in the compile
+benchmark and 1.6 GB of `VmHWM` in the container, so a container capped below about
+2 GB can still be killed.**
+
+### Portability of the precompiled file
+
+- wasmtime 47 checks only the architecture and OS of the target triple when it loads
+  a precompiled artifact, not the libc (gnu or musl), and accepts an artifact whose
+  CPU feature flags are a subset of the host's. A baseline (x86-64-v2) `.cwasm`
+  loaded into the native engine on this host, so the published file is not tied to
+  the CPU generation that built it. The engine configuration is part of the asset
+  name (`cfg<n>`), so a change to it publishes a new file instead of loading a stale
+  one.
+- aarch64 is built by the same workflow on a native arm64 runner and is **not
+  verified**: nothing in this section ran on arm64. The first CI run is the check.
+- A file that wasmtime rejects is deleted and the engine compiles locally, so an
+  unexpected mismatch costs the old first boot and no more.
+
 ## Caveats for users
 
 Every remaining failure of this run, stated as a user would meet it. Nothing
 here is softened; the same list is in the user docs.
 
-1. **First boot compiles for 18 to 19 s on Alpine, with a 1.5 to 1.6 GB memory
-   peak.** The engine is unavailable meanwhile (searches report why), and a
-   container capped below roughly 2 GB can be killed during it. Later boots load
-   the cached `.cwasm` in under a second. The cache lives in the data directory
-   and must survive restarts, or every restart pays the compile.
+1. **First boot downloads the compiled guest: about 6 s from container start to
+   ready, with a 0.6 to 0.7 GB memory peak.** The engine is unavailable meanwhile
+   (searches report why). When the compiled guest cannot be downloaded (no pin for
+   the build, a network failure, a file wasmtime rejects), Mydia compiles it
+   locally instead: 18 to 19 s on Alpine and a 1.5 to 1.6 GB peak, and a container
+   capped below roughly 2 GB can be killed during it. Later boots load the cached
+   `.cwasm` in under a second. The cache lives in the data directory and must
+   survive restarts, or every restart repeats the first boot.
 2. **Memory.** A warm engine adds about 64 to 67 MB over the default at rest and
    about 288 to 295 MB at the peak of four concurrent searches. Both are measured on a tiny
    fixture page; real result pages are larger.
-3. **Disk and download.** A 38.9 MB download from GitHub on first boot and 158 MB
-   in the data directory (the component and its precompiled form).
+3. **Disk and download.** A 67.7 MB download from GitHub on first boot (38.9 MB
+   for the component, 28.8 MB for its compressed precompiled form; 38.9 MB when
+   the install has to compile) and 158 MB in the data directory.
 4. **Latency.** About 60 ms more per search at the median (89.0 against 29.5
    ms) and 112 ms more at p95 (248.6 against 136.1 ms), engine overhead only,
    excluding the network. Definitions with a `requestDelay` wait as Prowlarr
@@ -175,7 +247,8 @@ here is softened; the same list is in the user docs.
     wasm engine logs into private trackers was not measured.
 11. **Build and platform.** Needs the patched Wasmex NIF (a source build); the
     `.cwasm` is tied to the CPU architecture and wasmtime version of the host that
-    wrote it. A different machine or a wasmtime upgrade recompiles once.
+    wrote it. A wasmtime upgrade fetches the matching published file, or compiles
+    once when there is none.
 12. **Docker defaults.** The image's data directory is `/config` (next to the
     database) unless `MYDIA_DATA_DIR` is set. Both are volumes in the image
     contract; a container without a volume there repeats the download and the
