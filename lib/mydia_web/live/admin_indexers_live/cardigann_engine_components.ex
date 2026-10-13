@@ -99,7 +99,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
               ]}
             >
               <div class="card-body p-4 gap-2">
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <input
                     type="radio"
                     name="engine"
@@ -109,7 +109,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
                     checked={engine.id == selected(@status)}
                     disabled={@status.locked}
                   />
-                  <span class="font-medium">{engine.name}</span>
+                  <span class="font-medium whitespace-nowrap">{engine.name}</span>
                   <span :if={engine.id == @status.active} class="badge badge-success badge-sm">
                     Active
                   </span>
@@ -127,7 +127,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
                     {engine.badge}
                   </span>
                 </div>
-                <p id={"cardigann-engine-#{engine.id}-subline"} class="text-xs opacity-70">
+                <p id={"cardigann-engine-#{engine.id}-subline"} class="text-xs opacity-70 grow-0">
                   {engine.subline}
                 </p>
                 <ul class="text-sm space-y-1">
