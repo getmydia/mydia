@@ -241,15 +241,17 @@ defmodule Mydia.Indexers.SearchResult do
   @doc """
   Returns a URL safe to render as a link to the release's page on the indexer.
 
-  Returns `nil` unless `:info_url` is an absolute `http`/`https` URL with a host
-  that differs from `:download_url`.
+  Returns `nil` unless `:info_url` is an absolute `http`/`https` URL with a host.
 
   Indexers supply this value, and Cardigann definitions are fetched from an
   external repository, so the scheme allowlist is a security boundary: HEEx does
   not validate URL schemes, and a `javascript:` string would otherwise render as
-  a live script URL. The `:download_url` check exists because Prowlarr and
-  Jackett fall back to the torznab `<guid>`, which on some indexers is the
-  `.torrent` link rather than a details page.
+  a live script URL.
+
+  `:info_url` may equal `:download_url`: some Cardigann definitions (LimeTorrents)
+  point both at the details page and resolve the magnet from it at grab time.
+  The torznab adapters already refuse a `<guid>` that is one of the item's
+  download links, which is the case an equality check here used to catch.
 
   ## Examples
 
@@ -266,13 +268,11 @@ defmodule Mydia.Indexers.SearchResult do
       nil
   """
   @spec info_page_url(t()) :: String.t() | nil
-  def info_page_url(%__MODULE__{info_url: info_url, download_url: download_url})
-      when is_binary(info_url) do
+  def info_page_url(%__MODULE__{info_url: info_url}) when is_binary(info_url) do
     trimmed = String.trim(info_url)
 
     cond do
       trimmed == "" -> nil
-      trimmed == download_url -> nil
       not linkable_scheme?(trimmed) -> nil
       true -> trimmed
     end

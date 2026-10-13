@@ -635,4 +635,76 @@ defmodule Mydia.Indexers.Adapter.NewznabTest do
       assert length(results) == 2
     end
   end
+
+  describe "info_url guid fallback" do
+    defp newznab_search_one(item_fields) do
+      bypass = Bypass.open()
+
+      body = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <rss version="2.0" xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/">
+        <channel>
+          <item>
+            <title>Copper.Lantern.2031.1080p.WEB-DL.x264-GRP</title>
+            #{item_fields}
+            <newznab:attr name="size" value="1000"/>
+          </item>
+        </channel>
+      </rss>
+      """
+
+      Bypass.expect_once(bypass, "GET", "/api", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/xml")
+        |> Plug.Conn.resp(200, body)
+      end)
+
+      {:ok, [result]} = Newznab.search(build_config(bypass), "copper lantern")
+      result
+    end
+
+    test "drops a guid equal to the enclosure URL" do
+      result =
+        newznab_search_one("""
+        <guid>https://indexer.example/nzb/42</guid>
+        <enclosure url="https://indexer.example/nzb/42" length="1000" type="application/x-nzb"/>
+        """)
+
+      assert result.info_url == nil
+    end
+
+    test "keeps a guid equal to the link when the enclosure is the download" do
+      # <link> is the RSS item URL, usually the details page; it is only a
+      # download link when the item has no enclosure.
+      result =
+        newznab_search_one("""
+        <guid>https://indexer.example/details/42</guid>
+        <link>https://indexer.example/details/42</link>
+        <enclosure url="https://indexer.example/nzb/42" length="1000" type="application/x-nzb"/>
+        """)
+
+      assert result.info_url == "https://indexer.example/details/42"
+    end
+
+    test "drops a guid equal to the link when the link is the only download" do
+      result =
+        newznab_search_one("""
+        <guid>https://indexer.example/get/42</guid>
+        <link>https://indexer.example/get/42</link>
+        """)
+
+      assert result.download_url == "https://indexer.example/get/42"
+      assert result.info_url == nil
+    end
+
+    test "keeps a guid that differs from every download URL" do
+      result =
+        newznab_search_one("""
+        <guid>https://indexer.example/details/42</guid>
+        <enclosure url="https://indexer.example/nzb/42" length="1000" type="application/x-nzb"/>
+        """)
+
+      assert result.info_url == "https://indexer.example/details/42"
+    end
+  end
 end
