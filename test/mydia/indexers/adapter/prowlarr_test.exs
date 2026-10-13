@@ -794,4 +794,73 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
       assert {:error, %Error{type: :not_found}} = Prowlarr.retest_indexer(config, 7)
     end
   end
+
+  describe "info_url guid fallback" do
+    defp prowlarr_search_one(item) do
+      bypass = Bypass.open()
+
+      base = %{
+        "title" => "Copper.Lantern.2031.1080p.WEB-DL.x264-GRP",
+        "size" => 1000,
+        "downloadProtocol" => "torrent",
+        "seeders" => 5,
+        "leechers" => 7,
+        "indexer" => "Test Tracker"
+      }
+
+      body = Jason.encode!([Map.merge(base, item)])
+
+      Bypass.expect_once(bypass, "GET", "/api/v1/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, body)
+      end)
+
+      {:ok, [result]} = Prowlarr.search(build_config(bypass), "copper lantern")
+      result
+    end
+
+    test "drops a guid equal to downloadUrl" do
+      result =
+        prowlarr_search_one(%{
+          "guid" => "https://tracker.example/dl/42.torrent",
+          "downloadUrl" => "https://tracker.example/dl/42.torrent"
+        })
+
+      assert result.info_url == nil
+    end
+
+    test "drops a guid equal to downloadUrl when a magnet wins" do
+      result =
+        prowlarr_search_one(%{
+          "guid" => "https://tracker.example/dl/42.torrent",
+          "downloadUrl" => "https://tracker.example/dl/42.torrent",
+          "magnetUrl" => "magnet:?xt=urn:btih:aaa"
+        })
+
+      assert result.download_url == "magnet:?xt=urn:btih:aaa"
+      assert result.info_url == nil
+    end
+
+    test "keeps a guid that differs from every download URL" do
+      result =
+        prowlarr_search_one(%{
+          "guid" => "https://tracker.example/details/42",
+          "downloadUrl" => "https://tracker.example/dl/42.torrent"
+        })
+
+      assert result.info_url == "https://tracker.example/details/42"
+    end
+
+    test "keeps an explicit infoUrl even when equal to downloadUrl" do
+      result =
+        prowlarr_search_one(%{
+          "guid" => "prowlarr-guid-42",
+          "infoUrl" => "https://tracker.example/t/42",
+          "downloadUrl" => "https://tracker.example/t/42"
+        })
+
+      assert result.info_url == "https://tracker.example/t/42"
+    end
+  end
 end

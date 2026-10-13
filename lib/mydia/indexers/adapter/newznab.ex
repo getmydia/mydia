@@ -351,12 +351,19 @@ defmodule Mydia.Indexers.Adapter.Newznab do
           true -> ""
         end
 
-      # Info URL - prefer comments, fall back to guid
+      # Info URL - prefer comments, fall back to guid. Some indexers set the
+      # guid to the NZB link, which is not a details page, so the guid only
+      # counts when it matches none of the item's download URLs.
       info_url =
         cond do
-          item.comments != "" -> item.comments
-          item.guid != "" -> item.guid
-          true -> nil
+          item.comments != "" ->
+            item.comments
+
+          item.guid != "" and item.guid not in [item.enclosure_url, item.link] ->
+            item.guid
+
+          true ->
+            nil
         end
 
       # Indexer - prefer item indexer attribute, fall back to configured name

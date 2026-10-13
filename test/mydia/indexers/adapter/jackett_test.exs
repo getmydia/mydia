@@ -281,4 +281,103 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
              "expected exactly one attempt, Req retried a transient failure"
     end
   end
+
+  describe "info_url guid fallback" do
+    defp torznab_item(fields) do
+      """
+      <item>
+        <title>Copper Lantern 2031 1080p WEB-DL x264-GRP</title>
+        #{fields}
+        <torznab:attr name="seeders" value="5"/>
+        <torznab:attr name="peers" value="7"/>
+      </item>
+      """
+    end
+
+    defp search_one(item_xml) do
+      bypass = Bypass.open()
+
+      body = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+        <channel>#{item_xml}</channel>
+      </rss>
+      """
+
+      Bypass.expect_once(bypass, "GET", "/api/v2.0/indexers/all/results/torznab/api", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/xml")
+        |> Plug.Conn.resp(200, body)
+      end)
+
+      config = %{
+        type: :jackett,
+        name: "Test Jackett",
+        host: "localhost",
+        port: bypass.port,
+        api_key: "test-api-key",
+        use_ssl: false,
+        options: %{timeout: 5_000}
+      }
+
+      {:ok, [result]} = Jackett.search(config, "copper lantern")
+      result
+    end
+
+    test "drops a guid that is the item's .torrent link" do
+      result =
+        search_one(
+          torznab_item("""
+          <guid>https://tracker.example/dl/42.torrent</guid>
+          <link>https://tracker.example/dl/42.torrent</link>
+          <enclosure url="https://tracker.example/dl/42.torrent" length="1000" type="application/x-bittorrent"/>
+          """)
+        )
+
+      assert result.info_url == nil
+    end
+
+    test "drops a guid that matches a non-chosen download candidate" do
+      # The magnet wins as download_url, but the guid is still the .torrent file.
+      result =
+        search_one(
+          torznab_item("""
+          <guid>https://tracker.example/dl/42.torrent</guid>
+          <link>https://tracker.example/dl/42.torrent</link>
+          <enclosure url="https://tracker.example/dl/42.torrent" length="1000" type="application/x-bittorrent"/>
+          <torznab:attr name="magneturl" value="magnet:?xt=urn:btih:aaa"/>
+          """)
+        )
+
+      assert result.download_url == "magnet:?xt=urn:btih:aaa"
+      assert result.info_url == nil
+    end
+
+    test "keeps a guid that differs from every download URL" do
+      result =
+        search_one(
+          torznab_item("""
+          <guid>https://tracker.example/details/42</guid>
+          <link>https://tracker.example/dl/42.torrent</link>
+          <enclosure url="https://tracker.example/dl/42.torrent" length="1000" type="application/x-bittorrent"/>
+          """)
+        )
+
+      assert result.info_url == "https://tracker.example/details/42"
+    end
+
+    test "keeps explicit comments even when equal to the download URL" do
+      result =
+        search_one(
+          torznab_item("""
+          <guid>https://tracker.example/t/42</guid>
+          <comments>https://tracker.example/t/42</comments>
+          <link>https://tracker.example/t/42</link>
+          <enclosure url="https://tracker.example/t/42" length="1000" type="application/x-bittorrent"/>
+          """)
+        )
+
+      assert result.info_url == "https://tracker.example/t/42"
+    end
+  end
 end

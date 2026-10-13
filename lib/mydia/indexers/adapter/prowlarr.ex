@@ -295,7 +295,7 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
           item["downloadUrl"] ||
           item["link"]
 
-      info_url = item["infoUrl"] || item["guid"]
+      info_url = item["infoUrl"] || details_guid(item)
       indexer = item["indexer"] || indexer_name
       category = item["categoryId"]
 
@@ -397,6 +397,15 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
         nil
     end
   end
+
+  # Prowlarr's guid is sometimes the .torrent link itself, which is not a
+  # details page, so it only stands in for infoUrl when it matches none of
+  # the item's download URLs.
+  defp details_guid(%{"guid" => guid} = item) when is_binary(guid) and guid != "" do
+    if guid in [item["magnetUrl"], item["downloadUrl"], item["link"]], do: nil, else: guid
+  end
+
+  defp details_guid(_item), do: nil
 
   defp parse_int(nil), do: nil
   defp parse_int(value) when is_integer(value), do: value
