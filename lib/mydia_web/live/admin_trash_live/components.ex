@@ -120,7 +120,10 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   def reason_filters(assigns) do
     ~H"""
-    <div class="overflow-x-auto">
+    <div
+      class="overflow-x-auto"
+      data-scroll-ok="segmented control is a non-wrapping join; scrolls only itself"
+    >
       <.segmented_control
         id="trash-reason-filter"
         value={@active || ""}

@@ -106,6 +106,19 @@ defmodule MydiaWeb.AdminPageConventionsTest do
       assert violations(~S(<div id="trash-content" class="space-y-4">), "x.ex") == []
     end
 
+    test "flags an unprefixed nested scroller" do
+      assert ["nested scroller" <> _] =
+               violations(~S(<div class="max-h-64 overflow-y-auto">), "x.ex")
+
+      assert ["nested scroller" <> _] = violations(~S(<div class="overflow-x-auto">), "x.ex")
+    end
+
+    test "allows a scroller scoped to sm and above, or marked data-scroll-ok" do
+      assert violations(~S(<div class="sm:max-h-64 sm:overflow-y-auto">), "x.ex") == []
+      assert violations(~S(<div class="max-sm:overflow-x-auto md:overflow-x-auto">), "x.ex") == []
+      assert violations(~S(<div class="overflow-x-auto" data-scroll-ok="chips">), "x.ex") == []
+    end
+
     test "flags text-gray and <.button" do
       assert ["raw grey" <> _] = violations(~S(<p class="text-gray-500">), "x.ex")
       assert ["<.button>" <> _] = violations(~S(<.button class="btn">Go</.button>), "x.ex")
@@ -169,11 +182,26 @@ defmodule MydiaWeb.AdminPageConventionsTest do
       content =~ ~s(class="p-4 sm:p-6) &&
         "page-owned body padding; admin_page/1 supplies the body wrapper",
       content =~ "text-gray-" && "raw grey; use text-base-content/<n>",
+      nested_scroller(content),
       Regex.match?(~r/<\.button[\s>\/]/, content) &&
         "<.button>; use a raw <button> or <.row_action>"
     ]
     |> Enum.filter(& &1)
     |> Kernel.++(bare_events(content))
+  end
+
+  # An unprefixed overflow-x/y-auto is a scroller on phones. Admin screens get
+  # exactly one (the page or an open dialog), so scope it with sm: or mark the
+  # element as a deliberate exception with data-scroll-ok="reason".
+  @nested_scroller ~r/<[^<>]*(?<![\w:-])overflow-[xy]-auto[^<>]*>/s
+
+  defp nested_scroller(content) do
+    flagged? =
+      @nested_scroller
+      |> Regex.scan(content)
+      |> Enum.any?(fn [tag] -> not String.contains?(tag, "data-scroll-ok") end)
+
+    flagged? && "nested scroller; scope it with sm: (one scroller per phone screen)"
   end
 
   defp bare_events(content) do
