@@ -31,6 +31,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
     doc: "EngineSwitcher.Status, nil when Cardigann is off"
 
   attr :cardigann_cache_bytes, :integer, default: 0
+  attr :cardigann_engine_expanded, :boolean, default: false
 
   def indexers_tab(assigns) do
     ~H"""
@@ -38,13 +39,6 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
       <FlareSolverrComponents.flaresolverr_row
         flaresolverr={@flaresolverr}
         flaresolverr_status={@flaresolverr_status}
-      />
-
-      <CardigannEngineComponents.engine_section
-        :if={@cardigann_enabled and @cardigann_engine}
-        status={@cardigann_engine}
-        cache_bytes={@cardigann_cache_bytes}
-        only_verified={only_verified(@library_indexers, @cardigann_engine)}
       />
 
       <%= if @indexers == [] and @library_indexers == [] do %>
@@ -73,38 +67,45 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
             <:empty>No indexer connections.</:empty>
           </.admin_list>
         </.admin_section>
-
-        <.admin_section
-          :if={@library_indexers != []}
-          id="library-indexers-section"
-          title="Library Indexers"
-          icon="hero-book-open"
-          count={length(@library_indexers)}
-        >
-          <div class="flex justify-end">
-            <button
-              id="add-more-library-indexers"
-              phx-click="show_indexer_library"
-              class="btn btn-xs btn-ghost text-primary"
-              title="Browse and add more indexers from the library"
-            >
-              <.icon name="hero-plus" class="w-3 h-3" /> Add More
-            </button>
-          </div>
-          <.admin_list id="library-indexers" items={@library_indexers}>
-            <:row :let={indexer}>
-              <.library_indexer_row
-                indexer={indexer}
-                active_engine={(@cardigann_engine && @cardigann_engine.active) || :builtin}
-                flaresolverr_available={
-                  @flaresolverr_status.configured and @flaresolverr_status.status != :disabled
-                }
-              />
-            </:row>
-            <:empty>No library indexers.</:empty>
-          </.admin_list>
-        </.admin_section>
       <% end %>
+
+      <.admin_section
+        :if={@library_indexers != [] or (@cardigann_enabled and @cardigann_engine != nil)}
+        id="library-indexers-section"
+        title="Library Indexers"
+        icon="hero-book-open"
+        count={length(@library_indexers)}
+      >
+        <CardigannEngineComponents.engine_section
+          :if={@cardigann_enabled and @cardigann_engine}
+          status={@cardigann_engine}
+          cache_bytes={@cardigann_cache_bytes}
+          expanded={@cardigann_engine_expanded}
+          only_verified={only_verified(@library_indexers, @cardigann_engine)}
+        />
+        <div class="flex justify-end">
+          <button
+            id="add-more-library-indexers"
+            phx-click="show_indexer_library"
+            class="btn btn-xs btn-ghost text-primary"
+            title="Browse and add more indexers from the library"
+          >
+            <.icon name="hero-plus" class="w-3 h-3" /> Add More
+          </button>
+        </div>
+        <.admin_list id="library-indexers" items={@library_indexers}>
+          <:row :let={indexer}>
+            <.library_indexer_row
+              indexer={indexer}
+              active_engine={(@cardigann_engine && @cardigann_engine.active) || :builtin}
+              flaresolverr_available={
+                @flaresolverr_status.configured and @flaresolverr_status.status != :disabled
+              }
+            />
+          </:row>
+          <:empty>No library indexers.</:empty>
+        </.admin_list>
+      </.admin_section>
     </div>
     """
   end

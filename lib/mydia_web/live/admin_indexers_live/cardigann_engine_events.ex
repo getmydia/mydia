@@ -16,12 +16,14 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineEvents do
   @events [
     "switch_cardigann_engine",
     "retry_cardigann_engine",
+    "toggle_cardigann_engine",
     "remove_cardigann_engine_cache"
   ]
 
   @spec attach(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def attach(socket) do
     socket
+    |> assign(cardigann_engine_expanded: false)
     |> subscribe()
     |> load()
     |> attach_hook(:cardigann_engine_events, :handle_event, &handle_event/3)
@@ -76,6 +78,10 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineEvents do
   defp handle_event("retry_cardigann_engine", _params, socket) do
     EngineSwitcher.retry_now()
     {:halt, socket}
+  end
+
+  defp handle_event("toggle_cardigann_engine", _params, socket) do
+    {:halt, assign(socket, cardigann_engine_expanded: !socket.assigns.cardigann_engine_expanded)}
   end
 
   defp handle_event("remove_cardigann_engine_cache", _params, socket) do

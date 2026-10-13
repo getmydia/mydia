@@ -614,6 +614,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
 
     test "shows both engines with built-in active", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      open_engine(view)
       assert has_element?(view, "#cardigann-engine")
       assert has_element?(view, "#cardigann-engine-builtin[checked]")
       refute has_element?(view, "#cardigann-engine-transition")
@@ -621,6 +622,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
 
     test "choosing Prowlarr shows live progress while built-in keeps serving", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      open_engine(view)
 
       view |> element("#cardigann-engine-form") |> render_change(%{"engine" => "prowlarr"})
       assert_receive {:fake_engine, :ensure_started}
@@ -649,6 +651,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
 
     test "download progress without a total renders an indeterminate bar", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      open_engine(view)
       view |> element("#cardigann-engine-form") |> render_change(%{"engine" => "prowlarr"})
       engine_event(view, {:phase, :fetching})
       engine_event(view, {:progress, 1_048_576, nil})
@@ -674,6 +677,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       end)
 
       {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      open_engine(view)
       view |> element("#cardigann-engine-remove-cache") |> render_click()
 
       assert has_element?(
@@ -686,8 +690,37 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       refute has_element?(view, "#cardigann-engine-remove-cache")
     end
 
-    # Expands the engine picker. Task 3 makes it collapsed by default.
-    defp open_engine(view), do: view
+    defp open_engine(view) do
+      view |> element("#cardigann-engine-toggle") |> render_click()
+      view
+    end
+
+    test "the picker sits in Library Indexers, collapsed, with the active engine named",
+         %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+
+      assert has_element?(view, "#library-indexers-section #cardigann-engine")
+      assert has_element?(view, "#cardigann-engine", "How library indexers run")
+      assert has_element?(view, "#cardigann-engine", "Separate from Prowlarr connections")
+      assert has_element?(view, "#cardigann-engine-toggle", "Change")
+      assert has_element?(view, "#cardigann-engine-active", "Built-in")
+      refute has_element?(view, "#cardigann-engine-cards")
+
+      open_engine(view)
+      assert has_element?(view, "#cardigann-engine-cards")
+      assert has_element?(view, "#cardigann-engine-toggle", "Done")
+    end
+
+    test "a running switch keeps the picker open", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      open_engine(view)
+      view |> element("#cardigann-engine-form") |> render_change(%{"engine" => "prowlarr"})
+
+      # Collapsing is ignored while a transition is shown.
+      refute has_element?(view, "#cardigann-engine-toggle")
+      assert has_element?(view, "#cardigann-engine-cards")
+      assert has_element?(view, "#cardigann-engine-transition")
+    end
 
     test "the wasm engine is called Prowlarr-based and recommended for private trackers",
          %{conn: conn} do
@@ -712,12 +745,14 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     test "CARDIGANN_ENGINE locks the choice", %{conn: conn} do
       System.put_env("CARDIGANN_ENGINE", "builtin")
       {:ok, view, _} = live(conn, ~p"/admin/indexers")
+      open_engine(view)
       assert has_element?(view, "#cardigann-engine-prowlarr[disabled]")
     end
 
     test "an unknown engine value is refused without crashing", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/admin/indexers")
 
+      open_engine(view)
       render_hook(view, "switch_cardigann_engine", %{"engine" => "wasm"})
 
       refute_received {:fake_engine, :ensure_started}
