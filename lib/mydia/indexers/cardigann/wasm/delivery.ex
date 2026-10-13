@@ -206,18 +206,28 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Delivery do
     tmp = "#{target}.part-#{Base.url_encode64(:crypto.strong_rand_bytes(6), padding: false)}"
     Logger.info("Cardigann engine: downloading #{url}")
 
-    with :ok <- ensure_dir(Path.dirname(target)),
-         {:ok, sha} <- stream_gunzip(url, tmp, progress),
-         :ok <- if(sha == pin, do: :ok, else: {:error, {:checksum_mismatch, url}}),
-         :ok <- write_atomically(target <> ".sha256", sha <> "\n"),
-         :ok <- or_write_failed(File.rename(tmp, target)) do
-      :ok
-    else
-      error ->
-        File.rm(tmp)
-        File.rm(target <> ".sha256")
-        error
+    try do
+      with :ok <- ensure_dir(Path.dirname(target)),
+           {:ok, sha} <- stream_gunzip(url, tmp, progress),
+           :ok <- if(sha == pin, do: :ok, else: {:error, {:checksum_mismatch, url}}),
+           :ok <- write_atomically(target <> ".sha256", sha <> "\n"),
+           :ok <- or_write_failed(File.rename(tmp, target)) do
+        :ok
+      else
+        error ->
+          discard_partial(tmp, target)
+          error
+      end
+    catch
+      kind, reason ->
+        discard_partial(tmp, target)
+        :erlang.raise(kind, reason, __STACKTRACE__)
     end
+  end
+
+  defp discard_partial(tmp, target) do
+    File.rm(tmp)
+    File.rm(target <> ".sha256")
   end
 
   defp or_write_failed(:ok), do: :ok
@@ -259,6 +269,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Delivery do
          ) do
       {:ok, %Req.Response{status: 200} = resp} ->
         case Req.Response.get_private(resp, :cwasm) do
+          {:error, {:write_failed, _} = reason} -> {:error, reason}
           {:error, why} -> {:error, {:download_failed, "#{url}: #{why}"}}
           nil -> {:error, {:download_failed, "#{url}: empty body"}}
           %{hash: hash} -> {:ok, hash |> :crypto.hash_final() |> Base.encode16(case: :lower)}
@@ -280,17 +291,24 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Delivery do
       state ->
         try do
           out = :zlib.inflate(state.z, data)
-          :ok = :file.write(state.io, out)
-          received = Req.Response.get_private(resp, :received, 0) + byte_size(data)
-          state = %{state | hash: :crypto.hash_update(state.hash, out)}
 
-          resp =
-            resp
-            |> Req.Response.put_private(:cwasm, state)
-            |> Req.Response.put_private(:received, received)
-            |> report_progress(received, state.progress)
+          case :file.write(state.io, out) do
+            :ok ->
+              received = Req.Response.get_private(resp, :received, 0) + byte_size(data)
+              state = %{state | hash: :crypto.hash_update(state.hash, out)}
 
-          {:cont, {req, resp}}
+              resp =
+                resp
+                |> Req.Response.put_private(:cwasm, state)
+                |> Req.Response.put_private(:received, received)
+                |> report_progress(received, state.progress)
+
+              {:cont, {req, resp}}
+
+            {:error, reason} ->
+              {:halt,
+               {req, Req.Response.put_private(resp, :cwasm, {:error, {:write_failed, reason}})}}
+          end
         rescue
           e in ErlangError ->
             why = "not gzip (#{inspect(e.original)})"

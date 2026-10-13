@@ -100,6 +100,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.DeliveryTest do
       serve_cwasm(ctx.bypass, "not found", 404)
       assert {:error, {:download_failed, _}} = Delivery.fetch_precompiled(ctx.target)
       refute File.exists?(ctx.target)
+      assert Path.wildcard(Path.dirname(ctx.target) <> "/*.part-*") == []
     end
 
     test "a body that is not gzip is a download failure", ctx do
