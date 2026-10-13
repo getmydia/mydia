@@ -106,13 +106,13 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
             <table class="table table-xs font-mono">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Method</th>
-                  <th>URL</th>
-                  <th class="text-right">Status</th>
-                  <th class="text-right">Size</th>
-                  <th class="text-right">Time</th>
-                  <th>Outcome</th>
+                  <th class="max-sm:whitespace-normal">Time</th>
+                  <th class="max-sm:hidden">Method</th>
+                  <th class="max-sm:whitespace-normal">URL</th>
+                  <th class="text-right max-sm:whitespace-normal">Status</th>
+                  <th class="text-right max-sm:hidden">Size</th>
+                  <th class="text-right max-sm:hidden">Time</th>
+                  <th class="max-sm:whitespace-normal">Outcome</th>
                 </tr>
               </thead>
               <tbody id="plugin-net" phx-update="stream">
@@ -195,7 +195,7 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
       >
         {log_time(@event.inserted_at)}
       </td>
-      <td class="whitespace-nowrap max-sm:whitespace-normal">{@meta["method"] || "GET"}</td>
+      <td class="whitespace-nowrap max-sm:hidden">{@meta["method"] || "GET"}</td>
       <td
         class="max-w-md truncate max-sm:max-w-none max-sm:whitespace-normal max-sm:break-all"
         title={@meta["url"]}
@@ -203,10 +203,10 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
         {net_path(@meta)}
       </td>
       <td class="text-right whitespace-nowrap max-sm:whitespace-normal">{@meta["status"] || "—"}</td>
-      <td class="text-right whitespace-nowrap max-sm:whitespace-normal">
+      <td class="text-right whitespace-nowrap max-sm:hidden">
         {format_bytes(@meta["bytes"])}
       </td>
-      <td class="text-right whitespace-nowrap max-sm:whitespace-normal">
+      <td class="text-right whitespace-nowrap max-sm:hidden">
         {format_ms(@meta["duration_ms"])}
       </td>
       <td class="whitespace-nowrap max-sm:whitespace-normal">

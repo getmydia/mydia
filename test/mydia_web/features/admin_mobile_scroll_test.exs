@@ -12,16 +12,21 @@ defmodule MydiaWeb.Features.AdminMobileScrollTest do
 
   @moduletag :feature
 
+  alias Mydia.Events
   alias Mydia.Repo
+  alias Mydia.Settings
   alias MydiaWeb.AdminNav
 
+  @guest_fixture Path.expand("../../support/fixtures/plugins/host_test_fixture.wasm", __DIR__)
+
   # Tables that must render with at least one row, so the stacked layout is
-  # exercised rather than an empty-state alert.
+  # exercised rather than an empty-state alert, and a value seeded (or always
+  # present) that must be visible in it.
   @tables %{
-    "/admin/users" => "#users",
-    "/admin/jobs" => "#cron-jobs",
-    "/admin/release-blacklist" => "#blacklist",
-    "/admin/plugins" => "#plugin-sources-table"
+    "/admin/users" => {"#users", "alexandria.longusername"},
+    "/admin/jobs" => {"#cron-jobs", "Mydia.Jobs.HdrBackfill"},
+    "/admin/release-blacklist" => {"#blacklist", "The.Quiet.Harbor.S01E01"},
+    "/admin/plugins" => {"#plugin-sources-table", "Official"}
   }
 
   setup do
@@ -80,6 +85,52 @@ defmodule MydiaWeb.Features.AdminMobileScrollTest do
       })
     end
 
+    seed_plugin_with_network_log()
+
+    :ok
+  end
+
+  # A plugin whose Logs dialog has a Network tab with a few recorded requests.
+  defp seed_plugin_with_network_log do
+    slug = "fictional-relay-plugin"
+
+    {:ok, _} =
+      Settings.create_plugin_config(%{
+        slug: slug,
+        name: "Fictional Relay Plugin",
+        version: "1.0.0",
+        manifest: %{
+          "slug" => slug,
+          "name" => "Fictional Relay Plugin",
+          "version" => "1.0.0",
+          "capabilities" => %{"net:http" => ["relay.example"]}
+        },
+        wasm_module: File.read!(@guest_fixture),
+        granted_capabilities: %{"net:http" => ["relay.example"]},
+        enabled: false
+      })
+
+    for {outcome, status} <- [{"ok", 200}, {"ok", 204}, {"denied", nil}] do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "plugin",
+          type: "plugin.http_request",
+          actor_type: :system,
+          actor_id: slug,
+          severity: if(status, do: :info, else: :warning),
+          metadata: %{
+            "slug" => slug,
+            "method" => "GET",
+            "url" => "https://relay.example/v1/" <> String.duplicate("segment/", 8),
+            "host" => "relay.example",
+            "status" => status,
+            "bytes" => 2048,
+            "duration_ms" => 123,
+            "outcome" => outcome
+          }
+        })
+    end
+
     :ok
   end
 
@@ -112,6 +163,14 @@ defmodule MydiaWeb.Features.AdminMobileScrollTest do
   # scroller while it is open.
   defp independent_scrollers_in_dialog(session) do
     Enum.reject(independent_scrollers(session), &String.contains?(&1, ".modal-box"))
+  end
+
+  # Pixels by which the open dialog's content is wider than the dialog, or 0.
+  defp dialog_sideways_overflow(session) do
+    eval_js(session, """
+    var b = document.querySelector('.modal-open .modal-box');
+    return b.scrollWidth > b.clientWidth + 1 ? b.scrollWidth - b.clientWidth : 0;
+    """)
   end
 
   # Pixels by which the document itself overflows sideways, or 0.
@@ -158,12 +217,15 @@ defmodule MydiaWeb.Features.AdminMobileScrollTest do
   @tag :feature
   test "the tables under test actually render rows", %{session: session} do
     login_as_admin(session)
+    phone(session)
 
-    for {path, selector} <- @tables do
+    for {path, {selector, text}} <- @tables do
       visit_liveview(session, path)
 
       assert Wallaby.Browser.has_css?(session, "#{selector} tbody tr"),
              "#{path} rendered no #{selector} rows, so the scroll check proves nothing"
+
+      Wallaby.Browser.assert_text(session, Wallaby.Query.css(selector), text)
     end
   end
 
@@ -172,17 +234,26 @@ defmodule MydiaWeb.Features.AdminMobileScrollTest do
     login_as_admin(session)
     phone(session)
 
-    for {path, opener} <- [
-          {"/admin/indexers", ~s([phx-click="show_indexer_library"])},
-          {"/admin/clients", ~s([phx-click="new_download_client"])},
-          {"/admin/media-servers", ~s([phx-click="new_media_server"])}
+    for {path, opener, prepare} <- [
+          {"/admin/indexers", ~s([phx-click="show_indexer_library"]), nil},
+          {"/admin/clients", ~s([phx-click="new_download_client"]), nil},
+          {"/admin/media-servers", ~s([phx-click="new_media_server"]), nil},
+          {"/admin/plugins", "#logs-fictional-relay-plugin", "#logs-tab-network"}
         ] do
       visit_liveview(session, path)
       js_click(session, opener)
       assert Wallaby.Browser.has_css?(session, ".modal-open .modal-box")
 
+      if prepare do
+        js_click(session, prepare)
+        assert Wallaby.Browser.has_css?(session, "#plugin-net tr:not(.hidden)")
+      end
+
       assert independent_scrollers_in_dialog(session) == [],
              "#{path} dialog: " <> inspect(independent_scrollers_in_dialog(session))
+
+      assert dialog_sideways_overflow(session) == 0,
+             "#{path} dialog content is wider than the dialog"
     end
   end
 end
