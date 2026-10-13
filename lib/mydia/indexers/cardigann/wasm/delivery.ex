@@ -20,6 +20,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Delivery do
   Every step but the development artifact needs the pin (`Artifact.pinned_sha256/0`);
   a build without one cannot verify anything and says so.
 
+  `fetch_precompiled/2` gets the CI-built `.cwasm` for this architecture, when
+  the build carries its pin (`Artifact.cwasm_pin/0`).
+
   `prune/1` removes what earlier versions left in the directory.
   """
 
@@ -143,28 +146,32 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Delivery do
   defp collect({:data, data}, {req, %Req.Response{status: 200} = resp}, progress) do
     chunks = [data | Req.Response.get_private(resp, :chunks, [])]
     received = Req.Response.get_private(resp, :received, 0) + byte_size(data)
-    now = System.monotonic_time(:millisecond)
-    last = Req.Response.get_private(resp, :reported_at, nil)
-
-    reported_at =
-      if last == nil or now - last >= @progress_interval_ms do
-        progress.(received, content_length(resp))
-        now
-      else
-        last
-      end
 
     resp =
       resp
       |> Req.Response.put_private(:chunks, chunks)
       |> Req.Response.put_private(:received, received)
-      |> Req.Response.put_private(:reported_at, reported_at)
+      |> report_progress(received, progress)
 
     {:cont, {req, resp}}
   end
 
   # An error page is not the guest: drop it, the status decides.
   defp collect({:data, _data}, acc, _progress), do: {:cont, acc}
+
+  # Calls `progress` at most every @progress_interval_ms, tracking the last
+  # report in the response's private map.
+  defp report_progress(resp, received, progress) do
+    now = System.monotonic_time(:millisecond)
+    last = Req.Response.get_private(resp, :reported_at, nil)
+
+    if last == nil or now - last >= @progress_interval_ms do
+      progress.(received, content_length(resp))
+      Req.Response.put_private(resp, :reported_at, now)
+    else
+      resp
+    end
+  end
 
   defp content_length(resp) do
     with [value | _] <- Req.Response.get_header(resp, "content-length"),
@@ -174,6 +181,126 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Delivery do
       _ -> nil
     end
   end
+
+  @doc """
+  Downloads the CI-built `.cwasm.gz` for this architecture into `target`,
+  inflating it on the fly so the 119 MB file never sits in memory, and keeps it
+  only when its SHA-256 matches `Artifact.cwasm_pin/0`. Writes the
+  `<target>.sha256` sidecar that `Engine` checks before every load. `:no_pin`
+  when the build has no pin (Nix, a source build, an image built before the
+  asset was published): the caller compiles locally.
+
+  `progress: fun(bytes, total)` is called as in `ensure/1`, with compressed
+  byte counts.
+  """
+  @spec fetch_precompiled(Path.t(), keyword()) :: :ok | :no_pin | {:error, reason()}
+  def fetch_precompiled(target, opts \\ []) do
+    case Artifact.cwasm_pin() do
+      nil -> :no_pin
+      pin -> fetch_precompiled(target, pin, Keyword.get(opts, :progress, fn _, _ -> :ok end))
+    end
+  end
+
+  defp fetch_precompiled(target, pin, progress) do
+    url = Artifact.cwasm_base_url() <> "/" <> Artifact.cwasm_asset_name()
+    tmp = "#{target}.part-#{Base.url_encode64(:crypto.strong_rand_bytes(6), padding: false)}"
+    Logger.info("Cardigann engine: downloading #{url}")
+
+    with :ok <- ensure_dir(Path.dirname(target)),
+         {:ok, sha} <- stream_gunzip(url, tmp, progress),
+         :ok <- if(sha == pin, do: :ok, else: {:error, {:checksum_mismatch, url}}),
+         :ok <- write_atomically(target <> ".sha256", sha <> "\n"),
+         :ok <- or_write_failed(File.rename(tmp, target)) do
+      :ok
+    else
+      error ->
+        File.rm(tmp)
+        File.rm(target <> ".sha256")
+        error
+    end
+  end
+
+  defp or_write_failed(:ok), do: :ok
+  defp or_write_failed({:error, reason}), do: {:error, {:write_failed, reason}}
+
+  # Inflates each chunk into a 0600 file and hashes what was written. Req runs
+  # the `into:` function in this process, so the raw file handle opened here is
+  # usable from it. The inflate state lives in the response's private map.
+  defp stream_gunzip(url, tmp, progress) do
+    z = :zlib.open()
+
+    try do
+      :ok = :zlib.inflateInit(z, 31)
+
+      with :ok <- File.write(tmp, ""),
+           :ok <- File.chmod(tmp, 0o600),
+           {:ok, io} <- File.open(tmp, [:write, :binary, :raw]) do
+        try do
+          state = %{io: io, z: z, hash: :crypto.hash_init(:sha256), progress: progress}
+          request_gunzip(url, state)
+        after
+          File.close(io)
+        end
+      else
+        {:error, reason} -> {:error, {:write_failed, reason}}
+      end
+    after
+      :zlib.close(z)
+    end
+  end
+
+  defp request_gunzip(url, state) do
+    case Req.get(url,
+           retry: false,
+           decode_body: false,
+           receive_timeout: 300_000,
+           connect_options: [timeout: 10_000],
+           into: &inflate_chunk(&1, &2, state)
+         ) do
+      {:ok, %Req.Response{status: 200} = resp} ->
+        case Req.Response.get_private(resp, :cwasm) do
+          {:error, why} -> {:error, {:download_failed, "#{url}: #{why}"}}
+          nil -> {:error, {:download_failed, "#{url}: empty body"}}
+          %{hash: hash} -> {:ok, hash |> :crypto.hash_final() |> Base.encode16(case: :lower)}
+        end
+
+      {:ok, %Req.Response{status: status}} ->
+        {:error, {:download_failed, "#{url} returned HTTP #{status}"}}
+
+      {:error, e} ->
+        {:error, {:download_failed, "#{url}: #{Exception.message(e)}"}}
+    end
+  end
+
+  defp inflate_chunk({:data, data}, {req, %Req.Response{status: 200} = resp}, initial) do
+    case Req.Response.get_private(resp, :cwasm, initial) do
+      {:error, _} ->
+        {:halt, {req, resp}}
+
+      state ->
+        try do
+          out = :zlib.inflate(state.z, data)
+          :ok = :file.write(state.io, out)
+          received = Req.Response.get_private(resp, :received, 0) + byte_size(data)
+          state = %{state | hash: :crypto.hash_update(state.hash, out)}
+
+          resp =
+            resp
+            |> Req.Response.put_private(:cwasm, state)
+            |> Req.Response.put_private(:received, received)
+            |> report_progress(received, state.progress)
+
+          {:cont, {req, resp}}
+        rescue
+          e in ErlangError ->
+            why = "not gzip (#{inspect(e.original)})"
+            {:halt, {req, Req.Response.put_private(resp, :cwasm, {:error, why})}}
+        end
+    end
+  end
+
+  # An error page is not the guest: drop it, the status decides.
+  defp inflate_chunk({:data, _}, acc, _initial), do: {:cont, acc}
 
   defp verify(bytes, pin, source) do
     if Artifact.sha256(bytes) == pin, do: :ok, else: {:error, {:checksum_mismatch, source}}
