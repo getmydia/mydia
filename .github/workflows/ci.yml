@@ -262,10 +262,12 @@ jobs:
       # failed to start fails the job instead of silently skipping those tests.
       - name: Start RustFS
         run: |
-          nohup devenv shell -- mydia-s3 < /dev/null > rustfs.log 2>&1 &
-          # devenv shell prints its banner on stdout, so capturing `printenv`
-          # through it yields the banner too. Poll from inside one shell instead.
-          if devenv shell -- bash -c 'for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
+          # One devenv shell starts the server and polls it. Two shells started
+          # together race to replace devenv's GC-root symlink and the loser
+          # exits 1 with "Failed to remove existing GC root". devenv shell also
+          # prints its banner on stdout, so capturing `printenv` through it
+          # yields the banner too, which is why the poll runs inside.
+          if devenv shell -- bash -c 'setsid nohup mydia-s3 < /dev/null > rustfs.log 2>&1 & for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
             exit 0
           fi
           cat rustfs.log
@@ -572,10 +574,12 @@ jobs:
       # failed to start fails the job instead of silently skipping those tests.
       - name: Start RustFS
         run: |
-          nohup devenv shell -- mydia-s3 < /dev/null > rustfs.log 2>&1 &
-          # devenv shell prints its banner on stdout, so capturing `printenv`
-          # through it yields the banner too. Poll from inside one shell instead.
-          if devenv shell -- bash -c 'for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
+          # One devenv shell starts the server and polls it. Two shells started
+          # together race to replace devenv's GC-root symlink and the loser
+          # exits 1 with "Failed to remove existing GC root". devenv shell also
+          # prints its banner on stdout, so capturing `printenv` through it
+          # yields the banner too, which is why the poll runs inside.
+          if devenv shell -- bash -c 'setsid nohup mydia-s3 < /dev/null > rustfs.log 2>&1 & for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
             exit 0
           fi
           cat rustfs.log
