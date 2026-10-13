@@ -25,6 +25,7 @@ defmodule Mydia.Indexers do
   require Logger
   alias Mydia.Indexers.Adapter
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Indexers.SearchStats
   alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.CardigannDefinition
@@ -290,6 +291,15 @@ defmodule Mydia.Indexers do
             completed = completed + 1
             name = indexer_display_name(config)
             message = format_exit_reason(reason)
+
+            SearchStats.Telemetry.emit(config,
+              kind: :search,
+              outcome: if(reason == :timeout, do: :deadline, else: :crashed),
+              # The task's own start is gone with it; every task starts with
+              # the fan-out, so the search's elapsed time stands in.
+              duration_ms: System.monotonic_time(:millisecond) - start_time,
+              error_message: message
+            )
 
             Logger.error("Indexer search failed for #{name}: #{inspect(reason)}")
 
@@ -637,8 +647,9 @@ defmodule Mydia.Indexers do
 
   defp search_with_metrics(config, query, opts) do
     start_time = System.monotonic_time(:millisecond)
+    SearchStats.Network.reset()
 
-    result =
+    {outcome, results, error_message} =
       case search(config, query, opts) do
         {:ok, results} ->
           # Per-indexer-config NZB min-post-age filter (#121). Applied here
@@ -649,24 +660,31 @@ defmodule Mydia.Indexers do
           # keyed by `result.indexer` would never match the configured
           # name. Doing it here, with the originating config in scope,
           # sidesteps that gap entirely.
-          filtered = reject_too_fresh_nzbs_for_config(results, config)
-          {true, filtered, nil}
+          {:ok, reject_too_fresh_nzbs_for_config(results, config), nil}
 
         {:error, error} ->
           Logger.warning("Indexer search failed for #{config.name}: #{inspect(error)}")
 
-          {false, [], format_indexer_error(error)}
+          {error_outcome(error), [], format_indexer_error(error)}
       end
 
-    end_time = System.monotonic_time(:millisecond)
-    duration = end_time - start_time
+    duration = System.monotonic_time(:millisecond) - start_time
+
+    SearchStats.Telemetry.emit(config,
+      kind: :search,
+      outcome: outcome,
+      duration_ms: duration,
+      result_count: length(results),
+      network_ms: SearchStats.Network.take_ms(),
+      error_message: error_message
+    )
 
     # After the search, not before: an indexer that failed during this very
     # search has just been paused, and the user should see that too.
     paused =
       if Keyword.get(opts, :report_paused, false), do: paused_indexer_list(config), else: []
 
-    {success, results, error_message} = result
+    success = outcome == :ok
 
     metrics = %{
       paused: paused,
@@ -724,6 +742,8 @@ defmodule Mydia.Indexers do
   end
 
   defp format_indexer_error(%Adapter.Error{message: message}), do: message
+
+  defp error_outcome(%Adapter.Error{type: type}), do: type
 
   defp filter_by_seeders(results, min_seeders) when min_seeders > 0 do
     # NZB results have nil seeders; the min-seeders setting is torrent-only.
