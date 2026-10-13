@@ -595,14 +595,16 @@ defmodule Mydia.Indexers do
 
     if CardigannFeatureFlags.enabled?() do
       list_cardigann_definitions(enabled: true)
-      |> Enum.map(&cardigann_definition_to_config/1)
+      |> Enum.map(&cardigann_config/1)
     else
       []
     end
   end
 
   # Converts a CardigannDefinition to the config map expected by the Cardigann adapter
-  defp cardigann_definition_to_config(%CardigannDefinition{} = definition) do
+  @doc false
+  @spec cardigann_config(CardigannDefinition.t()) :: map()
+  def cardigann_config(%CardigannDefinition{} = definition) do
     %{
       id: definition.id,
       type: :cardigann,

@@ -16,8 +16,11 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
   import Ecto.Query, only: [from: 2]
 
+  alias Mydia.Indexers
   alias Mydia.Indexers.Adapter.Error
+  alias Mydia.Indexers.Adapter.Registry
   alias Mydia.Indexers.Cardigann.BlockPage
+  alias Mydia.Indexers.Cardigann.EngineSwitcher
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.Links
   alias Mydia.Indexers.Cardigann.SessionManager
@@ -27,6 +30,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   alias Mydia.Indexers.CardigannParser
   alias Mydia.Indexers.CardigannResultParser
   alias Mydia.Indexers.CardigannSearchEngine
+  alias Mydia.Indexers.SearchStats
   alias Mydia.Repo
 
   @type test_result :: %{
@@ -113,6 +117,12 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   @spec execute_health_check(CardigannDefinition.t(), keyword()) ::
           {:ok, test_result()} | {:error, String.t()}
   def execute_health_check(%CardigannDefinition{} = definition, _opts \\ []) do
+    result = run_health_check(definition)
+    record_health(definition, result)
+    result
+  end
+
+  defp run_health_check(definition) do
     # Parse the definition
     case CardigannParser.parse_definition(definition.definition) do
       {:ok, parsed_definition} ->
@@ -339,7 +349,104 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
 
   # Private Functions
 
+  # A needs_login check is not a probe of the tracker, so it is not recorded.
+  defp record_health(_definition, {:ok, %{status: "needs_login"}}), do: :ok
+
+  defp record_health(definition, {:ok, result}) do
+    SearchStats.Telemetry.emit(Indexers.cardigann_config(definition),
+      kind: :health,
+      outcome: if(result.status == "healthy", do: :ok, else: result.status),
+      duration_ms: result.response_time_ms || 0,
+      error_message: result[:error]
+    )
+  end
+
   defp perform_test_search(definition, parsed_definition) do
+    if EngineSwitcher.active() == :prowlarr,
+      do: prowlarr_probe(definition, parsed_definition),
+      else: builtin_probe(definition, parsed_definition)
+  end
+
+  # The Prowlarr engine owns its session, mirror failover and FlareSolverr, so
+  # the probe is one search through whatever adapter serves :cardigann now,
+  # with the same probe query the built-in path uses. Mirror state
+  # (active_link, link_status) is left as the adapter leaves it.
+  defp prowlarr_probe(definition, parsed) do
+    start_time = System.monotonic_time(:millisecond)
+
+    outcome =
+      with {:ok, adapter} <- Registry.get_adapter(:cardigann) do
+        adapter.search(Indexers.cardigann_config(definition), probe_query(parsed), [])
+      end
+
+    elapsed = System.monotonic_time(:millisecond) - start_time
+
+    case outcome do
+      {:error, %Error{type: :login_required}} ->
+        {:ok, needs_login_result()}
+
+      outcome ->
+        result = prowlarr_result(definition, outcome, elapsed)
+        update_health_status(definition, result)
+        {:ok, result}
+    end
+  end
+
+  defp prowlarr_result(_definition, {:ok, []}, elapsed) do
+    %{
+      success: true,
+      status: "degraded",
+      message: "Search parsed no rows",
+      response_time_ms: elapsed,
+      error: nil
+    }
+  end
+
+  defp prowlarr_result(definition, {:ok, results}, elapsed) do
+    %{
+      success: true,
+      status: determine_health_status(definition, true, elapsed),
+      message: "Search returned #{length(results)} result(s)",
+      response_time_ms: elapsed,
+      error: nil
+    }
+  end
+
+  defp prowlarr_result(definition, {:error, %Error{message: message}}, elapsed) do
+    case classify_probe_error(message) do
+      {:cloudflare, message} ->
+        %{
+          success: true,
+          status: "degraded",
+          message: message,
+          response_time_ms: elapsed,
+          error: message
+        }
+
+      {:error, message} ->
+        %{
+          success: false,
+          status: determine_health_status(definition, false, elapsed),
+          message: "Search failed",
+          response_time_ms: elapsed,
+          error: message
+        }
+    end
+  end
+
+  # Nothing is persisted: needs_login is cleared only by a real login, so
+  # a check must neither overwrite it nor count as a failure.
+  defp needs_login_result do
+    %{
+      success: false,
+      status: "needs_login",
+      message: "Needs login",
+      response_time_ms: nil,
+      error: nil
+    }
+  end
+
+  defp builtin_probe(definition, parsed_definition) do
     start_time = System.monotonic_time(:millisecond)
 
     case SessionManager.user_config(parsed_definition, definition) do
@@ -348,16 +455,7 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
         probe_with_session(definition, parsed_definition, user_config, start_time)
 
       {:error, %Error{type: :login_required}} ->
-        # Nothing is persisted: needs_login is cleared only by a real login, so
-        # a check must neither overwrite it nor count as a failure.
-        {:ok,
-         %{
-           success: false,
-           status: "needs_login",
-           message: "Needs login",
-           response_time_ms: nil,
-           error: nil
-         }}
+        {:ok, needs_login_result()}
 
       {:error, %Error{message: message}} ->
         result = %{
