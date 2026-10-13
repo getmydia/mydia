@@ -366,6 +366,19 @@ defmodule Mydia.Indexers.Adapter.JackettTest do
       assert result.info_url == "https://tracker.example/details/42"
     end
 
+    test "keeps a guid equal to the link when a direct download URL exists" do
+      result =
+        search_one(
+          torznab_item("""
+          <guid>https://tracker.example/details/42</guid>
+          <link>https://tracker.example/details/42</link>
+          <enclosure url="https://tracker.example/dl/42.torrent" length="1000" type="application/x-bittorrent"/>
+          """)
+        )
+
+      assert result.info_url == "https://tracker.example/details/42"
+    end
+
     test "keeps explicit comments even when equal to the download URL" do
       result =
         search_one(

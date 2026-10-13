@@ -673,14 +673,27 @@ defmodule Mydia.Indexers.Adapter.NewznabTest do
       assert result.info_url == nil
     end
 
-    test "drops a guid equal to the link when the enclosure differs" do
+    test "keeps a guid equal to the link when the enclosure is the download" do
+      # <link> is the RSS item URL, usually the details page; it is only a
+      # download link when the item has no enclosure.
+      result =
+        newznab_search_one("""
+        <guid>https://indexer.example/details/42</guid>
+        <link>https://indexer.example/details/42</link>
+        <enclosure url="https://indexer.example/nzb/42" length="1000" type="application/x-nzb"/>
+        """)
+
+      assert result.info_url == "https://indexer.example/details/42"
+    end
+
+    test "drops a guid equal to the link when the link is the only download" do
       result =
         newznab_search_one("""
         <guid>https://indexer.example/get/42</guid>
         <link>https://indexer.example/get/42</link>
-        <enclosure url="https://indexer.example/nzb/42" length="1000" type="application/x-nzb"/>
         """)
 
+      assert result.download_url == "https://indexer.example/get/42"
       assert result.info_url == nil
     end
 

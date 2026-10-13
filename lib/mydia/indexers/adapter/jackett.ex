@@ -322,21 +322,7 @@ defmodule Mydia.Indexers.Adapter.Jackett do
           true -> ""
         end
 
-      # Info URL - prefer comments, fall back to guid. Some indexers set the
-      # guid to the .torrent link, which is not a details page, so the guid
-      # only counts when it matches none of the item's download URLs.
-      info_url =
-        cond do
-          item.comments != "" ->
-            item.comments
-
-          item.guid != "" and
-              item.guid not in [item.magnet, item.download_url, item.enclosure_url, item.link] ->
-            item.guid
-
-          true ->
-            nil
-        end
+      info_url = details_url(item)
 
       # Indexer - prefer tracker name, fall back to configured name
       indexer =
@@ -415,6 +401,25 @@ defmodule Mydia.Indexers.Adapter.Jackett do
         Logger.error("Failed to parse Jackett result item: #{inspect(error)}")
         Logger.debug("Item: #{inspect(item)}")
         nil
+    end
+  end
+
+  # Info URL - prefer comments, fall back to guid. Some indexers set the guid
+  # to the .torrent link, which is not a details page, so the guid only counts
+  # when it matches none of the item's download URLs.
+  defp details_url(%{comments: comments}) when comments != "", do: comments
+  defp details_url(%{guid: ""}), do: nil
+
+  defp details_url(item) do
+    if item.guid in guid_download_urls(item), do: nil, else: item.guid
+  end
+
+  # <link> is the RSS item URL, usually the details page. It only counts as a
+  # download link when the item carries no direct one.
+  defp guid_download_urls(item) do
+    case Enum.reject([item.magnet, item.download_url, item.enclosure_url], &(&1 == "")) do
+      [] -> [item.link]
+      direct -> direct
     end
   end
 

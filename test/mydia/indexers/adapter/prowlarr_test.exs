@@ -852,6 +852,28 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
       assert result.info_url == "https://tracker.example/details/42"
     end
 
+    test "keeps a guid equal to link when downloadUrl is the download" do
+      result =
+        prowlarr_search_one(%{
+          "guid" => "https://tracker.example/details/42",
+          "link" => "https://tracker.example/details/42",
+          "downloadUrl" => "https://tracker.example/dl/42.torrent"
+        })
+
+      assert result.info_url == "https://tracker.example/details/42"
+    end
+
+    test "drops a guid equal to link when link is the only download" do
+      result =
+        prowlarr_search_one(%{
+          "guid" => "https://tracker.example/get/42",
+          "link" => "https://tracker.example/get/42"
+        })
+
+      assert result.download_url == "https://tracker.example/get/42"
+      assert result.info_url == nil
+    end
+
     test "keeps an explicit infoUrl even when equal to downloadUrl" do
       result =
         prowlarr_search_one(%{
