@@ -113,7 +113,7 @@ jobs:
           GUEST_HASH: ${{ steps.names.outputs.hash }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
         if: steps.names.outputs.skip != 'true' && steps.guest.outputs.missing != 'true'
 
       - name: Precompile

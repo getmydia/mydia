@@ -322,8 +322,9 @@ and remembers the one that worked. What it costs, measured on the Alpine image
   the compiled `.cwasm` (119 MB, named for the wasm hash, the wasmtime version and
   the CPU architecture, with a checksum file that is verified before every load).
   Files for other versions are deleted after a successful load. Keep the directory
-  on a volume: without one, every container recreate repeats the download and the
-  compile.
+  on a volume: without one, every recreate downloads the `.wasm` and the published
+  `.cwasm` again, and compiles locally only when the published file is unavailable
+  or rejected.
 - **Later boots.** The `.cwasm` loads in under a second. A `.cwasm` that fails its
   checksum or is rejected by wasmtime (another CPU, a corrupt file) is deleted and
   rebuilt.
