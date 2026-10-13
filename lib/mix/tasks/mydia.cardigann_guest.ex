@@ -5,6 +5,7 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
       mix mydia.cardigann_guest hash                  # print the source hash
       mix mydia.cardigann_guest fetch                 # download and verify
       mix mydia.cardigann_guest pin [--require]       # record the published checksum
+      mix mydia.cardigann_guest pin --cwasm           # record the published .cwasm checksum (soft)
       mix mydia.cardigann_guest verify [--allow-missing]
 
   `fetch` is a no-op when the file already verifies. Otherwise it downloads
@@ -29,7 +30,11 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
 
   @impl Mix.Task
   def run(argv) do
-    {opts, args} = OptionParser.parse!(argv, strict: [allow_missing: :boolean, require: :boolean])
+    {opts, args} =
+      OptionParser.parse!(argv,
+        strict: [allow_missing: :boolean, require: :boolean, cwasm: :boolean]
+      )
+
     # Not app.config: that evaluates config/runtime.exs, which in a prod image
     # build raises for the deployment variables (DATABASE_PATH, SECRET_KEY_BASE)
     # a build has no value for. This task needs the code paths and the compile
@@ -59,15 +64,19 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
   end
 
   defp command(["pin"], opts) do
-    case pin(Keyword.get(opts, :require, false)) do
-      :ok -> :ok
-      {:error, reason} -> Mix.raise("Cardigann guest pin: #{reason}")
+    if Keyword.get(opts, :cwasm, false) do
+      pin_cwasm()
+    else
+      case pin(Keyword.get(opts, :require, false)) do
+        :ok -> :ok
+        {:error, reason} -> Mix.raise("Cardigann guest pin: #{reason}")
+      end
     end
   end
 
   defp command(_args, _opts) do
     Mix.raise(
-      "usage: mix mydia.cardigann_guest hash | fetch | pin [--require] | verify [--allow-missing]"
+      "usage: mix mydia.cardigann_guest hash | fetch | pin [--require | --cwasm] | verify [--allow-missing]"
     )
   end
 
@@ -130,6 +139,33 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
     end
   end
 
+  @doc """
+  Records the SHA-256 of the CI-built `.cwasm` for this machine's architecture,
+  so the release can verify the precompiled guest it downloads. Always soft: a
+  build without it compiles the guest locally on first boot, as before.
+  """
+  def pin_cwasm do
+    name = String.replace_suffix(Artifact.cwasm_asset_name(), ".gz", ".sha256")
+    url = Artifact.cwasm_base_url() <> "/" <> name
+
+    with {:ok, body} <- get_url(url),
+         sha = String.trim(body),
+         true <- Regex.match?(~r/\A[0-9a-f]{64}\z/, sha) do
+      dir = Path.dirname(target())
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, name), sha <> "\n")
+      Mix.shell().info("Pinned precompiled Cardigann guest #{name} to #{sha}")
+    else
+      other ->
+        Mix.shell().error(
+          "WARNING: no published precompiled Cardigann guest (#{inspect(other)}); installs " <>
+            "that choose the engine will compile it locally on first boot."
+        )
+    end
+
+    :ok
+  end
+
   @doc "`:ok`, or `{:error, :missing | :checksum_mismatch}`. Missing is fine when `allow_missing?`."
   def verify(allow_missing?) do
     case Artifact.load(target()) do
@@ -171,9 +207,9 @@ defmodule Mix.Tasks.Mydia.CardigannGuest do
     end
   end
 
-  defp get(name) do
-    url = base_url() <> "/" <> name
+  defp get(name), do: get_url(base_url() <> "/" <> name)
 
+  defp get_url(url) do
     case Req.get(url, retry: false, receive_timeout: 120_000, connect_options: [timeout: 3_000]) do
       {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) -> {:ok, body}
       {:ok, %Req.Response{status: status}} -> {:unavailable, "#{url} returned HTTP #{status}"}

@@ -276,6 +276,11 @@ RUN if [ "$CARDIGANN_REQUIRE_PIN" = "true" ]; then \
       mix mydia.cardigann_guest pin; \
     fi
 
+# The precompiled guest for this image's architecture (buildx runs this stage
+# once per platform). Soft for every image: without it an install compiles the
+# guest on first boot, as before. Only the 64-character sidecar is fetched.
+RUN mix mydia.cardigann_guest pin --cwasm
+
 # Fail the build if a bundled plugin's wasm artifact was not produced (the
 # :plugins compiler graceful-skips a missing toolchain, so this is the guard
 # that a release image never ships without its bundled plugins).

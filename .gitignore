@@ -114,6 +114,7 @@ docs/.venv/
 /priv/cardigann/*.wasm
 /priv/cardigann/*.wasm.sha256
 /priv/cardigann/*.wasm.cwasm
+/priv/cardigann/*.cwasm.sha256
 /priv/cardigann/.unavailable-*
 
 # Cookie jars (from HTTP clients)
