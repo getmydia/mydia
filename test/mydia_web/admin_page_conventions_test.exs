@@ -115,8 +115,47 @@ defmodule MydiaWeb.AdminPageConventionsTest do
 
     test "allows a scroller scoped to sm and above, or marked data-scroll-ok" do
       assert violations(~S(<div class="sm:max-h-64 sm:overflow-y-auto">), "x.ex") == []
-      assert violations(~S(<div class="max-sm:overflow-x-auto md:overflow-x-auto">), "x.ex") == []
+      assert violations(~S(<div class="md:overflow-x-auto lg:overflow-auto">), "x.ex") == []
       assert violations(~S(<div class="overflow-x-auto" data-scroll-ok="chips">), "x.ex") == []
+    end
+
+    test "flags a max-sm scroller and every overflow auto or scroll token" do
+      for token <-
+            ~w(max-sm:overflow-x-auto overflow-auto overflow-scroll overflow-x-scroll
+               overflow-y-scroll overflow-x-auto overflow-y-auto) do
+        assert ["nested scroller" <> _] = violations(~s(<div class="p-2 #{token}">), "x.ex"),
+               "#{token} was not flagged"
+      end
+    end
+
+    test "flags a scroller after a > inside an attribute value" do
+      html = ~S'<button phx-click={JS.push("x") |> JS.hide()} class="overflow-auto">'
+      assert ["nested scroller" <> _] = violations(html, "x.ex")
+
+      ok = ~S'<button phx-click={JS.push("x") |> JS.hide()} class="sm:overflow-auto">'
+      assert violations(ok, "x.ex") == []
+    end
+
+    test "flags a scroller inside a class list and honors data-scroll-ok after a >" do
+      assert ["nested scroller" <> _] =
+               violations(~S(<div class={["flex", @open && "overflow-y-auto"]}>), "x.ex")
+
+      marked =
+        ~S'<div phx-click={JS.push("x") |> JS.hide()} class="overflow-x-auto" data-scroll-ok="chips">'
+
+      assert violations(marked, "x.ex") == []
+    end
+
+    test "flags reordered page-owned padding but not look-alikes" do
+      assert ["page-owned body padding" <> _] =
+               violations(~S(<div class="space-y-4 p-4 sm:p-6">), "x.ex")
+
+      assert ["page-owned body padding" <> _] =
+               violations(~S(<div class={["sm:p-6", "space-y-4", "p-4"]}>), "x.ex")
+
+      assert violations(~S(<div class="sm:p-4 sm:p-6">), "x.ex") == []
+      assert violations(~S(<div class="px-4 sm:p-6">), "x.ex") == []
+      assert violations(~S(<div class="p-4">), "x.ex") == []
     end
 
     test "flags text-gray and <.button" do
@@ -179,8 +218,7 @@ defmodule MydiaWeb.AdminPageConventionsTest do
       Regex.match?(~r/class="modal(-box)?[\s"]/, content) &&
         "hand-rolled modal; use <.admin_modal>",
       template_too_long(content, path),
-      content =~ ~s(class="p-4 sm:p-6) &&
-        "page-owned body padding; admin_page/1 supplies the body wrapper",
+      page_owned_padding(content),
       content =~ "text-gray-" && "raw grey; use text-base-content/<n>",
       nested_scroller(content),
       Regex.match?(~r/<\.button[\s>\/]/, content) &&
@@ -190,18 +228,66 @@ defmodule MydiaWeb.AdminPageConventionsTest do
     |> Kernel.++(bare_events(content))
   end
 
-  # An unprefixed overflow-x/y-auto is a scroller on phones. Admin screens get
-  # exactly one (the page or an open dialog), so scope it with sm: or mark the
-  # element as a deliberate exception with data-scroll-ok="reason".
-  @nested_scroller ~r/<[^<>]*(?<![\w:-])overflow-[xy]-auto[^<>]*>/s
+  # A tag, tolerant of `>` inside a quoted attribute value or a `{...}`
+  # expression (`phx-click={JS.push("x") |> JS.hide()}`), which a plain
+  # `[^<>]*` scan would end early.
+  @tag_regex ~r/<[a-zA-Z.][\w.:-]*(?:"[^"]*"|'[^']*'|\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}|[^>"'{}])*>/s
+  @class_attr ~r/(?<![\w-])class=("[^"]*"|\{(?:[^{}]|\{[^{}]*\})*\})/s
+  @string_literal ~r/"([^"]*)"/
+  @scroller_token ~r/^(?:[\w-]+:)*!?overflow-(?:[xy]-)?(?:auto|scroll)$/
+  @desktop_variants ~w(sm md lg xl 2xl)
 
+  # Each tag as a list of its class attributes, every one a list of tokens
+  # (the string literals of `class="..."` and `class={[...]}` pooled).
+  defp tags_with_classes(content) do
+    @tag_regex
+    |> Regex.scan(content)
+    |> Enum.map(fn [tag] ->
+      classes =
+        @class_attr
+        |> Regex.scan(tag, capture: :all_but_first)
+        |> Enum.map(fn [value] ->
+          @string_literal
+          |> Regex.scan(value, capture: :all_but_first)
+          |> Enum.flat_map(fn [literal] -> String.split(literal) end)
+        end)
+
+      {tag, classes}
+    end)
+  end
+
+  # p-4 plus sm:p-6 on one element is the old page-owned body wrapper, in
+  # whatever order the classes are written.
+  defp page_owned_padding(content) do
+    owned? =
+      content
+      |> tags_with_classes()
+      |> Enum.any?(fn {_tag, classes} ->
+        Enum.any?(classes, &("p-4" in &1 and "sm:p-6" in &1))
+      end)
+
+    owned? && "page-owned body padding; admin_page/1 supplies the body wrapper"
+  end
+
+  # Any overflow-auto/scroll token that applies on phones is a scroller on
+  # phones. Admin screens get exactly one (the page or an open dialog), so
+  # scope it with sm:/md:/... or mark the element as a deliberate exception
+  # with data-scroll-ok="reason". max-sm: is a phone scroller, not an exemption.
   defp nested_scroller(content) do
     flagged? =
-      @nested_scroller
-      |> Regex.scan(content)
-      |> Enum.any?(fn [tag] -> not String.contains?(tag, "data-scroll-ok") end)
+      content
+      |> tags_with_classes()
+      |> Enum.any?(fn {tag, classes} ->
+        not String.contains?(tag, "data-scroll-ok") and
+          Enum.any?(classes, fn tokens -> Enum.any?(tokens, &phone_scroller?/1) end)
+      end)
 
     flagged? && "nested scroller; scope it with sm: (one scroller per phone screen)"
+  end
+
+  defp phone_scroller?(token) do
+    Regex.match?(@scroller_token, token) and
+      not (token |> String.split(":") |> hd() |> then(&(&1 in @desktop_variants)))
   end
 
   defp bare_events(content) do
