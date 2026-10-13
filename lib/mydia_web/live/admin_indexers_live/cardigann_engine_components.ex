@@ -206,7 +206,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
         <% phase -> %>
           <progress class="progress progress-primary w-full" />
           <p class="text-sm">
-            {if phase == :compiling, do: "Compiling", else: "Preparing"} the Prowlarr-based engine...
+            {phase_text(phase)}...
             <span
               id={"cardigann-engine-elapsed-#{phase}"}
               phx-hook=".ElapsedSeconds"
@@ -268,6 +268,10 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
 
   defp other_name(:builtin), do: engine_name(:prowlarr)
   defp other_name(:prowlarr), do: engine_name(:builtin)
+
+  defp phase_text(:compiling), do: "Compiling the Prowlarr-based engine"
+  defp phase_text(:downloading_precompiled), do: "Downloading the precompiled engine"
+  defp phase_text(_phase), do: "Preparing the Prowlarr-based engine"
 
   defp download_label(%Transition{bytes: nil}), do: ""
   defp download_label(%Transition{bytes: bytes, total: nil}), do: format_mb(bytes)

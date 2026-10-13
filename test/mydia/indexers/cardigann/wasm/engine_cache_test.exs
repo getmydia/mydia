@@ -139,6 +139,77 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineCacheTest do
     assert File.exists?(ctx.sidecar)
   end
 
+  test "downloads the published .cwasm instead of compiling, and caches it", ctx do
+    {:ok, bytes} = Artifact.load()
+    built = Path.join(ctx.dir, "ci-built.cwasm")
+
+    :ok =
+      Wasmex.Engine.precompile_component_to_file(
+        Mydia.Indexers.Cardigann.Wasm.EngineConfig.ci_engine(),
+        bytes,
+        built
+      )
+
+    cwasm = File.read!(built)
+    File.rm!(built)
+    bypass = Bypass.open()
+
+    Bypass.expect_once(bypass, "GET", "/cw/" <> Artifact.cwasm_asset_name(), fn conn ->
+      Plug.Conn.resp(conn, 200, :zlib.gzip(cwasm))
+    end)
+
+    put_env_for_test(:cardigann_cwasm_base_url, "http://localhost:#{bypass.port}/cw")
+    put_env_for_test(:cardigann_cwasm_pin, Artifact.sha256(cwasm))
+
+    log = capture_info(fn -> assert start_and_wait() end)
+
+    assert log =~ "downloaded precompiled"
+    assert File.read!(ctx.cwasm) == cwasm
+  end
+
+  test "a published .cwasm the engine rejects is deleted and the guest is compiled locally",
+       ctx do
+    bypass = Bypass.open()
+    junk = :crypto.strong_rand_bytes(4096)
+
+    Bypass.expect_once(bypass, "GET", "/cw/" <> Artifact.cwasm_asset_name(), fn conn ->
+      Plug.Conn.resp(conn, 200, :zlib.gzip(junk))
+    end)
+
+    put_env_for_test(:cardigann_cwasm_base_url, "http://localhost:#{bypass.port}/cw")
+    put_env_for_test(:cardigann_cwasm_pin, Artifact.sha256(junk))
+
+    log = capture_info(fn -> assert start_and_wait() end)
+
+    assert log =~ "rejected the published precompiled guest"
+    assert log =~ "compiled and cached"
+    refute File.read!(ctx.cwasm) == junk
+  end
+
+  # The "ready (... in N ms)" line is info, below the test environment's level.
+  defp capture_info(fun) do
+    previous = Logger.level()
+    Logger.configure(level: :info)
+
+    try do
+      ExUnit.CaptureLog.capture_log([level: :info], fun)
+    after
+      Logger.configure(level: previous)
+    end
+  end
+
+  defp put_env_for_test(key, value) do
+    previous = Application.fetch_env(:mydia, key)
+    Application.put_env(:mydia, key, value)
+
+    on_exit(fn ->
+      case previous do
+        {:ok, v} -> Application.put_env(:mydia, key, v)
+        :error -> Application.delete_env(:mydia, key)
+      end
+    end)
+  end
+
   defp patched_nif? do
     Wasmex.Native.malloc_trim()
     true
