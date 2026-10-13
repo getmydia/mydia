@@ -158,7 +158,7 @@ what an install gets when no `.cwasm` is published or its pin is missing.
 | Download size | `.wasm` 38,945,911 B plus `.cwasm.gz` 28,782,677 B: **67.7 MB**, against 38.9 MB before |
 | Disk per install | 158 MB in `/config/cardigann/` (`.wasm` 38,945,911 B, `.cwasm` 118,975,960 B, a 65 B checksum file), unchanged. The `.gz` is inflated while it downloads and never stored |
 | Image size | 728,947,434 B, against 728,900,297 B for the previous section's branch image (+47 KB, from an unrelated rebuild of the same stages) |
-| Precompile in the Docker stage | 18.1 s on Alpine in the Docker stage (Task 7 measurement; 4.4 s for the parallel compile on the 16-core glibc host, Task 2 measurement), 118,975,960 B in both. The two files differ in content, so a pin has to come from the Alpine build CI runs, never from a host build |
+| Precompile in the Docker stage | 18.1 s on Alpine in the Docker stage (measured in the Docker stage; 4.4 s for the parallel compile, measured on the 16-core glibc host), 118,975,960 B in both. The two files differ in content, so a pin has to come from the Alpine build CI runs, never from a host build |
 
 What the download case saves: about 18 s of first-boot time and about 1 GB of peak
 memory (633 to 662 MB against 1,607 MB). A container capped near 1 GB is enough for

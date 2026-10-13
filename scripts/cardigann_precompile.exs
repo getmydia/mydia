@@ -16,6 +16,10 @@ alias Mydia.Indexers.Cardigann.Wasm.EngineConfig
 
 [wasm, out, asset] = System.argv()
 
+unless String.ends_with?(asset, ".cwasm.gz") do
+  raise "asset name #{asset} must end in .cwasm.gz"
+end
+
 # The asset name carries the wasmtime version the release tag was computed from.
 # Refuse to write a file under a name that disagrees with the NIF compiling it.
 cargo = "deps/wasmex/native/wasmex/Cargo.toml"

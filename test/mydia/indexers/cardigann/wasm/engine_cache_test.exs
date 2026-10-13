@@ -167,6 +167,16 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineCacheTest do
     assert File.read!(ctx.cwasm) == cwasm
   end
 
+  test "without a pin the boot never announces a precompiled download", _ctx do
+    put_env_for_test(:cardigann_cwasm_pin, nil)
+    Phoenix.PubSub.subscribe(Mydia.PubSub, Engine.topic())
+
+    assert start_and_wait()
+
+    assert_receive {:cardigann_wasm_engine, :ready}, 5_000
+    refute_received {:cardigann_wasm_engine, {:phase, :downloading_precompiled}}
+  end
+
   test "a published .cwasm the engine rejects is deleted and the guest is compiled locally",
        ctx do
     bypass = Bypass.open()

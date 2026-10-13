@@ -4,10 +4,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   in `native/cardigann_guest/SPIKE.md`.
 
   The GenServer only owns the compiled component. Compiling the 75 MB guest
-  costs about 3.3 s and happens once, asynchronously after boot, under one
-  the shared runtime engine from `EngineConfig.runtime_engine/0`: a compiled
-  component can be instantiated only in stores of the engine that compiled it. The engine and component sit
-  in `:persistent_term`, and `call/3` runs in the caller's process: a fresh
+  costs about 3.3 s and happens once, asynchronously after boot, under the
+  shared runtime engine from `EngineConfig.runtime_engine/0`: a compiled
+  component can be instantiated only in stores of the engine that compiled
+  it. The engine and component sit in `:persistent_term`, and `call/3` runs in the caller's process: a fresh
   store and instance per call (about 3 ms), killed afterwards, so a hung or
   crashed guest never outlives its call.
 
@@ -590,37 +590,40 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   # wasmtime rejects the file (another CPU or engine config). A rejected file is
   # deleted so the next boot does not try it again from the cache.
   defp load_published(store, cwasm, bytes) do
-    send_phase(:downloading_precompiled)
+    if Artifact.cwasm_pin() do
+      send_phase(:downloading_precompiled)
+      result = fetch_published(store, cwasm, bytes)
+      send_phase(:compiling)
+      result
+    end
+  end
 
-    result =
-      case Delivery.fetch_precompiled(cwasm, progress: &broadcast({:progress, &1, &2})) do
-        :ok ->
-          case Components.Component.deserialize_file(store, cwasm, bytes) do
-            {:ok, component} ->
-              {:ok, component, "downloaded precompiled"}
+  defp fetch_published(store, cwasm, bytes) do
+    case Delivery.fetch_precompiled(cwasm, progress: &broadcast({:progress, &1, &2})) do
+      :ok ->
+        case Components.Component.deserialize_file(store, cwasm, bytes) do
+          {:ok, component} ->
+            {:ok, component, "downloaded precompiled"}
 
-            {:error, reason} ->
-              Logger.warning(
-                "Cardigann wasm engine: wasmtime rejected the published precompiled guest " <>
-                  "(#{inspect(reason)}), compiling locally"
-              )
+          {:error, reason} ->
+            Logger.warning(
+              "Cardigann wasm engine: wasmtime rejected the published precompiled guest " <>
+                "(#{inspect(reason)}), compiling locally"
+            )
 
-              File.rm(cwasm)
-              File.rm(cwasm <> ".sha256")
-              nil
-          end
+            File.rm(cwasm)
+            File.rm(cwasm <> ".sha256")
+            nil
+        end
 
-        :no_pin ->
-          nil
+      :no_pin ->
+        nil
 
-        {:error, reason} ->
-          Logger.warning("Cardigann wasm engine: #{Delivery.describe(reason)}, compiling locally")
+      {:error, reason} ->
+        Logger.warning("Cardigann wasm engine: #{Delivery.describe(reason)}, compiling locally")
 
-          nil
-      end
-
-    send_phase(:compiling)
-    result
+        nil
+    end
   end
 
   defp compile_component(store, bytes) do

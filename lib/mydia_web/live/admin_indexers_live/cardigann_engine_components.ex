@@ -192,7 +192,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
               Retry now
             </button>
           </div>
-        <% :fetching -> %>
+        <% phase when phase in [:fetching, :downloading_precompiled] -> %>
           <progress
             :if={@transition.total}
             class="progress progress-primary w-full"
@@ -201,7 +201,9 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
           />
           <progress :if={is_nil(@transition.total)} class="progress progress-primary w-full" />
           <p class="text-sm">
-            Downloading the Prowlarr-based engine {download_label(@transition)}
+            {if phase == :fetching,
+              do: "Downloading the Prowlarr-based engine",
+              else: phase_text(phase)} {download_label(@transition)}
           </p>
         <% phase -> %>
           <progress class="progress progress-primary w-full" />
