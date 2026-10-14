@@ -299,8 +299,15 @@ void main() {
   });
 
   testWidgets('narrow layouts use a bottom sheet', (tester) async {
-    await _open(tester, [_source('acc1', 'aa11')]);
+    await _open(tester, [_source('acc1', 'aa11')], size: const Size(599, 600));
     expect(find.byType(BottomSheet), findsOneWidget);
+  });
+
+  testWidgets('the rail width already gets the popover, not a sheet',
+      (tester) async {
+    await _open(tester, [_source('acc1', 'aa11')], size: const Size(600, 600));
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byKey(const ValueKey('source-picker')), findsOneWidget);
   });
 
   testWidgets('wide layouts hang a popover under the anchor', (tester) async {

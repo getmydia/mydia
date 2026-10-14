@@ -63,7 +63,9 @@ Future<PickerChoice?> showSourcePicker(
   required SourceId? currentId,
 }) {
   final list = SourcePickerList(currentId: currentId);
-  if (!Breakpoints.isDesktop(anchorContext)) {
+  // The rail starts at the same width, and its switcher always opens the
+  // popover.
+  if (!Breakpoints.showsRail(anchorContext)) {
     return showModalBottomSheet<PickerChoice>(
       context: anchorContext,
       backgroundColor: AppColors.surfaceVariant,

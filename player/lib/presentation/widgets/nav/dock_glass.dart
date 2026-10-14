@@ -5,7 +5,6 @@ import '../../../core/theme/colors.dart';
 /// The bottom dock's frosted-glass recipe. The cast bar floats directly
 /// above the dock and must read as the same material, so both use these.
 abstract final class DockGlass {
-  static const double blurSigma = 10;
   static const double sideMargin = 12;
 
   /// Fill alpha. The colour is the ambient tint's surface, applied by
