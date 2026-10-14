@@ -60,6 +60,7 @@ Future<(ProviderContainer, _Calls)> _pump(
   String location = '/',
   bool withSwitchCallback = true,
   List<MediaSource> included = const [],
+  bool compact = false,
 }) async {
   final calls = _Calls();
   final container = ProviderContainer(
@@ -79,6 +80,7 @@ Future<(ProviderContainer, _Calls)> _pump(
             location: location,
             onNavigate: calls.navigations.add,
             onSwitchSource: withSwitchCallback ? calls.switches.add : null,
+            compact: compact,
           ),
         ),
       ),
@@ -185,6 +187,23 @@ void main() {
     expect(container.read(activeSourceIdProvider), _plex().id);
     expect(calls.switches, ['/s/acc1:owner:srv9']);
     expect(calls.navigations, isEmpty);
+  });
+
+  testWidgets('compact is a 48px button that opens the same picker',
+      (tester) async {
+    final (_, calls) =
+        await _pump(tester, thirdParty: [_plex()], compact: true);
+    const compactKey = ValueKey('source-switcher-compact');
+    expect(find.byKey(_header), findsNothing);
+    expect(tester.getSize(find.byKey(compactKey)), const Size(48, 48));
+    expect(find.bySemanticsLabel(RegExp('^Switch server')), findsOneWidget);
+
+    await tester.tap(find.byKey(compactKey));
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.byKey(const ValueKey('source-switcher-acc1:owner:srv9')));
+    await tester.pumpAndSettle();
+    expect(calls.switches, ['/s/acc1:owner:srv9']);
   });
 
   testWidgets('every Mydia opens its own routes', (tester) async {

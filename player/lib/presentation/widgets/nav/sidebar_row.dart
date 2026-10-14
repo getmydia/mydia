@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../focus_highlight.dart';
 
@@ -52,6 +53,11 @@ class SidebarRow extends StatefulWidget {
   /// region, which is the whole reason the boundary is explicit.
   final FocusNode? focusNode;
 
+  /// Icon-only 48x48 rendering for the collapsed rail. The label moves to a
+  /// tooltip, the badge stays as a top-right overlay, and the edit-mode
+  /// affordances are not drawn.
+  final bool compact;
+
   const SidebarRow({
     super.key,
     required this.icon,
@@ -69,6 +75,7 @@ class SidebarRow extends StatefulWidget {
     this.isHidden = false,
     this.editingTrailing,
     this.focusNode,
+    this.compact = false,
   });
 
   @override
@@ -81,8 +88,56 @@ class _SidebarRowState extends State<SidebarRow> {
 
   static const _menuWidth = 36.0;
 
+  Widget _buildCompact() {
+    final isSelected = widget.isSelected && !widget.isDisabled;
+    return Tooltip(
+      message: widget.label,
+      child: FocusHighlight(
+        focusNode: widget.focusNode,
+        onActivate: widget.isDisabled ? null : widget.onTap,
+        borderRadius:
+            const BorderRadius.all(Radius.circular(AppTheme.radiusNavItem)),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.isDisabled ? null : widget.onTap,
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? Colors.white.withValues(alpha: 0.18)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppTheme.radiusNavItem),
+              border: isSelected
+                  ? Border.all(color: AppColors.primary, width: 2)
+                  : null,
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  isSelected ? widget.selectedIcon : widget.icon,
+                  size: 22,
+                  color: widget.isDisabled
+                      ? AppColors.textDisabled
+                      : isSelected
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary,
+                ),
+                if (widget.badge != null)
+                  Positioned(top: 8, right: 8, child: widget.badge!),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.compact) return _buildCompact();
     final isSelected = widget.isSelected && !widget.isDisabled;
 
     // An anchor cannot be reordered or hidden, so while editing it reads as

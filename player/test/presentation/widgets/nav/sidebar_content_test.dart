@@ -5,6 +5,7 @@ import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
 import 'package:player/presentation/widgets/nav/sidebar_content.dart';
 import 'package:player/presentation/widgets/nav/sidebar_row.dart';
@@ -26,6 +27,7 @@ Future<void> _pump(
   bool isOffline = false,
   double height = 1400,
   FocusNode? selectedRowFocusNode,
+  bool compact = false,
 }) async {
   tester.view.physicalSize = Size(1200, height + 200);
   tester.view.devicePixelRatio = 1.0;
@@ -53,6 +55,7 @@ Future<void> _pump(
               onNavigate: onNavigate ?? (_) {},
               isOffline: isOffline,
               selectedRowFocusNode: selectedRowFocusNode,
+              compact: compact,
             ),
           ),
         ),
@@ -347,5 +350,76 @@ void main() {
     await tester.pump();
 
     expect(node.hasFocus, isTrue);
+  });
+
+  group('compact', () {
+    testWidgets('shows icons with tooltips and no labels', (tester) async {
+      await _pump(tester, location: '/', compact: true);
+
+      expect(find.text('Search'), findsNothing);
+      expect(find.byTooltip('Search'), findsOneWidget);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('sidebar-row-search'))),
+        const Size(48, 48),
+      );
+      expect(
+        tester.getSize(find.byKey(const ValueKey('sidebar-row-settings'))),
+        const Size(48, 48),
+      );
+    });
+
+    testWidgets('hides the header and the new-filter row', (tester) async {
+      await _pump(tester, location: '/', compact: true);
+
+      expect(find.byTooltip('Edit sidebar'), findsNothing);
+      expect(find.text('Mydia Player'), findsNothing);
+      expect(find.byTooltip('+ New filter'), findsNothing);
+    });
+
+    testWidgets('the selected row is ringed and filled', (tester) async {
+      await _pump(
+        tester,
+        location: '/s/${fakeSourceId.value}/favorites',
+        compact: true,
+      );
+
+      final box = tester.widget<Container>(
+        find.descendant(
+          of: find.byKey(const ValueKey('sidebar-row-favorites')),
+          matching: find.byType(Container),
+        ),
+      );
+      final decoration = box.decoration! as BoxDecoration;
+      final border = decoration.border! as Border;
+      expect(border.top.color, AppColors.primary);
+      expect(border.top.width, 2);
+      expect(decoration.color, Colors.white.withValues(alpha: 0.18));
+    });
+
+    testWidgets('exactly one row carries the focus node', (tester) async {
+      final node = FocusNode(debugLabel: 'shell-sidebar');
+      addTearDown(node.dispose);
+      await _pump(
+        tester,
+        location: '/s/${fakeSourceId.value}/favorites',
+        compact: true,
+        selectedRowFocusNode: node,
+      );
+
+      node.requestFocus();
+      await tester.pump();
+      expect(node.hasFocus, isTrue);
+      expect(
+          find.byKey(const ValueKey('sidebar-row-favorites')), findsOneWidget);
+    });
+
+    testWidgets('tapping a row navigates', (tester) async {
+      final routes = <String>[];
+      await _pump(tester, location: '/', compact: true, onNavigate: routes.add);
+
+      await tester.tap(find.byKey(const ValueKey('sidebar-row-movies')));
+      await tester.pumpAndSettle();
+      expect(routes, ['/s/${fakeSourceId.value}/library/movies']);
+    });
   });
 }

@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../screens/detail/detail_links.dart';
 import '../../screens/sources/plex_home_sheet.dart';
@@ -27,6 +28,7 @@ class SourceSwitcher extends ConsumerWidget {
     required this.location,
     required this.onNavigate,
     this.onSwitchSource,
+    this.compact = false,
   });
 
   final String location;
@@ -38,6 +40,9 @@ class SourceSwitcher extends ConsumerWidget {
   /// drawer passes a callback that leaves the drawer open, so the viewer
   /// sees the nav change under the new header.
   final ValueChanged<String>? onSwitchSource;
+
+  /// The collapsed rail's 48x48 button: the server's initial, no caption.
+  final bool compact;
 
   /// The source the header names: the one in a `/s/<id>` location,
   /// otherwise the remembered pick, on screens such as `/sources/manage`.
@@ -58,6 +63,18 @@ class SourceSwitcher extends ConsumerWidget {
     if (sources.isEmpty) return const SizedBox.shrink();
     final current =
         currentFor(sources, location, ref.watch(activeSourceIdProvider));
+
+    if (compact) {
+      final name =
+          isAllServersLocation(location) ? 'All servers' : current.displayName;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _CompactButton(
+          name: name,
+          onOpen: (anchorContext) => _open(anchorContext, ref, current),
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -115,6 +132,58 @@ class SourceSwitcher extends ConsumerWidget {
               (onSwitchSource ?? onNavigate)(sourceHomeLocation(id)),
         );
     }
+  }
+}
+
+class _CompactButton extends StatelessWidget {
+  const _CompactButton({required this.name, required this.onOpen});
+
+  final String name;
+  final ValueChanged<BuildContext> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    void open() => onOpen(context);
+    final initial = name.isEmpty ? '?' : name.characters.first.toUpperCase();
+    const radius = BorderRadius.all(Radius.circular(14));
+
+    return Semantics(
+      button: true,
+      label: 'Switch server: $name',
+      excludeSemantics: true,
+      onTap: open,
+      child: Tooltip(
+        message: name,
+        child: FocusHighlight(
+          onActivate: open,
+          borderRadius: radius,
+          child: SizedBox(
+            key: const ValueKey('source-switcher-compact'),
+            width: 48,
+            height: 48,
+            child: Material(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: radius,
+              child: InkWell(
+                borderRadius: radius,
+                onTap: open,
+                child: Center(
+                  child: Text(
+                    initial,
+                    style: const TextStyle(
+                      fontFamily: AppTheme.displayFamily,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

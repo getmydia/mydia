@@ -11,7 +11,14 @@ import '../connection_status_dot.dart';
 import 'sidebar_row.dart';
 
 class AllServersServerRows extends ConsumerWidget {
-  const AllServersServerRows({super.key, required this.onNavigate});
+  const AllServersServerRows({
+    super.key,
+    required this.onNavigate,
+    this.compact = false,
+  });
+
+  /// Icon-only rows for the collapsed rail; the "Servers" caption is dropped.
+  final bool compact;
 
   final ValueChanged<String> onNavigate;
 
@@ -19,15 +26,19 @@ class AllServersServerRows extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sources = ref.watch(allServersSourcesProvider);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Text('Servers', style: Theme.of(context).textTheme.labelSmall),
-        ),
+        if (!compact)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child:
+                Text('Servers', style: Theme.of(context).textTheme.labelSmall),
+          ),
         for (final s in sources)
           SidebarRow(
             key: ValueKey('all-server-row-${s.id.value}'),
+            compact: compact,
             icon: Icons.dns_outlined,
             selectedIcon: Icons.dns,
             label: s.displayName,

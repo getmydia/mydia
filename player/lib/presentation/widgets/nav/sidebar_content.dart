@@ -34,6 +34,7 @@ class SidebarContent extends ConsumerWidget {
     this.onSwitchSource,
     this.backToMydiaWidget,
     this.selectedRowFocusNode,
+    this.compact = false,
   });
 
   final String location;
@@ -54,6 +55,11 @@ class SidebarContent extends ConsumerWidget {
   /// on the routes it does not list, such as a filter that has since been
   /// deleted.
   final FocusNode? selectedRowFocusNode;
+
+  /// Icon-only rendering for the collapsed rail: no header, no new-filter
+  /// row, centred 48px rows, and edit mode is treated as off (without
+  /// touching `sidebarEditModeProvider`).
+  final bool compact;
 
   /// The destination that should render as selected.
   ///
@@ -111,7 +117,7 @@ class SidebarContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final editing = ref.watch(sidebarEditModeProvider);
+    final editing = ref.watch(sidebarEditModeProvider) && !compact;
 
     final asyncDestinations = ref.watch(sidebarDestinationsProvider);
     final destinations = switch (asyncDestinations) {
@@ -152,50 +158,55 @@ class SidebarContent extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: backToMydiaWidget!,
           ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(20, hasBackWidget ? 16 : 20, 12, 16),
-          child: Row(
-            children: [
-              const MydiaLogo(size: 36),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Mydia Player',
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        style:
-                            Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: -0.5,
-                                ),
+        if (!compact)
+          Padding(
+            padding: EdgeInsets.fromLTRB(20, hasBackWidget ? 16 : 20, 12, 16),
+            child: Row(
+              children: [
+                const MydiaLogo(size: 36),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Mydia Player',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.5,
+                              ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    const ChannelBadge(),
-                  ],
+                      const SizedBox(width: 8),
+                      const ChannelBadge(),
+                    ],
+                  ),
                 ),
-              ),
-              IconButton(
-                onPressed: () =>
-                    ref.read(sidebarEditModeProvider.notifier).toggle(),
-                tooltip: 'Edit sidebar',
-                visualDensity: VisualDensity.compact,
-                icon: Icon(
-                  Icons.edit_outlined,
-                  size: 20,
-                  color: editing ? AppColors.primary : AppColors.textSecondary,
+                IconButton(
+                  onPressed: () =>
+                      ref.read(sidebarEditModeProvider.notifier).toggle(),
+                  tooltip: 'Edit sidebar',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    Icons.edit_outlined,
+                    size: 20,
+                    color:
+                        editing ? AppColors.primary : AppColors.textSecondary,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         SourceSwitcher(
           location: location,
           onNavigate: onNavigate,
           onSwitchSource: onSwitchSource,
+          compact: compact,
         ),
         if (editing)
           SidebarEditBar(
@@ -322,20 +333,24 @@ class SidebarContent extends ConsumerWidget {
     // remote can reach the sidebar from routes the entries do not list.
     final focusId = selected?.id ?? entries.firstOrNull?.id;
 
-    Widget row(SourceNavEntry entry) {
+    Widget buildEntry(SourceNavEntry entry) {
       final destination =
           destinations.where((d) => d.id == entry.id).firstOrNull;
       final isSelected = selected?.id == entry.id;
       if (destination == null) {
-        return SidebarRow(
+        return KeyedSubtree(
           key: ValueKey('source-nav-${entry.id}'),
-          focusNode: entry.id == focusId ? selectedRowFocusNode : null,
-          icon: entry.icon,
-          selectedIcon: entry.selectedIcon,
-          label: entry.label,
-          isSelected: isSelected,
-          isDisabled: isOffline,
-          onTap: () => onNavigate(entry.route),
+          child: SidebarRow(
+            key: ValueKey('sidebar-row-${entry.id}'),
+            compact: compact,
+            focusNode: entry.id == focusId ? selectedRowFocusNode : null,
+            icon: entry.icon,
+            selectedIcon: entry.selectedIcon,
+            label: entry.label,
+            isSelected: isSelected,
+            isDisabled: isOffline,
+            onTap: () => onNavigate(entry.route),
+          ),
         );
       }
       return KeyedSubtree(
@@ -352,13 +367,21 @@ class SidebarContent extends ConsumerWidget {
       );
     }
 
+    // A tight ListView constraint would stretch the 48px compact rows.
+    Widget row(SourceNavEntry entry) {
+      final built = buildEntry(entry);
+      return compact ? Align(child: built) : built;
+    }
+
     final leading = entries.where((e) => e.anchored && e.id == 'search');
     final trailing = entries.where((e) => e.anchored && e.id != 'search');
     final middle = entries.where((e) => !e.anchored);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 12),
       child: Column(
+        crossAxisAlignment:
+            compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
         children: [
           for (final entry in leading) ...[
             row(entry),
@@ -375,12 +398,13 @@ class SidebarContent extends ConsumerWidget {
                 // the viewer sees the server's nav replace All servers'.
                 if (allServers)
                   AllServersServerRows(
+                    compact: compact,
                     onNavigate: onSwitchSource ?? onNavigate,
                   ),
               ],
             ),
           ),
-          if (canFilter)
+          if (canFilter && !compact)
             SidebarRow(
               icon: Icons.add_rounded,
               selectedIcon: Icons.add_rounded,
@@ -499,6 +523,8 @@ class SidebarContent extends ConsumerWidget {
 
     if (destination.id == 'settings') {
       return SettingsSidebarRow(
+        key: ValueKey('sidebar-row-${destination.id}'),
+        compact: compact,
         location: location,
         focusNode: carriesFocusNode ? selectedRowFocusNode : null,
         isSelected: isSelected,
@@ -512,6 +538,8 @@ class SidebarContent extends ConsumerWidget {
 
     if (destination is FilterDestination) {
       return SidebarRow(
+        key: ValueKey('sidebar-row-${destination.id}'),
+        compact: compact,
         focusNode: carriesFocusNode ? selectedRowFocusNode : null,
         icon: destination.icon,
         selectedIcon: destination.selectedIcon,
@@ -546,6 +574,8 @@ class SidebarContent extends ConsumerWidget {
     }
 
     return SidebarRow(
+      key: ValueKey('sidebar-row-${destination.id}'),
+      compact: compact,
       focusNode: carriesFocusNode ? selectedRowFocusNode : null,
       icon: destination.icon,
       selectedIcon: destination.selectedIcon,
