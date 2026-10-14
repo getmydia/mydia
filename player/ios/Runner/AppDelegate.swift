@@ -7,6 +7,9 @@ import AVFoundation
   private var privacyEnabled = false
   private var privacyCover: UIView?
 
+  /// Owns `mydia/native-tab-bar`. Kept alive for the app's lifetime.
+  private var nativeTabBarPlugin: NativeTabBarPlugin?
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -46,16 +49,23 @@ import AVFoundation
   }
 
   /// On iOS 26 iPhones, puts a native tab bar over the Flutter view.
-  /// Everywhere else the root stays the `FlutterViewController`.
+  /// Everywhere else the root stays the `FlutterViewController` and the
+  /// plugin only answers `isSupported` with false.
   private func installNativeTabBar() {
+    guard let registrar = registrar(forPlugin: "NativeTabBarPlugin") else { return }
+    let plugin = NativeTabBarPlugin(messenger: registrar.messenger())
+    nativeTabBarPlugin = plugin
+
     #if compiler(>=6.2)
     guard #available(iOS 26.0, *),
-          UIDevice.current.userInterfaceIdiom == .phone,
-          let window,
-          let flutter = window.rootViewController as? FlutterViewController else { return }
+          UIDevice.current.userInterfaceIdiom == .phone else { return }
+    guard let window, let flutter = window.rootViewController as? FlutterViewController else {
+      NSLog("[NativeTabBar] root swap skipped: window or FlutterViewController root missing")
+      return
+    }
     let tabs = MydiaTabBarController(flutterViewController: flutter)
+    plugin.attach(tabs)
     window.rootViewController = tabs
-    tabs.applySpikeFixture()
     #endif
   }
 

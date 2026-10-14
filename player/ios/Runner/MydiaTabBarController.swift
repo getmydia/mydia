@@ -220,41 +220,6 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
       node = container.superview
     }
   }
-
-  // MARK: Spike fixture (removed in Task 2)
-
-  func applySpikeFixture() {
-    setTabs([
-      NativeTabSpec(id: "home", title: "Home", symbol: "house.fill", badge: nil, enabled: true),
-      NativeTabSpec(id: "movies", title: "Movies", symbol: "film.fill", badge: nil, enabled: true),
-      NativeTabSpec(id: "shows", title: "Shows", symbol: "tv.fill", badge: nil, enabled: true),
-      NativeTabSpec(
-        id: "downloads", title: "Downloads", symbol: "arrow.down.circle.fill", badge: nil,
-        enabled: true),
-      NativeTabSpec(id: "settings", title: "Settings", symbol: "gearshape.fill", badge: "1", enabled: true),
-    ])
-    select("home")
-    // Stands in for Dart's round trip: refuse the tap, then select it.
-    onTabSelected = { [weak self] id in
-      NSLog("[NativeTabBar] spike tabSelected %@", id)
-      DispatchQueue.main.async { self?.select(id) }
-    }
-    onInsetsChanged = { NSLog("[NativeTabBar] spike inset %.1f", $0) }
-    onAccessoryTapped = { NSLog("[NativeTabBar] spike accessory tapped") }
-    var playing = true
-    onAccessoryPlayPause = { [weak self] in
-      playing.toggle()
-      self?.setAccessory(Self.spikeAccessory(playing: playing))
-    }
-    setAccessory(Self.spikeAccessory(playing: playing))
-    setBarVisible(true)
-  }
-
-  private static func spikeAccessory(playing: Bool) -> CastAccessoryModel {
-    CastAccessoryModel(
-      title: "Night Harbor", subtitle: "Casting to Lantern Room", artwork: nil,
-      symbol: "airplayvideo", playing: playing)
-  }
 }
 
 /// A tab's content: transparent and never hit, so touches fall through to
