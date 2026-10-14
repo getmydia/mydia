@@ -50,6 +50,11 @@ import 'toast/toaster.dart';
 /// bar would otherwise sit on the drawer and its scrim. It stays mounted, as
 /// `AppShell.dockChrome` keeps the dock mounted, so no screen's
 /// `DockInsets` reflow behind the drawer.
+///
+/// Stands down entirely while the shell reports the native iOS tab bar through
+/// `ReportedNativeBar`: that bar's accessory shows the same state. The shell
+/// reports it whenever its route is current on the native path, drawer or not,
+/// so the open drawer does not bring this bar back.
 class CastBarLayer extends StatefulWidget {
   const CastBarLayer({super.key, required this.child});
 
@@ -64,6 +69,7 @@ class _CastBarLayerState extends State<CastBarLayer> {
   double _castBar = 0;
   double _sidebar = 0;
   bool _drawerOpen = false;
+  bool _nativeBar = false;
 
   void _setDock(double height) {
     if (!mounted || height == _dock) return;
@@ -85,6 +91,11 @@ class _CastBarLayerState extends State<CastBarLayer> {
     setState(() => _drawerOpen = open);
   }
 
+  void _setNativeBar(bool shown) {
+    if (!mounted || shown == _nativeBar) return;
+    setState(() => _nativeBar = shown);
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasDock = _dock > 0;
@@ -97,6 +108,8 @@ class _CastBarLayerState extends State<CastBarLayer> {
       onCastBar: _setCastBar,
       onSidebar: _setSidebar,
       onDrawer: _setDrawer,
+      nativeBar: _nativeBar,
+      onNativeBar: _setNativeBar,
       child: Stack(
         children: [
           widget.child,
@@ -135,7 +148,13 @@ class _CastBarLayerState extends State<CastBarLayer> {
                           child: AnimatedOpacity(
                             opacity: _drawerOpen ? 0 : 1,
                             duration: const Duration(milliseconds: 200),
-                            child: const CastMiniController(),
+                            // The native tab bar's accessory is the cast
+                            // bar while the shell shows it. Unmounting, not
+                            // hiding, also drops the bar's reported height,
+                            // which the native inset already includes.
+                            child: _nativeBar
+                                ? const SizedBox.shrink()
+                                : const CastMiniController(),
                           ),
                         ),
                       ),

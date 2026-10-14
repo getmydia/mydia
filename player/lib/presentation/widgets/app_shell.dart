@@ -13,6 +13,8 @@ import '../../core/downloads/orphan_download_sweep.dart';
 import '../../core/focus/region_traversal_policy.dart';
 import '../../core/focus/sidebar_focus_boundary.dart';
 import '../../core/layout/window_chrome_inset.dart';
+import '../../core/platform/native_tab_bar_support.dart';
+import '../../domain/navigation/source_nav.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
 import '../../core/router/root_routes.dart';
 import '../../core/player/input_capabilities.dart';
@@ -21,17 +23,21 @@ import '../../core/layout/breakpoints.dart';
 import 'ambient_backdrop.dart';
 import 'ambient_backdrop_provider.dart';
 import 'cast_bar/dock_extents.dart';
+import 'cast_bar/native_cast_accessory.dart';
 import 'compatibility_banner.dart';
 import 'nav/bottom_nav.dart';
 import 'nav/current_source.dart';
 import 'nav/desktop_sidebar.dart';
 import 'nav/mobile_drawer.dart';
+import 'nav/nav_badges.dart';
+import 'nav/native_tab_bar.dart';
 import 'offline_banner.dart';
 import 'toast/toaster.dart';
 import 'update_banner.dart';
 
 /// Modern app shell with adaptive navigation.
 /// Shows sidebar on desktop (≥900px) and bottom nav on mobile.
+/// On iOS 26 iPhones the bottom nav is the native tab bar (`NativeTabBar`).
 /// Routes a viewer in offline mode may still open: downloads, and the
 /// per-source pages (`/s/`), which serve what the source has cached.
 bool offlineRouteAllowed(String route) =>
@@ -151,6 +157,54 @@ class AppShell extends ConsumerStatefulWidget {
           ),
         ),
       );
+
+  /// Whether the native tab bar should show: the shell's route is current
+  /// (not covered by the immersive player) and the drawer is closed. The
+  /// mobile-layout condition is the branch this is called from.
+  @visibleForTesting
+  static bool nativeBarVisible({
+    required bool shellCurrent,
+    required bool drawerOpen,
+  }) =>
+      shellCurrent && !drawerOpen;
+
+  /// The mobile `bottomNavigationBar`: the native iOS tab bar where it is
+  /// installed, `BottomNav` in [dockChrome] everywhere else, unchanged.
+  @visibleForTesting
+  static Widget mobileBottomBar({
+    required bool native,
+    required bool drawerOpen,
+    required bool shellCurrent,
+    required String location,
+    required List<SourceNavEntry> entries,
+    required bool isOffline,
+    required bool showBackToMydia,
+    required String? settingsBadge,
+    required ValueChanged<String> onNavigate,
+  }) {
+    if (native) {
+      return NativeTabBar(
+        location: location,
+        entries: entries,
+        onNavigate: onNavigate,
+        visible: nativeBarVisible(
+            shellCurrent: shellCurrent, drawerOpen: drawerOpen),
+        isOffline: isOffline,
+        showBackToMydia: showBackToMydia,
+        settingsBadge: settingsBadge,
+      );
+    }
+    return dockChrome(
+      drawerOpen: drawerOpen,
+      child: BottomNav(
+        location: location,
+        onNavigate: onNavigate,
+        entries: entries,
+        isOffline: isOffline,
+        showBackToMydia: showBackToMydia,
+      ),
+    );
+  }
 
   /// Reports the desktop sidebar's width to `DockExtents` so the floating
   /// cast bar sits beside it instead of painting over its bottom rows.
@@ -454,65 +508,77 @@ class _AppShellState extends ConsumerState<AppShell>
       );
     }
 
-    return ReportedDrawer(
-      open: _drawerOpen,
-      child: Scaffold(
-        key: AppShell.scaffoldKey,
-        backgroundColor: Colors.transparent,
-        extendBody: true,
-        onDrawerChanged: (isOpen) {
-          if (!mounted) return;
-          setState(() => _drawerOpen = isOpen);
-          AppShell.onDrawerVisibilityChanged(isOpen: isOpen, ref: ref);
-        },
-        drawer: MobileDrawer(
-          location: location,
-          onNavigate: (route) {
-            Navigator.of(context).pop();
-            _navigateTo(route);
+    final native = NativeTabBarSupport.supported;
+    // Covered by a route pushed over the shell (the immersive player).
+    final shellCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+
+    return ReportedNativeBar(
+      shown: native && shellCurrent,
+      child: ReportedDrawer(
+        open: _drawerOpen,
+        child: Scaffold(
+          key: AppShell.scaffoldKey,
+          backgroundColor: Colors.transparent,
+          extendBody: true,
+          onDrawerChanged: (isOpen) {
+            if (!mounted) return;
+            setState(() => _drawerOpen = isOpen);
+            AppShell.onDrawerVisibilityChanged(isOpen: isOpen, ref: ref);
           },
-          // Navigates without popping, so the drawer stays open on the new
-          // server's nav and the viewer sees the switch land.
-          onSwitchSource: _navigateTo,
-          showBackToMydia: showBackToMydia,
-          isOffline: isOffline,
-        ),
-        body: Stack(
-          children: [
-            Positioned.fill(child: backdrop),
-            // Insets pass through unchanged here: a narrow mobile/macOS window
-            // has no sidebar to cover the window-control reserve, so the row
-            // still needs the full ambient value.
-            AppShell.contentGutter(
-              child: Column(
-                children: [
-                  AppShell.bannerArea(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (isOffline) OfflineBanner(location: widget.location),
-                        const CompatibilityBanner(),
-                        const UpdateBanner(),
-                      ],
-                    ),
-                  ),
-                  Expanded(child: widget.child),
-                ],
-              ),
-            ),
-          ],
-        ),
-        bottomNavigationBar: AppShell.dockChrome(
-          drawerOpen: _drawerOpen,
-          child: BottomNav(
+          drawer: MobileDrawer(
             location: location,
-            onNavigate: _navigateTo,
+            onNavigate: (route) {
+              Navigator.of(context).pop();
+              _navigateTo(route);
+            },
+            // Navigates without popping, so the drawer stays open on the new
+            // server's nav and the viewer sees the switch land.
+            onSwitchSource: _navigateTo,
+            showBackToMydia: showBackToMydia,
+            isOffline: isOffline,
+          ),
+          body: Stack(
+            children: [
+              Positioned.fill(child: backdrop),
+              // Insets pass through unchanged here: a narrow mobile/macOS window
+              // has no sidebar to cover the window-control reserve, so the row
+              // still needs the full ambient value.
+              AppShell.contentGutter(
+                child: Column(
+                  children: [
+                    AppShell.bannerArea(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isOffline)
+                            OfflineBanner(location: widget.location),
+                          const CompatibilityBanner(),
+                          const UpdateBanner(),
+                        ],
+                      ),
+                    ),
+                    Expanded(child: widget.child),
+                  ],
+                ),
+              ),
+              if (native) const NativeCastAccessory(),
+            ],
+          ),
+          bottomNavigationBar: AppShell.mobileBottomBar(
+            native: native,
+            drawerOpen: _drawerOpen,
+            shellCurrent: shellCurrent,
+            location: location,
             entries: bottomNavEntries(
               ref.watch(sourceNavEntriesProvider(location)),
               downloadSupported: isDownloadSupported,
             ),
             isOffline: isOffline,
             showBackToMydia: showBackToMydia,
+            settingsBadge: native
+                ? settingsTabBadge(updatePending: settingsUpdatePending(ref))
+                : null,
+            onNavigate: _navigateTo,
           ),
         ),
       ),

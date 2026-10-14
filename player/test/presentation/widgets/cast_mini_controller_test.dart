@@ -423,6 +423,34 @@ void main() {
               'take pointer events');
     });
 
+    testWidgets('the native bar takes the cast bar off the layer',
+        (tester) async {
+      await _pumpLayer(
+        tester,
+        target: _device,
+        screen: (context) => const ReportedNativeBar(
+          shown: true,
+          child: SizedBox.expand(),
+        ),
+      );
+      await tester.pump();
+      expect(find.byType(CastMiniController), findsNothing);
+    });
+
+    testWidgets('without the native bar the layer still shows it',
+        (tester) async {
+      await _pumpLayer(
+        tester,
+        target: _device,
+        screen: (context) => const ReportedNativeBar(
+          shown: false,
+          child: SizedBox.expand(),
+        ),
+      );
+      await tester.pump();
+      expect(find.byType(CastMiniController), findsOneWidget);
+    });
+
     group('with the mobile nav drawer', () {
       late GlobalKey<ScaffoldState> scaffoldKey;
       late ValueNotifier<bool> present;
