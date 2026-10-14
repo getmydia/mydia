@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/config/web_config.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/navigation/source_nav.dart';
 import '../focus_highlight.dart';
 import '../glass_surface.dart';
 import '../toast/toast_obstruction.dart';
 import 'dock_glass.dart';
+import 'library_sheet.dart';
 import 'nav_badges.dart';
 
 /// The bar's items out of a source's [entries]: Home, Movies, Shows, then
@@ -28,6 +30,23 @@ List<SourceNavEntry> bottomNavEntries(
   ];
 }
 
+/// The source's own rows that the bar has no room for: its libraries and the
+/// viewer's saved filters. Long-press on Home lists them.
+List<SourceNavEntry> libraryNavEntries(List<SourceNavEntry> entries) {
+  const barIds = {
+    'home',
+    'movies',
+    'shows',
+    'downloads',
+    'favorites',
+    'settings',
+  };
+  return [
+    for (final e in entries)
+      if (!e.anchored && !barIds.contains(e.id)) e,
+  ];
+}
+
 /// Mobile bottom navigation bar
 class BottomNav extends StatelessWidget {
   final String location;
@@ -36,6 +55,9 @@ class BottomNav extends StatelessWidget {
   /// The bar's items, in order. The shell picks them from the current
   /// source's navigation (see [bottomNavEntries]).
   final List<SourceNavEntry> entries;
+
+  /// Rows listed by a long-press on Home (see [libraryNavEntries]).
+  final List<SourceNavEntry> libraryEntries;
   final bool isOffline;
   final bool showBackToMydia;
 
@@ -44,6 +66,7 @@ class BottomNav extends StatelessWidget {
     required this.location,
     required this.onNavigate,
     required this.entries,
+    this.libraryEntries = const [],
     this.isOffline = false,
     this.showBackToMydia = false,
   });
@@ -61,12 +84,12 @@ class BottomNav extends StatelessWidget {
             // blurred fill so the pill now reads as true frosted glass over the
             // ambient backdrop instead of a near-opaque surface.
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(AppTheme.radiusBottomBar),
               boxShadow: DockGlass.shadow,
             ),
             child: GlassSurface.chrome(
               opacity: DockGlass.fillOpacity,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(AppTheme.radiusBottomBar),
               border: DockGlass.border,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -97,6 +120,14 @@ class BottomNav extends StatelessWidget {
                           isSelected: entry.matches(location),
                           isDisabled: isOffline && entry.id != 'downloads',
                           onTap: () => onNavigate(entry.route),
+                          onLongPress:
+                              entry.id == 'home' && libraryEntries.isNotEmpty
+                                  ? () => showLibrarySheet(
+                                        context,
+                                        entries: libraryEntries,
+                                        onNavigate: onNavigate,
+                                      )
+                                  : null,
                         ),
                   ],
                 ),
@@ -116,6 +147,7 @@ class NavItem extends StatefulWidget {
   final bool isSelected;
   final bool isDisabled;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final Widget? badge;
 
   const NavItem({
@@ -125,6 +157,7 @@ class NavItem extends StatefulWidget {
     required this.label,
     required this.isSelected,
     required this.onTap,
+    this.onLongPress,
     this.isDisabled = false,
     this.badge,
   });
@@ -185,6 +218,7 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
         onTapDown: _handleTapDown,
         onTapUp: _handleTapUp,
         onTapCancel: _handleTapCancel,
+        onLongPress: widget.onLongPress,
         child: ScaleTransition(
           scale: _scaleAnimation,
           child: AnimatedContainer(

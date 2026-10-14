@@ -523,6 +523,7 @@ class _AppShellState extends ConsumerState<AppShell>
       );
     }
 
+    final navEntries = ref.watch(sourceNavEntriesProvider(location));
     return ReportedDrawer(
       open: _drawerOpen,
       child: Scaffold(
@@ -568,9 +569,10 @@ class _AppShellState extends ConsumerState<AppShell>
             location: location,
             onNavigate: _navigateTo,
             entries: bottomNavEntries(
-              ref.watch(sourceNavEntriesProvider(location)),
+              navEntries,
               downloadSupported: isDownloadSupported,
             ),
+            libraryEntries: libraryNavEntries(navEntries),
             isOffline: isOffline,
             showBackToMydia: showBackToMydia,
           ),
