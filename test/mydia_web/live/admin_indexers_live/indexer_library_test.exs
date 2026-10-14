@@ -220,10 +220,11 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
       |> element("button.flex.items-start[phx-click='show_indexer_library']")
       |> render_click()
 
-      assert has_element?(
-               view,
-               "#library-definition-#{definition.id} .tooltip[data-tip='This indexer requires configuration']"
-             )
+      hint =
+        "#library-definition-#{definition.id} [aria-label='This indexer requires configuration']"
+
+      assert has_element?(view, hint)
+      refute has_element?(view, ".tooltip #{hint}")
     end
 
     test "removes an added indexer, even a disabled one", %{conn: conn} do

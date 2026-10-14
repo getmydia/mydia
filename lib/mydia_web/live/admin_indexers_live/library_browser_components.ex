@@ -212,9 +212,14 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
       <:descriptor :if={@definition.description}>{@definition.description}</:descriptor>
       <:badges>
         <%= if Components.needs_library_config?(@definition) and @definition.in_library do %>
-          <div class="tooltip" data-tip="This indexer requires configuration">
+          <span
+            title="This indexer requires configuration"
+            aria-label="This indexer requires configuration"
+            role="img"
+            class="inline-flex"
+          >
             <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-warning" />
-          </div>
+          </span>
         <% end %>
         <%= if @definition.in_library and @definition.health_status not in [nil, "unknown"] do %>
           <span class={"badge badge-sm badge-outline #{Components.library_health_status_badge_class(@definition.health_status)}"}>
