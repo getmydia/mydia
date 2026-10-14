@@ -263,39 +263,70 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   defp run_isolated(compiled, call, ctx, timeout_ms) do
     task =
       Task.async(fn ->
-        with probe when is_function(probe, 1) <-
-               Application.get_env(:mydia, :cardigann_wasm_guest_probe),
-             do: probe.(self())
-
+        # The instance process is linked to this one, so it dies with it even
+        # when the task is brutally killed; trapping exits keeps the explicit
+        # kill in run/4 from taking the task down with it.
+        Process.flag(:trap_exit, true)
+        probe(ctx, {:task, self()})
         run(compiled, call, ctx, timeout_ms)
       end)
 
-    case Task.yield(task, timeout_ms + @task_grace_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, result} ->
-        result
+    result =
+      case Task.yield(task, timeout_ms + @task_grace_ms) || Task.shutdown(task, :brutal_kill) do
+        {:ok, result} ->
+          result
 
-      {:exit, reason} ->
-        {:error, Error.engine_error("Engine instance exited: #{inspect(reason)}")}
+        {:exit, reason} ->
+          {:error, Error.engine_error("Engine instance exited: #{inspect(reason)}")}
 
-      nil ->
-        {:error, Error.timeout("Cardigann call timed out after #{timeout_ms} ms")}
-    end
+        nil ->
+          {:error, Error.timeout("Cardigann call timed out after #{timeout_ms} ms")}
+      end
+
+    flush_exit(task.pid)
+    result
   end
+
+  # A caller that traps exits gets {:EXIT, task, _} from the task's link,
+  # whatever way the task ended. Leave nothing in its mailbox.
+  defp flush_exit(pid) do
+    if Process.info(self(), :trap_exit) == {:trap_exit, true} do
+      receive do
+        {:EXIT, ^pid, _} -> :ok
+      after
+        1_000 -> :ok
+      end
+    end
+
+    :ok
+  end
+
+  # Test seam: a per-call hook in ctx that observes the guest processes.
+  defp probe(%{guest_probe: probe}, event) when is_function(probe, 1), do: probe.(event)
+  defp probe(_ctx, _event), do: :ok
 
   defp run(%{engine: engine, component: component}, call, ctx, timeout_ms) do
     limits = %Wasmex.StoreLimits{memory_size: @memory_limit}
 
     with {:ok, store} <- Components.Store.new_wasi(wasi(), limits, engine),
          {:ok, pid} <-
-           GenServer.start(Components, %{
+           GenServer.start_link(Components, %{
              store: store,
              component: component,
              imports: HostHttp.imports(ctx)
            }) do
+      probe(ctx, {:instance, pid})
+
       try do
         invoke(pid, call, ctx, timeout_ms)
       after
         Process.exit(pid, :kill)
+
+        receive do
+          {:EXIT, ^pid, _} -> :ok
+        after
+          1_000 -> :ok
+        end
       end
     else
       {:error, reason} -> {:error, Error.engine_error("Instantiation failed: #{inspect(reason)}")}

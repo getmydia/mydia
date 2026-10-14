@@ -553,31 +553,66 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
     # guest work runs in a process that ends with the call.
     test "the guest work runs in a short-lived process, not the caller", %{bypass: b, ctx: ctx} do
       test_pid = self()
-      Application.put_env(:mydia, :cardigann_wasm_guest_probe, &send(test_pid, {:guest, &1}))
-      on_exit(fn -> Application.delete_env(:mydia, :cardigann_wasm_guest_probe) end)
+      ctx = Map.put(ctx, :guest_probe, &send(test_pid, {:guest, &1}))
 
       assert {:ok, _} =
                Engine.call({:capabilities, yaml("lantern-public.yml", b)}, ctx, @call_timeout)
 
-      assert_receive {:guest, guest}
-      assert guest != self()
-      refute Process.alive?(guest)
+      assert_receive {:guest, {:task, task}}
+      assert_receive {:guest, {:instance, instance}}
+      assert task != self()
+      refute Process.alive?(task)
+      refute Process.alive?(instance)
     end
 
     test "respects the calling process's $callers in the guest process", %{bypass: b, ctx: ctx} do
       test_pid = self()
 
-      Application.put_env(:mydia, :cardigann_wasm_guest_probe, fn _ ->
-        send(test_pid, {:callers, Process.get(:"$callers")})
-      end)
-
-      on_exit(fn -> Application.delete_env(:mydia, :cardigann_wasm_guest_probe) end)
+      ctx =
+        Map.put(ctx, :guest_probe, fn
+          {:task, _} -> send(test_pid, {:callers, Process.get(:"$callers")})
+          _ -> :ok
+        end)
 
       assert {:ok, _} =
                Engine.call({:capabilities, yaml("lantern-public.yml", b)}, ctx, @call_timeout)
 
       assert_receive {:callers, callers}
       assert self() in callers
+    end
+
+    test "a killed guest process takes its instance with it, and a trapping caller is left clean",
+         %{bypass: b, ctx: ctx} do
+      test_pid = self()
+
+      # Hang the task right after the instance starts, so only a kill ends it.
+      ctx =
+        Map.put(ctx, :guest_probe, fn
+          {:instance, pid} ->
+            send(test_pid, {:instance, self(), pid})
+            Process.sleep(:infinity)
+
+          _ ->
+            :ok
+        end)
+
+      yaml = yaml("lantern-public.yml", b)
+
+      caller =
+        spawn(fn ->
+          Process.flag(:trap_exit, true)
+          result = Engine.call({:capabilities, yaml}, ctx, @call_timeout)
+          send(test_pid, {:caller_done, result, Process.info(self(), :messages)})
+        end)
+
+      assert_receive {:instance, task, instance}
+      assert Process.alive?(instance)
+      ref = Process.monitor(instance)
+      Process.exit(task, :kill)
+
+      assert_receive {:DOWN, ^ref, :process, ^instance, _}, 5_000
+      assert_receive {:caller_done, {:error, %{type: :engine_error}}, {:messages, []}}, 5_000
+      refute Process.alive?(caller)
     end
   end
 
