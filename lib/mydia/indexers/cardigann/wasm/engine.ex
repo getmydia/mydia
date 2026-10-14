@@ -263,10 +263,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   defp run_isolated(compiled, call, ctx, timeout_ms) do
     task =
       Task.async(fn ->
-        # The instance process is linked to this one, so it dies with it even
-        # when the task is brutally killed; trapping exits keeps the explicit
-        # kill in run/4 from taking the task down with it.
-        Process.flag(:trap_exit, true)
+        # The instance process is linked to this one and does not trap exits,
+        # so it dies with the task, and the task dies with a killed caller
+        # (Task.async links both ways); the guest never outlives its slot.
         probe(ctx, {:task, self()})
         run(compiled, call, ctx, timeout_ms)
       end)
@@ -320,13 +319,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
       try do
         invoke(pid, call, ctx, timeout_ms)
       after
+        # Unlink first: the kill must not propagate back and take the task down
+        # before it returns its result.
+        Process.unlink(pid)
         Process.exit(pid, :kill)
-
-        receive do
-          {:EXIT, ^pid, _} -> :ok
-        after
-          1_000 -> :ok
-        end
       end
     else
       {:error, reason} -> {:error, Error.engine_error("Instantiation failed: #{inspect(reason)}")}

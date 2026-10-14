@@ -614,6 +614,58 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
       assert_receive {:caller_done, {:error, %{type: :engine_error}}, {:messages, []}}, 5_000
       refute Process.alive?(caller)
     end
+
+    test "a killed caller takes the guest task and its instance with it", %{bypass: b, ctx: ctx} do
+      test_pid = self()
+
+      ctx =
+        Map.put(ctx, :guest_probe, fn
+          {:task, task} ->
+            send(test_pid, {:task, task})
+
+          {:instance, pid} ->
+            send(test_pid, {:instance, pid})
+            Process.sleep(:infinity)
+        end)
+
+      yaml = yaml("lantern-public.yml", b)
+      caller = spawn(fn -> Engine.call({:capabilities, yaml}, ctx, @call_timeout) end)
+
+      assert_receive {:task, task}
+      assert_receive {:instance, instance}
+      task_ref = Process.monitor(task)
+      instance_ref = Process.monitor(instance)
+      Process.exit(caller, :kill)
+
+      assert_receive {:DOWN, ^task_ref, :process, ^task, _}, 5_000
+      assert_receive {:DOWN, ^instance_ref, :process, ^instance, _}, 5_000
+    end
+
+    test "an instance that crashes mid-call gives the caller an error, not a hang",
+         %{bypass: b, ctx: ctx} do
+      test_pid = self()
+
+      ctx =
+        Map.put(ctx, :guest_probe, fn
+          {:instance, pid} ->
+            send(test_pid, {:instance, pid})
+            Process.sleep(:infinity)
+
+          _ ->
+            :ok
+        end)
+
+      yaml = yaml("lantern-public.yml", b)
+
+      spawn(fn ->
+        Process.flag(:trap_exit, true)
+        send(test_pid, {:result, Engine.call({:capabilities, yaml}, ctx, @call_timeout)})
+      end)
+
+      assert_receive {:instance, instance}
+      Process.exit(instance, :kill)
+      assert_receive {:result, {:error, %{type: :engine_error}}}, 5_000
+    end
   end
 
   describe "telemetry" do
