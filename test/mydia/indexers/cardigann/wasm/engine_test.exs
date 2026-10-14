@@ -566,11 +566,52 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
 
       assert {:ok, _} = search("lantern-public.yml", b, ctx)
 
-      assert_receive {:telemetry, %{duration: duration, network: network},
+      assert_receive {:telemetry, %{duration: duration, network: network, queue: queue},
                       %{export: :search, outcome: :ok}}
 
+      assert queue == 0
       assert network > 0
       assert duration >= network
+    end
+
+    test "a call that waits out its timeout for a slot times out and reports the queue time",
+         %{ctx: ctx} do
+      alias Mydia.Indexers.Cardigann.Wasm.Slots
+
+      # The application may already run the server (max 2); hold every slot.
+      unless GenServer.whereis(Slots), do: start_supervised!({Slots, max: 2})
+      max = :sys.get_state(Slots).max
+      test_pid = self()
+
+      holders =
+        for _ <- 1..max do
+          spawn_link(fn ->
+            Slots.run(5_000, fn ->
+              send(test_pid, :held)
+              receive do: (:release -> :ok)
+            end)
+          end)
+        end
+
+      for _ <- 1..max, do: assert_receive(:held)
+      id = "t7q-#{System.unique_integer([:positive])}"
+
+      :telemetry.attach(
+        id,
+        [:mydia, :cardigann, :wasm, :call],
+        fn _event, measurements, metadata, _ ->
+          send(test_pid, {:telemetry, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(id) end)
+
+      assert {:error, %{type: :timeout}} = Engine.call({:capabilities, "id: x"}, ctx, 200)
+
+      assert_receive {:telemetry, %{queue: queue}, %{outcome: :timeout}}
+      assert System.convert_time_unit(queue, :native, :millisecond) > 0
+      Enum.each(holders, &send(&1, :release))
     end
   end
 end
