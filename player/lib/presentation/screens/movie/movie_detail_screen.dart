@@ -213,6 +213,7 @@ class MovieDetailScreen extends ConsumerWidget {
     MovieView movie,
   ) {
     return HeroPlayControl(
+      resume: movie.hasResumableProgress,
       files: movie.files,
       onFileSelected: (file) => pushPlayer(
         context,

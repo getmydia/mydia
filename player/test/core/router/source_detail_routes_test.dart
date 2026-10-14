@@ -13,7 +13,7 @@ import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
 import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/screens/sources/source_error_view.dart';
 import 'package:player/presentation/screens/sources/source_item_screen.dart';
-import 'package:player/presentation/widgets/play_button.dart';
+import 'package:player/presentation/widgets/primary_play_button.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../presentation/screens/sources/fake_media_source.dart';
@@ -96,7 +96,7 @@ void main() {
     final before = fake.itemCalls;
     expect(before, greaterThan(0));
 
-    await tester.tap(find.byType(PlayButton));
+    await tester.tap(find.byType(PrimaryPlayButton));
     await tester.pumpAndSettle();
     expect(find.text('player stub'), findsOneWidget);
 

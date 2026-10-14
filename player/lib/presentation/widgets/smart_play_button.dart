@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../core/player/best_file.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/media_file.dart';
 import '../../domain/models/show_next_up.dart';
 import 'focus_highlight.dart';
 import 'next_up_labels.dart';
-import 'play_button.dart';
+import 'primary_play_button.dart';
 import 'quality_selector.dart';
 
 /// Below this many logical pixels of available width, the pill sheds its text.
@@ -41,12 +42,16 @@ class SmartPlayButton extends StatefulWidget {
   /// knows which file it picked.
   final NextUpEpisode? episode;
 
+  /// The icon form's label: "Play", or "Resume" for an item with progress.
+  final String playLabel;
+
   const SmartPlayButton({
     super.key,
     required this.files,
     required this.onFileSelected,
     this.state,
     this.episode,
+    this.playLabel = 'Play',
   });
 
   @override
@@ -105,7 +110,9 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            compact ? _buildIconForm(context) : _buildPillForm(context),
+            compact
+                ? _buildIconForm(context, iconOnly: true)
+                : _buildPillForm(context),
             if (cueLine != null) ...[
               const SizedBox(height: 6),
               Text(
@@ -122,7 +129,9 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
     );
   }
 
-  Widget _buildIconForm(BuildContext context) {
+  /// The plain form: version label, white Play button, quality dropdown.
+  /// [iconOnly] sheds the button's text for narrow, width-bounded layouts.
+  Widget _buildIconForm(BuildContext context, {bool iconOnly = false}) {
     final hasMultiple = widget.files.length > 1;
 
     return Row(
@@ -142,7 +151,9 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
           const SizedBox(width: 8),
         ],
         // Play button
-        PlayButton(
+        PrimaryPlayButton(
+          label: widget.playLabel,
+          iconOnly: iconOnly,
           onPressed: _selectedFile != null
               ? () => widget.onFileSelected(_selectedFile!)
               : null,
@@ -177,13 +188,18 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
           icon: const Icon(Icons.play_arrow_rounded, size: 20),
           label: Text(nextUpLabel(widget.state!)),
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: AppColors.onPrimary,
+            backgroundColor: Colors.white,
+            foregroundColor: AppColors.background,
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            shape: const StadiumBorder(),
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(
+                Radius.circular(AppTheme.radiusButton),
+              ),
+            ),
             textStyle: const TextStyle(
+              fontFamily: AppTheme.displayFamily,
               fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),

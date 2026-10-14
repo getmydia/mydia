@@ -7,7 +7,7 @@ import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 import 'package:player/presentation/widgets/movie_watched_controls.dart';
-import 'package:player/presentation/widgets/play_button.dart';
+import 'package:player/presentation/widgets/primary_play_button.dart';
 
 import '../detail/detail_harness.dart';
 import '../sources/fake_media_source.dart';
@@ -16,7 +16,7 @@ const _ref =
     ItemRef(sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm-1');
 
 /// The fixture supplies no versions, so the hero's play control renders no
-/// resolution label and PlayButton is its only child.
+/// resolution label and PrimaryPlayButton is its only child.
 Future<void> _pumpScreen(
   WidgetTester tester,
   Size size, {
@@ -128,7 +128,8 @@ void main() {
     await _pumpScreen(tester, const Size(1000, 900));
 
     // The content overlay is inset 20 from the right of the 1000px surface.
-    expect(tester.getRect(find.byType(PlayButton)).right, closeTo(980, 0.5));
+    expect(tester.getRect(find.byType(PrimaryPlayButton)).right,
+        closeTo(980, 0.5));
   });
 
   testWidgets('hero play control lives in the hero, not the body',
@@ -138,7 +139,7 @@ void main() {
     // 380 is the hero SliverAppBar's expandedHeight, set in
     // _buildHeroSection. Unscrolled, anything below that line is in the
     // body, where _buildActionColumn lives.
-    final play = tester.getRect(find.byType(PlayButton));
+    final play = tester.getRect(find.byType(PrimaryPlayButton));
     final actions = tester.getRect(find.byType(DetailActionRow));
     expect(play.bottom, lessThan(380));
     expect(play.bottom, lessThan(actions.top));

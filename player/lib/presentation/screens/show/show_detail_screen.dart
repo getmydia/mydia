@@ -246,6 +246,7 @@ class ShowDetailScreen extends ConsumerWidget {
     EpisodeView episode,
   ) {
     return HeroPlayControl(
+      resume: _resumeSeconds(episode) != null,
       files: episode.files,
       onFileSelected: (file) => pushPlayer(
         context,
