@@ -53,8 +53,10 @@ import 'toast/toaster.dart';
 ///
 /// Stands down entirely while the shell reports the native iOS tab bar through
 /// `ReportedNativeBar`: that bar's accessory shows the same state. The shell
-/// reports it whenever its route is current on the native path, drawer or not,
-/// so the open drawer does not bring this bar back.
+/// reports it on the native path unless a PAGE (the immersive player, any
+/// pushed screen) covers the shell. Drawer open or not, dialog or bottom sheet
+/// up or not (the native accessory's own cast sheet is one), it stays
+/// reported, so none of those bring this bar back over what is on screen.
 class CastBarLayer extends StatefulWidget {
   const CastBarLayer({super.key, required this.child});
 

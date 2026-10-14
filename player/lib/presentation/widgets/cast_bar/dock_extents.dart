@@ -216,6 +216,9 @@ class ReportedDrawer extends StatelessWidget {
 }
 
 /// Reports whether the native tab bar is [shown] to [DockExtents.onNativeBar].
+///
+/// [shown] means the native bar owns the cast UI: false only off the native
+/// path or while a page covers the shell. A popup over the shell leaves it true.
 class ReportedNativeBar extends StatelessWidget {
   const ReportedNativeBar({
     super.key,

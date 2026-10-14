@@ -16,6 +16,7 @@ import '../../core/layout/window_chrome_inset.dart';
 import '../../core/platform/native_tab_bar_support.dart';
 import '../../domain/navigation/source_nav.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
+import '../../core/router/page_cover_observer.dart';
 import '../../core/router/root_routes.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/playback/playback_progress_providers.dart';
@@ -159,14 +160,29 @@ class AppShell extends ConsumerStatefulWidget {
       );
 
   /// Whether the native tab bar should show: the shell's route is current
-  /// (not covered by the immersive player) and the drawer is closed. The
-  /// mobile-layout condition is the branch this is called from.
+  /// (no route of any kind above it: not the immersive player, not a dialog
+  /// or bottom sheet, so the bar never sits over a Flutter sheet) and the
+  /// drawer is closed. The mobile-layout condition is the branch this is
+  /// called from.
   @visibleForTesting
   static bool nativeBarVisible({
     required bool shellCurrent,
     required bool drawerOpen,
   }) =>
       shellCurrent && !drawerOpen;
+
+  /// Whether the shell reports the native bar to `ReportedNativeBar`, which
+  /// makes `CastBarLayer` stand the floating cast pill down. Unlike
+  /// [nativeBarVisible] this ignores popups: only a PAGE over the shell
+  /// ([coveredByPage], from `PageCoverObserver`) brings the pill back. A
+  /// dialog or the native accessory's own cast sheet must not, or the pill
+  /// would paint over it.
+  @visibleForTesting
+  static bool nativeBarReported({
+    required bool native,
+    required bool coveredByPage,
+  }) =>
+      native && !coveredByPage;
 
   /// The mobile `bottomNavigationBar`: the native iOS tab bar where it is
   /// installed, `BottomNav` in [dockChrome] everywhere else, unchanged.
@@ -303,6 +319,11 @@ class _AppShellState extends ConsumerState<AppShell>
     super.didChangeDependencies();
     // Listen to all route changes (including push/pop of detail screens)
     // to ensure the shell repaints when uncovered after a pop.
+    final cover = ref.read(pageCoverObserverProvider);
+    if (_coverObserver != cover) {
+      _coverObserver?.removeListener(_onRouteChanged);
+      _coverObserver = cover..addListener(_onRouteChanged);
+    }
     final router = GoRouter.of(context);
     if (_router != router) {
       _router?.routerDelegate.removeListener(_onRouteChanged);
@@ -314,6 +335,8 @@ class _AppShellState extends ConsumerState<AppShell>
   void _onRouteChanged() {
     if (mounted) setState(() {});
   }
+
+  PageCoverObserver? _coverObserver;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
@@ -337,6 +360,7 @@ class _AppShellState extends ConsumerState<AppShell>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _router?.routerDelegate.removeListener(_onRouteChanged);
+    _coverObserver?.removeListener(_onRouteChanged);
     _collectionAutoSync?.dispose();
     _sidebarFocusNode.dispose();
     _sidebarScopeNode.dispose();
@@ -509,11 +533,15 @@ class _AppShellState extends ConsumerState<AppShell>
     }
 
     final native = NativeTabBarSupport.supported;
-    // Covered by a route pushed over the shell (the immersive player).
-    final shellCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+    final route = ModalRoute.of(context);
+    // Any route above the shell (page, dialog, sheet) hides the native bar.
+    final shellCurrent = route?.isCurrent ?? true;
+    // Only a page above the shell brings the floating cast pill back.
+    final coveredByPage = _coverObserver?.isCovered(route) ?? false;
 
     return ReportedNativeBar(
-      shown: native && shellCurrent,
+      shown: AppShell.nativeBarReported(
+          native: native, coveredByPage: coveredByPage),
       child: ReportedDrawer(
         open: _drawerOpen,
         child: Scaffold(

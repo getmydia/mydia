@@ -126,8 +126,10 @@ Native computes the inset from the selected tab's `safeAreaInsets.bottom`,
 which already includes the bar, the accessory and the home indicator. The box
 is also a bottom `ToastObstruction`, so toasts sit above the bar.
 
-The bar is visible when the shell's route is current (the immersive player is
-not on top of it) and the drawer is closed (`AppShell.nativeBarVisible`).
+The bar is visible when the shell's route is current (no route of any kind
+is on top of it: not the immersive player, not a dialog, not a bottom sheet)
+and the drawer is closed (`AppShell.nativeBarVisible`). A native bar must not
+sit over a Flutter sheet.
 `NativeTabBar.dispose` hides it, so leaving the mobile layout (rotation to a
 sidebar width, sign-out) takes the bar with it. The bar starts hidden, so a
 launch that never reaches the shell (login, startup errors) shows nothing.
@@ -163,8 +165,16 @@ The accessory shows only while the bar is visible, so it follows the drawer,
 the player and the shell route. While it is the cast bar, `CastBarLayer`
 unmounts the floating `CastMiniController` (`DockExtents.nativeBar`, reported
 by `ReportedNativeBar`), which also drops that bar's reported height, since
-the native inset already includes the accessory. When the player covers the
-shell, the flag drops and the floating bar is back.
+the native inset already includes the accessory.
+
+The flag drops, and the floating bar comes back, only when a PAGE covers the
+shell (a `PageRoute`: the immersive player, any go_router page pushed over
+it). A popup route (a dialog, a modal bottom sheet, including the accessory's
+own cast sheet) does not count: the native bar hides under it, but the
+floating bar stays away, or it would paint over the sheet. Pages are told
+from popups by `PageCoverObserver` (`lib/core/router/page_cover_observer.dart`),
+a `NavigatorObserver` on the root `GoRouter` that tracks the route stack;
+`AppShell.nativeBarReported` combines it with the native flag.
 
 The accessory has room for a title and play/pause only. A tap anywhere but
 play/pause opens `showCastControlsSheet` on the root navigator, a bottom sheet
