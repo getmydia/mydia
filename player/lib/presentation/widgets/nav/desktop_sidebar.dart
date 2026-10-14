@@ -59,6 +59,7 @@ class DesktopSidebar extends StatelessWidget {
 /// layered depth — replacing the prior flat `Container(color: background)` +
 /// faint 1px border (R6). The chrome fill clears the R10 legibility floor so
 /// nav labels stay readable over any backdrop.
+///
 /// On iOS 26 and macOS 26 the blur is Apple's native glass ([NativeGlass]).
 ///
 /// Extracted as a public widget so the glass composition is unit-testable

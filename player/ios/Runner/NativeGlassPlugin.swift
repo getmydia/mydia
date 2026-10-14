@@ -68,6 +68,7 @@ private final class NativeGlassPlatformView: NSObject, FlutterPlatformView {
   init(frame: CGRect, params: NativeGlassParams) {
     super.init()
     effectView.frame = frame
+    effectView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     effectView.isUserInteractionEnabled = false
     effectView.clipsToBounds = true
     effectView.layer.cornerRadius = params.cornerRadius

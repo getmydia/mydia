@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -18,9 +20,14 @@ class NativeGlassSupport {
   @visibleForTesting
   static bool? debugOverride;
 
+  /// Clears the cached probe answer in tests.
+  @visibleForTesting
+  static void debugReset() => _supported = false;
+
   static bool get supported => debugOverride ?? _supported;
 
-  /// Asks the native side once. Never throws: a missing plugin or a platform
+  /// Asks the native side once. Never throws and never hangs: the probe is
+  /// bounded by a 2 second timeout, and a timeout, a missing plugin or any
   /// error is logged and answers false, so every surface keeps its Flutter
   /// glass.
   static Future<void> initialize() async {
@@ -32,12 +39,21 @@ class NativeGlassSupport {
       return;
     }
     try {
-      _supported = await channel.invokeMethod<bool>('isSupported') ?? false;
+      _supported = await channel
+              .invokeMethod<bool>('isSupported')
+              .timeout(const Duration(seconds: 2)) ??
+          false;
+    } on TimeoutException {
+      debugPrint('[NativeGlass] probe timed out, using Flutter glass');
+      _supported = false;
     } on MissingPluginException catch (e) {
       debugPrint('[NativeGlass] plugin missing, using Flutter glass: $e');
       _supported = false;
     } on PlatformException catch (e) {
       debugPrint('[NativeGlass] probe failed, using Flutter glass: $e');
+      _supported = false;
+    } on Object catch (e) {
+      debugPrint('[NativeGlass] probe error, using Flutter glass: $e');
       _supported = false;
     }
   }

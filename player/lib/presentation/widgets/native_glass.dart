@@ -16,6 +16,10 @@ import '../../core/theme/native_glass_support.dart';
 /// widget the call site built before native glass existed, so non-Apple
 /// platforms, older OS versions and every existing test are unchanged.
 ///
+/// The native view reads `cornerRadius` and `tint` once at creation, so a call
+/// site that needs to change them on a live widget must give it a new key.
+/// All current call sites pass constants.
+///
 /// The corner radius is applied natively. Do not wrap this in a
 /// `ClipRRect`: a clip on a platform view costs an extra mutator pass and
 /// gains nothing.

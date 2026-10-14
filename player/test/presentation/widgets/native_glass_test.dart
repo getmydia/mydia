@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -181,5 +183,61 @@ void main() {
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
+  });
+
+  group('NativeGlassSupport.initialize', () {
+    setUp(NativeGlassSupport.debugReset);
+
+    void mock(Future<Object?>? Function(MethodCall) handler) {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(NativeGlassSupport.channel, handler);
+      addTearDown(() =>
+          messenger.setMockMethodCallHandler(NativeGlassSupport.channel, null));
+    }
+
+    final ios = TargetPlatformVariant.only(TargetPlatform.iOS);
+
+    testWidgets('reply true: supported', (tester) async {
+      mock((_) async => true);
+      await NativeGlassSupport.initialize();
+      expect(NativeGlassSupport.supported, isTrue);
+    }, variant: ios);
+
+    testWidgets('reply false: unsupported', (tester) async {
+      mock((_) async => false);
+      await NativeGlassSupport.initialize();
+      expect(NativeGlassSupport.supported, isFalse);
+    }, variant: ios);
+
+    testWidgets('reply null: unsupported', (tester) async {
+      mock((_) async => null);
+      await NativeGlassSupport.initialize();
+      expect(NativeGlassSupport.supported, isFalse);
+    }, variant: ios);
+
+    testWidgets('PlatformException: unsupported', (tester) async {
+      mock((_) async => throw PlatformException(code: 'x'));
+      await NativeGlassSupport.initialize();
+      expect(NativeGlassSupport.supported, isFalse);
+    }, variant: ios);
+
+    testWidgets('no handler (MissingPluginException): unsupported',
+        (tester) async {
+      // A mock channel handler that throws MissingPluginException replies
+      // null, which is what a channel with no native handler produces.
+      mock((_) async => throw MissingPluginException());
+      await NativeGlassSupport.initialize();
+      expect(NativeGlassSupport.supported, isFalse);
+    }, variant: ios);
+
+    testWidgets('never completes: unsupported after the 2s timeout',
+        (tester) async {
+      mock((_) => Completer<Object?>().future);
+      final done = NativeGlassSupport.initialize();
+      await tester.pump(const Duration(seconds: 3));
+      await done;
+      expect(NativeGlassSupport.supported, isFalse);
+    }, variant: ios);
   });
 }
