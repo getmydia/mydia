@@ -44,7 +44,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
           optional(:gate_opts) => keyword(),
           # benchmark only: index 1 accumulates the exchanges' wall-clock microseconds
           optional(:network) => :atomics.atomics_ref(),
-          # test-only: called with {:task, pid} and {:instance, pid} by the engine
+          # test-only: called with {:task, pid}, {:watcher, pid} and {:instance, pid} by the engine
           optional(:guest_probe) => (term() -> any())
         }
 

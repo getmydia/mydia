@@ -26,6 +26,22 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SlotsTest do
     {a, b}
   end
 
+  # Waits until the server holds `expected` queued requests, so a test acts
+  # only after its `:acquire` has really arrived.
+  defp await_queued(slots, expected, attempts \\ 100) do
+    cond do
+      :queue.len(:sys.get_state(slots).queue) == expected ->
+        :ok
+
+      attempts == 0 ->
+        flunk("expected #{expected} queued request(s) in #{inspect(slots)}")
+
+      true ->
+        Process.sleep(10)
+        await_queued(slots, expected, attempts - 1)
+    end
+  end
+
   test "runs the function and returns its value", %{slots: slots} do
     assert {:ok, 42, _waited} = Slots.run(slots, 1_000, fn -> 42 end)
   end
@@ -66,7 +82,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SlotsTest do
 
     queued = spawn(fn -> Slots.run(slots, 5_000, fn -> :never end) end)
     ref = Process.monitor(queued)
-    Process.sleep(50)
+    await_queued(slots, 1)
     Process.exit(queued, :kill)
     assert_receive {:DOWN, ^ref, _, _, _}
 
@@ -96,7 +112,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SlotsTest do
         Process.sleep(:infinity)
       end)
 
-    Process.sleep(50)
+    await_queued(name, 1)
     ref = Process.monitor(pid)
     Process.exit(pid, :kill)
     assert_receive {:DOWN, ^ref, _, _, _}

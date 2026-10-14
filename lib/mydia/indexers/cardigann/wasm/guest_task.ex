@@ -20,8 +20,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.GuestTask do
 
   alias Mydia.Indexers.Adapter.Error
 
-  # Slack above the guest's own budget before the guest process is given up on.
-  @task_grace_ms 5_000
+  # Only lets the guest's own timeout path report first. The whole call, store
+  # and instance setup included, is bounded by `timeout_ms` plus this slack.
+  @task_slack_ms 250
 
   @doc """
   Runs `fun` (zero-arity, returns the call result) in a guest task and returns
@@ -33,7 +34,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.GuestTask do
     caller = self()
     task = Task.Supervisor.async_nolink(Mydia.TaskSupervisor, fn -> guest(caller, ctx, fun) end)
 
-    case Task.yield(task, timeout_ms + @task_grace_ms) || Task.shutdown(task, :brutal_kill) do
+    case Task.yield(task, timeout_ms + @task_slack_ms) || Task.shutdown(task, :brutal_kill) do
       {:ok, result} ->
         result
 
