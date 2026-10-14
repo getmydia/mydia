@@ -108,6 +108,34 @@ void main() {
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
+  testWidgets('native: child gets the parent constraints, as on the fallback',
+      (tester) async {
+    NativeGlassSupport.debugOverride = true;
+    _capturePlatformViews(tester);
+    BoxConstraints? seen;
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: Center(
+        child: SizedBox(
+          width: 200,
+          height: 300,
+          child: NativeGlass(
+            cornerRadius: 0,
+            fallback: (c) => c,
+            child: LayoutBuilder(builder: (_, c) {
+              seen = c;
+              return const SizedBox();
+            }),
+          ),
+        ),
+      ),
+    ));
+    await tester.pump();
+
+    expect(seen!.isTight, isTrue);
+    expect(seen!.biggest, const Size(200, 300));
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
   testWidgets('supported on macOS: AppKitView with the same params',
       (tester) async {
     NativeGlassSupport.debugOverride = true;

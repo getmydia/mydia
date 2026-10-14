@@ -76,6 +76,8 @@ class NativeGlass extends StatelessWidget {
 
     final rim = border;
     return Stack(
+      // The child gets the same constraints it would get on the fallback path.
+      fit: StackFit.passthrough,
       children: [
         Positioned.fill(child: IgnorePointer(child: glass)),
         if (rim != null)
