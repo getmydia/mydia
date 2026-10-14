@@ -89,8 +89,9 @@ Future<List<String>> _pumpBar(
   WidgetTester tester, {
   List<SourceNavEntry> libraryEntries = const [],
   EdgeInsets padding = EdgeInsets.zero,
+  Size size = const Size(400, 800),
 }) async {
-  tester.view.physicalSize = const Size(400, 800);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final navigations = <String>[];
@@ -147,6 +148,42 @@ void main() {
     await tester.longPress(find.text('Home'));
     await tester.pumpAndSettle();
     expect(find.text('Libraries'), findsNothing);
+  });
+
+  testWidgets('a long library list scrolls inside a short landscape sheet',
+      (tester) async {
+    final many = [
+      for (var i = 0; i < 15; i++)
+        SourceNavEntry(
+          id: 'lib-$i',
+          label: 'Library $i',
+          icon: Icons.folder_outlined,
+          selectedIcon: Icons.folder,
+          route: '/s/x/library/$i',
+        ),
+    ];
+    final navigations = await _pumpBar(
+      tester,
+      libraryEntries: many,
+      size: const Size(800, 400),
+    );
+    await tester.longPress(find.text('Home'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    final last = find.byKey(const ValueKey('library-sheet-lib-14'));
+    await tester.scrollUntilVisible(last, 100,
+        scrollable: find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.byType(Scrollable),
+        ));
+    // scrollUntilVisible stops once the row's edge shows; bring all of it in.
+    await tester.ensureVisible(last);
+    await tester.pumpAndSettle();
+    await tester.tap(last);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(navigations, ['/s/x/library/14']);
   });
 
   test('libraryNavEntries drops anchored entries and the bar ids', () {

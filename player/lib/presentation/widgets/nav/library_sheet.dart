@@ -29,17 +29,27 @@ Future<void> showLibrarySheet(
                 child: Text('Libraries',
                     style: Theme.of(sheetContext).textTheme.headlineSmall),
               ),
-              for (final entry in entries)
-                ListTile(
-                  key: ValueKey('library-sheet-${entry.id}'),
-                  leading: Icon(entry.icon),
-                  title: Text(entry.label),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    onNavigate(entry.route);
-                  },
+              // The heading stays put; the rows scroll when the source has
+              // more than the sheet's height allows (many libraries, or a
+              // short landscape phone).
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.only(bottom: 12),
+                  children: [
+                    for (final entry in entries)
+                      ListTile(
+                        key: ValueKey('library-sheet-${entry.id}'),
+                        leading: Icon(entry.icon),
+                        title: Text(entry.label),
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          onNavigate(entry.route);
+                        },
+                      ),
+                  ],
                 ),
-              const SizedBox(height: 12),
+              ),
             ],
           ),
         ),
