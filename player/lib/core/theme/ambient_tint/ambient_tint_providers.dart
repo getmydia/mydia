@@ -76,17 +76,30 @@ class AmbientTintController extends _$AmbientTintController {
   @override
   AmbientTintColors build() {
     ref.onDispose(() => _timer?.cancel());
+    _built = false;
     ref.listen(
       ambientBackdropControllerProvider,
       (_, next) => _schedule(next),
       fireImmediately: true,
     );
+    _built = true;
     return AmbientTintColors.neutral;
   }
+
+  // False while build runs: state cannot be written until build returns, and
+  // build already returns neutral.
+  bool _built = false;
 
   void _schedule(BackdropSource source) {
     _timer?.cancel();
     final generation = ++_generation;
+    final url = source.imageUrl;
+    if (url == null || url.isEmpty) {
+      // No artwork needs no debounce: settle on neutral at once.
+      _timer = null;
+      if (_built) state = AmbientTintColors.neutral;
+      return;
+    }
     _timer = Timer(debounce, () => _resolve(source, generation));
   }
 

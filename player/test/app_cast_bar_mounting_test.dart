@@ -9,7 +9,6 @@ import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/theme/ambient_tint/ambient_tint_providers.dart';
 import 'package:player/domain/models/cast_device.dart';
 
 const _device = CastDevice(
@@ -56,9 +55,6 @@ void main() {
       child: const MyApp(),
     ));
     await tester.pump();
-    // `ShellAmbientTint` starts the tint controller's debounce timer on the
-    // first frame; let it fire so no timer is pending when the test ends.
-    await tester.pump(AmbientTintController.debounce);
     return container;
   }
 

@@ -75,4 +75,28 @@ void main() {
           isNot(AmbientTintColors.neutral));
     });
   });
+
+  test('no artwork resets to neutral at once with no timer pending', () {
+    fakeAsync((async) {
+      final c = _container([], seed: const Color(0xFF2F4A9F));
+      c.listen(ambientTintControllerProvider, (_, __) {});
+      final backdrop = c.read(ambientBackdropControllerProvider.notifier);
+      backdrop.setDefault(_night);
+      async.elapse(AmbientTintController.debounce);
+      async.flushMicrotasks();
+      expect(c.read(ambientTintControllerProvider),
+          isNot(AmbientTintColors.neutral));
+
+      backdrop.setDefault(BackdropSource.none);
+      expect(c.read(ambientTintControllerProvider), AmbientTintColors.neutral);
+      expect(async.nonPeriodicTimerCount, 0);
+
+      backdrop.setHover(_salt);
+      async.elapse(AmbientTintController.debounce);
+      async.flushMicrotasks();
+      backdrop.clearHover();
+      expect(c.read(ambientTintControllerProvider), AmbientTintColors.neutral);
+      expect(async.nonPeriodicTimerCount, 0);
+    });
+  });
 }
