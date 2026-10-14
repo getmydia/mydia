@@ -161,4 +161,17 @@ void main() {
     final content = File(path).readAsStringSync();
     expect(content, contains('Open Font License'));
   });
+
+  test('Outfit license is declared as an asset', () {
+    final pubspec =
+        loadYaml(File('pubspec.yaml').readAsStringSync()) as YamlMap;
+    final assets = (pubspec['flutter'] as YamlMap)['assets'] as YamlList;
+    expect(assets, contains('assets/fonts/Outfit-LICENSE.txt'));
+  });
+
+  test('Outfit license file exists and is the SIL OFL', () {
+    const path = 'assets/fonts/Outfit-LICENSE.txt';
+    expect(File(path).existsSync(), isTrue);
+    expect(File(path).readAsStringSync(), contains('Open Font License'));
+  });
 }

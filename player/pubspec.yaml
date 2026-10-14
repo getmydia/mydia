@@ -130,6 +130,7 @@ flutter:
 
   assets:
     - assets/fonts/Inter-LICENSE.txt
+    - assets/fonts/Outfit-LICENSE.txt
 
   fonts:
     - family: Inter
