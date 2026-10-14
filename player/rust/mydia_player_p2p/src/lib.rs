@@ -15,8 +15,13 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 #[frb(init)]
 pub fn init_app() {
-    // Default utilities - e.g. logging
-    flutter_rust_bridge::setup_default_user_utils();
+    // Not `setup_default_user_utils`: it installs the platform `log` sink at
+    // Trace with no per-target filter, and the sink keeps whichever logger
+    // registers first, so the filtered Android logger below never took
+    // effect. rustls logs through `log`, and at Trace it wrote every TLS
+    // handshake to logcat, certificate chains in hex included, which pushed
+    // everything else out of the device's log buffer within minutes.
+    flutter_rust_bridge::setup_backtrace();
 
     // Initialize Android logging for log:: macros
     #[cfg(target_os = "android")]
@@ -24,10 +29,13 @@ pub fn init_app() {
         android_logger::Config::default()
             .with_max_level(log::LevelFilter::Debug)
             .with_filter(android_logger::FilterBuilder::new()
-                .parse("info,mydia=debug,iroh=info,noq=warn,noq_proto=warn,yamux=warn,netlink_proto=warn")
+                .parse("info,mydia=debug,iroh=info,noq=warn,noq_proto=warn,rustls=warn,yamux=warn,netlink_proto=warn")
                 .build())
             .with_tag("mydia_p2p"),
     );
+
+    #[cfg(not(target_os = "android"))]
+    flutter_rust_bridge::setup_log_to_console(log::LevelFilter::Info);
 
     init_logging();
 
@@ -91,13 +99,10 @@ where
 /// `wasm32-unknown-unknown`, and its default writer is stdout, which a browser
 /// does not have. Leaving the global dispatcher unset is what makes
 /// `tracing`'s `log` feature, enabled for this target only, forward every
-/// event to the `log` crate, and `setup_default_user_utils` above has already
-/// pointed `log` at the browser console. That call asks for `Trace`, which is
-/// unreadable at iroh's volume, so the ceiling is lowered here.
+/// event to the `log` crate, and `init_app` has already pointed `log` at the
+/// browser console at `Info`. `Trace` is unreadable at iroh's volume.
 #[cfg(target_arch = "wasm32")]
-fn init_logging() {
-    log::set_max_level(log::LevelFilter::Info);
-}
+fn init_logging() {}
 
 pub struct P2pHost {
     inner: Host,
