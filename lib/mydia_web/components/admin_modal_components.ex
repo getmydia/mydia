@@ -19,7 +19,8 @@ defmodule MydiaWeb.AdminModalComponents do
 
   attr :on_close, :any,
     required: true,
-    doc: "event name or JS for the backdrop; nil for a modal a stray click must not dismiss"
+    doc:
+      "event name or JS for the backdrop and the header close button; nil for a modal a stray click must not dismiss (no close button)"
 
   attr :tone, :atom,
     default: :primary,
@@ -41,11 +42,12 @@ defmodule MydiaWeb.AdminModalComponents do
       aria-labelledby={"#{@id}-title"}
     >
       <div class={[
-        "modal-box max-sm:w-full max-sm:max-w-none max-sm:h-full max-sm:max-h-none max-sm:rounded-none",
+        "modal-box flex flex-col overflow-hidden",
+        "max-sm:w-full max-sm:max-w-none max-sm:h-full max-sm:max-h-none max-sm:rounded-none",
         "[&_.label]:whitespace-normal",
         box_width(@size)
       ]}>
-        <div class="flex items-center justify-between gap-3 mb-5">
+        <div class="flex items-center justify-between gap-3 mb-5 shrink-0">
           <div class="flex items-center gap-3 min-w-0">
             <div class={[
               "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
@@ -58,9 +60,23 @@ defmodule MydiaWeb.AdminModalComponents do
               <p :if={@subtitle} class="text-sm text-base-content/60">{@subtitle}</p>
             </div>
           </div>
-          {render_slot(@header_aside)}
+          <div class="flex items-center gap-2 shrink-0">
+            {render_slot(@header_aside)}
+            <button
+              :if={@on_close}
+              id={"#{@id}-close"}
+              type="button"
+              class="btn btn-sm btn-circle btn-ghost"
+              aria-label="Close"
+              phx-click={@on_close}
+            >
+              <.icon name="hero-x-mark" class="w-5 h-5" />
+            </button>
+          </div>
         </div>
-        {render_slot(@inner_block)}
+        <div id={"#{@id}-body"} class="flex-1 min-h-0 overflow-y-auto">
+          {render_slot(@inner_block)}
+        </div>
         <.admin_modal_actions :if={@actions != []}>{render_slot(@actions)}</.admin_modal_actions>
       </div>
       <div class="modal-backdrop bg-black/50" phx-click={@on_close}></div>
@@ -70,10 +86,16 @@ defmodule MydiaWeb.AdminModalComponents do
 
   slot :inner_block, required: true
 
-  @doc "The bordered button row at the bottom of an admin_modal/1."
+  @doc """
+  The bordered button row at the bottom of an admin_modal/1. Sticky, so a form
+  that renders it inside its own `<form>` (and so inside the scrolling body)
+  still keeps its buttons on screen.
+  """
   def admin_modal_actions(assigns) do
     ~H"""
-    <div class="modal-action mt-6 pt-4 border-t border-base-300">{render_slot(@inner_block)}</div>
+    <div class="modal-action mt-6 pt-4 border-t border-base-300 sticky bottom-0 bg-base-100">
+      {render_slot(@inner_block)}
+    </div>
     """
   end
 
