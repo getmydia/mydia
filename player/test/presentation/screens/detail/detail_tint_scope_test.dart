@@ -67,18 +67,30 @@ void main() {
 
   testWidgets('while pending the ambient tint above shows', (tester) async {
     final seen = <AmbientTintColors>[];
-    await _pump(
-      tester,
-      const UrlArt('https://art/night-ferry.jpg'),
-      seen,
-      overrides: [
-        tintExtractorProvider.overrideWithValue(
-          (_) => Future.delayed(const Duration(seconds: 1), () => _rust),
+    const warm = AmbientTintColors(
+      ground: Color(0xFF2A1510),
+      surface: Color(0xFF2A1510),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          tintExtractorProvider.overrideWithValue(
+            (_) => Future.delayed(const Duration(seconds: 1), () => _rust),
+          ),
+        ],
+        child: MaterialApp(
+          home: AmbientTint(
+            colors: warm,
+            child: DetailTintScope(
+              art: const UrlArt('https://art/night-ferry.jpg'),
+              child: _Probe(seen),
+            ),
+          ),
         ),
-      ],
+      ),
     );
     await tester.pump();
-    expect(seen.last, AmbientTintColors.neutral);
+    expect(seen.last, warm);
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
     expect(seen.last, AmbientTintColors.fromSeed(_rust));

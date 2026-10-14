@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/ambient_tint/ambient_tint.dart';
+import '../../../core/theme/ambient_tint/ambient_tint_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/detail/detail_art.dart';
@@ -32,7 +33,8 @@ class DetailHeroBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     final overlay = this.overlay;
     final bottom = this.bottom;
-    final ground = AmbientTint.of(context).ground;
+    final tint = AmbientTint.of(context);
+    final ground = tint.ground;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -40,12 +42,11 @@ class DetailHeroBackground extends StatelessWidget {
           DetailArtImage(
             art: art,
             slot: slot,
-            placeholder: (_) =>
-                Container(color: AmbientTint.of(context).surface),
-            errorWidget: _empty,
+            placeholder: (_) => Container(color: tint.surface),
+            errorWidget: (_) => _empty(tint),
           )
         else
-          _empty(context),
+          _empty(tint),
         DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -69,10 +70,10 @@ class DetailHeroBackground extends StatelessWidget {
     );
   }
 
-  Widget _empty(BuildContext context) {
+  Widget _empty(AmbientTintColors tint) {
     final icon = fallbackIcon;
     return Container(
-      color: AmbientTint.of(context).surface,
+      color: tint.surface,
       child: icon == null
           ? null
           : Icon(icon, size: 64, color: AppColors.textSecondary),
