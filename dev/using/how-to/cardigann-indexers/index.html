@@ -3797,7 +3797,7 @@ trackers, since their logins then follow Prowlarr's code exactly.</p>
 Indexers</strong> section: <strong>How library indexers run</strong> shows the active engine, and
 <strong>Change</strong> opens a Built-in and a Prowlarr-based card. The default is Built-in.
 Switching takes effect without a restart.</p>
-<p>The first time you switch to Prowlarr-based, Mydia downloads and compiles the engine
+<p>The first time you switch to Prowlarr-based, Mydia downloads the engine and prepares it
 while the built-in engine keeps serving your searches, and the page shows
 progress. When it is ready, searches move over by themselves. If something goes
 wrong, the page shows the reason. Problems that can pass, such as a network
@@ -3807,7 +3807,7 @@ engine, need the cause fixed first. If the Prowlarr-based engine stops being rea
 later, for example if the engine crashes and restarts, the built-in engine serves searches again
 until it is.</p>
 <p>Switching back to Built-in frees the engine's memory but keeps the downloaded
-and compiled files, so switching to Prowlarr-based again takes about a second. Use
+and prepared files, so switching to Prowlarr-based again takes about a second. Use
 <strong>Remove cached Prowlarr-based engine</strong> under <strong>Change</strong> to delete them. The button
 appears while Built-in is selected.</p>
 <p>A "verified" badge on a tracker means that engine returned results for it that
@@ -3825,17 +3825,19 @@ the 44 public trackers where Prowlarr returned results, it matched on all of the
 and the built-in engine on 28.</p>
 <p>It is opt-in because it costs something. Read this before turning it on:</p>
 <ul>
-<li><strong>The first start downloads about 39 MB from GitHub and compiles it.</strong> The
-  compile takes about 18 s on the Alpine image and uses up to about 1.6 GB of
-  memory while it runs, then settles at about 500 MB. A container limited to
-  less than about 2 GB can be killed during it. The built-in engine
-  keeps serving searches meanwhile, and the rest of Mydia is not held up. If the download
-  fails, Mydia retries in the background.</li>
-<li><strong>Later starts load the compiled copy in under a second.</strong> It is kept in a
+<li><strong>The first start downloads about 68 MB from GitHub.</strong> With the usual setup the
+  engine is ready about 6 s after the container starts and uses up to about
+  0.65 GB of memory on the way, then settles at about 500 MB. If the prepared
+  copy cannot be downloaded, Mydia prepares the engine on your server instead.
+  That takes about 18 s and uses up to about 1.6 GB of memory, and a container
+  limited to less than about 2 GB can be killed during it. The built-in engine
+  keeps serving searches meanwhile, and the rest of Mydia is not held up. If the
+  download fails, Mydia retries in the background.</li>
+<li><strong>Later starts load the prepared copy in under a second.</strong> It is kept in a
   <code>cardigann</code> folder in your data directory (<code>MYDIA_DATA_DIR</code>, or next to the
-  database file, which is <code>/config</code> in the Docker image): 39 MB for the download
-  and 119 MB for the compiled copy. Keep that folder on a volume. Without one,
-  every container recreate downloads and compiles again.</li>
+  database file, which is <code>/config</code> in the Docker image): 39 MB for the engine
+  and 119 MB for the prepared copy. Keep that folder on a volume. Without one,
+  every container recreate downloads the engine again.</li>
 <li><strong>Memory.</strong> About 65 MB more than the built-in engine when idle, and about
   290 MB more while four searches run at once.</li>
 <li><strong>Speed.</strong> About 60 ms slower per search at the median, 110 ms at the 95th
@@ -3854,7 +3856,7 @@ Mydia version yourself, put it on the server and point Mydia at it:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">CARDIGANN_WASM_PATH</span><span class="o">=</span>/path/to/cardigann-&lt;hash&gt;.wasm
 </code></pre></div>
 <p>Mydia checks the file against the checksum built into your version and refuses
-one that does not match. Nothing is downloaded, and the compiled copy is still
+one that does not match. Nothing is downloaded, and the prepared copy is still
 cached in the data directory.</p>
 <p>If you set <code>ENABLE_CARDIGANN=false</code>, Cardigann is off whichever engine you pick.</p>
 <h2 id="supported-indexers">Supported Indexers</h2>
