@@ -635,14 +635,14 @@ void main() {
   });
 
   testWidgets('scrolls its version footer clear of the dock', (tester) async {
-    tester.view.physicalSize = const Size(600, 800);
+    tester.view.physicalSize = const Size(599, 800);
     tester.view.devicePixelRatio = 1.0;
     tester.view.padding = const FakeViewPadding(bottom: 34);
     addTearDown(tester.view.reset);
 
     await _pump(
       tester,
-      size: const Size(600, 800),
+      size: const Size(599, 800),
       version: '1.2.3',
       inShell: true,
     );

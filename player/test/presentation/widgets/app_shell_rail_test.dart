@@ -11,13 +11,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/focus/region_traversal_policy.dart';
 import 'package:player/core/focus/sidebar_focus_boundary.dart';
 import 'package:player/core/layout/breakpoints.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/presentation/widgets/app_shell.dart';
+import 'package:player/presentation/widgets/cast_bar/dock_extents.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 import 'package:player/presentation/widgets/nav/floating_rail.dart';
 
@@ -128,51 +129,25 @@ void main() {
           overrides: _overrides(),
           child: MaterialApp(
             home: Scaffold(
-              body: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        left: Breakpoints.railContentInset(pinned: false),
-                      ),
-                      child: FocusTraversalGroup(
-                        policy: RegionTraversalPolicy(
-                          onExit: (direction) =>
-                              direction == TraversalDirection.left
-                                  ? boundary.focusSidebar()
-                                  : false,
-                        ),
-                        child: FocusScope(
-                          node: contentScope,
-                          child: Focus(
-                            focusNode: contentNode,
-                            child: const SizedBox.expand(),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: FocusTraversalGroup(
-                      policy: RegionTraversalPolicy(
-                        onExit: (direction) =>
-                            direction == TraversalDirection.right
-                                ? boundary.focusContent()
-                                : false,
-                      ),
-                      child: FocusScope(
-                        node: railScope,
-                        child: FloatingRail(
-                          location: '/',
-                          onNavigate: (_) {},
-                          isOffline: false,
-                          selectedRowFocusNode: railRow,
-                          onExitRequested: boundary.focusContent,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              // The shell's own layer builder, so a miswired region, swapped
+              // direction or dropped `onExitRequested` fails here.
+              body: AppShell.railLayers(
+                regionsEnabled: true,
+                contentLeft: Breakpoints.railContentInset(pinned: false),
+                railScope: railScope,
+                contentScope: contentScope,
+                boundary: boundary,
+                content: Focus(
+                  focusNode: contentNode,
+                  child: const SizedBox.expand(),
+                ),
+                railBuilder: (onExitRequested) => FloatingRail(
+                  location: '/',
+                  onNavigate: (_) {},
+                  isOffline: false,
+                  selectedRowFocusNode: railRow,
+                  onExitRequested: onExitRequested,
+                ),
               ),
             ),
           ),
@@ -215,20 +190,72 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       await tester.pumpAndSettle();
 
-      for (var i = 0; i < 30; i++) {
+      final stops = railScope.traversalDescendants
+          .where((n) => n.canRequestFocus && n.context != null)
+          .toList()
+        ..sort((a, b) => a.rect.top.compareTo(b.rect.top));
+      expect(stops.length, greaterThan(1));
+      // Captured now: the list scrolls as focus moves, which shifts rects.
+      final firstTop = stops.first.rect.top;
+      final lastTop = stops.last.rect.top;
+      final firstRow = stops.where((n) => n.rect.top == firstTop).toList();
+      final lastRow = stops.where((n) => n.rect.top == lastTop).toList();
+
+      for (var i = 0; i < stops.length + 5; i++) {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
         await tester.pump();
       }
-      expect(railScope.hasFocus, isTrue);
+      // A row can nest more than one focus node, so "is that row" means the
+      // focused node is, or is nested with, one of the stops at that end.
+      bool onRow(Iterable<FocusNode> row) {
+        final primary = FocusManager.instance.primaryFocus!;
+        return row.any((n) =>
+            n == primary ||
+            primary.ancestors.contains(n) ||
+            n.ancestors.contains(primary));
+      }
+
+      expect(onRow(firstRow), isTrue);
       expect(contentScope.hasFocus, isFalse);
 
-      for (var i = 0; i < 60; i++) {
+      for (var i = 0; i < stops.length + 5; i++) {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pump();
       }
       await tester.pumpAndSettle();
-      expect(railScope.hasFocus, isTrue);
+      expect(onRow(lastRow), isTrue);
       expect(contentScope.hasFocus, isFalse);
     });
+  });
+
+  testWidgets('sidebarChrome reports the pinned rail footprint (312)',
+      (tester) async {
+    final reported = <double>[];
+    await tester.pumpWidget(
+      DockExtents(
+        dock: 0,
+        castBar: 0,
+        sidebar: 0,
+        drawerOpen: false,
+        onDock: (_) {},
+        onSidebar: reported.add,
+        onCastBar: (_) {},
+        onDrawer: (_) {},
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: AppShell.sidebarChrome(
+              child: SizedBox(
+                width: Breakpoints.railContentInset(pinned: true),
+                height: 100,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(reported.last, 312);
   });
 }

@@ -11,7 +11,8 @@ abstract class Breakpoints {
   /// Maximum width for mobile layouts
   static const double mobile = 600;
 
-  /// Minimum width for tablet layouts (when sidebar appears)
+  /// Minimum width for desktop-style content layouts. The rail appears
+  /// earlier, at [mobile].
   static const double tablet = 900;
 
   /// Minimum width for desktop layouts
@@ -52,7 +53,9 @@ abstract class Breakpoints {
     return width >= mobile && width < tablet;
   }
 
-  /// Check if current screen is desktop or larger (shows sidebar)
+  /// Check if current screen is tablet-landscape or larger. This is a
+  /// content-layout predicate; whether the shell shows the rail is
+  /// [showsRail].
   static bool isDesktop(BuildContext context) =>
       MediaQuery.sizeOf(context).width >= tablet;
 

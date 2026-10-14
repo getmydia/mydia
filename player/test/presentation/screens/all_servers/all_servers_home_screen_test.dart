@@ -161,6 +161,11 @@ void main() {
   });
 
   testWidgets('has the cast button and no in-list title', (t) async {
+    // The helper leaves the view at 800 logical px, which shows the rail
+    // layout; the phone layout needs a view below 600.
+    t.view.physicalSize = const Size(599, 1800);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
     await pump(t, [serverWith('a')]);
     expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
     expect(find.text('All servers'), findsNothing);

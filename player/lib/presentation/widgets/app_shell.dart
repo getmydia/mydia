@@ -160,8 +160,73 @@ class AppShell extends ConsumerStatefulWidget {
         ),
       );
 
-  /// Reports the rail's footprint to `DockExtents` so the floating cast bar
-  /// sits beside it instead of painting over its bottom rows.
+  /// The desktop branch's layers: the rail footprint reporter, the content
+  /// column (padded by [contentLeft]) and the rail on top, with the two focus
+  /// regions wired to [boundary].
+  ///
+  /// Public and `@visibleForTesting` for the reason [contentInsets] is: the
+  /// shell cannot be mounted by a widget test (it needs the authenticated
+  /// provider graph), so the region wiring lives here where a test can drive
+  /// the exact call `build` makes. [regionsEnabled] is
+  /// `InputCapabilities.directionalPrimary` in the shell; a test passes true.
+  /// [railBuilder] receives the callback the rail must be given as its
+  /// `onExitRequested`.
+  @visibleForTesting
+  static Widget railLayers({
+    required bool regionsEnabled,
+    required double contentLeft,
+    required FocusScopeNode railScope,
+    required FocusScopeNode contentScope,
+    required SidebarFocusBoundary boundary,
+    required Widget content,
+    required Widget Function(VoidCallback onExitRequested) railBuilder,
+  }) =>
+      Builder(
+        builder: (context) => Stack(
+          fit: StackFit.expand,
+          children: [
+            // Reports the rail's footprint so the cast bar clears it.
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: IgnorePointer(
+                child: sidebarChrome(child: SizedBox(width: contentLeft)),
+              ),
+            ),
+            Positioned.fill(
+              child: AnimatedPadding(
+                duration:
+                    context.reducedMotionDuration(DepthTokens.motionMedium),
+                curve: DepthTokens.curveStandard,
+                padding: EdgeInsets.only(left: contentLeft),
+                child: _AppShellState._region(
+                  enabled: regionsEnabled,
+                  node: contentScope,
+                  onExit: (direction) => direction == TraversalDirection.left
+                      ? boundary.focusSidebar()
+                      : false,
+                  child: content,
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: _AppShellState._region(
+                enabled: regionsEnabled,
+                node: railScope,
+                onExit: (direction) => direction == TraversalDirection.right
+                    ? boundary.focusContent()
+                    : false,
+                child: railBuilder(boundary.focusContent),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  /// Reports the rail plus its gap (`Breakpoints.railContentInset`) to
+  /// `DockExtents` so the floating cast bar sits beside it instead of
+  /// painting over its bottom rows.
   ///
   /// Gated on the route being current for the same reason as [dockChrome]:
   /// a route pushed over the shell (the immersive player) hides the
@@ -353,12 +418,13 @@ class _AppShellState extends ConsumerState<AppShell>
   /// consulted — so the boundary would silently stop calling back and the
   /// sidebar would become unreachable again, with no test failing. Do not
   /// reconfigure these nodes.
-  Widget _region({
+  static Widget _region({
+    required bool enabled,
     required Widget child,
     required RegionExitCallback onExit,
     required FocusScopeNode node,
   }) {
-    if (!InputCapabilities.directionalPrimary) return child;
+    if (!enabled) return child;
     return FocusTraversalGroup(
       policy: RegionTraversalPolicy(onExit: onExit),
       child: FocusScope(node: node, child: child),
@@ -413,65 +479,41 @@ class _AppShellState extends ConsumerState<AppShell>
         body: Stack(
           children: [
             Positioned.fill(child: backdrop),
-            // Reports the rail's footprint so the cast bar clears it.
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: IgnorePointer(
-                child: AppShell.sidebarChrome(
-                  child: SizedBox(width: contentLeft),
-                ),
-              ),
-            ),
             Positioned.fill(
-              child: AnimatedPadding(
-                duration:
-                    context.reducedMotionDuration(DepthTokens.motionMedium),
-                curve: DepthTokens.curveStandard,
-                padding: EdgeInsets.only(left: contentLeft),
-                child: _region(
-                  node: _contentScopeNode,
-                  onExit: (direction) => direction == TraversalDirection.left
-                      ? _focusBoundary.focusSidebar()
-                      : false,
-                  // The rail already covers the leading window-control
-                  // reserve, so the content column narrows what it keeps
-                  // clear to `AppShell.contentInsets` before its own screen
-                  // (via `WindowTitleRow`) reads `WindowChromeInsets.of`.
-                  child: WindowChromeInsets.scope(
-                    insets: AppShell.contentInsets(chrome),
-                    child: AppShell.contentGutter(
-                      child: Column(
-                        children: [
-                          AppShell.bannerArea(child: _banners(isOffline)),
-                          Expanded(child: widget.child),
-                        ],
-                      ),
+              child: AppShell.railLayers(
+                regionsEnabled: InputCapabilities.directionalPrimary,
+                contentLeft: contentLeft,
+                railScope: _sidebarScopeNode,
+                contentScope: _contentScopeNode,
+                boundary: _focusBoundary,
+                // The rail already covers the leading window-control
+                // reserve, so the content column narrows what it keeps
+                // clear to `AppShell.contentInsets` before its own screen
+                // (via `WindowTitleRow`) reads `WindowChromeInsets.of`.
+                content: WindowChromeInsets.scope(
+                  insets: AppShell.contentInsets(chrome),
+                  child: AppShell.contentGutter(
+                    child: Column(
+                      children: [
+                        AppShell.bannerArea(child: _banners(isOffline)),
+                        Expanded(child: widget.child),
+                      ],
                     ),
                   ),
                 ),
-              ),
-            ),
-            Positioned.fill(
-              child: _region(
-                node: _sidebarScopeNode,
-                onExit: (direction) => direction == TraversalDirection.right
-                    ? _focusBoundary.focusContent()
-                    : false,
-                child: FloatingRail(
+                railBuilder: (onExitRequested) => FloatingRail(
                   location: location,
                   onNavigate: _navigateTo,
                   showBackToMydia: showBackToMydia,
                   isOffline: isOffline,
-                  // Gated like the region above it: off-tier the sidebar row
-                  // falls back to the per-row node FocusHighlight creates,
-                  // which is what keeps `_region`'s "unchanged off-tier"
-                  // claim true rather than borrowing the shell-owned node.
+                  // Gated like the regions: off-tier the sidebar row falls
+                  // back to the per-row node FocusHighlight creates, which
+                  // is what keeps `region`'s "unchanged off-tier" claim
+                  // true rather than borrowing the shell-owned node.
                   selectedRowFocusNode: InputCapabilities.directionalPrimary
                       ? _sidebarFocusNode
                       : null,
-                  onExitRequested: _focusBoundary.focusContent,
+                  onExitRequested: onExitRequested,
                   topInset: chrome.leading > 0 ? chrome.height : 0,
                 ),
               ),

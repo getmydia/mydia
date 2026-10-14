@@ -8,16 +8,16 @@ export 'toast_controller.dart' show ToastEdge;
 
 /// Marks [child] as something toasts must not cover.
 ///
-/// Wrap the desktop sidebar ([ToastEdge.left]) and anything pinned to the
+/// Wrap the floating rail ([ToastEdge.left]) and anything pinned to the
 /// bottom of the window ([ToastEdge.bottom]). The `ToastLayer` above keeps
 /// the pill right of the widest left claim and above the tallest bottom one.
-/// Nothing hardcodes the sidebar's 260 or the dock's 83: a restyled
+/// Nothing hardcodes the rail's width or the dock's 83: a restyled
 /// obstruction moves the toast with no further edits.
 ///
 /// A claim counts only while [active] is true and this subtree is on screen.
 /// The second condition reads `TickerMode`: the Navigator's `Overlay`
 /// disables tickers for routes covered by an opaque route, so the shell's
-/// sidebar stops counting under a full-screen detail page or the player, and
+/// rail stops counting under a full-screen detail page or the player, and
 /// keeps counting under a dialog, which is not opaque.
 ///
 /// Inert without a `ToastLayer` ancestor, so wrapped widgets still pump in

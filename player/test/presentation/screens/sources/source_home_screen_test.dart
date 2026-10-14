@@ -108,6 +108,11 @@ Future<List<String>> pumpHome(
   ]);
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
+  // The surface size alone leaves the view at 800 logical px, which shows the
+  // rail layout; size the view itself so a phone width is a phone layout.
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
   await tester.pumpWidget(ProviderScope(
     overrides: [
       mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
