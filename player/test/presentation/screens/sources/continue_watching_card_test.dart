@@ -63,6 +63,61 @@ void main() {
     );
   });
 
+  ItemSummary episode() => const ItemSummary(
+        ref: ItemRef(
+          sourceId: fakeSourceId,
+          kind: ItemKind.episode,
+          externalId: 'saltmarsh-2',
+        ),
+        title: 'The Low Tide',
+        showTitle: 'Saltmarsh',
+        subtitle: 'S1 · E2',
+        durationSeconds: 3600,
+        userState: UserState(watched: false, progressSeconds: 600),
+      );
+
+  testWidgets('an episode shows its series and its place; a movie one line',
+      (tester) async {
+    await _pump(tester, episode());
+    expect(find.text('Saltmarsh'), findsOneWidget);
+    expect(find.text('S1 · E2'), findsOneWidget);
+    expect(find.text('The Low Tide'), findsNothing);
+
+    await _pump(tester, _item());
+    expect(find.text('Night Ferry'), findsOneWidget);
+    expect(find.text('S1 · E2'), findsNothing);
+  });
+
+  testWidgets('scaled text up to 1.3 does not overflow', (tester) async {
+    for (final item in [episode(), _item()]) {
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          sourceArtworkProvider.overrideWith((ref, key) async => null),
+          mediaSourceProvider(fakeSourceId)
+              .overrideWithValue(FakeMediaSource()),
+        ],
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.3)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                height: ContinueWatchingCard.height,
+                child: ContinueWatchingCard(item: item, onTap: () {}),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('time left rolls over to hours', (tester) async {
     await _pump(tester, _item(duration: 7200, progress: 3360));
     expect(find.text('1h 4m left'), findsOneWidget);

@@ -172,9 +172,13 @@ void main() {
             .getTopLeft(find.byKey(const Key('source-library-row-movies')))
             .dy),
       );
-      // An episode's card is titled by its series.
+      // An episode's card is titled by its series, with its place beneath.
       expect(
         find.descendant(of: row, matching: find.text('Invented Series')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text('S1 · E2')),
         findsOneWidget,
       );
     });

@@ -24,7 +24,9 @@ class ContinueWatchingCard extends ConsumerWidget {
   static const Size artSize = Size(280, 120);
 
   /// The card's height: the artwork plus the caption block.
-  static const double height = 196;
+  ///
+  /// Room for an episode's caption line and for text scaled up to about 1.3.
+  static const double height = 232;
 
   final ItemSummary item;
   final VoidCallback onTap;
@@ -104,6 +106,19 @@ class ContinueWatchingCard extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                           style: textTheme.titleSmall,
                         ),
+                        // An episode names its place in the series.
+                        if (item.showTitle != null &&
+                            item.subtitle != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            item.subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.bodySmall?.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         Row(
                           children: [
