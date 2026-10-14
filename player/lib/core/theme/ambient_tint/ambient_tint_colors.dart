@@ -26,7 +26,7 @@ class AmbientTintColors {
   static const double maxTone = 20;
 
   /// Chroma ceiling, so saturated art reads as a tint rather than a colour.
-  static const double maxChroma = 48;
+  static const double maxChroma = 24;
 
   /// Below this the art is effectively grey and the neutral tint is used.
   static const double minSeedChroma = 8;
