@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../domain/detail/detail_target.dart';
 import '../../domain/sources/item.dart';
+import '../../presentation/screens/collections/collection_detail_screen.dart';
 import '../../presentation/screens/detail/detail_links.dart';
 import '../../presentation/screens/episode/episode_detail_screen.dart';
 import '../../presentation/screens/movie/movie_detail_screen.dart';
@@ -34,6 +35,18 @@ GoRoute sourceItemRoute() => GoRoute(
       },
       builder: (context, state) =>
           SourceItemScreen(item: _refOf(state, _kindParam(state))),
+    );
+
+/// A collection's page. It opens item pages with `push`, so it sits in the
+/// shell like them: go_router cannot push a shell route above a page on the
+/// root navigator.
+GoRoute sourceCollectionRoute() => GoRoute(
+      path: '/s/:sourceId/collection/:collectionId',
+      name: 'source_collection',
+      builder: (context, state) => CollectionDetailScreen(
+        sourceId: SourceId(state.pathParameters['sourceId']!),
+        collectionId: state.pathParameters['collectionId']!,
+      ),
     );
 
 /// Source detail routes. They are registered inside the shell route, so the

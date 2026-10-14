@@ -777,7 +777,10 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         intent,
         screenWidth: screenWidth,
         fetch: (itemRef) => fetchLoadContentItem(ref, itemRef),
-        push: (path) => pushRouteSafely(router, path),
+        push: (path) {
+          final message = pushRouteSafely(router, path).message;
+          if (message != null && mounted) showToast(context, message);
+        },
       );
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error pulling session: $e');

@@ -7,7 +7,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Page;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -22,11 +22,14 @@ import 'package:player/core/router/source_detail_routes.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
+import 'package:player/domain/sources/library.dart' show Page;
+import 'package:player/presentation/screens/collections/collection_detail_screen.dart';
 import 'package:player/presentation/screens/detail/detail_links.dart';
 import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
 import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
+import '../../presentation/screens/sources/fake_capable_source.dart';
 import '../../presentation/screens/sources/fake_media_source.dart';
 import '../../test_utils/mock_auth_storage.dart';
 import '../../test_utils/toast_harness.dart';
@@ -37,7 +40,8 @@ const _shellKey = Key('test-shell');
 const _homeKey = Key('test-home');
 const _playerKey = Key('test-player');
 const _rootPageKey = Key('test-root-page');
-const _openItemKey = Key('test-open-item');
+const _formKey = Key('test-form');
+const _dialogKey = Key('test-dialog');
 
 final _detailNames = {
   'source_movie_detail',
@@ -94,6 +98,7 @@ class _TopProbeState extends State<_TopProbe> {
 Future<GoRouter> _pumpShellRouter(
   WidgetTester tester, {
   String initialLocation = '/',
+  FakeMediaSource? source,
 }) async {
   final router = GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -114,28 +119,29 @@ Future<GoRouter> _pumpShellRouter(
             path: '/',
             builder: (context, state) => const SizedBox(key: _homeKey),
           ),
-          // Stands in for the collection screen, which opens items by push.
-          GoRoute(
-            path: '/collection-stub',
-            builder: (context, state) => Center(
-              child: TextButton(
-                key: _openItemKey,
-                onPressed: () => context.push('/s/$_id/movie/m1'),
-                child: const Text('open'),
-              ),
-            ),
-          ),
+          // The real route definitions, as `appRouter` registers them.
+          sourceCollectionRoute(),
           ...sourceDetailRoutes(),
         ],
       ),
       GoRoute(
         path: '/root-page',
+        name: 'root_page',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) =>
             const Scaffold(body: SizedBox(key: _rootPageKey)),
       ),
+      // Named as in `appRouter`, which is what `pushRouteSafely` goes by.
+      GoRoute(
+        path: '/sources/add',
+        name: 'add_source',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) =>
+            const Scaffold(body: SizedBox(key: _formKey)),
+      ),
       GoRoute(
         path: '/s/:sourceId/player/:itemId',
+        name: 'source_player',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) =>
             const Scaffold(body: SizedBox(key: _playerKey)),
@@ -147,7 +153,8 @@ Future<GoRouter> _pumpShellRouter(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(ProviderScope(
     overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+      mediaSourceProvider(fakeSourceId)
+          .overrideWithValue(source ?? FakeMediaSource()),
       sourceArtworkProvider.overrideWith((ref, key) async => null),
     ],
     child: MaterialApp.router(routerConfig: router, builder: toastLayerBuilder),
@@ -274,11 +281,17 @@ void main() {
 
   testWidgets('a collection page opens an item in the shell and Back returns',
       (tester) async {
-    final router = await _pumpShellRouter(tester);
-    router.go('/collection-stub');
+    // The real collection route and screen: it opens the item with `push`.
+    final source = FakeCapableSource()
+      ..collectionItemPages = [
+        Page(items: [fakeMovie(1)])
+      ];
+    final router = await _pumpShellRouter(tester, source: source);
+    router.go('/s/$_id/collection/c1');
     await tester.pumpAndSettle();
+    expect(_inShell(find.byType(CollectionDetailScreen)), findsOneWidget);
 
-    await tester.tap(find.byKey(_openItemKey));
+    await tester.tap(find.text('Invented Film 1'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
@@ -286,12 +299,14 @@ void main() {
     await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.byKey(_openItemKey), findsOneWidget);
-    expect(router.state.uri.path, '/collection-stub');
+    expect(_inShell(find.byType(CollectionDetailScreen)), findsOneWidget);
+    expect(router.state.uri.path, '/s/$_id/collection/c1');
   });
 
   group('pushRouteSafely with a root page above the shell', () {
-    testWidgets('closes the root page, shows the detail page, Back returns',
+    final detail = '/s/$_id/movie/m1';
+
+    testWidgets('closes a plain root page, shows the detail page, Back returns',
         (tester) async {
       final router = await _pumpShellRouter(tester);
       unawaited(router.push<void>('/root-page'));
@@ -299,7 +314,8 @@ void main() {
       expect(find.byKey(_rootPageKey), findsOneWidget);
       expect(rootRouteIsOnTop(), isTrue);
 
-      pushRouteSafely(router, '/s/$_id/movie/m1');
+      expect(
+          pushRouteSafely(router, detail), PushOutcome.pushedAfterClosingPages);
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -325,6 +341,74 @@ void main() {
       router.pop();
       await tester.pumpAndSettle();
       expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
+    });
+
+    testWidgets('a dialog is left open: it does not stop the push',
+        (tester) async {
+      final router = await _pumpShellRouter(tester);
+      final context = rootNavigatorKey.currentContext!;
+      unawaited(showDialog<void>(
+        context: context,
+        builder: (_) => const AlertDialog(key: _dialogKey),
+      ));
+      await tester.pumpAndSettle();
+      expect(rootRouteIsOnTop(), isFalse, reason: 'a dialog is not a page');
+
+      expect(pushRouteSafely(router, detail), PushOutcome.pushed);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(_dialogKey), findsOneWidget);
+      expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
+    });
+
+    testWidgets('a dialog over a root page: nothing opens, both stay',
+        (tester) async {
+      final router = await _pumpShellRouter(tester);
+      unawaited(router.push<void>('/root-page'));
+      await tester.pumpAndSettle();
+      unawaited(showDialog<void>(
+        context: rootNavigatorKey.currentContext!,
+        builder: (_) => const AlertDialog(key: _dialogKey),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(pushRouteSafely(router, detail), PushOutcome.blockedByForm);
+      await tester.pumpAndSettle();
+      expect(find.byKey(_dialogKey), findsOneWidget);
+      expect(find.byKey(_rootPageKey), findsOneWidget);
+      expect(find.byType(MovieDetailScreen), findsNothing);
+    });
+
+    testWidgets('the player is never closed: nothing opens, with a message',
+        (tester) async {
+      final router = await _pumpShellRouter(tester);
+      unawaited(router.push<void>(sourcePlayerLocation(fakeMovie(1).ref)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(_playerKey), findsOneWidget);
+
+      final outcome = pushRouteSafely(router, detail);
+      await tester.pumpAndSettle();
+
+      expect(outcome, PushOutcome.blockedByPlayer);
+      expect(outcome.message, isNotNull);
+      expect(find.byKey(_playerKey), findsOneWidget);
+      expect(find.byType(MovieDetailScreen), findsNothing);
+    });
+
+    testWidgets('a form is never closed: nothing opens, with a message',
+        (tester) async {
+      final router = await _pumpShellRouter(tester);
+      unawaited(router.push<void>('/sources/add'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(_formKey), findsOneWidget);
+
+      final outcome = pushRouteSafely(router, detail);
+      await tester.pumpAndSettle();
+
+      expect(outcome, PushOutcome.blockedByForm);
+      expect(outcome.message, isNotNull);
+      expect(find.byKey(_formKey), findsOneWidget);
+      expect(find.byType(MovieDetailScreen), findsNothing);
     });
 
     testWidgets('a player path is still pushed over the root page',
