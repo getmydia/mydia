@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/cache/artwork_decode.dart';
 import '../../core/cache/poster_cache_manager.dart';
+import '../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../core/theme/colors.dart';
 import '../../core/ui/reduced_motion.dart';
 import 'artwork_image.dart';
@@ -102,7 +103,7 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
         fit: StackFit.expand,
         children: [
           // Constant dark base so the scrim never brightens mid-crossfade.
-          const ColoredBox(color: AppColors.background),
+          ColoredBox(color: AmbientTint.of(context).ground),
           AnimatedSwitcher(
             duration: duration,
             // Keep both layers stacked during the fade so the outgoing artwork
@@ -224,6 +225,9 @@ class _ArtworkLayer extends StatelessWidget {
 /// colour and top-of-scrim alpha, and both are asserted against worst-case
 /// bright artwork in `ambient_backdrop_contrast_test`. Naming only the alpha
 /// here is what let the base colour drift to a navy literal unnoticed.
+///
+/// Not tinted: a tinted scrim over white artwork drops textSecondary to about
+/// 2.6:1.
 class AmbientBackdropScrim extends StatelessWidget {
   const AmbientBackdropScrim({super.key});
 
@@ -272,16 +276,14 @@ class _StaticFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
+    final tint = AmbientTint.of(context);
+    return DecoratedBox(
       decoration: BoxDecoration(
         gradient: RadialGradient(
-          center: Alignment(0, -0.6),
+          center: const Alignment(0, -0.6),
           radius: 1.4,
-          colors: [
-            AppColors.surface,
-            AppColors.background,
-          ],
-          stops: [0.0, 1.0],
+          colors: [tint.surface, tint.ground],
+          stops: const [0.0, 1.0],
         ),
       ),
     );

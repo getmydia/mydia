@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cache/artwork_decode.dart';
 import 'package:player/core/cache/poster_cache_manager.dart';
+import 'package:player/core/theme/ambient_tint/ambient_tint.dart';
+import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:player/presentation/widgets/ambient_backdrop.dart';
 import 'package:player/presentation/widgets/artwork_image.dart';
 
@@ -332,6 +335,36 @@ void main() {
 
         expect(rendered, boundedProvider);
       });
+    });
+  });
+
+  group('AmbientBackdrop tint', () {
+    ColoredBox firstBase(WidgetTester tester) => tester.widget<ColoredBox>(
+          find
+              .descendant(
+                of: find.byType(AmbientBackdrop),
+                matching: find.byType(ColoredBox),
+              )
+              .first,
+        );
+
+    testWidgets('base takes the tinted ground', (tester) async {
+      final warm = AmbientTintColors.fromSeed(const Color(0xFF9F4A2F));
+      await tester.pumpWidget(
+        _host(AmbientTint(
+          colors: warm,
+          child: const AmbientBackdrop(imageUrl: null, id: 'a'),
+        )),
+      );
+      expect(firstBase(tester).color, warm.ground);
+    });
+
+    testWidgets('base is the neutral background without a scope',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(const AmbientBackdrop(imageUrl: null, id: 'a')),
+      );
+      expect(firstBase(tester).color, AppColors.background);
     });
   });
 }
