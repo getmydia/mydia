@@ -52,6 +52,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
   @interface "mydia:cardigann/engine@1.0.0"
   @memory_limit 512 * 1024 * 1024
+  # Slack above the guest's own budget before the guest process is given up on.
+  @task_grace_ms 5_000
   @key {__MODULE__, :compiled}
   @topic "cardigann_wasm_engine"
 
@@ -158,7 +160,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
         ctx = Map.put(ctx, :network, network)
 
         # The guest's budget is whatever the queue left of the caller's timeout.
-        guest = fn -> run(compiled, call, ctx, max(timeout_ms - elapsed_ms(started), 1)) end
+        guest = fn ->
+          run_isolated(compiled, call, ctx, max(timeout_ms - elapsed_ms(started), 1))
+        end
 
         {result, queue_ms} =
           case Slots.run(remaining, guest) do
@@ -246,6 +250,36 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
       inherit_stderr: false,
       allow_http: false
     }
+  end
+
+  # An instance's memory stays resident until the process whose heap references
+  # its store and instance resources is garbage collected, so a long-lived
+  # caller (an Oban worker, a LiveView) would hold the last instance between
+  # calls. The guest work therefore runs in a process that ends with the call.
+  # Task.async keeps `$callers` and the link, so a raise in `run/4` still
+  # reaches the caller as before. Everything the guest needs from the caller is
+  # in `ctx` (HostHttp's imports run in the instance's own process, never the
+  # caller's), and telemetry stays in the caller (`finish/6`).
+  defp run_isolated(compiled, call, ctx, timeout_ms) do
+    task =
+      Task.async(fn ->
+        with probe when is_function(probe, 1) <-
+               Application.get_env(:mydia, :cardigann_wasm_guest_probe),
+             do: probe.(self())
+
+        run(compiled, call, ctx, timeout_ms)
+      end)
+
+    case Task.yield(task, timeout_ms + @task_grace_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} ->
+        result
+
+      {:exit, reason} ->
+        {:error, Error.engine_error("Engine instance exited: #{inspect(reason)}")}
+
+      nil ->
+        {:error, Error.timeout("Cardigann call timed out after #{timeout_ms} ms")}
+    end
   end
 
   defp run(%{engine: engine, component: component}, call, ctx, timeout_ms) do

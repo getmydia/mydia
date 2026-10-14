@@ -547,6 +547,40 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
     end
   end
 
+  describe "process isolation" do
+    # An instance's memory stays resident while the process that created the
+    # store and instance is alive (the resources hang off its heap), so the
+    # guest work runs in a process that ends with the call.
+    test "the guest work runs in a short-lived process, not the caller", %{bypass: b, ctx: ctx} do
+      test_pid = self()
+      Application.put_env(:mydia, :cardigann_wasm_guest_probe, &send(test_pid, {:guest, &1}))
+      on_exit(fn -> Application.delete_env(:mydia, :cardigann_wasm_guest_probe) end)
+
+      assert {:ok, _} =
+               Engine.call({:capabilities, yaml("lantern-public.yml", b)}, ctx, @call_timeout)
+
+      assert_receive {:guest, guest}
+      assert guest != self()
+      refute Process.alive?(guest)
+    end
+
+    test "respects the calling process's $callers in the guest process", %{bypass: b, ctx: ctx} do
+      test_pid = self()
+
+      Application.put_env(:mydia, :cardigann_wasm_guest_probe, fn _ ->
+        send(test_pid, {:callers, Process.get(:"$callers")})
+      end)
+
+      on_exit(fn -> Application.delete_env(:mydia, :cardigann_wasm_guest_probe) end)
+
+      assert {:ok, _} =
+               Engine.call({:capabilities, yaml("lantern-public.yml", b)}, ctx, @call_timeout)
+
+      assert_receive {:callers, callers}
+      assert self() in callers
+    end
+  end
+
   describe "telemetry" do
     test "every call emits duration and network time", %{bypass: b, ctx: ctx} do
       respond(b, "GET", "/search", 200, body("lantern-search.html"))
