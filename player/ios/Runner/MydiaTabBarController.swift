@@ -148,7 +148,9 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
     barVisible = visible
     setTabBarHidden(!visible, animated: true)
     applyAccessory()
-    reportInsets()
+    // Showing: the selected tab's inset is still the hidden value here;
+    // viewSafeAreaInsetsDidChange / viewDidLayoutSubviews report the real one.
+    if !visible { reportInsets() }
   }
 
   /// Nil removes the accessory.
