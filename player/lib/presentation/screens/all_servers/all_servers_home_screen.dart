@@ -20,8 +20,7 @@ import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../home/home_loading_skeleton.dart';
 import '../sources/home_header.dart';
-import '../sources/source_continue_watching_row.dart'
-    show continueWatchingCaption;
+import '../sources/continue_watching_card.dart';
 import '../sources/source_error_view.dart';
 import '../sources/source_home_hero.dart';
 import '../sources/source_poster_row.dart';
@@ -98,7 +97,9 @@ class AllServersHomeScreen extends ConsumerWidget {
     final recent = ref.watch(allServersRecentlyAddedProvider);
     final favorites = ref.watch(allServersFavoritesRowProvider);
     if (!resuming.hasValue || !recent.hasValue) {
-      return HomeLoadingSkeleton(showHero: false, topInset: chromeTop + 16);
+      // A hero and a landscape first rail, as the loaded page opens with
+      // (the list's own top padding is the inset).
+      return HomeLoadingSkeleton(topInset: chromeTop + 16);
     }
     final r = resuming.requireValue, n = recent.requireValue;
     // Favorites loads in later; until then the rail is simply absent.
@@ -145,16 +146,22 @@ class AllServersHomeScreen extends ConsumerWidget {
               ),
             ),
           if (continueItems.isNotEmpty)
-            _rail(
-              context,
-              key: 'all-continue-watching',
-              railId: 'all-continue',
+            SourcePosterRow(
+              key: const Key('all-continue-watching'),
               title: 'Continue Watching',
-              location: allServersContinueWatchingLocation,
+              railId: 'all-continue',
               items: continueItems,
-              result: r,
-              caption: continueWatchingCaption,
-              menu: (c, item) => _menu(c, ref, item),
+              itemWidth: ContinueWatchingCard.artSize.width,
+              height: ContinueWatchingCard.height,
+              onTitleTap: () =>
+                  context.push(allServersContinueWatchingLocation),
+              posterFor: (context, item) => ContinueWatchingCard(
+                key: ValueKey(
+                    'all-poster-${item.ref.sourceId.value}-${item.ref.externalId}'),
+                item: item,
+                onTap: () => context.push(allServersItemLocation(item.ref)),
+                onContextMenu: (c) => _menu(c, ref, item),
+              ),
             ),
           if (movieItems.isNotEmpty)
             _rail(

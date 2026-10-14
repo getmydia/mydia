@@ -19,17 +19,6 @@ import 'continue_watching_card.dart';
 import 'source_browse_providers.dart';
 import 'source_poster_row.dart';
 
-/// `Invented Series · S1 · E2` for an episode, the item's own caption
-/// otherwise.
-String? continueWatchingCaption(ItemSummary item) {
-  final caption = item.subtitle ?? item.year?.toString();
-  return switch ((item.showTitle, caption)) {
-    (final show?, final caption?) => '$show · $caption',
-    (final show?, null) => show,
-    (null, _) => caption,
-  };
-}
-
 class SourceContinueWatchingRow extends ConsumerStatefulWidget {
   const SourceContinueWatchingRow({super.key, required this.sourceId});
 

@@ -10,6 +10,7 @@ import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_home_screen.dart';
 import 'package:player/presentation/screens/home/home_loading_skeleton.dart';
+import 'package:player/presentation/screens/sources/continue_watching_card.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
@@ -175,6 +176,62 @@ void main() {
     await pump(t, [serverWith('a')]);
     expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
     expect(find.text('All servers'), findsNothing);
+  });
+
+  testWidgets('continue watching renders landscape cards with the episode line',
+      (t) async {
+    t.view.physicalSize = const Size(1280, 1800);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final s = fakeServer('a');
+    await pump(t, [
+      FakeMergedSource(s, resuming: [
+        ItemSummary(
+          ref:
+              ItemRef(sourceId: s.id, kind: ItemKind.episode, externalId: 'e1'),
+          title: 'The Low Tide',
+          showTitle: 'Saltmarsh',
+          subtitle: 'S1 · E2',
+          lastPlayedAt: DateTime.utc(2024, 1, 1),
+        ),
+      ]),
+    ]);
+    final card = find.byKey(ValueKey('all-poster-${s.id.value}-e1'));
+    expect(t.widget(card), isA<ContinueWatchingCard>());
+    expect(find.descendant(of: card, matching: find.text('Saltmarsh')),
+        findsOneWidget);
+    expect(find.descendant(of: card, matching: find.text('S1 · E2')),
+        findsOneWidget);
+  });
+
+  testWidgets('the skeleton matches the loaded hero and first rail at 1280x800',
+      (t) async {
+    t.view.physicalSize = const Size(1280, 800);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final gate = Completer<void>();
+    final a = serverWith('a')..gate = gate;
+    await pump(t, [a], settle: false);
+
+    double railItemHeight(Finder rail) => t
+        .getSize(find.descendant(of: rail, matching: find.byType(ListView)))
+        .height;
+
+    final skeletonHero = t.getSize(find.byKey(HomeLoadingSkeleton.heroKey));
+    final skeletonRail = railItemHeight(
+      find.byKey(HomeLoadingSkeleton.railKey).first,
+    );
+
+    gate.complete();
+    await t.pumpAndSettle();
+
+    final loadedHero = t.getSize(find.byKey(const Key('all-home-hero')));
+    final loadedRail =
+        railItemHeight(find.byKey(const Key('all-continue-watching')));
+
+    expect(skeletonHero.height, closeTo(loadedHero.height, 1));
+    expect(skeletonRail, ContinueWatchingCard.height);
+    expect(loadedRail, ContinueWatchingCard.height);
   });
 
   testWidgets('loading shows the skeleton', (t) async {
