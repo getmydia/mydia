@@ -44,7 +44,7 @@ Indexers** section: **How library indexers run** shows the active engine, and
 **Change** opens a Built-in and a Prowlarr-based card. The default is Built-in.
 Switching takes effect without a restart.
 
-The first time you switch to Prowlarr-based, Mydia downloads and compiles the engine
+The first time you switch to Prowlarr-based, Mydia downloads the engine and prepares it
 while the built-in engine keeps serving your searches, and the page shows
 progress. When it is ready, searches move over by themselves. If something goes
 wrong, the page shows the reason. Problems that can pass, such as a network
@@ -55,7 +55,7 @@ later, for example if the engine crashes and restarts, the built-in engine serve
 until it is.
 
 Switching back to Built-in frees the engine's memory but keeps the downloaded
-and compiled files, so switching to Prowlarr-based again takes about a second. Use
+and prepared files, so switching to Prowlarr-based again takes about a second. Use
 **Remove cached Prowlarr-based engine** under **Change** to delete them. The button
 appears while Built-in is selected.
 
@@ -79,17 +79,19 @@ and the built-in engine on 28.
 
 It is opt-in because it costs something. Read this before turning it on:
 
-- **The first start downloads about 39 MB from GitHub and compiles it.** The
-  compile takes about 18 s on the Alpine image and uses up to about 1.6 GB of
-  memory while it runs, then settles at about 500 MB. A container limited to
-  less than about 2 GB can be killed during it. The built-in engine
-  keeps serving searches meanwhile, and the rest of Mydia is not held up. If the download
-  fails, Mydia retries in the background.
-- **Later starts load the compiled copy in under a second.** It is kept in a
+- **The first start downloads about 68 MB from GitHub.** With the usual setup the
+  engine is ready about 6 s after the container starts and uses up to about
+  0.65 GB of memory on the way, then settles at about 500 MB. If the prepared
+  copy cannot be downloaded, Mydia prepares the engine on your server instead.
+  That takes about 18 s and uses up to about 1.6 GB of memory, and a container
+  limited to less than about 2 GB can be killed during it. The built-in engine
+  keeps serving searches meanwhile, and the rest of Mydia is not held up. If the
+  download fails, Mydia retries in the background.
+- **Later starts load the prepared copy in under a second.** It is kept in a
   `cardigann` folder in your data directory (`MYDIA_DATA_DIR`, or next to the
-  database file, which is `/config` in the Docker image): 39 MB for the download
-  and 119 MB for the compiled copy. Keep that folder on a volume. Without one,
-  every container recreate downloads and compiles again.
+  database file, which is `/config` in the Docker image): 39 MB for the engine
+  and 119 MB for the prepared copy. Keep that folder on a volume. Without one,
+  every container recreate downloads the engine again.
 - **Memory.** About 65 MB more than the built-in engine when idle, and about
   290 MB more while four searches run at once.
 - **Speed.** About 60 ms slower per search at the median, 110 ms at the 95th
@@ -111,7 +113,7 @@ CARDIGANN_WASM_PATH=/path/to/cardigann-<hash>.wasm
 ```
 
 Mydia checks the file against the checksum built into your version and refuses
-one that does not match. Nothing is downloaded, and the compiled copy is still
+one that does not match. Nothing is downloaded, and the prepared copy is still
 cached in the data directory.
 
 If you set `ENABLE_CARDIGANN=false`, Cardigann is off whichever engine you pick.

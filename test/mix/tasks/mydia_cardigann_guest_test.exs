@@ -196,4 +196,62 @@ defmodule Mix.Tasks.Mydia.CardigannGuestTest do
       refute File.exists?(wasm <> ".sha256")
     end
   end
+
+  describe "pin --cwasm" do
+    setup ctx do
+      prior_url = Application.fetch_env(:mydia, :cardigann_cwasm_base_url)
+      prior_shell = Mix.shell()
+      Mix.shell(Mix.Shell.Process)
+
+      Application.put_env(
+        :mydia,
+        :cardigann_cwasm_base_url,
+        "http://localhost:#{ctx.bypass.port}/cw"
+      )
+
+      on_exit(fn ->
+        Mix.shell(prior_shell)
+
+        case prior_url do
+          {:ok, v} -> Application.put_env(:mydia, :cardigann_cwasm_base_url, v)
+          :error -> Application.delete_env(:mydia, :cardigann_cwasm_base_url)
+        end
+      end)
+
+      %{sidecar: String.replace_suffix(Artifact.cwasm_asset_name(), ".gz", ".sha256")}
+    end
+
+    test "records the published .cwasm checksum for this architecture", ctx do
+      sha = String.duplicate("b", 64)
+
+      Bypass.expect_once(ctx.bypass, "GET", "/cw/" <> ctx.sidecar, fn conn ->
+        Plug.Conn.resp(conn, 200, sha <> "\n")
+      end)
+
+      assert :ok = Task.run(["pin", "--cwasm"])
+      assert File.read!(Path.join(ctx.dir, ctx.sidecar)) == sha <> "\n"
+    end
+
+    test "a missing sidecar is a warning, never an error", ctx do
+      Bypass.expect_once(ctx.bypass, "GET", "/cw/" <> ctx.sidecar, fn conn ->
+        Plug.Conn.resp(conn, 404, "")
+      end)
+
+      assert :ok = Task.run(["pin", "--cwasm"])
+      assert_received {:mix_shell, :error, [msg]}
+      assert msg =~ "compile it locally"
+      refute File.exists?(Path.join(ctx.dir, ctx.sidecar))
+    end
+
+    test "something that is not a checksum is a warning too", ctx do
+      Bypass.expect_once(ctx.bypass, "GET", "/cw/" <> ctx.sidecar, fn conn ->
+        Plug.Conn.resp(conn, 200, "<html>nope</html>")
+      end)
+
+      assert :ok = Task.run(["pin", "--cwasm"])
+      assert_received {:mix_shell, :error, [msg]}
+      assert msg =~ "compile it locally"
+      refute File.exists?(Path.join(ctx.dir, ctx.sidecar))
+    end
+  end
 end

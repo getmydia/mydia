@@ -44,10 +44,12 @@ Consumers:
   `cardigann-<hash>.wasm` on first boot into `cardigann/` under
   `MYDIA_DATA_DIR`, or next to the database file when that is unset (`/config`
   in the image) (`Mydia.Indexers.Cardigann.Wasm.Delivery`). It checks the file
-  against the pinned SHA-256, compiles it once and caches the result as
-  `cardigann-<wasm sha256>-wasmtime<version>-<arch>.cwasm` beside it, with a
-  `.sha256` of its own that is checked before every load. A failed download or
-  compile is retried in the background (30 s, doubling, up to 30 min).
+  against the pinned SHA-256, then loads the compiled form from, in order: the
+  cached `cardigann-<wasm sha256>-wasmtime<version>-<arch>.cwasm` beside it (its
+  own `.sha256` is checked before every load), the published `.cwasm` (below),
+  or a local compile. Whichever of the last two succeeds writes the cache file.
+  A failed download or compile is retried in the background (30 s, doubling, up
+  to 30 min).
   `CARDIGANN_WASM_PATH` points at a local copy for air-gapped installs; that
   file is verified against the same pin.
 - A dev `mix compile` with `CARDIGANN_ENGINE=prowlarr` set runs
@@ -63,6 +65,32 @@ Consumers:
   `WASMEX_BUILD=1`: the Dockerfile and the Nix package do. Without it the
   engine still works, compiling in memory on every start and keeping the
   compiler's heap.
+
+### The precompiled `.cwasm`
+
+Compiling the guest takes 18 s and peaks near 1.6 GB, so CI also publishes the
+compiled form. `.github/workflows/cardigann-cwasm.yml` builds it in the release
+image's own builder (Dockerfile target `cwasm-out`, on a native runner per
+architecture) and publishes it as its own release,
+`cardigann-cwasm-<hash>-wasmtime<ver>-cfg<n>`, holding
+`cardigann-<hash>-wasmtime<ver>-cfg<n>-<arch>.cwasm.gz` plus a `.sha256` of the
+decompressed file. `<hash>` is the guest's source hash, `<ver>` the wasmtime
+version of the Wasmex the image builds, and `<n>` the version of the engine
+configuration, so a change to any of them publishes a new release and an old
+image never fetches a mismatched file.
+
+The Docker build records that checksum with `mix mydia.cardigann_guest pin
+--cwasm`, which is soft: with no published `.cwasm` the build carries no pin and
+the install compiles locally, as before. At first boot the engine downloads the
+`.cwasm.gz`, inflates it while writing, keeps it only when its SHA-256 matches
+the pin, and loads it. The `.wasm` is downloaded as well, because deserializing
+a component needs the interface it was compiled from.
+
+A failed download, a checksum mismatch, or a file wasmtime rejects (another
+architecture or engine configuration) deletes the file and falls back to the
+local compile, whose memory peak is the one in `BENCH.md`. Nix has no `.cwasm`
+pin and always compiles locally. A pin has to come from the CI build, since the
+same guest compiled on another libc gives different bytes.
 
 ## The pin
 

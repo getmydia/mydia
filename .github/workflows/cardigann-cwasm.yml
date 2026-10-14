@@ -1,0 +1,197 @@
+name: Cardigann precompiled guest
+
+# Precompiles the published Cardigann guest for x86_64 and aarch64, in the
+# release image's own builder (Dockerfile target cwasm-out), and publishes the
+# result as its own release, keyed by guest hash, wasmtime version and engine
+# config version (Mydia.Indexers.Cardigann.Wasm.Artifact). Installs download it
+# instead of compiling the guest on first boot. Pull requests build but never
+# publish. Never create the release or upload assets by hand.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "native/cardigann_guest/**"
+      - "patches/wasmex/**"
+      - "mix.lock"
+      - "Dockerfile"
+      - "scripts/cardigann_precompile.exs"
+      - "lib/mydia/indexers/cardigann/wasm/engine_config.ex"
+      - "lib/mydia/indexers/cardigann/wasm/artifact.ex"
+      - ".github/workflows/cardigann-cwasm.yml"
+  push:
+    branches: [master]
+    paths:
+      - "native/cardigann_guest/**"
+      - "patches/wasmex/**"
+      - "mix.lock"
+      - "Dockerfile"
+      - "scripts/cardigann_precompile.exs"
+      - "lib/mydia/indexers/cardigann/wasm/engine_config.ex"
+      - "lib/mydia/indexers/cardigann/wasm/artifact.ex"
+      - ".github/workflows/cardigann-cwasm.yml"
+  # A guest change is published by the other workflow; precompile once it is.
+  workflow_run:
+    workflows: ["Cardigann guest"]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.names.outputs.tag }}
+      skip: ${{ steps.names.outputs.skip }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Names
+        id: names
+        run: |
+          hash=$(native/cardigann_guest/scripts/source-hash.sh)
+          # Same values Artifact compiles in: the wasmtime pin from the Wasmex
+          # crate, the config version from the module attribute.
+          wasmex=$(grep -o '"wasmex": {:hex, :wasmex, "[0-9.]*"' mix.lock | grep -o '[0-9][0-9.]*')
+          wasmtime=$(curl -fsSL "https://raw.githubusercontent.com/tessi/wasmex/v${wasmex}/native/wasmex/Cargo.toml" \
+            | sed -n 's/^wasmtime *= *"=\{0,1\}\([0-9.]*\)".*/\1/p')
+          cfg=$(sed -n 's/^ *@cwasm_config_version \([0-9]*\)$/\1/p' lib/mydia/indexers/cardigann/wasm/artifact.ex)
+          test -n "$hash" && test -n "$wasmtime" && test -n "$cfg"
+          tag="cardigann-cwasm-${hash}-wasmtime${wasmtime}-cfg${cfg}"
+          {
+            echo "hash=$hash"
+            echo "tag=$tag"
+            echo "asset=cardigann-${hash}-wasmtime${wasmtime}-cfg${cfg}-${MATRIX_ARCH}.cwasm.gz"
+          } >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" --json isDraft -q .isDraft 2>/dev/null | grep -qx false; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MATRIX_ARCH: ${{ matrix.arch }}
+
+      - name: Fetch the published guest
+        id: guest
+        if: steps.names.outputs.skip != 'true'
+        run: |
+          mkdir -p guest
+          name="cardigann-${GUEST_HASH}.wasm"
+          if ! gh release download "cardigann-guest-${GUEST_HASH}" \
+               -p "$name" -p "$name.sha256" -D guest; then
+            echo "::notice::the guest for this hash is not published yet; the Cardigann guest workflow triggers this one when it is"
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          (cd guest && echo "$(cat "$name.sha256")  $name" | sha256sum -c -)
+          mv "guest/$name" guest/cardigann.wasm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GUEST_HASH: ${{ steps.names.outputs.hash }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+        if: steps.names.outputs.skip != 'true' && steps.guest.outputs.missing != 'true'
+
+      - name: Precompile
+        if: steps.names.outputs.skip != 'true' && steps.guest.outputs.missing != 'true'
+        run: |
+          docker buildx build --target cwasm-out \
+            --build-context guest=guest \
+            --build-arg CWASM_ASSET="${CWASM_ASSET}" \
+            --cache-from "type=gha,scope=cwasm-${MATRIX_ARCH}" \
+            --cache-to "type=gha,mode=max,scope=cwasm-${MATRIX_ARCH}" \
+            --output type=local,dest=out .
+          ls -l out
+          # A build that exits 0 without both files must not look like "guest
+          # not published yet" to the publish job.
+          for f in out/*.cwasm.gz out/*.cwasm.sha256; do
+            test -s "$f" || { echo "::error::expected build output $f is missing"; exit 1; }
+          done
+        env:
+          CWASM_ASSET: ${{ steps.names.outputs.asset }}
+          MATRIX_ARCH: ${{ matrix.arch }}
+
+      - name: Upload for this run
+        if: steps.names.outputs.skip != 'true' && steps.guest.outputs.missing != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cwasm-${{ matrix.arch }}
+          path: out/
+          retention-days: 7
+
+  publish:
+    name: Publish
+    needs: build
+    if: >-
+      github.event_name != 'pull_request' &&
+      needs.build.outputs.skip != 'true' &&
+      github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: cardigann-cwasm-publish
+      cancel-in-progress: false
+    steps:
+      # Only for LICENSE and NOTICE; no repository script runs in this job.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      # With `pattern:` and no matching artifact the action logs and succeeds
+      # (only `artifact-ids` throws on no match), so no continue-on-error here.
+      # It may not create `out`, hence the mkdir below.
+      - name: Download both architectures
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: cwasm-*
+          merge-multiple: true
+          path: out
+
+      - name: Publish
+        run: |
+          mkdir -p out
+          cd out
+          count=$(find . -maxdepth 1 -name '*.cwasm.gz' | wc -l)
+          if [ "$count" != 2 ]; then
+            echo "::notice::$count of 2 architectures built (guest not published yet?); nothing to publish"
+            exit 0
+          fi
+          cp ../native/cardigann_guest/LICENSE "$TAG.LICENSE"
+          { cat ../native/cardigann_guest/NOTICE; printf '\nBuilt from %s\n' "$GITHUB_SHA"; } > "$TAG.NOTICE"
+          state=$(gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null || true)
+          if [ "$state" = "false" ]; then echo "$TAG is already published"; exit 0; fi
+          if [ "$state" = "true" ]; then gh release delete "$TAG" --yes; fi
+          gh release create "$TAG" --draft --prerelease --latest=false --target "$GITHUB_SHA" \
+            --title "Cardigann precompiled guest ${TAG#cardigann-cwasm-}" \
+            --notes "Precompiled Cardigann guest for x86_64 and aarch64, built at $GITHUB_SHA. Checksums are of the decompressed .cwasm." \
+            ./*.cwasm.gz ./*.cwasm.sha256 "$TAG.LICENSE" "$TAG.NOTICE"
+          gh release edit "$TAG" --draft=false --prerelease --latest=false
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}

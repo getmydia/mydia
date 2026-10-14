@@ -632,6 +632,18 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       engine_event(view, {:progress, 1_048_576, 4_194_304})
       assert has_element?(view, "#cardigann-engine-transition", "1.0 / 4.0 MB")
 
+      engine_event(view, {:phase, :downloading_precompiled})
+
+      assert has_element?(
+               view,
+               "#cardigann-engine-transition",
+               "Downloading the precompiled engine"
+             )
+
+      engine_event(view, {:progress, 2_097_152, 4_194_304})
+      assert has_element?(view, "#cardigann-engine-transition progress[value]")
+      assert has_element?(view, "#cardigann-engine-transition", "2.0 / 4.0 MB")
+
       # A permanent failure schedules no retry, so there is nothing to retry.
       engine_event(view, {:unavailable, "the engine download failed: timeout", nil})
       assert has_element?(view, "#cardigann-engine-transition .alert-warning", "timeout")

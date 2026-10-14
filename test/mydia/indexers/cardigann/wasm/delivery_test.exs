@@ -8,6 +8,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.DeliveryTest do
   @bytes "not really a component, just bytes with a known hash"
   @keys [
     :cardigann_cache_dir,
+    :cardigann_cwasm_base_url,
+    :cardigann_cwasm_pin,
     :cardigann_guest_base_url,
     :cardigann_pinned_sha256,
     :cardigann_wasm_path
@@ -55,6 +57,58 @@ defmodule Mydia.Indexers.Cardigann.Wasm.DeliveryTest do
     name = "/dl/" <> Artifact.file_name()
 
     Bypass.expect_once(bypass, "GET", name, fn conn -> Plug.Conn.resp(conn, status, bytes) end)
+  end
+
+  describe "fetch_precompiled" do
+    setup %{dir: dir, bypass: bypass} do
+      cwasm = :crypto.strong_rand_bytes(300_000)
+      Application.put_env(:mydia, :cardigann_cwasm_base_url, "http://localhost:#{bypass.port}/cw")
+      Application.put_env(:mydia, :cardigann_cwasm_pin, Artifact.sha256(cwasm))
+      {:ok, cwasm: cwasm, target: Path.join([dir, "cache", "x.cwasm"])}
+    end
+
+    defp serve_cwasm(bypass, body, status \\ 200) do
+      Bypass.expect_once(bypass, "GET", "/cw/" <> Artifact.cwasm_asset_name(), fn conn ->
+        Plug.Conn.resp(conn, status, body)
+      end)
+    end
+
+    test "downloads, gunzips, verifies and writes the file with its sidecar", ctx do
+      serve_cwasm(ctx.bypass, :zlib.gzip(ctx.cwasm))
+      assert :ok = Delivery.fetch_precompiled(ctx.target)
+      assert File.read!(ctx.target) == ctx.cwasm
+      assert File.read!(ctx.target <> ".sha256") == Artifact.sha256(ctx.cwasm) <> "\n"
+      assert Bitwise.band(File.stat!(ctx.target).mode, 0o777) == 0o600
+      assert Path.wildcard(ctx.target <> ".part-*") == []
+    end
+
+    test "is :no_pin and makes no request without a pin", ctx do
+      Application.put_env(:mydia, :cardigann_cwasm_pin, nil)
+      assert :no_pin = Delivery.fetch_precompiled(ctx.target)
+      refute File.exists?(ctx.target)
+    end
+
+    test "a checksum mismatch leaves nothing behind", ctx do
+      serve_cwasm(ctx.bypass, :zlib.gzip("something else"))
+      assert {:error, {:checksum_mismatch, _}} = Delivery.fetch_precompiled(ctx.target)
+      refute File.exists?(ctx.target)
+      refute File.exists?(ctx.target <> ".sha256")
+      assert Path.wildcard(Path.dirname(ctx.target) <> "/*.part-*") == []
+    end
+
+    test "a 404 is a download failure", ctx do
+      serve_cwasm(ctx.bypass, "not found", 404)
+      assert {:error, {:download_failed, _}} = Delivery.fetch_precompiled(ctx.target)
+      refute File.exists?(ctx.target)
+      assert Path.wildcard(Path.dirname(ctx.target) <> "/*.part-*") == []
+    end
+
+    test "a body that is not gzip is a download failure", ctx do
+      serve_cwasm(ctx.bypass, "plain bytes")
+      assert {:error, {:download_failed, _}} = Delivery.fetch_precompiled(ctx.target)
+      refute File.exists?(ctx.target)
+      assert Path.wildcard(Path.dirname(ctx.target) <> "/*.part-*") == []
+    end
   end
 
   describe "download" do
