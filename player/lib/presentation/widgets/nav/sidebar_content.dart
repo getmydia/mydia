@@ -14,6 +14,7 @@ import '../mydia_logo.dart';
 import '../../../domain/navigation/all_servers_locations.dart';
 import 'all_servers_server_rows.dart';
 import 'nav_badges.dart';
+import 'rail_scope.dart';
 import 'sidebar_edit_bar.dart';
 import 'sidebar_middle_list.dart';
 import 'sidebar_row.dart';
@@ -34,7 +35,8 @@ class SidebarContent extends ConsumerWidget {
     this.onSwitchSource,
     this.backToMydiaWidget,
     this.selectedRowFocusNode,
-    this.compact = false,
+    this.rail = false,
+    this.railLabelsVisible = false,
   });
 
   final String location;
@@ -56,10 +58,17 @@ class SidebarContent extends ConsumerWidget {
   /// deleted.
   final FocusNode? selectedRowFocusNode;
 
-  /// Icon-only rendering for the collapsed rail: no header, no new-filter
-  /// row, centred 48px rows, and edit mode is treated as off (without
-  /// touching `sidebarEditModeProvider`).
-  final bool compact;
+  /// Lays the content out for the floating rail: 48px rows whose icon boxes
+  /// sit at one fixed position, with the label beside the box. The geometry is
+  /// identical whether the rail is collapsed or expanded, so only the rail's
+  /// width and [railLabelsVisible] change between the two. There is no logo
+  /// header (the rail's footer carries the edit toggle). Edit mode is an
+  /// explicit, expanded-only action and switches back to the full layout.
+  final bool rail;
+
+  /// Whether the rail's labels are showing, which only decides whether the
+  /// icon-only tooltips are needed. The labels' fade belongs to the rows.
+  final bool railLabelsVisible;
 
   /// The destination that should render as selected.
   ///
@@ -117,7 +126,8 @@ class SidebarContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final editing = ref.watch(sidebarEditModeProvider) && !compact;
+    final editing = ref.watch(sidebarEditModeProvider);
+    final railLayout = rail && !editing;
 
     final asyncDestinations = ref.watch(sidebarDestinationsProvider);
     final destinations = switch (asyncDestinations) {
@@ -150,16 +160,17 @@ class SidebarContent extends ConsumerWidget {
 
     final hasBackWidget = backToMydiaWidget != null;
 
-    return Column(
-      crossAxisAlignment:
-          compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (hasBackWidget)
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            padding: EdgeInsets.fromLTRB(12, 12, 12, railLayout ? 8 : 0),
             child: backToMydiaWidget!,
-          ),
-        if (!compact)
+          )
+        else if (railLayout)
+          const SizedBox(height: 12),
+        if (!rail)
           Padding(
             padding: EdgeInsets.fromLTRB(20, hasBackWidget ? 16 : 20, 12, 16),
             child: Row(
@@ -207,7 +218,6 @@ class SidebarContent extends ConsumerWidget {
           location: location,
           onNavigate: onNavigate,
           onSwitchSource: onSwitchSource,
-          compact: compact,
         ),
         if (editing)
           SidebarEditBar(
@@ -220,6 +230,7 @@ class SidebarContent extends ConsumerWidget {
               context: context,
               ref: ref,
               destinations: destinations,
+              railLayout: railLayout,
             ),
           )
         else
@@ -302,6 +313,8 @@ class SidebarContent extends ConsumerWidget {
           ),
       ],
     );
+    if (!railLayout) return content;
+    return RailScope(labelsVisible: railLabelsVisible, child: content);
   }
 
   /// The rows for the source this location belongs to. Search and the app's
@@ -311,6 +324,7 @@ class SidebarContent extends ConsumerWidget {
     required BuildContext context,
     required WidgetRef ref,
     required List<NavDestination> destinations,
+    required bool railLayout,
   }) {
     final entries = ref.watch(sourceNavEntriesProvider(location));
     final source = ref.watch(currentSourceIdProvider(location));
@@ -343,7 +357,6 @@ class SidebarContent extends ConsumerWidget {
           key: ValueKey('source-nav-${entry.id}'),
           child: SidebarRow(
             key: ValueKey('sidebar-row-${entry.id}'),
-            compact: compact,
             focusNode: entry.id == focusId ? selectedRowFocusNode : null,
             icon: entry.icon,
             selectedIcon: entry.selectedIcon,
@@ -368,48 +381,42 @@ class SidebarContent extends ConsumerWidget {
       );
     }
 
-    // A tight ListView constraint would stretch the 48px compact rows.
-    Widget row(SourceNavEntry entry) {
-      final built = buildEntry(entry);
-      return compact ? Align(child: built) : built;
-    }
-
     final leading = entries.where((e) => e.anchored && e.id == 'search');
     final trailing = entries.where((e) => e.anchored && e.id != 'search');
     final middle = entries.where((e) => !e.anchored);
 
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
-        crossAxisAlignment:
-            compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (final entry in leading) ...[
-            row(entry),
+            buildEntry(entry),
             const SizedBox(height: 2)
           ],
           Expanded(
             child: ListView(
               children: [
                 for (final entry in middle) ...[
-                  row(entry),
+                  buildEntry(entry),
                   const SizedBox(height: 2),
                 ],
                 // Like the header picker: the mobile drawer stays open so
                 // the viewer sees the server's nav replace All servers'.
                 if (allServers)
                   AllServersServerRows(
-                    compact: compact,
                     onNavigate: onSwitchSource ?? onNavigate,
                   ),
               ],
             ),
           ),
-          if (canFilter && !compact)
+          if (canFilter)
             SidebarRow(
+              key: const ValueKey('sidebar-row-new-filter'),
               icon: Icons.add_rounded,
               selectedIcon: Icons.add_rounded,
-              label: '+ New filter',
+              // The rail names it in the tooltip and beside the icon.
+              label: railLayout ? 'New filter' : '+ New filter',
               isSelected: false,
               onTap: () => showFilterEditor(
                 context: context,
@@ -426,7 +433,7 @@ class SidebarContent extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           for (final entry in trailing) ...[
-            row(entry),
+            buildEntry(entry),
             const SizedBox(height: 2)
           ],
           const SizedBox(height: 16),
@@ -525,7 +532,6 @@ class SidebarContent extends ConsumerWidget {
     if (destination.id == 'settings') {
       return SettingsSidebarRow(
         key: ValueKey('sidebar-row-${destination.id}'),
-        compact: compact,
         location: location,
         focusNode: carriesFocusNode ? selectedRowFocusNode : null,
         isSelected: isSelected,
@@ -540,7 +546,6 @@ class SidebarContent extends ConsumerWidget {
     if (destination is FilterDestination) {
       return SidebarRow(
         key: ValueKey('sidebar-row-${destination.id}'),
-        compact: compact,
         focusNode: carriesFocusNode ? selectedRowFocusNode : null,
         icon: destination.icon,
         selectedIcon: destination.selectedIcon,
@@ -576,7 +581,6 @@ class SidebarContent extends ConsumerWidget {
 
     return SidebarRow(
       key: ValueKey('sidebar-row-${destination.id}'),
-      compact: compact,
       focusNode: carriesFocusNode ? selectedRowFocusNode : null,
       icon: destination.icon,
       selectedIcon: destination.selectedIcon,

@@ -37,6 +37,7 @@ Future<InMemorySidebarLayoutStore> _pumpRail(
   bool highContrast = false,
   bool disableAnimations = false,
   bool pinned = false,
+  bool showBackToMydia = false,
 }) async {
   tester.view.physicalSize = const Size(1280, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -50,6 +51,7 @@ Future<InMemorySidebarLayoutStore> _pumpRail(
       overrides: [
         sidebarLayoutStoreProvider.overrideWithValue(store),
         thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
+        switchableSourcesProvider.overrideWithValue(const [fakeSource]),
         hasMydiaProvider.overrideWithValue(true),
         mediaSourceProvider(fakeSourceId).overrideWithValue(_MydiaLike()),
       ],
@@ -83,6 +85,7 @@ Future<InMemorySidebarLayoutStore> _pumpRail(
                   location: '/',
                   onNavigate: onNavigate ?? (_) {},
                   isOffline: false,
+                  showBackToMydia: showBackToMydia,
                   selectedRowFocusNode: rowNode,
                   onExitRequested: onExitRequested,
                 ),
@@ -95,6 +98,76 @@ Future<InMemorySidebarLayoutStore> _pumpRail(
   );
   await tester.pumpAndSettle();
   return store;
+}
+
+/// The animated opacity value (not the target) of the fade above [finder].
+double _fadeValue(WidgetTester tester, Finder fade) => tester
+    .widget<FadeTransition>(
+      find.descendant(of: fade, matching: find.byType(FadeTransition)).first,
+    )
+    .opacity
+    .value;
+
+double _labelOpacity(WidgetTester tester, String text) => _fadeValue(
+      tester,
+      find.ancestor(
+          of: find.text(text), matching: find.byType(AnimatedOpacity)),
+    );
+
+double _scrimOpacity(WidgetTester tester) =>
+    _fadeValue(tester, find.byKey(const Key('rail-scrim-fade')));
+
+/// The icon of every entry the rail must keep still, by name.
+Map<String, Finder> _railIcons() {
+  Finder inRow(String id) => find
+      .descendant(
+        of: find.byKey(ValueKey('sidebar-row-$id')),
+        matching: find.byType(Icon),
+      )
+      .first;
+  return {
+    'server switcher': find.byKey(const ValueKey('source-switcher-compact')),
+    'back to mydia': find.byIcon(Icons.arrow_back_rounded),
+    'first row': inRow('search'),
+    'middle row': inRow('movies'),
+    'settings': inRow('settings'),
+    'new filter': inRow('new-filter'),
+  };
+}
+
+Map<String, Rect> _rects(WidgetTester tester, Map<String, Finder> icons) =>
+    {for (final e in icons.entries) e.key: tester.getRect(e.value)};
+
+void _expectSameRects(
+  Map<String, Rect> expected,
+  Map<String, Rect> actual,
+  String when,
+) {
+  for (final e in expected.entries) {
+    final got = actual[e.key]!;
+    expect(
+      (got.left - e.value.left).abs() < 0.5 &&
+          (got.top - e.value.top).abs() < 0.5 &&
+          (got.width - e.value.width).abs() < 0.5 &&
+          (got.height - e.value.height).abs() < 0.5,
+      isTrue,
+      reason: '${e.key} moved $when: ${e.value} -> $got',
+    );
+  }
+}
+
+/// Pumps [frames] 16ms frames, checking every one for exceptions and calling
+/// [onFrame] with the frame's index.
+Future<void> _pumpFrames(
+  WidgetTester tester,
+  int frames, {
+  void Function(int frame)? onFrame,
+}) async {
+  for (var i = 0; i < frames; i++) {
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(tester.takeException(), isNull, reason: 'exception in frame $i');
+    onFrame?.call(i);
+  }
 }
 
 double _contrast(Color a, Color b) {
@@ -261,8 +334,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_railWidth(tester), 272);
-    expect(tester.widget<SidebarContent>(find.byType(SidebarContent)).compact,
-        isFalse);
+    expect(
+      tester
+          .widget<SidebarContent>(find.byType(SidebarContent))
+          .railLabelsVisible,
+      isTrue,
+    );
+    expect(_labelOpacity(tester, 'Movies'), 1);
     expect(find.byKey(_scrimKey), findsOneWidget);
   });
 
@@ -306,6 +384,208 @@ void main() {
     await tester.pumpAndSettle();
     expect(routes, hasLength(1));
     expect(_railWidth(tester), 272);
+  });
+
+  group('one geometry, only width and label opacity animate', () {
+    testWidgets('icons never move while the rail expands and collapses',
+        (tester) async {
+      await _pumpRail(tester, showBackToMydia: true);
+      final icons = _railIcons();
+      final collapsed = _rects(tester, icons);
+      expect(_railWidth(tester), 72);
+      // Centred in the collapsed rail.
+      final rail = tester.getRect(find.byKey(_railKey));
+      for (final e in collapsed.entries) {
+        expect(e.value.center.dx, closeTo(rail.center.dx, 0.5), reason: e.key);
+      }
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: const Offset(40, 300));
+      await _pumpFrames(
+        tester,
+        40,
+        onFrame: (_) =>
+            _expectSameRects(collapsed, _rects(tester, icons), 'expanding'),
+      );
+      await tester.pumpAndSettle();
+      expect(_railWidth(tester), 272);
+      _expectSameRects(collapsed, _rects(tester, icons), 'once expanded');
+
+      await gesture.moveTo(const Offset(900, 300));
+      await _pumpFrames(
+        tester,
+        25,
+        onFrame: (_) =>
+            _expectSameRects(collapsed, _rects(tester, icons), 'collapsing'),
+      );
+      await tester.pumpAndSettle();
+      expect(_railWidth(tester), 72);
+      _expectSameRects(collapsed, _rects(tester, icons), 'once collapsed');
+    });
+
+    testWidgets('no overflow at 72px or mid-animation, Back to Mydia shown',
+        (tester) async {
+      await _pumpRail(tester, showBackToMydia: true);
+      expect(tester.takeException(), isNull);
+      expect(find.text('Back to Mydia'), findsOneWidget);
+      expect(find.byTooltip('Back to Mydia'), findsOneWidget);
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: const Offset(40, 300));
+      await _pumpFrames(tester, 30);
+      await gesture.moveTo(const Offset(900, 300));
+      await _pumpFrames(tester, 20);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('labels are invisible collapsed and opaque expanded',
+        (tester) async {
+      final row = FocusNode(debugLabel: 'row');
+      addTearDown(row.dispose);
+      await _pumpRail(tester, rowNode: row);
+      expect(_labelOpacity(tester, 'Movies'), 0);
+      expect(_labelOpacity(tester, 'Settings'), 0);
+
+      row.requestFocus();
+      await tester.pumpAndSettle();
+      expect(_labelOpacity(tester, 'Movies'), 1);
+      expect(_labelOpacity(tester, 'Settings'), 1);
+    });
+
+    testWidgets('labels fade in late and out fast, not all at once',
+        (tester) async {
+      final row = FocusNode(debugLabel: 'row');
+      addTearDown(row.dispose);
+      await _pumpRail(tester, rowNode: row);
+
+      row.requestFocus();
+      await tester.idle();
+      await tester.pump();
+      // Early in the width animation the labels have not started to show.
+      await tester.pump(const Duration(milliseconds: 48));
+      final early = _labelOpacity(tester, 'Movies');
+      await tester.pump(const Duration(milliseconds: 64));
+      final mid = _labelOpacity(tester, 'Movies');
+      expect(early, lessThan(0.1));
+      expect(mid, inExclusiveRange(0.0, 1.0));
+      await tester.pumpAndSettle();
+      expect(_labelOpacity(tester, 'Movies'), 1);
+
+      // Collapse: gone well before the 200ms width animation finishes.
+      row.unfocus();
+      await tester.idle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 110));
+      expect(_labelOpacity(tester, 'Movies'), 0);
+      expect(_railWidth(tester), greaterThan(72));
+    });
+
+    testWidgets('the scrim fades rather than jumping, inert while hidden',
+        (tester) async {
+      final row = FocusNode(debugLabel: 'row');
+      addTearDown(row.dispose);
+      await _pumpRail(tester, rowNode: row);
+      expect(_scrimOpacity(tester), 0);
+      expect(
+        tester
+            .widget<IgnorePointer>(find.byKey(const Key('rail-scrim-guard')))
+            .ignoring,
+        isTrue,
+      );
+
+      row.requestFocus();
+      await tester.idle();
+      await tester.pump();
+      final seen = <double>[];
+      await _pumpFrames(tester, 6, onFrame: (_) {
+        seen.add(_scrimOpacity(tester));
+      });
+      expect(seen.first, greaterThan(0));
+      expect(seen.first, lessThan(1));
+      for (var i = 1; i < seen.length; i++) {
+        expect(seen[i], greaterThanOrEqualTo(seen[i - 1]));
+      }
+      expect(
+        tester
+            .widget<IgnorePointer>(find.byKey(const Key('rail-scrim-guard')))
+            .ignoring,
+        isFalse,
+      );
+      await tester.pumpAndSettle();
+      expect(_scrimOpacity(tester), 1);
+
+      row.unfocus();
+      await tester.idle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      final fading = _scrimOpacity(tester);
+      expect(fading, inExclusiveRange(0.0, 1.0));
+      await tester.pumpAndSettle();
+      expect(_scrimOpacity(tester), 0);
+    });
+
+    testWidgets('the footer buttons are inert and unfocusable collapsed',
+        (tester) async {
+      final store = await _pumpRail(tester);
+      const pin = Key('rail-pin');
+      const edit = Key('rail-edit');
+      FocusNode nodeOf(Key key) => Focus.of(tester.element(find
+          .descendant(of: find.byKey(key), matching: find.byType(Focus))
+          .first));
+
+      expect(nodeOf(pin).canRequestFocus, isFalse);
+      expect(nodeOf(edit).canRequestFocus, isFalse);
+      await tester.tap(find.byKey(pin), warnIfMissed: false);
+      await tester.tap(find.byKey(edit), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(store.railPinned, isFalse);
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(FloatingRail)));
+      expect(container.read(sidebarEditModeProvider), isFalse);
+      // Still reserving room, so nothing above moves.
+      expect(tester.getSize(find.byKey(pin)).height, greaterThan(0));
+    });
+
+    testWidgets('the footer buttons work once expanded', (tester) async {
+      final store = await _pumpRail(tester);
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: const Offset(40, 300));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(FloatingRail)));
+
+      await tester.tap(find.byKey(const Key('rail-edit')));
+      await tester.pumpAndSettle();
+      expect(container.read(sidebarEditModeProvider), isTrue);
+      expect(_railWidth(tester), 272);
+
+      await tester.tap(find.byKey(const Key('rail-pin')));
+      await tester.pumpAndSettle();
+      expect(store.railPinned, isTrue);
+    });
+
+    testWidgets('reduced motion reaches the final state in one pump',
+        (tester) async {
+      final row = FocusNode(debugLabel: 'row');
+      addTearDown(row.dispose);
+      await _pumpRail(tester, rowNode: row, disableAnimations: true);
+
+      row.requestFocus();
+      await tester.idle();
+      await tester.pump();
+      expect(_railWidth(tester), 272);
+      expect(_labelOpacity(tester, 'Movies'), 1);
+      expect(_scrimOpacity(tester), 1);
+
+      row.unfocus();
+      await tester.idle();
+      await tester.pump();
+      expect(_railWidth(tester), 72);
+      expect(_labelOpacity(tester, 'Movies'), 0);
+      expect(_scrimOpacity(tester), 0);
+    });
   });
 
   test('expanded fill keeps textSecondary at 4.5:1 over a white backdrop', () {

@@ -8,28 +8,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../screens/detail/detail_links.dart';
 import '../connection_status_dot.dart';
+import 'rail_scope.dart';
 import 'sidebar_row.dart';
 
 class AllServersServerRows extends ConsumerWidget {
-  const AllServersServerRows({
-    super.key,
-    required this.onNavigate,
-    this.compact = false,
-  });
-
-  /// Icon-only rows for the collapsed rail; the "Servers" caption is dropped.
-  final bool compact;
+  const AllServersServerRows({super.key, required this.onNavigate});
 
   final ValueChanged<String> onNavigate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sources = ref.watch(allServersSourcesProvider);
+    // The rail has no caption: it would be a row that exists only while
+    // expanded, shifting every server row below it.
+    final inRail = RailScope.maybeOf(context) != null;
     return Column(
-      crossAxisAlignment:
-          compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!compact)
+        if (!inRail)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child:
@@ -38,7 +34,6 @@ class AllServersServerRows extends ConsumerWidget {
         for (final s in sources)
           SidebarRow(
             key: ValueKey('all-server-row-${s.id.value}'),
-            compact: compact,
             icon: Icons.dns_outlined,
             selectedIcon: Icons.dns,
             label: s.displayName,

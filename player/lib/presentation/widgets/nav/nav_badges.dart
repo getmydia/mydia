@@ -60,9 +60,6 @@ class SettingsSidebarRow extends ConsumerWidget {
   /// Forwarded to the wrapped [SidebarRow]. See its docs.
   final FocusNode? focusNode;
 
-  /// Forwarded to the wrapped [SidebarRow]. See its docs.
-  final bool compact;
-
   /// The shell location, for the badge's source.
   final String location;
 
@@ -76,7 +73,6 @@ class SettingsSidebarRow extends ConsumerWidget {
     this.isHidden = false,
     this.editingTrailing,
     this.focusNode,
-    this.compact = false,
   });
 
   @override
@@ -93,7 +89,6 @@ class SettingsSidebarRow extends ConsumerWidget {
       isHidden: isHidden,
       editingTrailing: editingTrailing,
       focusNode: focusNode,
-      compact: compact,
     );
   }
 }

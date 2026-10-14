@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../focus_highlight.dart';
+import 'rail_scope.dart';
 
 /// Individual sidebar navigation item
 class SidebarRow extends StatefulWidget {
@@ -53,11 +54,6 @@ class SidebarRow extends StatefulWidget {
   /// region, which is the whole reason the boundary is explicit.
   final FocusNode? focusNode;
 
-  /// Icon-only 48x48 rendering for the collapsed rail. The label moves to a
-  /// tooltip, the badge stays as a top-right overlay, and the edit-mode
-  /// affordances are not drawn.
-  final bool compact;
-
   const SidebarRow({
     super.key,
     required this.icon,
@@ -75,7 +71,6 @@ class SidebarRow extends StatefulWidget {
     this.isHidden = false,
     this.editingTrailing,
     this.focusNode,
-    this.compact = false,
   });
 
   @override
@@ -88,48 +83,61 @@ class _SidebarRowState extends State<SidebarRow> {
 
   static const _menuWidth = 36.0;
 
-  Widget _buildCompact() {
+  /// The rail's geometry: a 48x48 icon box with the label beside it. The
+  /// selection fill and ring wrap the icon box, which is the part that stays
+  /// on screen while the rail is collapsed.
+  Widget _buildRail(RailScope rail) {
     final isSelected = widget.isSelected && !widget.isDisabled;
-    return Tooltip(
-      message: widget.label,
-      child: FocusHighlight(
+    return RailEntry(
+      tooltip: widget.label,
+      labelsVisible: rail.labelsVisible,
+      onTap: widget.isDisabled ? null : widget.onTap,
+      iconBox: FocusHighlight(
         focusNode: widget.focusNode,
         onActivate: widget.isDisabled ? null : widget.onTap,
         borderRadius:
             const BorderRadius.all(Radius.circular(AppTheme.radiusNavItem)),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.isDisabled ? null : widget.onTap,
-          child: Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? Colors.white.withValues(alpha: 0.18)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(AppTheme.radiusNavItem),
-              border: isSelected
-                  ? Border.all(color: AppColors.primary, width: 2)
-                  : null,
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  isSelected ? widget.selectedIcon : widget.icon,
-                  size: 22,
-                  color: widget.isDisabled
-                      ? AppColors.textDisabled
-                      : isSelected
-                          ? AppColors.textPrimary
-                          : AppColors.textSecondary,
-                ),
-                if (widget.badge != null)
-                  Positioned(top: 8, right: 8, child: widget.badge!),
-              ],
-            ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isSelected
+                ? Colors.white.withValues(alpha: 0.18)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppTheme.radiusNavItem),
+            border: isSelected
+                ? Border.all(color: AppColors.primary, width: 2)
+                : null,
           ),
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              Icon(
+                isSelected ? widget.selectedIcon : widget.icon,
+                size: 22,
+                color: widget.isDisabled
+                    ? AppColors.textDisabled
+                    : isSelected
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+              ),
+              if (widget.badge != null)
+                Positioned(top: 8, right: 8, child: widget.badge!),
+            ],
+          ),
+        ),
+      ),
+      label: Text(
+        widget.label,
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+          color: widget.isDisabled
+              ? AppColors.textDisabled
+              : isSelected
+                  ? AppColors.textPrimary
+                  : AppColors.textSecondary,
         ),
       ),
     );
@@ -137,7 +145,8 @@ class _SidebarRowState extends State<SidebarRow> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.compact) return _buildCompact();
+    final rail = RailScope.maybeOf(context);
+    if (rail != null && !widget.isEditing) return _buildRail(rail);
     final isSelected = widget.isSelected && !widget.isDisabled;
 
     // An anchor cannot be reordered or hidden, so while editing it reads as

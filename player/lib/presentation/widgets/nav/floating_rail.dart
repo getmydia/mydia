@@ -7,11 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/navigation/sidebar_layout_providers.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../../../core/ui/reduced_motion.dart';
 import '../glass_surface.dart';
 import '../toast/toast_obstruction.dart';
 import 'back_to_mydia_button.dart';
+import 'rail_scope.dart';
 import 'sidebar_content.dart';
 
 /// Floating navigation rail: collapsed to icons at rest, expanding over the
@@ -49,9 +51,7 @@ class FloatingRail extends ConsumerStatefulWidget {
 class _FloatingRailState extends ConsumerState<FloatingRail> {
   bool _hovered = false;
   bool _focused = false;
-  bool _labels = false;
   Timer? _hoverTimer;
-  Timer? _labelTimer;
 
   bool get _pinned => ref.read(railPinnedProvider);
   bool _expandedFor(bool pinned) => pinned || _hovered || _focused;
@@ -59,34 +59,17 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
   @override
   void dispose() {
     _hoverTimer?.cancel();
-    _labelTimer?.cancel();
     super.dispose();
   }
 
   void _setExpanded(void Function() change) {
-    final before = _expandedFor(_pinned);
     setState(change);
-    _syncExpansion(before, _expandedFor(_pinned));
+    _exitEditWhenCollapsed(_expandedFor(_pinned));
   }
 
-  /// Runs the label and edit-mode side of an expansion change. [wasPinned]
-  /// marks an unpin: the labels were showing, so they stay when the rail
-  /// remains expanded (hover or focus) even though expansion did not change.
-  void _syncExpansion(bool before, bool after, {bool wasPinned = false}) {
-    if (before == after && !wasPinned) return;
-    _labelTimer?.cancel();
-    if (!after) {
-      setState(() => _labels = false);
-      ref.read(sidebarEditModeProvider.notifier).exit();
-      return;
-    }
-    if (wasPinned || context.reduceMotion) {
-      setState(() => _labels = true);
-    } else {
-      _labelTimer = Timer(DepthTokens.motionMedium * 0.6, () {
-        if (mounted) setState(() => _labels = true);
-      });
-    }
+  /// Edit mode is an expanded-only action, so collapsing ends it.
+  void _exitEditWhenCollapsed(bool expanded) {
+    if (!expanded) ref.read(sidebarEditModeProvider.notifier).exit();
   }
 
   void _collapse() {
@@ -119,15 +102,11 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
   Widget build(BuildContext context) {
     ref.listen<bool>(railPinnedProvider, (prev, next) {
       if (prev == null || prev == next) return;
-      _syncExpansion(
-        _expandedFor(prev),
-        _expandedFor(next),
-        wasPinned: prev && !next,
-      );
+      _exitEditWhenCollapsed(_expandedFor(next));
     });
     final pinned = ref.watch(railPinnedProvider);
     final expanded = _expandedFor(pinned);
-    final labels = pinned || (expanded && _labels);
+    final showScrim = expanded && !pinned;
     final highContrast = MediaQuery.highContrastOf(context);
     final duration = context.reducedMotionDuration(DepthTokens.motionMedium);
     const inset = Breakpoints.railInset;
@@ -135,18 +114,29 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
 
     return Stack(
       children: [
-        if (expanded && !pinned)
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _collapse,
-              child: ColoredBox(
-                key: const Key('rail-scrim'),
-                color:
-                    Colors.black.withValues(alpha: highContrast ? 0.7 : 0.55),
+        Positioned.fill(
+          // Always mounted so it can fade; inert while hidden.
+          child: IgnorePointer(
+            key: const Key('rail-scrim-guard'),
+            ignoring: !showScrim,
+            child: AnimatedOpacity(
+              key: const Key('rail-scrim-fade'),
+              opacity: showScrim ? 1 : 0,
+              duration: duration,
+              curve: DepthTokens.curveStandard,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _collapse,
+                child: ColoredBox(
+                  // Findable only while the scrim is meant to be showing.
+                  key: showScrim ? const Key('rail-scrim') : null,
+                  color:
+                      Colors.black.withValues(alpha: highContrast ? 0.7 : 0.55),
+                ),
               ),
             ),
           ),
+        ),
         Positioned(
           // Clear of a display cutout or gesture area (landscape phones).
           left: inset + safe.left,
@@ -189,17 +179,18 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
                     ),
                     shadows: DepthTokens.chrome,
                     child: ClipRect(
+                      // Always laid out at the expanded width: the collapsed
+                      // rail clips it, so nothing re-lays-out or moves.
                       child: OverflowBox(
                         alignment: Alignment.topLeft,
-                        minWidth: 0,
-                        maxWidth: labels
-                            ? Breakpoints.railExpandedWidth
-                            : Breakpoints.railCollapsedWidth,
+                        minWidth: Breakpoints.railExpandedWidth,
+                        maxWidth: Breakpoints.railExpandedWidth,
                         child: Column(
                           children: [
                             Expanded(
                               child: SidebarContent(
-                                compact: !labels,
+                                rail: true,
+                                railLabelsVisible: expanded,
                                 location: widget.location,
                                 onNavigate: _navigate,
                                 isOffline: widget.isOffline,
@@ -210,21 +201,7 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
                                     : null,
                               ),
                             ),
-                            if (expanded)
-                              IconButton(
-                                key: const Key('rail-pin'),
-                                tooltip:
-                                    pinned ? 'Unpin sidebar' : 'Pin sidebar',
-                                onPressed: () => ref
-                                    .read(railPinnedProvider.notifier)
-                                    .toggle(),
-                                icon: Icon(
-                                  pinned
-                                      ? Icons.push_pin_rounded
-                                      : Icons.push_pin_outlined,
-                                ),
-                              ),
-                            const SizedBox(height: 8),
+                            _RailFooter(expanded: expanded, pinned: pinned),
                           ],
                         ),
                       ),
@@ -236,6 +213,66 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Pin and edit-sidebar actions under the rows. It always reserves its height
+/// so the rows above never move; while the rail is collapsed the buttons are
+/// invisible, inert and out of focus traversal.
+class _RailFooter extends ConsumerWidget {
+  const _RailFooter({required this.expanded, required this.pinned});
+
+  final bool expanded;
+  final bool pinned;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final editing = ref.watch(sidebarEditModeProvider);
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, bottom: 8),
+      child: SizedBox(
+        height: RailScope.rowHeight,
+        child: ExcludeFocus(
+          excluding: !expanded,
+          child: ExcludeSemantics(
+            excluding: !expanded,
+            child: IgnorePointer(
+              ignoring: !expanded,
+              child: RailLabel(
+                visible: expanded,
+                child: Row(
+                  children: [
+                    IconButton(
+                      key: const Key('rail-pin'),
+                      tooltip: pinned ? 'Unpin sidebar' : 'Pin sidebar',
+                      onPressed: () =>
+                          ref.read(railPinnedProvider.notifier).toggle(),
+                      icon: Icon(
+                        pinned
+                            ? Icons.push_pin_rounded
+                            : Icons.push_pin_outlined,
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('rail-edit'),
+                      tooltip: 'Edit sidebar',
+                      onPressed: () =>
+                          ref.read(sidebarEditModeProvider.notifier).toggle(),
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        color: editing
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

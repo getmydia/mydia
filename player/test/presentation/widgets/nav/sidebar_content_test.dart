@@ -27,7 +27,8 @@ Future<void> _pump(
   bool isOffline = false,
   double height = 1400,
   FocusNode? selectedRowFocusNode,
-  bool compact = false,
+  bool rail = false,
+  bool railLabelsVisible = false,
   bool withSwitcher = false,
 }) async {
   tester.view.physicalSize = Size(1200, height + 200);
@@ -59,7 +60,8 @@ Future<void> _pump(
               onNavigate: onNavigate ?? (_) {},
               isOffline: isOffline,
               selectedRowFocusNode: selectedRowFocusNode,
-              compact: compact,
+              rail: rail,
+              railLabelsVisible: railLabelsVisible,
             ),
           ),
         ),
@@ -356,40 +358,70 @@ void main() {
     expect(node.hasFocus, isTrue);
   });
 
-  group('compact', () {
-    testWidgets('shows icons with tooltips and no labels', (tester) async {
-      await _pump(tester, location: '/', compact: true);
+  group('rail', () {
+    double labelOpacity(WidgetTester tester, String text) => tester
+        .widget<AnimatedOpacity>(
+          find
+              .ancestor(
+                  of: find.text(text), matching: find.byType(AnimatedOpacity))
+              .first,
+        )
+        .opacity;
 
-      expect(find.text('Search'), findsNothing);
+    testWidgets('shows icon boxes with tooltips while labels are hidden',
+        (tester) async {
+      await _pump(tester, location: '/', rail: true);
+
+      expect(labelOpacity(tester, 'Search'), 0);
       expect(find.byTooltip('Search'), findsOneWidget);
-      expect(
-        tester.getSize(find.byKey(const ValueKey('sidebar-row-search'))),
-        const Size(48, 48),
-      );
-      expect(
-        tester.getSize(find.byKey(const ValueKey('sidebar-row-settings'))),
-        const Size(48, 48),
-      );
+      for (final id in ['search', 'settings']) {
+        final row = find.byKey(ValueKey('sidebar-row-$id'));
+        expect(tester.getSize(row).height, 48);
+        final icon = find.descendant(of: row, matching: find.byType(Icon));
+        expect(tester.getSize(icon.first), const Size(22, 22));
+      }
     });
 
-    testWidgets('hides the header and the new-filter row', (tester) async {
-      await _pump(tester, location: '/', compact: true);
+    testWidgets('labels show and the tooltips go once expanded',
+        (tester) async {
+      await _pump(tester, location: '/', rail: true, railLabelsVisible: true);
+
+      expect(labelOpacity(tester, 'Search'), 1);
+      expect(find.byTooltip('Search'), findsNothing);
+    });
+
+    testWidgets('has no header, and the new-filter row is a normal row',
+        (tester) async {
+      await _pump(tester, location: '/', rail: true);
 
       expect(find.byTooltip('Edit sidebar'), findsNothing);
       expect(find.text('Mydia Player'), findsNothing);
-      // The same fixture shows the row when not compact (see 'the New filter
-      // row is hidden while editing'), so this absence is meaningful.
+      // The full layout shows '+ New filter'; the rail has the same row as an
+      // icon with the tooltip "New filter".
       expect(find.text('+ New filter'), findsNothing);
+      expect(find.byTooltip('New filter'), findsOneWidget);
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('sidebar-row-new-filter')))
+            .height,
+        48,
+      );
     });
 
-    testWidgets('the server switcher is centred with the rows', (tester) async {
-      await _pump(tester, location: '/', compact: true, withSwitcher: true);
+    testWidgets('the server switcher icon lines up with the rows',
+        (tester) async {
+      await _pump(tester, location: '/', rail: true, withSwitcher: true);
 
       final switcher = find.byKey(const ValueKey('source-switcher-compact'));
       expect(switcher, findsOneWidget);
+      expect(tester.getSize(switcher), const Size(48, 48));
+      final rowIcon = find.descendant(
+        of: find.byKey(const ValueKey('sidebar-row-search')),
+        matching: find.byType(Icon),
+      );
       expect(
         tester.getCenter(switcher).dx,
-        tester.getCenter(find.byKey(const ValueKey('sidebar-row-search'))).dx,
+        tester.getCenter(rowIcon.first).dx,
       );
     });
 
@@ -397,7 +429,7 @@ void main() {
       await _pump(
         tester,
         location: '/s/${fakeSourceId.value}/favorites',
-        compact: true,
+        rail: true,
       );
 
       final box = tester.widget<Container>(
@@ -419,7 +451,7 @@ void main() {
       await _pump(
         tester,
         location: '/s/${fakeSourceId.value}/favorites',
-        compact: true,
+        rail: true,
         selectedRowFocusNode: node,
       );
 
@@ -448,7 +480,7 @@ void main() {
 
     testWidgets('tapping a row navigates', (tester) async {
       final routes = <String>[];
-      await _pump(tester, location: '/', compact: true, onNavigate: routes.add);
+      await _pump(tester, location: '/', rail: true, onNavigate: routes.add);
 
       await tester.tap(find.byKey(const ValueKey('sidebar-row-movies')));
       await tester.pumpAndSettle();
