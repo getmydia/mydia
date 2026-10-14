@@ -9,19 +9,38 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/focus/focus_reveal_section.dart';
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/sources/media_source.dart' show ArtworkRequest;
 import '../../../core/sources/source.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
+import '../../widgets/shell_rail_inset.dart';
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
+import 'source_home_hero_backdrop.dart';
 
 class SourceHomeHero extends ConsumerWidget {
-  const SourceHomeHero({super.key, required this.sourceId, required this.item});
+  const SourceHomeHero({
+    super.key,
+    required this.sourceId,
+    required this.item,
+    this.bleedTop = 0,
+  });
 
   final SourceId sourceId;
   final ItemSummary item;
+
+  /// How far the backdrop runs above the hero's own box, for a screen that
+  /// puts space between the window top and the hero. Zero where something
+  /// else (a banner) sits there.
+  final double bleedTop;
+
+  /// Identifies the backdrop layer.
+  static const backdropKey = Key('source-home-hero-backdrop');
+
+  static const _wideGap = 36.0;
+  static const _maxTextWidth = 560.0;
 
   /// The poster card's size when the hero is laid out wide.
   static const posterSize = Size(248, 360);
@@ -127,61 +146,140 @@ class SourceHomeHero extends ConsumerWidget {
 
     // UP from the first rail lands on the hero's buttons, which sit at its
     // bottom. On a television this reveals the whole hero, not just the button.
+    final topPad = MediaQuery.paddingOf(context).top + 24;
+    final backdrop = request == null
+        ? null
+        : _backdrop(context, request,
+            wide: wide, padding: padding, top: topPad);
     return FocusRevealSection(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          padding,
-          MediaQuery.paddingOf(context).top + 24,
-          padding,
-          32,
-        ),
-        child: wide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  DecoratedBox(
-                    decoration: const BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color(0x73000000),
-                          blurRadius: 60,
-                          offset: Offset(0, 30),
-                        ),
-                      ],
-                    ),
-                    child: SizedBox(
-                      width: posterSize.width,
-                      height: posterSize.height,
-                      child: poster,
-                    ),
-                  ),
-                  const SizedBox(width: 36),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 560),
-                        child: info,
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            : Column(
-                children: [
-                  // 60% of the screen, not of the padded column.
-                  SizedBox(
-                    width: narrowPosterWidth(context),
-                    child: AspectRatio(
-                      aspectRatio: posterSize.width / posterSize.height,
-                      child: poster,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  info,
-                ],
-              ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        // Passthrough: the content sizes the hero exactly as it did before
+        // the backdrop, which is only ever a background layer.
+        fit: StackFit.passthrough,
+        children: [
+          if (backdrop != null) backdrop,
+          _content(
+            context,
+            wide: wide,
+            padding: padding,
+            top: topPad,
+            poster: poster,
+            info: info,
+          ),
+        ],
       ),
+    );
+  }
+
+  /// The artwork layer, positioned relative to the hero's own box: under the
+  /// rail and up to the window top on wide layouts, behind the poster on
+  /// stacked ones.
+  Widget _backdrop(
+    BuildContext context,
+    ArtworkRequest request, {
+    required bool wide,
+    required double padding,
+    required double top,
+  }) {
+    final inset = wide ? ShellRailInset.of(context) : 0.0;
+    final layer = HomeHeroBackdrop(
+      key: backdropKey,
+      request: request,
+      wide: wide,
+      inset: inset,
+      padding: padding,
+      posterSize: posterSize,
+      gap: _wideGap,
+      maxTextWidth: _maxTextWidth,
+    );
+    if (wide) {
+      return Positioned(
+        left: -inset,
+        right: 0,
+        top: -bleedTop,
+        bottom: 0,
+        child: layer,
+      );
+    }
+    final posterHeight =
+        narrowPosterWidth(context) * posterSize.height / posterSize.width;
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: -bleedTop,
+      height: bleedTop +
+          top +
+          posterHeight +
+          HomeHeroBackdropTokens.narrowPosterGap,
+      child: layer,
+    );
+  }
+
+  Widget _content(
+    BuildContext context, {
+    required bool wide,
+    required double padding,
+    required double top,
+    required Widget poster,
+    required Widget info,
+  }) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        padding,
+        top,
+        padding,
+        32,
+      ),
+      child: wide
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                DecoratedBox(
+                  decoration: const BoxDecoration(
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x73000000),
+                        blurRadius: 60,
+                        offset: Offset(0, 30),
+                      ),
+                    ],
+                  ),
+                  child: SizedBox(
+                    width: posterSize.width,
+                    height: posterSize.height,
+                    child: poster,
+                  ),
+                ),
+                const SizedBox(width: _wideGap),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ConstrainedBox(
+                      constraints:
+                          const BoxConstraints(maxWidth: _maxTextWidth),
+                      child: info,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              children: [
+                // 60% of the screen, not of the padded column.
+                SizedBox(
+                  width: narrowPosterWidth(context),
+                  child: AspectRatio(
+                    aspectRatio: posterSize.width / posterSize.height,
+                    child: poster,
+                  ),
+                ),
+                const SizedBox(
+                  height: HomeHeroBackdropTokens.narrowPosterGap,
+                ),
+                info,
+              ],
+            ),
     );
   }
 }

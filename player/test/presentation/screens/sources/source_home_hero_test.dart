@@ -5,6 +5,8 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/sources/source_home_hero.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
+import 'package:player/presentation/widgets/artwork_image.dart';
+import 'package:player/presentation/widgets/shell_rail_inset.dart';
 
 import 'fake_media_source.dart';
 
@@ -120,5 +122,213 @@ void main() {
     expect(source.imageUrl, contains('/backdrop/night-ferry'));
     expect(source.headers, {'X-Plex-Token': 'tok'});
     expect(source.cacheKey, isNotNull);
+  });
+
+  group('backdrop', () {
+    const backdropKey = SourceHomeHero.backdropKey;
+    const railInset = 96.0;
+
+    // The shell's Home column: padded by the rail's footprint, which it also
+    // publishes, with the list's viewport left unclipped and RailBleed
+    // clipping the rest.
+    Future<void> pumpInShell(
+      WidgetTester tester,
+      Size size, {
+      ItemSummary? item,
+      double inset = railInset,
+      bool reduceMotion = false,
+      double bleedTop = 0,
+    }) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final container = ProviderContainer(overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+      ]);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              disableAnimations: reduceMotion,
+            ),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: ShellRailInset(
+              left: inset,
+              child: Padding(
+                padding: EdgeInsets.only(left: inset),
+                child: RailBleed(
+                  child: SingleChildScrollView(
+                    clipBehavior: Clip.none,
+                    child: SourceHomeHero(
+                      sourceId: fakeSourceId,
+                      item: item ?? _movie(),
+                      bleedTop: bleedTop,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+      await tester.pump();
+    }
+
+    ArtworkImage image(WidgetTester tester) => tester.widget<ArtworkImage>(
+          find.descendant(
+            of: find.byKey(backdropKey),
+            matching: find.byType(ArtworkImage),
+          ),
+        );
+
+    testWidgets('wide: runs under the rail to the window edge and top',
+        (tester) async {
+      await pumpInShell(tester, const Size(1280, 800));
+
+      final backdrop = tester.getRect(find.byKey(backdropKey));
+      final hero = tester.getRect(find.byType(SourceHomeHero));
+      expect(backdrop.left, 0, reason: 'under the rail');
+      expect(backdrop.top, 0);
+      expect(backdrop.right, 1280);
+      expect(backdrop.bottom, hero.bottom,
+          reason: 'it ends with the hero, fully on the ground');
+      expect(hero.left, railInset);
+    });
+
+    testWidgets('wide: the poster and text sit where they did before',
+        (tester) async {
+      await pumpInShell(tester, const Size(1280, 800));
+
+      // 32 padding past the column's left edge, 24 below the top.
+      expect(tester.getRect(find.byKey(posterKey)),
+          const Rect.fromLTWH(railInset + 32, 24, 248, 360));
+      expect(
+        tester.getTopLeft(find.text('Night Ferry')).dx,
+        railInset + 32 + 248 + 36,
+      );
+    });
+
+    testWidgets('wide: one image layer, no blur', (tester) async {
+      await pumpInShell(tester, const Size(1280, 800));
+
+      expect(
+        find.descendant(
+            of: find.byKey(backdropKey), matching: find.byType(ArtworkImage)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+            of: find.byKey(backdropKey), matching: find.byType(ImageFiltered)),
+        findsNothing,
+      );
+      expect(
+        find.ancestor(
+            of: find.byKey(backdropKey),
+            matching: find.byType(RepaintBoundary)),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('paints the backdrop art, credentials included',
+        (tester) async {
+      await pumpInShell(tester, const Size(1280, 800));
+
+      final art = image(tester);
+      expect(art.imageUrl, contains('/backdrop/night-ferry'));
+      expect(art.headers, {'X-Plex-Token': 'tok'});
+      expect(art.cacheKey, isNotNull);
+    });
+
+    testWidgets('falls back to the poster only without a backdrop',
+        (tester) async {
+      await pumpInShell(
+        tester,
+        const Size(1280, 800),
+        item: const ItemSummary(
+          ref: ItemRef(
+            sourceId: fakeSourceId,
+            kind: ItemKind.movie,
+            externalId: 'night-ferry',
+          ),
+          title: 'Night Ferry',
+          poster: ArtworkRef('/art/night-ferry'),
+        ),
+      );
+
+      expect(image(tester).imageUrl, contains('/art/night-ferry'));
+    });
+
+    testWidgets('no art at all: no backdrop and no error', (tester) async {
+      await pumpInShell(
+        tester,
+        const Size(1280, 800),
+        item: const ItemSummary(
+          ref: ItemRef(
+            sourceId: fakeSourceId,
+            kind: ItemKind.movie,
+            externalId: 'night-ferry',
+          ),
+          title: 'Night Ferry',
+        ),
+      );
+
+      expect(find.byKey(backdropKey), findsNothing);
+      expect(find.text('Night Ferry'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('bleedTop lifts it above the hero', (tester) async {
+      await pumpInShell(tester, const Size(1280, 800), bleedTop: 40);
+
+      expect(tester.getTopLeft(find.byKey(backdropKey)).dy, -40);
+      expect(tester.getTopLeft(find.byKey(posterKey)).dy, 24);
+    });
+
+    testWidgets('fades in when motion is allowed', (tester) async {
+      await pumpInShell(tester, const Size(1280, 800));
+      expect(image(tester).fadeInDuration, const Duration(milliseconds: 500));
+    });
+
+    testWidgets('does not fade under reduced motion', (tester) async {
+      await pumpInShell(tester, const Size(1280, 800), reduceMotion: true);
+      expect(image(tester).fadeInDuration, Duration.zero);
+    });
+
+    testWidgets('narrow: behind the poster, title on the plain ground',
+        (tester) async {
+      // No rail below the wide layout.
+      await pumpInShell(tester, const Size(400, 800), inset: 0);
+
+      final backdrop = tester.getRect(find.byKey(backdropKey));
+      final poster = tester.getRect(find.byKey(posterKey));
+      expect(backdrop.left, 0);
+      expect(backdrop.right, 400);
+      expect(backdrop.top, 0);
+      expect(backdrop.overlaps(poster), isTrue);
+      expect(backdrop.bottom, poster.bottom + 20,
+          reason: 'it ends where the title block begins');
+      expect(
+        tester.getTopLeft(find.text('Night Ferry')).dy,
+        greaterThanOrEqualTo(backdrop.bottom),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('narrow: the backdrop paints under the poster', (tester) async {
+      await pumpInShell(tester, const Size(400, 800), inset: 0);
+
+      final stack = tester.widget<Stack>(find
+          .ancestor(of: find.byKey(backdropKey), matching: find.byType(Stack))
+          .first);
+      final backdropIndex = stack.children.indexWhere(
+        (w) => w is Positioned && w.child.key == backdropKey,
+      );
+      expect(backdropIndex, 0, reason: 'first child paints first');
+    });
   });
 }

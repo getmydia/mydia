@@ -48,6 +48,36 @@ class SliverRailInset extends StatelessWidget {
       );
 }
 
+/// Lets [child] paint up to [ShellRailInset] to the left of its own box, so
+/// art in a page the shell has already inset (Home) can run under the rail.
+///
+/// The top, right and bottom edges still clip as before. Pair it with a
+/// scrollable whose own `clipBehavior` is `Clip.none`, since the scrollable's
+/// viewport would otherwise clip at the column's edge first.
+class RailBleed extends StatelessWidget {
+  const RailBleed({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ClipRect(
+        clipper: _RailBleedClipper(ShellRailInset.of(context)),
+        child: child,
+      );
+}
+
+class _RailBleedClipper extends CustomClipper<Rect> {
+  const _RailBleedClipper(this.inset);
+
+  final double inset;
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(-inset, 0, size.width, size.height);
+
+  @override
+  bool shouldReclip(_RailBleedClipper old) => old.inset != inset;
+}
+
 /// Wraps each of [slivers] in a [SliverRailInset].
 List<Widget> railInsetSlivers(List<Widget> slivers) =>
     [for (final s in slivers) SliverRailInset(sliver: s)];

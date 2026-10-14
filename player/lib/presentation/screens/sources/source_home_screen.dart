@@ -16,6 +16,7 @@ import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
+import '../../widgets/shell_rail_inset.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../detail/detail_links.dart';
 import '../home/home_loading_skeleton.dart';
@@ -120,8 +121,12 @@ class SourceHomeScreen extends ConsumerWidget {
               RefreshIndicator(
                 edgeOffset: chromeTop,
                 onRefresh: () => _refresh(ref),
-                child: ListView(
+                // The hero's backdrop runs under the rail: the viewport lets
+                // it paint left of the column and RailBleed clips the rest.
+                child: RailBleed(
+                    child: ListView(
                   key: const Key('source-home-list'),
+                  clipBehavior: Clip.none,
                   physics: const AlwaysScrollableScrollPhysics(),
                   // The hero is drawn under the bar; without one, the first
                   // row clears it.
@@ -142,7 +147,7 @@ class SourceHomeScreen extends ConsumerWidget {
                     SourceContinueWatchingRow(sourceId: sourceId),
                     _Rows(sourceId: sourceId, libraries: value),
                   ],
-                ),
+                )),
               ),
               // Overlaid, never a Column sibling: a refetch must not shove
               // the list (see BrowseScaffold's class doc).
