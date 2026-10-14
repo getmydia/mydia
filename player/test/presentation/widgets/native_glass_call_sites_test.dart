@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/native_glass_support.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_pill.dart';
@@ -10,6 +11,7 @@ import 'package:player/presentation/widgets/native_glass.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 import 'package:player/presentation/widgets/nav/desktop_sidebar.dart';
 import 'package:player/presentation/widgets/nav/dock_glass.dart';
+import 'package:player/presentation/widgets/nav/mobile_drawer.dart';
 
 void _mockPlatformViews(WidgetTester tester) {
   final messenger = tester.binding.defaultBinaryMessenger;
@@ -132,5 +134,35 @@ void main() {
               (d.decoration as BoxDecoration).boxShadow == DepthTokens.chrome);
       expect(shadowed, isTrue);
     }, variant: macos);
+  });
+
+  group('MobileDrawer.surface', () {
+    testWidgets('native: transparent square Drawer over native glass',
+        (tester) async {
+      NativeGlassSupport.debugOverride = true;
+      _mockPlatformViews(tester);
+      await tester
+          .pumpWidget(_host(MobileDrawer.surface(child: const Text('nav'))));
+      await tester.pump();
+
+      final drawer = tester.widget<Drawer>(find.byType(Drawer));
+      expect(drawer.backgroundColor, Colors.transparent);
+      expect(drawer.shape, const RoundedRectangleBorder());
+      expect(
+          tester.widget<NativeGlass>(find.byType(NativeGlass)).cornerRadius, 0);
+      expect(find.byType(UiKitView), findsOneWidget);
+      expect(find.text('nav'), findsOneWidget);
+    }, variant: _ios);
+
+    testWidgets('fallback: the opaque drawer it always was', (tester) async {
+      NativeGlassSupport.debugOverride = false;
+      await tester
+          .pumpWidget(_host(MobileDrawer.surface(child: const Text('nav'))));
+
+      final drawer = tester.widget<Drawer>(find.byType(Drawer));
+      expect(drawer.backgroundColor, AppColors.background);
+      expect(drawer.shape, isNull);
+      expect(find.byType(UiKitView), findsNothing);
+    }, variant: _ios);
   });
 }

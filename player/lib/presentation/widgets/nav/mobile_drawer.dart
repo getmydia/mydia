@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/config/web_config.dart';
 import '../../../core/theme/colors.dart';
+import '../native_glass.dart';
 import 'sidebar_content.dart';
 import 'sidebar_row.dart';
 
@@ -24,8 +25,7 @@ class MobileDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Drawer(
-      backgroundColor: AppColors.background,
+    return surface(
       child: SafeArea(
         child: SidebarContent(
           location: location,
@@ -45,6 +45,29 @@ class MobileDrawer extends StatelessWidget {
                 )
               : null,
         ),
+      ),
+    );
+  }
+
+  /// The drawer chrome around [child]: Apple's native glass where the OS has
+  /// it, otherwise the opaque background the drawer has always had. The
+  /// drawer was never frosted, so there is no Flutter glass fallback to keep.
+  ///
+  /// Square while native, because [NativeGlass] takes one uniform radius and
+  /// the drawer's edge has to match the glass under it.
+  ///
+  /// Public and `@visibleForTesting` so a test can check the chrome without
+  /// mounting `SidebarContent`'s provider graph.
+  @visibleForTesting
+  static Widget surface({required Widget child}) {
+    final native = NativeGlass.available;
+    return Drawer(
+      backgroundColor: native ? Colors.transparent : AppColors.background,
+      shape: native ? const RoundedRectangleBorder() : null,
+      child: NativeGlass(
+        cornerRadius: 0,
+        fallback: (child) => child,
+        child: child,
       ),
     );
   }
