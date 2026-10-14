@@ -72,6 +72,11 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
+    // Native Liquid Glass behind the sidebar (and the dock/drawer at narrow
+    // widths).
+    NativeGlassPlugin.register(
+      with: flutterViewController.registrar(forPlugin: "NativeGlassPlugin"))
+
     // Make the window look more native
     self.titlebarAppearsTransparent = true
     self.titleVisibility = .hidden

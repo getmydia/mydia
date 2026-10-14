@@ -21,6 +21,11 @@ import AVFoundation
       AirPlayChannelHandler.register(with: registrar(forPlugin: "AirPlayChannelHandler")!)
     }
 
+    // Native Liquid Glass behind the dock, cast bar, sidebar and drawer.
+    if let glassRegistrar = registrar(forPlugin: "NativeGlassPlugin") {
+      NativeGlassPlugin.register(with: glassRegistrar)
+    }
+
     // Window privacy: blur the app switcher snapshot while a locked or
     // hidden server is open.
     if let privacyRegistrar = registrar(forPlugin: "WindowPrivacy") {

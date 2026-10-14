@@ -339,7 +339,7 @@ jobs:
             artifact_path: player/build/windows/x64/runner/Release/
             shell: bash
           - platform: macOS
-            os: macos-latest
+            os: macos-26
             platform_dir: macos
             artifact_name: mydia-player-macos-app
             # Must stay the ditto archive, not the .app directory. "Package

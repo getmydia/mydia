@@ -50,7 +50,7 @@ env:
 jobs:
   build:
     name: Build macOS
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v7
