@@ -270,28 +270,18 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     caller = self()
     work = fn -> guest_task(caller, compiled, call, ctx, timeout_ms) end
 
-    {task, linked?} =
-      case Process.whereis(Mydia.TaskSupervisor) do
-        nil -> {Task.async(work), true}
-        _pid -> {Task.Supervisor.async_nolink(Mydia.TaskSupervisor, work), false}
-      end
+    task = Task.Supervisor.async_nolink(Mydia.TaskSupervisor, work)
 
-    result =
-      case Task.yield(task, timeout_ms + @task_grace_ms) || Task.shutdown(task, :brutal_kill) do
-        {:ok, result} ->
-          result
+    case Task.yield(task, timeout_ms + @task_grace_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} ->
+        result
 
-        {:exit, reason} ->
-          {:error, Error.engine_error("Engine instance exited: #{inspect(reason)}")}
+      {:exit, reason} ->
+        {:error, Error.engine_error("Engine instance exited: #{inspect(reason)}")}
 
-        nil ->
-          {:error, Error.timeout("Cardigann call timed out after #{timeout_ms} ms")}
-      end
-
-    # Only without the supervisor (the task is then linked): a caller that
-    # traps exits gets {:EXIT, task, _}. Leave nothing in its mailbox.
-    if linked?, do: flush_exit(task.pid)
-    result
+      nil ->
+        {:error, Error.timeout("Cardigann call timed out after #{timeout_ms} ms")}
+    end
   end
 
   defp guest_task(caller, compiled, call, ctx, timeout_ms) do
@@ -315,18 +305,6 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
       Process.unlink(watcher)
       Process.exit(watcher, :kill)
     end
-  end
-
-  defp flush_exit(pid) do
-    if Process.info(self(), :trap_exit) == {:trap_exit, true} do
-      receive do
-        {:EXIT, ^pid, _} -> :ok
-      after
-        1_000 -> :ok
-      end
-    end
-
-    :ok
   end
 
   # Test seam: a per-call hook in ctx that observes the guest processes.

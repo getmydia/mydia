@@ -562,9 +562,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
       assert_receive {:guest, {:instance, instance}}
       assert_receive {:guest, {:watcher, watcher}}
       assert task != self()
-      refute Process.alive?(task)
-      refute Process.alive?(instance)
-      refute Process.alive?(watcher)
+
+      refs = for pid <- [task, instance, watcher], do: Process.monitor(pid)
+      for ref <- refs, do: assert_receive({:DOWN, ^ref, :process, _, _}, 5_000)
     end
 
     test "respects the calling process's $callers in the guest process", %{bypass: b, ctx: ctx} do
