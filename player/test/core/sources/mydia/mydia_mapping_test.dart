@@ -141,6 +141,23 @@ void main() {
     expect(d.versions.single.id, 'f-e-21');
   });
 
+  test('an episode detail carries its show artwork and its thumbnail as still',
+      () {
+    final d = episodeDetail(s, fx.episode('e-21'));
+    expect(
+        d.summary.backdrop, const ArtworkRef('https://img.example/e-21.jpg'));
+    expect(d.showBackdrop,
+        const ArtworkRef('https://img.example/s-1-backdrop.jpg'));
+    expect(
+        d.showPoster, const ArtworkRef('https://img.example/s-1-poster.jpg'));
+  });
+
+  test('an episode with no thumbnail has no still but keeps the show art', () {
+    final d = episodeDetail(s, {...fx.episode('e-21'), 'thumbnailUrl': null});
+    expect(d.summary.backdrop, isNull);
+    expect(d.showBackdrop, isNotNull);
+  });
+
   test('continue watching maps movies and episodes, skips unknown types', () {
     final movie = continueWatchingSummary(s, {
       'id': 'm-1',

@@ -179,6 +179,8 @@ EpisodeView episodeViewFromSourceDetail(
     airDate: s.airDate,
     runtime: _minutes(s.durationSeconds),
     still: _art(s.ref.sourceId, s.backdrop),
+    showBackdrop: _art(s.ref.sourceId, d.showBackdrop),
+    showPoster: _art(s.ref.sourceId, d.showPoster),
     progress: progressFromUserState(
       s.userState,
       s.durationSeconds,

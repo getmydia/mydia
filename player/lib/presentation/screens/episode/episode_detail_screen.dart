@@ -32,7 +32,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
       value: ref.watch(episodeViewProvider(target)),
       noun: 'episode',
       onRetry: () => ref.read(episodeActionsProvider(target)).refresh(),
-      tintArt: (episode) => episode.still ?? episode.showBackdrop,
+      tintArt: (episode) => episode.heroArt,
       builder: (context, episode) => _buildContent(context, ref, episode),
     );
   }
@@ -116,8 +116,8 @@ class EpisodeDetailScreen extends ConsumerWidget {
       expandedHeight: 300,
       back: const DetailHeroBackButton(),
       background: DetailHeroBackground(
-        // The episode still, or the show's backdrop when there is none.
-        art: episode.still ?? episode.showBackdrop,
+        // The episode still, or the show's backdrop or poster when none.
+        art: episode.heroArt,
         slot: ArtSlot.still,
         fallbackIcon: Icons.movie_rounded,
         bottom: progress != null && progress.percentage > 0

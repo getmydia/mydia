@@ -157,6 +157,9 @@ ItemSummary episodeSummary(
       title: e['title'] as String? ?? '',
       showTitle: showTitle ?? _map(e['show'])['title'] as String?,
       poster: _art(e['thumbnailUrl']),
+      // The thumbnail is a landscape still, which is what the episode page
+      // and its rows read as a backdrop.
+      backdrop: _art(e['thumbnailUrl']),
       durationSeconds: _minutes(e['runtime']),
       userState: _progress(e['progress']),
       index: e['episodeNumber'] as int?,
@@ -350,9 +353,13 @@ ItemDetail episodeDetail(SourceId sid, Map<String, dynamic> e) {
   final summary = episodeSummary(sid, e);
   final showId = _map(e['show'])['id'] as String?;
   final season = e['seasonNumber'] as int?;
+  final showArtwork = _map(_map(e['show'])['artwork']);
   return ItemDetail(
     summary: summary,
     overview: e['overview'] as String?,
+    // What the episode page shows while the episode has no still.
+    showBackdrop: _art(showArtwork['backdropUrl']),
+    showPoster: _art(showArtwork['posterUrl']),
     versions: [
       for (final f in _list(e['files']))
         mediaVersion(f, durationSeconds: summary.durationSeconds),

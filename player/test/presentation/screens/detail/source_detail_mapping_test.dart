@@ -91,6 +91,54 @@ void main() {
     expect(v.episodeCode, 'S01E01');
   });
 
+  group('episode hero art', () {
+    ItemDetail detail({
+      ArtworkRef? still,
+      ArtworkRef? showBackdrop,
+      ArtworkRef? showPoster,
+    }) =>
+        ItemDetail(
+          summary: ItemSummary(
+            ref: fakeEpisode(1).ref,
+            title: 'Invented Episode 1',
+            backdrop: still,
+          ),
+          showBackdrop: showBackdrop,
+          showPoster: showPoster,
+        );
+
+    String? path(DetailArt? art) => art is SourceArt ? art.ref.path : null;
+
+    EpisodeView view(ItemDetail d) =>
+        episodeViewFromSourceDetail(d, features: features);
+
+    test('the still wins', () {
+      final v = view(detail(
+        still: const ArtworkRef('/still'),
+        showBackdrop: const ArtworkRef('/backdrop'),
+        showPoster: const ArtworkRef('/poster'),
+      ));
+      expect(path(v.heroArt), '/still');
+    });
+
+    test('no still falls back to the show backdrop', () {
+      final v = view(detail(
+        showBackdrop: const ArtworkRef('/backdrop'),
+        showPoster: const ArtworkRef('/poster'),
+      ));
+      expect(path(v.heroArt), '/backdrop');
+    });
+
+    test('no still and no backdrop falls back to the show poster', () {
+      final v = view(detail(showPoster: const ArtworkRef('/poster')));
+      expect(path(v.heroArt), '/poster');
+    });
+
+    test('no art at all leaves the hero empty', () {
+      expect(view(detail()).heroArt, isNull);
+    });
+  });
+
   test('progress from user state', () {
     expect(progressFromUserState(const UserState(), 100), isNull);
     expect(progressFromUserState(const UserState(watched: true), 100)?.watched,
