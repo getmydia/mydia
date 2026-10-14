@@ -51,7 +51,7 @@ class SourceHomeHero extends ConsumerWidget {
           ? BackdropSource.none
           : BackdropSource(
               imageUrl: request.url,
-              id: item.ref.externalId,
+              id: request.cacheKey,
               headers: request.headers,
               cacheKey: request.cacheKey,
             ),

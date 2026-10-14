@@ -115,7 +115,8 @@ void main() {
     }
 
     final source = container.read(ambientBackdropControllerProvider);
-    expect(source.id, 'night-ferry');
+    expect(source.id, source.cacheKey,
+        reason: 'ids repeat across servers; the cache key does not');
     expect(source.imageUrl, contains('/backdrop/night-ferry'));
     expect(source.headers, {'X-Plex-Token': 'tok'});
     expect(source.cacheKey, isNotNull);
