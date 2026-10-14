@@ -18,8 +18,11 @@
       flaresolverr={@flaresolverr}
       flaresolverr_status={@flaresolverr_status}
       retesting_paused={@retesting_paused}
+      search_stats={@search_stats}
+      search_stats_window={@search_stats_window}
     />
     <MydiaWeb.AdminIndexersLive.Components.modals {assigns} />
+    <MydiaWeb.AdminIndexersLive.SearchStatsComponents.failures_modal failures={@search_failures} />
     <MydiaWeb.AdminIndexersLive.LoginComponents.login_prompt {assigns} />
   </.admin_page>
 </Layouts.app>

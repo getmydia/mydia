@@ -1,0 +1,104 @@
+defmodule MydiaWeb.AdminIndexersLive.SearchStatsTest do
+  use MydiaWeb.ConnCase, async: false
+
+  import Phoenix.LiveViewTest
+  import Mydia.SettingsFixtures
+
+  alias Mydia.Accounts
+  alias Mydia.Indexers.SearchStats.Event
+  alias Mydia.Repo
+
+  setup %{conn: conn} do
+    unique_id = System.unique_integer([:positive])
+
+    {:ok, user} =
+      Accounts.create_user(%{
+        email: "admin_#{unique_id}@example.com",
+        username: "admin_#{unique_id}",
+        password_hash: "$2b$12$test",
+        role: "admin"
+      })
+
+    {:ok, token, _claims} = Mydia.Auth.Guardian.encode_and_sign(user)
+    start_supervised!(Mydia.Indexers.Health)
+    Mydia.Indexers.register_adapters()
+
+    conn =
+      conn
+      |> init_test_session(%{})
+      |> put_session(:guardian_default_token, token)
+      |> put_req_header("authorization", "Bearer #{token}")
+
+    busy =
+      indexer_config_fixture(%{
+        name: "Fictional Relay",
+        type: :prowlarr,
+        base_url: "http://localhost:1"
+      })
+
+    quiet =
+      indexer_config_fixture(%{
+        name: "Imaginary Relay",
+        type: :prowlarr,
+        base_url: "http://localhost:2"
+      })
+
+    %{conn: conn, busy: busy, quiet: quiet}
+  end
+
+  defp insert!(indexer, attrs) do
+    Repo.insert!(
+      struct(
+        Event,
+        Map.merge(
+          %{
+            id: Ecto.UUID.generate(),
+            indexer_id: indexer.id,
+            indexer_name: indexer.name,
+            indexer_type: "prowlarr",
+            kind: "search",
+            outcome: "ok",
+            duration_ms: 400,
+            result_count: 3,
+            inserted_at: DateTime.utc_now()
+          },
+          attrs
+        )
+      )
+    )
+  end
+
+  test "shows a strip per indexer, empty when it has no rows", %{
+    conn: conn,
+    busy: busy,
+    quiet: quiet
+  } do
+    insert!(busy, %{})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    assert has_element?(view, "#indexer-stats-#{busy.id}-none")
+    assert has_element?(view, "#indexer-stats-#{quiet.id}", "No searches yet")
+  end
+
+  test "the window toggle switches to seven days", %{conn: conn, busy: busy} do
+    insert!(busy, %{inserted_at: DateTime.add(DateTime.utc_now(), -3 * 86_400, :second)})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    refute has_element?(view, "#indexer-stats-#{busy.id}-none")
+
+    view |> element("#indexer-stats-window-week") |> render_click()
+    assert has_element?(view, "#indexer-stats-#{busy.id}-none")
+  end
+
+  test "a strip opens and closes the recent failures dialog", %{conn: conn, busy: busy} do
+    insert!(busy, %{})
+    failure = insert!(busy, %{outcome: "timeout", error_message: "Cardigann call timed out"})
+    {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+    view |> element("#indexer-stats-#{busy.id}-none") |> render_click()
+    assert has_element?(view, "#indexer-failure-#{failure.id}", "Cardigann call timed out")
+
+    render_hook(view, "close_search_failures", %{})
+    refute has_element?(view, "#indexer-failures")
+  end
+end

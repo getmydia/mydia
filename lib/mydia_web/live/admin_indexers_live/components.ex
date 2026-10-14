@@ -8,7 +8,8 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   alias MydiaWeb.AdminIndexersLive.{
     CardigannEngineComponents,
     FlareSolverrComponents,
-    LoginComponents
+    LoginComponents,
+    SearchStatsComponents
   }
 
   alias MydiaWeb.IndexerComponents
@@ -32,6 +33,8 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
 
   attr :cardigann_cache_bytes, :integer, default: 0
   attr :cardigann_engine_expanded, :boolean, default: false
+  attr :search_stats, :map, default: %{}
+  attr :search_stats_window, :atom, default: :day
 
   def indexers_tab(assigns) do
     ~H"""
@@ -48,6 +51,9 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
         </span>
       </div>
     <% else %>
+      <div class="flex justify-end">
+        <SearchStatsComponents.window_toggle window={@search_stats_window} />
+      </div>
       <.admin_section
         :if={@indexers != []}
         id="indexer-connections-section"
@@ -61,6 +67,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
               indexer={indexer}
               health={Map.get(@indexer_health, indexer.id, %{status: :unknown})}
               retesting={MapSet.member?(@retesting_paused, indexer.id)}
+              stats={Map.get(@search_stats, indexer.id, [])}
             />
           </:row>
           <:empty>No indexer connections.</:empty>
@@ -96,6 +103,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
         <:row :let={indexer}>
           <.library_indexer_row
             indexer={indexer}
+            stats={Map.get(@search_stats, indexer.id, [])}
             active_engine={(@cardigann_engine && @cardigann_engine.active) || :builtin}
             flaresolverr_available={
               @flaresolverr_status.configured and @flaresolverr_status.status != :disabled
@@ -111,6 +119,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :indexer, :any, required: true
   attr :health, :map, required: true
   attr :retesting, :boolean, default: false
+  attr :stats, :list, default: []
 
   defp indexer_row(assigns) do
     assigns =
@@ -209,6 +218,9 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           />
         </.row_actions>
       </:actions>
+      <:body>
+        <SearchStatsComponents.stats_strip indexer_id={@indexer.id} summaries={@stats} />
+      </:body>
     </.admin_row>
     """
   end
@@ -216,6 +228,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :indexer, :any, required: true
   attr :flaresolverr_available, :boolean, required: true
   attr :active_engine, :atom, default: :builtin
+  attr :stats, :list, default: []
 
   defp library_indexer_row(assigns) do
     ~H"""
@@ -321,6 +334,9 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           />
         </.row_actions>
       </:actions>
+      <:body>
+        <SearchStatsComponents.stats_strip indexer_id={@indexer.id} summaries={@stats} />
+      </:body>
     </.admin_row>
     """
   end

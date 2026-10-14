@@ -10,7 +10,14 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
-  alias MydiaWeb.AdminIndexersLive.{CardigannEngineEvents, ErrorMessages, LoginFlow}
+
+  alias MydiaWeb.AdminIndexersLive.{
+    CardigannEngineEvents,
+    ErrorMessages,
+    LoginFlow,
+    SearchStatsEvents
+  }
+
   alias MydiaWeb.IndexerComponents
 
   @impl true
@@ -28,6 +35,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> load_data()
      |> maybe_load_flaresolverr_status()
      |> CardigannEngineEvents.attach()
+     |> SearchStatsEvents.attach()
      |> LoginFlow.attach()}
   end
 
@@ -451,7 +459,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   def handle_event("test_library_indexer", %{"id" => id}, socket) do
     case Indexers.test_cardigann_connection(id) do
       {:ok, result} ->
-        {flash_type, flash_message} = library_test_flash(result)
+        {flash_type, flash_message} = ErrorMessages.library_test_flash(result)
         {:noreply, socket |> put_flash(flash_type, flash_message) |> load_data()}
 
       {:error, reason} ->
@@ -919,6 +927,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     socket
     |> assign(:library_indexers, library_indexers)
     |> assign(:library_indexer_stats, library_indexer_stats)
+    |> SearchStatsEvents.refresh()
   end
 
   defp get_indexer_health_status(indexers) do
@@ -1354,23 +1363,5 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
           Map.put(params, "connection_settings", stored)
         end
     end
-  end
-
-  # A search that reached the site but parsed nothing is neither a success nor
-  # an outage, and flattening it into "Connection successful" is what let five
-  # indexers report a green test while every search returned zero results. The
-  # flash component only has :info and :error (core_components.ex:45), so a
-  # degraded result is :error with a message that says what is degraded; the
-  # row's health badge carries the "degraded" state separately.
-  defp library_test_flash(%{success: true, status: "degraded"} = result) do
-    {:error, "#{result.message} (#{result.response_time_ms}ms)"}
-  end
-
-  defp library_test_flash(%{success: true} = result) do
-    {:info, "#{result.message} (#{result.response_time_ms}ms)"}
-  end
-
-  defp library_test_flash(result) do
-    {:error, "#{result.message}: #{result.error || "Unknown error"}"}
   end
 end
