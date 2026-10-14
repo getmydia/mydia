@@ -150,4 +150,15 @@ void main() {
       expect(destinations.map((d) => d.id), contains('collections'));
     });
   });
+
+  test('rail pin toggles and persists', () async {
+    final store = InMemorySidebarLayoutStore();
+    final container = _container(store);
+
+    expect(container.read(railPinnedProvider), isFalse);
+    container.read(railPinnedProvider.notifier).toggle();
+
+    expect(container.read(railPinnedProvider), isTrue);
+    expect(store.railPinned, isTrue);
+  });
 }

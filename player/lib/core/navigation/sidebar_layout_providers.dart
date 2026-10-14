@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -63,6 +65,18 @@ class SidebarEditMode extends _$SidebarEditMode {
   void toggle() => state = !state;
 
   void exit() => state = false;
+}
+
+/// Whether the viewer pinned the floating rail open on this device.
+@Riverpod(keepAlive: true)
+class RailPinned extends _$RailPinned {
+  @override
+  bool build() => ref.watch(sidebarLayoutStoreProvider).railPinned;
+
+  void toggle() {
+    state = !state;
+    unawaited(ref.read(sidebarLayoutStoreProvider).saveRailPinned(state));
+  }
 }
 
 /// The middle rows edit mode arranges, hidden ones included.

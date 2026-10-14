@@ -48,4 +48,35 @@ void main() {
 
     expect(store.get(), layout);
   });
+
+  test('the in-memory store remembers the rail pin', () async {
+    final store = InMemorySidebarLayoutStore();
+    expect(store.railPinned, isFalse);
+
+    await store.saveRailPinned(true);
+
+    expect(store.railPinned, isTrue);
+  });
+
+  test('the hive store round-trips the rail pin beside the layout', () async {
+    final store = HiveSidebarLayoutStore(box);
+    final layout = SidebarLayout.defaults.withHidden('movies');
+    expect(store.railPinned, isFalse);
+
+    await store.save(layout);
+    await store.saveRailPinned(true);
+
+    expect(store.railPinned, isTrue);
+    expect(store.get(), layout);
+
+    await store.saveRailPinned(false);
+    expect(store.railPinned, isFalse);
+  });
+
+  test('a stored pin alone leaves the layout unset', () async {
+    final store = HiveSidebarLayoutStore(box);
+    await store.saveRailPinned(true);
+
+    expect(store.get(), isNull);
+  });
 }
