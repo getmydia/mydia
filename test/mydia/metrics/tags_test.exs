@@ -29,4 +29,24 @@ defmodule Mydia.Metrics.TagsTest do
     assert Tags.oban_job(%{job: job}) == %{queue: "media", worker: "Mydia.Jobs.LibraryScanner"}
     assert Tags.oban_job(:junk) == %{queue: "unknown", worker: "unknown"}
   end
+
+  describe "indexer_search/1" do
+    test "stringifies the labels and names a missing engine" do
+      assert Tags.indexer_search(%{
+               indexer_name: "Fictional Tracker",
+               engine: nil,
+               kind: :search,
+               outcome: :timeout
+             }) == %{
+               indexer_name: "Fictional Tracker",
+               engine: "none",
+               kind: "search",
+               outcome: "timeout"
+             }
+    end
+
+    test "never raises" do
+      assert %{indexer_name: "unknown"} = Tags.indexer_search(:garbage)
+    end
+  end
 end

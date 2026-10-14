@@ -342,6 +342,8 @@ config :mydia, Oban,
        {"*/30 * * * *", Mydia.Jobs.MediaServerWatchedSync, args: %{"mode" => "all_enabled"}},
        # Purge expired release-blacklist rows daily at 5:30 AM (#123)
        {"30 5 * * *", Mydia.Jobs.BlacklistCleanup},
+       # Prune indexer search metrics past their 14-day retention daily at 4:45 AM
+       {"45 4 * * *", Mydia.Jobs.IndexerStatsCleanup},
        # Analyze media files lacking tech metadata every minute (#131)
        {"* * * * *", Mydia.Jobs.FileAnalysis},
        # Runs behind FileAnalysis: a file needs a duration before it can be
@@ -461,6 +463,11 @@ config :mydia, :indexer_search,
   # Default rate limit for Cardigann indexers (requests per minute per indexer)
   # Cardigann indexers hit sites directly, so conservative limits prevent bans
   default_cardigann_rate_limit: 3
+
+# How many Prowlarr-engine guest instances may run at once. Each instance
+# grows its own .NET heap (about 58 MB for a small search, more for a large
+# results page); see native/cardigann_guest/BENCH.md, "Memory per instance".
+config :mydia, :cardigann_wasm_max_instances, 2
 
 # Feature flags
 config :mydia, :features,

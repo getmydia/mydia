@@ -6,7 +6,7 @@ defmodule Mydia.Metrics.Tags do
   `:telemetry` detaches a handler that raises and Peep attaches one handler per
   event. Anything unrecognised becomes `"unknown"`. Every value comes from a
   bounded set: route patterns, HTTP methods, status classes, queue and worker
-  module names.
+  module names, indexer names, engines and outcomes.
   """
 
   alias Mydia.Perf.Keys
@@ -34,6 +34,26 @@ defmodule Mydia.Metrics.Tags do
     guard(%{queue: @unknown, worker: @unknown}, fn ->
       %{job: %Oban.Job{queue: queue, worker: worker}} = metadata
       %{queue: to_string(queue), worker: to_string(worker)}
+    end)
+  end
+
+  @doc "Indexer calls: name, engine (`none` outside Cardigann), kind and outcome."
+  @spec indexer_search(term()) :: %{
+          indexer_name: String.t(),
+          engine: String.t(),
+          kind: String.t(),
+          outcome: String.t()
+        }
+  def indexer_search(metadata) do
+    guard(%{indexer_name: @unknown, engine: @unknown, kind: @unknown, outcome: @unknown}, fn ->
+      %{indexer_name: name, kind: kind, outcome: outcome} = metadata
+
+      %{
+        indexer_name: to_string(name),
+        engine: to_string(Map.get(metadata, :engine) || "none"),
+        kind: to_string(kind),
+        outcome: to_string(outcome)
+      }
     end)
   end
 

@@ -199,6 +199,160 @@ benchmark and 1.6 GB of `VmHWM` in the container, so a container capped below ab
 - A file that wasmtime rejects is deleted and the engine compiles locally, so an
   unexpected mismatch costs the old first boot and no more.
 
+## Memory per instance (2026-10-13)
+
+Where the extra memory under load comes from, measured to decide which memory
+levers are worth applying. Production Alpine image of `origin/master`, engine
+loaded from the cached `.cwasm` (second boot), fixture tracker on 198.51.100.7 as in
+the 2026-10-12 section, driven through `bin/mydia rpc`. Nothing was committed or
+baked in; no real tracker was contacted.
+
+Method.
+
+- **Pages.** `lantern` (the two-row test page, 639 B, 2 releases) and a 1 MB variant
+  made by repeating the result row 3,400 times with invented release names
+  (993,972 B, 3,400 releases). The large page is a worst case: real result pages are
+  nearer 50 to 200 KB.
+- **Readings.** `VmRSS` and `VmHWM` from `/proc/self/status` of the BEAM, and
+  `Anonymous` from `/proc/self/smaps_rollup`, before and after each phase.
+  `VmHWM` was reset before each phase (`/proc/self/clear_refs`, value 5), and `VmRSS`
+  was also sampled every 4 ms during the phase to get the peak. Each phase was run
+  twice, after a GC of the calling process and a 2.5 s pause. The BEAM's own
+  baseline drifts by 30 to 70 MB between phases (263 to 333 MB anonymous), so only
+  peak-minus-before differences are used, not absolute values.
+- **Guest linear memory.** The patched Wasmex does not expose a memory size for a
+  component store, so the guest's footprint is the anonymous-memory delta around the
+  call. For the "while alive" readings, `Engine.run/4` was replicated in the script
+  so memory could be read before the instance was killed.
+- **Concurrency** is `Task.async_stream` over `Engine.call/3`, the real path.
+
+| Case | Peak RSS over before (MB) | Anonymous while the instance is alive (MB) | Wall |
+|---|---|---|---|
+| Instantiate only, 1 instance | +0.1 | +0.05 | 8 to 11 ms |
+| Instantiate only, 4 at once | +0.4 | +0.05 each | 0.3 s (held 300 ms) |
+| One search, `lantern` | **+58** (58.4, 58.3) | **+49** to +51 | 32 ms |
+| One search, 1 MB page | **+176 to +183** | +65 to +155 (noisy, includes the BEAM decoding 3,400 results) | 0.9 to 1.1 s |
+| 4 concurrent, `lantern` | **+231** (230.9, 230.6) | n/a | 60 to 63 ms for all four |
+| 4 concurrent, 1 MB page | **+614 to +693** | n/a | 6.4 to 6.6 s for all four |
+| 8 concurrent, 1 MB page | +1,205 to +1,206 | n/a | 17.0 to 17.9 s for all eight |
+
+Findings.
+
+- **Instantiation is free.** A fresh instance costs 0.1 MB and about 10 ms. The
+  `.cwasm` is mapped and its data segments are copy-on-write, and the .NET runtime
+  does not start until the first export is called, so none of the guest's memory is
+  touched at instantiation.
+- **The cost is the first call.** The smallest possible search touches about 49 MB
+  of anonymous memory in the guest (runtime start, the YAML definition, the parser)
+  and raises the BEAM's RSS by about 58 MB, the same in every run. That is a floor
+  per concurrent instance. Four concurrent small searches are 4 x 58 = 231 MB,
+  which is the +229 MB seen in the 2026-10-12 section.
+- **Large pages cost about 3 times more.** Peak memory is linear in the number of
+  concurrent calls: 4 x 1 MB pages peak at +614 to +693 MB and 8 at +1.2 GB, about
+  150 to 175 MB each.
+- **Concurrency does not buy throughput on large pages.** One search takes 1.1 s,
+  four at once take 6.5 s (4 x 1.1 would be 4.4 s serially) and eight take 17 s. For
+  small pages four at once take 60 ms against 4 x 32 ms serially.
+- **Memory returns only when the calling process lets go of the store.** After an
+  instance is killed, its anonymous memory stayed resident until the owning process
+  was garbage collected (in the replicated serial runs, +50 MB remained for the
+  next phase until the script's process collected). When the caller was a
+  short-lived `Task` the memory was back at baseline as soon as the task ended. A
+  long-lived caller of `Engine.call/3` could therefore hold the last instance's
+  memory between calls. Not investigated further.
+
+Levers, tried where they could be.
+
+| Lever | Test | Result |
+|---|---|---|
+| Guest GC environment | Passed `DOTNET_GCgen0size=0x100000`, `DOTNET_GCgen0MaxBudget=0x100000`, `DOTNET_GCConserveMemory=9`, `DOTNET_GCHeapHardLimit=0x4000000` through the WASI environment, 3 runs each | No change on `lantern` (49 MB in all 12 runs). On the 1 MB page 54 to 129 MB with every setting, within the run-to-run spread of the default (69, 86, 129 MB). Either the NativeAOT-LLVM runtime ignores them or they do not bind |
+| Per-instance limit | Ran with 32, 48, 64, 80, 96, 128, 256 and 512 MB | 32 and 48 MB trap on the first call. 64 MB passes `lantern` but the 1 MB page **hangs until the call timeout** instead of failing. 80 MB and up pass the 1 MB page, using 71 to 83 MB at 80 MB against 69 to 129 MB at the default. The guest's GC adapts to the limit, but a smaller limit saves little for pages that fit in it; it mostly caps the worst case |
+| Pooling allocator or copy-on-write memory init | Reasoned from instantiate-only and first-call numbers | Instantiation touches 0.1 MB, so there is nothing to save there. The 49 MB is written by the runtime after instantiation, which neither technique avoids |
+| Compile store in `:persistent_term` | Dropped `store` from the persistent term on an idle engine and collected every process | Anonymous 292.2 to 286.9 MB, RSS 509.0 to 503.7 MB: **5.3 MB**. One sample. An earlier run in a busy VM showed 47 MB, which was the BEAM baseline settling, not the store |
+
+Idle, engine ready (second boot, 30 s after start): `VmRSS` 501.6 MB, `VmHWM`
+572.5 MB. By kind, from `smaps_rollup` and `status`: **anonymous 284.8 MB**,
+shared memory 151.5 MB (the compiled code, in two `memfd:vmem` mappings of 64 to
+65 MB each, one writable and one executable, so `Rss` counts the same pages twice;
+`Pss_Shmem` is 76.5 MB), file-backed 65.3 MB (BEAM, NIF and shared libraries; the
+Wasmex NIF alone is 15 MB). The anonymous part is the BEAM heap, the Wasmex engine
+and the retained component state; the cached `.cwasm` is not file-backed here, it
+sits in `memfd` shared memory.
+
+What this means for the levers.
+
+- **Concurrency cap: worth applying.** Per-instance memory is a hard 58 MB floor
+  and rises to 150 to 180 MB on a 1 MB page, and peak memory is linear in the
+  number of concurrent calls. A cap of 2 or 3 turns the 4-way peaks (+231 MB small,
+  +614 to +693 MB large) into roughly half. It does not cost latency where it
+  matters: on large pages concurrency was slower than serial, and on small pages
+  the added wait is tens of milliseconds.
+- **Guest GC variables: skip.** No setting moved the number.
+- **Lowering the 512 MB limit: skip as a memory lever.** It saves nothing for
+  normal pages, and too low a value (64 MB) makes a large page hang until the
+  timeout instead of failing. If anything, a ceiling of 128 to 256 MB would only cap
+  a pathological page; it is a safety choice, not a saving.
+- **Pooling allocator and copy-on-write init: skip.** Instantiation is already
+  0.1 MB.
+- **Dropping the compile store: skip.** 5 MB of 500, not worth the change.
+
+## Memory per instance, after the cap (2026-10-14)
+
+The same measurement run on this branch, which caps concurrent guest instances at
+`:cardigann_wasm_max_instances` (default 2; set it in application config) and runs
+each guest call in a short-lived process so the instance's memory is released when
+the call ends. Same method and fixture as the section above: Alpine image built
+from `origin/master` (before) and from this branch (after), engine loaded from the
+cached `.cwasm`, fixture tracker on 198.51.100.7, `lantern` and the 1 MB page of
+invented releases, driven through `bin/mydia rpc` with `Engine.call/3`. Each case
+ran twice, back to back, in separate containers for the two images; the table gives
+both readings. Peak is the 4 ms `VmRSS` sampler minus `VmRSS` before the burst.
+Latency is per search from the call to its return, so it includes any wait for a
+slot.
+
+| Burst | Peak over before (MB), before the cap | Peak over before (MB), with the cap | Wall (ms), before | Wall (ms), with the cap | p50 / p95 (ms), before | p50 / p95 (ms), with the cap |
+|---|---|---|---|---|---|---|
+| 4 x `lantern` | 229.9, 229.5 (226.6, 227.8) | **117.2, 117.2** | 89, 68 (57, 66) | 86, 73 | 88 / 89, 53 / 68 (55 / 57, 53 / 66) | 80 / 86, 70 / 73 |
+| 8 x `lantern` | 452.9, 454.6 (454.2, 453.6) | **115.1, 117.3** | 104, 105 (95, 99) | 165, 147 | 92 / 103, 99 / 105 (83 / 95, 92 / 99) | 117 / 165, 107 / 146 |
+| 4 x 1 MB page | 642.8, 617.1 (651.6, 563.6) | **447.3, 387.2** | 7,542, 7,235 (7,078, 6,659) | **4,327, 4,729** | 7,489 / 7,542, 7,157 / 7,235 (7,002 / 7,078, 6,641 / 6,659) | 4,274 / 4,327, 4,723 / 4,729 |
+| 8 x 1 MB page | 993.7, 1,235.9 (1,138.2, 965.1) | **398.4, 362.0** | 18,606, 18,648 (16,476, 16,763) | **9,010, 8,459** | 18,566 / 18,604, 18,599 / 18,647 (16,413 / 16,476, 16,735 / 16,763) | 7,022 / 9,010, 6,712 / 8,459 |
+
+Figures in brackets are a second, independent container run of the before image.
+
+What changed.
+
+- **Peak memory no longer grows with the number of callers.** Four and eight small
+  searches peak at the same +115 to +117 MB, two instances' worth. A burst of large
+  pages peaks at +360 to +450 MB, down from +565 to +1,240 MB, about half to a third.
+- **The cap removes the contention on large pages.** Four 1 MB pages finish in 4.3
+  to 4.7 s against 6.7 to 7.5 s, and eight in 8.5 to 9.0 s against 16.5 to 18.6 s.
+  Median latency for the eight is 6.7 to 7.0 s against 16.4 to 18.6 s. The first
+  measurement predicted this: on large pages concurrency was slower than serial.
+- **Small pages pay the wait.** Four at once cost nothing visible (p95 73 to 86 ms
+  against 57 to 89 ms). Eight at once take 147 to 165 ms against 95 to 105 ms,
+  because six of them queue behind two instances; the added wait is tens of
+  milliseconds.
+- **A long-lived caller no longer holds the last instance.** One long-lived process
+  (the rpc evaluator) ran a `lantern` search four times, waiting 6 s after each and
+  reading anonymous memory around it, with no garbage collection of the caller. Before:
+  +51.4, -2.0, +51.7, +0.9 MB (the last instance stays resident until the caller
+  collects it, then the next call's instance adds 51 MB again). After: 0.0, 0.0, 0.0,
+  0.0 MB.
+- **Idle before and after a burst.** After the cap, RSS after all eight bursts and
+  30 s of waiting was 570 MB against 558 MB before the first burst (anonymous 311
+  against 299 MB). The before image's final readings (84 and 266 MB RSS, below its own
+  idle value of 541 to 568 MB) mean the kernel reclaimed pages of the shared compiled
+  code under the 1.5 to 1.6 GB peaks, so they do not say how much the instances held;
+  the long-lived caller measurement above is the clean one.
+
+Not measured: `mix mydia.cardigann_bench` (M4) was not re-run. It queries the 81
+public definitions on live trackers, which this measurement does not do, and it
+runs one definition at a time (`--concurrency 1`) for the latency comparison, where
+the cap never queues. Its p95 is therefore expected to be unchanged: 248.6 ms
+against a limit of 272.2 ms in the second run. What the cap changes is the case of
+more than two searches in flight, covered by the table. The wait there is bounded by
+the call timeout, which counts queue time.
+
 ## Caveats for users
 
 Every remaining failure of this run, stated as a user would meet it. Nothing
@@ -212,9 +366,13 @@ here is softened; the same list is in the user docs.
    capped below roughly 2 GB can be killed during it. Later boots load the cached
    `.cwasm` in under a second. The cache lives in the data directory and must
    survive restarts, or every restart repeats the first boot.
-2. **Memory.** A warm engine adds about 64 to 67 MB over the default at rest and
-   about 288 to 295 MB at the peak of four concurrent searches. Both are measured on a tiny
-   fixture page; real result pages are larger.
+2. **Memory.** A warm engine adds about 64 to 67 MB over the default at rest. A
+   running search adds about 58 MB on a tiny page and 175 to 185 MB on a 1 MB page
+   (real result pages are nearer 50 to 200 KB), released when the search ends. At
+   most `cardigann_wasm_max_instances` searches (default 2) run at once and the
+   rest wait, so the peak is about 117 MB over idle for any number of small
+   searches and 360 to 450 MB for a burst of 1 MB pages (before the cap: 230 MB for
+   four small searches, 455 MB for eight, and up to 1.2 GB for eight large ones).
 3. **Disk and download.** A 67.7 MB download from GitHub on first boot (38.9 MB
    for the component, 28.8 MB for its compressed precompiled form; 38.9 MB when
    the install has to compile) and 158 MB in the data directory.
@@ -222,7 +380,11 @@ here is softened; the same list is in the user docs.
    ms) and 112 ms more at p95 (248.6 against 136.1 ms), engine overhead only,
    excluding the network. Definitions with a `requestDelay` wait as Prowlarr
    does (the Elixir engine ignores it), so their searches are slower: the unpaired
-   p95 over every successful search is 1.3 s for the wasm engine.
+   p95 over every successful search is 1.3 s for the wasm engine. These are
+   one-at-a-time figures. With more than two searches in flight the extra ones
+   wait for a slot: eight small searches at once take 147 to 165 ms in total
+   instead of 95 to 105 ms, while eight 1 MB pages take 8.5 to 9.0 s instead of
+   16.5 to 18.6 s. The wait counts against the call timeout.
 5. **Cloudflare and dead trackers.** 20 of the 81 public definitions end in an
    error on the wasm engine: 12 in HTTP 403 (1337x, btetree, damagnet, eztv,
    pornrips, sexypics, skidrowrepack, torrentbyte, torrentcore, torrentsome,

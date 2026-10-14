@@ -252,10 +252,10 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
       :for={engine <- @engines}
       id={"verified-#{@definition_id}-#{engine}"}
       class={[
-        "badge badge-xs gap-1 tooltip",
+        "badge badge-xs gap-1",
         if(engine == @active, do: "badge-primary", else: "badge-outline")
       ]}
-      data-tip={@tip}
+      title={@tip}
     >
       <.icon name="hero-check" class="w-3 h-3" />{engine_name(engine)}
     </span>

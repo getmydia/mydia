@@ -177,6 +177,9 @@ defmodule Mydia.Application do
         # Prometheus endpoint. Returns :ignore unless MYDIA_METRICS_ENABLED.
         # Its slow poller queries the repo, so it starts after it.
         Mydia.Metrics.Supervisor,
+        # Indexer search metrics. After the repo for the same reason as the
+        # events writer: terminate/2 writes a final batch.
+        Mydia.Indexers.SearchStats.Recorder,
         Mydia.Downloads.Client.Registry,
         # Owns the ETS table holding the derived set of client torrents Mydia
         # does not manage. init/1 only creates the table (no I/O), so unlike
@@ -251,7 +254,7 @@ defmodule Mydia.Application do
   # ready. Nothing is started when Cardigann is off.
   defp cardigann_engine_children do
     if Mydia.Indexers.CardigannFeatureFlags.enabled?(),
-      do: [Mydia.Indexers.Cardigann.EngineSwitcher],
+      do: [Mydia.Indexers.Cardigann.Wasm.Slots, Mydia.Indexers.Cardigann.EngineSwitcher],
       else: []
   end
 

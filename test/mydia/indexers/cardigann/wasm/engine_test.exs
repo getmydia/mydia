@@ -547,6 +547,135 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
     end
   end
 
+  describe "process isolation" do
+    # An instance's memory stays resident while the process that created the
+    # store and instance is alive (the resources hang off its heap), so the
+    # guest work runs in a process that ends with the call.
+    test "the guest work runs in a short-lived process, not the caller", %{bypass: b, ctx: ctx} do
+      test_pid = self()
+      ctx = Map.put(ctx, :guest_probe, &send(test_pid, {:guest, &1}))
+
+      assert {:ok, _} =
+               Engine.call({:capabilities, yaml("lantern-public.yml", b)}, ctx, @call_timeout)
+
+      assert_receive {:guest, {:task, task}}
+      assert_receive {:guest, {:instance, instance}}
+      assert_receive {:guest, {:watcher, watcher}}
+      assert task != self()
+
+      refs = for pid <- [task, instance, watcher], do: Process.monitor(pid)
+      for ref <- refs, do: assert_receive({:DOWN, ^ref, :process, _, _}, 5_000)
+    end
+
+    test "respects the calling process's $callers in the guest process", %{bypass: b, ctx: ctx} do
+      test_pid = self()
+
+      ctx =
+        Map.put(ctx, :guest_probe, fn
+          {:task, _} -> send(test_pid, {:callers, Process.get(:"$callers")})
+          _ -> :ok
+        end)
+
+      assert {:ok, _} =
+               Engine.call({:capabilities, yaml("lantern-public.yml", b)}, ctx, @call_timeout)
+
+      assert_receive {:callers, callers}
+      assert self() in callers
+    end
+
+    test "a killed guest process takes its instance with it, and a trapping caller is left clean",
+         %{bypass: b, ctx: ctx} do
+      test_pid = self()
+
+      # Hang the task right after the instance starts, so only a kill ends it.
+      ctx =
+        Map.put(ctx, :guest_probe, fn
+          {:instance, pid} ->
+            send(test_pid, {:instance, self(), pid})
+            Process.sleep(:infinity)
+
+          _ ->
+            :ok
+        end)
+
+      yaml = yaml("lantern-public.yml", b)
+
+      caller =
+        spawn(fn ->
+          Process.flag(:trap_exit, true)
+          result = Engine.call({:capabilities, yaml}, ctx, @call_timeout)
+          send(test_pid, {:caller_done, result, Process.info(self(), :messages)})
+        end)
+
+      caller_ref = Process.monitor(caller)
+
+      assert_receive {:instance, task, instance}
+      assert Process.alive?(instance)
+      ref = Process.monitor(instance)
+      Process.exit(task, :kill)
+
+      assert_receive {:DOWN, ^ref, :process, ^instance, _}, 5_000
+      assert_receive {:caller_done, {:error, %{type: :engine_error}}, {:messages, []}}, 5_000
+      assert_receive {:DOWN, ^caller_ref, :process, ^caller, _}, 5_000
+    end
+
+    test "a killed caller takes the guest task and its instance with it", %{bypass: b, ctx: ctx} do
+      test_pid = self()
+
+      ctx =
+        Map.put(ctx, :guest_probe, fn
+          {:instance, pid} ->
+            send(test_pid, {:instance, pid})
+            Process.sleep(:infinity)
+
+          event ->
+            send(test_pid, event)
+        end)
+
+      yaml = yaml("lantern-public.yml", b)
+      caller = spawn(fn -> Engine.call({:capabilities, yaml}, ctx, @call_timeout) end)
+
+      assert_receive {:task, task}
+      assert_receive {:watcher, watcher}
+      assert_receive {:instance, instance}
+      refs = for pid <- [task, watcher, instance], do: {pid, Process.monitor(pid)}
+      Process.exit(caller, :kill)
+
+      for {pid, ref} <- refs, do: assert_receive({:DOWN, ^ref, :process, ^pid, _}, 5_000)
+    end
+
+    test "an instance that crashes mid-call gives the caller an error, not a hang",
+         %{bypass: b, ctx: ctx} do
+      test_pid = self()
+
+      ctx =
+        Map.put(ctx, :guest_probe, fn
+          {:instance, pid} ->
+            send(test_pid, {:instance, pid})
+            Process.sleep(:infinity)
+
+          _ ->
+            :ok
+        end)
+
+      yaml = yaml("lantern-public.yml", b)
+
+      # A caller that does not trap exits must survive the guest's crash.
+      caller =
+        spawn(fn ->
+          result = Engine.call({:capabilities, yaml}, ctx, @call_timeout)
+          send(test_pid, {:result, result, self()})
+          receive do: (:done -> :ok)
+        end)
+
+      assert_receive {:instance, instance}
+      Process.exit(instance, :kill)
+      assert_receive {:result, {:error, %{type: :engine_error}}, ^caller}, 5_000
+      assert Process.alive?(caller)
+      send(caller, :done)
+    end
+  end
+
   describe "telemetry" do
     test "every call emits duration and network time", %{bypass: b, ctx: ctx} do
       respond(b, "GET", "/search", 200, body("lantern-search.html"))
@@ -566,11 +695,52 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
 
       assert {:ok, _} = search("lantern-public.yml", b, ctx)
 
-      assert_receive {:telemetry, %{duration: duration, network: network},
+      assert_receive {:telemetry, %{duration: duration, network: network, queue: queue},
                       %{export: :search, outcome: :ok}}
 
+      assert queue == 0
       assert network > 0
       assert duration >= network
+    end
+
+    test "a call that waits out its timeout for a slot times out and reports the queue time",
+         %{ctx: ctx} do
+      alias Mydia.Indexers.Cardigann.Wasm.Slots
+
+      # The application may already run the server (max 2); hold every slot.
+      unless GenServer.whereis(Slots), do: start_supervised!({Slots, max: 2})
+      max = :sys.get_state(Slots).max
+      test_pid = self()
+
+      holders =
+        for _ <- 1..max do
+          spawn_link(fn ->
+            Slots.run(5_000, fn ->
+              send(test_pid, :held)
+              receive do: (:release -> :ok)
+            end)
+          end)
+        end
+
+      for _ <- 1..max, do: assert_receive(:held)
+      id = "t7q-#{System.unique_integer([:positive])}"
+
+      :telemetry.attach(
+        id,
+        [:mydia, :cardigann, :wasm, :call],
+        fn _event, measurements, metadata, _ ->
+          send(test_pid, {:telemetry, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(id) end)
+
+      assert {:error, %{type: :timeout}} = Engine.call({:capabilities, "id: x"}, ctx, 200)
+
+      assert_receive {:telemetry, %{queue: queue}, %{outcome: :timeout}}
+      assert System.convert_time_unit(queue, :native, :millisecond) > 0
+      Enum.each(holders, &send(&1, :release))
     end
   end
 end

@@ -19,7 +19,7 @@ defmodule Mydia.Metrics.Definitions do
   @ms {:native, :millisecond}
 
   @spec all() :: [Telemetry.Metrics.t()]
-  def all, do: vm() ++ http() ++ oban() ++ library() ++ downloads() ++ streaming()
+  def all, do: vm() ++ http() ++ oban() ++ library() ++ downloads() ++ streaming() ++ indexers()
 
   defp vm do
     [
@@ -117,6 +117,28 @@ defmodule Mydia.Metrics.Definitions do
         :direct_play_sessions,
         [:kind],
         "Running direct-play and remux sessions"
+      )
+    ]
+  end
+
+  # One label per configured indexer: a handful on a home install, which is
+  # what keeps this bounded.
+  defp indexers do
+    [
+      counter("mydia.indexer.search.total",
+        event_name: [:mydia, :indexers, :search, :stop],
+        tags: [:indexer_name, :engine, :kind, :outcome],
+        tag_values: &Tags.indexer_search/1,
+        description: "Indexer calls by indexer, engine, kind and outcome"
+      ),
+      distribution("mydia.indexer.search.duration.milliseconds",
+        event_name: [:mydia, :indexers, :search, :stop],
+        measurement: :duration,
+        unit: @ms,
+        tags: [:indexer_name, :engine, :kind],
+        tag_values: &Tags.indexer_search/1,
+        reporter_options: [peep_bucket_calculator: Buckets.Job],
+        description: "Indexer call duration, failures included"
       )
     ]
   end

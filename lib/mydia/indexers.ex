@@ -25,6 +25,8 @@ defmodule Mydia.Indexers do
   require Logger
   alias Mydia.Indexers.Adapter
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Indexers.ResultDedup
+  alias Mydia.Indexers.SearchStats
   alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.CardigannDefinition
@@ -291,6 +293,15 @@ defmodule Mydia.Indexers do
             name = indexer_display_name(config)
             message = format_exit_reason(reason)
 
+            SearchStats.Telemetry.emit(config,
+              kind: :search,
+              outcome: if(reason == :timeout, do: :deadline, else: :crashed),
+              # The task's own start is gone with it; every task starts with
+              # the fan-out, so the search's elapsed time stands in.
+              duration_ms: System.monotonic_time(:millisecond) - start_time,
+              error_message: message
+            )
+
             Logger.error("Indexer search failed for #{name}: #{inspect(reason)}")
 
             on_indexer_result.(%IndexerProgress{
@@ -343,7 +354,7 @@ defmodule Mydia.Indexers do
     results
     |> filter_by_seeders(min_seeders)
     |> then(fn results ->
-      if should_deduplicate, do: deduplicate_results(results), else: results
+      if should_deduplicate, do: ResultDedup.deduplicate(results), else: results
     end)
     |> rank_results(query, min_seeders)
     |> Enum.take(max_results)
@@ -585,14 +596,16 @@ defmodule Mydia.Indexers do
 
     if CardigannFeatureFlags.enabled?() do
       list_cardigann_definitions(enabled: true)
-      |> Enum.map(&cardigann_definition_to_config/1)
+      |> Enum.map(&cardigann_config/1)
     else
       []
     end
   end
 
   # Converts a CardigannDefinition to the config map expected by the Cardigann adapter
-  defp cardigann_definition_to_config(%CardigannDefinition{} = definition) do
+  @doc false
+  @spec cardigann_config(CardigannDefinition.t()) :: map()
+  def cardigann_config(%CardigannDefinition{} = definition) do
     %{
       id: definition.id,
       type: :cardigann,
@@ -637,8 +650,9 @@ defmodule Mydia.Indexers do
 
   defp search_with_metrics(config, query, opts) do
     start_time = System.monotonic_time(:millisecond)
+    SearchStats.Network.reset()
 
-    result =
+    {outcome, results, error_message} =
       case search(config, query, opts) do
         {:ok, results} ->
           # Per-indexer-config NZB min-post-age filter (#121). Applied here
@@ -649,24 +663,31 @@ defmodule Mydia.Indexers do
           # keyed by `result.indexer` would never match the configured
           # name. Doing it here, with the originating config in scope,
           # sidesteps that gap entirely.
-          filtered = reject_too_fresh_nzbs_for_config(results, config)
-          {true, filtered, nil}
+          {:ok, reject_too_fresh_nzbs_for_config(results, config), nil}
 
         {:error, error} ->
           Logger.warning("Indexer search failed for #{config.name}: #{inspect(error)}")
 
-          {false, [], format_indexer_error(error)}
+          {error_outcome(error), [], format_indexer_error(error)}
       end
 
-    end_time = System.monotonic_time(:millisecond)
-    duration = end_time - start_time
+    duration = System.monotonic_time(:millisecond) - start_time
+
+    SearchStats.Telemetry.emit(config,
+      kind: :search,
+      outcome: outcome,
+      duration_ms: duration,
+      result_count: length(results),
+      network_ms: SearchStats.Network.take_ms(),
+      error_message: error_message
+    )
 
     # After the search, not before: an indexer that failed during this very
     # search has just been paused, and the user should see that too.
     paused =
       if Keyword.get(opts, :report_paused, false), do: paused_indexer_list(config), else: []
 
-    {success, results, error_message} = result
+    success = outcome == :ok
 
     metrics = %{
       paused: paused,
@@ -725,64 +746,14 @@ defmodule Mydia.Indexers do
 
   defp format_indexer_error(%Adapter.Error{message: message}), do: message
 
+  defp error_outcome(%Adapter.Error{type: type}), do: type
+
   defp filter_by_seeders(results, min_seeders) when min_seeders > 0 do
     # NZB results have nil seeders; the min-seeders setting is torrent-only.
     Enum.filter(results, fn result -> is_nil(result.seeders) or result.seeders >= min_seeders end)
   end
 
   defp filter_by_seeders(results, _min_seeders), do: results
-
-  defp deduplicate_results(results) do
-    # Group results by normalized title and hash
-    results
-    |> Enum.group_by(&dedup_key/1)
-    |> Enum.map(fn {_key, group} ->
-      # For each group, merge duplicates by taking the best one
-      merge_duplicates(group)
-    end)
-  end
-
-  defp dedup_key(result) do
-    # Extract hash from magnet link if available
-    hash = extract_hash_from_url(result.download_url)
-    normalized_title = normalize_title(result.title)
-
-    {hash, normalized_title}
-  end
-
-  defp extract_hash_from_url(url) when is_binary(url) do
-    case Regex.run(~r/urn:btih:([a-f0-9]{40})/i, url) do
-      [_, hash] -> String.downcase(hash)
-      nil -> nil
-    end
-  end
-
-  defp extract_hash_from_url(nil), do: nil
-
-  defp normalize_title(title) when is_binary(title) do
-    title
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9]+/, "")
-  end
-
-  defp normalize_title(nil), do: ""
-
-  defp merge_duplicates([single]), do: single
-
-  defp merge_duplicates(duplicates) do
-    # When we have duplicates, prefer:
-    # 1. Results with more seeders
-    # 2. Results from more reliable sources (if we had source ranking)
-    # 3. Results with complete metadata
-    Enum.max_by(duplicates, fn result ->
-      # NZB results have nil seeders; treat as 0 for ordering only.
-      {result.seeders || 0, has_complete_metadata?(result)}
-    end)
-  end
-
-  defp has_complete_metadata?(%SearchResult{quality: quality}) do
-    quality != nil && quality.resolution != nil && quality.source != nil
-  end
 
   defp rank_results(results, search_query, min_seeders) do
     # Use the unified ReleaseRanker for consistent scoring across manual and automated searches
