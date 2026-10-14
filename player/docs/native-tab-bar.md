@@ -33,9 +33,10 @@ dock exactly as before: a missing plugin, a PlatformException, any other
 error, or no answer within 2 seconds (each is logged as
 `[NativeTabBar] ... using the Flutter dock`).
 
-`initialize()` is awaited once from `_startApp` in `main.dart`, and `supported`
-is read synchronously in `build` afterwards (the same shape as
-`InputCapabilities`). `flutter test` never calls `initialize()`, so tests see
+`initialize()` runs once inside the `inputCapabilities` startup step of
+`_startApp` in `main.dart`, through `Future.wait` alongside
+`InputCapabilities.initialize()`, and `supported` is read synchronously in
+`build` afterwards (the same shape as `InputCapabilities`). `flutter test` never calls `initialize()`, so tests see
 false unless they set `NativeTabBarSupport.debugOverride` (reset it in
 `tearDown`).
 
@@ -273,10 +274,27 @@ From the shipped build:
   sheet closes it.
 - [ ] VoiceOver reads each tab, the badge, the accessory summary and its
   play/pause button.
+- [ ] Open the cast sheet from the accessory: no second cast pill appears.
+- [ ] Open a dialog from a shell screen: the floating cast pill does not
+  appear.
+- [ ] Close the drawer: screens do not jump.
+- [ ] Scroll in the middle of the screen right after a tab switch.
+- [ ] Status-bar tap scrolls the screen to the top (unverified after the root
+  swap, see Known limits).
 - [ ] Rotation: landscape switches to the sidebar (bar gone); portrait brings
   the bar back on the right tab.
 - [ ] Embed mode (if testable): the `Mydia` back item leads and works.
 - [ ] No `unknown SF Symbol` or `unknown tab id` lines in the device log.
+
+## Known limits
+
+- Status-bar tap scroll-to-top after the root swap is unverified:
+  `FlutterAppDelegate` forwards some behavior only when the root is a
+  `FlutterViewController`, and the root is now the tab controller. Check on
+  device.
+- Cast artwork in the native accessory is fetched by `URLSession` and is
+  subject to App Transport Security. Plain-http artwork fails to load and the
+  accessory keeps the state symbol.
 
 ## Adding a Swift file to the Runner
 
