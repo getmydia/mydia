@@ -4,6 +4,7 @@ import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../glass_surface.dart';
+import '../native_glass.dart';
 import '../toast/toast_obstruction.dart';
 import 'back_to_mydia_button.dart';
 import 'sidebar_content.dart';
@@ -58,6 +59,7 @@ class DesktopSidebar extends StatelessWidget {
 /// layered depth — replacing the prior flat `Container(color: background)` +
 /// faint 1px border (R6). The chrome fill clears the R10 legibility floor so
 /// nav labels stay readable over any backdrop.
+/// On iOS 26 and macOS 26 the blur is Apple's native glass ([NativeGlass]).
 ///
 /// Extracted as a public widget so the glass composition is unit-testable
 /// without mounting the full shell's provider graph.
@@ -65,6 +67,15 @@ class GlassSidebarPanel extends StatelessWidget {
   final Widget child;
 
   const GlassSidebarPanel({super.key, required this.child});
+
+  /// Defines the panel's right edge against the content column, on both the
+  /// native and the Flutter glass.
+  static const _rim = Border(
+    right: BorderSide(
+      color: DepthTokens.rimColor,
+      width: DepthTokens.rimWidth,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -74,16 +85,16 @@ class GlassSidebarPanel extends StatelessWidget {
         width: Breakpoints.sidebarWidth,
         child: DecoratedBox(
           decoration: const BoxDecoration(boxShadow: DepthTokens.chrome),
-          child: GlassSurface(
-            blurSigma: DepthTokens.blurChrome,
-            fillColor: AppColors.surface.withValues(
-              alpha: DepthTokens.chromeFillOpacity,
-            ),
-            border: const Border(
-              right: BorderSide(
-                color: DepthTokens.rimColor,
-                width: DepthTokens.rimWidth,
+          child: NativeGlass(
+            cornerRadius: 0,
+            border: _rim,
+            fallback: (child) => GlassSurface(
+              blurSigma: DepthTokens.blurChrome,
+              fillColor: AppColors.surface.withValues(
+                alpha: DepthTokens.chromeFillOpacity,
               ),
+              border: _rim,
+              child: child,
             ),
             child: child,
           ),

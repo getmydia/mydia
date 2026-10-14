@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/native_glass_support.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_pill.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/native_glass.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
+import 'package:player/presentation/widgets/nav/desktop_sidebar.dart';
 import 'package:player/presentation/widgets/nav/dock_glass.dart';
 
 void _mockPlatformViews(WidgetTester tester) {
@@ -96,5 +98,39 @@ void main() {
       expect(surface.borderRadius, CastPill.radius);
       expect(surface.fillColor, DockGlass.fill);
     }, variant: _ios);
+  });
+
+  group('GlassSidebarPanel', () {
+    final macos = TargetPlatformVariant.only(TargetPlatform.macOS);
+    const rim = Border(
+      right: BorderSide(
+        color: DepthTokens.rimColor,
+        width: DepthTokens.rimWidth,
+      ),
+    );
+
+    testWidgets('native: square glass, rim kept, chrome shadow kept',
+        (tester) async {
+      NativeGlassSupport.debugOverride = true;
+      _mockPlatformViews(tester);
+      await tester.pumpWidget(_host(const SizedBox(
+        height: 400,
+        child: GlassSidebarPanel(child: Text('nav')),
+      )));
+      await tester.pump();
+
+      final glass = tester.widget<NativeGlass>(find.byType(NativeGlass));
+      expect(glass.cornerRadius, 0);
+      expect(glass.border, rim);
+      expect(find.byType(AppKitView), findsOneWidget);
+      expect(find.byType(GlassSurface), findsNothing);
+      expect(find.text('nav'), findsOneWidget);
+      final shadowed = tester
+          .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+          .any((d) =>
+              d.decoration is BoxDecoration &&
+              (d.decoration as BoxDecoration).boxShadow == DepthTokens.chrome);
+      expect(shadowed, isTrue);
+    }, variant: macos);
   });
 }
