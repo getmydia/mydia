@@ -20,10 +20,6 @@ abstract class Breakpoints {
   /// Minimum width for widescreen layouts
   static const double widescreen = 1600;
 
-  /// Width of the sidebar on desktop
-  @Deprecated('Use railCollapsedWidth / railExpandedWidth')
-  static const double sidebarWidth = 260;
-
   /// Floating navigation rail, collapsed to icons.
   static const double railCollapsedWidth = 72;
 
