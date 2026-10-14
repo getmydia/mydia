@@ -96,9 +96,12 @@ class _ShimmerHero extends StatelessWidget {
           ),
           child: Padding(
             padding: EdgeInsets.symmetric(vertical: vertical),
-            child: Text(
-              text,
-              style: style?.copyWith(color: Colors.transparent),
+            // The text only sizes the bar; a screen reader must not say "M".
+            child: ExcludeSemantics(
+              child: Text(
+                text,
+                style: style?.copyWith(color: Colors.transparent),
+              ),
             ),
           ),
         ),

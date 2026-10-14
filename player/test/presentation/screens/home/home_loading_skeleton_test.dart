@@ -122,6 +122,16 @@ void main() {
       );
     });
 
+    testWidgets('the sizing text never reaches the semantics tree',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      await _pump(tester, const Size(1400, 3000));
+
+      expect(find.bySemanticsLabel('M'), findsNothing);
+      expect(find.bySemanticsLabel(RegExp(r'^M(\nM)*$')), findsNothing);
+      handle.dispose();
+    });
+
     testWidgets('draws a hero and three rails', (tester) async {
       // Tall enough that the hero and all three rails land inside the
       // sliver's default cache extent; 900 leaves the third rail unbuilt at
