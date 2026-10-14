@@ -108,7 +108,9 @@ void main() {
     });
 
     testWidgets('no spacer sits between the rails', (tester) async {
-      await _pump(tester, const Size(390, 844));
+      // Tall: the stacked hero is as tall as the loaded one, which leaves
+      // the second rail unbuilt in an 844 px viewport.
+      await _pump(tester, const Size(390, 2400));
 
       final rails = find.byKey(HomeLoadingSkeleton.railKey);
       expect(rails, findsAtLeastNWidgets(2));

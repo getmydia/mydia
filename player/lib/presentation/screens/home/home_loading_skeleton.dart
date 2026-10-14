@@ -82,16 +82,67 @@ class _ShimmerHero extends StatelessWidget {
     Widget bar(double width, double height, double radius) =>
         _ShimmerRail._bar(width: width, height: height, radius: radius);
 
+    // A bar as tall as [lines] lines of [style], so the placeholder follows
+    // the loaded text's metrics: invisible text inside a filled box.
+    Widget textBar(double? width, TextStyle? style, int lines, double radius,
+        {double vertical = 0}) {
+      final text = List.filled(lines, 'M').join('\n');
+      return SizedBox(
+        width: width,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.shimmerBase,
+            borderRadius: BorderRadius.circular(radius),
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: vertical),
+            child: Text(
+              text,
+              style: style?.copyWith(color: Colors.transparent),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final textTheme = Theme.of(context).textTheme;
+    final align = wide ? CrossAxisAlignment.start : CrossAxisAlignment.center;
     final lines = Column(
-      crossAxisAlignment:
-          wide ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment: align,
       mainAxisSize: MainAxisSize.min,
       children: [
-        bar(220, 40, 8),
+        // The chip row.
+        textBar(
+          80,
+          const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          1,
+          AppTheme.radiusChip,
+          vertical: 4,
+        ),
         const SizedBox(height: 14),
-        bar(320, 16, 6),
+        textBar(
+          wide ? 300 : 200,
+          textTheme.displayLarge?.copyWith(
+            fontSize: wide ? 48 : 30,
+            letterSpacing: -1.2,
+            height: 1.0,
+          ),
+          1,
+          8,
+        ),
+        const SizedBox(height: 12),
+        textBar(wide ? 420 : 280, textTheme.bodyLarge, 2, 6),
         const SizedBox(height: 20),
-        bar(180, 52, AppTheme.radiusButton),
+        if (wide)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: bar(220, 52, AppTheme.radiusButton),
+          )
+        else ...[
+          bar(double.infinity, 52, AppTheme.radiusButton),
+          const SizedBox(height: 10),
+          bar(double.infinity, 52, AppTheme.radiusButton),
+        ],
       ],
     );
 
@@ -150,7 +201,7 @@ class _ShimmerHero extends StatelessWidget {
 class _ShimmerRail extends StatelessWidget {
   const _ShimmerRail({super.key, this.landscape = false});
 
-  /// Continue Watching's 280x180 cards instead of posters.
+  /// Continue Watching's landscape cards instead of posters.
   final bool landscape;
 
   @override

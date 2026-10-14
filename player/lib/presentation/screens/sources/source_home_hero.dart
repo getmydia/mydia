@@ -1,6 +1,8 @@
 /// The featured title at the top of a source's home.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,9 +26,10 @@ class SourceHomeHero extends ConsumerWidget {
   /// The poster card's size when the hero is laid out wide.
   static const posterSize = Size(248, 360);
 
-  /// The stacked layout's poster width: 60% of the screen.
+  /// The stacked layout's poster width: 60% of the screen, capped so a
+  /// window just under the wide breakpoint does not get a giant poster.
   static double narrowPosterWidth(BuildContext context) =>
-      MediaQuery.sizeOf(context).width * 0.6;
+      math.min(MediaQuery.sizeOf(context).width * 0.6, 320);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
