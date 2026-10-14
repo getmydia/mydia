@@ -168,7 +168,7 @@ defmodule MydiaWeb.AdminModalComponentsTest do
         """)
 
       assert count(html, "#m .modal-box.flex.flex-col.overflow-hidden") == 1
-      assert count(html, "#m-body.flex-1.min-h-0.overflow-y-auto #inside") == 1
+      assert count(html, "#m-body.flex-1.min-h-0.overflow-y-auto.px-1.-mx-1 #inside") == 1
       # The action row sits outside the scroller.
       assert count(html, "#m-body .modal-action") == 0
       assert count(html, "#m .modal-box > .modal-action #save") == 1

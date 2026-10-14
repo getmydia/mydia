@@ -74,7 +74,7 @@ defmodule MydiaWeb.AdminModalComponents do
             </button>
           </div>
         </div>
-        <div id={"#{@id}-body"} class="flex-1 min-h-0 overflow-y-auto">
+        <div id={"#{@id}-body"} class="flex-1 min-h-0 overflow-y-auto px-1 -mx-1">
           {render_slot(@inner_block)}
         </div>
         <.admin_modal_actions :if={@actions != []}>{render_slot(@actions)}</.admin_modal_actions>
