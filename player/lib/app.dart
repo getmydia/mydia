@@ -14,6 +14,7 @@ import 'core/sources/connection/connection_refresh_bus.dart';
 import 'core/layout/tv_canvas.dart';
 import 'core/layout/window_chrome_inset.dart';
 import 'core/media_session/media_session_bridge.dart';
+import 'core/theme/ambient_tint/ambient_tint.dart';
 import 'core/theme/app_theme.dart';
 import 'core/window/decoration_layout_source.dart';
 import 'core/window/window_frame_state_source.dart';
@@ -533,6 +534,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // every route and dialog, and outlive the route that showed them. It
       // sits inside `WindowChromeInset` for the same reason the bar does.
       //
+      // `ShellAmbientTint` sits above the toasts and the cast bar so they
+      // share the shell's tint.
+      //
       // `WindowChromeInset` wraps both rather than the reverse: the cast bar
       // is itself a route-level overlay, so it has to sit inside the reserved
       // window chrome like everything else.
@@ -547,8 +551,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           frameState: _windowFrame.state,
           child: WindowChromeInset(
             decorationLayout: _decorationLayout.layout,
-            child: ToastLayer(
-              child: CastBarLayer(child: child ?? const SizedBox.shrink()),
+            child: ShellAmbientTint(
+              child: ToastLayer(
+                child: CastBarLayer(child: child ?? const SizedBox.shrink()),
+              ),
             ),
           ),
         ),
