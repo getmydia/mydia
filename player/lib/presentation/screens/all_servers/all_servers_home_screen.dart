@@ -159,6 +159,8 @@ class AllServersHomeScreen extends ConsumerWidget {
                 key: ValueKey(
                     'all-poster-${item.ref.sourceId.value}-${item.ref.externalId}'),
                 item: item,
+                trailingLabel: allServersServerLabel(
+                    included[item.ref.sourceId], r.extraCopies[item.ref] ?? 0),
                 onTap: () => context.push(allServersItemLocation(item.ref)),
                 onContextMenu: (c) => _menu(c, ref, item),
               ),

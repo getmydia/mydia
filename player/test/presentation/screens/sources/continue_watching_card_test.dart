@@ -88,8 +88,39 @@ void main() {
     expect(find.text('S1 · E2'), findsNothing);
   });
 
+  testWidgets('the trailing label renders when given and not otherwise',
+      (tester) async {
+    await _pump(tester, _item());
+    expect(find.text('Server a'), findsNothing);
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: ContinueWatchingCard(
+              item: _item(),
+              onTap: () {},
+              trailingLabel: 'Server a +2',
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.pump();
+    expect(find.text('Server a +2'), findsOneWidget);
+  });
+
   testWidgets('scaled text up to 1.3 does not overflow', (tester) async {
-    for (final item in [episode(), _item()]) {
+    for (final (item, label) in [
+      (episode(), null),
+      (_item(), null),
+      (episode(), 'A Rather Long Server Name +12'),
+      (_item(), 'A Rather Long Server Name +12'),
+    ]) {
       await tester.pumpWidget(ProviderScope(
         overrides: [
           sourceArtworkProvider.overrideWith((ref, key) async => null),
@@ -107,7 +138,8 @@ void main() {
               alignment: Alignment.topLeft,
               child: SizedBox(
                 height: ContinueWatchingCard.height,
-                child: ContinueWatchingCard(item: item, onTap: () {}),
+                child: ContinueWatchingCard(
+                    item: item, onTap: () {}, trailingLabel: label),
               ),
             ),
           ),

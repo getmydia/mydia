@@ -200,7 +200,32 @@ void main() {
     expect(t.widget(card), isA<ContinueWatchingCard>());
     expect(find.descendant(of: card, matching: find.text('Saltmarsh')),
         findsOneWidget);
-    expect(find.descendant(of: card, matching: find.text('S1 · E2')),
+    expect(find.descendant(of: card, matching: find.text('S1 · E2 · Server a')),
+        findsOneWidget,
+        reason: 'the episode line carries the server name');
+  });
+
+  testWidgets('continue watching names its server, with +N for extra copies',
+      (t) async {
+    t.view.physicalSize = const Size(1280, 1800);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final a = fakeServer('a'), b = fakeServer('b');
+    const ids = ExternalIds(tmdb: '7');
+    await pump(t, [
+      FakeMergedSource(a, resuming: [
+        item(a, 'a1', ids: ids, lastPlayedAt: DateTime.utc(2024, 1, 2)),
+        item(a, 'a2', lastPlayedAt: DateTime.utc(2024, 1, 1)),
+      ]),
+      FakeMergedSource(b, resuming: [
+        item(b, 'b1', ids: ids, lastPlayedAt: DateTime.utc(2024, 1, 1)),
+      ]),
+    ]);
+    final copies = find.byKey(ValueKey('all-poster-${a.id.value}-a1'));
+    expect(find.descendant(of: copies, matching: find.text('Server a +1')),
+        findsOneWidget);
+    final single = find.byKey(ValueKey('all-poster-${a.id.value}-a2'));
+    expect(find.descendant(of: single, matching: find.text('Server a')),
         findsOneWidget);
   });
 

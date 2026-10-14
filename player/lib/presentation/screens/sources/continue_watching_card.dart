@@ -19,7 +19,12 @@ class ContinueWatchingCard extends ConsumerWidget {
     required this.item,
     required this.onTap,
     this.onContextMenu,
+    this.trailingLabel,
   });
+
+  /// Muted text after the episode caption, on the same single line, such as
+  /// the server name on All servers. Null on a source's own home.
+  final String? trailingLabel;
 
   static const Size artSize = Size(280, 120);
 
@@ -58,6 +63,10 @@ class ContinueWatchingCard extends ConsumerWidget {
           );
     const radius = BorderRadius.all(Radius.circular(AppTheme.radiusCard));
     final textTheme = Theme.of(context).textTheme;
+    final caption = [
+      if (item.showTitle != null) item.subtitle,
+      trailingLabel,
+    ].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
 
     // Hovering the card drives the shell's ambient backdrop to its artwork,
     // the way a poster does.
@@ -106,12 +115,13 @@ class ContinueWatchingCard extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                           style: textTheme.titleSmall,
                         ),
-                        // An episode names its place in the series.
-                        if (item.showTitle != null &&
-                            item.subtitle != null) ...[
+                        // An episode names its place in the series; the
+                        // label (a server name) shares that one line, so
+                        // the card never grows.
+                        if (caption.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
-                            item.subtitle!,
+                            caption,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: textTheme.bodySmall?.copyWith(
