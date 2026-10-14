@@ -1,7 +1,7 @@
 defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
   @moduledoc """
   The Cardigann engine picker inside Library Indexers and the per-tracker
-  "verified on" badges. Rendering only; `MydiaWeb.AdminIndexersLive.Index`
+  verification badge. Rendering only; `MydiaWeb.AdminIndexersLive.Index`
   handles the events.
 
   The copy is qualitative on purpose: measured figures change with every bench
