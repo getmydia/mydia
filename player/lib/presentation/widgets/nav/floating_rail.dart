@@ -66,15 +66,21 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
   void _setExpanded(void Function() change) {
     final before = _expandedFor(_pinned);
     setState(change);
-    final after = _expandedFor(_pinned);
-    if (before == after) return;
+    _syncExpansion(before, _expandedFor(_pinned));
+  }
+
+  /// Runs the label and edit-mode side of an expansion change. [wasPinned]
+  /// marks an unpin: the labels were showing, so they stay when the rail
+  /// remains expanded (hover or focus) even though expansion did not change.
+  void _syncExpansion(bool before, bool after, {bool wasPinned = false}) {
+    if (before == after && !wasPinned) return;
     _labelTimer?.cancel();
     if (!after) {
       setState(() => _labels = false);
       ref.read(sidebarEditModeProvider.notifier).exit();
       return;
     }
-    if (context.reduceMotion) {
+    if (wasPinned || context.reduceMotion) {
       setState(() => _labels = true);
     } else {
       _labelTimer = Timer(DepthTokens.motionMedium * 0.6, () {
@@ -111,6 +117,14 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<bool>(railPinnedProvider, (prev, next) {
+      if (prev == null || prev == next) return;
+      _syncExpansion(
+        _expandedFor(prev),
+        _expandedFor(next),
+        wasPinned: prev && !next,
+      );
+    });
     final pinned = ref.watch(railPinnedProvider);
     final expanded = _expandedFor(pinned);
     final labels = pinned || (expanded && _labels);

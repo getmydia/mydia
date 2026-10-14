@@ -11,6 +11,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/presentation/widgets/nav/floating_rail.dart';
+import 'package:player/presentation/widgets/nav/sidebar_content.dart';
 
 import '../../screens/sources/fake_capable_source.dart';
 import '../../screens/sources/fake_media_source.dart';
@@ -35,6 +36,7 @@ Future<InMemorySidebarLayoutStore> _pumpRail(
   ValueChanged<String>? onNavigate,
   bool highContrast = false,
   bool disableAnimations = false,
+  bool pinned = false,
 }) async {
   tester.view.physicalSize = const Size(1280, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -42,6 +44,7 @@ Future<InMemorySidebarLayoutStore> _pumpRail(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final store = InMemorySidebarLayoutStore();
+  if (pinned) await store.saveRailPinned(true);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -230,6 +233,79 @@ void main() {
     await tester.pumpAndSettle();
     final scrim = tester.widget<ColoredBox>(find.byKey(_scrimKey));
     expect(scrim.color.a, closeTo(0.55, 0.01));
+  });
+
+  testWidgets('moving out before 200ms cancels the hover expansion',
+      (tester) async {
+    await _pumpRail(tester);
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: const Offset(40, 300));
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.moveTo(const Offset(900, 300));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(_railWidth(tester), 72);
+    expect(find.byKey(_scrimKey), findsNothing);
+  });
+
+  testWidgets('pinned, hovered, then unpinned keeps expanded with labels',
+      (tester) async {
+    await _pumpRail(tester, pinned: true);
+    expect(_railWidth(tester), 272);
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: const Offset(40, 300));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('rail-pin')));
+    await tester.pumpAndSettle();
+
+    expect(_railWidth(tester), 272);
+    expect(tester.widget<SidebarContent>(find.byType(SidebarContent)).compact,
+        isFalse);
+    expect(find.byKey(_scrimKey), findsOneWidget);
+  });
+
+  testWidgets(
+      'pinned then unpinned with pointer away collapses and exits '
+      'edit mode', (tester) async {
+    await _pumpRail(tester, pinned: true);
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(FloatingRail)));
+    container.read(sidebarEditModeProvider.notifier).toggle();
+    expect(container.read(sidebarEditModeProvider), isTrue);
+
+    await tester.tap(find.byKey(const Key('rail-pin')));
+    await tester.pumpAndSettle();
+
+    expect(_railWidth(tester), 72);
+    expect(find.byKey(_scrimKey), findsNothing);
+    expect(container.read(sidebarEditModeProvider), isFalse);
+  });
+
+  testWidgets('navigating collapses an unpinned rail', (tester) async {
+    final row = FocusNode(debugLabel: 'row');
+    addTearDown(row.dispose);
+    final routes = <String>[];
+    await _pumpRail(tester, rowNode: row, onNavigate: routes.add);
+    row.requestFocus();
+    await tester.pumpAndSettle();
+    expect(_railWidth(tester), 272);
+
+    await tester.tap(find.text('Movies'));
+    await tester.pumpAndSettle();
+    expect(routes, hasLength(1));
+    expect(_railWidth(tester), 72);
+  });
+
+  testWidgets('navigating does not collapse a pinned rail', (tester) async {
+    final routes = <String>[];
+    await _pumpRail(tester, pinned: true, onNavigate: routes.add);
+
+    await tester.tap(find.text('Movies'));
+    await tester.pumpAndSettle();
+    expect(routes, hasLength(1));
+    expect(_railWidth(tester), 272);
   });
 
   test('expanded fill keeps textSecondary at 4.5:1 over a white backdrop', () {
