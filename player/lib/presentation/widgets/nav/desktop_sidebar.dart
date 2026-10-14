@@ -70,6 +70,7 @@ class GlassSidebarPanel extends StatelessWidget {
     return ToastObstruction(
       edge: ToastEdge.left,
       child: SizedBox(
+        // ignore: deprecated_member_use_from_same_package
         width: Breakpoints.sidebarWidth,
         child: DecoratedBox(
           decoration: const BoxDecoration(boxShadow: DepthTokens.chrome),

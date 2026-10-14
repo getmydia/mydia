@@ -21,7 +21,30 @@ abstract class Breakpoints {
   static const double widescreen = 1600;
 
   /// Width of the sidebar on desktop
+  @Deprecated('Use railCollapsedWidth / railExpandedWidth')
   static const double sidebarWidth = 260;
+
+  /// Floating navigation rail, collapsed to icons.
+  static const double railCollapsedWidth = 72;
+
+  /// Floating navigation rail, expanded with labels.
+  static const double railExpandedWidth = 272;
+
+  /// Gap between the rail and the window's top, bottom and leading edges.
+  static const double railInset = 16;
+
+  /// Gap between the rail and the content column.
+  static const double railGap = 24;
+
+  /// Leading inset the content column keeps clear of the rail. The rail
+  /// overlays content when it expands, so only a pinned rail widens this.
+  static double railContentInset({required bool pinned}) =>
+      railInset + (pinned ? railExpandedWidth : railCollapsedWidth) + railGap;
+
+  /// Whether the shell shows the floating rail (tablets and up) rather than
+  /// the phone bottom bar.
+  static bool showsRail(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= mobile;
 
   /// Check if current screen is mobile size
   static bool isMobile(BuildContext context) =>

@@ -70,8 +70,11 @@ class AppShell extends ConsumerStatefulWidget {
   /// arithmetic the desktop branch applies, rather than a mirror that would
   /// stay green if the subtraction were dropped.
   @visibleForTesting
-  static WindowChromeInsets contentInsets(WindowChromeInsets insets) => insets
-      .copyWith(leading: max(0, insets.leading - Breakpoints.sidebarWidth));
+  static WindowChromeInsets contentInsets(WindowChromeInsets insets) =>
+      insets.copyWith(
+        // ignore: deprecated_member_use_from_same_package
+        leading: max(0, insets.leading - Breakpoints.sidebarWidth),
+      );
 
   /// The content column's top edge is the window's: each screen's
   /// [WindowTitleRow] draws into the title-bar band. Only [bannerArea]
