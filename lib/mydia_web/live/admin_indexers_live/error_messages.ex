@@ -18,4 +18,23 @@ defmodule MydiaWeb.AdminIndexersLive.ErrorMessages do
   @spec format_transport_reason(term()) :: String.t()
   def format_transport_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
   def format_transport_reason(reason), do: inspect(reason)
+
+  # A search that reached the site but parsed nothing is neither a success nor
+  # an outage, and flattening it into "Connection successful" is what let five
+  # indexers report a green test while every search returned zero results. The
+  # flash component only has :info and :error (core_components.ex:45), so a
+  # degraded result is :error with a message that says what is degraded; the
+  # row's health badge carries the "degraded" state separately.
+  @spec library_test_flash(map()) :: {:info | :error, String.t()}
+  def library_test_flash(%{success: true, status: "degraded"} = result) do
+    {:error, "#{result.message} (#{result.response_time_ms}ms)"}
+  end
+
+  def library_test_flash(%{success: true} = result) do
+    {:info, "#{result.message} (#{result.response_time_ms}ms)"}
+  end
+
+  def library_test_flash(result) do
+    {:error, "#{result.message}: #{result.error || "Unknown error"}"}
+  end
 end

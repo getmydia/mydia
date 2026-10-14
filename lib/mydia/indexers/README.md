@@ -390,3 +390,21 @@ through the real search path and buckets the result (`ok`, `ok_empty_query`,
 `rows_dropped`, `blocked_page`, `parse_error`, ...). It talks to real trackers:
 run it by hand, never in CI. `--capture tmp/cardigann_captures` saves raw pages;
 committed fixtures are reduced from them with invented titles, never copied.
+
+## Search metrics
+
+Every indexer call settles into one `[:mydia, :indexers, :search, :stop]`
+event (`Mydia.Indexers.SearchStats.Telemetry`): searches from `search_all/2`,
+including tasks the deadline killed (`outcome: :deadline`), and Cardigann
+health probes (`kind: :health`). `SearchStats.Recorder` buffers them into
+`indexer_search_events`; rows are pruned after 14 days. The admin Indexers
+page reads `SearchStats.summary/2`, and `/metrics` (when
+`MYDIA_METRICS_ENABLED=true`) exports `mydia_indexer_search_total` and
+`mydia_indexer_search_duration_milliseconds`.
+
+`engine` says which Cardigann engine served the call. Network time is only
+known for the Prowlarr engine, which measures its host HTTP exchanges.
+
+The Cardigann health check probes through the active engine. Under Prowlarr
+it is one search through the adapter registered for `:cardigann`; mirror
+probing and `active_link` promotion happen only on the built-in path.
