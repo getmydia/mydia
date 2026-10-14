@@ -35,6 +35,7 @@ class MovieDetailScreen extends ConsumerWidget {
       value: ref.watch(movieViewProvider(target)),
       noun: 'movie',
       onRetry: () => ref.read(movieActionsProvider(target)).refresh(),
+      tintArt: (movie) => movie.backdrop,
       builder: (context, movie) => _buildContent(context, ref, movie),
     );
   }
@@ -190,6 +191,9 @@ class MovieDetailScreen extends ConsumerWidget {
         overlay: DetailHeroTitle(
           title: movie.title,
           subtitle: movie.yearDisplay,
+          poster: movie.poster == null
+              ? null
+              : DetailArtImage(art: movie.poster, slot: ArtSlot.poster),
           action: _buildHeroPlayControl(context, ref, movie),
         ),
       ),

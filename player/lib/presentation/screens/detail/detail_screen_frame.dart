@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/layout/window_chrome_inset.dart';
+import '../../../core/theme/ambient_tint/ambient_tint.dart';
+import '../../../domain/detail/detail_art.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../widgets/freshness_header.dart';
 import 'detail_providers.dart';
 import 'detail_states.dart';
+import 'detail_tint_scope.dart';
 
 /// The page frame every detail screen shares.
 ///
@@ -21,7 +24,11 @@ class DetailScreenFrame<T> extends StatelessWidget {
     required this.noun,
     required this.onRetry,
     required this.builder,
+    this.tintArt,
   });
+
+  /// The artwork this screen takes its tint from, once data has loaded.
+  final DetailArt? Function(T data)? tintArt;
 
   final DetailTarget target;
   final AsyncValue<T> value;
@@ -33,27 +40,37 @@ class DetailScreenFrame<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final art = switch (value) {
+      AsyncData(:final value) => tintArt?.call(value),
+      _ => null,
+    };
     return WindowChromeInsets.removeBand(
-      child: Scaffold(
-        extendBodyBehindAppBar: true,
-        body: Column(
-          children: [
-            FreshnessHeader(
-              queryKeys: freshnessKeys(target),
-              topInset: freshnessTopInset(context, appBarHeight: 0),
-            ),
-            Expanded(
-              child: value.when(
-                data: (data) => builder(context, data),
-                loading: () => const DetailLoadingState(),
-                error: (error, _) => DetailErrorState(
-                  noun: noun,
-                  error: error,
-                  onRetry: onRetry,
+      child: DetailTintScope(
+        art: art,
+        child: Builder(
+          builder: (context) => Scaffold(
+            backgroundColor: AmbientTint.of(context).ground,
+            extendBodyBehindAppBar: true,
+            body: Column(
+              children: [
+                FreshnessHeader(
+                  queryKeys: freshnessKeys(target),
+                  topInset: freshnessTopInset(context, appBarHeight: 0),
                 ),
-              ),
+                Expanded(
+                  child: value.when(
+                    data: (data) => builder(context, data),
+                    loading: () => const DetailLoadingState(),
+                    error: (error, _) => DetailErrorState(
+                      noun: noun,
+                      error: error,
+                      onRetry: onRetry,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

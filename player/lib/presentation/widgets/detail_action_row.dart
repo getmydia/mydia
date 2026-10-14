@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/colors.dart';
 import 'focus_highlight.dart';
+import 'glass_surface.dart';
 import 'toast/toaster.dart';
 
 /// Width of one action's slot when the row is [DetailActionRow.compact]. Wide
@@ -172,21 +173,16 @@ class _ActionButton extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: highlighted
+            SizedBox.square(
+              dimension: 44,
+              child: GlassSurface.faux(
+                fillColor: highlighted
                     ? highlightColor.withValues(alpha: 0.15)
-                    : AppColors.surfaceVariant,
-                border: Border.all(
-                  color: highlighted
-                      ? highlightColor.withValues(alpha: 0.45)
-                      : AppColors.border,
-                ),
+                    : Colors.white.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(22),
+                showRim: false,
+                child: Center(child: Icon(icon, color: color, size: 20)),
               ),
-              child: Icon(icon, color: color, size: 20),
             ),
             const SizedBox(height: 6),
             Text(

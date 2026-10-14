@@ -71,6 +71,7 @@ class ShowDetailScreen extends ConsumerWidget {
         value: showAsync,
         noun: 'TV show',
         onRetry: () => ref.read(showActionsProvider(target)).refresh(),
+        tintArt: (show) => show.backdrop,
         builder: (context, show) => _buildContent(context, ref, show),
       ),
     );
@@ -199,6 +200,9 @@ class ShowDetailScreen extends ConsumerWidget {
         overlay: DetailHeroTitle(
           title: show.title,
           subtitle: show.yearDisplay,
+          poster: show.poster == null
+              ? null
+              : DetailArtImage(art: show.poster, slot: ArtSlot.poster),
           below: selectedEpisode == null
               ? null
               : _buildEpisodeContextPill(show, selectedEpisode),

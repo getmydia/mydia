@@ -31,6 +31,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
       value: ref.watch(episodeViewProvider(target)),
       noun: 'episode',
       onRetry: () => ref.read(episodeActionsProvider(target)).refresh(),
+      tintArt: (episode) => episode.still ?? episode.showBackdrop,
       builder: (context, episode) => _buildContent(context, ref, episode),
     );
   }

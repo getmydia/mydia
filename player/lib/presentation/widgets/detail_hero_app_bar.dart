@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/theme/colors.dart';
+import '../../core/theme/ambient_tint/ambient_tint.dart';
 import 'window_chrome/window_title_row.dart';
 
 /// The pinned header of the movie, show and episode detail screens.
@@ -30,7 +30,8 @@ SliverAppBar detailHeroAppBar({
     toolbarHeight: rowHeight,
     pinned: true,
     stretch: true,
-    backgroundColor: AppColors.background,
+    backgroundColor: AmbientTint.of(context).ground,
+    surfaceTintColor: Colors.transparent,
     automaticallyImplyLeading: false,
     // NavigationToolbar centers `title` by default and only sizes it to its
     // intrinsic width, which would leave `WindowTitleRow`'s own cast button

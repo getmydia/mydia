@@ -64,6 +64,20 @@ void main() {
       expect(find.text('TMDB'), findsOneWidget);
     });
 
+    testWidgets('tag chips are 12% white, 8 radius, borderless',
+        (tester) async {
+      await _pump(tester, const DetailTagColumn(tags: ['4K']));
+
+      final chip = tester.widget<Container>(find.ancestor(
+        of: find.text('4K'),
+        matching: find.byType(Container),
+      ));
+      final decoration = chip.decoration! as BoxDecoration;
+      expect(decoration.color, Colors.white.withValues(alpha: 0.12));
+      expect(decoration.border, isNull);
+      expect(decoration.borderRadius, BorderRadius.circular(8));
+    });
+
     testWidgets('omits empty parts', (tester) async {
       await _pump(tester, const DetailTagColumn(tags: []));
 

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/ambient_tint/ambient_tint.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/detail/detail_art.dart';
 import '../../widgets/detail_art_image.dart';
+import 'detail_sections.dart' show kDetailHeroBreakpoint;
 
 /// The detail hero's background: artwork, the bottom-darkening gradient, an
 /// optional [overlay] inset 20 from the left, right and bottom, and an
@@ -29,6 +32,7 @@ class DetailHeroBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     final overlay = this.overlay;
     final bottom = this.bottom;
+    final ground = AmbientTint.of(context).ground;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -36,7 +40,8 @@ class DetailHeroBackground extends StatelessWidget {
           DetailArtImage(
             art: art,
             slot: slot,
-            placeholder: (_) => Container(color: AppColors.surface),
+            placeholder: (_) =>
+                Container(color: AmbientTint.of(context).surface),
             errorWidget: _empty,
           )
         else
@@ -48,9 +53,9 @@ class DetailHeroBackground extends StatelessWidget {
               end: Alignment.bottomCenter,
               colors: [
                 Colors.transparent,
-                AppColors.background.withValues(alpha: 0.5),
-                AppColors.background.withValues(alpha: 0.95),
-                AppColors.background,
+                ground.withValues(alpha: 0.5),
+                ground.withValues(alpha: 0.95),
+                ground,
               ],
               stops: const [0.0, 0.5, 0.8, 1.0],
             ),
@@ -67,7 +72,7 @@ class DetailHeroBackground extends StatelessWidget {
   Widget _empty(BuildContext context) {
     final icon = fallbackIcon;
     return Container(
-      color: AppColors.surface,
+      color: AmbientTint.of(context).surface,
       child: icon == null
           ? null
           : Icon(icon, size: 64, color: AppColors.textSecondary),
@@ -85,7 +90,12 @@ class DetailHeroTitle extends StatelessWidget {
     this.subtitle = '',
     this.below,
     this.action,
+    this.poster,
   });
+
+  /// Leads the row on wide layouts only; ignored below
+  /// [kDetailHeroBreakpoint].
+  final Widget? poster;
 
   final String title;
 
@@ -99,9 +109,19 @@ class DetailHeroTitle extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final below = this.below;
     final action = this.action;
+    final poster = this.poster;
+    final showPoster = poster != null &&
+        MediaQuery.sizeOf(context).width >= kDetailHeroBreakpoint;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
+        if (showPoster) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppTheme.radiusHeroPoster),
+            child: SizedBox(width: 160, height: 240, child: poster),
+          ),
+          const SizedBox(width: 24),
+        ],
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,8 +129,9 @@ class DetailHeroTitle extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+                style: textTheme.displayLarge?.copyWith(
+                  fontSize: 40,
+                  letterSpacing: -1,
                   shadows: [
                     Shadow(
                       color: Colors.black.withValues(alpha: 0.8),
