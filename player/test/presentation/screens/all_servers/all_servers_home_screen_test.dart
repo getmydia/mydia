@@ -81,6 +81,12 @@ void main() {
   });
 
   testWidgets('hero, then the four rails in order', (t) async {
+    // The surface size alone leaves the view at 800x600 logical px, which
+    // lays the hero out stacked (taller than the old backdrop) and pushes the
+    // last rails out of the built range. Size the view itself.
+    t.view.physicalSize = const Size(1280, 1800);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
     await pump(t, [serverWith('a'), serverWith('b')]);
     for (final k in [
       'all-home-hero',

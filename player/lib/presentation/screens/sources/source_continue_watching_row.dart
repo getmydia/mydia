@@ -13,9 +13,9 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../widgets/media_context_menu.dart';
-import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
 import '../detail/detail_links.dart';
+import 'continue_watching_card.dart';
 import 'source_browse_providers.dart';
 import 'source_poster_row.dart';
 
@@ -71,10 +71,11 @@ class _SourceContinueWatchingRowState
       title: 'Continue Watching',
       railId: 'continue',
       items: items,
-      posterFor: (context, item) => SourcePoster(
+      itemWidth: ContinueWatchingCard.artSize.width,
+      height: ContinueWatchingCard.height,
+      posterFor: (context, item) => ContinueWatchingCard(
         key: ValueKey('source-continue-${item.ref.externalId}'),
         item: item,
-        subtitle: continueWatchingCaption(item),
         onTap: () => _play(context, ref, item.ref),
         onContextMenu: (cardContext) => _openMenu(
           cardContext,

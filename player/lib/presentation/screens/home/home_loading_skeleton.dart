@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
+import '../sources/continue_watching_card.dart';
+import '../sources/source_home_hero.dart';
 import '../sources/source_poster_row.dart';
 
 /// The home screen's loading state.
@@ -30,6 +33,10 @@ class HomeLoadingSkeleton extends StatelessWidget {
   /// Test handle for the hero block.
   static const heroKey = ValueKey<String>('home-skeleton-hero');
 
+  /// Test handle for the hero's poster placeholder.
+  @visibleForTesting
+  static const heroPosterKey = ValueKey<String>('home-skeleton-hero-poster');
+
   /// Test handle shared by every placeholder rail.
   @visibleForTesting
   static const railKey = ValueKey<String>('home-skeleton-rail');
@@ -48,7 +55,8 @@ class HomeLoadingSkeleton extends StatelessWidget {
       padding: EdgeInsets.only(top: topInset),
       children: [
         if (showHero) const _ShimmerHero(key: HomeLoadingSkeleton.heroKey),
-        const _ShimmerRail(key: HomeLoadingSkeleton.railKey),
+        // The first rail is Continue Watching, drawn as landscape cards.
+        const _ShimmerRail(key: HomeLoadingSkeleton.railKey, landscape: true),
         const _ShimmerRail(key: HomeLoadingSkeleton.railKey),
         const _ShimmerRail(key: HomeLoadingSkeleton.railKey),
       ],
@@ -61,96 +69,73 @@ class _ShimmerHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isDesktop = Breakpoints.isDesktop(context);
-    // Match the responsive hero height from _HeroSection
-    final heroHeight = isDesktop
-        ? (size.height * 0.45).clamp(300.0, 450.0)
-        : size.height * 0.5;
-    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
+    final wide = Breakpoints.isDesktop(context);
+    final padding = Breakpoints.getHorizontalPadding(context);
+    // The same offsets as the loaded hero, so nothing moves on the swap.
+    final inset = EdgeInsets.fromLTRB(
+      padding,
+      MediaQuery.paddingOf(context).top + 24,
+      padding,
+      32,
+    );
 
-    return Container(
-      width: size.width,
-      height: heroHeight,
-      color: AppColors.surface,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.background.withValues(alpha: 0.4),
-                    Colors.transparent,
-                    AppColors.background.withValues(alpha: 0.9),
-                    AppColors.background,
-                  ],
-                  stops: const [0.0, 0.3, 0.7, 1.0],
-                ),
+    Widget bar(double width, double height, double radius) =>
+        _ShimmerRail._bar(width: width, height: height, radius: radius);
+
+    final lines = Column(
+      crossAxisAlignment:
+          wide ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        bar(220, 40, 8),
+        const SizedBox(height: 14),
+        bar(320, 16, 6),
+        const SizedBox(height: 20),
+        bar(180, 52, AppTheme.radiusButton),
+      ],
+    );
+
+    return Shimmer.fromColors(
+      baseColor: AppColors.shimmerBase,
+      highlightColor: AppColors.shimmerHighlight,
+      child: Padding(
+        padding: inset,
+        child: wide
+            ? Row(
+                children: [
+                  SizedBox(
+                    key: HomeLoadingSkeleton.heroPosterKey,
+                    width: SourceHomeHero.posterSize.width,
+                    height: SourceHomeHero.posterSize.height,
+                    child: bar(
+                      SourceHomeHero.posterSize.width,
+                      SourceHomeHero.posterSize.height,
+                      AppTheme.radiusHeroPoster,
+                    ),
+                  ),
+                  const SizedBox(width: 36),
+                  Expanded(child: lines),
+                ],
+              )
+            : Column(
+                children: [
+                  SizedBox(
+                    width: SourceHomeHero.narrowPosterWidth(context),
+                    child: AspectRatio(
+                      key: HomeLoadingSkeleton.heroPosterKey,
+                      aspectRatio: SourceHomeHero.posterSize.width /
+                          SourceHomeHero.posterSize.height,
+                      child: bar(
+                        double.infinity,
+                        double.infinity,
+                        AppTheme.radiusHeroPoster,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  lines,
+                ],
               ),
-            ),
-          ),
-          Positioned(
-            left: horizontalPadding,
-            right: horizontalPadding,
-            bottom: isDesktop ? 32 : 24,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 80,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: AppColors.shimmerBase,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  width: 200,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: AppColors.shimmerBase,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: 120,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: AppColors.shimmerBase,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.shimmerBase,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 120,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.shimmerBase,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -163,17 +148,25 @@ class _ShimmerHero extends StatelessWidget {
 /// not move anything. One `Shimmer` covers the whole rail so the highlight
 /// travels across it as a single motion.
 class _ShimmerRail extends StatelessWidget {
-  const _ShimmerRail({super.key});
+  const _ShimmerRail({super.key, this.landscape = false});
+
+  /// Continue Watching's 280x180 cards instead of posters.
+  final bool landscape;
 
   @override
   Widget build(BuildContext context) {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
+    final itemWidth = landscape
+        ? ContinueWatchingCard.artSize.width
+        : SourcePosterRow.posterWidth;
+    final railHeight =
+        landscape ? ContinueWatchingCard.height : SourcePosterRow.rowHeight;
+    final radius = landscape ? AppTheme.radiusCard : 8.0;
     // Overflow the viewport so the rail has no empty tail that fills in later.
-    final count = (MediaQuery.sizeOf(context).width /
-                (SourcePosterRow.posterWidth + cardSpacing))
-            .ceil() +
-        1;
+    final count =
+        (MediaQuery.sizeOf(context).width / (itemWidth + cardSpacing)).ceil() +
+            1;
 
     return Shimmer.fromColors(
       baseColor: AppColors.shimmerBase,
@@ -186,7 +179,7 @@ class _ShimmerRail extends StatelessWidget {
             child: _bar(width: 150, height: 24, radius: 6),
           ),
           SizedBox(
-            height: SourcePosterRow.rowHeight,
+            height: railHeight,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               // A skeleton has nothing to scroll to.
@@ -198,8 +191,8 @@ class _ShimmerRail extends StatelessWidget {
                   right: index < count - 1 ? cardSpacing : 0,
                 ),
                 child: SizedBox(
-                  width: SourcePosterRow.posterWidth,
-                  child: _bar(radius: 8),
+                  width: itemWidth,
+                  child: _bar(radius: radius),
                 ),
               ),
             ),

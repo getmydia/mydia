@@ -20,7 +20,14 @@ class SourcePosterRow extends StatelessWidget {
     this.onTitleTap,
     this.posterFor,
     this.showHeading = true,
+    this.itemWidth,
+    this.height,
   });
+
+  /// Item width and rail height when the items are not posters. Default to
+  /// [posterWidth] and [rowHeight].
+  final double? itemWidth;
+  final double? height;
 
   /// False when the caller draws its own heading above the row.
   final bool showHeading;
@@ -47,7 +54,7 @@ class SourcePosterRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Row(
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
+          Text(title, style: Theme.of(context).textTheme.headlineLarge),
           if (onTitleTap != null) const Icon(Icons.chevron_right),
         ],
       ),
@@ -62,16 +69,16 @@ class SourcePosterRow extends StatelessWidget {
         else
           KeyedSubtree(key: titleKey, child: heading),
         SizedBox(
-          height: rowHeight,
+          height: height ?? rowHeight,
           child: HorizontalRail(
             itemCount: items.length,
-            height: rowHeight,
+            height: height ?? rowHeight,
             leftFadeKey: Key('source-rail-left-$railId'),
             rightFadeKey: Key('source-rail-right-$railId'),
             itemBuilder: (context, index) {
               final item = items[index];
               return SizedBox(
-                width: posterWidth,
+                width: itemWidth ?? posterWidth,
                 child: posterFor?.call(context, item) ??
                     SourcePoster(
                       key: ValueKey('source-poster-${item.ref.externalId}'),

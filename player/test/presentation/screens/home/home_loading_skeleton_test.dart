@@ -10,6 +10,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/screens/home/home_loading_skeleton.dart';
+import 'package:player/presentation/screens/sources/continue_watching_card.dart';
 
 Future<void> _pump(WidgetTester tester, Size size) async {
   tester.view.physicalSize = size;
@@ -70,6 +71,40 @@ void main() {
         tester.getTopLeft(find.byKey(HomeLoadingSkeleton.heroKey)).dy,
         0,
       );
+    });
+
+    testWidgets('the hero placeholder is the loaded poster card at its offset',
+        (tester) async {
+      await _pump(tester, const Size(1280, 800));
+
+      final poster = find.byKey(HomeLoadingSkeleton.heroPosterKey);
+      expect(tester.getSize(poster), const Size(248, 360));
+      // The loaded hero pads its top by the safe area plus 24.
+      expect(tester.getTopLeft(poster).dy, 24);
+    });
+
+    testWidgets('narrow, the placeholder poster is 60% wide and centred',
+        (tester) async {
+      await _pump(tester, const Size(400, 800));
+
+      final poster = find.byKey(HomeLoadingSkeleton.heroPosterKey);
+      expect(tester.getSize(poster).width, 240);
+      expect(tester.getCenter(poster).dx, 200);
+    });
+
+    testWidgets('the first rail draws 280-wide landscape cards',
+        (tester) async {
+      await _pump(tester, const Size(1280, 3000));
+
+      final first = find.byKey(HomeLoadingSkeleton.railKey).first;
+      final card = find.descendant(
+        of: first,
+        matching: find.byWidgetPredicate(
+          (w) => w is SizedBox && w.width == 280,
+        ),
+      );
+      expect(card, findsWidgets);
+      expect(tester.getSize(card.first).height, ContinueWatchingCard.height);
     });
 
     testWidgets('no spacer sits between the rails', (tester) async {
