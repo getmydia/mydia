@@ -16,6 +16,7 @@ Future<List<String>> _pump(
   bool withMovies = true,
   bool downloadSupported = true,
   bool isOffline = false,
+  bool showBackToMydia = false,
 }) async {
   final source = FakeCapableSource();
   final libraries = [
@@ -41,6 +42,7 @@ Future<List<String>> _pump(
           onNavigate: navigations.add,
           entries: entries,
           isOffline: isOffline,
+          showBackToMydia: showBackToMydia,
         ),
       ),
     ),
@@ -224,5 +226,59 @@ void main() {
     await _pump(tester, downloadSupported: false);
     expect(find.text('Downloads'), findsNothing);
     expect(find.text('Favorites'), findsOneWidget);
+  });
+
+  group('narrow phones', () {
+    for (final width in [320.0, 360.0, 400.0, 599.0]) {
+      for (final back in [true, false]) {
+        testWidgets('fits every item at $width px, back to Mydia $back',
+            (tester) async {
+          tester.view.physicalSize = Size(width, 800);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.reset);
+
+          await _pump(tester, showBackToMydia: back);
+
+          expect(tester.takeException(), isNull);
+          final bar = tester.getRect(find.byType(GlassSurface).first);
+          final items = find.byType(NavItem);
+          expect(items, findsNWidgets(back ? 6 : 5));
+          for (final element in items.evaluate()) {
+            final rect = tester.getRect(find.byWidget(element.widget));
+            expect(rect.left, greaterThanOrEqualTo(bar.left));
+            expect(rect.right, lessThanOrEqualTo(bar.right));
+            expect(rect.width, greaterThanOrEqualTo(48));
+            expect(rect.height, greaterThanOrEqualTo(48));
+          }
+        });
+      }
+    }
+
+    testWidgets('icon-only items keep their names as tooltips', (tester) async {
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final navigations = await _pump(tester, showBackToMydia: true);
+
+      expect(find.text('Settings'), findsNothing);
+      for (final label in ['Mydia', 'Home', 'Movies', 'Settings']) {
+        expect(find.byTooltip(label), findsOneWidget, reason: label);
+      }
+      await tester.tap(find.byTooltip('Movies'));
+      expect(navigations, ['/s/${fakeSourceId.value}/library/movies']);
+    });
+
+    testWidgets('labels stay where each item has room for one', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await _pump(tester, showBackToMydia: true);
+
+      for (final label in ['Mydia', 'Home', 'Downloads', 'Settings']) {
+        expect(find.text(label), findsOneWidget, reason: label);
+      }
+    });
   });
 }

@@ -102,12 +102,16 @@ class SettingsNavItem extends ConsumerWidget {
   /// The shell location, for the badge's source.
   final String location;
 
+  /// Icon only; see `NavItem.compact`.
+  final bool compact;
+
   const SettingsNavItem({
     super.key,
     required this.location,
     required this.isSelected,
     required this.isDisabled,
     required this.onTap,
+    this.compact = false,
   });
 
   @override
@@ -119,6 +123,7 @@ class SettingsNavItem extends ConsumerWidget {
       isSelected: isSelected,
       isDisabled: isDisabled,
       onTap: onTap,
+      compact: compact,
       badge: SettingsBadge(location: location),
     );
   }

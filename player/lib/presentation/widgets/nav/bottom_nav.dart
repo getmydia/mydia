@@ -61,6 +61,12 @@ class BottomNav extends StatelessWidget {
   final bool isOffline;
   final bool showBackToMydia;
 
+  /// The narrowest share of the bar an item may have and still show its
+  /// label. Below it every item is icon-only: the selected pill and a
+  /// tooltip/semantics label carry the name, and the item still fills its
+  /// whole share, which stays a 48px tap target down to 320px with six items.
+  static const double compactItemWidth = 56;
+
   const BottomNav({
     super.key,
     required this.location,
@@ -92,44 +98,60 @@ class BottomNav extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppTheme.radiusBottomBar),
               border: DockGlass.border,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    if (showBackToMydia)
-                      const NavItem(
-                        icon: Icons.arrow_back_rounded,
-                        selectedIcon: Icons.arrow_back_rounded,
-                        label: 'Mydia',
-                        isSelected: false,
-                        onTap: navigateToMydiaApp,
-                      ),
-                    for (final entry in entries)
-                      if (entry.id == 'settings')
-                        SettingsNavItem(
-                          location: location,
-                          isSelected: entry.matches(location),
-                          isDisabled: isOffline,
-                          onTap: () => onNavigate(entry.route),
-                        )
-                      else
-                        NavItem(
-                          icon: entry.icon,
-                          selectedIcon: entry.selectedIcon,
-                          label: entry.shortLabel ?? entry.label,
-                          isSelected: entry.matches(location),
-                          isDisabled: isOffline && entry.id != 'downloads',
-                          onTap: () => onNavigate(entry.route),
-                          onLongPress:
-                              entry.id == 'home' && libraryEntries.isNotEmpty
-                                  ? () => showLibrarySheet(
-                                        context,
-                                        entries: libraryEntries,
-                                        onNavigate: onNavigate,
-                                      )
-                                  : null,
-                        ),
-                  ],
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                // Every item takes an equal share of the bar, so the row can
+                // never be wider than the bar. Where a share is too narrow for
+                // a label (see [compactItemWidth]) the items drop to icons.
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final count = entries.length + (showBackToMydia ? 1 : 0);
+                    final compact = count > 0 &&
+                        constraints.maxWidth / count < compactItemWidth;
+                    return Row(
+                      children: [
+                        if (showBackToMydia)
+                          Expanded(
+                            child: NavItem(
+                              icon: Icons.arrow_back_rounded,
+                              selectedIcon: Icons.arrow_back_rounded,
+                              label: 'Mydia',
+                              isSelected: false,
+                              compact: compact,
+                              onTap: navigateToMydiaApp,
+                            ),
+                          ),
+                        for (final entry in entries)
+                          Expanded(
+                            child: entry.id == 'settings'
+                                ? SettingsNavItem(
+                                    location: location,
+                                    isSelected: entry.matches(location),
+                                    isDisabled: isOffline,
+                                    compact: compact,
+                                    onTap: () => onNavigate(entry.route),
+                                  )
+                                : NavItem(
+                                    icon: entry.icon,
+                                    selectedIcon: entry.selectedIcon,
+                                    label: entry.shortLabel ?? entry.label,
+                                    isSelected: entry.matches(location),
+                                    isDisabled:
+                                        isOffline && entry.id != 'downloads',
+                                    compact: compact,
+                                    onTap: () => onNavigate(entry.route),
+                                    onLongPress: entry.id == 'home' &&
+                                            libraryEntries.isNotEmpty
+                                        ? () => showLibrarySheet(
+                                              context,
+                                              entries: libraryEntries,
+                                              onNavigate: onNavigate,
+                                            )
+                                        : null,
+                                  ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -150,6 +172,10 @@ class NavItem extends StatefulWidget {
   final VoidCallback? onLongPress;
   final Widget? badge;
 
+  /// Icon only, with [label] as tooltip and semantics. See
+  /// [BottomNav.compactItemWidth].
+  final bool compact;
+
   const NavItem({
     super.key,
     required this.icon,
@@ -160,6 +186,7 @@ class NavItem extends StatefulWidget {
     this.onLongPress,
     this.isDisabled = false,
     this.badge,
+    this.compact = false,
   });
 
   @override
@@ -209,7 +236,7 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
             ? AppColors.primary
             : AppColors.textSecondary;
 
-    return FocusHighlight(
+    final item = FocusHighlight(
       onActivate: widget.onTap,
       // Matches the pill `BoxDecoration.borderRadius` below: the ring traces
       // that exact rectangle, so the two radii must move together.
@@ -224,7 +251,11 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOut,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            // 12 + 24 + 12 keeps the icon-only item a 48px tap target.
+            padding: EdgeInsets.symmetric(
+              horizontal: 4,
+              vertical: widget.compact ? 12 : 8,
+            ),
             decoration: BoxDecoration(
               color: widget.isSelected && !widget.isDisabled
                   ? AppColors.primary.withValues(alpha: 0.12)
@@ -257,22 +288,39 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
                       ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 200),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: widget.isSelected && !widget.isDisabled
-                        ? FontWeight.w600
-                        : FontWeight.w500,
-                    color: effectiveColor,
+                if (!widget.compact) ...[
+                  const SizedBox(height: 4),
+                  // Scales a long label down rather than overflowing.
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 200),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: widget.isSelected && !widget.isDisabled
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: effectiveColor,
+                      ),
+                      child: Text(widget.label, maxLines: 1),
+                    ),
                   ),
-                  child: Text(widget.label),
-                ),
+                ],
               ],
             ),
           ),
         ),
+      ),
+    );
+    if (!widget.compact) return item;
+    return Tooltip(
+      message: widget.label,
+      child: Semantics(
+        label: widget.label,
+        button: true,
+        selected: widget.isSelected,
+        excludeSemantics: true,
+        child: item,
       ),
     );
   }
