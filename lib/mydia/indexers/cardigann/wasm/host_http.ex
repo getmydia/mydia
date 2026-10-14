@@ -43,7 +43,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.HostHttp do
           # test-only: allow localhost Bypass (e.g. allow_private_except_link_local: true)
           optional(:gate_opts) => keyword(),
           # benchmark only: index 1 accumulates the exchanges' wall-clock microseconds
-          optional(:network) => :atomics.atomics_ref()
+          optional(:network) => :atomics.atomics_ref(),
+          # test-only: called with {:task, pid}, {:watcher, pid} and {:instance, pid} by the engine
+          optional(:guest_probe) => (term() -> any())
         }
 
   @type header :: %{name: String.t(), value: String.t()}
