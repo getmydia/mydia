@@ -13,7 +13,15 @@ import '../../widgets/app_shell.dart';
 /// leaving nothing to pop. Swiping from the edge still reached the drawer,
 /// which is how the missing icon went unnoticed.
 class SourceDrawerButton extends StatelessWidget {
-  const SourceDrawerButton({super.key});
+  const SourceDrawerButton({super.key, this.color});
+
+  /// The glyph colour, where the default does not read (white over hero art).
+  final Color? color;
+
+  /// Whether the shell has a drawer to open: false in the wide layout, whose
+  /// shell has no drawer `Scaffold`. Unlike [maybe] it ignores whether the
+  /// route can pop, for pages that show a back button beside this one.
+  static bool get shellHasDrawer => AppShell.scaffoldKey.currentState != null;
 
   /// The button, or null where it has no job: the wide layout, which has no
   /// drawer, and a route that can pop, which shows a back button instead.
@@ -29,6 +37,7 @@ class SourceDrawerButton extends StatelessWidget {
       key: const Key('source-open-drawer'),
       tooltip: 'Menu',
       icon: const Icon(Icons.menu_rounded),
+      color: color,
       onPressed: () => AppShell.scaffoldKey.currentState?.openDrawer(),
     );
   }

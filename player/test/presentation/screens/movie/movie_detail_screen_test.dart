@@ -4,7 +4,10 @@ import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/detail/detail_sections.dart';
 import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
+import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
+import 'package:player/presentation/widgets/nav/mobile_drawer.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 import 'package:player/presentation/widgets/movie_watched_controls.dart';
 import 'package:player/presentation/widgets/primary_play_button.dart';
@@ -47,6 +50,8 @@ Future<void> _pumpScreen(
 }
 
 void main() {
+  menuButtonTests();
+
   testWidgets('wide layout shows the action column beside the tag column',
       (tester) async {
     await _pumpScreen(tester, const Size(1000, 900));
@@ -152,5 +157,70 @@ void main() {
     );
     expect(actions.left, closeTo(20, 0.5));
     expect(actions.width, 64.0 * tester.widgetList(slots).length);
+  });
+}
+
+/// The movie page inside a Scaffold keyed like the phone shell's, so the
+/// drawer exists the way it does there.
+Future<void> _pumpInShell(WidgetTester tester, Size size) {
+  // Logical pixels, as the shell's breakpoint reads them.
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+  final source = ScriptedDetailSource(
+    detailOf: (ref) => ItemDetail(
+      summary: ItemSummary(ref: ref, title: 'Meridian Drift'),
+    ),
+  );
+  return pumpDetailScreen(
+    tester,
+    Scaffold(
+      key: AppShell.scaffoldKey,
+      drawer: MobileDrawer(location: '/', onNavigate: (_) {}),
+      body: const MovieDetailScreen.target(target: SourceTarget(_ref)),
+    ),
+    [source],
+    size: size,
+  );
+}
+
+void menuButtonTests() {
+  testWidgets('a phone gets a Menu button that opens the shell drawer',
+      (tester) async {
+    await _pumpInShell(tester, const Size(400, 900));
+
+    final menu = find.byKey(const Key('source-open-drawer'));
+    expect(menu, findsOneWidget);
+    expect(find.byTooltip('Menu'), findsOneWidget);
+    expect(find.byType(MobileDrawer), findsNothing);
+
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MobileDrawer), findsOneWidget);
+  });
+
+  testWidgets('the Menu button sits before the cast button', (tester) async {
+    await _pumpInShell(tester, const Size(400, 900));
+
+    expect(
+      tester.getRect(find.byKey(const Key('source-open-drawer'))).right,
+      lessThanOrEqualTo(
+        tester.getRect(find.byKey(WindowTitleRow.castKey)).left,
+      ),
+    );
+  });
+
+  testWidgets('a wide window has no Menu button', (tester) async {
+    await _pumpInShell(tester, const Size(1280, 900));
+
+    expect(find.byKey(const Key('source-open-drawer')), findsNothing);
+  });
+
+  testWidgets('outside the shell there is no drawer, so no Menu button',
+      (tester) async {
+    await _pumpScreen(tester, const Size(400, 900));
+
+    expect(find.byKey(const Key('source-open-drawer')), findsNothing);
   });
 }

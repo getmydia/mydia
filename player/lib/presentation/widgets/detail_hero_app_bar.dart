@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/layout/breakpoints.dart';
 import '../../core/theme/ambient_tint/ambient_tint.dart';
+import '../screens/sources/source_drawer_button.dart';
 import 'shell_rail_inset.dart';
 import 'window_chrome/window_title_row.dart';
 
@@ -50,7 +52,17 @@ SliverAppBar detailHeroAppBar({
       padding: EdgeInsets.only(left: ShellRailInset.of(context)),
       child: SizedBox(
         width: double.infinity,
-        child: WindowTitleRow(leading: back),
+        child: WindowTitleRow(
+          leading: back,
+          // The detail pages sit in the shell's Scaffold, so on a phone the
+          // drawer is one tap away, as on the listing pages. The cast button
+          // stays last.
+          actions: [
+            if (Breakpoints.isMobile(context) &&
+                SourceDrawerButton.shellHasDrawer)
+              const SourceDrawerButton(color: Colors.white),
+          ],
+        ),
       ),
     ),
     flexibleSpace: FlexibleSpaceBar(
