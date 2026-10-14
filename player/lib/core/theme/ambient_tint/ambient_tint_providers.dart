@@ -41,7 +41,9 @@ TintCache tintCache(Ref ref) => TintCache();
 Future<AmbientTintColors> tintForSource(Ref ref, BackdropSource source) async {
   final url = source.imageUrl;
   if (url == null || url.isEmpty) return AmbientTintColors.neutral;
-  final key = source.id ?? url;
+  // Not `source.id`: item ids are only unique within one server, so two
+  // servers with small ids would share a cache slot.
+  final key = source.cacheKey ?? url;
   final cache = ref.read(tintCacheProvider);
   final hit = cache.get(key);
   if (hit != null) return hit;

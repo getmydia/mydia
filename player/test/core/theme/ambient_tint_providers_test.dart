@@ -47,6 +47,27 @@ void main() {
     expect(calls, hasLength(1));
   });
 
+  test('sources sharing an id but not artwork resolve independently', () async {
+    final calls = <BackdropSource>[];
+    final c = ProviderContainer(overrides: [
+      tintExtractorProvider.overrideWithValue((source) async {
+        calls.add(source);
+        return source.imageUrl!.contains('a-server')
+            ? const Color(0xFF2F4A9F)
+            : const Color(0xFF9F2F2F);
+      }),
+    ]);
+    addTearDown(c.dispose);
+    const a = BackdropSource(imageUrl: 'https://a-server/art/7', id: '7');
+    const b = BackdropSource(imageUrl: 'https://b-server/art/7', id: '7');
+
+    final first = await c.read(tintForSourceProvider(a).future);
+    final second = await c.read(tintForSourceProvider(b).future);
+
+    expect(calls, hasLength(2));
+    expect(first, isNot(second));
+  });
+
   test('an extractor error resolves neutral', () async {
     final container = ProviderContainer(overrides: [
       tintExtractorProvider
