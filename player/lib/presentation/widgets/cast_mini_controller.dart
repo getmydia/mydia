@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/sources/sources_providers.dart';
 import '../../core/cast/cast_backend.dart';
 import '../../core/cast/cast_providers.dart';
 import '../../core/cast/cast_seek.dart';
@@ -16,11 +15,10 @@ import '../../core/remote/remote_control_intent.dart';
 import '../../core/router/navigator_keys.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/cast_device.dart';
-import '../../core/p2p/p2p_service.dart' show p2pStatusNotifierProvider;
-import '../../core/playback/local_playback_state.dart';
 import '../screens/detail/load_content_fetchers.dart';
 import 'cast_actions.dart';
 import 'cast_bar/cast_bar_parts.dart';
+import 'cast_bar/cast_bar_state.dart';
 import 'cast_bar/cast_pill.dart';
 import 'cast_bar/dock_extents.dart';
 import 'cast_subtitle_sheet.dart';
@@ -164,7 +162,13 @@ class _CastBarLayerState extends State<CastBarLayer> {
 /// `_buildOffline`. There is no separate full-screen remote: everything the
 /// user can do while casting lives here.
 class CastMiniController extends ConsumerStatefulWidget {
-  const CastMiniController({super.key});
+  const CastMiniController({super.key, this.reportsExtent = true});
+
+  /// Whether the bar reports its height to `DockExtents`, so screens leave
+  /// room for it. False when it is hosted somewhere other than the floating
+  /// layer (the native accessory's cast controls sheet), where reporting
+  /// would pad every screen for a bar that is not floating over them.
+  final bool reportsExtent;
 
   @override
   ConsumerState<CastMiniController> createState() => _CastMiniControllerState();
@@ -178,70 +182,30 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   /// tick and the bar becomes impossible to scrub.
   double? _dragFraction;
 
-  Widget? _buildContent() {
-    final capabilities = ref.watch(castCapabilitiesProvider);
-    // `capabilities` describes only Chromecast/DLNA platform entitlement.
-    // A Mydia target needs none of that — it is reached over the
-    // already-connected p2p host, not the platform's local-network
-    // discovery — so `castDiscoveryProvider` and `cast_device_picker.dart`
-    // both already keep it ungated for the same reason (see
-    // `castDiscoveryProvider`'s own dartdoc in `cast_providers.dart`).
-    // Gating the whole bar on `capabilities.any` alone means this never
-    // mounts on a build with no other capability at all — Flutter Web,
-    // `ambient_lifecycle.dart` names as this app's primary deployment —
-    // which would make both the ambient "Playing on X" banner and the
-    // pull-to-local button unreachable there.
-    final hasMydia = ref.watch(mydiaCastBackendProvider) != null;
-    if (!capabilities.any && !hasMydia) return null;
-
-    // Gate on a Mydia server before touching anything else in the cast stack.
-    // Building the cast chain before a server is stored does work for
-    // nothing: you cannot be casting before you have a server, so there is
-    // nothing to show.
-    if (!ref.watch(hasMydiaProvider)) return null;
-
-    final session = ref.watch(castSessionProvider).value;
-    final target = ref.watch(castTargetProvider);
-    final isLocalPlaying = ref.watch(localPlaybackActiveProvider);
-
-    final Widget? content;
-    if (session == null) {
-      if (isLocalPlaying) return null;
-      // A remembered device with no session at all: a connect that failed.
-      // With neither, there is nothing of this device's own to show — which
-      // is exactly when an ambient banner about a *different* paired player
-      // belongs: an active cast (of this device's own) already claims the
-      // bar, and stacking a third party's "Playing on X" underneath it
-      // would just be noise.
-      content = target == null ? _buildAmbient() : _buildOffline(target);
-    } else if (session.connectionState == CastConnectionState.connecting) {
-      content = _buildConnecting(session.device);
-    } else if (session.isStale) {
-      // The media reconnect re-casts what was playing. With no media there is
-      // nothing to re-cast, so a media-less drop gets a plain reconnect.
-      content = session.mediaInfo == null
-          ? _buildOffline(session.device)
-          : _buildStale(session);
-    } else if (session.mediaInfo == null) {
-      content = _buildIdle(session.device);
-    } else {
-      content = _buildPlaying(session);
-    }
-
-    return content;
-  }
+  Widget? _buildContent() => switch (ref.watch(castBarStateProvider)) {
+        null => null,
+        CastBarAmbient(:final target, :final deviceName) =>
+          _buildAmbient(target, deviceName),
+        CastBarOffline(:final device) => _buildOffline(device),
+        CastBarConnecting(:final device) => _buildConnecting(device),
+        CastBarStale(:final session) => _buildStale(session),
+        CastBarIdle(:final device) => _buildIdle(device),
+        CastBarPlaying(:final session) => _buildPlaying(session),
+      };
 
   @override
   Widget build(BuildContext context) {
     final content = _buildContent();
+    final bar = content == null
+        ? const SizedBox.shrink()
+        : ToastObstruction(
+            edge: ToastEdge.bottom,
+            child: SafeArea(top: false, child: content),
+          );
+    if (!widget.reportsExtent) return bar;
     return ReportedExtent(
       onExtent: DockExtents.reporterOf(context)?.onCastBar,
-      child: content == null
-          ? const SizedBox.shrink()
-          : ToastObstruction(
-              edge: ToastEdge.bottom,
-              child: SafeArea(top: false, child: content),
-            ),
+      child: bar,
     );
   }
 
@@ -285,8 +249,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         child: CastBarRow(
           leading: const CastIconTile(
               accent: true, child: Icon(Icons.cast_connected)),
-          title: 'Ready to play on ${device.name}',
-          status: 'Connected',
+          title: CastBarText.idleTitle(device.name),
+          status: CastBarText.idleStatus,
           dot: CastDot.live,
           actions: [
             _closeButton(
@@ -308,7 +272,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                   strokeWidth: 2, color: AppColors.primary),
             ),
           ),
-          title: 'Connecting to ${device.name}…',
+          title: CastBarText.connectingTitle(device.name),
           actions: [
             _closeButton(
               key: const Key('cast-bar-connecting-cancel'),
@@ -327,7 +291,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         child: CastBarRow(
           leading: const CastIconTile(child: Icon(Icons.cast)),
           title: device.name,
-          status: 'Not connected',
+          status: CastBarText.offlineStatus,
           dot: CastDot.idle,
           actions: [
             CastPrimaryAction(
@@ -344,44 +308,13 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         ),
       );
 
-  /// "Playing on Living Room" for a paired player already mid-watch that
-  /// nobody asked this device to track — from [ambientPlayingProvider]
-  /// (`AmbientTargets`, `core/remote/ambient_targets.dart`). Null when there
-  /// is nothing ambient to show, which is the ordinary case: most of the
-  /// time no other paired device is playing anything at all.
-  ///
-  /// Only ever one row, the first target held: a user with more than one
-  /// other device mid-watch at once is a corner the picker already covers,
-  /// and this banner's whole point is a glanceable nudge, not a second
-  /// picker. Shows the first held target that is neither this device nor
-  /// dismissed.
-  Widget? _buildAmbient() {
-    final held = ref.watch(ambientPlayingProvider).value ?? const [];
-    final dismissed = ref.watch(ambientDismissalsProvider);
-    final selfNodeId =
-        ref.watch(p2pStatusNotifierProvider.select((s) => s.nodeId));
-
-    final ambientTarget = held
-        .where((t) =>
-            selfNodeId == null ||
-            t.device.id.toLowerCase() != selfNodeId.toLowerCase())
-        .where((t) => !dismissed.contains(AmbientDismissal.of(t)))
-        .firstOrNull;
-    if (ambientTarget == null) return null;
-
-    // `AmbientTarget.device.name` is the bare node id — the probe this came
-    // from carries no display names (see that field's own dartdoc) — so
-    // resolve the real one against the paired-device roster before it ever
-    // reaches the label. Falls back to the id itself only in the narrow
-    // window before `remoteDeviceNamesProvider` has resolved.
-    final names = ref.watch(remoteDeviceNamesProvider).value ?? const {};
-    final name = names[ambientTarget.device.id] ?? ambientTarget.device.id;
-
+  /// The "Playing on X" row; see [castBarStateProvider] for when it shows.
+  Widget _buildAmbient(AmbientTarget ambientTarget, String name) {
     return CastPill(
       child: CastBarRow(
         leading: CastThumb(imageUrl: ambientTarget.snapshot.imageUrl),
         title: ambientTarget.snapshot.title,
-        status: 'Playing on $name',
+        status: CastBarText.ambientStatus(name),
         dot: CastDot.live,
         actions: [
           CastPrimaryAction(
@@ -391,7 +324,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           ),
           _closeButton(
             key: const Key('cast-bar-ambient-dismiss'),
-            tooltip: 'Hide Playing on $name',
+            tooltip: 'Hide ${CastBarText.ambientStatus(name)}',
             onPressed: () => ref
                 .read(ambientDismissalsProvider.notifier)
                 .dismiss(ambientTarget),
@@ -471,7 +404,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
             dimmed: true,
           ),
           title: session.mediaInfo?.title ?? session.device.name,
-          status: 'Lost connection to ${session.device.name}',
+          status: CastBarText.staleStatus(session.device.name),
           dot: CastDot.lost,
           actions: [
             // Re-cast what the *stale session* was playing. Anything else
@@ -520,9 +453,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           CastBarRow(
             leading: CastThumb(imageUrl: info.imageUrl),
             title: info.title,
-            status: syncing
-                ? 'Reconnecting to ${session.device.name}…'
-                : 'Casting to ${session.device.name}',
+            status: CastBarText.playingStatus(session.device.name,
+                syncing: syncing),
             dot: syncing ? CastDot.idle : CastDot.live,
             actions: [
               // What the close button does depends on whether this device
@@ -660,15 +592,10 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                   tooltip: isPlaying ? 'Pause' : 'Play',
                   onPressed: syncing
                       ? null
-                      : () async {
-                          final manager =
-                              await ref.read(castSessionManagerProvider.future);
-                          if (isPlaying) {
-                            await manager.pause();
-                          } else {
-                            await manager.play();
-                          }
-                        },
+                      : () async => toggleCastPlayback(
+                            await ref.read(castSessionManagerProvider.future),
+                            session,
+                          ),
                 ),
                 _slot(IconButton(
                   key: const Key('cast-bar-forward'),

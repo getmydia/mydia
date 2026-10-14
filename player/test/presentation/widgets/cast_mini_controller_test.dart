@@ -1570,6 +1570,8 @@ void main() {
       ));
       await tester.pump();
       await tester.pump();
+      // The banner comes through castBarStateProvider, one rebuild after ambientPlayingProvider.
+      await tester.pump();
 
       expect(find.text('Playing on Living Room'), findsOneWidget,
           reason: 'the ambient banner must be reachable on a build with no '
@@ -1628,6 +1630,8 @@ void main() {
         child: const MaterialApp(home: Scaffold(body: CastMiniController())),
       ));
       await tester.pump();
+      await tester.pump();
+      // The banner comes through castBarStateProvider, one rebuild after ambientPlayingProvider.
       await tester.pump();
 
       expect(find.text('Playing on Living Room'), findsOneWidget,
