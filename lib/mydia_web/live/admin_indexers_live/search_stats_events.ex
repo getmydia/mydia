@@ -1,11 +1,11 @@
 defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
   @moduledoc """
   The per-indexer search stats on the Indexers page, as LiveView hooks so
-  `AdminIndexersLive.Index` gains only one line of wiring (the same pattern as
+  `AdminIndexersLive.Index` gains only a little wiring (the same pattern as
   `CardigannEngineEvents`).
 
-  Stats load on mount, on a window change, and whenever the page reloads its
-  library indexers.
+  Stats load on a window change and through `refresh/1`, which the page calls
+  whenever it reloads its library indexers (mount, Test, save, toggle).
   """
 
   import Phoenix.Component, only: [assign: 2]
@@ -16,18 +16,19 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
   @spec attach(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def attach(socket) do
     socket
-    |> assign(search_stats_window: :day, search_failures: nil)
-    |> load()
+    |> assign(search_stats_window: window(socket), search_failures: nil)
     |> attach_hook(:search_stats_events, :handle_event, &handle_event/3)
-    |> attach_hook(:search_stats_info, :handle_info, &handle_info/2)
   end
 
-  defp load(socket),
-    do: assign(socket, search_stats: SearchStats.summary(socket.assigns.search_stats_window))
+  @doc "Reloads the stats for the current window (24 hours before `attach/1` runs)."
+  @spec refresh(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+  def refresh(socket), do: assign(socket, search_stats: SearchStats.summary(window(socket)))
+
+  defp window(socket), do: Map.get(socket.assigns, :search_stats_window, :day)
 
   defp handle_event("search_stats_window", %{"window" => window}, socket)
        when window in ["day", "week"] do
-    {:halt, socket |> assign(search_stats_window: String.to_existing_atom(window)) |> load()}
+    {:halt, socket |> assign(search_stats_window: String.to_existing_atom(window)) |> refresh()}
   end
 
   defp handle_event("search_stats_window", _params, socket), do: {:halt, socket}
@@ -43,9 +44,6 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsEvents do
     do: {:halt, assign(socket, search_failures: nil)}
 
   defp handle_event(_event, _params, socket), do: {:cont, socket}
-
-  defp handle_info(:reload_library_indexers, socket), do: {:cont, load(socket)}
-  defp handle_info(_message, socket), do: {:cont, socket}
 
   defp indexer_name(socket, id) do
     (Map.get(socket.assigns, :indexers, []) ++ Map.get(socket.assigns, :library_indexers, []))

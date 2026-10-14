@@ -927,6 +927,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     socket
     |> assign(:library_indexers, library_indexers)
     |> assign(:library_indexer_stats, library_indexer_stats)
+    |> SearchStatsEvents.refresh()
   end
 
   defp get_indexer_health_status(indexers) do
