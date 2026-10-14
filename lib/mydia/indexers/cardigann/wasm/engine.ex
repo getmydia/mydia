@@ -256,19 +256,25 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   # its store and instance resources is garbage collected, so a long-lived
   # caller (an Oban worker, a LiveView) would hold the last instance between
   # calls. The guest work therefore runs in a process that ends with the call.
-  # Task.async keeps `$callers` and the link, so a raise in `run/4` still
-  # reaches the caller as before. Everything the guest needs from the caller is
-  # in `ctx` (HostHttp's imports run in the instance's own process, never the
-  # caller's), and telemetry stays in the caller (`finish/6`).
+  # The task is not linked to the caller (a crashing guest must never kill a
+  # search worker; it comes back as an error), and keeps `$callers`.
+  # Everything the guest needs from the caller is in `ctx` (HostHttp's imports
+  # run in the instance's own process, never the caller's), and telemetry stays
+  # in the caller (`finish/6`).
+  #
+  # The guest still must not outlive its caller, or the slot would be freed
+  # while it runs: a watcher linked to the task monitors the caller and kills
+  # the task when the caller dies. The task does not trap exits and the
+  # instance is linked to it, so the instance dies with the task.
   defp run_isolated(compiled, call, ctx, timeout_ms) do
-    task =
-      Task.async(fn ->
-        # The instance process is linked to this one and does not trap exits,
-        # so it dies with the task, and the task dies with a killed caller
-        # (Task.async links both ways); the guest never outlives its slot.
-        probe(ctx, {:task, self()})
-        run(compiled, call, ctx, timeout_ms)
-      end)
+    caller = self()
+    work = fn -> guest_task(caller, compiled, call, ctx, timeout_ms) end
+
+    {task, linked?} =
+      case Process.whereis(Mydia.TaskSupervisor) do
+        nil -> {Task.async(work), true}
+        _pid -> {Task.Supervisor.async_nolink(Mydia.TaskSupervisor, work), false}
+      end
 
     result =
       case Task.yield(task, timeout_ms + @task_grace_ms) || Task.shutdown(task, :brutal_kill) do
@@ -282,12 +288,35 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
           {:error, Error.timeout("Cardigann call timed out after #{timeout_ms} ms")}
       end
 
-    flush_exit(task.pid)
+    # Only without the supervisor (the task is then linked): a caller that
+    # traps exits gets {:EXIT, task, _}. Leave nothing in its mailbox.
+    if linked?, do: flush_exit(task.pid)
     result
   end
 
-  # A caller that traps exits gets {:EXIT, task, _} from the task's link,
-  # whatever way the task ended. Leave nothing in its mailbox.
+  defp guest_task(caller, compiled, call, ctx, timeout_ms) do
+    task = self()
+
+    watcher =
+      spawn_link(fn ->
+        ref = Process.monitor(caller)
+
+        receive do
+          {:DOWN, ^ref, :process, _, _} -> Process.exit(task, :kill)
+        end
+      end)
+
+    probe(ctx, {:task, task})
+    probe(ctx, {:watcher, watcher})
+
+    try do
+      run(compiled, call, ctx, timeout_ms)
+    after
+      Process.unlink(watcher)
+      Process.exit(watcher, :kill)
+    end
+  end
+
   defp flush_exit(pid) do
     if Process.info(self(), :trap_exit) == {:trap_exit, true} do
       receive do

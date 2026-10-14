@@ -560,9 +560,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
 
       assert_receive {:guest, {:task, task}}
       assert_receive {:guest, {:instance, instance}}
+      assert_receive {:guest, {:watcher, watcher}}
       assert task != self()
       refute Process.alive?(task)
       refute Process.alive?(instance)
+      refute Process.alive?(watcher)
     end
 
     test "respects the calling process's $callers in the guest process", %{bypass: b, ctx: ctx} do
@@ -620,25 +622,24 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
 
       ctx =
         Map.put(ctx, :guest_probe, fn
-          {:task, task} ->
-            send(test_pid, {:task, task})
-
           {:instance, pid} ->
             send(test_pid, {:instance, pid})
             Process.sleep(:infinity)
+
+          event ->
+            send(test_pid, event)
         end)
 
       yaml = yaml("lantern-public.yml", b)
       caller = spawn(fn -> Engine.call({:capabilities, yaml}, ctx, @call_timeout) end)
 
       assert_receive {:task, task}
+      assert_receive {:watcher, watcher}
       assert_receive {:instance, instance}
-      task_ref = Process.monitor(task)
-      instance_ref = Process.monitor(instance)
+      refs = for pid <- [task, watcher, instance], do: {pid, Process.monitor(pid)}
       Process.exit(caller, :kill)
 
-      assert_receive {:DOWN, ^task_ref, :process, ^task, _}, 5_000
-      assert_receive {:DOWN, ^instance_ref, :process, ^instance, _}, 5_000
+      for {pid, ref} <- refs, do: assert_receive({:DOWN, ^ref, :process, ^pid, _}, 5_000)
     end
 
     test "an instance that crashes mid-call gives the caller an error, not a hang",
@@ -657,14 +658,19 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
 
       yaml = yaml("lantern-public.yml", b)
 
-      spawn(fn ->
-        Process.flag(:trap_exit, true)
-        send(test_pid, {:result, Engine.call({:capabilities, yaml}, ctx, @call_timeout)})
-      end)
+      # A caller that does not trap exits must survive the guest's crash.
+      caller =
+        spawn(fn ->
+          result = Engine.call({:capabilities, yaml}, ctx, @call_timeout)
+          send(test_pid, {:result, result, self()})
+          receive do: (:done -> :ok)
+        end)
 
       assert_receive {:instance, instance}
       Process.exit(instance, :kill)
-      assert_receive {:result, {:error, %{type: :engine_error}}}, 5_000
+      assert_receive {:result, {:error, %{type: :engine_error}}, ^caller}, 5_000
+      assert Process.alive?(caller)
+      send(caller, :done)
     end
   end
 
