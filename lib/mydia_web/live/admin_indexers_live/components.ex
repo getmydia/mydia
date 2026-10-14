@@ -242,7 +242,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           {@indexer.type}
         </span>
         <span :if={@indexer.language} class="badge badge-xs badge-ghost">{@indexer.language}</span>
-        <CardigannEngineComponents.verified_badges
+        <CardigannEngineComponents.verified_badge
           definition_id={@indexer.indexer_id}
           active={@active_engine}
         />
