@@ -163,7 +163,7 @@ defmodule MydiaWeb.AdminComponents do
     <nav
       id="admin-page-tabs"
       aria-label={"#{@hub_label} pages"}
-      class="tabs tabs-border flex-wrap mb-6"
+      class="tabs tabs-border flex-wrap mb-6 max-sm:hidden"
     >
       <.link
         :for={tab <- @tabs}
@@ -174,6 +174,38 @@ defmodule MydiaWeb.AdminComponents do
       >
         {tab.label}
       </.link>
+    </nav>
+
+    <%!-- Phones: the wrapped strip took three lines, and a scrolling strip hid
+          tabs off-screen (ae1cb95ce), so the hub's pages sit in a menu. --%>
+    <nav id="admin-page-switcher" aria-label={"#{@hub_label} pages"} class="sm:hidden mb-4">
+      <div class="dropdown w-full z-20">
+        <div
+          id="admin-page-switcher-trigger"
+          tabindex="0"
+          role="button"
+          class="btn w-full justify-between"
+        >
+          {@nav_page.label}
+          <.icon name="hero-chevron-down" class="w-4 h-4 opacity-60" />
+        </div>
+        <ul
+          tabindex="-1"
+          class="dropdown-content menu w-full mt-1 p-2 shadow-lg bg-base-200 border border-base-300 rounded-box"
+        >
+          <li :for={tab <- @tabs}>
+            <.link
+              id={"admin-switcher-#{tab.key}"}
+              navigate={tab.path}
+              aria-current={tab.key == @nav_page.key && "page"}
+              class={[tab.key == @nav_page.key && "menu-active"]}
+            >
+              <.icon name={tab.icon} class="w-4 h-4 opacity-60" />
+              {tab.label}
+            </.link>
+          </li>
+        </ul>
+      </div>
     </nav>
 
     <div id="admin-page-body" class="bg-base-100 max-sm:bg-transparent py-4 sm:p-6 space-y-4">
