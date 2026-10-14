@@ -5,6 +5,7 @@ import '../../../core/theme/colors.dart';
 import '../../../domain/navigation/source_nav.dart';
 import '../focus_highlight.dart';
 import '../glass_surface.dart';
+import '../native_glass.dart';
 import '../toast/toast_obstruction.dart';
 import 'dock_glass.dart';
 import 'nav_badges.dart';
@@ -64,11 +65,15 @@ class BottomNav extends StatelessWidget {
               borderRadius: BorderRadius.circular(22),
               boxShadow: DockGlass.shadow,
             ),
-            child: GlassSurface(
-              blurSigma: DockGlass.blurSigma,
-              fillColor: DockGlass.fill,
-              borderRadius: BorderRadius.circular(22),
-              border: DockGlass.border,
+            child: NativeGlass(
+              cornerRadius: 22,
+              fallback: (child) => GlassSurface(
+                blurSigma: DockGlass.blurSigma,
+                fillColor: DockGlass.fill,
+                borderRadius: BorderRadius.circular(22),
+                border: DockGlass.border,
+                child: child,
+              ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 child: Row(

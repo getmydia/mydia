@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../glass_surface.dart';
+import '../native_glass.dart';
 import '../nav/dock_glass.dart';
 
 /// The glass pill every cast bar state renders in, matching the dock it
@@ -8,6 +9,7 @@ import '../nav/dock_glass.dart';
 class CastPill extends StatelessWidget {
   const CastPill({super.key, required this.child});
 
+  /// NativeGlass's cornerRadius in [build] must match.
   static const radius = BorderRadius.all(Radius.circular(18));
 
   /// Widest the bar grows beside the desktop sidebar, including this pill's
@@ -24,11 +26,17 @@ class CastPill extends StatelessWidget {
       child: DecoratedBox(
         decoration:
             BoxDecoration(borderRadius: radius, boxShadow: DockGlass.shadow),
-        child: GlassSurface(
-          blurSigma: DockGlass.blurSigma,
-          fillColor: DockGlass.fill,
-          borderRadius: radius,
-          border: DockGlass.border,
+        // Same tint as the dock (NativeGlass.defaultTint), so the bar and
+        // the dock it floats above read as one material.
+        child: NativeGlass(
+          cornerRadius: 18,
+          fallback: (child) => GlassSurface(
+            blurSigma: DockGlass.blurSigma,
+            fillColor: DockGlass.fill,
+            borderRadius: radius,
+            border: DockGlass.border,
+            child: child,
+          ),
           // Transparent Material so IconButton ink and tooltips still work
           // on glass.
           child: Material(
