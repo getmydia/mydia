@@ -86,6 +86,26 @@ defmodule MydiaWeb.AdminIndexersLive.IndexerLibraryTest do
       # Modal should be closed
       refute html =~ "Browse and add indexers from the definition library"
     end
+
+    test "closes from the header close button, and the list has no scroller of its own", %{
+      conn: conn
+    } do
+      set_cardigann_feature_flag(true)
+      cardigann_definition_fixture(%{enabled: false})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      view
+      |> element("button.flex.items-start[phx-click='show_indexer_library']")
+      |> render_click()
+
+      refute has_element?(view, ~s(#indexer-library-modal-body [class*="sm:overflow-y-auto"]))
+      assert has_element?(view, "#indexer-library-modal-body #library-definitions")
+
+      view |> element("#indexer-library-modal-close") |> render_click()
+
+      refute has_element?(view, "#indexer-library-modal")
+    end
   end
 
   describe "filters" do

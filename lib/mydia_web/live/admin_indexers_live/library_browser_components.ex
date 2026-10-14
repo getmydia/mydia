@@ -121,20 +121,18 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
         </div>
       </div>
       <%!-- Indexer List --%>
-      <div class="sm:overflow-y-auto sm:max-h-[50vh]">
-        <.admin_list id="library-definitions" items={@definitions}>
-          <:row :let={definition}>
-            <.definition_row definition={definition} />
-          </:row>
-          <:empty>
-            <%= if @search_query != "" or @filter_type != "all" or @filter_language != "all" or @filter_added != "all" do %>
-              No indexers match your filters. Try adjusting your search criteria.
-            <% else %>
-              No indexer definitions available. Click "Sync Library" to fetch indexers from the repository.
-            <% end %>
-          </:empty>
-        </.admin_list>
-      </div>
+      <.admin_list id="library-definitions" items={@definitions}>
+        <:row :let={definition}>
+          <.definition_row definition={definition} />
+        </:row>
+        <:empty>
+          <%= if @search_query != "" or @filter_type != "all" or @filter_language != "all" or @filter_added != "all" do %>
+            No indexers match your filters. Try adjusting your search criteria.
+          <% else %>
+            No indexer definitions available. Click "Sync Library" to fetch indexers from the repository.
+          <% end %>
+        </:empty>
+      </.admin_list>
       <.admin_modal_actions>
         <button class="btn btn-ghost" phx-click="close_indexer_library">Close</button>
       </.admin_modal_actions>
