@@ -131,6 +131,7 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
     final highContrast = MediaQuery.highContrastOf(context);
     final duration = context.reducedMotionDuration(DepthTokens.motionMedium);
     const inset = Breakpoints.railInset;
+    final safe = MediaQuery.paddingOf(context);
 
     return Stack(
       children: [
@@ -147,9 +148,10 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
             ),
           ),
         Positioned(
-          left: inset,
+          // Clear of a display cutout or gesture area (landscape phones).
+          left: inset + safe.left,
           top: inset + widget.topInset,
-          bottom: inset,
+          bottom: inset + safe.bottom,
           child: ToastObstruction(
             edge: ToastEdge.left,
             child: Focus(

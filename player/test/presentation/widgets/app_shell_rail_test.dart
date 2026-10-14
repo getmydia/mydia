@@ -228,6 +228,78 @@ void main() {
     });
   });
 
+  testWidgets('the rail and content column clear the safe area',
+      (tester) async {
+    _setSize(tester, const Size(1280, 800));
+    final reported = <double>[];
+    final railScope = FocusScopeNode();
+    final contentScope = FocusScopeNode();
+    final railRow = FocusNode();
+    addTearDown(railScope.dispose);
+    addTearDown(contentScope.dispose);
+    addTearDown(railRow.dispose);
+    const contentKey = Key('safe-area-content');
+
+    Future<void> pumpWith(EdgeInsets padding) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _overrides(),
+          child: MaterialApp(
+            home: Scaffold(
+              body: MediaQuery(
+                data: MediaQueryData(
+                  size: const Size(1280, 800),
+                  padding: padding,
+                ),
+                child: DockExtents(
+                  dock: 0,
+                  castBar: 0,
+                  sidebar: 0,
+                  drawerOpen: false,
+                  onDock: (_) {},
+                  onSidebar: reported.add,
+                  onCastBar: (_) {},
+                  onDrawer: (_) {},
+                  child: AppShell.railLayers(
+                    regionsEnabled: true,
+                    contentLeft: Breakpoints.railContentInset(pinned: false),
+                    railScope: railScope,
+                    contentScope: contentScope,
+                    boundary: SidebarFocusBoundary(
+                      sidebarNode: railRow,
+                      contentScope: contentScope,
+                    ),
+                    content: const SizedBox.expand(key: contentKey),
+                    railBuilder: (onExitRequested) => FloatingRail(
+                      location: '/',
+                      onNavigate: (_) {},
+                      isOffline: false,
+                      selectedRowFocusNode: railRow,
+                      onExitRequested: onExitRequested,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pumpWith(EdgeInsets.zero);
+    final baseContentLeft = tester.getTopLeft(find.byKey(contentKey)).dx;
+    expect(tester.getTopLeft(find.byKey(_railKey)).dx, 16);
+    expect(tester.getBottomLeft(find.byKey(_railKey)).dy, 800 - 16);
+    expect(reported.last, Breakpoints.railContentInset(pinned: false));
+
+    await pumpWith(const EdgeInsets.only(left: 44, bottom: 21));
+    expect(tester.getTopLeft(find.byKey(_railKey)).dx, 16 + 44);
+    expect(tester.getBottomLeft(find.byKey(_railKey)).dy, 800 - 21 - 16);
+    expect(tester.getTopLeft(find.byKey(contentKey)).dx, baseContentLeft + 44);
+    expect(reported.last, Breakpoints.railContentInset(pinned: false) + 44);
+  });
+
   testWidgets('sidebarChrome reports the pinned rail footprint (312)',
       (tester) async {
     final reported = <double>[];

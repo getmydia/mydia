@@ -182,46 +182,59 @@ class AppShell extends ConsumerStatefulWidget {
     required Widget Function(VoidCallback onExitRequested) railBuilder,
   }) =>
       Builder(
-        builder: (context) => Stack(
-          fit: StackFit.expand,
-          children: [
-            // Reports the rail's footprint so the cast bar clears it.
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: IgnorePointer(
-                child: sidebarChrome(child: SizedBox(width: contentLeft)),
-              ),
-            ),
-            Positioned.fill(
-              child: AnimatedPadding(
-                duration:
-                    context.reducedMotionDuration(DepthTokens.motionMedium),
-                curve: DepthTokens.curveStandard,
-                padding: EdgeInsets.only(left: contentLeft),
-                child: _AppShellState._region(
-                  enabled: regionsEnabled,
-                  node: contentScope,
-                  onExit: (direction) => direction == TraversalDirection.left
-                      ? boundary.focusSidebar()
-                      : false,
-                  child: content,
+        builder: (context) {
+          // The rail sits inside the safe area (see FloatingRail), so the
+          // column and the reported footprint start that much further in.
+          final safeLeft = MediaQuery.paddingOf(context).left;
+          final left = contentLeft + safeLeft;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              // Reports the rail's footprint so the cast bar clears it.
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                child: IgnorePointer(
+                  child: sidebarChrome(child: SizedBox(width: left)),
                 ),
               ),
-            ),
-            Positioned.fill(
-              child: _AppShellState._region(
-                enabled: regionsEnabled,
-                node: railScope,
-                onExit: (direction) => direction == TraversalDirection.right
-                    ? boundary.focusContent()
-                    : false,
-                child: railBuilder(boundary.focusContent),
+              Positioned.fill(
+                child: AnimatedPadding(
+                  duration:
+                      context.reducedMotionDuration(DepthTokens.motionMedium),
+                  curve: DepthTokens.curveStandard,
+                  padding: EdgeInsets.only(left: left),
+                  // The column is already inset, so screens inside it must
+                  // not apply the same safe-area gap a second time.
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeLeft: true,
+                    child: _AppShellState._region(
+                      enabled: regionsEnabled,
+                      node: contentScope,
+                      onExit: (direction) =>
+                          direction == TraversalDirection.left
+                              ? boundary.focusSidebar()
+                              : false,
+                      child: content,
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
-        ),
+              Positioned.fill(
+                child: _AppShellState._region(
+                  enabled: regionsEnabled,
+                  node: railScope,
+                  onExit: (direction) => direction == TraversalDirection.right
+                      ? boundary.focusContent()
+                      : false,
+                  child: railBuilder(boundary.focusContent),
+                ),
+              ),
+            ],
+          );
+        },
       );
 
   /// Reports the rail plus its gap (`Breakpoints.railContentInset`) to
