@@ -7,7 +7,7 @@ import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 import 'package:player/presentation/widgets/nav/mobile_drawer.dart';
-import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
+import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 import 'package:player/presentation/widgets/movie_watched_controls.dart';
 import 'package:player/presentation/widgets/primary_play_button.dart';
@@ -200,15 +200,18 @@ void menuButtonTests() {
     expect(find.byType(MobileDrawer), findsOneWidget);
   });
 
-  testWidgets('the Menu button sits before the cast button', (tester) async {
+  testWidgets('the Menu button is left of the back button, both leading',
+      (tester) async {
     await _pumpInShell(tester, const Size(400, 900));
 
-    expect(
-      tester.getRect(find.byKey(const Key('source-open-drawer'))).right,
-      lessThanOrEqualTo(
-        tester.getRect(find.byKey(WindowTitleRow.castKey)).left,
-      ),
-    );
+    final menu = tester.getRect(find.byKey(const Key('source-open-drawer')));
+    final back = tester.getRect(find.byType(DetailHeroBackButton));
+    expect(menu.right, lessThanOrEqualTo(back.left));
+    // Both sit at the leading edge: two 48 px buttons after the 8 px gutter.
+    expect(menu.left, lessThan(16));
+    expect(back.right, lessThan(110));
+    expect(menu.size, back.size);
+    expect(menu.center.dy, closeTo(back.center.dy, 0.5));
   });
 
   testWidgets('a wide window has no Menu button', (tester) async {

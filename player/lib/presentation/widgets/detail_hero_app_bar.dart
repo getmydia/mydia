@@ -53,15 +53,19 @@ SliverAppBar detailHeroAppBar({
       child: SizedBox(
         width: double.infinity,
         child: WindowTitleRow(
-          leading: back,
           // The detail pages sit in the shell's Scaffold, so on a phone the
-          // drawer is one tap away, as on the listing pages. The cast button
-          // stays last.
-          actions: [
-            if (Breakpoints.isMobile(context) &&
-                SourceDrawerButton.shellHasDrawer)
-              const SourceDrawerButton(color: Colors.white),
-          ],
+          // drawer is one tap away, at the leading edge as on the listing
+          // pages: menu first, then back.
+          leading:
+              Breakpoints.isMobile(context) && SourceDrawerButton.shellHasDrawer
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SourceDrawerButton(color: Colors.white),
+                        back,
+                      ],
+                    )
+                  : back,
         ),
       ),
     ),
