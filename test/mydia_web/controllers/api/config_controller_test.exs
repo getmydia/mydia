@@ -1,5 +1,7 @@
 defmodule MydiaWeb.Api.ConfigControllerTest do
-  use MydiaWeb.ConnCase, async: true
+  # Not async: the cardigann.engine tests replace the application's
+  # EngineSwitcher and set CARDIGANN_ENGINE, both global.
+  use MydiaWeb.ConnCase, async: false
 
   setup do
     {_admin, token} = MydiaWeb.AuthHelpers.create_user_and_token(%{role: "admin"})
@@ -47,12 +49,14 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
       Supervisor.terminate_child(Mydia.Supervisor, EngineSwitcher)
       start_supervised!(EngineSwitcher)
 
+      # Restore the config before restarting the application's switcher: it
+      # boots into whatever engine the runtime config names.
       on_exit(fn ->
-        Supervisor.restart_child(Mydia.Supervisor, EngineSwitcher)
         Application.put_env(:mydia, :runtime_config, runtime)
         Application.delete_env(:mydia, :fake_wasm_engine_pid)
         System.delete_env("CARDIGANN_ENGINE")
         :persistent_term.erase({EngineSwitcher, :active})
+        Supervisor.restart_child(Mydia.Supervisor, EngineSwitcher)
         Mydia.Indexers.register_adapters()
       end)
 

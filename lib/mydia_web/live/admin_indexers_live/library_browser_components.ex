@@ -204,7 +204,7 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
         <span :if={@definition.language} class="badge badge-sm badge-ghost">
           {@definition.language}
         </span>
-        <CardigannEngineComponents.verified_badges
+        <CardigannEngineComponents.verified_badge
           definition_id={@definition.indexer_id}
           active={CardigannFeatureFlags.active_engine()}
         />

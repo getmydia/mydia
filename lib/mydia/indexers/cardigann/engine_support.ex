@@ -66,6 +66,18 @@ defmodule Mydia.Indexers.Cardigann.EngineSupport do
   @spec verified_on() :: Date.t()
   def verified_on, do: @verified_on
 
+  @doc """
+  How `definition_id` stands on `active`: verified there, verified only on the
+  other engine, or not verified at all.
+  """
+  @spec verification(String.t(), engine()) :: :verified | {:other_only, engine()} | :unverified
+  def verification(definition_id, active) do
+    case verified_engines(definition_id) do
+      [] -> :unverified
+      engines -> if active in engines, do: :verified, else: {:other_only, hd(engines)}
+    end
+  end
+
   @doc "The ids verified on `engine` and not on the other one."
   @spec only_on(engine(), [String.t()]) :: [String.t()]
   def only_on(engine, ids), do: Enum.filter(ids, &(verified_engines(&1) == [engine]))

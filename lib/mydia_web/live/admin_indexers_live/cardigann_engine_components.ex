@@ -1,7 +1,7 @@
 defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
   @moduledoc """
   The Cardigann engine picker inside Library Indexers and the per-tracker
-  "verified on" badges. Rendering only; `MydiaWeb.AdminIndexersLive.Index`
+  verification badge. Rendering only; `MydiaWeb.AdminIndexersLive.Index`
   handles the events.
 
   The copy is qualitative on purpose: measured figures change with every bench
@@ -239,26 +239,34 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
   attr :definition_id, :string, required: true
   attr :active, :atom, required: true
 
-  @doc ~s("Built-in" / "Prowlarr-based" badges for the engines a definition was verified on.)
-  def verified_badges(assigns) do
+  @doc "One badge saying whether a definition is verified on the active engine."
+  def verified_badge(assigns) do
     assigns =
       assign(assigns,
-        engines: EngineSupport.verified_engines(assigns.definition_id),
-        tip: "Verified against Prowlarr's results on #{EngineSupport.verified_on()}"
+        verification: EngineSupport.verification(assigns.definition_id, assigns.active),
+        checked: EngineSupport.verified_on()
       )
 
     ~H"""
-    <span
-      :for={engine <- @engines}
-      id={"verified-#{@definition_id}-#{engine}"}
-      class={[
-        "badge badge-xs gap-1",
-        if(engine == @active, do: "badge-primary", else: "badge-outline")
-      ]}
-      title={@tip}
-    >
-      <.icon name="hero-check" class="w-3 h-3" />{engine_name(engine)}
-    </span>
+    <%= case @verification do %>
+      <% :verified -> %>
+        <span
+          id={"verified-#{@definition_id}"}
+          class="badge badge-xs badge-soft badge-success gap-1"
+          title={"Search results matched Prowlarr's on the #{engine_name(@active)} engine (checked #{@checked})."}
+        >
+          <.icon name="hero-check" class="w-3 h-3" />Verified
+        </span>
+      <% {:other_only, other} -> %>
+        <span
+          id={"verified-#{@definition_id}"}
+          class="badge badge-xs badge-soft badge-warning"
+          title={"Search results matched Prowlarr's only on the #{engine_name(other)} engine (checked #{@checked}). Change it under How library indexers run."}
+        >
+          Verified on {engine_name(other)} only
+        </span>
+      <% :unverified -> %>
+    <% end %>
     """
   end
 

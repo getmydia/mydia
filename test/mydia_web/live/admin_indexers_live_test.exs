@@ -579,14 +579,17 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       Supervisor.terminate_child(Mydia.Supervisor, EngineSwitcher)
       start_supervised!(EngineSwitcher)
 
+      # Restore the config before restarting the application's switcher: it
+      # boots into whatever engine the runtime config names, and a leftover
+      # :prowlarr leaves a failed transition on the page for later tests.
       on_exit(fn ->
-        Supervisor.restart_child(Mydia.Supervisor, EngineSwitcher)
         Application.put_env(:mydia, :features, features)
         Application.put_env(:mydia, :runtime_config, runtime)
         Application.delete_env(:mydia, :fake_wasm_engine_pid)
         Application.delete_env(:mydia, :fake_wasm_engine_status)
         System.delete_env("CARDIGANN_ENGINE")
         :persistent_term.erase({EngineSwitcher, :active})
+        Supervisor.restart_child(Mydia.Supervisor, EngineSwitcher)
         Mydia.Indexers.register_adapters()
       end)
 
@@ -771,17 +774,27 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert has_element?(view, "#cardigann-engine-builtin[checked]")
     end
 
-    test "library rows show verified badges", %{conn: conn} do
-      Mydia.IndexersFixtures.cardigann_definition_fixture(%{
-        indexer_id: "nyaasi",
-        name: "Nyaa",
-        in_library: true,
-        enabled: true
-      })
+    test "library rows show one badge relative to the active engine", %{conn: conn} do
+      for {id, name} <- [{"nyaasi", "Nyaa"}, {"anibt", "AniBT"}, {"no-such-tracker", "Nowhere"}] do
+        Mydia.IndexersFixtures.cardigann_definition_fixture(%{
+          indexer_id: id,
+          name: name,
+          in_library: true,
+          enabled: true
+        })
+      end
 
       {:ok, view, _} = live(conn, ~p"/admin/indexers")
-      assert has_element?(view, "#verified-nyaasi-prowlarr")
-      refute has_element?(view, "#verified-nyaasi-builtin")
+
+      assert has_element?(view, "#verified-anibt.badge-success", "Verified")
+
+      assert has_element?(
+               view,
+               "#verified-nyaasi.badge-warning",
+               "Verified on Prowlarr-based only"
+             )
+
+      refute has_element?(view, "#verified-no-such-tracker")
       assert has_element?(view, "#cardigann-engine-only-verified", "Nyaa")
     end
   end
