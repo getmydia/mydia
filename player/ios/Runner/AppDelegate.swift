@@ -37,7 +37,26 @@ import AVFoundation
         }
     }
 
+    // Must stay the last step before `super`: `FlutterAppDelegate` finds each
+    // plugin registrar through `window.rootViewController as? FlutterViewController`,
+    // which stops matching once the tab bar controller becomes the root.
+    installNativeTabBar()
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  /// On iOS 26 iPhones, puts a native tab bar over the Flutter view.
+  /// Everywhere else the root stays the `FlutterViewController`.
+  private func installNativeTabBar() {
+    #if compiler(>=6.2)
+    guard #available(iOS 26.0, *),
+          UIDevice.current.userInterfaceIdiom == .phone,
+          let window,
+          let flutter = window.rootViewController as? FlutterViewController else { return }
+    let tabs = MydiaTabBarController(flutterViewController: flutter)
+    window.rootViewController = tabs
+    tabs.applySpikeFixture()
+    #endif
   }
 
   // The app switcher snapshots the window after this returns.
