@@ -3,7 +3,7 @@ defmodule Mydia.Indexers.Cardigann.EngineSwitcher.Transition do
 
   @type t :: %__MODULE__{
           target: :prowlarr,
-          phase: :pending | :fetching | :compiling | :failed,
+          phase: :pending | :fetching | :downloading_precompiled | :compiling | :failed,
           bytes: non_neg_integer() | nil,
           total: non_neg_integer() | nil,
           phase_started_at: DateTime.t(),

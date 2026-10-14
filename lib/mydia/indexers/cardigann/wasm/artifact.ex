@@ -57,6 +57,17 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Artifact do
   # release takes no further uploads and its assets can never be replaced.
   @default_base_url "https://github.com/getmydia/mydia/releases/download/cardigann-guest-#{@pinned_hash}"
 
+  # Bump when Mydia.Indexers.Cardigann.Wasm.EngineConfig or the ISA baseline in
+  # the Wasmex patch changes: a .cwasm loads only into an engine configured like
+  # the one that wrote it, and the published releases are immutable.
+  @cwasm_config_version 1
+
+  # The precompiled guest has its own release, because it depends on the
+  # wasmtime version and engine config as well as the guest sources, and a
+  # published release takes no further uploads.
+  @cwasm_release_tag "cardigann-cwasm-#{@pinned_hash}-wasmtime#{@wasmtime_version}-cfg#{@cwasm_config_version}"
+  @default_cwasm_base_url "https://github.com/getmydia/mydia/releases/download/#{@cwasm_release_tag}"
+
   @prowlarr_tag (case @root |> Path.join("native/cardigann_guest/PROWLARR_REF") |> File.read() do
                    {:ok, ref} -> ref |> String.split() |> List.first()
                    {:error, _} -> "unknown"
@@ -102,13 +113,59 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Artifact do
   @doc "The pin from `ARTIFACT_SHA256` alone, nil when it is not set for these sources."
   def compiled_pin, do: Application.get_env(:mydia, :cardigann_compiled_pin, @pinned_sha256)
 
-  defp baked_pin do
-    with {:ok, body} <- File.read(path() <> ".sha256"),
+  defp baked_pin, do: read_sha(path() <> ".sha256")
+
+  defp read_sha(file) do
+    with {:ok, body} <- File.read(file),
          sha = String.trim(body),
          true <- Regex.match?(~r/\A[0-9a-f]{64}\z/, sha) do
       sha
     else
       _ -> nil
+    end
+  end
+
+  @doc "The CPU architecture a precompiled component is tied to: x86_64 or aarch64."
+  def arch,
+    do: :erlang.system_info(:system_architecture) |> to_string() |> String.split("-") |> hd()
+
+  @doc "The wasmtime version of the Wasmex this build compiles."
+  def wasmtime_version, do: @wasmtime_version
+
+  @doc "See `@cwasm_config_version`."
+  def cwasm_config_version, do: @cwasm_config_version
+
+  @doc "The release holding the CI-built `.cwasm` for these sources and this Wasmex."
+  def cwasm_release_tag, do: @cwasm_release_tag
+
+  @doc "The `.cwasm` asset for this architecture, gzipped."
+  def cwasm_asset_name,
+    do:
+      "cardigann-#{@pinned_hash}-wasmtime#{@wasmtime_version}-cfg#{@cwasm_config_version}-#{arch()}.cwasm.gz"
+
+  @doc "Where the `.cwasm` is published. The `:cardigann_cwasm_base_url` application env overrides it."
+  def cwasm_base_url,
+    do: Application.get_env(:mydia, :cardigann_cwasm_base_url, @default_cwasm_base_url)
+
+  @doc """
+  Where the Docker build puts the published `.cwasm`'s SHA-256
+  (`mix mydia.cardigann_guest pin --cwasm`), beside the wasm pin.
+  """
+  def cwasm_pin_path,
+    do:
+      Path.join(
+        Path.dirname(path()),
+        String.replace_suffix(cwasm_asset_name(), ".gz", ".sha256")
+      )
+
+  @doc """
+  SHA-256 (hex) of the decompressed published `.cwasm`, or nil. Never compiled in:
+  Nix and source builds have none and compile locally.
+  """
+  def cwasm_pin do
+    case Application.fetch_env(:mydia, :cardigann_cwasm_pin) do
+      {:ok, override} -> override
+      :error -> read_sha(cwasm_pin_path())
     end
   end
 
@@ -132,8 +189,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Artifact do
   architecture. Its own checksum sits beside it in `<name>.sha256`.
   """
   def cwasm_name(wasm_sha256) do
-    arch = :erlang.system_info(:system_architecture) |> to_string() |> String.split("-") |> hd()
-    "cardigann-#{wasm_sha256}-wasmtime#{@wasmtime_version}-#{arch}.cwasm"
+    "cardigann-#{wasm_sha256}-wasmtime#{@wasmtime_version}-#{arch()}.cwasm"
   end
 
   @doc "Where the precompiled component for `wasm_sha256` is cached."

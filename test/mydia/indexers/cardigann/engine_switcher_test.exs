@@ -67,6 +67,11 @@ defmodule Mydia.Indexers.Cardigann.EngineSwitcherTest do
     assert %Status{transition: %Transition{phase: :fetching, bytes: 1_000, total: 4_000}} =
              EngineSwitcher.status(@server)
 
+    engine_event({:phase, :downloading_precompiled})
+
+    assert %Status{transition: %Transition{phase: :downloading_precompiled}} =
+             EngineSwitcher.status(@server)
+
     engine_event({:phase, :compiling})
 
     # A :ready the engine does not confirm is stale and changes nothing.

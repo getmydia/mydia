@@ -49,6 +49,50 @@ diff -ru a/lib/wasmex/engine.ex b/lib/wasmex/engine.ex
    @doc ~S"""
    Ahead-of-time (AOT) compiles a WebAssembly module.
  
+diff -ru a/lib/wasmex/engine_config.ex b/lib/wasmex/engine_config.ex
+--- a/lib/wasmex/engine_config.ex
++++ b/lib/wasmex/engine_config.ex
+@@ -10,6 +10,7 @@
+     * `:debug_info` - Configures whether DWARF debug information will be emitted during compilation. This defaults to `false`.
+     * `:memory64` - Whether or not to use 64-bit memory. This defaults to `false`.
+     * `:wasm_component_model` - Whether or not to use the WebAssembly component model. This defaults to `true`.
++    * `:isa_baseline` - Mydia patch. Compile for the host triple without host CPU feature detection (x86-64-v2 on x86_64, the generic baseline on aarch64), so the artifact loads on any CPU of that architecture. Defaults to `false`.
+ 
+   ## Example
+ 
+@@ -24,7 +25,8 @@
+             wasm_backtrace_details: false,
+             memory64: false,
+             wasm_component_model: true,
+-            debug_info: false
++            debug_info: false,
++            isa_baseline: false
+ 
+   @type t :: %__MODULE__{
+           consume_fuel: boolean(),
+@@ -32,7 +34,8 @@
+           wasm_backtrace_details: boolean(),
+           memory64: boolean(),
+           wasm_component_model: boolean(),
+-          debug_info: boolean()
++          debug_info: boolean(),
++          isa_baseline: boolean()
+         }
+ 
+   @doc ~S"""
+@@ -89,6 +92,12 @@
+     %__MODULE__{config | cranelift_opt_level: cranelift_opt_level}
+   end
+ 
++  @doc "Mydia patch: compile for a portable ISA baseline instead of the host's CPU features."
++  @spec isa_baseline(t(), boolean()) :: t()
++  def isa_baseline(%__MODULE__{} = config, isa_baseline) when is_boolean(isa_baseline) do
++    %__MODULE__{config | isa_baseline: isa_baseline}
++  end
++
+   @doc ~S"""
+   Configures whether backtraces in traps will parse debug info in the Wasm
+   file to have filename/line number information.
 diff -ru a/lib/wasmex/native.ex b/lib/wasmex/native.ex
 --- a/lib/wasmex/native.ex
 +++ b/lib/wasmex/native.ex
@@ -72,7 +116,13 @@ diff -ru a/lib/wasmex/native.ex b/lib/wasmex/native.ex
 diff -ru a/native/wasmex/Cargo.toml b/native/wasmex/Cargo.toml
 --- a/native/wasmex/Cargo.toml
 +++ b/native/wasmex/Cargo.toml
-@@ -23,3 +23,6 @@
+@@ -18,8 +18,12 @@
+ rand = "0.10.2"
+ rustler = { version = "0.38.0", features = ["big_integer", "serde"] }
+ tokio = { version = "1.53.1", features = ["full"] }
++target-lexicon = "0.13"
+ wasmtime = "47.0.2"
+ wasmtime-wasi = "47.0.2"
  wasmtime-wasi-http = "47.0.2"
  wat = "1.254.0"
  wit-parser = "0.255.0"
@@ -119,7 +169,15 @@ diff -ru a/native/wasmex/src/component.rs b/native/wasmex/src/component.rs
 diff -ru a/native/wasmex/src/engine.rs b/native/wasmex/src/engine.rs
 --- a/native/wasmex/src/engine.rs
 +++ b/native/wasmex/src/engine.rs
-@@ -104,6 +104,40 @@
+@@ -29,6 +29,7 @@
+     memory64: bool,
+     wasm_component_model: bool,
+     debug_info: bool,
++    isa_baseline: bool,
+ }
+ 
+ #[rustler::resource_impl()]
+@@ -104,6 +105,40 @@
      Ok(binary.release(env))
  }
  
@@ -160,3 +218,28 @@ diff -ru a/native/wasmex/src/engine.rs b/native/wasmex/src/engine.rs
  pub(crate) fn engine_config(engine_config: ExEngineConfig) -> Config {
      let backtrace_details = match engine_config.wasm_backtrace_details {
          true => WasmBacktraceDetails::Enable,
+@@ -126,6 +161,24 @@
+     config.debug_info(engine_config.debug_info);
+     config.epoch_interruption(true);
+ 
++    // Mydia patch: a portable artifact. Naming the host triple explicitly turns
++    // off host CPU feature detection, so Cranelift starts from the
++    // architecture's baseline; x86_64 then gets x86-64-v2.
++    if engine_config.isa_baseline {
++        config
++            .target(&target_lexicon::HOST.to_string())
++            .expect("the host triple is a valid target");
++
++        #[cfg(target_arch = "x86_64")]
++        for flag in ["has_sse3", "has_ssse3", "has_sse41", "has_sse42", "has_popcnt"] {
++            // SAFETY: every flag is a CPU feature implied by x86-64-v2, which
++            // wasmtime checks against the host when the artifact is loaded.
++            unsafe {
++                config.cranelift_flag_enable(flag);
++            }
++        }
++    }
++
+     config
+ }
+ 

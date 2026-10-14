@@ -192,7 +192,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
               Retry now
             </button>
           </div>
-        <% :fetching -> %>
+        <% phase when phase in [:fetching, :downloading_precompiled] -> %>
           <progress
             :if={@transition.total}
             class="progress progress-primary w-full"
@@ -201,12 +201,14 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
           />
           <progress :if={is_nil(@transition.total)} class="progress progress-primary w-full" />
           <p class="text-sm">
-            Downloading the Prowlarr-based engine {download_label(@transition)}
+            {if phase == :fetching,
+              do: "Downloading the Prowlarr-based engine",
+              else: phase_text(phase)} {download_label(@transition)}
           </p>
         <% phase -> %>
           <progress class="progress progress-primary w-full" />
           <p class="text-sm">
-            {if phase == :compiling, do: "Compiling", else: "Preparing"} the Prowlarr-based engine...
+            {phase_text(phase)}...
             <span
               id={"cardigann-engine-elapsed-#{phase}"}
               phx-hook=".ElapsedSeconds"
@@ -268,6 +270,10 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
 
   defp other_name(:builtin), do: engine_name(:prowlarr)
   defp other_name(:prowlarr), do: engine_name(:builtin)
+
+  defp phase_text(:compiling), do: "Compiling the Prowlarr-based engine"
+  defp phase_text(:downloading_precompiled), do: "Downloading the precompiled engine"
+  defp phase_text(_phase), do: "Preparing the Prowlarr-based engine"
 
   defp download_label(%Transition{bytes: nil}), do: ""
   defp download_label(%Transition{bytes: bytes, total: nil}), do: format_mb(bytes)

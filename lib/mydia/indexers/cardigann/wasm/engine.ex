@@ -4,10 +4,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   in `native/cardigann_guest/SPIKE.md`.
 
   The GenServer only owns the compiled component. Compiling the 75 MB guest
-  costs about 3.3 s and happens once, asynchronously after boot, under one
-  explicitly created `Wasmex.Engine`: a compiled component can be instantiated
-  only in stores of the engine that compiled it. The engine and component sit
-  in `:persistent_term`, and `call/3` runs in the caller's process: a fresh
+  costs about 3.3 s and happens once, asynchronously after boot, under the
+  shared runtime engine from `EngineConfig.runtime_engine/0`: a compiled
+  component can be instantiated only in stores of the engine that compiled
+  it. The engine and component sit in `:persistent_term`, and `call/3` runs in the caller's process: a fresh
   store and instance per call (about 3 ms), killed afterwards, so a hung or
   crashed guest never outlives its call.
 
@@ -28,7 +28,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   require Logger
 
   alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Indexers.Cardigann.Wasm.{Artifact, Codec, Delivery, HostHttp}
+  alias Mydia.Indexers.Cardigann.Wasm.{Artifact, Codec, Delivery, EngineConfig, HostHttp}
   alias Wasmex.Components
   alias Wasmex.Wasi.WasiP2Options
 
@@ -114,11 +114,18 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   @doc """
   The engine's state, without waiting: `:disabled` (not selected, so the process
   does not run), `:pending`, `:fetching` (downloading the artifact),
+  `:downloading_precompiled` (fetching the CI-built `.cwasm`),
   `:compiling` (compiling or loading it), `:ready`, or `{:unavailable, reason}`
   with a printable reason.
   """
   @spec status() ::
-          :disabled | :pending | :fetching | :compiling | :ready | {:unavailable, String.t()}
+          :disabled
+          | :pending
+          | :fetching
+          | :downloading_precompiled
+          | :compiling
+          | :ready
+          | {:unavailable, String.t()}
   def status do
     GenServer.call(__MODULE__, :status, 1_000)
   catch
@@ -368,7 +375,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   # The background process reports which step it is on (download, then compile
   # or load), for the status line. A late message after the settle is ignored.
   def handle_info({:phase, phase}, %{status: status} = state)
-      when status in [:compiling, :fetching],
+      when status in [:compiling, :fetching, :downloading_precompiled],
       do: {:noreply, %{state | status: phase}}
 
   def handle_info(:retry, %{status: {:unavailable, _}} = state),
@@ -441,7 +448,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   @impl true
   # During a background retry the engine is still unavailable: say so, and say why.
   def handle_call(:status, _from, %{failures: failures, status: status} = state)
-      when failures > 0 and status in [:compiling, :fetching],
+      when failures > 0 and status in [:compiling, :fetching, :downloading_precompiled],
       do: {:reply, {:unavailable, "#{state.last_reason} (retrying now)"}, state}
 
   def handle_call(:status, _from, state), do: {:reply, state.status, state}
@@ -449,14 +456,14 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   # A caller does not wait out a retry: the last attempt failed, so it gets the
   # unavailable answer at once rather than after its whole timeout.
   def handle_call(:available, _from, %{failures: failures, status: status} = state)
-      when failures > 0 and status in [:compiling, :fetching],
+      when failures > 0 and status in [:compiling, :fetching, :downloading_precompiled],
       do: {:reply, false, state}
 
   def handle_call(:available, from, %{status: :pending} = state),
     do: {:noreply, %{state | status: :compiling, waiters: [from]}, {:continue, :compile}}
 
   def handle_call(:available, from, %{status: status} = state)
-      when status in [:compiling, :fetching],
+      when status in [:compiling, :fetching, :downloading_precompiled],
       do: {:noreply, %{state | waiters: [from | state.waiters]}}
 
   def handle_call(:available, _from, %{status: status} = state),
@@ -470,7 +477,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   # serialized form is what gets loaded (about 65 MB less resident than the
   # freshly compiled component, BENCH.md "Memory spike"). Its own function, so
   # the 75 MB artifact binary is out of every frame afterwards.
-  defp load_component(store) do
+  defp load_component(store, engine) do
     send_phase(:fetching)
 
     with {:ok, _path, bytes} <- Delivery.ensure(progress: &broadcast({:progress, &1, &2})) do
@@ -480,7 +487,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
       result =
         if precompiled?(),
-          do: load_cached(store, cwasm, bytes) || build_cached(store, cwasm, bytes),
+          do:
+            load_cached(store, cwasm, bytes) ||
+              load_published(store, cwasm, bytes) ||
+              build_cached(store, engine, cwasm, bytes),
           else: nil
 
       case result || compile_component(store, bytes) do
@@ -545,11 +555,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   # records its checksum, then loads that file. nil when the cache cannot be
   # written or loaded (a Wasmex without the patch, a read only data directory):
   # the caller compiles in memory instead.
-  defp build_cached(store, cwasm, bytes) do
+  defp build_cached(store, engine, cwasm, bytes) do
     tmp = "#{cwasm}.part-#{Base.url_encode64(:crypto.strong_rand_bytes(6), padding: false)}"
 
     with :ok <- Delivery.ensure_dir(Path.dirname(cwasm)),
-         :ok <- Wasmex.Engine.precompile_component_to_file(Wasmex.Engine.default(), bytes, tmp),
+         :ok <- Wasmex.Engine.precompile_component_to_file(engine, bytes, tmp),
          :ok <- File.chmod(tmp, 0o600),
          :ok <- Delivery.write_atomically(cwasm <> ".sha256", file_sha256(tmp) <> "
 "),
@@ -572,6 +582,48 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     e in ErlangError ->
       Logger.warning("Cardigann wasm engine: precompile unsupported (#{Exception.message(e)})")
       nil
+  end
+
+  # The CI-built .cwasm (native/cardigann_guest/README.md, "The published
+  # artifact"), verified against the pin baked into the image. nil, so the
+  # caller compiles locally, when there is no pin, the download fails, or
+  # wasmtime rejects the file (another CPU or engine config). A rejected file is
+  # deleted so the next boot does not try it again from the cache.
+  defp load_published(store, cwasm, bytes) do
+    if Artifact.cwasm_pin() do
+      send_phase(:downloading_precompiled)
+      result = fetch_published(store, cwasm, bytes)
+      send_phase(:compiling)
+      result
+    end
+  end
+
+  defp fetch_published(store, cwasm, bytes) do
+    case Delivery.fetch_precompiled(cwasm, progress: &broadcast({:progress, &1, &2})) do
+      :ok ->
+        case Components.Component.deserialize_file(store, cwasm, bytes) do
+          {:ok, component} ->
+            {:ok, component, "downloaded precompiled"}
+
+          {:error, reason} ->
+            Logger.warning(
+              "Cardigann wasm engine: wasmtime rejected the published precompiled guest " <>
+                "(#{inspect(reason)}), compiling locally"
+            )
+
+            File.rm(cwasm)
+            File.rm(cwasm <> ".sha256")
+            nil
+        end
+
+      :no_pin ->
+        nil
+
+      {:error, reason} ->
+        Logger.warning("Cardigann wasm engine: #{Delivery.describe(reason)}, compiling locally")
+
+        nil
+    end
   end
 
   defp compile_component(store, bytes) do
@@ -606,10 +658,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     # Test seam: lets a test observe a call that gives up while compiling.
     Process.sleep(Application.get_env(:mydia, :cardigann_wasm_compile_delay_ms, 0))
 
-    engine = Wasmex.Engine.default()
+    engine = EngineConfig.runtime_engine()
 
     with {:ok, store} <- Components.Store.new_wasi(wasi(), nil, engine),
-         {:ok, component, how} <- load_component(store) do
+         {:ok, component, how} <- load_component(store, engine) do
       # The compile store stays referenced alongside the component.
       :persistent_term.put(@key, %{engine: engine, component: component, store: store})
       release_build_memory()

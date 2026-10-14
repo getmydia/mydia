@@ -100,7 +100,7 @@ RUN --mount=type=cache,target=/root/.pub-cache,sharing=locked \
 # no docker ecosystem). ci-nix.yml's "Check / BEAM Pin" job asserts the tag's
 # Elixir minor, OTP major and Alpine minor against .elixir-version,
 # .otp-version and the runtime stage.
-FROM hexpm/elixir:1.20.4-erlang-29.1-alpine-3.24.2@sha256:b6fda8246507074bd84911c234bfc9b346c391b2be7f9fd275e37d9bc5a049b6 AS builder
+FROM hexpm/elixir:1.20.4-erlang-29.1-alpine-3.24.2@sha256:b6fda8246507074bd84911c234bfc9b346c391b2be7f9fd275e37d9bc5a049b6 AS deps
 
 # The official elixir image sets this and hexpm/elixir does not. Without it the
 # VM falls back to latin1 native filename encoding.
@@ -211,6 +211,9 @@ RUN elixir -pa "_build/prod/lib/*/ebin" \
 RUN elixir --erl "+S 1:1" -pa _build/prod/lib/exqlite/ebin \
       -r patches/exqlite/destructor_probe.exs -e 'ExqliteDestructorProbe.assert_patched!()'
 
+# ── deps: everything above, reused by the cwasm stage below ──────────────────
+FROM deps AS builder
+
 # Copy application source
 COPY config ./config
 COPY priv ./priv
@@ -276,6 +279,11 @@ RUN if [ "$CARDIGANN_REQUIRE_PIN" = "true" ]; then \
       mix mydia.cardigann_guest pin; \
     fi
 
+# The precompiled guest for this image's architecture (buildx runs this stage
+# once per platform). Soft for every image: without it an install compiles the
+# guest on first boot, as before. Only the 64-character sidecar is fetched.
+RUN mix mydia.cardigann_guest pin --cwasm
+
 # Fail the build if a bundled plugin's wasm artifact was not produced (the
 # :plugins compiler graceful-skips a missing toolchain, so this is the guard
 # that a release image never ships without its bundled plugins).
@@ -295,6 +303,20 @@ RUN --mount=type=cache,target=/root/.npm,sharing=locked \
 
 # Build release
 RUN mix release
+
+# Precompiles the Cardigann guest for this platform, for
+# .github/workflows/cardigann-cwasm.yml. Built only with --target cwasm-out and a
+# `guest` build context holding cardigann.wasm; never part of the image.
+FROM deps AS cwasm
+ARG CWASM_ASSET
+COPY lib/mydia/indexers/cardigann/wasm/engine_config.ex lib/mydia/indexers/cardigann/wasm/engine_config.ex
+COPY scripts/cardigann_precompile.exs ./scripts/cardigann_precompile.exs
+RUN --mount=from=guest,target=/guest \
+    test -n "$CWASM_ASSET" && \
+    elixir -pa "_build/prod/lib/*/ebin" scripts/cardigann_precompile.exs /guest/cardigann.wasm /out "$CWASM_ASSET"
+
+FROM scratch AS cwasm-out
+COPY --from=cwasm /out/ /
 
 # ============================================
 # Runtime Stage
