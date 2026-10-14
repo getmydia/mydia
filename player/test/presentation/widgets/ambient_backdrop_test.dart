@@ -41,6 +41,25 @@ void main() {
       });
     });
 
+    testWidgets('passes headers and cacheKey through to the ArtworkImage',
+        (tester) async {
+      await mockNetworkImages(() async {
+        await tester.pumpWidget(
+          _host(const AmbientBackdrop(
+            imageUrl: 'https://art/x.jpg',
+            id: 'x',
+            headers: {'X-Token': 'a'},
+            cacheKey: 'k',
+          )),
+        );
+        await tester.pump();
+
+        final image = tester.widget<ArtworkImage>(find.byType(ArtworkImage));
+        expect(image.headers, {'X-Token': 'a'});
+        expect(image.cacheKey, 'k');
+      });
+    });
+
     testWidgets('null imageUrl renders the static fallback (no image)',
         (tester) async {
       await tester.pumpWidget(_host(const AmbientBackdrop()));

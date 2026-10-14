@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 
 import '../../core/cache/artwork_decode.dart';
@@ -36,6 +37,12 @@ class AmbientBackdrop extends StatefulWidget {
   /// treated as a single stable layer.
   final String? id;
 
+  /// Request headers the artwork needs (credentialed sources).
+  final Map<String, String> headers;
+
+  /// Disk-cache identity when [imageUrl] depends on the current connection.
+  final String? cacheKey;
+
   /// Sigma of the gaussian blur applied to the artwork.
   final double blurSigma;
 
@@ -47,6 +54,8 @@ class AmbientBackdrop extends StatefulWidget {
     super.key,
     this.imageUrl,
     this.id,
+    this.headers = const {},
+    this.cacheKey,
     this.blurSigma = 40,
     this.crossfadeDuration = const Duration(milliseconds: 600),
   });
@@ -62,7 +71,10 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
     // Pre-warm the incoming artwork before the AnimatedSwitcher key swaps so
     // the crossfade does not stall on first decode (plan U4 / R2).
     final url = widget.imageUrl;
-    if (url != null && url != oldWidget.imageUrl) {
+    if (url != null &&
+        (url != oldWidget.imageUrl ||
+            widget.cacheKey != oldWidget.cacheKey ||
+            !mapEquals(widget.headers, oldWidget.headers))) {
       // Must build the same provider _ArtworkLayer resolves, decode width
       // included, or this warms a cache entry nothing reads and every
       // backdrop decodes twice.
@@ -72,6 +84,8 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
           cacheManager: BackdropCacheManager(),
           decodeWidth:
               viewportDecodeWidth(context, sourceWidth: backdropSourceWidth),
+          headers: widget.headers.isEmpty ? null : widget.headers,
+          cacheKey: widget.cacheKey,
         ),
         context,
       );
@@ -144,6 +158,8 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
     return _ArtworkLayer(
       key: ValueKey('ambient-${widget.id ?? url}'),
       imageUrl: url,
+      headers: widget.headers,
+      cacheKey: widget.cacheKey,
       blurSigma: widget.blurSigma,
     );
   }
@@ -153,11 +169,15 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
 /// [ImageFiltered] (never a live [BackdropFilter]).
 class _ArtworkLayer extends StatelessWidget {
   final String imageUrl;
+  final Map<String, String> headers;
+  final String? cacheKey;
   final double blurSigma;
 
   const _ArtworkLayer({
     super.key,
     required this.imageUrl,
+    required this.headers,
+    required this.cacheKey,
     required this.blurSigma,
   });
 
@@ -174,6 +194,8 @@ class _ArtworkLayer extends StatelessWidget {
           ),
           child: ArtworkImage(
             imageUrl: imageUrl,
+            headers: headers.isEmpty ? null : headers,
+            cacheKey: cacheKey,
             fit: BoxFit.cover,
             cacheManager: BackdropCacheManager(),
             // Viewport width rather than a LayoutBuilder, so it matches the

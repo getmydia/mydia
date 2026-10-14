@@ -382,6 +382,8 @@ class _AppShellState extends ConsumerState<AppShell>
     final backdrop = AmbientBackdrop(
       imageUrl: backdropSource.imageUrl,
       id: backdropSource.id,
+      headers: backdropSource.headers,
+      cacheKey: backdropSource.cacheKey,
     );
 
     if (isDesktop) {
