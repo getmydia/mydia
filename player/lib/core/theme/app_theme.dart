@@ -8,11 +8,22 @@ import 'depth_tokens.dart';
 /// See docs/architecture/design.md for complete design guidelines.
 class AppTheme {
   // Design system constants
-  static const double radiusButton = 10.0; // Buttons
-  static const double radiusCard = 14.0; // Cards, modals
+  static const String displayFamily = 'Outfit';
+
+  static const double radiusButton = 16.0; // Buttons
+  static const double radiusCard = 18.0; // Cards, modals
+  static const double radiusHeroPoster = 22.0; // Home and detail hero poster
+  static const double radiusChip = 8.0; // Tag and metadata chips
+  static const double radiusNavPill = 18.0; // Pill nav container
+  static const double radiusNavItem = 12.0; // Items inside a pill or rail
+  static const double radiusRail = 22.0; // Floating navigation rail
+  static const double radiusBottomBar = 24.0; // Phone floating bottom bar
   static const double radiusBadge = 30.0; // Badges (pill shape)
   static const double radiusInput = 10.0; // Input fields
   static const double radiusSheet = 20.0; // Bottom sheets
+
+  /// Secondary button fill: white at 14%, over any ground.
+  static const Color secondaryButtonFill = Color(0x24FFFFFF);
 
   static ThemeData get darkTheme {
     return ThemeData(
@@ -73,6 +84,7 @@ class AppTheme {
       textTheme: const TextTheme(
         // Page titles - text-3xl (30px)
         displayLarge: TextStyle(
+          fontFamily: displayFamily,
           fontSize: 30,
           fontWeight: FontWeight.w700,
           color: AppColors.textPrimary,
@@ -81,6 +93,7 @@ class AppTheme {
         ),
         // Section headers - text-2xl (24px)
         displayMedium: TextStyle(
+          fontFamily: displayFamily,
           fontSize: 24,
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
@@ -89,6 +102,7 @@ class AppTheme {
         ),
         // Card titles - text-xl (20px)
         displaySmall: TextStyle(
+          fontFamily: displayFamily,
           fontSize: 20,
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
@@ -97,6 +111,7 @@ class AppTheme {
         ),
         // Subheadings - text-lg (18px)
         headlineLarge: TextStyle(
+          fontFamily: displayFamily,
           fontSize: 18,
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
@@ -104,6 +119,7 @@ class AppTheme {
           height: 1.3,
         ),
         headlineMedium: TextStyle(
+          fontFamily: displayFamily,
           fontSize: 18,
           fontWeight: FontWeight.w500,
           color: AppColors.textPrimary,
@@ -111,6 +127,7 @@ class AppTheme {
           height: 1.3,
         ),
         headlineSmall: TextStyle(
+          fontFamily: displayFamily,
           fontSize: 16,
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
@@ -119,12 +136,14 @@ class AppTheme {
         ),
         // Default body - text-base (16px)
         titleLarge: TextStyle(
+          fontFamily: displayFamily,
           fontSize: 16,
           fontWeight: FontWeight.w500,
           color: AppColors.textPrimary,
           height: 1.35,
         ),
         titleMedium: TextStyle(
+          fontFamily: displayFamily,
           fontSize: 16,
           fontWeight: FontWeight.w500,
           color: AppColors.textPrimary,
@@ -132,6 +151,7 @@ class AppTheme {
         ),
         // Secondary text - text-sm (14px)
         titleSmall: TextStyle(
+          fontFamily: displayFamily,
           fontSize: 14,
           fontWeight: FontWeight.w500,
           color: AppColors.textPrimary,
@@ -183,10 +203,15 @@ class AppTheme {
       // Elevated Button
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.onPrimary,
+          backgroundColor: Colors.white,
+          foregroundColor: AppColors.background,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          textStyle: const TextStyle(
+            fontFamily: displayFamily,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusButton),
           ),
@@ -196,7 +221,12 @@ class AppTheme {
       // Text Button
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.primary,
+          foregroundColor: AppColors.textPrimary,
+          textStyle: const TextStyle(
+            fontFamily: displayFamily,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusButton),
@@ -207,8 +237,14 @@ class AppTheme {
       // Outlined Button
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.border),
+          foregroundColor: AppColors.textPrimary,
+          backgroundColor: secondaryButtonFill,
+          side: BorderSide.none,
+          textStyle: const TextStyle(
+            fontFamily: displayFamily,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusButton),
@@ -226,8 +262,15 @@ class AppTheme {
       // Filled Button (for primary actions)
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.onPrimary,
+          backgroundColor: Colors.white,
+          foregroundColor: AppColors.background,
+          elevation: 0,
+          textStyle: const TextStyle(
+            fontFamily: displayFamily,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusButton),
           ),
