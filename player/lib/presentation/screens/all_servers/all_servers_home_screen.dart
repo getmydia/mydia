@@ -16,6 +16,7 @@ import '../../../domain/sources/source_error.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/media_context_menu.dart';
+import '../../widgets/shell_rail_inset.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../home/home_loading_skeleton.dart';
@@ -74,17 +75,23 @@ class AllServersHomeScreen extends ConsumerWidget {
         // rewrites padding.top to the bar's bottom edge.
         final chromeTop = freshnessTopInset(context,
             appBarHeight: WindowTitleRow.heightOf(context));
+        // The page spans the window so the hero's backdrop can run under the
+        // rail; everything else sits beside it.
+        final bar = homeHeader(
+          context,
+          mobileTitle: const HomeMydiaLockup(),
+          desktopTitle: const HomeDesktopTitle(
+            icon: Icons.dns_rounded,
+            label: 'All servers',
+          ),
+          onSearch: () => context.go(allServersSearchLocation),
+        );
         return Scaffold(
           backgroundColor: Colors.transparent,
           extendBodyBehindAppBar: true,
-          appBar: homeHeader(
-            context,
-            mobileTitle: const HomeMydiaLockup(),
-            desktopTitle: const HomeDesktopTitle(
-              icon: Icons.dns_rounded,
-              label: 'All servers',
-            ),
-            onSearch: () => context.go(allServersSearchLocation),
+          appBar: PreferredSize(
+            preferredSize: bar.preferredSize,
+            child: ShellPageInset(child: bar),
           ),
           body: _body(context, ref, chromeTop),
         );
@@ -99,8 +106,11 @@ class AllServersHomeScreen extends ConsumerWidget {
     if (!resuming.hasValue || !recent.hasValue) {
       // A hero and a landscape first rail, as the loaded page opens with
       // (the list's own top padding is the inset).
-      return HomeLoadingSkeleton(topInset: chromeTop + 16);
+      return ShellPageInset(
+        child: HomeLoadingSkeleton(topInset: chromeTop + 16),
+      );
     }
+    final inset = ShellRailInset.of(context);
     final r = resuming.requireValue, n = recent.requireValue;
     // Favorites loads in later; until then the rail is simply absent.
     final f = favorites.value;
@@ -117,7 +127,7 @@ class AllServersHomeScreen extends ConsumerWidget {
     // Zero included servers is nothing to show, not every server failing.
     if (everyServer > 0 && unavailable.length >= everyServer) {
       return Padding(
-        padding: EdgeInsets.only(top: chromeTop),
+        padding: EdgeInsets.only(top: chromeTop, left: inset),
         child: SourceErrorView(
             error: const SourceException.unreachable(),
             onRetry: () => _refresh(ref)),
@@ -133,7 +143,7 @@ class AllServersHomeScreen extends ConsumerWidget {
         key: const Key('all-servers-home'),
         physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
-            0, chromeTop + 16, 0, DockInsets.bottomOf(context)),
+            inset, chromeTop + 16, 0, DockInsets.bottomOf(context)),
         children: [
           AllServersBanner(
               unavailable: unavailable, onRetry: () => _refresh(ref)),

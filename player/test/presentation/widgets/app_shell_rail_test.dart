@@ -272,7 +272,10 @@ void main() {
                       sidebarNode: railRow,
                       contentScope: contentScope,
                     ),
-                    content: const SizedBox.expand(key: contentKey),
+                    // The shell does not pad its content; a page insets itself.
+                    content: const ShellPageInset(
+                      child: SizedBox.expand(key: contentKey),
+                    ),
                     railBuilder: (onExitRequested) => FloatingRail(
                       location: '/',
                       onNavigate: (_) {},
@@ -333,7 +336,9 @@ void main() {
                 ),
                 content: Builder(builder: (context) {
                   insetSeen.add(ShellRailInset.of(context));
-                  return const SizedBox.expand(key: contentKey);
+                  return const ShellPageInset(
+                    child: SizedBox.expand(key: contentKey),
+                  );
                 }),
                 railBuilder: (onExitRequested) => FloatingRail(
                   location: '/',
@@ -351,7 +356,7 @@ void main() {
       return tester.getTopLeft(find.byKey(contentKey)).dx;
     }
 
-    testWidgets('equals the padding the column gets', (tester) async {
+    testWidgets('is what a page insets itself by', (tester) async {
       final seen = <double>[];
       final left = await pumpLayers(tester, insetSeen: seen);
       expect(left, Breakpoints.railContentInset(pinned: false));
@@ -395,7 +400,9 @@ void main() {
                 content: Navigator(
                   key: navKey,
                   onGenerateRoute: (_) => MaterialPageRoute<void>(
-                    builder: (_) => const SizedBox.expand(key: probeKey),
+                    builder: (_) => const ShellPageInset(
+                      child: SizedBox.expand(key: probeKey),
+                    ),
                   ),
                 ),
                 railBuilder: (onExitRequested) => FloatingRail(

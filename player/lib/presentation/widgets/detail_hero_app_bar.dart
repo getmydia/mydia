@@ -8,9 +8,8 @@ import 'window_chrome/window_title_row.dart';
 /// The pinned header of the movie, show and episode detail screens.
 ///
 /// The hero art runs to the window's top and left edges, behind the window
-/// controls and under the floating rail (it is laid out `ShellRailInset`
-/// wider than the bar), and the title row (back, cast) sits in the band on top
-/// of it, in the content column. Before the
+/// controls and under the floating rail, and the title row (back, cast) sits
+/// in the band on top of it, beside the rail (`ShellRailInset`). Before the
 /// window-control band existed, each of these screens reserved a flat
 /// `AppBar`-height strip and put its own translucent back button and cast
 /// button in `leading`/`actions`; that strip is gone, and this builder is
@@ -45,14 +44,16 @@ SliverAppBar detailHeroAppBar({
     // against, exactly as it does in `WindowTitleBar`'s `AppBar` slot.
     centerTitle: false,
     titleSpacing: 0,
-    title: SizedBox(
-      width: double.infinity,
-      child: WindowTitleRow(leading: back),
+    // The bar and its art span the page, under the rail; the title row sits
+    // beside it, so the back button never lands under the rail.
+    title: Padding(
+      padding: EdgeInsets.only(left: ShellRailInset.of(context)),
+      child: SizedBox(
+        width: double.infinity,
+        child: WindowTitleRow(leading: back),
+      ),
     ),
-    // The art is laid out `ShellRailInset` wider than the bar, to its left, so
-    // it runs under the rail; the title row above stays in the column.
-    flexibleSpace: _UnderRail(
-        child: FlexibleSpaceBar(
+    flexibleSpace: FlexibleSpaceBar(
       stretchModes: const [
         StretchMode.zoomBackground,
         StretchMode.blurBackground,
@@ -82,31 +83,8 @@ SliverAppBar detailHeroAppBar({
             ),
         ],
       ),
-    )),
+    ),
   );
-}
-
-/// Lays [child] out [ShellRailInset] wider than its parent, extending to the
-/// left, so it covers the area under the rail. Zero inset (no rail) is a
-/// no-op.
-class _UnderRail extends StatelessWidget {
-  const _UnderRail({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final inset = ShellRailInset.of(context);
-    if (inset == 0) return child;
-    return LayoutBuilder(
-      builder: (context, constraints) => OverflowBox(
-        alignment: Alignment.centerRight,
-        minWidth: constraints.maxWidth + inset,
-        maxWidth: constraints.maxWidth + inset,
-        child: child,
-      ),
-    );
-  }
 }
 
 /// The back control for [detailHeroAppBar]'s title row on the movie, show

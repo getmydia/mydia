@@ -51,19 +51,22 @@ void main() {
       2560.0
     ]) {
       for (final pinned in const [false, true]) {
-        // The hero is the column beside the rail; its padding follows the
-        // window.
-        final width = window - Breakpoints.railContentInset(pinned: pinned);
+        // The backdrop spans the window, under the rail; the hero's column
+        // starts at the rail's footprint and its padding follows the window.
+        final inset = Breakpoints.railContentInset(pinned: pinned);
+        final backdropWidth = window;
         final padding = window >= Breakpoints.desktop ? 32.0 : 24.0;
         final gradient = HomeHeroBackdropTokens.leftGradient(
-          width: width,
+          width: backdropWidth,
+          inset: inset,
           padding: padding,
           posterSize: poster,
           gap: gap,
           maxTextWidth: maxText,
         );
         final textRight = HomeHeroBackdropTokens.textRightEdge(
-          width: width,
+          width: backdropWidth,
+          inset: inset,
           padding: padding,
           posterWidth: poster.width,
           gap: gap,
@@ -71,7 +74,7 @@ void main() {
         );
         // Opacity falls left to right, so the right edge is the worst point
         // under any glyph.
-        final alpha = _alphaAt(gradient, textRight / width);
+        final alpha = _alphaAt(gradient, textRight / backdropWidth);
         final bg = compositeOver(Colors.black.withValues(alpha: alpha), _white);
 
         final title = contrastRatio(AppColors.textPrimary, bg);

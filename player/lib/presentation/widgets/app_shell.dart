@@ -163,8 +163,9 @@ class AppShell extends ConsumerStatefulWidget {
       );
 
   /// The desktop branch's layers: the rail footprint reporter, the content
-  /// column (padded by [contentLeft]) and the rail on top, with the two focus
-  /// regions wired to [boundary].
+  /// column (full width, publishing [contentLeft] plus the safe area as
+  /// `ShellRailInset` for each page to inset itself by) and the rail on top,
+  /// with the two focus regions wired to [boundary].
   ///
   /// Public and `@visibleForTesting` for the reason [contentInsets] is: the
   /// shell cannot be mounted by a widget test (it needs the authenticated
@@ -191,8 +192,6 @@ class AppShell extends ConsumerStatefulWidget {
           final left = contentLeft + safeLeft;
           final duration =
               context.reducedMotionDuration(DepthTokens.motionMedium);
-          // `ShellRailInset` carries the same amount to the pages, animated
-          // with the rail, for the ones that paint under it.
           return Stack(
             fit: StackFit.expand,
             children: [
@@ -206,35 +205,33 @@ class AppShell extends ConsumerStatefulWidget {
                 ),
               ),
               Positioned.fill(
-                child: AnimatedPadding(
-                  duration: duration,
-                  curve: DepthTokens.curveStandard,
-                  // Constant for every page, so a page never slides when
-                  // another opens over it. A page that paints under the rail
-                  // (Home's hero, the detail art) reaches left by
-                  // `ShellRailInset` itself, see `RailBleed`.
-                  padding: EdgeInsets.only(left: left),
-                  // The column is already inset, so screens inside it must
-                  // not apply the same safe-area gap a second time.
-                  child: MediaQuery.removePadding(
-                    context: context,
-                    removeLeft: true,
-                    child: TweenAnimationBuilder<double>(
-                      tween: Tween<double>(end: left),
-                      duration: duration,
-                      curve: DepthTokens.curveStandard,
-                      child: _AppShellState._region(
-                        enabled: regionsEnabled,
-                        node: contentScope,
-                        onExit: (direction) =>
-                            direction == TraversalDirection.left
-                                ? boundary.focusSidebar()
-                                : false,
-                        child: content,
-                      ),
-                      builder: (context, inset, child) =>
-                          ShellRailInset(left: inset, child: child!),
+                // The content spans the whole window, under the rail, and is
+                // not padded here: go_router's shell navigator wraps its
+                // pages in an Overlay that clips at its own bounds, so a
+                // padded navigator would stop every page's art at the column.
+                // Each page insets itself by `ShellRailInset` (see
+                // `ShellPageInset`), which keeps its geometry while another
+                // page opens over it.
+                child: MediaQuery.removePadding(
+                  context: context,
+                  // The inset below already includes the safe area, so
+                  // screens must not apply that gap a second time.
+                  removeLeft: true,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(end: left),
+                    duration: duration,
+                    curve: DepthTokens.curveStandard,
+                    child: _AppShellState._region(
+                      enabled: regionsEnabled,
+                      node: contentScope,
+                      onExit: (direction) =>
+                          direction == TraversalDirection.left
+                              ? boundary.focusSidebar()
+                              : false,
+                      child: content,
                     ),
+                    builder: (context, inset, child) =>
+                        ShellRailInset(left: inset, child: child!),
                   ),
                 ),
               ),
@@ -544,7 +541,10 @@ class _AppShellState extends ConsumerState<AppShell>
                   child: AppShell.contentGutter(
                     child: Column(
                       children: [
-                        AppShell.bannerArea(child: _banners(isOffline)),
+                        // The banners belong beside the rail, not under it.
+                        AppShell.bannerArea(
+                          child: ShellPageInset(child: _banners(isOffline)),
+                        ),
                         Expanded(child: widget.child),
                       ],
                     ),

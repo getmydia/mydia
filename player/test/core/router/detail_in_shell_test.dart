@@ -18,6 +18,7 @@ import 'package:player/core/router/app_router.dart';
 import 'package:player/core/router/detail_location.dart';
 import 'package:player/core/router/navigator_keys.dart';
 import 'package:player/core/router/push_route.dart';
+import 'package:player/core/router/shell_pages.dart';
 import 'package:player/core/router/source_detail_routes.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
@@ -187,6 +188,9 @@ void main() {
     final top = router.configuration.routes;
     final shell = top.whereType<ShellRoute>().single;
 
+    // Every full-bleed name is a route the shell really has, so a rename
+    // cannot silently inset a page that paints under the rail.
+    expect(_names(shell.routes).containsAll(fullBleedShellRoutes), isTrue);
     // The collection page opens items by push, so it shares their navigator.
     final shellPages = {..._detailNames, 'source_collection'};
     expect(_names(shell.routes).containsAll(shellPages), isTrue);

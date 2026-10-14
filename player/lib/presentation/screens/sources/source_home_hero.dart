@@ -15,6 +15,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
+import '../../widgets/shell_rail_inset.dart';
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
 import 'source_home_hero_backdrop.dart';
@@ -181,10 +182,14 @@ class SourceHomeHero extends ConsumerWidget {
     required double padding,
     required double top,
   }) {
+    // The page is inset by the rail and the hero's own box starts at the
+    // column; the wide backdrop reaches back left under the rail.
+    final inset = wide ? ShellRailInset.of(context) : 0.0;
     final layer = HomeHeroBackdrop(
       key: backdropKey,
       request: request,
       wide: wide,
+      inset: inset,
       padding: padding,
       posterSize: posterSize,
       gap: _wideGap,
@@ -192,7 +197,7 @@ class SourceHomeHero extends ConsumerWidget {
     );
     if (wide) {
       return Positioned(
-        left: 0,
+        left: -inset,
         right: 0,
         top: -bleedTop,
         bottom: 0,

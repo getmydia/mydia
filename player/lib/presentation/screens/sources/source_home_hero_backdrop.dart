@@ -42,13 +42,6 @@ abstract final class HomeHeroBackdropTokens {
   static const double fadeStart = 0.55;
   static const int _fadeSteps = 10;
 
-  /// The art fades in from nothing across this many pixels at its left edge.
-  ///
-  /// The hero cannot paint under the floating rail: the shell's navigator
-  /// clips its pages at the column, so the art's left edge is the column's,
-  /// and a fade keeps it from reading as a hard vertical cut.
-  static const double leftRamp = 160;
-
   /// Gap between the stacked poster and the title block (the hero's own
   /// spacer). The stacked backdrop ends here, fully faded.
   static const narrowPosterGap = 20.0;
@@ -67,9 +60,11 @@ abstract final class HomeHeroBackdropTokens {
   }
 
   /// The wide layout's left-to-right black scrim over a backdrop [width]
-  /// pixels wide, the hero's own width.
+  /// pixels wide: the hero's own width plus [inset], which is how far the
+  /// backdrop reaches left of the hero, under the rail.
   static LinearGradient leftGradient({
     required double width,
+    double inset = 0,
     required double padding,
     required Size posterSize,
     required double gap,
@@ -77,6 +72,7 @@ abstract final class HomeHeroBackdropTokens {
   }) {
     final textRight = textRightEdge(
       width: width,
+      inset: inset,
       padding: padding,
       posterWidth: posterSize.width,
       gap: gap,
@@ -101,17 +97,19 @@ abstract final class HomeHeroBackdropTokens {
     );
   }
 
-  /// The x of the info column's right edge, from the hero's left edge.
+  /// The x of the info column's right edge, from the backdrop's left edge,
+  /// which is [inset] left of the hero's own.
   static double textRightEdge({
     required double width,
+    double inset = 0,
     required double padding,
     required double posterWidth,
     required double gap,
     required double maxTextWidth,
   }) {
-    final available = width - 2 * padding - posterWidth - gap;
+    final available = width - inset - 2 * padding - posterWidth - gap;
     final text = available.clamp(0.0, maxTextWidth);
-    return padding + posterWidth + gap + text;
+    return inset + padding + posterWidth + gap + text;
   }
 }
 
@@ -126,6 +124,7 @@ class HomeHeroBackdrop extends StatelessWidget {
     super.key,
     required this.request,
     required this.wide,
+    this.inset = 0,
     required this.padding,
     required this.posterSize,
     required this.gap,
@@ -134,6 +133,10 @@ class HomeHeroBackdrop extends StatelessWidget {
 
   final ArtworkRequest request;
   final bool wide;
+
+  /// How far this layer reaches left of the hero's own column, under the
+  /// rail.
+  final double inset;
   final double padding;
   final Size posterSize;
   final double gap;
@@ -145,97 +148,73 @@ class HomeHeroBackdrop extends StatelessWidget {
     final (maskStops, maskAlphas) = HomeHeroBackdropTokens.maskCurve;
     return RepaintBoundary(
       child: IgnorePointer(
-        child: _leftRamp(
-          enabled: wide,
-          child: ShaderMask(
-            blendMode: BlendMode.dstIn,
-            shaderCallback: (rect) => LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                for (final a in maskAlphas) Colors.white.withValues(alpha: a),
-              ],
-              stops: maskStops,
-            ).createShader(rect),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ArtworkImage(
-                  imageUrl: request.url,
-                  headers: request.headers.isEmpty ? null : request.headers,
-                  cacheKey: request.cacheKey,
-                  cacheManager: BackdropCacheManager(),
-                  // The ambient backdrop's decode width, so both read one
-                  // cache entry.
-                  decodeWidth: viewportDecodeWidth(
-                    context,
-                    sourceWidth: backdropSourceWidth,
-                  ),
-                  fit: BoxFit.cover,
-                  alignment: const Alignment(0, -0.2),
-                  fadeInDuration: reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 500),
-                  fadeOutDuration: Duration.zero,
-                  placeholder: (_) => const SizedBox.expand(),
-                  errorWidget: (_) => const SizedBox.expand(),
+        child: ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (rect) => LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              for (final a in maskAlphas) Colors.white.withValues(alpha: a),
+            ],
+            stops: maskStops,
+          ).createShader(rect),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ArtworkImage(
+                imageUrl: request.url,
+                headers: request.headers.isEmpty ? null : request.headers,
+                cacheKey: request.cacheKey,
+                cacheManager: BackdropCacheManager(),
+                // The ambient backdrop's decode width, so both read one
+                // cache entry.
+                decodeWidth: viewportDecodeWidth(
+                  context,
+                  sourceWidth: backdropSourceWidth,
                 ),
-                if (wide)
-                  LayoutBuilder(
-                    builder: (context, constraints) => DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: HomeHeroBackdropTokens.leftGradient(
-                          width: constraints.maxWidth,
-                          padding: padding,
-                          posterSize: posterSize,
-                          gap: gap,
-                          maxTextWidth: maxTextWidth,
-                        ),
+                fit: BoxFit.cover,
+                alignment: const Alignment(0, -0.2),
+                fadeInDuration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 500),
+                fadeOutDuration: Duration.zero,
+                placeholder: (_) => const SizedBox.expand(),
+                errorWidget: (_) => const SizedBox.expand(),
+              ),
+              if (wide)
+                LayoutBuilder(
+                  builder: (context, constraints) => DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: HomeHeroBackdropTokens.leftGradient(
+                        width: constraints.maxWidth,
+                        inset: inset,
+                        padding: padding,
+                        posterSize: posterSize,
+                        gap: gap,
+                        maxTextWidth: maxTextWidth,
                       ),
                     ),
                   ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(
-                          alpha: HomeHeroBackdropTokens.topScrimAlpha,
-                        ),
-                        Colors.black.withValues(alpha: 0),
-                      ],
-                      stops: const [0.0, HomeHeroBackdropTokens.topScrimEnd],
-                    ),
+                ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(
+                        alpha: HomeHeroBackdropTokens.topScrimAlpha,
+                      ),
+                      Colors.black.withValues(alpha: 0),
+                    ],
+                    stops: const [0.0, HomeHeroBackdropTokens.topScrimEnd],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
-    );
-  }
-
-  /// Fades [child] in across [HomeHeroBackdropTokens.leftRamp] pixels at its
-  /// left edge.
-  static Widget _leftRamp({required bool enabled, required Widget child}) {
-    if (!enabled) return child;
-    return ShaderMask(
-      blendMode: BlendMode.dstIn,
-      shaderCallback: (rect) {
-        final ramp =
-            (HomeHeroBackdropTokens.leftRamp / rect.width).clamp(0.0, 1.0);
-        return LinearGradient(
-          // Smoothstep sampled at quarters, so the ramp has no visible start.
-          colors: [
-            for (final a in const [0.0, 0.156, 0.5, 0.844, 1.0])
-              Colors.white.withValues(alpha: a),
-          ],
-          stops: [0.0, ramp * 0.25, ramp * 0.5, ramp * 0.75, ramp],
-        ).createShader(rect);
-      },
-      child: child,
     );
   }
 }

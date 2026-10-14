@@ -3,12 +3,21 @@ import 'package:flutter/widgets.dart';
 /// How far the floating rail reaches into the shell's content area, published
 /// by `AppShell.railLayers`.
 ///
-/// Most pages never read it: the shell pads their column by this amount, for
-/// every page, so a page never moves when another opens over it. A page whose
-/// artwork runs under the rail (Home's hero, the detail pages) reaches left by
-/// this much itself, with [ShellRailInset.of] and [RailBleed]. Zero where
-/// there is no rail (the phone layout) and outside the shell, so such a page
-/// is unchanged there.
+/// The shell's navigator spans the whole window, under the rail, and does not
+/// pad its pages: go_router wraps them in an Overlay that clips at its own
+/// bounds, so a column padded by the shell could never paint under the rail.
+/// Each page insets itself instead, inside its own route, so every page keeps
+/// its own geometry while another opens over it and nothing slides.
+///
+/// - Most pages are wrapped in [ShellPageInset] once, centrally
+///   (`core/router/shell_pages.dart`).
+/// - A page that paints under the rail (Home's hero, the detail pages) opts
+///   out of that wrapper, paints its art and ground full width and insets its
+///   text and controls with [ShellRailInset.of], [ShellPageInset] and
+///   [SliverRailInset].
+///
+/// Zero where there is no rail (the phone layout) and outside the shell, so
+/// such a page is unchanged there.
 class ShellRailInset extends InheritedWidget {
   const ShellRailInset({super.key, required this.left, required super.child});
 
@@ -23,32 +32,32 @@ class ShellRailInset extends InheritedWidget {
   bool updateShouldNotify(ShellRailInset old) => old.left != left;
 }
 
-/// Lets [child] paint up to [ShellRailInset] to the left of its own box, so
-/// art in a page the shell has already inset (Home) can run under the rail.
-///
-/// The top, right and bottom edges still clip as before. Pair it with a
-/// scrollable whose own `clipBehavior` is `Clip.none`, since the scrollable's
-/// viewport would otherwise clip at the column's edge first.
-class RailBleed extends StatelessWidget {
-  const RailBleed({super.key, required this.child});
+/// Insets [child] by the rail's footprint.
+class ShellPageInset extends StatelessWidget {
+  const ShellPageInset({super.key, required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => ClipRect(
-        clipper: _RailBleedClipper(ShellRailInset.of(context)),
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.only(left: ShellRailInset.of(context)),
         child: child,
       );
 }
 
-class _RailBleedClipper extends CustomClipper<Rect> {
-  const _RailBleedClipper(this.inset);
+/// Insets a [sliver] by the rail's footprint.
+class SliverRailInset extends StatelessWidget {
+  const SliverRailInset({super.key, required this.sliver});
 
-  final double inset;
-
-  @override
-  Rect getClip(Size size) => Rect.fromLTRB(-inset, 0, size.width, size.height);
+  final Widget sliver;
 
   @override
-  bool shouldReclip(_RailBleedClipper old) => old.inset != inset;
+  Widget build(BuildContext context) => SliverPadding(
+        padding: EdgeInsets.only(left: ShellRailInset.of(context)),
+        sliver: sliver,
+      );
 }
+
+/// Wraps each of [slivers] in a [SliverRailInset].
+List<Widget> railInsetSlivers(List<Widget> slivers) =>
+    [for (final s in slivers) SliverRailInset(sliver: s)];

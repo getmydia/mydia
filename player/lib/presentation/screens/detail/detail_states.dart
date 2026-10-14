@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../widgets/detail_hero_app_bar.dart';
+import '../../widgets/shell_rail_inset.dart';
 
 /// The detail screens' loading body.
 ///
@@ -17,7 +18,6 @@ class DetailLoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
-      clipBehavior: Clip.none,
       slivers: [
         detailHeroAppBar(
           context: context,
@@ -29,18 +29,20 @@ class DetailLoadingState extends StatelessWidget {
             child: const Center(child: CircularProgressIndicator()),
           ),
         ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _shimmer(height: 48, radius: 12),
-                const SizedBox(height: 24),
-                _shimmer(height: 24, width: 200),
-                const SizedBox(height: 16),
-                _shimmer(height: 100),
-              ],
+        SliverRailInset(
+          sliver: SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _shimmer(height: 48, radius: 12),
+                  const SizedBox(height: 24),
+                  _shimmer(height: 24, width: 200),
+                  const SizedBox(height: 16),
+                  _shimmer(height: 100),
+                ],
+              ),
             ),
           ),
         ),
@@ -80,7 +82,6 @@ class DetailErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return CustomScrollView(
-      clipBehavior: Clip.none,
       slivers: [
         detailHeroAppBar(
           context: context,
@@ -89,51 +90,53 @@ class DetailErrorState extends StatelessWidget {
           topScrim: false,
           background: Container(color: AppColors.background),
         ),
-        SliverFillRemaining(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.error_outline_rounded,
-                      size: 48,
-                      color: AppColors.error,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Failed to load $noun',
-                    style: textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    error.toString(),
-                    style: textTheme.bodyMedium
-                        ?.copyWith(color: AppColors.textSecondary),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
-                  FilledButton.icon(
-                    onPressed: onRetry,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Try Again'),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
+        SliverRailInset(
+          sliver: SliverFillRemaining(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.error_outline_rounded,
+                        size: 48,
+                        color: AppColors.error,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 24),
+                    Text(
+                      'Failed to load $noun',
+                      style: textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      error.toString(),
+                      style: textTheme.bodyMedium
+                          ?.copyWith(color: AppColors.textSecondary),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+                    FilledButton.icon(
+                      onPressed: onRetry,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Try Again'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

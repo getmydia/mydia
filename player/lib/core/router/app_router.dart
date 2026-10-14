@@ -43,6 +43,7 @@ import '../../presentation/screens/downloads/downloads_screen.dart';
 import '../../presentation/widgets/app_shell.dart';
 import '../config/web_config.dart' show isInstanceHostedWeb;
 import 'navigator_keys.dart';
+import 'shell_pages.dart';
 import 'legacy_routes.dart';
 
 part 'app_router.g.dart';
@@ -388,7 +389,9 @@ GoRouter appRouter(Ref ref) {
           location: state.matchedLocation,
           child: child,
         ),
-        routes: [
+        // Every page insets itself by the rail (`shellPages`); the shell
+        // navigator spans the window so full-bleed pages can paint under it.
+        routes: shellPages([
           GoRoute(
             path: '/',
             name: 'home',
@@ -579,7 +582,7 @@ GoRouter appRouter(Ref ref) {
             name: 'search',
             builder: _legacyStub,
           ),
-        ],
+        ]),
       ),
 
       // Full-window routes, outside the shell. The unprefixed detail routes
