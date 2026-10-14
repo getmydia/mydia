@@ -76,6 +76,37 @@ defmodule Mydia.Indexers.Cardigann.Wasm.SlotsTest do
     send(b, :release)
   end
 
+  test "a caller queued when the server dies runs unslotted and survives" do
+    name = :"slots_temp_#{System.unique_integer([:positive])}"
+
+    pid =
+      start_supervised!(
+        Supervisor.child_spec({Slots, name: name, max: 1}, id: name, restart: :temporary)
+      )
+
+    test_pid = self()
+
+    holder = hold(name, test_pid)
+    assert_receive {:holding, _}
+
+    caller =
+      spawn(fn ->
+        result = Slots.run(name, 5_000, fn -> :ran end)
+        send(test_pid, {:caller_done, result})
+        Process.sleep(:infinity)
+      end)
+
+    Process.sleep(50)
+    ref = Process.monitor(pid)
+    Process.exit(pid, :kill)
+    assert_receive {:DOWN, ^ref, _, _, _}
+
+    assert_receive {:caller_done, {:ok, :ran, _}}, 2_000
+    assert Process.alive?(caller)
+    Process.exit(caller, :kill)
+    Process.exit(holder, :kill)
+  end
+
   test "without a server the function runs unbounded" do
     assert {:ok, :ok, 0} = Slots.run(:no_such_slots, 1_000, fn -> :ok end)
   end

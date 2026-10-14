@@ -607,6 +607,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
           send(test_pid, {:caller_done, result, Process.info(self(), :messages)})
         end)
 
+      caller_ref = Process.monitor(caller)
+
       assert_receive {:instance, task, instance}
       assert Process.alive?(instance)
       ref = Process.monitor(instance)
@@ -614,7 +616,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.EngineTest do
 
       assert_receive {:DOWN, ^ref, :process, ^instance, _}, 5_000
       assert_receive {:caller_done, {:error, %{type: :engine_error}}, {:messages, []}}, 5_000
-      refute Process.alive?(caller)
+      assert_receive {:DOWN, ^caller_ref, :process, ^caller, _}, 5_000
     end
 
     test "a killed caller takes the guest task and its instance with it", %{bypass: b, ctx: ctx} do

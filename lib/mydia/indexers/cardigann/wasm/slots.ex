@@ -12,6 +12,8 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Slots do
 
   use GenServer
 
+  require Logger
+
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     name = Keyword.get(opts, :name, __MODULE__)
@@ -32,6 +34,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Slots do
         :exit, {:timeout, _} ->
           GenServer.cast(server, {:cancel, self()})
           {:error, :timeout}
+
+        :exit, reason ->
+          Logger.warning("Cardigann slots unavailable (#{inspect(reason)}), running unslotted")
+          {:ok, fun.(), System.monotonic_time(:millisecond) - started}
       else
         :ok ->
           waited = System.monotonic_time(:millisecond) - started
