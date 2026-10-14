@@ -121,20 +121,18 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
         </div>
       </div>
       <%!-- Indexer List --%>
-      <div class="sm:overflow-y-auto sm:max-h-[50vh]">
-        <.admin_list id="library-definitions" items={@definitions}>
-          <:row :let={definition}>
-            <.definition_row definition={definition} />
-          </:row>
-          <:empty>
-            <%= if @search_query != "" or @filter_type != "all" or @filter_language != "all" or @filter_added != "all" do %>
-              No indexers match your filters. Try adjusting your search criteria.
-            <% else %>
-              No indexer definitions available. Click "Sync Library" to fetch indexers from the repository.
-            <% end %>
-          </:empty>
-        </.admin_list>
-      </div>
+      <.admin_list id="library-definitions" items={@definitions}>
+        <:row :let={definition}>
+          <.definition_row definition={definition} />
+        </:row>
+        <:empty>
+          <%= if @search_query != "" or @filter_type != "all" or @filter_language != "all" or @filter_added != "all" do %>
+            No indexers match your filters. Try adjusting your search criteria.
+          <% else %>
+            No indexer definitions available. Click "Sync Library" to fetch indexers from the repository.
+          <% end %>
+        </:empty>
+      </.admin_list>
       <.admin_modal_actions>
         <button class="btn btn-ghost" phx-click="close_indexer_library">Close</button>
       </.admin_modal_actions>
@@ -214,9 +212,14 @@ defmodule MydiaWeb.AdminIndexersLive.LibraryBrowserComponents do
       <:descriptor :if={@definition.description}>{@definition.description}</:descriptor>
       <:badges>
         <%= if Components.needs_library_config?(@definition) and @definition.in_library do %>
-          <div class="tooltip" data-tip="This indexer requires configuration">
+          <span
+            title="This indexer requires configuration"
+            aria-label="This indexer requires configuration"
+            role="img"
+            class="inline-flex"
+          >
             <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-warning" />
-          </div>
+          </span>
         <% end %>
         <%= if @definition.in_library and @definition.health_status not in [nil, "unknown"] do %>
           <span class={"badge badge-sm badge-outline #{Components.library_health_status_badge_class(@definition.health_status)}"}>

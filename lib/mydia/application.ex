@@ -254,7 +254,7 @@ defmodule Mydia.Application do
   # ready. Nothing is started when Cardigann is off.
   defp cardigann_engine_children do
     if Mydia.Indexers.CardigannFeatureFlags.enabled?(),
-      do: [Mydia.Indexers.Cardigann.EngineSwitcher],
+      do: [Mydia.Indexers.Cardigann.Wasm.Slots, Mydia.Indexers.Cardigann.EngineSwitcher],
       else: []
   end
 

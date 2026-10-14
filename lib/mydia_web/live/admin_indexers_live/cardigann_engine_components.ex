@@ -252,18 +252,16 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
       <% :verified -> %>
         <span
           id={"verified-#{@definition_id}"}
-          tabindex="0"
-          class="badge badge-xs badge-soft badge-success gap-1 tooltip"
-          data-tip={"Search results matched Prowlarr's on the #{engine_name(@active)} engine (checked #{@checked})."}
+          class="badge badge-xs badge-soft badge-success gap-1"
+          title={"Search results matched Prowlarr's on the #{engine_name(@active)} engine (checked #{@checked})."}
         >
           <.icon name="hero-check" class="w-3 h-3" />Verified
         </span>
       <% {:other_only, other} -> %>
         <span
           id={"verified-#{@definition_id}"}
-          tabindex="0"
-          class="badge badge-xs badge-soft badge-warning tooltip"
-          data-tip={"Search results matched Prowlarr's only on the #{engine_name(other)} engine (checked #{@checked}). Change it under How library indexers run."}
+          class="badge badge-xs badge-soft badge-warning"
+          title={"Search results matched Prowlarr's only on the #{engine_name(other)} engine (checked #{@checked}). Change it under How library indexers run."}
         >
           Verified on {engine_name(other)} only
         </span>

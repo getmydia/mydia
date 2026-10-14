@@ -92,10 +92,15 @@ It is opt-in because it costs something. Read this before turning it on:
   database file, which is `/config` in the Docker image): 39 MB for the engine
   and 119 MB for the prepared copy. Keep that folder on a volume. Without one,
   every container recreate downloads the engine again.
-- **Memory.** About 65 MB more than the built-in engine when idle, and about
-  290 MB more while four searches run at once.
+- **Memory.** About 65 MB more than the built-in engine when idle. A search in
+  progress adds roughly 60 MB for a typical result page, and up to about 180 MB
+  for a very large one, and gives it back when it finishes. Mydia runs at most two
+  searches at a time on this engine and queues the rest, so the extra stays near
+  120 MB however many indexers you search at once.
 - **Speed.** About 60 ms slower per search at the median, 110 ms at the 95th
-  percentile, not counting the tracker's own response time.
+  percentile, not counting the tracker's own response time. When many indexers are
+  searched at once, the searches beyond the second wait their turn, which adds a
+  fraction of a second to the slowest of them.
 - **Errors are Prowlarr's wording**, such as an HTTP status, "Cloudflare protection
   detected" or "No answer from the tracker". In the benchmark, 20 of 81 public
   trackers ended in one of these; Prowlarr could not search any of those 20 either.

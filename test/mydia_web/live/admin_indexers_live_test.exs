@@ -1296,7 +1296,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
       assert has_element?(view, "#flaresolverr-form")
 
-      view |> element(~s{button[phx-click="close_flaresolverr_modal"]}) |> render_click()
+      view |> element("#flaresolverr-modal-close") |> render_click()
 
       refute has_element?(view, "#flaresolverr-form")
       assert is_nil(Settings.get_config_setting_by_key("flaresolverr.url"))

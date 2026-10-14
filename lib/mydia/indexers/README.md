@@ -332,12 +332,19 @@ and remembers the one that worked. What it costs, measured on the Alpine image
   `cardigann-<hash>.wasm`. It is verified against the same pin, so it must be the
   file published for this Mydia version, and nothing is downloaded. The compiled
   form is still cached in the data directory.
-- **Memory.** About 64 MB more than the default engine at rest, and 290 MB more
-  at the peak of four concurrent searches (measured on a small fixture page, so
-  real pages are larger). Containers capped below about 2 GB can be killed during
+- **Memory.** About 64 MB more than the default engine at rest. Each running
+  search adds about 58 MB on a small page and 175 to 185 MB on a 1 MB page, freed
+  when the search ends. `config :mydia, :cardigann_wasm_max_instances` (default 2)
+  caps how many run at once; the rest queue (the `queue` measurement of the call
+  telemetry is the wait, in native time units) and the wait counts against the call timeout. With
+  the cap the peak is about 117 MB over idle for any number of small searches and
+  360 to 450 MB for a burst of 1 MB pages, against 230 to 455 MB and up to 1.2 GB
+  without it. Containers capped below about 2 GB can be killed during
   the local compile, which only runs when the precompiled download is not used.
 - **Latency.** About 60 ms more per search at the median, and 110 ms more at p95,
-  on top of the network time.
+  on top of the network time, one search at a time. Searches beyond the cap wait
+  for a slot: eight small searches at once take about 150 ms in total instead of
+  100 ms.
 - **Experimental toolchain.** The component is built with a pre-release .NET
   (NativeAOT-LLVM to `wasm32-wasip2`) and runs on a patched Wasmex that is built
   from source. Expect rough edges.

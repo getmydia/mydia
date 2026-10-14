@@ -128,6 +128,51 @@ defmodule MydiaWeb.AdminModalComponentsTest do
       assert count(html, ".modal-backdrop.bg-black\\/50") == 1
       assert count(html, ".modal-backdrop[phx-click]") == 0
     end
+
+    test "header close button sends on_close" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminModalComponents.admin_modal id="m" icon="hero-book-open" title="T" on_close="close_m">
+          x
+        </AdminModalComponents.admin_modal>
+        """)
+
+      assert count(html, ~s(#m button#m-close[type=button][aria-label=Close][phx-click=close_m])) ==
+               1
+    end
+
+    test "on_close nil renders no close button" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminModalComponents.admin_modal id="m" icon="hero-key" title="T" on_close={nil}>
+          x
+        </AdminModalComponents.admin_modal>
+        """)
+
+      assert count(html, "#m-close") == 0
+    end
+
+    test "body scrolls between a fixed header and action row" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminModalComponents.admin_modal id="m" icon="hero-book-open" title="T" on_close="close_m">
+          <p id="inside">x</p>
+          <:actions><button id="save">Save</button></:actions>
+        </AdminModalComponents.admin_modal>
+        """)
+
+      assert count(html, "#m .modal-box.flex.flex-col.overflow-hidden") == 1
+      assert count(html, "#m-body.flex-1.min-h-0.overflow-y-auto.px-1.-mx-1 #inside") == 1
+      # The action row sits outside the scroller.
+      assert count(html, "#m-body .modal-action") == 0
+      assert count(html, "#m .modal-box > .modal-action #save") == 1
+    end
   end
 
   test "admin_modal_actions/1 is the bordered action row" do
@@ -140,7 +185,10 @@ defmodule MydiaWeb.AdminModalComponentsTest do
       </AdminModalComponents.admin_modal_actions>
       """)
 
-    assert count(html, ".modal-action.mt-6.pt-4.border-t.border-base-300 #b") == 1
+    assert count(
+             html,
+             ".modal-action.mt-6.pt-4.border-t.border-base-300.sticky.bottom-0.bg-base-100 #b"
+           ) == 1
   end
 
   test "admin_header/1 renders the page header ids without the hub tab strip" do
@@ -174,7 +222,39 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     assert count(html, "nav#admin-page-tabs.flex-nowrap") == 0
   end
 
-  test "admin_page/1 supplies the body wrapper, with no side padding on phones" do
+  test "admin_page/1 swaps the tab strip for a one-line page switcher on phones" do
+    assigns = %{}
+
+    html =
+      rendered_to_string(~H"""
+      <AdminComponents.admin_page page={:trash}>body</AdminComponents.admin_page>
+      """)
+
+    hub_pages = MydiaWeb.AdminNav.visible_pages(:administration)
+
+    assert count(html, ~s(nav#admin-page-tabs[class~="max-sm:hidden"])) == 1
+    assert count(html, ~s(nav#admin-page-switcher[class~="sm:hidden"])) == 1
+    assert count(html, "nav#admin-page-switcher .dropdown.w-full.z-20") == 1
+    assert count(html, "#admin-page-switcher-trigger.btn.w-full") == 1
+
+    assert html
+           |> LazyHTML.from_fragment()
+           |> LazyHTML.query("#admin-page-switcher-trigger")
+           |> LazyHTML.text()
+           |> String.trim() == "Trash"
+
+    assert count(html, "nav#admin-page-switcher ul.dropdown-content.menu.w-full") == 1
+    assert count(html, ~s(nav#admin-page-switcher a[id^="admin-switcher-"])) == length(hub_pages)
+
+    for page <- hub_pages do
+      assert count(html, ~s(a#admin-switcher-#{page.key}[href="#{page.path}"])) == 1
+    end
+
+    assert count(html, ~s(nav#admin-page-switcher a[aria-current="page"])) == 1
+    assert count(html, ~s(a#admin-switcher-trash[aria-current="page"].menu-active)) == 1
+  end
+
+  test "admin_page/1 supplies the body wrapper, with no side padding or fill on phones" do
     assigns = %{}
 
     html =
@@ -186,6 +266,9 @@ defmodule MydiaWeb.AdminModalComponentsTest do
 
     assert count(html, "div#admin-page-body.bg-base-100.py-4.space-y-4 #inside") == 1
     assert count(html, ~s(div#admin-page-body[class*="sm:p-6"])) == 1
+    # Below sm the body paints nothing, so bordered lists sit on the page
+    # background instead of leaving base-100 stripes between sections.
+    assert count(html, ~s(div#admin-page-body[class~="max-sm:bg-transparent"])) == 1
     assert count(html, "div#admin-page-body.p-4") == 0
     assert count(html, "div#admin-page-body.px-4") == 0
   end

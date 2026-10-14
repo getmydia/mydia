@@ -16,8 +16,9 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   the guest is still compiling waits up to its own timeout for it.
 
   Each call emits `[:mydia, :cardigann, :wasm, :call]` with measurements
-  `%{duration: native, network: native}` (`network` is the time spent inside
-  host HTTP exchanges) and metadata `%{export: atom, outcome: atom}`.
+  `%{duration: native, network: native, queue: native}` (`network` is the time
+  spent inside host HTTP exchanges, `queue` the time spent waiting for a free
+  instance slot, see `Slots`) and metadata `%{export: atom, outcome: atom}`.
   The same network time is added to `Mydia.Indexers.SearchStats.Network` in
   the calling process, which is how a search's per-indexer metrics see it.
 
@@ -30,7 +31,17 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
   require Logger
 
   alias Mydia.Indexers.Adapter.Error
-  alias Mydia.Indexers.Cardigann.Wasm.{Artifact, Codec, Delivery, EngineConfig, HostHttp}
+
+  alias Mydia.Indexers.Cardigann.Wasm.{
+    Artifact,
+    Codec,
+    Delivery,
+    EngineConfig,
+    GuestTask,
+    HostHttp,
+    Slots
+  }
+
   alias Mydia.Indexers.SearchStats.Network
   alias Wasmex.Components
   alias Wasmex.Wasi.WasiP2Options
@@ -146,20 +157,37 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
     case await(timeout_ms) do
       {:ok, compiled} ->
-        remaining = max(timeout_ms - native_to_ms(System.monotonic_time() - started), 1)
+        remaining = max(timeout_ms - elapsed_ms(started), 1)
         network = :atomics.new(2, signed: false)
         ctx = Map.put(ctx, :network, network)
-        result = run(compiled, call, ctx, remaining)
-        finish(export, ctx, started, network, result)
+
+        # The guest's budget is whatever the queue left of the caller's timeout.
+        guest = fn ->
+          run_isolated(compiled, call, ctx, max(timeout_ms - elapsed_ms(started), 1))
+        end
+
+        {result, queue_ms} =
+          case Slots.run(remaining, guest) do
+            {:ok, result, waited} ->
+              {result, waited}
+
+            {:error, :timeout} ->
+              {{:error, Error.timeout("Cardigann call timed out after #{timeout_ms} ms")},
+               remaining}
+          end
+
+        finish(export, ctx, started, network, queue_ms, result)
 
       :compiling ->
         error = Error.timeout("The Cardigann engine is still compiling", %{compiling: true})
-        finish(export, ctx, started, nil, {:error, error})
+        finish(export, ctx, started, nil, 0, {:error, error})
 
       :unavailable ->
-        finish(export, ctx, started, nil, {:error, unavailable(status())})
+        finish(export, ctx, started, nil, 0, {:error, unavailable(status())})
     end
   end
+
+  defp elapsed_ms(started), do: native_to_ms(System.monotonic_time() - started)
 
   defp await(timeout_ms) do
     case :persistent_term.get(@key, nil) do
@@ -226,19 +254,29 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     }
   end
 
+  # The guest runs in its own short-lived process; see `GuestTask`.
+  defp run_isolated(compiled, call, ctx, timeout_ms) do
+    GuestTask.run(ctx, timeout_ms, fn -> run(compiled, call, ctx, timeout_ms) end)
+  end
+
   defp run(%{engine: engine, component: component}, call, ctx, timeout_ms) do
     limits = %Wasmex.StoreLimits{memory_size: @memory_limit}
 
     with {:ok, store} <- Components.Store.new_wasi(wasi(), limits, engine),
          {:ok, pid} <-
-           GenServer.start(Components, %{
+           GenServer.start_link(Components, %{
              store: store,
              component: component,
              imports: HostHttp.imports(ctx)
            }) do
+      GuestTask.probe(ctx, {:instance, pid})
+
       try do
         invoke(pid, call, ctx, timeout_ms)
       after
+        # Unlink first: the kill must not propagate back and take the task down
+        # before it returns its result.
+        Process.unlink(pid)
         Process.exit(pid, :kill)
       end
     else
@@ -309,7 +347,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
   # ── Telemetry ─────────────────────────────────────────────────────────────
 
-  defp finish(export, ctx, started, network, result) do
+  defp finish(export, ctx, started, network, queue_ms, result) do
     duration = System.monotonic_time() - started
 
     network_us = if network, do: :atomics.get(network, 1), else: 0
@@ -320,7 +358,11 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
     :telemetry.execute(
       [:mydia, :cardigann, :wasm, :call],
-      %{duration: duration, network: network_native},
+      %{
+        duration: duration,
+        network: network_native,
+        queue: System.convert_time_unit(queue_ms, :millisecond, :native)
+      },
       %{export: export, outcome: outcome}
     )
 

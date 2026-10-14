@@ -464,6 +464,11 @@ config :mydia, :indexer_search,
   # Cardigann indexers hit sites directly, so conservative limits prevent bans
   default_cardigann_rate_limit: 3
 
+# How many Prowlarr-engine guest instances may run at once. Each instance
+# grows its own .NET heap (about 58 MB for a small search, more for a large
+# results page); see native/cardigann_guest/BENCH.md, "Memory per instance".
+config :mydia, :cardigann_wasm_max_instances, 2
+
 # Feature flags
 config :mydia, :features,
   # Enable/disable Cardigann native indexer support
