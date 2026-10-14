@@ -39,6 +39,7 @@ import 'core/remote/merged_roster.dart';
 import 'core/remote/remote_target_controller.dart';
 import 'core/router/legacy_routes.dart';
 import 'core/router/navigator_keys.dart';
+import 'core/router/push_route.dart';
 import 'core/scroll/app_scroll_behavior.dart';
 import 'presentation/screens/detail/load_content_fetchers.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
@@ -441,7 +442,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         fetch: (itemRef) => fetchLoadContentItem(ref, itemRef),
         push: (path) {
           if (!mounted) return;
-          router.push(path);
+          pushRouteSafely(router, path);
         },
       );
     } catch (error, stackTrace) {

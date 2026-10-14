@@ -554,6 +554,17 @@ GoRouter appRouter(Ref ref) {
               ),
             ),
           ),
+          // A collection opens item pages with `push`, so it has to share
+          // their navigator: go_router cannot push a shell route above a
+          // root-navigator page.
+          GoRoute(
+            path: '/s/:sourceId/collection/:collectionId',
+            name: 'source_collection',
+            builder: (context, state) => CollectionDetailScreen(
+              sourceId: SourceId(state.pathParameters['sourceId']!),
+              collectionId: state.pathParameters['collectionId']!,
+            ),
+          ),
           sourceItemRoute(),
           // Movie, show, season and episode pages sit in the shell too, so
           // the rail stays beside them; only the player is immersive.
@@ -601,16 +612,6 @@ GoRouter appRouter(Ref ref) {
         name: 'collection_detail',
         parentNavigatorKey: rootNavigatorKey,
         builder: _legacyStub,
-      ),
-      // Still full window: the screen owns the title-bar band.
-      GoRoute(
-        path: '/s/:sourceId/collection/:collectionId',
-        name: 'source_collection',
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => CollectionDetailScreen(
-          sourceId: SourceId(state.pathParameters['sourceId']!),
-          collectionId: state.pathParameters['collectionId']!,
-        ),
       ),
       GoRoute(
         path: '/movie/:id',

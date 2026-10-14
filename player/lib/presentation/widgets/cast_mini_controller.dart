@@ -14,6 +14,7 @@ import '../../core/remote/ambient_targets.dart';
 import '../../core/remote/load_content_navigation.dart';
 import '../../core/remote/remote_control_intent.dart';
 import '../../core/router/navigator_keys.dart';
+import '../../core/router/push_route.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/cast_device.dart';
 import '../../core/p2p/p2p_service.dart' show p2pStatusNotifierProvider;
@@ -776,7 +777,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         intent,
         screenWidth: screenWidth,
         fetch: (itemRef) => fetchLoadContentItem(ref, itemRef),
-        push: (path) => router.push(path),
+        push: (path) => pushRouteSafely(router, path),
       );
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error pulling session: $e');

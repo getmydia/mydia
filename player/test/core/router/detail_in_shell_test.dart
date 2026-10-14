@@ -16,6 +16,7 @@ import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/router/app_router.dart';
 import 'package:player/core/router/navigator_keys.dart';
+import 'package:player/core/router/push_route.dart';
 import 'package:player/core/router/source_detail_routes.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
@@ -34,6 +35,8 @@ final _id = fakeSourceId.value;
 const _shellKey = Key('test-shell');
 const _homeKey = Key('test-home');
 const _playerKey = Key('test-player');
+const _rootPageKey = Key('test-root-page');
+const _openItemKey = Key('test-open-item');
 
 final _detailNames = {
   'source_movie_detail',
@@ -67,8 +70,25 @@ Future<GoRouter> _pumpShellRouter(
             path: '/',
             builder: (context, state) => const SizedBox(key: _homeKey),
           ),
+          // Stands in for the collection screen, which opens items by push.
+          GoRoute(
+            path: '/collection-stub',
+            builder: (context, state) => Center(
+              child: TextButton(
+                key: _openItemKey,
+                onPressed: () => context.push('/s/$_id/movie/m1'),
+                child: const Text('open'),
+              ),
+            ),
+          ),
           ...sourceDetailRoutes(),
         ],
+      ),
+      GoRoute(
+        path: '/root-page',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) =>
+            const Scaffold(body: SizedBox(key: _rootPageKey)),
       ),
       GoRoute(
         path: '/s/:sourceId/player/:itemId',
@@ -116,7 +136,10 @@ void main() {
     final top = router.configuration.routes;
     final shell = top.whereType<ShellRoute>().single;
 
-    expect(_names(shell.routes).containsAll(_detailNames), isTrue);
+    // The collection page opens items by push, so it shares their navigator.
+    final shellPages = {..._detailNames, 'source_collection'};
+    expect(_names(shell.routes).containsAll(shellPages), isTrue);
+    expect(_names(top).intersection(shellPages), isEmpty);
     expect(_names(top).intersection(_detailNames), isEmpty);
     // The player stays immersive, above the shell.
     expect(_names(top), contains('source_player'));
@@ -199,5 +222,76 @@ void main() {
     router.pop();
     await tester.pumpAndSettle();
     expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
+  });
+
+  testWidgets('a collection page opens an item in the shell and Back returns',
+      (tester) async {
+    final router = await _pumpShellRouter(tester);
+    router.go('/collection-stub');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(_openItemKey));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(_openItemKey), findsOneWidget);
+    expect(router.state.uri.path, '/collection-stub');
+  });
+
+  group('pushRouteSafely with a root page above the shell', () {
+    testWidgets('closes the root page, shows the detail page, Back returns',
+        (tester) async {
+      final router = await _pumpShellRouter(tester);
+      unawaited(router.push<void>('/root-page'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(_rootPageKey), findsOneWidget);
+      expect(rootRouteIsOnTop(), isTrue);
+
+      pushRouteSafely(router, '/s/$_id/movie/m1');
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(_rootPageKey), findsNothing);
+      expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(MovieDetailScreen), findsNothing);
+      expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
+    });
+
+    testWidgets('pushes plainly when nothing is above the shell',
+        (tester) async {
+      final router = await _pumpShellRouter(tester);
+      expect(rootRouteIsOnTop(), isFalse);
+
+      pushRouteSafely(router, '/s/$_id/movie/m1');
+      await tester.pumpAndSettle();
+      expect(_inShell(find.byType(MovieDetailScreen)), findsOneWidget);
+
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
+    });
+
+    testWidgets('a player path is still pushed over the root page',
+        (tester) async {
+      final router = await _pumpShellRouter(tester);
+      unawaited(router.push<void>('/root-page'));
+      await tester.pumpAndSettle();
+
+      pushRouteSafely(router, sourcePlayerLocation(fakeMovie(1).ref));
+      await tester.pumpAndSettle();
+      expect(find.byKey(_playerKey), findsOneWidget);
+
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.byKey(_rootPageKey), findsOneWidget);
+    });
   });
 }
