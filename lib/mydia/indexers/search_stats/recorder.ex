@@ -16,8 +16,6 @@ defmodule Mydia.Indexers.SearchStats.Recorder do
   flush the real backlog is the process mailbox. Under the SQL sandbox `record/2`
   inserts synchronously in the caller, as `Mydia.Events.create_event_async/1`
   does, so tests see their own rows.
-
-  Returns `:ignore` under `MYDIA_CLI_MODE=true`.
   """
   # terminate/2 flushes through Repo.insert_all, which can wait on the SQLite
   # write lock; see Mydia.Events.Writer for why 10 seconds.
@@ -69,31 +67,27 @@ defmodule Mydia.Indexers.SearchStats.Recorder do
 
   @impl true
   def init(opts) do
-    if System.get_env("MYDIA_CLI_MODE") == "true" do
-      :ignore
-    else
-      Process.flag(:trap_exit, true)
+    Process.flag(:trap_exit, true)
 
-      if Keyword.get(opts, :attach, true) do
-        :telemetry.attach(
-          {__MODULE__, self()},
-          Telemetry.event(),
-          &__MODULE__.handle_telemetry/4,
-          %{server: self()}
-        )
-      end
-
-      {:ok,
-       %{
-         buffer: [],
-         size: 0,
-         dropped: 0,
-         timer: nil,
-         flush_interval_ms: Keyword.get(opts, :flush_interval_ms, @flush_interval_ms),
-         max_batch: Keyword.get(opts, :max_batch, @max_batch),
-         max_buffer: Keyword.get(opts, :max_buffer, @max_buffer)
-       }}
+    if Keyword.get(opts, :attach, true) do
+      :telemetry.attach(
+        {__MODULE__, self()},
+        Telemetry.event(),
+        &__MODULE__.handle_telemetry/4,
+        %{server: self()}
+      )
     end
+
+    {:ok,
+     %{
+       buffer: [],
+       size: 0,
+       dropped: 0,
+       timer: nil,
+       flush_interval_ms: Keyword.get(opts, :flush_interval_ms, @flush_interval_ms),
+       max_batch: Keyword.get(opts, :max_batch, @max_batch),
+       max_buffer: Keyword.get(opts, :max_buffer, @max_buffer)
+     }}
   end
 
   @impl true
