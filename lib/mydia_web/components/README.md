@@ -313,8 +313,9 @@ one admin-only page outside the hubs; it renders `<.admin_header>` directly.
 never repeats the page name.
 
 **Body.** `admin_page/1` wraps the body in `div#admin-page-body`
-(`py-4 sm:p-6 space-y-4`: no side padding on phones, where `main` already
-has 12px). A page's `*_tab` component renders its content directly, with no
+(`bg-base-100 max-sm:bg-transparent py-4 sm:p-6 space-y-4`: no side padding
+and no fill on phones, where `main` already has 12px. A filled body with no
+inset showed only as dark stripes between edge-to-edge lists). A page's `*_tab` component renders its content directly, with no
 padding wrapper of its own; the conventions test flags one. A real subsection
 (Needs Attention, Scheduled Jobs) is `<.admin_section title icon count>`. Its
 `:actions` slot holds what sits beside the heading: a button, a range picker, a
@@ -324,7 +325,9 @@ navigation, or switching content panes inside a modal. Colours come from theme
 tokens such as `text-base-content/60`, never `text-gray-*`.
 
 **Lists.** `<.admin_list id items>` with a `:row` and an `:empty` slot renders
-the `bg-base-200 rounded-box divide-y divide-base-300` container, or an
+the `bg-base-200 rounded-box border border-base-300 divide-y divide-base-300`
+container (the border is what separates a card from the `base-200` page on
+phones), or an
 `alert alert-info` when empty. Each row is `<.admin_row id>` with `:title`,
 `:descriptor` (one truncated `text-xs opacity-60` line), `:details`
 (multi-line notes and warnings, not truncated or dimmed), `:badges`

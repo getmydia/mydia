@@ -98,7 +98,11 @@ defmodule MydiaWeb.AdminListComponentsTest do
         </AdminListComponents.admin_list>
         """)
 
-      assert count(html, "#things.bg-base-200.rounded-box.divide-y.divide-base-300") == 1
+      assert count(
+               html,
+               "#things.bg-base-200.rounded-box.border.border-base-300.divide-y.divide-base-300"
+             ) == 1
+
       assert count(html, "#things .row") == 2
       assert count(html, "#things-empty") == 0
     end

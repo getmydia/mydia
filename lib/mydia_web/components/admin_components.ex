@@ -176,7 +176,7 @@ defmodule MydiaWeb.AdminComponents do
       </.link>
     </nav>
 
-    <div id="admin-page-body" class="bg-base-100 py-4 sm:p-6 space-y-4">
+    <div id="admin-page-body" class="bg-base-100 max-sm:bg-transparent py-4 sm:p-6 space-y-4">
       {render_slot(@inner_block)}
     </div>
     """

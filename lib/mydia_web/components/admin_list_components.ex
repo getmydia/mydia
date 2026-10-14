@@ -57,7 +57,11 @@ defmodule MydiaWeb.AdminListComponents do
       <.icon name="hero-information-circle" class="w-5 h-5" />
       <span>{render_slot(@empty)}</span>
     </div>
-    <div :if={@items != []} id={@id} class="bg-base-200 rounded-box divide-y divide-base-300">
+    <div
+      :if={@items != []}
+      id={@id}
+      class="bg-base-200 rounded-box border border-base-300 divide-y divide-base-300"
+    >
       <%= for item <- @items do %>
         {render_slot(@row, item)}
       <% end %>

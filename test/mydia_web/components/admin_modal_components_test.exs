@@ -174,7 +174,7 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     assert count(html, "nav#admin-page-tabs.flex-nowrap") == 0
   end
 
-  test "admin_page/1 supplies the body wrapper, with no side padding on phones" do
+  test "admin_page/1 supplies the body wrapper, with no side padding or fill on phones" do
     assigns = %{}
 
     html =
@@ -186,6 +186,9 @@ defmodule MydiaWeb.AdminModalComponentsTest do
 
     assert count(html, "div#admin-page-body.bg-base-100.py-4.space-y-4 #inside") == 1
     assert count(html, ~s(div#admin-page-body[class*="sm:p-6"])) == 1
+    # Below sm the body paints nothing, so bordered lists sit on the page
+    # background instead of leaving base-100 stripes between sections.
+    assert count(html, ~s(div#admin-page-body[class~="max-sm:bg-transparent"])) == 1
     assert count(html, "div#admin-page-body.p-4") == 0
     assert count(html, "div#admin-page-body.px-4") == 0
   end
