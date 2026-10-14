@@ -275,18 +275,6 @@ class SidebarContent extends ConsumerWidget {
                           ref.read(sidebarLayoutControllerProvider).unhide(id),
                     ),
                   ),
-                  if (!editing)
-                    SidebarRow(
-                      icon: Icons.add_rounded,
-                      selectedIcon: Icons.add_rounded,
-                      label: '+ New filter',
-                      isSelected: false,
-                      onTap: () => showFilterEditor(
-                        context: context,
-                        ref: ref,
-                        initialFilter: MediaFilter.allMovies,
-                      ),
-                    ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Divider(

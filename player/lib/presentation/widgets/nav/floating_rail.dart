@@ -53,12 +53,18 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
   bool _focused = false;
   Timer? _hoverTimer;
 
+  /// The footer's edit button. Leaving edit mode disposes the edit bar's
+  /// Done button, which would otherwise take focus with it and collapse the
+  /// rail under a keyboard or remote user.
+  final FocusNode _editFocus = FocusNode(debugLabel: 'rail-edit');
+
   bool get _pinned => ref.read(railPinnedProvider);
   bool _expandedFor(bool pinned) => pinned || _hovered || _focused;
 
   @override
   void dispose() {
     _hoverTimer?.cancel();
+    _editFocus.dispose();
     super.dispose();
   }
 
@@ -100,6 +106,11 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<bool>(sidebarEditModeProvider, (prev, next) {
+      // Runs before the rebuild, while focus is still on the control that
+      // ended editing, so moving it here keeps the user inside the rail.
+      if (prev == true && !next && _focused) _editFocus.requestFocus();
+    });
     ref.listen<bool>(railPinnedProvider, (prev, next) {
       if (prev == null || prev == next) return;
       _exitEditWhenCollapsed(_expandedFor(next));
@@ -201,7 +212,11 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
                                     : null,
                               ),
                             ),
-                            _RailFooter(expanded: expanded, pinned: pinned),
+                            _RailFooter(
+                              expanded: expanded,
+                              pinned: pinned,
+                              editFocus: _editFocus,
+                            ),
                           ],
                         ),
                       ),
@@ -221,10 +236,15 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
 /// so the rows above never move; while the rail is collapsed the buttons are
 /// invisible, inert and out of focus traversal.
 class _RailFooter extends ConsumerWidget {
-  const _RailFooter({required this.expanded, required this.pinned});
+  const _RailFooter({
+    required this.expanded,
+    required this.pinned,
+    required this.editFocus,
+  });
 
   final bool expanded;
   final bool pinned;
+  final FocusNode editFocus;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -256,6 +276,7 @@ class _RailFooter extends ConsumerWidget {
                     ),
                     IconButton(
                       key: const Key('rail-edit'),
+                      focusNode: editFocus,
                       tooltip: 'Edit sidebar',
                       onPressed: () =>
                           ref.read(sidebarEditModeProvider.notifier).toggle(),

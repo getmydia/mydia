@@ -117,6 +117,13 @@ double _labelOpacity(WidgetTester tester, String text) => _fadeValue(
 double _scrimOpacity(WidgetTester tester) =>
     _fadeValue(tester, find.byKey(const Key('rail-scrim-fade')));
 
+/// The focus node a button owns: the nearest one enclosing [inner], a widget
+/// inside the button (`Focus.of` on the button itself would find a parent's).
+FocusNode _buttonNode(WidgetTester tester, Finder button, Finder inner) =>
+    Focus.of(
+      tester.element(find.descendant(of: button, matching: inner).first),
+    );
+
 /// The icon of every entry the rail must keep still, by name.
 Map<String, Finder> _railIcons() {
   Finder inRow(String id) => find
@@ -530,9 +537,8 @@ void main() {
       final store = await _pumpRail(tester);
       const pin = Key('rail-pin');
       const edit = Key('rail-edit');
-      FocusNode nodeOf(Key key) => Focus.of(tester.element(find
-          .descendant(of: find.byKey(key), matching: find.byType(Focus))
-          .first));
+      FocusNode nodeOf(Key key) =>
+          _buttonNode(tester, find.byKey(key), find.byType(Icon));
 
       expect(nodeOf(pin).canRequestFocus, isFalse);
       expect(nodeOf(edit).canRequestFocus, isFalse);
@@ -564,6 +570,82 @@ void main() {
       await tester.tap(find.byKey(const Key('rail-pin')));
       await tester.pumpAndSettle();
       expect(store.railPinned, isTrue);
+    });
+
+    testWidgets('finishing an edit from the keyboard keeps focus in the rail',
+        (tester) async {
+      final row = FocusNode(debugLabel: 'row');
+      addTearDown(row.dispose);
+      await _pumpRail(tester, rowNode: row);
+      row.requestFocus();
+      await tester.pumpAndSettle();
+      expect(_railWidth(tester), 272);
+
+      bool focusInRail() =>
+          FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<FloatingRail>() !=
+          null;
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(FloatingRail)));
+
+      // Focus alone (no hover) reaches the footer's edit button and presses it.
+      _buttonNode(tester, find.byKey(const Key('rail-edit')), find.byType(Icon))
+          .requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(container.read(sidebarEditModeProvider), isTrue);
+      expect(_railWidth(tester), 272);
+      expect(focusInRail(), isTrue);
+
+      // Move focus to Done and press it.
+      _buttonNode(
+        tester,
+        find.widgetWithText(TextButton, 'Done'),
+        find.byType(Text),
+      ).requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(container.read(sidebarEditModeProvider), isFalse);
+      expect(focusInRail(), isTrue);
+      expect(_railWidth(tester), 272);
+    });
+
+    testWidgets('Done with no earlier focus in the rail does not collapse it',
+        (tester) async {
+      // Focus history would let Flutter fall back to an earlier node, hiding
+      // the defect. Here Done is the only thing ever focused in the rail.
+      await _pumpRail(tester);
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: const Offset(40, 300));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(FloatingRail)));
+      container.read(sidebarEditModeProvider.notifier).toggle();
+      await tester.pumpAndSettle();
+
+      _buttonNode(
+        tester,
+        find.widgetWithText(TextButton, 'Done'),
+        find.byType(Text),
+      ).requestFocus();
+      await tester.pumpAndSettle();
+      await gesture.moveTo(const Offset(900, 300));
+      await tester.pumpAndSettle();
+      expect(_railWidth(tester), 272, reason: 'focus on Done holds it open');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(container.read(sidebarEditModeProvider), isFalse);
+      expect(_railWidth(tester), 272);
+      expect(
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<FloatingRail>(),
+        isNotNull,
+      );
     });
 
     testWidgets('reduced motion reaches the final state in one pump',
