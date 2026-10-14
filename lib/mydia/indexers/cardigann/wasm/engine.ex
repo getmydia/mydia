@@ -35,6 +35,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     Codec,
     Delivery,
     EngineConfig,
+    GuestTask,
     HostHttp,
     Slots
   }
@@ -52,8 +53,6 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
 
   @interface "mydia:cardigann/engine@1.0.0"
   @memory_limit 512 * 1024 * 1024
-  # Slack above the guest's own budget before the guest process is given up on.
-  @task_grace_ms 5_000
   @key {__MODULE__, :compiled}
   @topic "cardigann_wasm_engine"
 
@@ -252,64 +251,10 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
     }
   end
 
-  # An instance's memory stays resident until the process whose heap references
-  # its store and instance resources is garbage collected, so a long-lived
-  # caller (an Oban worker, a LiveView) would hold the last instance between
-  # calls. The guest work therefore runs in a process that ends with the call.
-  # The task is not linked to the caller (a crashing guest must never kill a
-  # search worker; it comes back as an error), and keeps `$callers`.
-  # Everything the guest needs from the caller is in `ctx` (HostHttp's imports
-  # run in the instance's own process, never the caller's), and telemetry stays
-  # in the caller (`finish/6`).
-  #
-  # The guest still must not outlive its caller, or the slot would be freed
-  # while it runs: a watcher linked to the task monitors the caller and kills
-  # the task when the caller dies. The task does not trap exits and the
-  # instance is linked to it, so the instance dies with the task.
+  # The guest runs in its own short-lived process; see `GuestTask`.
   defp run_isolated(compiled, call, ctx, timeout_ms) do
-    caller = self()
-    work = fn -> guest_task(caller, compiled, call, ctx, timeout_ms) end
-
-    task = Task.Supervisor.async_nolink(Mydia.TaskSupervisor, work)
-
-    case Task.yield(task, timeout_ms + @task_grace_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, result} ->
-        result
-
-      {:exit, reason} ->
-        {:error, Error.engine_error("Engine instance exited: #{inspect(reason)}")}
-
-      nil ->
-        {:error, Error.timeout("Cardigann call timed out after #{timeout_ms} ms")}
-    end
+    GuestTask.run(ctx, timeout_ms, fn -> run(compiled, call, ctx, timeout_ms) end)
   end
-
-  defp guest_task(caller, compiled, call, ctx, timeout_ms) do
-    task = self()
-
-    watcher =
-      spawn_link(fn ->
-        ref = Process.monitor(caller)
-
-        receive do
-          {:DOWN, ^ref, :process, _, _} -> Process.exit(task, :kill)
-        end
-      end)
-
-    probe(ctx, {:task, task})
-    probe(ctx, {:watcher, watcher})
-
-    try do
-      run(compiled, call, ctx, timeout_ms)
-    after
-      Process.unlink(watcher)
-      Process.exit(watcher, :kill)
-    end
-  end
-
-  # Test seam: a per-call hook in ctx that observes the guest processes.
-  defp probe(%{guest_probe: probe}, event) when is_function(probe, 1), do: probe.(event)
-  defp probe(_ctx, _event), do: :ok
 
   defp run(%{engine: engine, component: component}, call, ctx, timeout_ms) do
     limits = %Wasmex.StoreLimits{memory_size: @memory_limit}
@@ -321,7 +266,7 @@ defmodule Mydia.Indexers.Cardigann.Wasm.Engine do
              component: component,
              imports: HostHttp.imports(ctx)
            }) do
-      probe(ctx, {:instance, pid})
+      GuestTask.probe(ctx, {:instance, pid})
 
       try do
         invoke(pid, call, ctx, timeout_ms)
