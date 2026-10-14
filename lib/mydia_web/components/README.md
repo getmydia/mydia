@@ -373,11 +373,21 @@ header (an Enabled toggle, say); a form field there needs
 `<.form for={@<x>_form} id="<x>-form" phx-change="validate_<x>" phx-submit="save_<x>">`
 inside; a form whose buttons must be inside the `<form>` renders
 `<.admin_modal_actions>` itself. `tone={:error}` tints the icon tile for a
-destructive confirmation. `on_close={nil}` keeps the backdrop but makes it
-inert, for content a stray click must not dismiss (a one-time API key).
-Below `sm` the box fills the screen, so the dialog is the only thing that
-scrolls; a list inside a dialog caps its own height only from `sm` up
-(`sm:max-h-* sm:overflow-y-auto`). Field labels inside the box wrap, since
+destructive confirmation. Whenever `on_close` is set, a header close button
+`#<id>-close` (ghost `btn-circle`, `hero-x-mark`, aria-label "Close") sends
+the same event as the backdrop; `on_close={nil}` gets neither a working
+backdrop nor a button, for content a stray click must not dismiss (a one-time
+API key). Below `sm` the box fills the screen and covers the backdrop, which
+is why the button matters on phones.
+The box is a flex column: the header stays fixed, the content sits in a
+scrolling body `#<id>-body` (`px-1 -mx-1` so focus rings are not clipped) and
+the action row stays outside the scroller. `admin_modal_actions/1` is sticky
+at the bottom, so a form that renders it inside its own `<form>`, which lives
+in the body, still keeps its buttons on screen. The body is the scroller, so
+content must not add its own `overflow-y-auto` or `max-h` list scroller. A
+daisyUI `.tooltip` bubble inside the body is clipped by it and can make it
+scroll sideways (measured on the indexer library's verified-engine badges,
+which use a native `title` instead). Field labels inside the box wrap, since
 daisyUI's `.label` is `nowrap`.
 
 **Filters.** A `<.segmented_control>` option takes an `id` when a test or a

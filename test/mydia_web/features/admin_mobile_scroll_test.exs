@@ -134,11 +134,19 @@ defmodule MydiaWeb.Features.AdminMobileScrollTest do
     :ok
   end
 
+  @dialog_scroller_js ~S"""
+  (function () {
+    var box = document.querySelector('.modal-open .modal-box');
+    return box && (box.querySelector(':scope > [id$="-body"]') || box);
+  })()
+  """
+
   # Every element outside the sidebar and dock that scrolls on its own, as
   # "Y client/scroll X client/scroll selector" lines. The document itself is
   # allowed to scroll and is skipped.
-  defp independent_scrollers(session) do
+  defp independent_scrollers(session, exempt_dialog_scroller \\ false) do
     eval_js(session, """
+    var allowed = #{exempt_dialog_scroller} ? (#{@dialog_scroller_js}) : null;
     var out = [];
     var all = document.querySelectorAll('body *');
     for (var i = 0; i < all.length; i++) {
@@ -148,6 +156,7 @@ defmodule MydiaWeb.Features.AdminMobileScrollTest do
       if (s.display === 'none' || s.visibility === 'hidden') continue;
       if (el.closest('aside, .drawer-side, nav#mobile-dock')) continue;
       var y = /(auto|scroll)/.test(s.overflowY) && el.scrollHeight > el.clientHeight + 4;
+      if (el === allowed) y = false;
       var x = /(auto|scroll)/.test(s.overflowX) && el.scrollWidth > el.clientWidth + 4;
       if (!(x || y)) continue;
       out.push((y ? 'Y ' + el.clientHeight + '/' + el.scrollHeight + ' ' : '') +
@@ -159,16 +168,16 @@ defmodule MydiaWeb.Features.AdminMobileScrollTest do
     """)
   end
 
-  # The open dialog's box is allowed to scroll: it is the screen's one
-  # scroller while it is open.
-  defp independent_scrollers_in_dialog(session) do
-    Enum.reject(independent_scrollers(session), &String.contains?(&1, ".modal-box"))
-  end
+  # The open dialog's one allowed scroller is its body (the element admin_modal
+  # scrolls between the fixed header and the action row), or the box itself for
+  # dialogs without one. Only its vertical scrolling is exempt: sideways
+  # scrolling, and any scroller nested inside it, are still reported.
+  defp independent_scrollers_in_dialog(session), do: independent_scrollers(session, true)
 
-  # Pixels by which the open dialog's content is wider than the dialog, or 0.
+  # Pixels by which the open dialog's scroller is wider than itself, or 0.
   defp dialog_sideways_overflow(session) do
     eval_js(session, """
-    var b = document.querySelector('.modal-open .modal-box');
+    var b = #{@dialog_scroller_js};
     return b.scrollWidth > b.clientWidth + 1 ? b.scrollWidth - b.clientWidth : 0;
     """)
   end

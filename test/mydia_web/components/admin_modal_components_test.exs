@@ -128,6 +128,51 @@ defmodule MydiaWeb.AdminModalComponentsTest do
       assert count(html, ".modal-backdrop.bg-black\\/50") == 1
       assert count(html, ".modal-backdrop[phx-click]") == 0
     end
+
+    test "header close button sends on_close" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminModalComponents.admin_modal id="m" icon="hero-book-open" title="T" on_close="close_m">
+          x
+        </AdminModalComponents.admin_modal>
+        """)
+
+      assert count(html, ~s(#m button#m-close[type=button][aria-label=Close][phx-click=close_m])) ==
+               1
+    end
+
+    test "on_close nil renders no close button" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminModalComponents.admin_modal id="m" icon="hero-key" title="T" on_close={nil}>
+          x
+        </AdminModalComponents.admin_modal>
+        """)
+
+      assert count(html, "#m-close") == 0
+    end
+
+    test "body scrolls between a fixed header and action row" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <AdminModalComponents.admin_modal id="m" icon="hero-book-open" title="T" on_close="close_m">
+          <p id="inside">x</p>
+          <:actions><button id="save">Save</button></:actions>
+        </AdminModalComponents.admin_modal>
+        """)
+
+      assert count(html, "#m .modal-box.flex.flex-col.overflow-hidden") == 1
+      assert count(html, "#m-body.flex-1.min-h-0.overflow-y-auto.px-1.-mx-1 #inside") == 1
+      # The action row sits outside the scroller.
+      assert count(html, "#m-body .modal-action") == 0
+      assert count(html, "#m .modal-box > .modal-action #save") == 1
+    end
   end
 
   test "admin_modal_actions/1 is the bordered action row" do
@@ -140,7 +185,10 @@ defmodule MydiaWeb.AdminModalComponentsTest do
       </AdminModalComponents.admin_modal_actions>
       """)
 
-    assert count(html, ".modal-action.mt-6.pt-4.border-t.border-base-300 #b") == 1
+    assert count(
+             html,
+             ".modal-action.mt-6.pt-4.border-t.border-base-300.sticky.bottom-0.bg-base-100 #b"
+           ) == 1
   end
 
   test "admin_header/1 renders the page header ids without the hub tab strip" do
