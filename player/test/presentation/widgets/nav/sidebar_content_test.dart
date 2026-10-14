@@ -28,6 +28,7 @@ Future<void> _pump(
   double height = 1400,
   FocusNode? selectedRowFocusNode,
   bool compact = false,
+  bool withSwitcher = false,
 }) async {
   tester.view.physicalSize = Size(1200, height + 200);
   tester.view.devicePixelRatio = 1.0;
@@ -43,6 +44,9 @@ Future<void> _pump(
         // source of its own (`/`, `/settings`) resolves against it.
         thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
         hasMydiaProvider.overrideWithValue(true),
+        // The switcher only renders when there is a choice of servers.
+        if (withSwitcher)
+          switchableSourcesProvider.overrideWithValue(const [fakeSource]),
         mediaSourceProvider(fakeSourceId).overrideWithValue(_MydiaLike()),
       ],
       child: MaterialApp(
@@ -373,7 +377,20 @@ void main() {
 
       expect(find.byTooltip('Edit sidebar'), findsNothing);
       expect(find.text('Mydia Player'), findsNothing);
-      expect(find.byTooltip('+ New filter'), findsNothing);
+      // The same fixture shows the row when not compact (see 'the New filter
+      // row is hidden while editing'), so this absence is meaningful.
+      expect(find.text('+ New filter'), findsNothing);
+    });
+
+    testWidgets('the server switcher is centred with the rows', (tester) async {
+      await _pump(tester, location: '/', compact: true, withSwitcher: true);
+
+      final switcher = find.byKey(const ValueKey('source-switcher-compact'));
+      expect(switcher, findsOneWidget);
+      expect(
+        tester.getCenter(switcher).dx,
+        tester.getCenter(find.byKey(const ValueKey('sidebar-row-search'))).dx,
+      );
     });
 
     testWidgets('the selected row is ringed and filled', (tester) async {
@@ -409,8 +426,24 @@ void main() {
       node.requestFocus();
       await tester.pump();
       expect(node.hasFocus, isTrue);
+      final selectedRow = find.byKey(const ValueKey('sidebar-row-favorites'));
+      expect(selectedRow, findsOneWidget);
+      // The focused node lives under the selected row, and only one
+      // SidebarRow was handed the node.
       expect(
-          find.byKey(const ValueKey('sidebar-row-favorites')), findsOneWidget);
+        find.descendant(
+          of: selectedRow,
+          matching: find.byWidgetPredicate(
+            (w) => w is Focus && w.focusNode == node,
+          ),
+        ),
+        findsOneWidget,
+      );
+      final carriers = tester
+          .widgetList<SidebarRow>(find.byType(SidebarRow))
+          .where((r) => r.focusNode == node);
+      expect(carriers, hasLength(1));
+      expect(carriers.single.label, 'Favorites');
     });
 
     testWidgets('tapping a row navigates', (tester) async {

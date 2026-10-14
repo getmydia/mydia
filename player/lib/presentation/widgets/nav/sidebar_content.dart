@@ -151,7 +151,8 @@ class SidebarContent extends ConsumerWidget {
     final hasBackWidget = backToMydiaWidget != null;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: [
         if (hasBackWidget)
           Padding(
