@@ -214,8 +214,12 @@ class _ShimmerRail extends StatelessWidget {
     final itemWidth = landscape
         ? ContinueWatchingCard.artSize.width
         : SourcePosterRow.posterWidth;
-    final railHeight =
-        landscape ? ContinueWatchingCard.height : SourcePosterRow.rowHeight;
+    // The loaded rail sizes to its tallest card; Continue Watching mixes
+    // episodes (with a caption line) and movies, so the skeleton assumes the
+    // caption, which is also what All servers always shows (server name).
+    final railHeight = landscape
+        ? ContinueWatchingCard.heightFor(context, hasCaption: true)
+        : SourcePosterRow.rowHeight;
     final radius = landscape ? AppTheme.radiusCard : 8.0;
     // Overflow the viewport so the rail has no empty tail that fills in later.
     final count =

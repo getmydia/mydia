@@ -255,8 +255,14 @@ void main() {
         railItemHeight(find.byKey(const Key('all-continue-watching')));
 
     expect(skeletonHero.height, closeTo(loadedHero.height, 1));
-    expect(skeletonRail, ContinueWatchingCard.height);
-    expect(loadedRail, ContinueWatchingCard.height);
+    // Every All servers card carries its server name, so the loaded rail is
+    // the captioned height the skeleton assumes.
+    final expected = ContinueWatchingCard.heightFor(
+      t.element(find.byKey(const Key('all-continue-watching'))),
+      hasCaption: true,
+    );
+    expect(skeletonRail, expected);
+    expect(loadedRail, expected);
   });
 
   testWidgets('loading shows the skeleton', (t) async {

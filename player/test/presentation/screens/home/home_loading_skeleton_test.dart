@@ -104,7 +104,13 @@ void main() {
         ),
       );
       expect(card, findsWidgets);
-      expect(tester.getSize(card.first).height, ContinueWatchingCard.height);
+      expect(
+        tester.getSize(card.first).height,
+        ContinueWatchingCard.heightFor(
+          tester.element(card.first),
+          hasCaption: true,
+        ),
+      );
     });
 
     testWidgets('no spacer sits between the rails', (tester) async {

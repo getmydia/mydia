@@ -124,6 +124,8 @@ class AllServersHomeScreen extends ConsumerWidget {
       );
     }
     final hero = continueItems.firstOrNull ?? movieItems.firstOrNull;
+    String? continueLabel(ItemSummary item) => allServersServerLabel(
+        included[item.ref.sourceId], r.extraCopies[item.ref] ?? 0);
     return RefreshIndicator(
       edgeOffset: chromeTop,
       onRefresh: () async => _refresh(ref),
@@ -152,15 +154,22 @@ class AllServersHomeScreen extends ConsumerWidget {
               railId: 'all-continue',
               items: continueItems,
               itemWidth: ContinueWatchingCard.artSize.width,
-              height: ContinueWatchingCard.height,
+              height: ContinueWatchingCard.heightFor(
+                context,
+                hasCaption: continueItems.any(
+                  (item) => ContinueWatchingCard.hasCaptionFor(
+                    item,
+                    trailingLabel: continueLabel(item),
+                  ),
+                ),
+              ),
               onTitleTap: () =>
                   context.push(allServersContinueWatchingLocation),
               posterFor: (context, item) => ContinueWatchingCard(
                 key: ValueKey(
                     'all-poster-${item.ref.sourceId.value}-${item.ref.externalId}'),
                 item: item,
-                trailingLabel: allServersServerLabel(
-                    included[item.ref.sourceId], r.extraCopies[item.ref] ?? 0),
+                trailingLabel: continueLabel(item),
                 onTap: () => context.push(allServersItemLocation(item.ref)),
                 onContextMenu: (c) => _menu(c, ref, item),
               ),

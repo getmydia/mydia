@@ -2,6 +2,8 @@
 /// bar with the time left.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -28,10 +30,54 @@ class ContinueWatchingCard extends ConsumerWidget {
 
   static const Size artSize = Size(280, 120);
 
-  /// The card's height: the artwork plus the caption block.
-  ///
-  /// Room for an episode's caption line and for text scaled up to about 1.3.
-  static const double height = 232;
+  static const double _padTop = 12;
+  static const double _padSide = 14;
+  static const double _padBottom = 12;
+  static const double _captionGap = 6;
+  static const double _progressGap = 8;
+  static const double _barHeight = 4;
+
+  /// Whether the card shows a caption line: an episode's place in its series,
+  /// or a [trailingLabel] such as a server name.
+  static bool hasCaptionFor(ItemSummary item, {String? trailingLabel}) =>
+      _captionOf(item, trailingLabel).isNotEmpty;
+
+  static String _captionOf(ItemSummary item, String? trailingLabel) => [
+        if (item.showTitle != null) item.subtitle,
+        trailingLabel,
+      ].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
+
+  /// The card's height, computed from its content: the artwork, the body
+  /// padding, the title line, the caption line when [hasCaption], and the
+  /// progress row, all measured with the theme's text styles at the current
+  /// text scale. A row of cards uses the tallest.
+  static double heightFor(BuildContext context, {required bool hasCaption}) {
+    final textTheme = Theme.of(context).textTheme;
+    final base = DefaultTextStyle.of(context).style;
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+
+    double line(TextStyle? style) {
+      final painter = TextPainter(
+        text: TextSpan(text: 'Xg', style: base.merge(style)),
+        textDirection: direction,
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    final progressRow = math.max(_barHeight, line(textTheme.bodySmall));
+    return artSize.height +
+        _padTop +
+        line(textTheme.titleSmall) +
+        (hasCaption ? _captionGap + line(textTheme.bodySmall) : 0) +
+        _progressGap +
+        progressRow +
+        _padBottom;
+  }
 
   final ItemSummary item;
   final VoidCallback onTap;
@@ -63,10 +109,7 @@ class ContinueWatchingCard extends ConsumerWidget {
           );
     const radius = BorderRadius.all(Radius.circular(AppTheme.radiusCard));
     final textTheme = Theme.of(context).textTheme;
-    final caption = [
-      if (item.showTitle != null) item.subtitle,
-      trailingLabel,
-    ].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
+    final caption = _captionOf(item, trailingLabel);
 
     // Hovering the card drives the shell's ambient backdrop to its artwork,
     // the way a poster does.
@@ -105,7 +148,12 @@ class ContinueWatchingCard extends ConsumerWidget {
                           ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                    padding: const EdgeInsets.fromLTRB(
+                      _padSide,
+                      _padTop,
+                      _padSide,
+                      _padBottom,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -119,7 +167,7 @@ class ContinueWatchingCard extends ConsumerWidget {
                         // label (a server name) shares that one line, so
                         // the card never grows.
                         if (caption.isNotEmpty) ...[
-                          const SizedBox(height: 2),
+                          const SizedBox(height: _captionGap),
                           Text(
                             caption,
                             maxLines: 1,
@@ -129,7 +177,7 @@ class ContinueWatchingCard extends ConsumerWidget {
                             ),
                           ),
                         ],
-                        const SizedBox(height: 8),
+                        const SizedBox(height: _progressGap),
                         Row(
                           children: [
                             Expanded(
@@ -138,7 +186,7 @@ class ContinueWatchingCard extends ConsumerWidget {
                                 child: LinearProgressIndicator(
                                   key: const Key('continue-card-progress'),
                                   value: (status?.percentage ?? 0) / 100,
-                                  minHeight: 4,
+                                  minHeight: _barHeight,
                                   color: AppColors.primary,
                                   backgroundColor:
                                       Colors.white.withValues(alpha: 0.16),

@@ -114,39 +114,95 @@ void main() {
     expect(find.text('Server a +2'), findsOneWidget);
   });
 
-  testWidgets('scaled text up to 1.3 does not overflow', (tester) async {
-    for (final (item, label) in [
-      (episode(), null),
-      (_item(), null),
-      (episode(), 'A Rather Long Server Name +12'),
-      (_item(), 'A Rather Long Server Name +12'),
-    ]) {
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          sourceArtworkProvider.overrideWith((ref, key) async => null),
-          mediaSourceProvider(fakeSourceId)
-              .overrideWithValue(FakeMediaSource()),
-        ],
-        child: MaterialApp(
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context)
-                .copyWith(textScaler: const TextScaler.linear(1.3)),
-            child: child!,
-          ),
-          home: Scaffold(
-            body: Align(
-              alignment: Alignment.topLeft,
-              child: SizedBox(
-                height: ContinueWatchingCard.height,
-                child: ContinueWatchingCard(
-                    item: item, onTap: () {}, trailingLabel: label),
-              ),
+  Future<void> pumpScaled(
+    WidgetTester tester,
+    ItemSummary item, {
+    String? label,
+    double scale = 1.0,
+    bool fixedHeight = false,
+  }) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+        mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+      ],
+      child: MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: Builder(
+              builder: (context) {
+                final card = ContinueWatchingCard(
+                  item: item,
+                  onTap: () {},
+                  trailingLabel: label,
+                );
+                if (!fixedHeight) return card;
+                return SizedBox(
+                  height: ContinueWatchingCard.heightFor(
+                    context,
+                    hasCaption: ContinueWatchingCard.hasCaptionFor(
+                      item,
+                      trailingLabel: label,
+                    ),
+                  ),
+                  child: card,
+                );
+              },
             ),
           ),
         ),
-      ));
-      await tester.pump();
-      expect(tester.takeException(), isNull);
+      ),
+    ));
+    await tester.pump();
+  }
+
+  testWidgets('the body ends 12 px under the progress row, movie and episode',
+      (tester) async {
+    for (final item in [_item(), episode()]) {
+      // Sized the way a rail sizes it, so the gap below the progress row is
+      // exactly the body padding only if heightFor matches the content.
+      await pumpScaled(tester, item, fixedHeight: true);
+      final cardBottom =
+          tester.getBottomLeft(find.byType(ContinueWatchingCard)).dy;
+      final progressRow = find.ancestor(
+        of: find.byKey(const Key('continue-card-progress')),
+        matching: find.byType(Row),
+      );
+      expect(cardBottom - tester.getBottomLeft(progressRow.last).dy,
+          closeTo(12, 0.01));
+    }
+  });
+
+  testWidgets('an episode card is taller than a movie card by its caption',
+      (tester) async {
+    await pumpScaled(tester, _item());
+    final context = tester.element(find.byType(ContinueWatchingCard));
+    expect(
+      ContinueWatchingCard.heightFor(context, hasCaption: true),
+      greaterThan(ContinueWatchingCard.heightFor(context, hasCaption: false)),
+    );
+    expect(ContinueWatchingCard.heightFor(context, hasCaption: true),
+        lessThan(232));
+  });
+
+  testWidgets('scaled text up to 2.0 does not overflow', (tester) async {
+    for (final scale in [1.3, 2.0]) {
+      for (final (item, label) in [
+        (episode(), null),
+        (_item(), null),
+        (episode(), 'A Rather Long Server Name +12'),
+        (_item(), 'A Rather Long Server Name +12'),
+      ]) {
+        await pumpScaled(tester, item,
+            label: label, scale: scale, fixedHeight: true);
+        expect(tester.takeException(), isNull);
+      }
     }
   });
 

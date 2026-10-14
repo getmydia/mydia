@@ -61,7 +61,10 @@ class _SourceContinueWatchingRowState
       railId: 'continue',
       items: items,
       itemWidth: ContinueWatchingCard.artSize.width,
-      height: ContinueWatchingCard.height,
+      height: ContinueWatchingCard.heightFor(
+        context,
+        hasCaption: items.any(ContinueWatchingCard.hasCaptionFor),
+      ),
       posterFor: (context, item) => ContinueWatchingCard(
         key: ValueKey('source-continue-${item.ref.externalId}'),
         item: item,
