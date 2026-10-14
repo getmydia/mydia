@@ -56,7 +56,11 @@ FakeMergedSource serverWith(String id) {
   return FakeMergedSource(
     s,
     resuming: [
-      item(s, '${id}1', lastPlayedAt: DateTime.utc(2024, 1, id == 'b' ? 2 : 1)),
+      // A duration, as every real Continue Watching item has: the skeleton's
+      // height assumes the "left" label.
+      item(s, '${id}1',
+          durationSeconds: 3600,
+          lastPlayedAt: DateTime.utc(2024, 1, id == 'b' ? 2 : 1)),
     ],
     recent: [
       item(s, '${id}2', addedAt: DateTime.utc(2024, 1, 1)),

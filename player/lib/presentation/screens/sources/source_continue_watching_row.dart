@@ -64,6 +64,7 @@ class _SourceContinueWatchingRowState
       height: ContinueWatchingCard.heightFor(
         context,
         hasCaption: items.any(ContinueWatchingCard.hasCaptionFor),
+        hasTimeLeft: items.any(ContinueWatchingCard.hasTimeLeftFor),
       ),
       posterFor: (context, item) => ContinueWatchingCard(
         key: ValueKey('source-continue-${item.ref.externalId}'),

@@ -65,6 +65,19 @@ void main() {
     expect(find.text('1080p'), findsOneWidget);
   });
 
+  testWidgets('the icon-only button still announces itself as Play',
+      (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_host(
+      PrimaryPlayButton(onPressed: () {}, iconOnly: true),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Play'), findsNothing);
+    expect(find.bySemanticsLabel('Play'), findsOneWidget);
+    handle.dispose();
+  });
+
   testWidgets('resume labels the button Resume', (tester) async {
     await tester.pumpWidget(_host(
       HeroPlayControl(files: _files, onFileSelected: (_) {}, resume: true),

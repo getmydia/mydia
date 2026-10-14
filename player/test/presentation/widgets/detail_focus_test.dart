@@ -14,6 +14,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/play_button.dart';
@@ -109,7 +110,19 @@ void main() {
       final decorated = tester.widget<DecoratedBox>(
         find.byKey(FocusHighlight.ringKey),
       );
-      expect((decorated.decoration as BoxDecoration).border, isNotNull);
+      final border = (decorated.decoration as BoxDecoration).border! as Border;
+      // Gold and opaque: a white ring would vanish against the white pill.
+      expect(border.top.color, AppColors.primary);
+      expect(border.top.color.a, 1.0);
+
+      // Drawn outside the pill, in the gap around it.
+      final ring = tester.getRect(find.byKey(FocusHighlight.ringKey));
+      final pill = tester.getRect(find.byKey(PrimaryPlayButton.pillKey));
+      expect(ring.left, lessThan(pill.left));
+      expect(ring.top, lessThan(pill.top));
+      expect(ring.right, greaterThan(pill.right));
+      expect(ring.bottom, greaterThan(pill.bottom));
+      expect(pill.left - ring.left, PrimaryPlayButton.ringGap);
     });
 
     testWidgets('Enter on the focused button starts playback', (tester) async {

@@ -42,6 +42,9 @@ class ContinueWatchingCard extends ConsumerWidget {
   static bool hasCaptionFor(ItemSummary item, {String? trailingLabel}) =>
       _captionOf(item, trailingLabel).isNotEmpty;
 
+  /// Whether the card shows a time-left label next to its progress bar.
+  static bool hasTimeLeftFor(ItemSummary item) => _timeLeft(item) != null;
+
   static String _captionOf(ItemSummary item, String? trailingLabel) => [
         if (item.showTitle != null) item.subtitle,
         trailingLabel,
@@ -51,8 +54,17 @@ class ContinueWatchingCard extends ConsumerWidget {
   /// padding, the title line, the caption line when [hasCaption], and the
   /// progress row, all measured with the theme's text styles at the current
   /// text scale. A row of cards uses the tallest.
-  static double heightFor(BuildContext context, {required bool hasCaption}) {
+  ///
+  /// [hasTimeLeft] is whether any card shows the "22m left" label; without it
+  /// the progress row is just the 4 px bar.
+  static double heightFor(
+    BuildContext context, {
+    required bool hasCaption,
+    bool hasTimeLeft = true,
+  }) {
     final textTheme = Theme.of(context).textTheme;
+    // Text merges its style into the ambient DefaultTextStyle, so measure the
+    // same way or the font family and weight would differ from what renders.
     final base = DefaultTextStyle.of(context).style;
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
@@ -69,7 +81,9 @@ class ContinueWatchingCard extends ConsumerWidget {
       return height;
     }
 
-    final progressRow = math.max(_barHeight, line(textTheme.bodySmall));
+    final progressRow = hasTimeLeft
+        ? math.max(_barHeight, line(textTheme.bodySmall))
+        : _barHeight;
     return artSize.height +
         _padTop +
         line(textTheme.titleSmall) +

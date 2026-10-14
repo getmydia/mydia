@@ -162,6 +162,8 @@ class AllServersHomeScreen extends ConsumerWidget {
                     trailingLabel: continueLabel(item),
                   ),
                 ),
+                hasTimeLeft:
+                    continueItems.any(ContinueWatchingCard.hasTimeLeftFor),
               ),
               onTitleTap: () =>
                   context.push(allServersContinueWatchingLocation),

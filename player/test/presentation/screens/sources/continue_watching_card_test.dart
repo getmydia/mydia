@@ -150,6 +150,7 @@ void main() {
                       item,
                       trailingLabel: label,
                     ),
+                    hasTimeLeft: ContinueWatchingCard.hasTimeLeftFor(item),
                   ),
                   child: card,
                 );
@@ -164,7 +165,11 @@ void main() {
 
   testWidgets('the body ends 12 px under the progress row, movie and episode',
       (tester) async {
-    for (final item in [_item(), episode()]) {
+    // A card with no duration shows no time-left label and reserves no line
+    // for it.
+    final noDuration = _item(duration: 0, progress: 0);
+    expect(ContinueWatchingCard.hasTimeLeftFor(noDuration), isFalse);
+    for (final item in [_item(), episode(), noDuration]) {
       // Sized the way a rail sizes it, so the gap below the progress row is
       // exactly the body padding only if heightFor matches the content.
       await pumpScaled(tester, item, fixedHeight: true);

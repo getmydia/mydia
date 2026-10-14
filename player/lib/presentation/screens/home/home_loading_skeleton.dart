@@ -216,7 +216,8 @@ class _ShimmerRail extends StatelessWidget {
         : SourcePosterRow.posterWidth;
     // The loaded rail sizes to its tallest card; Continue Watching mixes
     // episodes (with a caption line) and movies, so the skeleton assumes the
-    // caption, which is also what All servers always shows (server name).
+    // caption, which is also what All servers always shows (server name),
+    // and a time-left label (heightFor's default).
     final railHeight = landscape
         ? ContinueWatchingCard.heightFor(context, hasCaption: true)
         : SourcePosterRow.rowHeight;

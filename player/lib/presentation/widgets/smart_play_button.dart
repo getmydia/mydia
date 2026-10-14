@@ -201,6 +201,14 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
+          ).copyWith(
+            // The default focus overlay is invisible on a white fill, so a
+            // focused pill gets a gold outline.
+            side: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.focused)
+                  ? const BorderSide(color: AppColors.primary, width: 2)
+                  : null,
+            ),
           ),
         ),
         if (hasMultiple) ...[
