@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/detail/detail_art.dart';
 import '../../widgets/detail_art_image.dart';
+import '../../widgets/shell_rail_inset.dart';
 import 'detail_sections.dart' show kDetailHeroBreakpoint;
 
 /// The detail hero's background: artwork, the bottom-darkening gradient, an
@@ -63,7 +64,13 @@ class DetailHeroBackground extends StatelessWidget {
           ),
         ),
         if (overlay != null)
-          Positioned(left: 20, right: 20, bottom: 20, child: overlay),
+          // The art runs under the rail; the title block stays beside it.
+          Positioned(
+            left: 20 + ShellRailInset.of(context),
+            right: 20,
+            bottom: 20,
+            child: overlay,
+          ),
         if (bottom != null)
           Positioned(left: 0, right: 0, bottom: 0, child: bottom),
       ],

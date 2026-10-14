@@ -21,6 +21,7 @@ import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/cast_bar/dock_extents.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 import 'package:player/presentation/widgets/nav/floating_rail.dart';
+import 'package:player/presentation/widgets/shell_rail_inset.dart';
 
 import '../screens/sources/fake_capable_source.dart';
 import '../screens/sources/fake_media_source.dart';
@@ -298,6 +299,81 @@ void main() {
     expect(tester.getBottomLeft(find.byKey(_railKey)).dy, 800 - 21 - 16);
     expect(tester.getTopLeft(find.byKey(contentKey)).dx, baseContentLeft + 44);
     expect(reported.last, Breakpoints.railContentInset(pinned: false) + 44);
+  });
+
+  group('full-bleed content (detail pages run their art under the rail)', () {
+    Future<double> pumpLayers(
+      WidgetTester tester, {
+      required bool fullBleed,
+      bool pinned = false,
+      required List<double> insetSeen,
+    }) async {
+      _setSize(tester, const Size(1280, 800));
+      final railScope = FocusScopeNode();
+      final contentScope = FocusScopeNode();
+      final railRow = FocusNode();
+      addTearDown(railScope.dispose);
+      addTearDown(contentScope.dispose);
+      addTearDown(railRow.dispose);
+      const contentKey = Key('bleed-content');
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _overrides(),
+          child: MaterialApp(
+            home: Scaffold(
+              body: AppShell.railLayers(
+                regionsEnabled: false,
+                contentLeft: Breakpoints.railContentInset(pinned: pinned),
+                fullBleedContent: fullBleed,
+                railScope: railScope,
+                contentScope: contentScope,
+                boundary: SidebarFocusBoundary(
+                  sidebarNode: railRow,
+                  contentScope: contentScope,
+                ),
+                content: Builder(builder: (context) {
+                  insetSeen.add(ShellRailInset.of(context));
+                  return const SizedBox.expand(key: contentKey);
+                }),
+                railBuilder: (onExitRequested) => FloatingRail(
+                  location: '/',
+                  onNavigate: (_) {},
+                  isOffline: false,
+                  selectedRowFocusNode: railRow,
+                  onExitRequested: onExitRequested,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return tester.getTopLeft(find.byKey(contentKey)).dx;
+    }
+
+    testWidgets('the column starts at the window edge, the inset is published',
+        (tester) async {
+      final seen = <double>[];
+      final left = await pumpLayers(tester, fullBleed: true, insetSeen: seen);
+      expect(left, 0);
+      expect(seen.last, Breakpoints.railContentInset(pinned: false));
+    });
+
+    testWidgets('a pinned rail widens the published inset, not the column',
+        (tester) async {
+      final seen = <double>[];
+      final left = await pumpLayers(tester,
+          fullBleed: true, pinned: true, insetSeen: seen);
+      expect(left, 0);
+      expect(seen.last, Breakpoints.railContentInset(pinned: true));
+    });
+
+    testWidgets('other pages are still padded by the shell', (tester) async {
+      final seen = <double>[];
+      final left = await pumpLayers(tester, fullBleed: false, insetSeen: seen);
+      expect(left, Breakpoints.railContentInset(pinned: false));
+      expect(seen.last, Breakpoints.railContentInset(pinned: false));
+    });
   });
 
   testWidgets('sidebarChrome reports the pinned rail footprint (312)',

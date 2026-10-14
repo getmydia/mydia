@@ -15,6 +15,7 @@ import 'package:player/core/auth/auth_service.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/router/app_router.dart';
+import 'package:player/core/router/detail_location.dart';
 import 'package:player/core/router/navigator_keys.dart';
 import 'package:player/core/router/push_route.dart';
 import 'package:player/core/router/source_detail_routes.dart';
@@ -49,6 +50,47 @@ final _detailNames = {
 /// real `AppShell` is given as `location`.
 String? _shellLocation;
 
+/// The location of the page on top, as `AppShell` reads it to decide whether
+/// the page runs under the rail.
+String? _topLocation;
+
+/// Reads the top page's location the way `AppShell` does: it listens to the
+/// router delegate, because a push does not rebuild the shell route's builder.
+class _TopProbe extends StatefulWidget {
+  const _TopProbe({required this.child});
+  final Widget child;
+
+  @override
+  State<_TopProbe> createState() => _TopProbeState();
+}
+
+class _TopProbeState extends State<_TopProbe> {
+  GoRouter? _router;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _router?.routerDelegate.removeListener(_changed);
+    _router = GoRouter.of(context)..routerDelegate.addListener(_changed);
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _router?.routerDelegate.removeListener(_changed);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _topLocation = _router?.state.uri.toString();
+    return widget.child;
+  }
+}
+
 Future<GoRouter> _pumpShellRouter(
   WidgetTester tester, {
   String initialLocation = '/',
@@ -60,9 +102,11 @@ Future<GoRouter> _pumpShellRouter(
       ShellRoute(
         builder: (context, state, child) {
           _shellLocation = state.matchedLocation;
-          return Column(
-            key: _shellKey,
-            children: [Expanded(child: child)],
+          return _TopProbe(
+            child: Column(
+              key: _shellKey,
+              children: [Expanded(child: child)],
+            ),
           );
         },
         routes: [
@@ -184,6 +228,9 @@ void main() {
     // the rail keeps that row selected without any help. (A `go` or a deep
     // link names the detail location instead; `shellNavLocation` covers it.)
     expect(_shellLocation, '/');
+    // The shell still learns which page is on top, which is how it lets a
+    // detail page run its art under the rail.
+    expect(isDetailLocation(_topLocation!), isTrue);
 
     // The in-page back button pops, it does not go home.
     await tester.tap(find.byTooltip('Back'));
@@ -192,6 +239,7 @@ void main() {
     expect(_inShell(find.byKey(_homeKey)), findsOneWidget);
     expect(router.state.uri.path, '/');
     expect(_shellLocation, '/');
+    expect(isDetailLocation(_topLocation!), isFalse);
   });
 
   testWidgets('Back works through the navigator for browser and Android back',

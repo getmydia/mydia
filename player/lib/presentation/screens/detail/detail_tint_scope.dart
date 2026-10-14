@@ -7,9 +7,9 @@ import '../../../domain/detail/detail_art.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/source_artwork.dart';
 
-/// Gives a detail screen the tint of its own artwork. Detail routes are
-/// pushed outside the shell, and the shell's tint follows whatever card was
-/// last focused, so the screen resolves its own. Arriving from a focused
+/// Gives a detail screen the tint of its own artwork. Detail routes render
+/// inside the shell, but the shell's tint follows whatever card was last
+/// focused, so the screen resolves its own. Arriving from a focused
 /// card is normally a cache hit, so the colour carries across.
 class DetailTintScope extends ConsumerWidget {
   const DetailTintScope({super.key, required this.art, required this.child});

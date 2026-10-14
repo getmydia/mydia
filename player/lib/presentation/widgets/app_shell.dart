@@ -30,6 +30,7 @@ import 'nav/current_source.dart';
 import 'nav/floating_rail.dart';
 import 'nav/mobile_drawer.dart';
 import 'offline_banner.dart';
+import 'shell_rail_inset.dart';
 import 'toast/toaster.dart';
 import 'update_banner.dart';
 
@@ -181,6 +182,7 @@ class AppShell extends ConsumerStatefulWidget {
     required SidebarFocusBoundary boundary,
     required Widget content,
     required Widget Function(VoidCallback onExitRequested) railBuilder,
+    bool fullBleedContent = false,
   }) =>
       Builder(
         builder: (context) {
@@ -188,6 +190,11 @@ class AppShell extends ConsumerStatefulWidget {
           // column and the reported footprint start that much further in.
           final safeLeft = MediaQuery.paddingOf(context).left;
           final left = contentLeft + safeLeft;
+          final duration =
+              context.reducedMotionDuration(DepthTokens.motionMedium);
+          // [fullBleedContent]: the page runs under the rail to the window's
+          // left edge and insets its own content by `ShellRailInset`, which
+          // is published either way and animates with the rail.
           return Stack(
             fit: StackFit.expand,
             children: [
@@ -202,23 +209,31 @@ class AppShell extends ConsumerStatefulWidget {
               ),
               Positioned.fill(
                 child: AnimatedPadding(
-                  duration:
-                      context.reducedMotionDuration(DepthTokens.motionMedium),
+                  duration: duration,
                   curve: DepthTokens.curveStandard,
-                  padding: EdgeInsets.only(left: left),
-                  // The column is already inset, so screens inside it must
-                  // not apply the same safe-area gap a second time.
+                  padding: EdgeInsets.only(left: fullBleedContent ? 0 : left),
+                  // The column is already inset (or the page insets itself
+                  // by `ShellRailInset`, which includes the safe area), so
+                  // screens inside it must not apply the same safe-area gap
+                  // a second time.
                   child: MediaQuery.removePadding(
                     context: context,
                     removeLeft: true,
-                    child: _AppShellState._region(
-                      enabled: regionsEnabled,
-                      node: contentScope,
-                      onExit: (direction) =>
-                          direction == TraversalDirection.left
-                              ? boundary.focusSidebar()
-                              : false,
-                      child: content,
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween<double>(end: left),
+                      duration: duration,
+                      curve: DepthTokens.curveStandard,
+                      child: _AppShellState._region(
+                        enabled: regionsEnabled,
+                        node: contentScope,
+                        onExit: (direction) =>
+                            direction == TraversalDirection.left
+                                ? boundary.focusSidebar()
+                                : false,
+                        child: content,
+                      ),
+                      builder: (context, inset, child) =>
+                          ShellRailInset(left: inset, child: child!),
                     ),
                   ),
                 ),
@@ -331,6 +346,11 @@ class _AppShellState extends ConsumerState<AppShell>
     super.didUpdateWidget(oldWidget);
     _rememberOrigin();
   }
+
+  /// The location of the page on top of the shell's navigator. Differs from
+  /// `widget.location` after a push, which leaves the shell on the location it
+  /// was entered at.
+  String _topLocation() => _router?.state.uri.toString() ?? widget.location;
 
   void _rememberOrigin() {
     if (!isDetailLocation(widget.location)) _originLocation = widget.location;
@@ -505,6 +525,7 @@ class _AppShellState extends ConsumerState<AppShell>
     );
 
     if (showsRail) {
+      final fullBleed = isDetailLocation(_topLocation());
       final pinned = ref.watch(railPinnedProvider);
       final contentLeft = Breakpoints.railContentInset(pinned: pinned);
       final chrome = WindowChromeInsets.of(context);
@@ -520,6 +541,10 @@ class _AppShellState extends ConsumerState<AppShell>
                 railScope: _sidebarScopeNode,
                 contentScope: _contentScopeNode,
                 boundary: _focusBoundary,
+                // A detail page runs its artwork under the rail. The page on
+                // top decides, not the shell's own location: a detail page
+                // pushed from Home leaves that at Home.
+                fullBleedContent: fullBleed,
                 // The rail already covers the leading window-control
                 // reserve, so the content column narrows what it keeps
                 // clear to `AppShell.contentInsets` before its own screen
@@ -529,7 +554,12 @@ class _AppShellState extends ConsumerState<AppShell>
                   child: AppShell.contentGutter(
                     child: Column(
                       children: [
-                        AppShell.bannerArea(child: _banners(isOffline)),
+                        AppShell.bannerArea(
+                          // The banners belong beside the rail, not under it.
+                          child: fullBleed
+                              ? RailInsetPadding(child: _banners(isOffline))
+                              : _banners(isOffline),
+                        ),
                         Expanded(child: widget.child),
                       ],
                     ),

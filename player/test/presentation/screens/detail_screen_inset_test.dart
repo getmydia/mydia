@@ -17,6 +17,7 @@ import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/presentation/screens/detail/detail_states.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
+import 'package:player/presentation/widgets/shell_rail_inset.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../helpers/cast_test_overrides.dart';
@@ -138,10 +139,11 @@ void main() {
     });
   });
 
-  group('detailHeroAppBar in the shell content column on macOS', () {
-    // The shell pads the column by the collapsed rail (88) and narrows the
-    // window-control reserve with `AppShell.contentInsets`, then the page
-    // draws its own title row into the band.
+  group('detailHeroAppBar in the shell, art under the rail, on macOS', () {
+    // The shell gives a detail page the full width, publishes the collapsed
+    // rail's footprint (88) as `ShellRailInset` and narrows the window-control
+    // reserve with `AppShell.contentInsets`; the page draws its own title row
+    // into the band.
     Future<void> pumpInShell(WidgetTester tester) async {
       tester.view.physicalSize = const Size(1300, 800);
       tester.view.devicePixelRatio = 1;
@@ -157,8 +159,8 @@ void main() {
             child: WindowChromeInsets.scope(
               insets: AppShell.contentInsets(_mac),
               child: MaterialApp(
-                home: Padding(
-                  padding: const EdgeInsets.only(left: 88),
+                home: ShellRailInset(
+                  left: 88,
                   child: WindowChromeInsets.removeBand(
                     child: Builder(
                       builder: (context) => Scaffold(
@@ -188,13 +190,14 @@ void main() {
     }
 
     testWidgets(
-        'the hero runs to the top of the column and starts at the rail edge',
+        'the hero runs to the window top and left edges, under the rail',
         (tester) async {
       await pumpInShell(tester);
 
       final hero = tester.getRect(find.byKey(_heroKey));
       expect(hero.top, 0);
-      expect(hero.left, 88);
+      expect(hero.left, 0);
+      expect(hero.width, 1300);
     });
 
     testWidgets(
