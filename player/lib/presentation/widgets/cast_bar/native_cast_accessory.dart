@@ -73,6 +73,10 @@ class _NativeCastAccessoryState extends ConsumerState<NativeCastAccessory> {
       ref.read(nativeTabBarChannelProvider);
   StreamSubscription<NativeTabBarEvent>? _events;
 
+  /// The native accessory sits above Flutter's modal barrier, so it can be
+  /// tapped again while the sheet is up.
+  bool _sheetOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -89,11 +93,17 @@ class _NativeCastAccessoryState extends ConsumerState<NativeCastAccessory> {
   void _onEvent(NativeTabBarEvent event) {
     switch (event) {
       case NativeAccessoryTapped():
-        if (!mounted) return;
+        if (!mounted || _sheetOpen) return;
+        _sheetOpen = true;
         // The router's root navigator, so the sheet covers the shell; the
         // fallback is for widget tests, which have no router.
         unawaited(
-            showCastControlsSheet(rootNavigatorKey.currentContext ?? context));
+          showCastControlsSheet(
+            rootNavigatorKey.currentContext ?? context,
+          ).whenComplete(() {
+            if (mounted) _sheetOpen = false;
+          }),
+        );
       case NativeAccessoryPlayPause():
         unawaited(_togglePlayback());
       case NativeTabSelected() || NativeInsetsChanged():

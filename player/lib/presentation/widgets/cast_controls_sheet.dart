@@ -26,8 +26,13 @@ class CastControlsSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Casting ended while the sheet was open: an empty sheet is useless.
+    // Remove this sheet's own route rather than popping the top one: a
+    // confirm dialog from the controller may be open above it.
+    final route = ModalRoute.of(context);
     ref.listen(castBarStateProvider, (previous, next) {
-      if (next == null) Navigator.of(context).maybePop();
+      if (next == null && route != null && route.isActive) {
+        Navigator.of(context).removeRoute(route);
+      }
     });
     return const SafeArea(
       top: false,

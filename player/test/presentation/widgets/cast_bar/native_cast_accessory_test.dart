@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -264,6 +266,42 @@ void main() {
       ]);
       await tester.pumpAndSettle();
       expect(find.byType(CastControlsSheet), findsNothing);
+    });
+
+    testWidgets('a second tap while the sheet is open opens no second sheet',
+        (tester) async {
+      await pump(tester, state: const CastBarIdle(_device));
+      await fromNative(tester, 'accessoryTapped');
+      await fromNative(tester, 'accessoryTapped');
+      await tester.pumpAndSettle();
+      expect(find.byType(CastControlsSheet), findsOneWidget);
+    });
+
+    testWidgets(
+        'the sheet closes itself, leaving a dialog above it open, when '
+        'there is nothing left to show', (tester) async {
+      final container = await pump(tester, state: const CastBarIdle(_device));
+      await fromNative(tester, 'accessoryTapped');
+      await tester.pumpAndSettle();
+      unawaited(showDialog<void>(
+        context: tester.element(find.byType(CastControlsSheet)),
+        useRootNavigator: true,
+        builder: (_) => const AlertDialog(title: Text('Stop playback?')),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text('Stop playback?'), findsOneWidget);
+
+      container.updateOverrides([
+        castBarStateProvider.overrideWithValue(null),
+        nativeTabBarChannelProvider.overrideWith((ref) {
+          final channel = NativeTabBarChannel(channel: _channel);
+          ref.onDispose(channel.dispose);
+          return channel;
+        }),
+      ]);
+      await tester.pumpAndSettle();
+      expect(find.byType(CastControlsSheet), findsNothing);
+      expect(find.text('Stop playback?'), findsOneWidget);
     });
   });
 }
