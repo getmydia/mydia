@@ -16,7 +16,6 @@ import '../../../domain/sources/source_error.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/media_context_menu.dart';
-import '../../widgets/shell_rail_inset.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../home/home_loading_skeleton.dart';
@@ -130,12 +129,8 @@ class AllServersHomeScreen extends ConsumerWidget {
     return RefreshIndicator(
       edgeOffset: chromeTop,
       onRefresh: () async => _refresh(ref),
-      // The hero's backdrop runs under the rail: the viewport lets it paint
-      // left of the column and RailBleed clips the rest.
-      child: RailBleed(
-          child: ListView(
+      child: ListView(
         key: const Key('all-servers-home'),
-        clipBehavior: Clip.none,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
             0, chromeTop + 16, 0, DockInsets.bottomOf(context)),
@@ -223,7 +218,7 @@ class AllServersHomeScreen extends ConsumerWidget {
               child: Center(child: Text('Nothing to show yet.')),
             ),
         ],
-      )),
+      ),
     );
   }
 

@@ -15,7 +15,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
-import '../../widgets/shell_rail_inset.dart';
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
 import 'source_home_hero_backdrop.dart';
@@ -182,12 +181,10 @@ class SourceHomeHero extends ConsumerWidget {
     required double padding,
     required double top,
   }) {
-    final inset = wide ? ShellRailInset.of(context) : 0.0;
     final layer = HomeHeroBackdrop(
       key: backdropKey,
       request: request,
       wide: wide,
-      inset: inset,
       padding: padding,
       posterSize: posterSize,
       gap: _wideGap,
@@ -195,7 +192,7 @@ class SourceHomeHero extends ConsumerWidget {
     );
     if (wide) {
       return Positioned(
-        left: -inset,
+        left: 0,
         right: 0,
         top: -bleedTop,
         bottom: 0,

@@ -6,7 +6,6 @@ import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/sources/source_home_hero.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
 import 'package:player/presentation/widgets/artwork_image.dart';
-import 'package:player/presentation/widgets/shell_rail_inset.dart';
 
 import 'fake_media_source.dart';
 
@@ -128,9 +127,7 @@ void main() {
     const backdropKey = SourceHomeHero.backdropKey;
     const railInset = 96.0;
 
-    // The shell's Home column: padded by the rail's footprint, which it also
-    // publishes, with the list's viewport left unclipped and RailBleed
-    // clipping the rest.
+    // The shell's Home column: padded by the rail's footprint.
     Future<void> pumpInShell(
       WidgetTester tester,
       Size size, {
@@ -156,19 +153,13 @@ void main() {
             child: child!,
           ),
           home: Scaffold(
-            body: ShellRailInset(
-              left: inset,
-              child: Padding(
-                padding: EdgeInsets.only(left: inset),
-                child: RailBleed(
-                  child: SingleChildScrollView(
-                    clipBehavior: Clip.none,
-                    child: SourceHomeHero(
-                      sourceId: fakeSourceId,
-                      item: item ?? _movie(),
-                      bleedTop: bleedTop,
-                    ),
-                  ),
+            body: Padding(
+              padding: EdgeInsets.only(left: inset),
+              child: SingleChildScrollView(
+                child: SourceHomeHero(
+                  sourceId: fakeSourceId,
+                  item: item ?? _movie(),
+                  bleedTop: bleedTop,
                 ),
               ),
             ),
@@ -186,18 +177,33 @@ void main() {
           ),
         );
 
-    testWidgets('wide: runs under the rail to the window edge and top',
+    testWidgets('wide: fills the hero, from the window top to the rail row',
         (tester) async {
       await pumpInShell(tester, const Size(1280, 800));
 
+      // The shell's navigator clips pages at the column, so the art cannot
+      // start under the rail; it fills the column and fades in at its edge.
       final backdrop = tester.getRect(find.byKey(backdropKey));
       final hero = tester.getRect(find.byType(SourceHomeHero));
-      expect(backdrop.left, 0, reason: 'under the rail');
+      expect(backdrop, hero);
       expect(backdrop.top, 0);
       expect(backdrop.right, 1280);
-      expect(backdrop.bottom, hero.bottom,
-          reason: 'it ends with the hero, fully on the ground');
       expect(hero.left, railInset);
+    });
+
+    testWidgets('the art is masked out at the bottom and faded in at the left',
+        (tester) async {
+      await pumpInShell(tester, const Size(1280, 800));
+
+      final masks = find.descendant(
+        of: find.byKey(backdropKey),
+        matching: find.byType(ShaderMask),
+      );
+      expect(masks, findsNWidgets(2), reason: 'left ramp, bottom fade');
+      for (final mask in tester.widgetList<ShaderMask>(masks)) {
+        expect(mask.blendMode, BlendMode.dstIn,
+            reason: 'it dissolves the art, it does not tint it');
+      }
     });
 
     testWidgets('wide: the poster and text sit where they did before',
