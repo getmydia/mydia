@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/presentation/screens/detail/detail_states.dart';
+import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
@@ -134,6 +135,87 @@ void main() {
       final backRect = tester.getRect(find.byKey(_backKey));
       expect(backRect.left, greaterThanOrEqualTo(80));
       expect(backRect.top, inInclusiveRange(0, 40));
+    });
+  });
+
+  group('detailHeroAppBar in the shell content column on macOS', () {
+    // The shell pads the column by the collapsed rail (88) and narrows the
+    // window-control reserve with `AppShell.contentInsets`, then the page
+    // draws its own title row into the band.
+    Future<void> pumpInShell(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1300, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: castCapableOverrides(),
+          child: MediaQuery(
+            data: MediaQueryData(
+              size: const Size(1300, 800),
+              padding: EdgeInsets.only(top: _mac.height),
+            ),
+            child: WindowChromeInsets.scope(
+              insets: AppShell.contentInsets(_mac),
+              child: MaterialApp(
+                home: Padding(
+                  padding: const EdgeInsets.only(left: 88),
+                  child: WindowChromeInsets.removeBand(
+                    child: Builder(
+                      builder: (context) => Scaffold(
+                        body: CustomScrollView(
+                          slivers: [
+                            detailHeroAppBar(
+                              context: context,
+                              expandedHeight: 380,
+                              back: const Icon(Icons.arrow_back_rounded,
+                                  key: _backKey),
+                              background: const ColoredBox(
+                                  color: Colors.blue, key: _heroKey),
+                            ),
+                            const SliverToBoxAdapter(
+                                child: SizedBox(height: 2000)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets(
+        'the hero runs to the top of the column and starts at the rail edge',
+        (tester) async {
+      await pumpInShell(tester);
+
+      final hero = tester.getRect(find.byKey(_heroKey));
+      expect(hero.top, 0);
+      expect(hero.left, 88);
+    });
+
+    testWidgets(
+        'the back button stays in the band without reserving the lights twice',
+        (tester) async {
+      await pumpInShell(tester);
+
+      final back = tester.getRect(find.byKey(_backKey));
+      // Past the rail, but not pushed a further 80 for the traffic lights the
+      // rail already covers.
+      expect(back.left, greaterThanOrEqualTo(88));
+      expect(back.left, lessThan(88 + 80));
+      expect((back.center.dy - 20).abs(), lessThan(1));
+    });
+
+    testWidgets('the cast button keeps the shared trailing gutter',
+        (tester) async {
+      await pumpInShell(tester);
+
+      expect(
+          tester.getRect(find.byKey(WindowTitleRow.castKey)).right, 1300 - 24);
     });
   });
 

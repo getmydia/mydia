@@ -12,7 +12,6 @@ import '../../presentation/screens/show/show_detail_screen.dart';
 import '../../presentation/screens/sources/source_item_screen.dart';
 import '../../presentation/screens/sources/source_season_route.dart';
 import '../sources/source.dart';
-import 'navigator_keys.dart';
 
 ItemRef _refOf(GoRouterState state, ItemKind kind) => ItemRef(
       sourceId: SourceId(state.pathParameters['sourceId']!),
@@ -37,12 +36,13 @@ GoRoute sourceItemRoute() => GoRoute(
           SourceItemScreen(item: _refOf(state, _kindParam(state))),
     );
 
-/// Full-window source detail routes, beside `/movie/:id`.
+/// Source detail routes. They are registered inside the shell route, so the
+/// rail (or the phone bottom bar) stays beside them; a push from a card adds
+/// a page to the shell's own navigator and Back pops to where the viewer was.
 List<GoRoute> sourceDetailRoutes() => [
       GoRoute(
         path: '/s/:sourceId/movie/:itemId',
         name: 'source_movie_detail',
-        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => MovieDetailScreen.target(
           target: SourceTarget(_refOf(state, ItemKind.movie)),
         ),
@@ -50,7 +50,6 @@ List<GoRoute> sourceDetailRoutes() => [
       GoRoute(
         path: '/s/:sourceId/show/:itemId',
         name: 'source_show_detail',
-        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => ShowDetailScreen.target(
           target: SourceTarget(_refOf(state, ItemKind.show)),
         ),
@@ -58,14 +57,12 @@ List<GoRoute> sourceDetailRoutes() => [
       GoRoute(
         path: '/s/:sourceId/season/:itemId',
         name: 'source_season_detail',
-        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) =>
             SourceSeasonRoute(season: _refOf(state, ItemKind.season)),
       ),
       GoRoute(
         path: '/s/:sourceId/episode/:itemId',
         name: 'source_episode_detail',
-        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => EpisodeDetailScreen.target(
           target: SourceTarget(_refOf(state, ItemKind.episode)),
         ),

@@ -6,8 +6,10 @@ import 'window_chrome/window_title_row.dart';
 
 /// The pinned header of the movie, show and episode detail screens.
 ///
-/// The hero art runs to the window's top edge, behind the window controls,
-/// and the title row (back, cast) sits in the band on top of it. Before the
+/// The hero art runs to the top of the shell's content column, which is the
+/// window's top edge, behind the window controls, and the title row (back,
+/// cast) sits in the band on top of it. Its leading edge is the column's, not
+/// the window's: the floating rail sits to the left of it. Before the
 /// window-control band existed, each of these screens reserved a flat
 /// `AppBar`-height strip and put its own translucent back button and cast
 /// button in `leading`/`actions`; that strip is gone, and this builder is

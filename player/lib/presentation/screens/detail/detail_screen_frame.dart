@@ -12,10 +12,13 @@ import 'detail_tint_scope.dart';
 
 /// The page frame every detail screen shares.
 ///
-/// A detail screen is a full-window route (pushed outside the shell), and so
-/// the sole owner of the title-bar band: the body has to sit under
+/// A detail screen renders in the shell's content column, beside the rail (or
+/// above the phone bottom bar). Like every other in-shell page it draws its
+/// own title row into the title-bar band, so the body has to sit under
 /// `removeBand`, or the ambient `MediaQuery.padding.top` still carries the
-/// band on top of the hero's own title row a second time.
+/// band on top of the hero's own title row a second time. The shell narrows
+/// `WindowChromeInsets` to the column (`AppShell.contentInsets`), so the back
+/// button clears the window controls only where the rail does not already.
 class DetailScreenFrame<T> extends StatelessWidget {
   const DetailScreenFrame({
     super.key,

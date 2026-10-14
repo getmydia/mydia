@@ -14,6 +14,7 @@ import '../../core/focus/region_traversal_policy.dart';
 import '../../core/focus/sidebar_focus_boundary.dart';
 import '../../core/layout/window_chrome_inset.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
+import '../../core/router/detail_location.dart';
 import '../../core/router/root_routes.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/depth_tokens.dart';
@@ -319,9 +320,26 @@ class _AppShellState extends ConsumerState<AppShell>
     contentScope: _contentScopeNode,
   );
 
+  /// The last non-detail location the shell showed. A detail page belongs to
+  /// no navigation row, so the rail, drawer and bottom bar read this instead
+  /// (see [shellNavLocation]). Null until the shell has shown one: a deep link
+  /// straight to a detail page.
+  String? _originLocation;
+
+  @override
+  void didUpdateWidget(AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _rememberOrigin();
+  }
+
+  void _rememberOrigin() {
+    if (!isDetailLocation(widget.location)) _originLocation = widget.location;
+  }
+
   @override
   void initState() {
     super.initState();
+    _rememberOrigin();
     _collectionAutoSync = ref.read(collectionAutoSyncProvider)(ref);
     _collectionAutoSync!.install(
       enabled: isDownloadSupported,
@@ -456,7 +474,10 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   Widget build(BuildContext context) {
-    final location = widget.location;
+    // What the navigation reads: the page itself, or for a detail page the
+    // page it was opened from. Banners and offline gating keep using the real
+    // location, whose source is the one on screen either way.
+    final location = shellNavLocation(widget.location, origin: _originLocation);
     final showBackToMydia = isEmbedMode;
     final isOffline = _isOfflineMode();
 

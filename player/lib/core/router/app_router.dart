@@ -555,6 +555,9 @@ GoRouter appRouter(Ref ref) {
             ),
           ),
           sourceItemRoute(),
+          // Movie, show, season and episode pages sit in the shell too, so
+          // the rail stays beside them; only the player is immersive.
+          ...sourceDetailRoutes(),
           sourceSearchRoute(),
           for (final (path, name, build) in _sourceListings)
             GoRoute(
@@ -579,7 +582,8 @@ GoRouter appRouter(Ref ref) {
         ],
       ),
 
-      // Detail routes - outside shell
+      // Full-window routes, outside the shell. The unprefixed detail routes
+      // below only redirect (see `legacy_routes.dart`).
       GoRoute(
         path: '/settings/devices',
         name: 'devices',
@@ -598,8 +602,7 @@ GoRouter appRouter(Ref ref) {
         parentNavigatorKey: rootNavigatorKey,
         builder: _legacyStub,
       ),
-      // Full window, like the item detail routes: the screen owns the
-      // title-bar band.
+      // Still full window: the screen owns the title-bar band.
       GoRoute(
         path: '/s/:sourceId/collection/:collectionId',
         name: 'source_collection',
@@ -627,7 +630,6 @@ GoRouter appRouter(Ref ref) {
         parentNavigatorKey: rootNavigatorKey,
         builder: _legacyStub,
       ),
-      ...sourceDetailRoutes(),
       GoRoute(
         path: '/s/:sourceId/player/:itemId',
         name: 'source_player',
