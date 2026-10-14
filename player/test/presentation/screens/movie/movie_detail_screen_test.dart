@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/presentation/screens/detail/detail_sections.dart';
 import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
@@ -53,6 +54,30 @@ void main() {
     expect(find.text('Play'), findsOneWidget);
     expect(find.byType(DetailActionRow), findsOneWidget);
     expect(find.byType(CastRail), findsOneWidget);
+  });
+
+  testWidgets('overview is its own section and not repeated in the tag column',
+      (tester) async {
+    await _pumpScreen(tester, const Size(1000, 1400));
+
+    expect(find.byType(DetailOverview), findsOneWidget);
+    expect(find.text('Overview'), findsOneWidget);
+    expect(find.byType(CastRail), findsOneWidget);
+    expect(find.text('Ana Bergstrom'), findsOneWidget);
+    const overview = 'A drifting research platform runs out of air.';
+    expect(find.text(overview), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(DetailTagColumn),
+        matching: find.text(overview),
+      ),
+      findsNothing,
+    );
+    // Same order as the show page: cast first, overview below it.
+    expect(
+      tester.getTopLeft(find.byType(DetailOverview)).dy,
+      greaterThan(tester.getBottomLeft(find.byType(CastRail)).dy),
+    );
   });
 
   testWidgets('narrow layout still renders the action column and tags',

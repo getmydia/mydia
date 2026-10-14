@@ -67,6 +67,11 @@ void main() {
     expect(d.contentRating, 'PG');
     expect(d.rating, 7.4);
     expect(d.isFavorite, isTrue);
+    expect(d.cast.single.name, 'Tomas Reyne');
+    expect(d.cast.single.role, 'Beekeeper');
+    expect(
+        d.cast.single.photo, const ArtworkRef('https://img.example/tomas.jpg'));
+    expect(d.trailerUrl, 'https://video.example/orchard-trailer');
     final v = d.versions.single;
     expect(v.id, 'f-m-1');
     expect(v.videoCodec, 'hevc');

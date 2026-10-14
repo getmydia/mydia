@@ -78,6 +78,13 @@ class MovieDetailScreen extends ConsumerWidget {
           ),
         ),
         SliverToBoxAdapter(child: DetailSimilarRail(movie: movie)),
+        if (movie.overview case final overview? when overview.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 24),
+              child: DetailOverview(overview: overview),
+            ),
+          ),
         const SliverDockGap(),
       ],
     );
@@ -131,7 +138,6 @@ class MovieDetailScreen extends ConsumerWidget {
         if (movie.contentRating case final rating?) rating,
         ...movie.genres,
       ],
-      overview: movie.overview,
       rating: movie.ratingDisplay,
     );
   }

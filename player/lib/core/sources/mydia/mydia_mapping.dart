@@ -299,12 +299,23 @@ ItemDetail movieDetail(SourceId sid, Map<String, dynamic> m) {
     rating: _rating(m['rating']),
     contentRating: m['contentRating'] as String?,
     isFavorite: m['isFavorite'] as bool? ?? false,
+    trailerUrl: m['trailerUrl'] as String?,
+    cast: _castOf(m['cast']),
     versions: [
       for (final f in _list(m['files']))
         mediaVersion(f, durationSeconds: summary.durationSeconds),
     ],
   );
 }
+
+List<Person> _castOf(Object? cast) => [
+      for (final c in _list(cast))
+        Person(
+          name: c['name'] as String? ?? '',
+          role: c['character'] as String?,
+          photo: _art(c['profileUrl']),
+        ),
+    ];
 
 ItemDetail showDetail(SourceId sid, Map<String, dynamic> s) => ItemDetail(
       summary: showSummary(sid, s),
@@ -314,14 +325,7 @@ ItemDetail showDetail(SourceId sid, Map<String, dynamic> s) => ItemDetail(
       contentRating: s['contentRating'] as String?,
       isFavorite: s['isFavorite'] as bool? ?? false,
       trailerUrl: s['trailerUrl'] as String?,
-      cast: [
-        for (final c in _list(s['cast']))
-          Person(
-            name: c['name'] as String? ?? '',
-            role: c['character'] as String?,
-            photo: _art(c['profileUrl']),
-          ),
-      ],
+      cast: _castOf(s['cast']),
     );
 
 /// The poster a show's seasons borrow.
