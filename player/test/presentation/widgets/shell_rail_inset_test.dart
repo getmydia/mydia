@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderClipRect;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/detail_art_image.dart' show ArtSlot;
 import 'package:player/presentation/screens/detail/detail_hero.dart';
@@ -38,23 +39,40 @@ void main() {
     expect(tester.getTopLeft(find.byKey(_overlayKey)).dx, 20);
   });
 
-  testWidgets('RailInsetPadding and SliverRailInset inset by the rail',
+  testWidgets('the ground strip and art paint left of the padded column',
       (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: ShellRailInset(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: ShellRailInset(
           left: 88,
-          child: Scaffold(
-            body: CustomScrollView(
-              slivers: railInsetSlivers(const [
-                SliverToBoxAdapter(child: SizedBox(key: Key('a'), height: 10)),
-              ]),
+          child: Padding(
+            padding: EdgeInsets.only(left: 88),
+            child: RailBleed(
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    left: -88,
+                    top: 0,
+                    width: 88,
+                    height: 50,
+                    child: ColoredBox(
+                      key: Key('strip'),
+                      color: Color(0xFF123456),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
-    expect(tester.getTopLeft(find.byKey(const Key('a'))).dx, 88);
+    expect(tester.getTopLeft(find.byKey(const Key('strip'))).dx, 0);
+    // The clip lets it through on the left, by exactly the inset.
+    final clip = tester.renderObject<RenderClipRect>(find.byType(ClipRect));
+    expect(clip.clipper!.getClip(const Size(500, 500)).left, -88);
   });
 
   testWidgets('the inset is zero outside the shell', (tester) async {

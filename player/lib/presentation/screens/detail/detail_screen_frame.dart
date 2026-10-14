@@ -13,16 +13,15 @@ import 'detail_tint_scope.dart';
 
 /// The page frame every detail screen shares.
 ///
-/// A detail screen renders inside the shell, with the floating rail over it
-/// (or the phone bottom bar below it). The shell gives it the full width: its
-/// ground and hero art run to the window's left edge under the rail, and the
-/// content is inset by `ShellRailInset` (see `SliverRailInset`). Like every
-/// other in-shell page it draws its own title row into the title-bar band, so
-/// the body has to sit under `removeBand`, or the ambient
-/// `MediaQuery.padding.top` still carries the band on top of the hero's own
-/// title row a second time. The shell narrows `WindowChromeInsets` to the
-/// column (`AppShell.contentInsets`), so the back button clears the window
-/// controls only where the rail does not already.
+/// A detail screen renders in the shell's content column, beside the rail (or
+/// above the phone bottom bar), and paints its ground and hero art under the
+/// rail, left of the column by `ShellRailInset`, as Home's hero does. Text and
+/// controls stay in the column. Like every other in-shell page it draws its
+/// own title row into the title-bar band, so the body has to sit under
+/// `removeBand`, or the ambient `MediaQuery.padding.top` still carries the
+/// band on top of the hero's own title row a second time. The shell narrows
+/// `WindowChromeInsets` to the column (`AppShell.contentInsets`), so the back
+/// button clears the window controls only where the rail does not already.
 class DetailScreenFrame<T> extends StatelessWidget {
   const DetailScreenFrame({
     super.key,
@@ -55,31 +54,50 @@ class DetailScreenFrame<T> extends StatelessWidget {
       child: DetailTintScope(
         art: art,
         child: Builder(
-          builder: (context) => Scaffold(
-            backgroundColor: AmbientTint.of(context).ground,
-            extendBodyBehindAppBar: true,
-            body: Column(
+          builder: (context) {
+            final ground = AmbientTint.of(context).ground;
+            return Stack(
+              fit: StackFit.expand,
+              // The ground reaches under the rail, left of the column.
+              clipBehavior: Clip.none,
               children: [
-                RailInsetPadding(
-                  child: FreshnessHeader(
-                    queryKeys: freshnessKeys(target),
-                    topInset: freshnessTopInset(context, appBarHeight: 0),
-                  ),
+                Positioned(
+                  left: -ShellRailInset.of(context),
+                  top: 0,
+                  bottom: 0,
+                  width: ShellRailInset.of(context),
+                  child: ColoredBox(color: ground),
                 ),
-                Expanded(
-                  child: value.when(
-                    data: (data) => builder(context, data),
-                    loading: () => const DetailLoadingState(),
-                    error: (error, _) => DetailErrorState(
-                      noun: noun,
-                      error: error,
-                      onRetry: onRetry,
-                    ),
+                Scaffold(
+                  backgroundColor: ground,
+                  extendBodyBehindAppBar: true,
+                  body: Column(
+                    children: [
+                      FreshnessHeader(
+                        queryKeys: freshnessKeys(target),
+                        topInset: freshnessTopInset(context, appBarHeight: 0),
+                      ),
+                      Expanded(
+                        // Lets the hero art paint left of the column; clips
+                        // the other three edges as the viewport did.
+                        child: RailBleed(
+                          child: value.when(
+                            data: (data) => builder(context, data),
+                            loading: () => const DetailLoadingState(),
+                            error: (error, _) => DetailErrorState(
+                              noun: noun,
+                              error: error,
+                              onRetry: onRetry,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );

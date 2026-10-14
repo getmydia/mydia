@@ -182,7 +182,6 @@ class AppShell extends ConsumerStatefulWidget {
     required SidebarFocusBoundary boundary,
     required Widget content,
     required Widget Function(VoidCallback onExitRequested) railBuilder,
-    bool fullBleedContent = false,
   }) =>
       Builder(
         builder: (context) {
@@ -192,9 +191,8 @@ class AppShell extends ConsumerStatefulWidget {
           final left = contentLeft + safeLeft;
           final duration =
               context.reducedMotionDuration(DepthTokens.motionMedium);
-          // [fullBleedContent]: the page runs under the rail to the window's
-          // left edge and insets its own content by `ShellRailInset`, which
-          // is published either way and animates with the rail.
+          // `ShellRailInset` carries the same amount to the pages, animated
+          // with the rail, for the ones that paint under it.
           return Stack(
             fit: StackFit.expand,
             children: [
@@ -211,11 +209,13 @@ class AppShell extends ConsumerStatefulWidget {
                 child: AnimatedPadding(
                   duration: duration,
                   curve: DepthTokens.curveStandard,
-                  padding: EdgeInsets.only(left: fullBleedContent ? 0 : left),
-                  // The column is already inset (or the page insets itself
-                  // by `ShellRailInset`, which includes the safe area), so
-                  // screens inside it must not apply the same safe-area gap
-                  // a second time.
+                  // Constant for every page, so a page never slides when
+                  // another opens over it. A page that paints under the rail
+                  // (Home's hero, the detail art) reaches left by
+                  // `ShellRailInset` itself, see `RailBleed`.
+                  padding: EdgeInsets.only(left: left),
+                  // The column is already inset, so screens inside it must
+                  // not apply the same safe-area gap a second time.
                   child: MediaQuery.removePadding(
                     context: context,
                     removeLeft: true,
@@ -346,11 +346,6 @@ class _AppShellState extends ConsumerState<AppShell>
     super.didUpdateWidget(oldWidget);
     _rememberOrigin();
   }
-
-  /// The location of the page on top of the shell's navigator. Differs from
-  /// `widget.location` after a push, which leaves the shell on the location it
-  /// was entered at.
-  String _topLocation() => _router?.state.uri.toString() ?? widget.location;
 
   void _rememberOrigin() {
     if (!isDetailLocation(widget.location)) _originLocation = widget.location;
@@ -525,7 +520,6 @@ class _AppShellState extends ConsumerState<AppShell>
     );
 
     if (showsRail) {
-      final fullBleed = isDetailLocation(_topLocation());
       final pinned = ref.watch(railPinnedProvider);
       final contentLeft = Breakpoints.railContentInset(pinned: pinned);
       final chrome = WindowChromeInsets.of(context);
@@ -541,10 +535,6 @@ class _AppShellState extends ConsumerState<AppShell>
                 railScope: _sidebarScopeNode,
                 contentScope: _contentScopeNode,
                 boundary: _focusBoundary,
-                // A detail page runs its artwork under the rail. The page on
-                // top decides, not the shell's own location: a detail page
-                // pushed from Home leaves that at Home.
-                fullBleedContent: fullBleed,
                 // The rail already covers the leading window-control
                 // reserve, so the content column narrows what it keeps
                 // clear to `AppShell.contentInsets` before its own screen
@@ -554,12 +544,7 @@ class _AppShellState extends ConsumerState<AppShell>
                   child: AppShell.contentGutter(
                     child: Column(
                       children: [
-                        AppShell.bannerArea(
-                          // The banners belong beside the rail, not under it.
-                          child: fullBleed
-                              ? RailInsetPadding(child: _banners(isOffline))
-                              : _banners(isOffline),
-                        ),
+                        AppShell.bannerArea(child: _banners(isOffline)),
                         Expanded(child: widget.child),
                       ],
                     ),

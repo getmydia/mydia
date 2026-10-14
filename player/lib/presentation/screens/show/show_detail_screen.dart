@@ -19,7 +19,6 @@ import '../../../domain/sources/item.dart';
 import 'show_season_section.dart';
 import 'show_selection_providers.dart';
 import '../../widgets/detail_hero_app_bar.dart';
-import '../../widgets/shell_rail_inset.dart';
 import '../../../core/player/resume_plan.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/cast_rail.dart';
@@ -139,51 +138,51 @@ class ShowDetailScreen extends ConsumerWidget {
     final heroEpisode = _withDetailFiles(ref, selectedEpisode);
 
     return CustomScrollView(
+      // The hero art reaches under the rail; `DetailScreenFrame`'s RailBleed
+      // does the clipping.
+      clipBehavior: Clip.none,
       slivers: [
         _buildHeroSection(context, ref, show, heroEpisode),
-        // The hero runs under the rail; everything below it sits beside it.
-        ...railInsetSlivers([
-          SliverToBoxAdapter(
-            child: _buildEpisodeHeroBody(context, ref, show, heroEpisode),
+        SliverToBoxAdapter(
+          child: _buildEpisodeHeroBody(context, ref, show, heroEpisode),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 28),
+            child: CastRail(members: show.cast),
           ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 28),
-              child: CastRail(members: show.cast),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: DetailSimilarRail(show: show),
-          ),
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                // Status chip only. Content rating and genres live in the
-                // hero's tag row; repeating them here rendered each twice.
-                DetailMetadataWrap(chips: [
-                  if (show.status case final status? when status.isNotEmpty)
-                    DetailMetadataChip(
-                      label: status,
-                      color: status == 'Ended'
-                          ? AppColors.textSecondary
-                          : AppColors.success,
-                    ),
-                ]),
+        ),
+        SliverToBoxAdapter(
+          child: DetailSimilarRail(show: show),
+        ),
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 20),
+              // Status chip only. Content rating and genres live in the
+              // hero's tag row; repeating them here rendered each twice.
+              DetailMetadataWrap(chips: [
+                if (show.status case final status? when status.isNotEmpty)
+                  DetailMetadataChip(
+                    label: status,
+                    color: status == 'Ended'
+                        ? AppColors.textSecondary
+                        : AppColors.success,
+                  ),
+              ]),
+              const SizedBox(height: 24),
+              if (show.overview case final overview?) ...[
+                DetailOverview(overview: overview),
                 const SizedBox(height: 24),
-                if (show.overview case final overview?) ...[
-                  DetailOverview(overview: overview),
-                  const SizedBox(height: 24),
-                ],
-                if (show.seasons.isNotEmpty) ShowSeasonSection(show: show),
-                const SizedBox(height: 8),
               ],
-            ),
+              if (show.seasons.isNotEmpty) ShowSeasonSection(show: show),
+              const SizedBox(height: 8),
+            ],
           ),
-          ShowEpisodeList(show: show, onRevealHero: _revealHero),
-          const SliverDockGap(),
-        ]),
+        ),
+        ShowEpisodeList(show: show, onRevealHero: _revealHero),
+        const SliverDockGap(),
       ],
     );
   }

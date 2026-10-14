@@ -9,6 +9,7 @@ import 'package:player/domain/detail/detail_art.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/detail/detail_screen_frame.dart';
+import 'package:player/presentation/widgets/shell_rail_inset.dart';
 
 import '../../../helpers/cast_test_overrides.dart';
 import '../sources/fake_media_source.dart' show fakeSourceId;
@@ -63,6 +64,47 @@ void main() {
     expect(seen.last, expected);
     expect(tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
         expected.ground);
+  });
+
+  testWidgets('the ground runs under the rail, left of the padded column',
+      (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: castCapableOverrides(),
+        child: MaterialApp(
+          home: AmbientTint(
+            colors: _warm,
+            // As the shell lays a page out: padded column, inset published.
+            child: ShellRailInset(
+              left: 88,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 88),
+                child: DetailScreenFrame<String>(
+                  target: _target,
+                  value: const AsyncValue.loading(),
+                  noun: 'movie',
+                  onRetry: () {},
+                  builder: (context, data) => const SizedBox(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final strip = find.byWidgetPredicate(
+      (w) => w is ColoredBox && w.color == _warm.ground,
+    );
+    expect(strip, findsWidgets);
+    final rects = [
+      for (final e in strip.evaluate()) tester.getRect(find.byWidget(e.widget)),
+    ];
+    expect(rects.any((r) => r.left == 0 && r.width == 88), isTrue);
   });
 
   testWidgets('loading keeps the inherited tint', (tester) async {

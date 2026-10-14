@@ -140,10 +140,10 @@ void main() {
   });
 
   group('detailHeroAppBar in the shell, art under the rail, on macOS', () {
-    // The shell gives a detail page the full width, publishes the collapsed
-    // rail's footprint (88) as `ShellRailInset` and narrows the window-control
-    // reserve with `AppShell.contentInsets`; the page draws its own title row
-    // into the band.
+    // The shell pads every page's column by the collapsed rail (88), publishes
+    // that amount as `ShellRailInset` and narrows the window-control reserve
+    // with `AppShell.contentInsets`; the page draws its own title row into the
+    // band and its art under the rail.
     Future<void> pumpInShell(WidgetTester tester) async {
       tester.view.physicalSize = const Size(1300, 800);
       tester.view.devicePixelRatio = 1;
@@ -159,24 +159,32 @@ void main() {
             child: WindowChromeInsets.scope(
               insets: AppShell.contentInsets(_mac),
               child: MaterialApp(
+                // The shell pads the column by the rail and publishes the same
+                // amount; the page's art reaches back left through RailBleed.
                 home: ShellRailInset(
                   left: 88,
-                  child: WindowChromeInsets.removeBand(
-                    child: Builder(
-                      builder: (context) => Scaffold(
-                        body: CustomScrollView(
-                          slivers: [
-                            detailHeroAppBar(
-                              context: context,
-                              expandedHeight: 380,
-                              back: const Icon(Icons.arrow_back_rounded,
-                                  key: _backKey),
-                              background: const ColoredBox(
-                                  color: Colors.blue, key: _heroKey),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 88),
+                    child: RailBleed(
+                      child: WindowChromeInsets.removeBand(
+                        child: Builder(
+                          builder: (context) => Scaffold(
+                            body: CustomScrollView(
+                              clipBehavior: Clip.none,
+                              slivers: [
+                                detailHeroAppBar(
+                                  context: context,
+                                  expandedHeight: 380,
+                                  back: const Icon(Icons.arrow_back_rounded,
+                                      key: _backKey),
+                                  background: const ColoredBox(
+                                      color: Colors.blue, key: _heroKey),
+                                ),
+                                const SliverToBoxAdapter(
+                                    child: SizedBox(height: 2000)),
+                              ],
                             ),
-                            const SliverToBoxAdapter(
-                                child: SizedBox(height: 2000)),
-                          ],
+                          ),
                         ),
                       ),
                     ),

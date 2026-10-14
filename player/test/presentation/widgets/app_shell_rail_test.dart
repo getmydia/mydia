@@ -6,6 +6,8 @@
 // tier does with them. `app_toast_layer_mounting_test.dart` pumps the whole
 // app and covers the shell mounting at 1400.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -301,10 +303,9 @@ void main() {
     expect(reported.last, Breakpoints.railContentInset(pinned: false) + 44);
   });
 
-  group('full-bleed content (detail pages run their art under the rail)', () {
+  group('the published rail inset (pages that paint under the rail)', () {
     Future<double> pumpLayers(
       WidgetTester tester, {
-      required bool fullBleed,
       bool pinned = false,
       required List<double> insetSeen,
     }) async {
@@ -324,7 +325,6 @@ void main() {
               body: AppShell.railLayers(
                 regionsEnabled: false,
                 contentLeft: Breakpoints.railContentInset(pinned: pinned),
-                fullBleedContent: fullBleed,
                 railScope: railScope,
                 contentScope: contentScope,
                 boundary: SidebarFocusBoundary(
@@ -351,28 +351,96 @@ void main() {
       return tester.getTopLeft(find.byKey(contentKey)).dx;
     }
 
-    testWidgets('the column starts at the window edge, the inset is published',
-        (tester) async {
+    testWidgets('equals the padding the column gets', (tester) async {
       final seen = <double>[];
-      final left = await pumpLayers(tester, fullBleed: true, insetSeen: seen);
-      expect(left, 0);
-      expect(seen.last, Breakpoints.railContentInset(pinned: false));
-    });
-
-    testWidgets('a pinned rail widens the published inset, not the column',
-        (tester) async {
-      final seen = <double>[];
-      final left = await pumpLayers(tester,
-          fullBleed: true, pinned: true, insetSeen: seen);
-      expect(left, 0);
-      expect(seen.last, Breakpoints.railContentInset(pinned: true));
-    });
-
-    testWidgets('other pages are still padded by the shell', (tester) async {
-      final seen = <double>[];
-      final left = await pumpLayers(tester, fullBleed: false, insetSeen: seen);
+      final left = await pumpLayers(tester, insetSeen: seen);
       expect(left, Breakpoints.railContentInset(pinned: false));
-      expect(seen.last, Breakpoints.railContentInset(pinned: false));
+      expect(seen.last, left);
+    });
+
+    testWidgets('a pinned rail widens both', (tester) async {
+      final seen = <double>[];
+      final left = await pumpLayers(tester, pinned: true, insetSeen: seen);
+      expect(left, Breakpoints.railContentInset(pinned: true));
+      expect(seen.last, left);
+    });
+
+    testWidgets(
+        'a page opened over another never moves it, on any frame of the push '
+        'and the pop', (tester) async {
+      _setSize(tester, const Size(1280, 800));
+      final railScope = FocusScopeNode();
+      final contentScope = FocusScopeNode();
+      final railRow = FocusNode();
+      final navKey = GlobalKey<NavigatorState>();
+      addTearDown(railScope.dispose);
+      addTearDown(contentScope.dispose);
+      addTearDown(railRow.dispose);
+      const probeKey = Key('probe');
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _overrides(),
+          child: MaterialApp(
+            home: Scaffold(
+              body: AppShell.railLayers(
+                regionsEnabled: false,
+                contentLeft: Breakpoints.railContentInset(pinned: false),
+                railScope: railScope,
+                contentScope: contentScope,
+                boundary: SidebarFocusBoundary(
+                  sidebarNode: railRow,
+                  contentScope: contentScope,
+                ),
+                // The shell's routed child: a navigator holding the page.
+                content: Navigator(
+                  key: navKey,
+                  onGenerateRoute: (_) => MaterialPageRoute<void>(
+                    builder: (_) => const SizedBox.expand(key: probeKey),
+                  ),
+                ),
+                railBuilder: (onExitRequested) => FloatingRail(
+                  location: '/',
+                  onNavigate: (_) {},
+                  isOffline: false,
+                  selectedRowFocusNode: railRow,
+                  onExitRequested: onExitRequested,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final home = tester.getTopLeft(find.byKey(probeKey)).dx;
+      expect(home, Breakpoints.railContentInset(pinned: false));
+
+      Future<void> everyFrame() async {
+        for (var i = 0; i < 40; i++) {
+          await tester.pump(const Duration(milliseconds: 16));
+          expect(
+            tester.getTopLeft(find.byKey(probeKey, skipOffstage: false)).dx,
+            home,
+            reason: 'frame $i',
+          );
+        }
+      }
+
+      // A fade moves nothing, so any shift of the probe is the shell's own
+      // padding (a platform slide or zoom would move it by itself).
+      unawaited(navKey.currentState!.push(PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+        pageBuilder: (_, __, ___) => const Scaffold(body: Text('detail')),
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
+      )));
+      await everyFrame();
+      await tester.pumpAndSettle();
+
+      navKey.currentState!.pop();
+      await everyFrame();
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(find.byKey(probeKey)).dx, home);
     });
   });
 
