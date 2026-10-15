@@ -180,11 +180,23 @@ jobs:
         if: needs.changes.outputs.player == 'true'
         run: dart analyze --fatal-infos
 
-      - name: Run tests
-        # --concurrency=1: the default concurrency silently drops 2-4 test
-        # files while still exiting 0, so this is load-bearing, not cosmetic.
+      - name: Install very_good_cli
         if: needs.changes.outputs.player == 'true'
-        run: flutter test --concurrency=1
+        run: dart pub global activate very_good_cli 1.5.0
+
+      - name: Run tests
+        # Compiles the suite once instead of once per file, which was 760 of
+        # this step's 988 seconds. very_good generates test/.test_optimizer.dart
+        # importing every *_test.dart, so all files share one isolate: a test
+        # that fails only here has leaked global state, and the fix is the
+        # leak, not an opt-out. Files tagged skip_very_good_optimization run
+        # separately in the same flutter test call.
+        #
+        # --concurrency 1 is still load-bearing: very_good passes -j 4 by
+        # default, and at default concurrency flutter test silently drops
+        # 2-4 files while exiting 0.
+        if: needs.changes.outputs.player == 'true'
+        run: dart pub global run very_good_cli:very_good test --concurrency 1
 
       - name: Run television-tier tests
         # `directionalPrimary` is compile-time influenced, so the VM run above
