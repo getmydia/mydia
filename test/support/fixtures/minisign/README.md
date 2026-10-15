@@ -8,5 +8,5 @@ directory. To regenerate:
 
     nix shell nixpkgs#minisign -c minisign -G -W -p test.pub -s test.key
     printf '%s' '{"version":2,"name":"Fixture Plugins","plugins":[]}' > catalog.json
-    minisign -S -s test.key -m catalog.json -x catalog.json.ED.minisig -t "fixture prehashed"
-    minisign -S -l -s test.key -m catalog.json -x catalog.json.Ed.minisig -t "fixture legacy"
+    minisign -S -s test.key -m catalog.json -x catalog.json.prehashed.minisig -t "fixture prehashed"
+    minisign -S -l -s test.key -m catalog.json -x catalog.json.legacy.minisig -t "fixture legacy"

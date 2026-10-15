@@ -15,13 +15,15 @@ defmodule Mydia.Plugins.Index.SignatureTest do
   describe "against the minisign CLI" do
     test "verifies a prehashed (ED) signature" do
       body = File.read!(fixture_path("catalog.json"))
-      sig = File.read!(fixture_path("catalog.json.ED.minisig"))
+      sig = File.read!(fixture_path("catalog.json.prehashed.minisig"))
+      assert sig =~ "trusted comment: fixture prehashed"
       assert :ok = Signature.verify(body, sig, cli_key())
     end
 
     test "verifies a legacy (Ed) signature" do
       body = File.read!(fixture_path("catalog.json"))
-      sig = File.read!(fixture_path("catalog.json.Ed.minisig"))
+      sig = File.read!(fixture_path("catalog.json.legacy.minisig"))
+      assert sig =~ "trusted comment: fixture legacy"
       assert :ok = Signature.verify(body, sig, cli_key())
     end
 
