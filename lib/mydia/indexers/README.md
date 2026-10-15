@@ -283,6 +283,26 @@ will use, marks each element whose text contains a needle with a
 attribute. A `:contains` that was not declared at parse time raises. Nothing
 under `lib/mydia/indexers/cardigann*` calls Floki.
 
+## Search paths are pages
+
+A definition paginates by listing several `search.paths` entries (1337x has
+four pages of 20, KickassTorrents two of 50). Like Prowlarr, the built-in
+engine requests every path whose categories match the query
+(`Cardigann.SearchPaths`: site ids mapped through `categorymappings`, a query
+without categories runs them all, `"!"` inverts) and merges the rows.
+
+Page 1 is the search: it gets mirror failover, FlareSolverr and the login
+session, and its error is the search's error. Later pages
+(`Cardigann.SearchPages`) are best effort. They are pinned to the mirror
+page 1 answered on (`response.base_url`, `pin_base_url: true`), reuse its
+session and clearance, wait out `requestDelay` like any request, and stop at
+the first failed or empty page. Rows are de-duplicated within the indexer by
+info hash, then download URL.
+
+Each path keeps its own `inputs` (merged over the search inputs unless
+`inheritinputs: false`), `method`, `response` type and `followredirect`.
+The health check and `LiveCheck` request page 1 only.
+
 ## Cardigann engines: built-in and Prowlarr-based
 
 Two engines can run Cardigann definitions, chosen by the layered setting
