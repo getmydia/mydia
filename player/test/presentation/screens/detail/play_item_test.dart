@@ -32,6 +32,7 @@ Future<List<String>> _pump(
     ),
     GoRoute(path: '/s/:id/player/:item', builder: record),
     GoRoute(path: '/s/:id/show/:item', builder: record),
+    GoRoute(path: '/s/:id/season/:item', builder: record),
   ]);
   await tester.pumpWidget(ProviderScope(
     overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(fake)],
@@ -59,6 +60,11 @@ void main() {
   testWidgets('a show without next up opens the show', (tester) async {
     final pushed = await _pump(tester, FakeMediaSource(), fakeShow.ref);
     expect(pushed.single, '/s/acc1:owner:aa11/show/s1');
+  });
+
+  testWidgets('a season opens its page and plays nothing', (tester) async {
+    final pushed = await _pump(tester, FakeDetailSource(), fakeSeason.ref);
+    expect(pushed.single, startsWith('/s/acc1:owner:aa11/season/'));
   });
 
   testWidgets('a failed fetch says why and goes nowhere', (tester) async {

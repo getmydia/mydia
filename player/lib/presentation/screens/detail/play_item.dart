@@ -15,12 +15,17 @@ import '../../widgets/toast/toaster.dart';
 import '../sources/source_browse_providers.dart';
 import 'detail_links.dart';
 
-/// Plays [item]'s best version for this screen; the session resumes from the
-/// saved position on its own. A show plays its next-up episode, and opens
-/// when the source has none to offer.
+/// Plays [item] for this screen; the session resumes from the saved position
+/// on its own. Movies, episodes and videos play their best version. A show
+/// plays its next-up episode, and opens when the source has none to offer. A
+/// season or folder has nothing to play itself, so it opens.
 Future<void> playItem(BuildContext context, WidgetRef ref, ItemRef item) async {
   final source = ref.read(mediaSourceProvider(item.sourceId));
   if (source == null) return;
+  if (item.kind == ItemKind.season || item.kind == ItemKind.folder) {
+    await context.push(sourceItemLocation(item));
+    return;
+  }
   if (item.kind == ItemKind.show) {
     ItemSummary? next;
     try {

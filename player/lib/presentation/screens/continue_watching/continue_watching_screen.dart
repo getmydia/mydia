@@ -96,12 +96,10 @@ class _ContinueWatchingScreenState
       // A tap plays, as on the home row; the menu carries details and removal.
       posterFor: (context, item, open) {
         // Null for a movie, so SourcePoster falls back to the year.
-        final caption =
-            [item.showTitle, item.subtitle].whereType<String>().join(' · ');
         return SourcePoster(
           key: ValueKey('source-poster-${item.ref.externalId}'),
           item: item,
-          subtitle: caption.isEmpty ? null : caption,
+          subtitle: showEpisodeCaption(item),
           onTap: () => playItem(context, ref, item.ref),
           onContextMenu: (posterContext) => _openMenu(posterContext, item),
           showMenuButton: true,

@@ -299,6 +299,16 @@ class ItemSummary {
 String? episodeSubtitle(int? season, int? episode) =>
     season == null || episode == null ? null : 'S$season · E$episode';
 
+/// `Show · S1 · E3` for an episode, from whichever parts it has; null when it
+/// has neither or is not an episode (a movie's subtitle is a source label, not
+/// a place in a series), so a poster falls back to the year.
+String? showEpisodeCaption(ItemSummary item) {
+  if (item.ref.kind != ItemKind.episode) return null;
+  final caption =
+      [item.showTitle, item.subtitle].whereType<String>().join(' · ');
+  return caption.isEmpty ? null : caption;
+}
+
 enum MediaStreamKind { audio, subtitle }
 
 @immutable

@@ -36,11 +36,6 @@ class _AllServersListingScreenState
     extends ConsumerState<AllServersListingScreen> {
   late LibraryKind? _kind = widget.kind;
 
-  /// `Show · S1 · E3` for an episode, null for anything else.
-  static String? _episodeCaption(ItemSummary item) => item.showTitle == null
-      ? null
-      : [item.showTitle, item.subtitle].whereType<String>().join(' · ');
-
   FutureProvider<MergedResult<List<ItemSummary>>> get _provider =>
       switch (widget.listing) {
         AllServersListing.continueWatching =>
@@ -132,7 +127,7 @@ class _AllServersListingScreenState
                       return AllServersPoster(
                         item: item,
                         extraCopies: merged.extraCopies[item.ref] ?? 0,
-                        caption: resuming ? _episodeCaption(item) : null,
+                        caption: resuming ? showEpisodeCaption(item) : null,
                         onTap: resuming
                             ? () => playItem(context, ref, item.ref)
                             : null,
