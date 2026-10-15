@@ -1058,6 +1058,50 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       assert {:ok, []} = Cardigann.search(@config, "zq")
     end
 
+    test "relative links resolve against the mirror that answered after failover", %{
+      definition: definition,
+      bypass: bypass
+    } do
+      dead = Bypass.open()
+      Bypass.down(dead)
+
+      live_url = "http://localhost:#{bypass.port}"
+      dead_url = "http://localhost:#{dead.port}"
+
+      yaml =
+        sample_yaml(dead_url)
+        |> String.replace(
+          "  path: /search/{{ .Keywords }}/\n",
+          "  paths:\n" <> @two_pages
+        )
+        |> String.replace(
+          "links:\n  - #{dead_url}\n",
+          "links:\n  - #{dead_url}\n  - #{live_url}\n"
+        )
+
+      definition |> Ecto.Changeset.change(%{definition: yaml}) |> Repo.update!()
+
+      relative_page = fn n, title ->
+        """
+        <html><body><table class="results"><tr><th>Header</th></tr>
+        <tr><td class="title"><a href="/t/#{n}">#{title}</a></td>
+        <td class="download"><a href="/dl/#{n}.torrent">d</a></td>
+        <td class="size">1 GB</td><td class="seeders">5</td><td class="leechers">1</td>
+        <td class="category">Movies</td></tr></table></body></html>
+        """
+      end
+
+      serve(bypass, "/p1/zq/", relative_page.(1, "Quiet Harbor 2041"))
+      serve(bypass, "/p2/zq/", relative_page.(2, "Glass Orchard"))
+
+      assert {:ok, results} = Cardigann.search(@config, "zq")
+
+      assert Enum.map(results, & &1.download_url) == [
+               "#{live_url}/dl/1.torrent",
+               "#{live_url}/dl/2.torrent"
+             ]
+    end
+
     test "only the paths whose categories match the query are requested", %{
       definition: definition,
       bypass: bypass

@@ -175,7 +175,8 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
     fn path, response ->
       CardigannResultParser.parse_results(parsed, response, config.name,
         template_context: template_context,
-        base_url: base_url,
+        # The mirror that answered, which differs from the first link after failover.
+        base_url: Map.get(response, :base_url) || base_url,
         search_path: path
       )
     end
