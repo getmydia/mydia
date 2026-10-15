@@ -16,12 +16,12 @@ import '../../../domain/sources/source_error.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/media_context_menu.dart';
+import '../../widgets/shell_rail_inset.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../home/home_loading_skeleton.dart';
 import '../sources/home_header.dart';
-import '../sources/source_continue_watching_row.dart'
-    show continueWatchingCaption;
+import '../sources/continue_watching_card.dart';
 import '../sources/source_error_view.dart';
 import '../sources/source_home_hero.dart';
 import '../sources/source_poster_row.dart';
@@ -75,17 +75,23 @@ class AllServersHomeScreen extends ConsumerWidget {
         // rewrites padding.top to the bar's bottom edge.
         final chromeTop = freshnessTopInset(context,
             appBarHeight: WindowTitleRow.heightOf(context));
+        // The page spans the window so the hero's backdrop can run under the
+        // rail; everything else sits beside it.
+        final bar = homeHeader(
+          context,
+          mobileTitle: const HomeMydiaLockup(),
+          desktopTitle: const HomeDesktopTitle(
+            icon: Icons.dns_rounded,
+            label: 'All servers',
+          ),
+          onSearch: () => context.go(allServersSearchLocation),
+        );
         return Scaffold(
           backgroundColor: Colors.transparent,
           extendBodyBehindAppBar: true,
-          appBar: homeHeader(
-            context,
-            mobileTitle: const HomeMydiaLockup(),
-            desktopTitle: const HomeDesktopTitle(
-              icon: Icons.dns_rounded,
-              label: 'All servers',
-            ),
-            onSearch: () => context.go(allServersSearchLocation),
+          appBar: PreferredSize(
+            preferredSize: bar.preferredSize,
+            child: ShellPageInset(child: bar),
           ),
           body: _body(context, ref, chromeTop),
         );
@@ -98,8 +104,13 @@ class AllServersHomeScreen extends ConsumerWidget {
     final recent = ref.watch(allServersRecentlyAddedProvider);
     final favorites = ref.watch(allServersFavoritesRowProvider);
     if (!resuming.hasValue || !recent.hasValue) {
-      return HomeLoadingSkeleton(showHero: false, topInset: chromeTop + 16);
+      // A hero and a landscape first rail, as the loaded page opens with
+      // (the list's own top padding is the inset).
+      return ShellPageInset(
+        child: HomeLoadingSkeleton(topInset: chromeTop + 16),
+      );
     }
+    final inset = ShellRailInset.of(context);
     final r = resuming.requireValue, n = recent.requireValue;
     // Favorites loads in later; until then the rail is simply absent.
     final f = favorites.value;
@@ -116,13 +127,15 @@ class AllServersHomeScreen extends ConsumerWidget {
     // Zero included servers is nothing to show, not every server failing.
     if (everyServer > 0 && unavailable.length >= everyServer) {
       return Padding(
-        padding: EdgeInsets.only(top: chromeTop),
+        padding: EdgeInsets.only(top: chromeTop, left: inset),
         child: SourceErrorView(
             error: const SourceException.unreachable(),
             onRetry: () => _refresh(ref)),
       );
     }
     final hero = continueItems.firstOrNull ?? movieItems.firstOrNull;
+    String? continueLabel(ItemSummary item) => allServersServerLabel(
+        included[item.ref.sourceId], r.extraCopies[item.ref] ?? 0);
     return RefreshIndicator(
       edgeOffset: chromeTop,
       onRefresh: () async => _refresh(ref),
@@ -130,7 +143,7 @@ class AllServersHomeScreen extends ConsumerWidget {
         key: const Key('all-servers-home'),
         physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
-            0, chromeTop + 16, 0, DockInsets.bottomOf(context)),
+            inset, chromeTop + 16, 0, DockInsets.bottomOf(context)),
         children: [
           AllServersBanner(
               unavailable: unavailable, onRetry: () => _refresh(ref)),
@@ -142,19 +155,40 @@ class AllServersHomeScreen extends ConsumerWidget {
                     'all-hero-${hero.ref.sourceId.value}-${hero.ref.externalId}'),
                 sourceId: hero.ref.sourceId,
                 item: hero,
+                // Nothing sits above the hero but the list's own padding,
+                // so the backdrop runs up to the window top. A banner
+                // there keeps it.
+                bleedTop: unavailable.isEmpty ? chromeTop + 16 : 0,
               ),
             ),
           if (continueItems.isNotEmpty)
-            _rail(
-              context,
-              key: 'all-continue-watching',
-              railId: 'all-continue',
+            SourcePosterRow(
+              key: const Key('all-continue-watching'),
               title: 'Continue Watching',
-              location: allServersContinueWatchingLocation,
+              railId: 'all-continue',
               items: continueItems,
-              result: r,
-              caption: continueWatchingCaption,
-              menu: (c, item) => _menu(c, ref, item),
+              itemWidth: ContinueWatchingCard.artSize.width,
+              height: ContinueWatchingCard.heightFor(
+                context,
+                hasCaption: continueItems.any(
+                  (item) => ContinueWatchingCard.hasCaptionFor(
+                    item,
+                    trailingLabel: continueLabel(item),
+                  ),
+                ),
+                hasTimeLeft:
+                    continueItems.any(ContinueWatchingCard.hasTimeLeftFor),
+              ),
+              onTitleTap: () =>
+                  context.push(allServersContinueWatchingLocation),
+              posterFor: (context, item) => ContinueWatchingCard(
+                key: ValueKey(
+                    'all-poster-${item.ref.sourceId.value}-${item.ref.externalId}'),
+                item: item,
+                trailingLabel: continueLabel(item),
+                onTap: () => context.push(allServersItemLocation(item.ref)),
+                onContextMenu: (c) => _menu(c, ref, item),
+              ),
             ),
           if (movieItems.isNotEmpty)
             _rail(

@@ -17,6 +17,7 @@ import '../../../domain/sources/library.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
+import '../../widgets/shell_rail_inset.dart';
 import '../detail/detail_links.dart';
 import '../home/home_loading_skeleton.dart';
 import 'home_header.dart';
@@ -104,15 +105,22 @@ class SourceHomeScreen extends ConsumerWidget {
       context,
       appBarHeight: WindowTitleRow.heightOf(context),
     );
+    // The page spans the window so the hero's backdrop can run under the
+    // rail; everything else sits beside it.
+    final inset = ShellRailInset.of(context);
+    final bar = header(
+      context,
+      title: source?.displayName ?? 'Server',
+      onSearch: searchable
+          ? () => context.push(sourceSearchLocation(sourceId))
+          : null,
+    );
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
-      appBar: header(
-        context,
-        title: source?.displayName ?? 'Server',
-        onSearch: searchable
-            ? () => context.push(sourceSearchLocation(sourceId))
-            : null,
+      appBar: PreferredSize(
+        preferredSize: bar.preferredSize,
+        child: ShellPageInset(child: bar),
       ),
       body: switch (libraries) {
         AsyncData(:final value) => Stack(
@@ -126,7 +134,7 @@ class SourceHomeScreen extends ConsumerWidget {
                   // The hero is drawn under the bar; without one, the first
                   // row clears it.
                   padding: EdgeInsets.fromLTRB(
-                    0,
+                    inset,
                     hero == null ? chromeTop : 0,
                     0,
                     DockInsets.bottomOf(context),
@@ -148,7 +156,7 @@ class SourceHomeScreen extends ConsumerWidget {
               // the list (see BrowseScaffold's class doc).
               Positioned(
                 top: 0,
-                left: 0,
+                left: inset,
                 right: 0,
                 child: FreshnessHeader(
                   topInset: chromeTop,
@@ -162,14 +170,14 @@ class SourceHomeScreen extends ConsumerWidget {
             ],
           ),
         AsyncError(:final error) => Padding(
-            padding: EdgeInsets.only(top: chromeTop),
+            padding: EdgeInsets.only(top: chromeTop, left: inset),
             child: SourceErrorView(
               error: error,
               account: source?.source.account,
               onRetry: () => ref.invalidate(sourceLibrariesProvider(sourceId)),
             ),
           ),
-        _ => const HomeLoadingSkeleton(),
+        _ => const ShellPageInset(child: HomeLoadingSkeleton()),
       },
     );
   }

@@ -20,6 +20,7 @@ import 'core/window/decoration_layout_source.dart';
 import 'core/window/window_frame_state_source.dart';
 import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'presentation/widgets/toast/toast_layer.dart';
+import 'presentation/widgets/toast/toaster.dart' show showToast;
 import 'core/providers/providers.dart';
 import 'core/cache/resume_gate.dart';
 import 'core/cache/watcher_registry.dart';
@@ -39,6 +40,7 @@ import 'core/remote/merged_roster.dart';
 import 'core/remote/remote_target_controller.dart';
 import 'core/router/legacy_routes.dart';
 import 'core/router/navigator_keys.dart';
+import 'core/router/push_route.dart';
 import 'core/scroll/app_scroll_behavior.dart';
 import 'presentation/screens/detail/load_content_fetchers.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
@@ -441,7 +443,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         fetch: (itemRef) => fetchLoadContentItem(ref, itemRef),
         push: (path) {
           if (!mounted) return;
-          router.push(path);
+          // Nothing opens over a player or an open form; say so instead.
+          final message = pushRouteSafely(router, path).message;
+          if (message != null && context.mounted) showToast(context, message);
         },
       );
     } catch (error, stackTrace) {

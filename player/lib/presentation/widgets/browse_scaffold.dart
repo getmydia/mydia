@@ -146,7 +146,9 @@ class BrowseScaffold extends ConsumerWidget {
     BuildContext context,
     double barHeight,
   ) {
-    final isDesktop = Breakpoints.isDesktop(context);
+    // The hamburger opens the phone drawer, which only exists below the
+    // rail breakpoint.
+    final isDesktop = Breakpoints.showsRail(context);
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final row = secondRow;
 

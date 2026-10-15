@@ -11,7 +11,8 @@ abstract class Breakpoints {
   /// Maximum width for mobile layouts
   static const double mobile = 600;
 
-  /// Minimum width for tablet layouts (when sidebar appears)
+  /// Minimum width for desktop-style content layouts. The rail appears
+  /// earlier, at [mobile].
   static const double tablet = 900;
 
   /// Minimum width for desktop layouts
@@ -20,8 +21,27 @@ abstract class Breakpoints {
   /// Minimum width for widescreen layouts
   static const double widescreen = 1600;
 
-  /// Width of the sidebar on desktop
-  static const double sidebarWidth = 260;
+  /// Floating navigation rail, collapsed to icons.
+  static const double railCollapsedWidth = 72;
+
+  /// Floating navigation rail, expanded with labels.
+  static const double railExpandedWidth = 272;
+
+  /// Gap between the rail and the window's top, bottom and leading edges.
+  static const double railInset = 16;
+
+  /// Gap between the rail and the content column.
+  static const double railGap = 24;
+
+  /// Leading inset the content column keeps clear of the rail. The rail
+  /// overlays content when it expands, so only a pinned rail widens this.
+  static double railContentInset({required bool pinned}) =>
+      railInset + (pinned ? railExpandedWidth : railCollapsedWidth) + railGap;
+
+  /// Whether the shell shows the floating rail (tablets and up) rather than
+  /// the phone bottom bar.
+  static bool showsRail(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= mobile;
 
   /// Check if current screen is mobile size
   static bool isMobile(BuildContext context) =>
@@ -33,7 +53,9 @@ abstract class Breakpoints {
     return width >= mobile && width < tablet;
   }
 
-  /// Check if current screen is desktop or larger (shows sidebar)
+  /// Check if current screen is tablet-landscape or larger. This is a
+  /// content-layout predicate; whether the shell shows the rail is
+  /// [showsRail].
   static bool isDesktop(BuildContext context) =>
       MediaQuery.sizeOf(context).width >= tablet;
 

@@ -478,7 +478,7 @@ void main() {
     // an un-settled teardown takes out every later suite.
     addTearDown(() => unmountApp(tester));
 
-    await tester.pumpWidget(const ProviderScope(child: MyApp()));
+    await tester.pumpWidget(testApp());
     final aClaimCode = await _generateClaimCode(adminApi, 'A');
     await _pairPlayerA(tester, aClaimCode);
 

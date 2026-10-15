@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/cache/fetch_log.dart';
+import 'package:player/core/navigation/sidebar_layout_providers.dart';
+import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/sources/cache/source_codecs.dart';
 import 'package:player/core/sources/cache/source_keys.dart';
@@ -62,6 +64,8 @@ Future<void> _pumpShell(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(ProviderScope(
     overrides: [
+      sidebarLayoutStoreProvider
+          .overrideWithValue(InMemorySidebarLayoutStore()),
       mediaSourceProvider(_idA).overrideWithValue(a),
       mediaSourceProvider(_idB).overrideWithValue(b),
     ],

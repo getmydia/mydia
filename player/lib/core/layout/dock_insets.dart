@@ -26,24 +26,24 @@ abstract final class DockInsets {
   /// Breathing room between the last item and the floating dock.
   static const double dockGap = 16;
 
-  /// Bottom breathing room on desktop, which has no dock because the sidebar
-  /// is on the left. Preserves the pre-existing spacing exactly.
+  /// Bottom breathing room where the rail shows (600px and wider), which has
+  /// no dock because the rail is on the left. Preserves the pre-existing spacing exactly.
   static const double desktopGap = 32;
 
   /// Bottom padding a scrollable must reserve for its last item to clear the
   /// dock.
   ///
-  /// Branches on [Breakpoints.isDesktop] rather than on whether the inset is
+  /// Branches on [Breakpoints.showsRail] rather than on whether the inset is
   /// non-zero, for two reasons. The arms encode different intents: clearing a
   /// floating dock versus leaving window-edge breathing room. And it is the
-  /// same predicate `AppShell` uses to pick its own desktop or mobile branch,
-  /// read off the window-sized ambient `MediaQuery`, so a screen can never
-  /// disagree with the shell about which layout it is in.
+  /// same predicate `AppShell` uses to pick its own rail or bottom-bar
+  /// branch, read off the window-sized ambient `MediaQuery`, so a screen can
+  /// never disagree with the shell about which layout it is in.
   ///
   /// Also adds the floating cast bar's own clearance when it is showing, so
   /// content never lands under it either.
   static double bottomOf(BuildContext context) =>
-      (Breakpoints.isDesktop(context)
+      (Breakpoints.showsRail(context)
           ? desktopGap
           : MediaQuery.paddingOf(context).bottom + dockGap) +
       _castBarClearance(context);

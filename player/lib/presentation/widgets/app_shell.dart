@@ -16,9 +16,12 @@ import '../../core/layout/window_chrome_inset.dart';
 import '../../core/platform/native_tab_bar_support.dart';
 import '../../domain/navigation/source_nav.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
+import '../../core/router/detail_location.dart';
 import '../../core/router/page_cover_observer.dart';
 import '../../core/router/root_routes.dart';
 import '../../core/player/input_capabilities.dart';
+import '../../core/theme/depth_tokens.dart';
+import '../../core/ui/reduced_motion.dart';
 import '../../core/playback/playback_progress_providers.dart';
 import '../../core/layout/breakpoints.dart';
 import 'ambient_backdrop.dart';
@@ -28,17 +31,18 @@ import 'cast_bar/native_cast_accessory.dart';
 import 'compatibility_banner.dart';
 import 'nav/bottom_nav.dart';
 import 'nav/current_source.dart';
-import 'nav/desktop_sidebar.dart';
+import 'nav/floating_rail.dart';
 import 'nav/mobile_drawer.dart';
 import 'nav/nav_badges.dart';
 import 'nav/native_tab_bar.dart';
 import 'offline_banner.dart';
+import 'shell_rail_inset.dart';
 import 'toast/toaster.dart';
 import 'update_banner.dart';
 
 /// Modern app shell with adaptive navigation.
-/// Shows sidebar on desktop (≥900px) and bottom nav on mobile.
-/// On iOS 26 iPhones the bottom nav is the native tab bar (`NativeTabBar`).
+/// Shows the floating rail at 600px and wider, the bottom bar below.
+/// On iOS 26 iPhones the bottom bar is the native tab bar (`NativeTabBar`).
 /// Routes a viewer in offline mode may still open: downloads, and the
 /// per-source pages (`/s/`), which serve what the source has cached.
 bool offlineRouteAllowed(String route) =>
@@ -60,25 +64,31 @@ class AppShell extends ConsumerStatefulWidget {
   });
 
   /// Narrows [insets] to what the desktop content column still has to keep
-  /// clear once [DesktopSidebar] is in the picture.
+  /// clear once the floating rail is in the picture.
   ///
-  /// The sidebar sits to the leading edge of the content column and is wider
-  /// (`Breakpoints.sidebarWidth`, 260) than either platform's leading
-  /// reserve (macOS's traffic lights, 80; a Linux button group, well under
-  /// 260), so it already covers whatever the window controls need there. A
-  /// screen's own [WindowTitleRow] still reserves that space for the strip
-  /// that actually runs across the sidebar *and* the content column, but the
-  /// content column itself must not reserve it a second time as a left
-  /// margin, or every browse header would show a dead gap the sidebar
-  /// already accounts for. The trailing edge has no such neighbour, so it is
-  /// passed through untouched.
+  /// The rail sits to the leading edge of the content column. Its collapsed
+  /// footprint (`Breakpoints.railInset` + `railCollapsedWidth`, 88) is wider
+  /// than either platform's leading reserve (macOS's traffic lights, 80; a
+  /// Linux button group, well under that), so it already covers whatever the
+  /// window controls need there. A screen's own [WindowTitleRow] still
+  /// reserves that space for the strip that actually runs across the rail
+  /// *and* the content column, but the content column itself must not
+  /// reserve it a second time as a left margin, or every browse header would
+  /// show a dead gap the rail already accounts for. The trailing edge has no
+  /// such neighbour, so it is passed through untouched.
   ///
   /// Public and `@visibleForTesting` so a test can exercise the exact
   /// arithmetic the desktop branch applies, rather than a mirror that would
   /// stay green if the subtraction were dropped.
   @visibleForTesting
-  static WindowChromeInsets contentInsets(WindowChromeInsets insets) => insets
-      .copyWith(leading: max(0, insets.leading - Breakpoints.sidebarWidth));
+  static WindowChromeInsets contentInsets(WindowChromeInsets insets) =>
+      insets.copyWith(
+        leading: max(
+          0,
+          insets.leading -
+              (Breakpoints.railInset + Breakpoints.railCollapsedWidth),
+        ),
+      );
 
   /// The content column's top edge is the window's: each screen's
   /// [WindowTitleRow] draws into the title-bar band. Only [bannerArea]
@@ -159,6 +169,94 @@ class AppShell extends ConsumerStatefulWidget {
         ),
       );
 
+  /// The desktop branch's layers: the rail footprint reporter, the content
+  /// column (full width, publishing [contentLeft] plus the safe area as
+  /// `ShellRailInset` for each page to inset itself by) and the rail on top,
+  /// with the two focus regions wired to [boundary].
+  ///
+  /// Public and `@visibleForTesting` for the reason [contentInsets] is: the
+  /// shell cannot be mounted by a widget test (it needs the authenticated
+  /// provider graph), so the region wiring lives here where a test can drive
+  /// the exact call `build` makes. [regionsEnabled] is
+  /// `InputCapabilities.directionalPrimary` in the shell; a test passes true.
+  /// [railBuilder] receives the callback the rail must be given as its
+  /// `onExitRequested`.
+  @visibleForTesting
+  static Widget railLayers({
+    required bool regionsEnabled,
+    required double contentLeft,
+    required FocusScopeNode railScope,
+    required FocusScopeNode contentScope,
+    required SidebarFocusBoundary boundary,
+    required Widget content,
+    required Widget Function(VoidCallback onExitRequested) railBuilder,
+  }) =>
+      Builder(
+        builder: (context) {
+          // The rail sits inside the safe area (see FloatingRail), so the
+          // column and the reported footprint start that much further in.
+          final safeLeft = MediaQuery.paddingOf(context).left;
+          final left = contentLeft + safeLeft;
+          final duration =
+              context.reducedMotionDuration(DepthTokens.motionMedium);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              // Reports the rail's footprint so the cast bar clears it.
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                child: IgnorePointer(
+                  child: sidebarChrome(child: SizedBox(width: left)),
+                ),
+              ),
+              Positioned.fill(
+                // The content spans the whole window, under the rail, and is
+                // not padded here: go_router's shell navigator wraps its
+                // pages in an Overlay that clips at its own bounds, so a
+                // padded navigator would stop every page's art at the column.
+                // Each page insets itself by `ShellRailInset` (see
+                // `ShellPageInset`), which keeps its geometry while another
+                // page opens over it.
+                child: MediaQuery.removePadding(
+                  context: context,
+                  // The inset below already includes the safe area, so
+                  // screens must not apply that gap a second time.
+                  removeLeft: true,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(end: left),
+                    duration: duration,
+                    curve: DepthTokens.curveStandard,
+                    child: _AppShellState._region(
+                      enabled: regionsEnabled,
+                      node: contentScope,
+                      onExit: (direction) =>
+                          direction == TraversalDirection.left
+                              ? boundary.focusSidebar()
+                              : false,
+                      child: content,
+                    ),
+                    builder: (context, inset, child) =>
+                        ShellRailInset(left: inset, child: child!),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: _AppShellState._region(
+                  enabled: regionsEnabled,
+                  node: railScope,
+                  onExit: (direction) => direction == TraversalDirection.right
+                      ? boundary.focusContent()
+                      : false,
+                  child: railBuilder(boundary.focusContent),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
   /// Whether the native tab bar should show: the shell's route is current on
   /// the root navigator (no page, dialog or sheet above it: not the immersive
   /// player), no popup is on the shell's own navigator ([shellPopup], from
@@ -199,6 +297,7 @@ class AppShell extends ConsumerStatefulWidget {
     bool shellPopup = false,
     required String location,
     required List<SourceNavEntry> entries,
+    List<SourceNavEntry> libraryEntries = const [],
     required bool isOffline,
     required bool showBackToMydia,
     required String? settingsBadge,
@@ -225,18 +324,20 @@ class AppShell extends ConsumerStatefulWidget {
         location: location,
         onNavigate: onNavigate,
         entries: entries,
+        libraryEntries: libraryEntries,
         isOffline: isOffline,
         showBackToMydia: showBackToMydia,
       ),
     );
   }
 
-  /// Reports the desktop sidebar's width to `DockExtents` so the floating
-  /// cast bar sits beside it instead of painting over its bottom rows.
+  /// Reports the rail plus its gap (`Breakpoints.railContentInset`) to
+  /// `DockExtents` so the floating cast bar sits beside it instead of
+  /// painting over its bottom rows.
   ///
   /// Gated on the route being current for the same reason as [dockChrome]:
   /// a route pushed over the shell (the immersive player) hides the
-  /// sidebar, and the bar must not keep leaving a gap for it.
+  /// rail, and the bar must not keep leaving a gap for it.
   @visibleForTesting
   static Widget sidebarChrome({required Widget child}) => Builder(
         builder: (context) => ReportedExtent(
@@ -312,9 +413,26 @@ class _AppShellState extends ConsumerState<AppShell>
     contentScope: _contentScopeNode,
   );
 
+  /// The last non-detail location the shell showed. A detail page belongs to
+  /// no navigation row, so the rail, drawer and bottom bar read this instead
+  /// (see [shellNavLocation]). Null until the shell has shown one: a deep link
+  /// straight to a detail page.
+  String? _originLocation;
+
+  @override
+  void didUpdateWidget(AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _rememberOrigin();
+  }
+
+  void _rememberOrigin() {
+    if (!isDetailLocation(widget.location)) _originLocation = widget.location;
+  }
+
   @override
   void initState() {
     super.initState();
+    _rememberOrigin();
     _collectionAutoSync = ref.read(collectionAutoSyncProvider)(ref);
     _collectionAutoSync!.install(
       enabled: isDownloadSupported,
@@ -439,21 +557,35 @@ class _AppShellState extends ConsumerState<AppShell>
   /// consulted — so the boundary would silently stop calling back and the
   /// sidebar would become unreachable again, with no test failing. Do not
   /// reconfigure these nodes.
-  Widget _region({
+  static Widget _region({
+    required bool enabled,
     required Widget child,
     required RegionExitCallback onExit,
     required FocusScopeNode node,
   }) {
-    if (!InputCapabilities.directionalPrimary) return child;
+    if (!enabled) return child;
     return FocusTraversalGroup(
       policy: RegionTraversalPolicy(onExit: onExit),
       child: FocusScope(node: node, child: child),
     );
   }
 
+  /// The offline, compatibility and update banners, stacked.
+  Widget _banners(bool isOffline) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isOffline) OfflineBanner(location: widget.location),
+          const CompatibilityBanner(),
+          const UpdateBanner(),
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
-    final location = widget.location;
+    // What the navigation reads: the page itself, or for a detail page the
+    // page it was opened from. Banners and offline gating keep using the real
+    // location, whose source is the one on screen either way.
+    final location = shellNavLocation(widget.location, origin: _originLocation);
     final showBackToMydia = isEmbedMode;
     final isOffline = _isOfflineMode();
 
@@ -468,7 +600,7 @@ class _AppShellState extends ConsumerState<AppShell>
     // LayoutBuilder defers building to the layout phase, which can prevent
     // proper repaint propagation on mobile when combined with GlobalKey
     // on the Scaffold (causing the "stuck navigation" bug).
-    final isDesktop = Breakpoints.isDesktop(context);
+    final showsRail = Breakpoints.showsRail(context);
 
     // Shell-level ambient backdrop, fed by the active browse screen. Sits behind
     // the (now transparent) in-shell Scaffolds for all browse screens (plan U5).
@@ -480,76 +612,70 @@ class _AppShellState extends ConsumerState<AppShell>
       cacheKey: backdropSource.cacheKey,
     );
 
-    if (isDesktop) {
+    if (showsRail) {
+      final pinned = ref.watch(railPinnedProvider);
+      final contentLeft = Breakpoints.railContentInset(pinned: pinned);
+      final chrome = WindowChromeInsets.of(context);
       return Scaffold(
         backgroundColor: Colors.transparent,
         body: Stack(
           children: [
             Positioned.fill(child: backdrop),
-            Row(
-              children: [
-                _region(
-                  node: _sidebarScopeNode,
-                  onExit: (direction) => direction == TraversalDirection.right
-                      ? _focusBoundary.focusContent()
-                      : false,
-                  child: AppShell.sidebarChrome(
-                    child: DesktopSidebar(
-                      location: location,
-                      onNavigate: _navigateTo,
-                      showBackToMydia: showBackToMydia,
-                      isOffline: isOffline,
-                      // Gated like the region above it: off-tier the sidebar row
-                      // falls back to the per-row node FocusHighlight creates,
-                      // which is what keeps `_region`'s "unchanged off-tier"
-                      // claim true rather than borrowing the shell-owned node.
-                      selectedRowFocusNode: InputCapabilities.directionalPrimary
-                          ? _sidebarFocusNode
-                          : null,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: _region(
-                    node: _contentScopeNode,
-                    onExit: (direction) => direction == TraversalDirection.left
-                        ? _focusBoundary.focusSidebar()
-                        : false,
-                    // The sidebar already covers the leading window-control
-                    // reserve, so the content column narrows what it keeps
-                    // clear to `AppShell.contentInsets` before its own screen
-                    // (via `WindowTitleRow`) reads `WindowChromeInsets.of`.
-                    child: WindowChromeInsets.scope(
-                      insets: AppShell.contentInsets(
-                          WindowChromeInsets.of(context)),
-                      child: AppShell.contentGutter(
-                        child: Column(
-                          children: [
-                            AppShell.bannerArea(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (isOffline)
-                                    OfflineBanner(location: widget.location),
-                                  const CompatibilityBanner(),
-                                  const UpdateBanner(),
-                                ],
-                              ),
-                            ),
-                            Expanded(child: widget.child),
-                          ],
+            Positioned.fill(
+              child: AppShell.railLayers(
+                regionsEnabled: InputCapabilities.directionalPrimary,
+                contentLeft: contentLeft,
+                railScope: _sidebarScopeNode,
+                contentScope: _contentScopeNode,
+                boundary: _focusBoundary,
+                // The rail already covers the leading window-control
+                // reserve, so the content column narrows what it keeps
+                // clear to `AppShell.contentInsets` before its own screen
+                // (via `WindowTitleRow`) reads `WindowChromeInsets.of`.
+                content: WindowChromeInsets.scope(
+                  insets: AppShell.contentInsets(chrome),
+                  child: AppShell.contentGutter(
+                    child: Column(
+                      children: [
+                        // The banners belong beside the rail, not under it.
+                        AppShell.bannerArea(
+                          child: ShellPageInset(child: _banners(isOffline)),
                         ),
-                      ),
+                        Expanded(child: widget.child),
+                      ],
                     ),
                   ),
                 ),
-              ],
+                railBuilder: (onExitRequested) => FloatingRail(
+                  location: location,
+                  onNavigate: _navigateTo,
+                  showBackToMydia: showBackToMydia,
+                  isOffline: isOffline,
+                  // Gated like the regions: off-tier the sidebar row falls
+                  // back to the per-row node FocusHighlight creates, which
+                  // is what keeps `region`'s "unchanged off-tier" claim
+                  // true rather than borrowing the shell-owned node.
+                  selectedRowFocusNode: InputCapabilities.directionalPrimary
+                      ? _sidebarFocusNode
+                      : null,
+                  onExitRequested: onExitRequested,
+                  // Clears the macOS traffic lights; with no window chrome
+                  // (phones, tablets, web) the top padding is the status
+                  // bar instead, which the rail must clear too.
+                  topInset: chrome.leading > 0
+                      ? chrome.height
+                      : chrome.isZero
+                          ? MediaQuery.paddingOf(context).top
+                          : 0,
+                ),
+              ),
             ),
           ],
         ),
       );
     }
 
+    final navEntries = ref.watch(sourceNavEntriesProvider(location));
     final native = NativeTabBarSupport.supported;
     final route = ModalRoute.of(context);
     // Any route above the shell (page, dialog, sheet) hides the native bar.
@@ -595,17 +721,7 @@ class _AppShellState extends ConsumerState<AppShell>
               AppShell.contentGutter(
                 child: Column(
                   children: [
-                    AppShell.bannerArea(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (isOffline)
-                            OfflineBanner(location: widget.location),
-                          const CompatibilityBanner(),
-                          const UpdateBanner(),
-                        ],
-                      ),
-                    ),
+                    AppShell.bannerArea(child: _banners(isOffline)),
                     Expanded(child: widget.child),
                   ],
                 ),
@@ -620,9 +736,10 @@ class _AppShellState extends ConsumerState<AppShell>
             shellPopup: shellPopup,
             location: location,
             entries: bottomNavEntries(
-              ref.watch(sourceNavEntriesProvider(location)),
+              navEntries,
               downloadSupported: isDownloadSupported,
             ),
+            libraryEntries: libraryNavEntries(navEntries),
             isOffline: isOffline,
             showBackToMydia: showBackToMydia,
             settingsBadge: native

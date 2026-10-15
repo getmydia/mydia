@@ -13,6 +13,7 @@ import '../../core/remote/ambient_targets.dart';
 import '../../core/remote/load_content_navigation.dart';
 import '../../core/remote/remote_control_intent.dart';
 import '../../core/router/navigator_keys.dart';
+import '../../core/router/push_route.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/cast_device.dart';
 import '../screens/detail/load_content_fetchers.dart';
@@ -724,7 +725,10 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         intent,
         screenWidth: screenWidth,
         fetch: (itemRef) => fetchLoadContentItem(ref, itemRef),
-        push: (path) => router.push(path),
+        push: (path) {
+          final message = pushRouteSafely(router, path).message;
+          if (message != null && mounted) showToast(context, message);
+        },
       );
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error pulling session: $e');

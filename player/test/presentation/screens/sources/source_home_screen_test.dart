@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:player/core/player/input_capabilities.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -21,6 +23,7 @@ import 'package:player/presentation/screens/sources/home_header.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 import 'package:player/presentation/screens/sources/source_home_hero.dart';
 import 'package:player/presentation/screens/sources/source_home_screen.dart';
+import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../../test_utils/toast_harness.dart';
@@ -108,6 +111,11 @@ Future<List<String>> pumpHome(
   ]);
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
+  // The surface size alone leaves the view at 800 logical px, which shows the
+  // rail layout; size the view itself so a phone width is a phone layout.
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
   await tester.pumpWidget(ProviderScope(
     overrides: [
       mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
@@ -164,7 +172,15 @@ void main() {
             .getTopLeft(find.byKey(const Key('source-library-row-movies')))
             .dy),
       );
-      expect(find.text('Invented Series · S1 · E2'), findsOneWidget);
+      // An episode's card is titled by its series, with its place beneath.
+      expect(
+        find.descendant(of: row, matching: find.text('Invented Series')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text('S1 · E2')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('is hidden for a source without it', (tester) async {
@@ -401,6 +417,37 @@ void main() {
       await tester.pumpAndSettle();
       expect(pushed.last, '/s/acc1:owner:aa11/movie/m1');
     });
+
+    // Requires --dart-define=MYDIA_FORCE_TV=true; CI runs it in the
+    // television-tier step.
+    testWidgets(
+      'TV: Up from the first rail card focuses the hero play button',
+      (tester) async {
+        await pumpHome(tester, source());
+        final card = find.byKey(const ValueKey('source-continue-m1'));
+        final focus = Focus.of(
+          tester.element(find.descendant(
+            of: card,
+            matching: find.byKey(FocusHighlight.ringKey),
+          )),
+        );
+        focus.requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+
+        var onPlay = false;
+        FocusManager.instance.primaryFocus?.context?.visitAncestorElements((e) {
+          if (e.widget.key == const Key('source-home-hero-play')) {
+            onPlay = true;
+            return false;
+          }
+          return true;
+        });
+        expect(onPlay, isTrue);
+      },
+      skip: !InputCapabilities.directionalPrimary,
+    );
 
     testWidgets('removing a card invalidates the Continue Watching rules',
         (tester) async {

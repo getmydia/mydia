@@ -9,9 +9,10 @@ import 'package:player/app.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
+import 'package:player/core/navigation/sidebar_layout_providers.dart';
+import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
-import 'package:player/presentation/widgets/nav/desktop_sidebar.dart';
 import 'package:player/presentation/widgets/toast/toast_layer.dart';
 import 'package:player/presentation/widgets/toast/toast_models.dart';
 import 'package:player/presentation/widgets/toast/toaster.dart';
@@ -42,6 +43,8 @@ void main() {
     addTearDown(tester.view.reset);
 
     final container = ProviderContainer(overrides: [
+      sidebarLayoutStoreProvider
+          .overrideWithValue(InMemorySidebarLayoutStore()),
       sourcesLoadingProvider.overrideWithValue(false),
       hasMydiaProvider.overrideWithValue(true),
       // The router sends `/` to the active source, and to /sources/add when
@@ -61,7 +64,7 @@ void main() {
     await tester.pump();
 
     final bar = find.byType(CastMiniController);
-    final sidebar = find.byType(GlassSidebarPanel);
+    final sidebar = find.byKey(const Key('floating-rail'));
     expect(bar, findsOneWidget);
     expect(sidebar, findsOneWidget);
 

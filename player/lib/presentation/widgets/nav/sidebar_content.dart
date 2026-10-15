@@ -14,6 +14,7 @@ import '../mydia_logo.dart';
 import '../../../domain/navigation/all_servers_locations.dart';
 import 'all_servers_server_rows.dart';
 import 'nav_badges.dart';
+import 'rail_scope.dart';
 import 'sidebar_edit_bar.dart';
 import 'sidebar_middle_list.dart';
 import 'sidebar_row.dart';
@@ -34,6 +35,9 @@ class SidebarContent extends ConsumerWidget {
     this.onSwitchSource,
     this.backToMydiaWidget,
     this.selectedRowFocusNode,
+    this.rail = false,
+    this.railLabelsVisible = false,
+    this.railFooter,
   });
 
   final String location;
@@ -54,6 +58,22 @@ class SidebarContent extends ConsumerWidget {
   /// on the routes it does not list, such as a filter that has since been
   /// deleted.
   final FocusNode? selectedRowFocusNode;
+
+  /// Lays the content out for the floating rail: 48px rows whose icon boxes
+  /// sit at one fixed position, with the label beside the box. The geometry is
+  /// identical whether the rail is collapsed or expanded, so only the rail's
+  /// width and [railLabelsVisible] change between the two. There is no logo
+  /// header (the rail's footer carries the edit toggle). Edit mode is an
+  /// explicit, expanded-only action and switches back to the full layout.
+  final bool rail;
+
+  /// The rail's own controls (expand, pin, edit). They go above the anchored
+  /// rows rather than under them, so Settings is always the rail's last entry.
+  final Widget? railFooter;
+
+  /// Whether the rail's labels are showing, which only decides whether the
+  /// icon-only tooltips are needed. The labels' fade belongs to the rows.
+  final bool railLabelsVisible;
 
   /// The destination that should render as selected.
   ///
@@ -112,6 +132,7 @@ class SidebarContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final editing = ref.watch(sidebarEditModeProvider);
+    final railLayout = rail && !editing;
 
     final asyncDestinations = ref.watch(sidebarDestinationsProvider);
     final destinations = switch (asyncDestinations) {
@@ -144,54 +165,60 @@ class SidebarContent extends ConsumerWidget {
 
     final hasBackWidget = backToMydiaWidget != null;
 
-    return Column(
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (hasBackWidget)
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            padding: EdgeInsets.fromLTRB(12, 12, 12, railLayout ? 8 : 0),
             child: backToMydiaWidget!,
-          ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(20, hasBackWidget ? 16 : 20, 12, 16),
-          child: Row(
-            children: [
-              const MydiaLogo(size: 36),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Mydia Player',
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        style:
-                            Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: -0.5,
-                                ),
+          )
+        else if (railLayout)
+          const SizedBox(height: 12),
+        if (!rail)
+          Padding(
+            padding: EdgeInsets.fromLTRB(20, hasBackWidget ? 16 : 20, 12, 16),
+            child: Row(
+              children: [
+                const MydiaLogo(size: 36),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Mydia Player',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.5,
+                              ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    const ChannelBadge(),
-                  ],
+                      const SizedBox(width: 8),
+                      const ChannelBadge(),
+                    ],
+                  ),
                 ),
-              ),
-              IconButton(
-                onPressed: () =>
-                    ref.read(sidebarEditModeProvider.notifier).toggle(),
-                tooltip: 'Edit sidebar',
-                visualDensity: VisualDensity.compact,
-                icon: Icon(
-                  Icons.edit_outlined,
-                  size: 20,
-                  color: editing ? AppColors.primary : AppColors.textSecondary,
+                IconButton(
+                  onPressed: () =>
+                      ref.read(sidebarEditModeProvider.notifier).toggle(),
+                  tooltip: 'Edit sidebar',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    Icons.edit_outlined,
+                    size: 20,
+                    color:
+                        editing ? AppColors.primary : AppColors.textSecondary,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         SourceSwitcher(
           location: location,
           onNavigate: onNavigate,
@@ -208,6 +235,7 @@ class SidebarContent extends ConsumerWidget {
               context: context,
               ref: ref,
               destinations: destinations,
+              railLayout: railLayout,
             ),
           )
         else
@@ -252,18 +280,7 @@ class SidebarContent extends ConsumerWidget {
                           ref.read(sidebarLayoutControllerProvider).unhide(id),
                     ),
                   ),
-                  if (!editing)
-                    SidebarRow(
-                      icon: Icons.add_rounded,
-                      selectedIcon: Icons.add_rounded,
-                      label: '+ New filter',
-                      isSelected: false,
-                      onTap: () => showFilterEditor(
-                        context: context,
-                        ref: ref,
-                        initialFilter: MediaFilter.allMovies,
-                      ),
-                    ),
+                  if (railFooter case final footer?) footer,
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Divider(
@@ -290,6 +307,8 @@ class SidebarContent extends ConsumerWidget {
           ),
       ],
     );
+    if (!railLayout) return content;
+    return RailScope(labelsVisible: railLabelsVisible, child: content);
   }
 
   /// The rows for the source this location belongs to. Search and the app's
@@ -299,6 +318,7 @@ class SidebarContent extends ConsumerWidget {
     required BuildContext context,
     required WidgetRef ref,
     required List<NavDestination> destinations,
+    required bool railLayout,
   }) {
     final entries = ref.watch(sourceNavEntriesProvider(location));
     final source = ref.watch(currentSourceIdProvider(location));
@@ -322,20 +342,23 @@ class SidebarContent extends ConsumerWidget {
     // remote can reach the sidebar from routes the entries do not list.
     final focusId = selected?.id ?? entries.firstOrNull?.id;
 
-    Widget row(SourceNavEntry entry) {
+    Widget buildEntry(SourceNavEntry entry) {
       final destination =
           destinations.where((d) => d.id == entry.id).firstOrNull;
       final isSelected = selected?.id == entry.id;
       if (destination == null) {
-        return SidebarRow(
+        return KeyedSubtree(
           key: ValueKey('source-nav-${entry.id}'),
-          focusNode: entry.id == focusId ? selectedRowFocusNode : null,
-          icon: entry.icon,
-          selectedIcon: entry.selectedIcon,
-          label: entry.label,
-          isSelected: isSelected,
-          isDisabled: isOffline,
-          onTap: () => onNavigate(entry.route),
+          child: SidebarRow(
+            key: ValueKey('sidebar-row-${entry.id}'),
+            focusNode: entry.id == focusId ? selectedRowFocusNode : null,
+            icon: entry.icon,
+            selectedIcon: entry.selectedIcon,
+            label: entry.label,
+            isSelected: isSelected,
+            isDisabled: isOffline,
+            onTap: () => onNavigate(entry.route),
+          ),
         );
       }
       return KeyedSubtree(
@@ -359,16 +382,17 @@ class SidebarContent extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (final entry in leading) ...[
-            row(entry),
+            buildEntry(entry),
             const SizedBox(height: 2)
           ],
           Expanded(
             child: ListView(
               children: [
                 for (final entry in middle) ...[
-                  row(entry),
+                  buildEntry(entry),
                   const SizedBox(height: 2),
                 ],
                 // Like the header picker: the mobile drawer stays open so
@@ -382,9 +406,11 @@ class SidebarContent extends ConsumerWidget {
           ),
           if (canFilter)
             SidebarRow(
+              key: const ValueKey('sidebar-row-new-filter'),
               icon: Icons.add_rounded,
               selectedIcon: Icons.add_rounded,
-              label: '+ New filter',
+              // The rail names it in the tooltip and beside the icon.
+              label: railLayout ? 'New filter' : '+ New filter',
               isSelected: false,
               onTap: () => showFilterEditor(
                 context: context,
@@ -392,6 +418,7 @@ class SidebarContent extends ConsumerWidget {
                 initialFilter: MediaFilter.allMovies,
               ),
             ),
+          if (railFooter case final footer?) footer,
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Divider(
@@ -401,7 +428,7 @@ class SidebarContent extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           for (final entry in trailing) ...[
-            row(entry),
+            buildEntry(entry),
             const SizedBox(height: 2)
           ],
           const SizedBox(height: 16),
@@ -499,6 +526,7 @@ class SidebarContent extends ConsumerWidget {
 
     if (destination.id == 'settings') {
       return SettingsSidebarRow(
+        key: ValueKey('sidebar-row-${destination.id}'),
         location: location,
         focusNode: carriesFocusNode ? selectedRowFocusNode : null,
         isSelected: isSelected,
@@ -512,6 +540,7 @@ class SidebarContent extends ConsumerWidget {
 
     if (destination is FilterDestination) {
       return SidebarRow(
+        key: ValueKey('sidebar-row-${destination.id}'),
         focusNode: carriesFocusNode ? selectedRowFocusNode : null,
         icon: destination.icon,
         selectedIcon: destination.selectedIcon,
@@ -546,6 +575,7 @@ class SidebarContent extends ConsumerWidget {
     }
 
     return SidebarRow(
+      key: ValueKey('sidebar-row-${destination.id}'),
       focusNode: carriesFocusNode ? selectedRowFocusNode : null,
       icon: destination.icon,
       selectedIcon: destination.selectedIcon,

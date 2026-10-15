@@ -5,6 +5,7 @@ import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
 import 'package:player/presentation/widgets/nav/sidebar_content.dart';
 import 'package:player/presentation/widgets/nav/sidebar_row.dart';
@@ -26,6 +27,9 @@ Future<void> _pump(
   bool isOffline = false,
   double height = 1400,
   FocusNode? selectedRowFocusNode,
+  bool rail = false,
+  bool railLabelsVisible = false,
+  bool withSwitcher = false,
 }) async {
   tester.view.physicalSize = Size(1200, height + 200);
   tester.view.devicePixelRatio = 1.0;
@@ -41,6 +45,9 @@ Future<void> _pump(
         // source of its own (`/`, `/settings`) resolves against it.
         thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
         hasMydiaProvider.overrideWithValue(true),
+        // The switcher only renders when there is a choice of servers.
+        if (withSwitcher)
+          switchableSourcesProvider.overrideWithValue(const [fakeSource]),
         mediaSourceProvider(fakeSourceId).overrideWithValue(_MydiaLike()),
       ],
       child: MaterialApp(
@@ -53,6 +60,8 @@ Future<void> _pump(
               onNavigate: onNavigate ?? (_) {},
               isOffline: isOffline,
               selectedRowFocusNode: selectedRowFocusNode,
+              rail: rail,
+              railLabelsVisible: railLabelsVisible,
             ),
           ),
         ),
@@ -347,5 +356,135 @@ void main() {
     await tester.pump();
 
     expect(node.hasFocus, isTrue);
+  });
+
+  group('rail', () {
+    double labelOpacity(WidgetTester tester, String text) => tester
+        .widget<AnimatedOpacity>(
+          find
+              .ancestor(
+                  of: find.text(text), matching: find.byType(AnimatedOpacity))
+              .first,
+        )
+        .opacity;
+
+    testWidgets('shows icon boxes with tooltips while labels are hidden',
+        (tester) async {
+      await _pump(tester, location: '/', rail: true);
+
+      expect(labelOpacity(tester, 'Search'), 0);
+      expect(find.byTooltip('Search'), findsOneWidget);
+      for (final id in ['search', 'settings']) {
+        final row = find.byKey(ValueKey('sidebar-row-$id'));
+        expect(tester.getSize(row).height, 48);
+        final icon = find.descendant(of: row, matching: find.byType(Icon));
+        expect(tester.getSize(icon.first), const Size(22, 22));
+      }
+    });
+
+    testWidgets('labels show and the tooltips go once expanded',
+        (tester) async {
+      await _pump(tester, location: '/', rail: true, railLabelsVisible: true);
+
+      expect(labelOpacity(tester, 'Search'), 1);
+      expect(find.byTooltip('Search'), findsNothing);
+    });
+
+    testWidgets('has no header, and the new-filter row is a normal row',
+        (tester) async {
+      await _pump(tester, location: '/', rail: true);
+
+      expect(find.byTooltip('Edit sidebar'), findsNothing);
+      expect(find.text('Mydia Player'), findsNothing);
+      // The full layout shows '+ New filter'; the rail has the same row as an
+      // icon with the tooltip "New filter".
+      expect(find.text('+ New filter'), findsNothing);
+      expect(find.byTooltip('New filter'), findsOneWidget);
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('sidebar-row-new-filter')))
+            .height,
+        48,
+      );
+    });
+
+    testWidgets('the server switcher icon lines up with the rows',
+        (tester) async {
+      await _pump(tester, location: '/', rail: true, withSwitcher: true);
+
+      final switcher = find.byKey(const ValueKey('source-switcher-compact'));
+      expect(switcher, findsOneWidget);
+      expect(tester.getSize(switcher), const Size(48, 48));
+      final rowIcon = find.descendant(
+        of: find.byKey(const ValueKey('sidebar-row-search')),
+        matching: find.byType(Icon),
+      );
+      expect(
+        tester.getCenter(switcher).dx,
+        tester.getCenter(rowIcon.first).dx,
+      );
+    });
+
+    testWidgets('the selected row is ringed and filled', (tester) async {
+      await _pump(
+        tester,
+        location: '/s/${fakeSourceId.value}/favorites',
+        rail: true,
+      );
+
+      final box = tester.widget<Container>(
+        find.descendant(
+          of: find.byKey(const ValueKey('sidebar-row-favorites')),
+          matching: find.byType(Container),
+        ),
+      );
+      final decoration = box.decoration! as BoxDecoration;
+      final border = decoration.border! as Border;
+      expect(border.top.color, AppColors.primary);
+      expect(border.top.width, 2);
+      expect(decoration.color, Colors.white.withValues(alpha: 0.18));
+    });
+
+    testWidgets('exactly one row carries the focus node', (tester) async {
+      final node = FocusNode(debugLabel: 'shell-sidebar');
+      addTearDown(node.dispose);
+      await _pump(
+        tester,
+        location: '/s/${fakeSourceId.value}/favorites',
+        rail: true,
+        selectedRowFocusNode: node,
+      );
+
+      node.requestFocus();
+      await tester.pump();
+      expect(node.hasFocus, isTrue);
+      final selectedRow = find.byKey(const ValueKey('sidebar-row-favorites'));
+      expect(selectedRow, findsOneWidget);
+      // The focused node lives under the selected row, and only one
+      // SidebarRow was handed the node.
+      expect(
+        find.descendant(
+          of: selectedRow,
+          matching: find.byWidgetPredicate(
+            (w) => w is Focus && w.focusNode == node,
+          ),
+        ),
+        findsOneWidget,
+      );
+      final carriers = tester
+          .widgetList<SidebarRow>(find.byType(SidebarRow))
+          .where((r) => r.focusNode == node);
+      expect(carriers, hasLength(1));
+      expect(carriers.single.label, 'Favorites');
+    });
+
+    testWidgets('tapping a row navigates', (tester) async {
+      final routes = <String>[];
+      await _pump(tester, location: '/', rail: true, onNavigate: routes.add);
+
+      await tester.tap(find.byKey(const ValueKey('sidebar-row-movies')));
+      await tester.pumpAndSettle();
+      expect(routes, ['/s/${fakeSourceId.value}/library/movies']);
+    });
   });
 }

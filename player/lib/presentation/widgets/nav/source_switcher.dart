@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../screens/detail/detail_links.dart';
 import '../../screens/sources/plex_home_sheet.dart';
@@ -19,6 +20,7 @@ import '../focus_highlight.dart';
 import '../../../domain/navigation/all_servers_locations.dart'
     show allServersRoot, isAllServersLocation;
 import '../../../domain/navigation/source_nav.dart' show sourceIdFromLocation;
+import 'rail_scope.dart';
 import 'source_picker.dart';
 
 class SourceSwitcher extends ConsumerWidget {
@@ -59,18 +61,35 @@ class SourceSwitcher extends ConsumerWidget {
     final current =
         currentFor(sources, location, ref.watch(activeSourceIdProvider));
 
+    final allServers = isAllServersLocation(location);
+    // Named only when the account's Plex Home has someone to switch to.
+    final homeUser = current.kind == SourceKind.plex &&
+            ref.watch(accountProfilesProvider(current.account.id)).length > 1
+        ? current.profile.name
+        : null;
+    void open(BuildContext anchorContext) => _open(anchorContext, ref, current);
+
+    final rail = RailScope.maybeOf(context);
+    if (rail != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: _RailSwitcher(
+          name: allServers ? 'All servers' : current.displayName,
+          caption: allServers ? null : _Header._caption(current, homeUser),
+          needsReauth: !allServers && current.account.needsReauth,
+          labelsVisible: rail.labelsVisible,
+          onOpen: open,
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: _Header(
         source: current,
-        allServers: isAllServersLocation(location),
-        // Named only when the account's Plex Home has someone to switch to.
-        homeUser: current.kind == SourceKind.plex &&
-                ref.watch(accountProfilesProvider(current.account.id)).length >
-                    1
-            ? current.profile.name
-            : null,
-        onOpen: (anchorContext) => _open(anchorContext, ref, current),
+        allServers: allServers,
+        homeUser: homeUser,
+        onOpen: open,
       ),
     );
   }
@@ -115,6 +134,104 @@ class SourceSwitcher extends ConsumerWidget {
               (onSwitchSource ?? onNavigate)(sourceHomeLocation(id)),
         );
     }
+  }
+}
+
+/// The rail's server entry: the server's initial in the icon box, then its
+/// name and caption beside it. Same 48px row collapsed and expanded.
+class _RailSwitcher extends StatelessWidget {
+  const _RailSwitcher({
+    required this.name,
+    required this.caption,
+    required this.needsReauth,
+    required this.labelsVisible,
+    required this.onOpen,
+  });
+
+  final String name;
+  final String? caption;
+  final bool needsReauth;
+  final bool labelsVisible;
+
+  /// Receives this row's own context, which the picker's popover hangs under.
+  final ValueChanged<BuildContext> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    void open() => onOpen(context);
+    final initial = name.isEmpty ? '?' : name.characters.first.toUpperCase();
+    const radius = BorderRadius.all(Radius.circular(14));
+    final theme = Theme.of(context).textTheme;
+
+    return Semantics(
+      button: true,
+      label: 'Switch server: $name',
+      excludeSemantics: true,
+      onTap: open,
+      child: RailEntry(
+        tooltip: name,
+        labelsVisible: labelsVisible,
+        onTap: open,
+        iconBox: FocusHighlight(
+          onActivate: open,
+          borderRadius: radius,
+          child: SizedBox(
+            key: const ValueKey('source-switcher-compact'),
+            child: Material(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: radius,
+              child: Center(
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    fontFamily: AppTheme.displayFamily,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        label: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    key: const ValueKey('source-switcher-rail-name'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        theme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  if (caption != null)
+                    Text(
+                      caption!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.labelSmall?.copyWith(
+                        color: needsReauth
+                            ? AppColors.warningText
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.unfold_more_rounded,
+              size: 20,
+              color: AppColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

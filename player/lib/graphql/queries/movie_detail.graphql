@@ -28,5 +28,11 @@ query MovieDetail($id: ID!) {
       ...MediaFileFragment
     }
     isFavorite
+    cast {
+      name
+      character
+      profileUrl
+    }
+    trailerUrl
   }
 }

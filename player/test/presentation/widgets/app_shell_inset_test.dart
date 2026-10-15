@@ -2,7 +2,7 @@
 // screen draws its own title row into the title-bar band:
 //
 //  * `AppShell.contentInsets` narrows the desktop content column's leading
-//    reserve to what `DesktopSidebar` does not already cover, so the column
+//    reserve to what the floating rail does not already cover, so the column
 //    is not padding for window controls the sidebar already sits under.
 //  * `AppShell.bannerArea` pads the offline/compatibility/update banner trio
 //    down below the band, but only while one of them is actually showing: an
@@ -25,6 +25,11 @@ void main() {
       'covers', () {
     const mac = WindowChromeInsets(height: 40, leading: 80, trailing: 0);
     expect(AppShell.contentInsets(mac).leading, 0);
+
+    // The rail's collapsed footprint is 16 + 72 = 88, so a wider reserve
+    // keeps only what pokes past it.
+    const wide = WindowChromeInsets(height: 40, leading: 100, trailing: 0);
+    expect(AppShell.contentInsets(wide).leading, 12);
 
     const linux = WindowChromeInsets(height: 36, leading: 0, trailing: 110);
     expect(AppShell.contentInsets(linux), linux);

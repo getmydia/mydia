@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:player/app.dart';
 import 'helpers/login_helpers.dart';
 import 'helpers/test_bootstrap.dart';
 
@@ -96,11 +94,7 @@ void main() {
       addTearDown(() => unmountApp(tester));
 
       // Launch the app using pumpWidget with proper Riverpod scope
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MyApp(),
-        ),
-      );
+      await tester.pumpWidget(testApp());
 
       // A fresh install lands on the add-server screen; this taps through to
       // the login screen (uses pump(), not pumpAndSettle, because of the
@@ -150,11 +144,7 @@ void main() {
     testWidgets('Invalid claim code shows error message',
         (WidgetTester tester) async {
       // Launch the app using pumpWidget with proper Riverpod scope
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MyApp(),
-        ),
-      );
+      await tester.pumpWidget(testApp());
 
       // Wait for login screen
       await waitForLoginScreen(tester);

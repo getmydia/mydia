@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../screens/detail/detail_links.dart';
 import '../connection_status_dot.dart';
+import 'rail_scope.dart';
 import 'sidebar_row.dart';
 
 class AllServersServerRows extends ConsumerWidget {
@@ -18,13 +19,18 @@ class AllServersServerRows extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sources = ref.watch(allServersSourcesProvider);
+    // The rail has no caption: it would be a row that exists only while
+    // expanded, shifting every server row below it.
+    final inRail = RailScope.maybeOf(context) != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Text('Servers', style: Theme.of(context).textTheme.labelSmall),
-        ),
+        if (!inRail)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child:
+                Text('Servers', style: Theme.of(context).textTheme.labelSmall),
+          ),
         for (final s in sources)
           SidebarRow(
             key: ValueKey('all-server-row-${s.id.value}'),

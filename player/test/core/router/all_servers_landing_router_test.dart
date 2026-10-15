@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
+import 'package:player/core/navigation/sidebar_layout_providers.dart';
+import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/router/app_router.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -44,6 +46,8 @@ void main() {
     final store = InMemorySourceStore();
     var mediaBuilt = 0;
     final container = ProviderContainer(overrides: [
+      sidebarLayoutStoreProvider
+          .overrideWithValue(InMemorySidebarLayoutStore()),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
       authServiceProvider

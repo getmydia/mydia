@@ -21,7 +21,7 @@ Future<void> _pumpInShell(
   bool pushed = false,
 }) async {
   // Narrow, but not so narrow the title bar overflows.
-  tester.view.physicalSize = const Size(600, 900);
+  tester.view.physicalSize = const Size(599, 900);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(ProviderScope(

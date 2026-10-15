@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/downloads/orphan_download_sweep.dart';
+import 'package:player/core/navigation/sidebar_layout_providers.dart';
+import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/playback/playback_progress_providers.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
@@ -39,6 +41,8 @@ Future<void> _pumpShell(
   final plexSource = _Src(fakeSource)..setStatus(plex);
   await tester.pumpWidget(ProviderScope(
     overrides: [
+      sidebarLayoutStoreProvider
+          .overrideWithValue(InMemorySidebarLayoutStore()),
       sourceProgressFlushProvider.overrideWith((ref) {}),
       orphanDownloadSweepProvider.overrideWith((ref) {}),
       activeSourceIdProvider.overrideWithValue(_plexId),

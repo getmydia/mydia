@@ -1,26 +1,54 @@
 /// The featured title at the top of a source's home.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/focus/focus_reveal_section.dart';
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/sources/media_source.dart' show ArtworkRequest;
 import '../../../core/sources/source.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
-import '../../widgets/artwork_image.dart';
+import '../../widgets/shell_rail_inset.dart';
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
+import 'source_home_hero_backdrop.dart';
 
 class SourceHomeHero extends ConsumerWidget {
-  const SourceHomeHero({super.key, required this.sourceId, required this.item});
+  const SourceHomeHero({
+    super.key,
+    required this.sourceId,
+    required this.item,
+    this.bleedTop = 0,
+  });
 
   final SourceId sourceId;
   final ItemSummary item;
+
+  /// How far the backdrop runs above the hero's own box, for a screen that
+  /// puts space between the window top and the hero. Zero where something
+  /// else (a banner) sits there.
+  final double bleedTop;
+
+  /// Identifies the backdrop layer.
+  static const backdropKey = Key('source-home-hero-backdrop');
+
+  static const _wideGap = 36.0;
+  static const _maxTextWidth = 560.0;
+
+  /// The poster card's size when the hero is laid out wide.
+  static const posterSize = Size(248, 360);
+
+  /// The stacked layout's poster width: 60% of the screen, capped so a
+  /// window just under the wide breakpoint does not get a giant poster.
+  static double narrowPosterWidth(BuildContext context) =>
+      math.min(MediaQuery.sizeOf(context).width * 0.6, 320);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,156 +70,285 @@ class SourceHomeHero extends ConsumerWidget {
           ? BackdropSource.none
           : BackdropSource(
               imageUrl: request.url,
-              id: item.ref.externalId,
+              id: request.cacheKey,
               headers: request.headers,
               cacheKey: request.cacheKey,
             ),
     );
 
-    final size = MediaQuery.of(context).size;
-    final isDesktop = Breakpoints.isDesktop(context);
-    // On desktop, cap hero height at 450px; on mobile use 50% of screen
-    final heroHeight = isDesktop
-        ? (size.height * 0.45).clamp(300.0, 450.0)
-        : size.height * 0.5;
-    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
+    final wide = Breakpoints.isDesktop(context);
+    final padding = Breakpoints.getHorizontalPadding(context);
+    final textTheme = Theme.of(context).textTheme;
     void open() => context.push(sourceItemLocation(item.ref));
-    final showTitle = item.showTitle;
+    final isEpisode = item.showTitle != null;
+    final chips = [
+      if (item.subtitle case final s?) s,
+      if (item.year case final y?) '$y',
+    ];
+
+    final poster = ClipRRect(
+      key: const Key('source-home-hero-poster'),
+      borderRadius: BorderRadius.circular(AppTheme.radiusHeroPoster),
+      child: item.poster == null
+          ? const _HeroFallback()
+          : SourceArtworkImage(
+              sourceId: sourceId,
+              art: item.poster!,
+              fallback: const _HeroFallback(),
+            ),
+    );
+
+    final info = Column(
+      crossAxisAlignment:
+          wide ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (chips.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [for (final c in chips) _HeroChip(c)],
+          ),
+          const SizedBox(height: 14),
+        ],
+        Text(
+          isEpisode ? item.showTitle! : item.title,
+          style: textTheme.displayLarge?.copyWith(
+            fontSize: wide ? 48 : 30,
+            letterSpacing: -1.2,
+            height: 1.0,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: wide ? TextAlign.start : TextAlign.center,
+        ),
+        if (item.overview case final overview?) ...[
+          const SizedBox(height: 12),
+          Text(
+            overview,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: wide ? TextAlign.start : TextAlign.center,
+            style: textTheme.bodyLarge?.copyWith(
+              color: AppColors.textPrimary.withValues(alpha: 0.78),
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
+        _HeroActions(
+          wide: wide,
+          onPlay: open,
+          secondaryLabel: isEpisode ? 'All episodes' : 'More info',
+          onSecondary: open,
+        ),
+      ],
+    );
 
     // UP from the first rail lands on the hero's buttons, which sit at its
     // bottom. On a television this reveals the whole hero, not just the button.
+    final topPad = MediaQuery.paddingOf(context).top + 24;
+    final backdrop = request == null
+        ? null
+        : _backdrop(context, request,
+            wide: wide, padding: padding, top: topPad);
     return FocusRevealSection(
-      child: GestureDetector(
-        onTap: open,
-        child: Stack(
-          children: [
-            ClipRect(
-              child: SizedBox(
-                width: size.width,
-                height: heroHeight,
-                child: request != null
-                    ? ArtworkImage(
-                        imageUrl: request.url,
-                        headers: request.headers,
-                        cacheKey: request.cacheKey,
-                        fit: BoxFit.cover,
-                        cacheManager: BackdropCacheManager(),
-                        placeholder: (context) =>
-                            Container(color: AppColors.surface),
-                        errorWidget: (context) => const _HeroFallback(),
-                      )
-                    : const _HeroFallback(),
-              ),
-            ),
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.background.withValues(alpha: 0.4),
-                      Colors.transparent,
-                      AppColors.background.withValues(alpha: 0.9),
-                      AppColors.background,
+      child: Stack(
+        clipBehavior: Clip.none,
+        // Passthrough: the content sizes the hero exactly as it did before
+        // the backdrop, which is only ever a background layer.
+        fit: StackFit.passthrough,
+        children: [
+          if (backdrop != null) backdrop,
+          _content(
+            context,
+            wide: wide,
+            padding: padding,
+            top: topPad,
+            poster: poster,
+            info: info,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The artwork layer, positioned relative to the hero's own box: under the
+  /// rail and up to the window top on wide layouts, behind the poster on
+  /// stacked ones.
+  Widget _backdrop(
+    BuildContext context,
+    ArtworkRequest request, {
+    required bool wide,
+    required double padding,
+    required double top,
+  }) {
+    // The page is inset by the rail and the hero's own box starts at the
+    // column; the wide backdrop reaches back left under the rail.
+    final inset = wide ? ShellRailInset.of(context) : 0.0;
+    final layer = HomeHeroBackdrop(
+      key: backdropKey,
+      request: request,
+      wide: wide,
+      inset: inset,
+      padding: padding,
+      posterSize: posterSize,
+      gap: _wideGap,
+      maxTextWidth: _maxTextWidth,
+    );
+    if (wide) {
+      return Positioned(
+        left: -inset,
+        right: 0,
+        top: -bleedTop,
+        bottom: 0,
+        child: layer,
+      );
+    }
+    final posterHeight =
+        narrowPosterWidth(context) * posterSize.height / posterSize.width;
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: -bleedTop,
+      height: bleedTop +
+          top +
+          posterHeight +
+          HomeHeroBackdropTokens.narrowPosterGap,
+      child: layer,
+    );
+  }
+
+  Widget _content(
+    BuildContext context, {
+    required bool wide,
+    required double padding,
+    required double top,
+    required Widget poster,
+    required Widget info,
+  }) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        padding,
+        top,
+        padding,
+        32,
+      ),
+      child: wide
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                DecoratedBox(
+                  decoration: const BoxDecoration(
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x73000000),
+                        blurRadius: 60,
+                        offset: Offset(0, 30),
+                      ),
                     ],
-                    stops: const [0.0, 0.3, 0.7, 1.0],
+                  ),
+                  child: SizedBox(
+                    width: posterSize.width,
+                    height: posterSize.height,
+                    child: poster,
                   ),
                 ),
-              ),
+                const SizedBox(width: _wideGap),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ConstrainedBox(
+                      constraints:
+                          const BoxConstraints(maxWidth: _maxTextWidth),
+                      child: info,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              children: [
+                // 60% of the screen, not of the padded column.
+                SizedBox(
+                  width: narrowPosterWidth(context),
+                  child: AspectRatio(
+                    aspectRatio: posterSize.width / posterSize.height,
+                    child: poster,
+                  ),
+                ),
+                const SizedBox(
+                  height: HomeHeroBackdropTokens.narrowPosterGap,
+                ),
+                info,
+              ],
             ),
-            Positioned(
-              left: horizontalPadding,
-              right: horizontalPadding,
-              bottom: isDesktop ? 32 : 24,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'FEATURED',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    item.title,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withValues(alpha: 0.5),
-                          blurRadius: 8,
-                        ),
-                      ],
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  if (showTitle != null)
-                    Text(
-                      showTitle,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                    ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      FilledButton.icon(
-                        key: const Key('source-home-hero-play'),
-                        onPressed: open,
-                        icon: const Icon(Icons.play_arrow_rounded),
-                        label: const Text('Play'),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 14,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        onPressed: open,
-                        icon: const Icon(Icons.info_outline_rounded, size: 20),
-                        label: const Text('More Info'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 14,
-                          ),
-                          side: BorderSide(
-                            color:
-                                AppColors.textSecondary.withValues(alpha: 0.5),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+    );
+  }
+}
+
+class _HeroChip extends StatelessWidget {
+  const _HeroChip(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
         ),
-      ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+      );
+}
+
+class _HeroActions extends StatelessWidget {
+  const _HeroActions({
+    required this.wide,
+    required this.onPlay,
+    required this.secondaryLabel,
+    required this.onSecondary,
+  });
+
+  final bool wide;
+  final VoidCallback onPlay;
+  final String secondaryLabel;
+  final VoidCallback onSecondary;
+
+  static const _height = 52.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final play = FilledButton.icon(
+      key: const Key('source-home-hero-play'),
+      onPressed: onPlay,
+      icon: const Icon(Icons.play_arrow_rounded),
+      label: const Text('Play'),
+      style: FilledButton.styleFrom(minimumSize: const Size(0, _height)),
+    );
+    final secondary = OutlinedButton(
+      key: const Key('source-home-hero-more'),
+      onPressed: onSecondary,
+      style: OutlinedButton.styleFrom(minimumSize: const Size(0, _height)),
+      child: Text(secondaryLabel),
+    );
+    if (wide) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [play, const SizedBox(width: 12), secondary],
+      );
+    }
+    return Column(
+      children: [
+        SizedBox(width: double.infinity, child: play),
+        const SizedBox(height: 10),
+        SizedBox(width: double.infinity, child: secondary),
+      ],
     );
   }
 }

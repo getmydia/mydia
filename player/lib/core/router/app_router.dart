@@ -24,7 +24,6 @@ import '../../presentation/screens/filter/filter_screen.dart';
 import '../../presentation/screens/sources/source_library_screen.dart';
 import '../../presentation/screens/detail/detail_links.dart' show SourceListing;
 import '../../presentation/screens/calendar/calendar_screen.dart';
-import '../../presentation/screens/collections/collection_detail_screen.dart';
 import '../../presentation/screens/collections/collections_screen.dart';
 import '../../presentation/screens/continue_watching/continue_watching_screen.dart';
 import '../../presentation/screens/favorites/favorites_screen.dart';
@@ -45,6 +44,7 @@ import '../../presentation/widgets/app_shell.dart';
 import '../config/web_config.dart' show isInstanceHostedWeb;
 import 'navigator_keys.dart';
 import 'page_cover_observer.dart';
+import 'shell_pages.dart';
 import 'legacy_routes.dart';
 
 part 'app_router.g.dart';
@@ -392,7 +392,9 @@ GoRouter appRouter(Ref ref) {
           location: state.matchedLocation,
           child: child,
         ),
-        routes: [
+        // Every page insets itself by the rail (`shellPages`); the shell
+        // navigator spans the window so full-bleed pages can paint under it.
+        routes: shellPages([
           GoRoute(
             path: '/',
             name: 'home',
@@ -557,7 +559,11 @@ GoRouter appRouter(Ref ref) {
               ),
             ),
           ),
+          sourceCollectionRoute(),
           sourceItemRoute(),
+          // Movie, show, season and episode pages sit in the shell too, so
+          // the rail stays beside them; only the player is immersive.
+          ...sourceDetailRoutes(),
           sourceSearchRoute(),
           for (final (path, name, build) in _sourceListings)
             GoRoute(
@@ -579,10 +585,11 @@ GoRouter appRouter(Ref ref) {
             name: 'search',
             builder: _legacyStub,
           ),
-        ],
+        ]),
       ),
 
-      // Detail routes - outside shell
+      // Full-window routes, outside the shell. The unprefixed detail routes
+      // below only redirect (see `legacy_routes.dart`).
       GoRoute(
         path: '/settings/devices',
         name: 'devices',
@@ -600,17 +607,6 @@ GoRouter appRouter(Ref ref) {
         name: 'collection_detail',
         parentNavigatorKey: rootNavigatorKey,
         builder: _legacyStub,
-      ),
-      // Full window, like the item detail routes: the screen owns the
-      // title-bar band.
-      GoRoute(
-        path: '/s/:sourceId/collection/:collectionId',
-        name: 'source_collection',
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => CollectionDetailScreen(
-          sourceId: SourceId(state.pathParameters['sourceId']!),
-          collectionId: state.pathParameters['collectionId']!,
-        ),
       ),
       GoRoute(
         path: '/movie/:id',
@@ -630,7 +626,6 @@ GoRouter appRouter(Ref ref) {
         parentNavigatorKey: rootNavigatorKey,
         builder: _legacyStub,
       ),
-      ...sourceDetailRoutes(),
       GoRoute(
         path: '/s/:sourceId/player/:itemId',
         name: 'source_player',

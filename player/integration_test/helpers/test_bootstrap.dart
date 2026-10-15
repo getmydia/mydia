@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/app.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/navigation/sidebar_layout_providers.dart';
+import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/storage/app_hive.dart';
 import 'package:player/native/frb_generated.dart';
 
@@ -27,6 +29,19 @@ Future<void> _runBootstrap() async {
   // container is `/root`. See `core/storage/app_hive.dart`.
   await initAppHive();
 }
+
+/// `MyApp` under the overrides `main` installs from its startup gate.
+///
+/// The sidebar store comes from a Hive box `main` opens before mounting; the
+/// shell reads it synchronously, so without an override the first frame
+/// throws. An in-memory store is enough here: nothing persists between tests.
+Widget testApp() => ProviderScope(
+      overrides: [
+        sidebarLayoutStoreProvider
+            .overrideWithValue(InMemorySidebarLayoutStore()),
+      ],
+      child: const MyApp(),
+    );
 
 /// Replaces the app with an empty widget, after giving its startup work time
 /// to settle.

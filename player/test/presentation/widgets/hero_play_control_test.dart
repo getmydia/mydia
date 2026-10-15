@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/presentation/widgets/hero_play_control.dart';
-import 'package:player/presentation/widgets/play_button.dart';
+import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/colors.dart';
+import 'package:player/presentation/widgets/primary_play_button.dart';
 
 const _files = [
   MediaFile(id: 'f1', resolution: '1080p', directPlaySupported: true),
@@ -36,7 +38,68 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Play'), findsOneWidget);
-    expect(find.byType(PlayButton), findsOneWidget);
+    expect(find.byType(PrimaryPlayButton), findsOneWidget);
+  });
+
+  testWidgets('is the white primary button, not gold', (tester) async {
+    await tester.pumpWidget(_host(
+      HeroPlayControl(files: _files, onFileSelected: (_) {}),
+    ));
+    await tester.pumpAndSettle();
+
+    final material = tester.widget<Material>(find.descendant(
+      of: find.byType(PrimaryPlayButton),
+      matching: find.byType(Material),
+    ));
+    expect(material.color, Colors.white);
+    expect(
+      material.borderRadius,
+      const BorderRadius.all(Radius.circular(AppTheme.radiusButton)),
+    );
+    final label = tester.widget<Text>(find.text('Play'));
+    expect(label.style?.color, AppColors.background);
+    expect(label.style?.fontFamily, AppTheme.displayFamily);
+    final icon = tester.widget<Icon>(find.byIcon(Icons.play_arrow_rounded));
+    expect(icon.color, AppColors.background);
+    // The version label stays beside the button, muted.
+    expect(find.text('1080p'), findsOneWidget);
+  });
+
+  testWidgets('the icon-only button still announces itself as Play',
+      (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_host(
+      PrimaryPlayButton(onPressed: () {}, iconOnly: true),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Play'), findsNothing);
+    expect(find.bySemanticsLabel('Play'), findsOneWidget);
+    handle.dispose();
+  });
+
+  testWidgets('resume labels the button Resume', (tester) async {
+    await tester.pumpWidget(_host(
+      HeroPlayControl(files: _files, onFileSelected: (_) {}, resume: true),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Resume'), findsOneWidget);
+    expect(find.text('Play'), findsNothing);
+  });
+
+  testWidgets('a button with nothing to play is disabled, not white',
+      (tester) async {
+    await tester.pumpWidget(_host(
+      HeroPlayControl(files: const [], onFileSelected: (_) {}),
+    ));
+    await tester.pumpAndSettle();
+
+    final material = tester.widget<Material>(find.descendant(
+      of: find.byType(PrimaryPlayButton),
+      matching: find.byType(Material),
+    ));
+    expect(material.color, AppColors.surfaceVariant);
   });
 
   testWidgets('tapping reports the auto-selected file', (tester) async {
@@ -46,7 +109,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(PlayButton));
+    await tester.tap(find.byType(PrimaryPlayButton));
     await tester.pumpAndSettle();
 
     expect(picked?.id, 'f1');
@@ -75,8 +138,8 @@ void main() {
   testWidgets('stays flush right when a quality dropdown is present (2+ files)',
       (tester) async {
     // With 2+ files, SmartPlayButton renders a quality dropdown that becomes
-    // the rightmost child instead of PlayButton, so this asserts on the
-    // control's own edge rather than PlayButton's — the two are not
+    // the rightmost child instead of PrimaryPlayButton, so this asserts on
+    // the control's own edge rather than the button's, as the two are not
     // interchangeable once the dropdown exists.
     await tester.pumpWidget(_host(
       HeroPlayControl(files: _twoFiles, onFileSelected: (_) {}),

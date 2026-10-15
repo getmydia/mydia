@@ -19,6 +19,7 @@ import '../../../domain/sources/item.dart';
 import 'show_season_section.dart';
 import 'show_selection_providers.dart';
 import '../../widgets/detail_hero_app_bar.dart';
+import '../../widgets/shell_rail_inset.dart';
 import '../../../core/player/resume_plan.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/cast_rail.dart';
@@ -71,6 +72,7 @@ class ShowDetailScreen extends ConsumerWidget {
         value: showAsync,
         noun: 'TV show',
         onRetry: () => ref.read(showActionsProvider(target)).refresh(),
+        tintArt: (show) => show.backdrop,
         builder: (context, show) => _buildContent(context, ref, show),
       ),
     );
@@ -139,46 +141,49 @@ class ShowDetailScreen extends ConsumerWidget {
     return CustomScrollView(
       slivers: [
         _buildHeroSection(context, ref, show, heroEpisode),
-        SliverToBoxAdapter(
-          child: _buildEpisodeHeroBody(context, ref, show, heroEpisode),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 28),
-            child: CastRail(members: show.cast),
+        // The hero runs under the rail; everything below it sits beside it.
+        ...railInsetSlivers([
+          SliverToBoxAdapter(
+            child: _buildEpisodeHeroBody(context, ref, show, heroEpisode),
           ),
-        ),
-        SliverToBoxAdapter(
-          child: DetailSimilarRail(show: show),
-        ),
-        SliverToBoxAdapter(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              // Status chip only. Content rating and genres live in the
-              // hero's tag row; repeating them here rendered each twice.
-              DetailMetadataWrap(chips: [
-                if (show.status case final status? when status.isNotEmpty)
-                  DetailMetadataChip(
-                    label: status,
-                    color: status == 'Ended'
-                        ? AppColors.textSecondary
-                        : AppColors.success,
-                  ),
-              ]),
-              const SizedBox(height: 24),
-              if (show.overview case final overview?) ...[
-                DetailOverview(overview: overview),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 28),
+              child: CastRail(members: show.cast),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: DetailSimilarRail(show: show),
+          ),
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 20),
+                // Status chip only. Content rating and genres live in the
+                // hero's tag row; repeating them here rendered each twice.
+                DetailMetadataWrap(chips: [
+                  if (show.status case final status? when status.isNotEmpty)
+                    DetailMetadataChip(
+                      label: status,
+                      color: status == 'Ended'
+                          ? AppColors.textSecondary
+                          : AppColors.success,
+                    ),
+                ]),
                 const SizedBox(height: 24),
+                if (show.overview case final overview?) ...[
+                  DetailOverview(overview: overview),
+                  const SizedBox(height: 24),
+                ],
+                if (show.seasons.isNotEmpty) ShowSeasonSection(show: show),
+                const SizedBox(height: 8),
               ],
-              if (show.seasons.isNotEmpty) ShowSeasonSection(show: show),
-              const SizedBox(height: 8),
-            ],
+            ),
           ),
-        ),
-        ShowEpisodeList(show: show, onRevealHero: _revealHero),
-        const SliverDockGap(),
+          ShowEpisodeList(show: show, onRevealHero: _revealHero),
+          const SliverDockGap(),
+        ]),
       ],
     );
   }
@@ -199,6 +204,9 @@ class ShowDetailScreen extends ConsumerWidget {
         overlay: DetailHeroTitle(
           title: show.title,
           subtitle: show.yearDisplay,
+          poster: show.poster == null
+              ? null
+              : DetailArtImage(art: show.poster, slot: ArtSlot.poster),
           below: selectedEpisode == null
               ? null
               : _buildEpisodeContextPill(show, selectedEpisode),
@@ -242,6 +250,7 @@ class ShowDetailScreen extends ConsumerWidget {
     EpisodeView episode,
   ) {
     return HeroPlayControl(
+      resume: _resumeSeconds(episode) != null,
       files: episode.files,
       onFileSelected: (file) => pushPlayer(
         context,

@@ -61,8 +61,8 @@ Future<void> _pumpCalendar(
   required List<ItemSummary> entries,
   required CalendarViewMode mode,
 }) async {
-  // Same 600-wide mobile layout and 34px home indicator as the library cases.
-  tester.view.physicalSize = const Size(600, 800);
+  // Same 599-wide mobile layout and 34px home indicator as the library cases.
+  tester.view.physicalSize = const Size(599, 800);
   tester.view.devicePixelRatio = 1.0;
   tester.view.padding = const FakeViewPadding(bottom: 34);
   addTearDown(tester.view.reset);
@@ -100,9 +100,9 @@ void main() {
       // glyph is a full em square, so labels measure far wider here than on a
       // device. `library_screen_layout_test.dart` carries the same caveat.
       //
-      // 600 is still below Breakpoints.tablet (900), so this is the mobile
-      // branch and the dock is present.
-      tester.view.physicalSize = const Size(600, 800);
+      // 599 is the widest width below Breakpoints.mobile (600), so this is
+      // the bottom-bar branch and the dock is present.
+      tester.view.physicalSize = const Size(599, 800);
       tester.view.devicePixelRatio = 1.0;
       tester.view.padding = const FakeViewPadding(bottom: 34);
       addTearDown(tester.view.reset);
@@ -134,9 +134,9 @@ void main() {
         tester,
         // 600 wide, not 400: at 400 the library app bar's Row overflows on a
         // pre-existing responsive bug unrelated to this change, and the test
-        // would fail for the wrong reason. Still below Breakpoints.tablet
-        // (900), so this is the mobile branch with a dock.
-        size: const Size(600, 900),
+        // would fail for the wrong reason. Still below Breakpoints.mobile
+        // (600), so this is the bottom-bar branch with a dock.
+        size: const Size(599, 900),
         bottomInset: 34,
         wrap: (child) => shellHarness(child: child),
       );

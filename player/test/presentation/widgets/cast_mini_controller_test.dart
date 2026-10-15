@@ -1954,8 +1954,8 @@ void main() {
     // of this task's changes involved, so it is a pre-existing test-harness
     // artifact, not a regression from floating the bar. Widened just enough
     // to clear it while staying a narrow, portrait, "phone" viewport (well
-    // under `Breakpoints.tablet`'s 900).
-    const phoneSize = Size(700, 844);
+    // under 600, `Breakpoints.mobile`, where the shell shows the bottom bar).
+    const phoneSize = Size(599, 844);
 
     Future<void> pumpShell(
       WidgetTester tester, {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../widgets/detail_art_image.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../widgets/detail_hero_app_bar.dart';
+import '../../widgets/shell_rail_inset.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/theme/colors.dart';
@@ -35,6 +36,7 @@ class MovieDetailScreen extends ConsumerWidget {
       value: ref.watch(movieViewProvider(target)),
       noun: 'movie',
       onRetry: () => ref.read(movieActionsProvider(target)).refresh(),
+      tintArt: (movie) => movie.backdrop,
       builder: (context, movie) => _buildContent(context, ref, movie),
     );
   }
@@ -63,21 +65,31 @@ class MovieDetailScreen extends ConsumerWidget {
     return CustomScrollView(
       slivers: [
         _buildHeroSection(context, ref, movie),
-        SliverToBoxAdapter(
-          child: DetailHeroBody(
-            actionColumn: (compact) =>
-                _buildActionColumn(context, ref, movie, compact: compact),
-            tagColumn: _buildTagColumn(context, movie),
+        // The hero runs under the rail; everything below it sits beside it.
+        ...railInsetSlivers([
+          SliverToBoxAdapter(
+            child: DetailHeroBody(
+              actionColumn: (compact) =>
+                  _buildActionColumn(context, ref, movie, compact: compact),
+              tagColumn: _buildTagColumn(context, movie),
+            ),
           ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 28),
-            child: CastRail(members: movie.cast),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 28),
+              child: CastRail(members: movie.cast),
+            ),
           ),
-        ),
-        SliverToBoxAdapter(child: DetailSimilarRail(movie: movie)),
-        const SliverDockGap(),
+          SliverToBoxAdapter(child: DetailSimilarRail(movie: movie)),
+          if (movie.overview case final overview? when overview.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 24),
+                child: DetailOverview(overview: overview),
+              ),
+            ),
+          const SliverDockGap(),
+        ]),
       ],
     );
   }
@@ -130,7 +142,6 @@ class MovieDetailScreen extends ConsumerWidget {
         if (movie.contentRating case final rating?) rating,
         ...movie.genres,
       ],
-      overview: movie.overview,
       rating: movie.ratingDisplay,
     );
   }
@@ -190,6 +201,9 @@ class MovieDetailScreen extends ConsumerWidget {
         overlay: DetailHeroTitle(
           title: movie.title,
           subtitle: movie.yearDisplay,
+          poster: movie.poster == null
+              ? null
+              : DetailArtImage(art: movie.poster, slot: ArtSlot.poster),
           action: _buildHeroPlayControl(context, ref, movie),
         ),
       ),
@@ -203,6 +217,7 @@ class MovieDetailScreen extends ConsumerWidget {
     MovieView movie,
   ) {
     return HeroPlayControl(
+      resume: movie.hasResumableProgress,
       files: movie.files,
       onFileSelected: (file) => pushPlayer(
         context,

@@ -44,6 +44,7 @@ Future<List<PickerChoice?>> _open(
   List<Source> sources, {
   SourceId? currentId = testMydiaSourceId,
   Size size = const Size(800, 600),
+  double anchorWidth = 240,
   Map<SourceId, FakeMediaSource> fakes = const {},
   List<SourceProfile> profiles = const [],
   List<MediaSource> included = const [],
@@ -75,7 +76,8 @@ Future<List<PickerChoice?>> _open(
         body: Align(
           alignment: Alignment.topLeft,
           child: SizedBox(
-            width: 240,
+            width: anchorWidth,
+            height: anchorWidth < 240 ? anchorWidth : null,
             child: Builder(
               builder: (context) => TextButton(
                 key: const Key('open-picker'),
@@ -297,8 +299,15 @@ void main() {
   });
 
   testWidgets('narrow layouts use a bottom sheet', (tester) async {
-    await _open(tester, [_source('acc1', 'aa11')]);
+    await _open(tester, [_source('acc1', 'aa11')], size: const Size(599, 600));
     expect(find.byType(BottomSheet), findsOneWidget);
+  });
+
+  testWidgets('the rail width already gets the popover, not a sheet',
+      (tester) async {
+    await _open(tester, [_source('acc1', 'aa11')], size: const Size(600, 600));
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byKey(const ValueKey('source-picker')), findsOneWidget);
   });
 
   testWidgets('wide layouts hang a popover under the anchor', (tester) async {
@@ -310,6 +319,24 @@ void main() {
       tester.getTopLeft(find.byKey(const ValueKey('source-picker'))).dy,
       greaterThanOrEqualTo(anchorBottom),
     );
+  });
+
+  testWidgets('a 48px anchor opens a full-width popover beside it',
+      (tester) async {
+    await _open(tester, [_source('acc1', 'aa11')],
+        size: const Size(1280, 800), anchorWidth: 48);
+    expect(tester.takeException(), isNull);
+
+    final anchor = tester.getRect(find
+        .ancestor(
+          of: find.byKey(const Key('open-picker')),
+          matching: find.byType(SizedBox),
+        )
+        .first);
+    expect(anchor.width, 48);
+    final popover = tester.getRect(find.byKey(const ValueKey('source-picker')));
+    expect(popover.width, greaterThanOrEqualTo(240));
+    expect(popover.left, greaterThanOrEqualTo(anchor.right));
   });
 
   testWidgets('Escape closes the popover with no choice', (tester) async {

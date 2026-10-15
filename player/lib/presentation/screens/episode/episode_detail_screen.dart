@@ -13,6 +13,7 @@ import '../detail/start_download.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../widgets/detail_hero_app_bar.dart';
+import '../../widgets/shell_rail_inset.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/theme/colors.dart';
@@ -31,6 +32,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
       value: ref.watch(episodeViewProvider(target)),
       noun: 'episode',
       onRetry: () => ref.read(episodeActionsProvider(target)).refresh(),
+      tintArt: (episode) => episode.heroArt,
       builder: (context, episode) => _buildContent(context, ref, episode),
     );
   }
@@ -41,49 +43,52 @@ class EpisodeDetailScreen extends ConsumerWidget {
     return CustomScrollView(
       slivers: [
         _buildHeroSection(context, ref, episode),
-        SliverToBoxAdapter(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              _buildShowLink(context, episode),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: _buildTitleSectionInline(context, episode),
-                    ),
-                    const SizedBox(width: 12),
-                    SmartPlayButton(
-                      files: episode.files,
-                      onFileSelected: (file) {
-                        pushPlayer(
-                          context,
-                          ref,
-                          target,
-                          episodePlayerLocation(episode, file),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              if (showActionRow) ...[
-                _buildActionRow(context, ref, episode),
+        // The hero runs under the rail; the body sits beside it.
+        SliverRailInset(
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 const SizedBox(height: 20),
+                _buildShowLink(context, episode),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: _buildTitleSectionInline(context, episode),
+                      ),
+                      const SizedBox(width: 12),
+                      SmartPlayButton(
+                        files: episode.files,
+                        onFileSelected: (file) {
+                          pushPlayer(
+                            context,
+                            ref,
+                            target,
+                            episodePlayerLocation(episode, file),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                if (showActionRow) ...[
+                  _buildActionRow(context, ref, episode),
+                  const SizedBox(height: 20),
+                ],
+                _buildMetadata(episode),
+                if (episode.overview case final overview?
+                    when overview.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  DetailOverview(overview: overview),
+                ],
+                const DockGap(),
               ],
-              _buildMetadata(episode),
-              if (episode.overview case final overview?
-                  when overview.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                DetailOverview(overview: overview),
-              ],
-              const DockGap(),
-            ],
+            ),
           ),
         ),
       ],
@@ -111,8 +116,8 @@ class EpisodeDetailScreen extends ConsumerWidget {
       expandedHeight: 300,
       back: const DetailHeroBackButton(),
       background: DetailHeroBackground(
-        // The episode still, or the show's backdrop when there is none.
-        art: episode.still ?? episode.showBackdrop,
+        // The episode still, or the show's backdrop or poster when none.
+        art: episode.heroArt,
         slot: ArtSlot.still,
         fallbackIcon: Icons.movie_rounded,
         bottom: progress != null && progress.percentage > 0

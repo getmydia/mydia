@@ -157,6 +157,9 @@ ItemSummary episodeSummary(
       title: e['title'] as String? ?? '',
       showTitle: showTitle ?? _map(e['show'])['title'] as String?,
       poster: _art(e['thumbnailUrl']),
+      // The thumbnail is a landscape still, which is what the episode page
+      // and its rows read as a backdrop.
+      backdrop: _art(e['thumbnailUrl']),
       durationSeconds: _minutes(e['runtime']),
       userState: _progress(e['progress']),
       index: e['episodeNumber'] as int?,
@@ -299,12 +302,23 @@ ItemDetail movieDetail(SourceId sid, Map<String, dynamic> m) {
     rating: _rating(m['rating']),
     contentRating: m['contentRating'] as String?,
     isFavorite: m['isFavorite'] as bool? ?? false,
+    trailerUrl: m['trailerUrl'] as String?,
+    cast: _castOf(m['cast']),
     versions: [
       for (final f in _list(m['files']))
         mediaVersion(f, durationSeconds: summary.durationSeconds),
     ],
   );
 }
+
+List<Person> _castOf(Object? cast) => [
+      for (final c in _list(cast))
+        Person(
+          name: c['name'] as String? ?? '',
+          role: c['character'] as String?,
+          photo: _art(c['profileUrl']),
+        ),
+    ];
 
 ItemDetail showDetail(SourceId sid, Map<String, dynamic> s) => ItemDetail(
       summary: showSummary(sid, s),
@@ -314,14 +328,7 @@ ItemDetail showDetail(SourceId sid, Map<String, dynamic> s) => ItemDetail(
       contentRating: s['contentRating'] as String?,
       isFavorite: s['isFavorite'] as bool? ?? false,
       trailerUrl: s['trailerUrl'] as String?,
-      cast: [
-        for (final c in _list(s['cast']))
-          Person(
-            name: c['name'] as String? ?? '',
-            role: c['character'] as String?,
-            photo: _art(c['profileUrl']),
-          ),
-      ],
+      cast: _castOf(s['cast']),
     );
 
 /// The poster a show's seasons borrow.
@@ -346,9 +353,13 @@ ItemDetail episodeDetail(SourceId sid, Map<String, dynamic> e) {
   final summary = episodeSummary(sid, e);
   final showId = _map(e['show'])['id'] as String?;
   final season = e['seasonNumber'] as int?;
+  final showArtwork = _map(_map(e['show'])['artwork']);
   return ItemDetail(
     summary: summary,
     overview: e['overview'] as String?,
+    // What the episode page shows while the episode has no still.
+    showBackdrop: _art(showArtwork['backdropUrl']),
+    showPoster: _art(showArtwork['posterUrl']),
     versions: [
       for (final f in _list(e['files']))
         mediaVersion(f, durationSeconds: summary.durationSeconds),

@@ -12,6 +12,10 @@ import '../../domain/navigation/sidebar_layout.dart';
 abstract class SidebarLayoutStore {
   SidebarLayout? get();
   Future<void> save(SidebarLayout layout);
+
+  /// Whether the floating rail stays expanded. Per device, never synced.
+  bool get railPinned;
+  Future<void> saveRailPinned(bool pinned);
 }
 
 class HiveSidebarLayoutStore implements SidebarLayoutStore {
@@ -21,6 +25,10 @@ class HiveSidebarLayoutStore implements SidebarLayoutStore {
 
   /// There is one sidebar, so one key.
   static const _key = 'layout';
+
+  /// The rail pin shares the box under its own key. It stays a map because the
+  /// box is typed `Map`, and it never touches the layout record.
+  static const _railKey = 'rail';
 
   final Box<Map<dynamic, dynamic>> _box;
 
@@ -42,16 +50,30 @@ class HiveSidebarLayoutStore implements SidebarLayoutStore {
 
   @override
   Future<void> save(SidebarLayout layout) => _box.put(_key, layout.toJson());
+
+  @override
+  bool get railPinned => _box.get(_railKey)?['pinned'] == true;
+
+  @override
+  Future<void> saveRailPinned(bool pinned) =>
+      _box.put(_railKey, {'pinned': pinned});
 }
 
 /// Used when the Hive box will not open. The arrangement simply does not
 /// persist this session.
 class InMemorySidebarLayoutStore implements SidebarLayoutStore {
   SidebarLayout? _layout;
+  bool _railPinned = false;
 
   @override
   SidebarLayout? get() => _layout;
 
   @override
   Future<void> save(SidebarLayout layout) async => _layout = layout;
+
+  @override
+  bool get railPinned => _railPinned;
+
+  @override
+  Future<void> saveRailPinned(bool pinned) async => _railPinned = pinned;
 }

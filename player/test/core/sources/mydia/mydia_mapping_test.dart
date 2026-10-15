@@ -67,6 +67,11 @@ void main() {
     expect(d.contentRating, 'PG');
     expect(d.rating, 7.4);
     expect(d.isFavorite, isTrue);
+    expect(d.cast.single.name, 'Tomas Reyne');
+    expect(d.cast.single.role, 'Beekeeper');
+    expect(
+        d.cast.single.photo, const ArtworkRef('https://img.example/tomas.jpg'));
+    expect(d.trailerUrl, 'https://video.example/orchard-trailer');
     final v = d.versions.single;
     expect(v.id, 'f-m-1');
     expect(v.videoCodec, 'hevc');
@@ -134,6 +139,23 @@ void main() {
         const ItemRef(
             sourceId: s, kind: ItemKind.season, externalId: 's-1.s2'));
     expect(d.versions.single.id, 'f-e-21');
+  });
+
+  test('an episode detail carries its show artwork and its thumbnail as still',
+      () {
+    final d = episodeDetail(s, fx.episode('e-21'));
+    expect(
+        d.summary.backdrop, const ArtworkRef('https://img.example/e-21.jpg'));
+    expect(d.showBackdrop,
+        const ArtworkRef('https://img.example/s-1-backdrop.jpg'));
+    expect(
+        d.showPoster, const ArtworkRef('https://img.example/s-1-poster.jpg'));
+  });
+
+  test('an episode with no thumbnail has no still but keeps the show art', () {
+    final d = episodeDetail(s, {...fx.episode('e-21'), 'thumbnailUrl': null});
+    expect(d.summary.backdrop, isNull);
+    expect(d.showBackdrop, isNotNull);
   });
 
   test('continue watching maps movies and episodes, skips unknown types', () {

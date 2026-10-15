@@ -430,6 +430,8 @@ class ItemDetail {
     this.isFavorite = false,
     this.show,
     this.season,
+    this.showBackdrop,
+    this.showPoster,
   });
 
   final ItemSummary summary;
@@ -451,6 +453,11 @@ class ItemDetail {
   final ItemRef? show;
   final ItemRef? season;
 
+  /// For an episode: its show's artwork, which the episode page falls back
+  /// to when the episode has no still of its own.
+  final ArtworkRef? showBackdrop;
+  final ArtworkRef? showPoster;
+
   factory ItemDetail.fromJson(Map<String, Object?> json) => ItemDetail(
         summary: ItemSummary.fromJson(json['summary']! as Map<String, Object?>),
         overview: json['overview'] as String?,
@@ -466,6 +473,8 @@ class ItemDetail {
         isFavorite: json['isFavorite'] as bool? ?? false,
         show: _refOrNull(json['show']),
         season: _refOrNull(json['season']),
+        showBackdrop: _art(json['showBackdrop']),
+        showPoster: _art(json['showPoster']),
       );
 
   Map<String, Object?> toJson() => {
@@ -483,5 +492,7 @@ class ItemDetail {
         'isFavorite': isFavorite,
         'show': show?.toJson(),
         'season': season?.toJson(),
+        'showBackdrop': showBackdrop?.path,
+        'showPoster': showPoster?.path,
       };
 }

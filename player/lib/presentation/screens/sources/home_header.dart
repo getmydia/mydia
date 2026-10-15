@@ -26,7 +26,7 @@ PreferredSizeWidget homeHeader(
   VoidCallback? onSearch,
 }) {
   final height = WindowTitleRow.heightOf(context);
-  if (Breakpoints.isDesktop(context)) {
+  if (Breakpoints.showsRail(context)) {
     return WindowTitleBar(height: height, title: desktopTitle);
   }
   return WindowTitleBar(

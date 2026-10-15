@@ -64,6 +64,18 @@ void main() {
       );
     });
 
+    testWidgets('between 600 and 899 the rail shows, so there is no dock',
+        (tester) async {
+      expect(
+        await readBottomOf(tester, size: const Size(700, 800), inset: 34),
+        DockInsets.desktopGap,
+      );
+      expect(
+        await readBottomOf(tester, size: const Size(599, 800), inset: 34),
+        34 + DockInsets.dockGap,
+      );
+    });
+
     testWidgets('preserves the pre-existing desktop spacing of 32',
         (tester) async {
       // The eight screens this replaces all used `isDesktop ? 32.0 : 100.0`.

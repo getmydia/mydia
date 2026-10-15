@@ -14,7 +14,6 @@ class AppTheme {
   static const double radiusCard = 18.0; // Cards, modals
   static const double radiusHeroPoster = 22.0; // Home and detail hero poster
   static const double radiusChip = 8.0; // Tag and metadata chips
-  static const double radiusNavPill = 18.0; // Pill nav container
   static const double radiusNavItem = 12.0; // Items inside a pill or rail
   static const double radiusRail = 22.0; // Floating navigation rail
   static const double radiusBottomBar = 24.0; // Phone floating bottom bar

@@ -10,7 +10,7 @@ import 'package:player/presentation/widgets/cast_rail.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
 import 'package:player/presentation/widgets/hero_play_control.dart';
-import 'package:player/presentation/widgets/play_button.dart';
+import 'package:player/presentation/widgets/primary_play_button.dart';
 
 import '../detail/detail_harness.dart';
 import '../sources/fake_media_source.dart';
@@ -295,7 +295,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(PlayButton));
+    await tester.tap(find.byType(PrimaryPlayButton));
     await tester.pumpAndSettle();
 
     expect(pushed, hasLength(1));
@@ -319,7 +319,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(PlayButton));
+    await tester.tap(find.byType(PrimaryPlayButton));
     await tester.pumpAndSettle();
 
     expect(pushed, hasLength(1));
@@ -333,7 +333,7 @@ void main() {
 
     // The content overlay is inset 20 from the right of the 1000px surface.
     // The control itself, not its last child: the fixture's episodes carry
-    // several versions, so a quality dropdown follows the PlayButton.
+    // several versions, so a quality dropdown follows the PrimaryPlayButton.
     expect(
       tester.getRect(find.byType(HeroPlayControl)).right,
       closeTo(980, 0.5),
@@ -349,7 +349,7 @@ void main() {
     // _buildHeroSection. Unscrolled, anything below that line is in the
     // body, where _buildActionColumn lives. This is what distinguishes
     // "moved to the title row" from "merely re-aligned in the action column".
-    final play = tester.getRect(find.byType(PlayButton));
+    final play = tester.getRect(find.byType(PrimaryPlayButton));
     final actions = tester.getRect(find.byType(DetailActionRow));
     expect(play.bottom, lessThan(380));
     expect(play.bottom, lessThan(actions.top));

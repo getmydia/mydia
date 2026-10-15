@@ -26,9 +26,9 @@ typedef ListingPosterBuilder = Widget Function(
   VoidCallback open,
 );
 
-/// A search shortcut for the title bar on a layout without the sidebar.
+/// A search shortcut for the title bar on a layout without the rail.
 List<Widget> sourceSearchActions(BuildContext context, SourceId sourceId) => [
-      if (!Breakpoints.isDesktop(context))
+      if (!Breakpoints.showsRail(context))
         IconButton(
           icon: Container(
             padding: const EdgeInsets.all(8),

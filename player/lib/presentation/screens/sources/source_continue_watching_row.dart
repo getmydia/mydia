@@ -13,22 +13,11 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../widgets/media_context_menu.dart';
-import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
 import '../detail/detail_links.dart';
+import 'continue_watching_card.dart';
 import 'source_browse_providers.dart';
 import 'source_poster_row.dart';
-
-/// `Invented Series · S1 · E2` for an episode, the item's own caption
-/// otherwise.
-String? continueWatchingCaption(ItemSummary item) {
-  final caption = item.subtitle ?? item.year?.toString();
-  return switch ((item.showTitle, caption)) {
-    (final show?, final caption?) => '$show · $caption',
-    (final show?, null) => show,
-    (null, _) => caption,
-  };
-}
 
 class SourceContinueWatchingRow extends ConsumerStatefulWidget {
   const SourceContinueWatchingRow({super.key, required this.sourceId});
@@ -71,10 +60,15 @@ class _SourceContinueWatchingRowState
       title: 'Continue Watching',
       railId: 'continue',
       items: items,
-      posterFor: (context, item) => SourcePoster(
+      itemWidth: ContinueWatchingCard.artSize.width,
+      height: ContinueWatchingCard.heightFor(
+        context,
+        hasCaption: items.any(ContinueWatchingCard.hasCaptionFor),
+        hasTimeLeft: items.any(ContinueWatchingCard.hasTimeLeftFor),
+      ),
+      posterFor: (context, item) => ContinueWatchingCard(
         key: ValueKey('source-continue-${item.ref.externalId}'),
         item: item,
-        subtitle: continueWatchingCaption(item),
         onTap: () => _play(context, ref, item.ref),
         onContextMenu: (cardContext) => _openMenu(
           cardContext,

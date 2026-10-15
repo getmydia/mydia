@@ -35,9 +35,11 @@ ItemSummary item(Source s, String id,
         DateTime? lastPlayedAt,
         String? airDate,
         ExternalIds ids = ExternalIds.none,
-        int? progress}) =>
+        int? progress,
+        int? durationSeconds}) =>
     ItemSummary(
       ref: ItemRef(sourceId: s.id, kind: kind, externalId: id),
+      durationSeconds: durationSeconds,
       title: title ?? 'Invented $id',
       sortTitle: sortTitle,
       addedAt: addedAt,

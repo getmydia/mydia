@@ -30,13 +30,13 @@ void main() {
     expect(AmbientTintColors.neutral.surface, AppColors.surface);
   });
 
-  test('fromSeed clamps tone into 14..20 and chroma to 48', () {
+  test('fromSeed clamps tone into 14..20 and chroma to 24', () {
     final bright = AmbientTintColors.fromSeed(
       Color(Hct.from(120, 90, 85).toInt()),
     );
     final hct = Hct.fromInt(bright.ground.toARGB32());
     expect(hct.tone, inInclusiveRange(13.5, 20.5));
-    expect(hct.chroma, lessThanOrEqualTo(48.5));
+    expect(hct.chroma, lessThanOrEqualTo(24.5));
   });
 
   group('every clamped ground keeps text legible', () {

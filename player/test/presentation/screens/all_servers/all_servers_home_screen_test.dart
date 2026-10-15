@@ -10,6 +10,7 @@ import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_home_screen.dart';
 import 'package:player/presentation/screens/home/home_loading_skeleton.dart';
+import 'package:player/presentation/screens/sources/continue_watching_card.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
@@ -55,7 +56,11 @@ FakeMergedSource serverWith(String id) {
   return FakeMergedSource(
     s,
     resuming: [
-      item(s, '${id}1', lastPlayedAt: DateTime.utc(2024, 1, id == 'b' ? 2 : 1)),
+      // A duration, as every real Continue Watching item has: the skeleton's
+      // height assumes the "left" label.
+      item(s, '${id}1',
+          durationSeconds: 3600,
+          lastPlayedAt: DateTime.utc(2024, 1, id == 'b' ? 2 : 1)),
     ],
     recent: [
       item(s, '${id}2', addedAt: DateTime.utc(2024, 1, 1)),
@@ -81,6 +86,12 @@ void main() {
   });
 
   testWidgets('hero, then the four rails in order', (t) async {
+    // The surface size alone leaves the view at 800x600 logical px, which
+    // lays the hero out stacked (taller than the old backdrop) and pushes the
+    // last rails out of the built range. Size the view itself.
+    t.view.physicalSize = const Size(1280, 1800);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
     await pump(t, [serverWith('a'), serverWith('b')]);
     for (final k in [
       'all-home-hero',
@@ -161,9 +172,101 @@ void main() {
   });
 
   testWidgets('has the cast button and no in-list title', (t) async {
+    // The helper leaves the view at 800 logical px, which shows the rail
+    // layout; the phone layout needs a view below 600.
+    t.view.physicalSize = const Size(599, 1800);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
     await pump(t, [serverWith('a')]);
     expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
     expect(find.text('All servers'), findsNothing);
+  });
+
+  testWidgets('continue watching renders landscape cards with the episode line',
+      (t) async {
+    t.view.physicalSize = const Size(1280, 1800);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final s = fakeServer('a');
+    await pump(t, [
+      FakeMergedSource(s, resuming: [
+        ItemSummary(
+          ref:
+              ItemRef(sourceId: s.id, kind: ItemKind.episode, externalId: 'e1'),
+          title: 'The Low Tide',
+          showTitle: 'Saltmarsh',
+          subtitle: 'S1 · E2',
+          lastPlayedAt: DateTime.utc(2024, 1, 1),
+        ),
+      ]),
+    ]);
+    final card = find.byKey(ValueKey('all-poster-${s.id.value}-e1'));
+    expect(t.widget(card), isA<ContinueWatchingCard>());
+    expect(find.descendant(of: card, matching: find.text('Saltmarsh')),
+        findsOneWidget);
+    expect(find.descendant(of: card, matching: find.text('S1 · E2 · Server a')),
+        findsOneWidget,
+        reason: 'the episode line carries the server name');
+  });
+
+  testWidgets('continue watching names its server, with +N for extra copies',
+      (t) async {
+    t.view.physicalSize = const Size(1280, 1800);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final a = fakeServer('a'), b = fakeServer('b');
+    const ids = ExternalIds(tmdb: '7');
+    await pump(t, [
+      FakeMergedSource(a, resuming: [
+        item(a, 'a1', ids: ids, lastPlayedAt: DateTime.utc(2024, 1, 2)),
+        item(a, 'a2', lastPlayedAt: DateTime.utc(2024, 1, 1)),
+      ]),
+      FakeMergedSource(b, resuming: [
+        item(b, 'b1', ids: ids, lastPlayedAt: DateTime.utc(2024, 1, 1)),
+      ]),
+    ]);
+    final copies = find.byKey(ValueKey('all-poster-${a.id.value}-a1'));
+    expect(find.descendant(of: copies, matching: find.text('Server a +1')),
+        findsOneWidget);
+    final single = find.byKey(ValueKey('all-poster-${a.id.value}-a2'));
+    expect(find.descendant(of: single, matching: find.text('Server a')),
+        findsOneWidget);
+  });
+
+  testWidgets('the skeleton matches the loaded hero and first rail at 1280x800',
+      (t) async {
+    t.view.physicalSize = const Size(1280, 800);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final gate = Completer<void>();
+    final a = serverWith('a')..gate = gate;
+    await pump(t, [a], settle: false);
+
+    double railItemHeight(Finder rail) => t
+        .getSize(find.descendant(of: rail, matching: find.byType(ListView)))
+        .height;
+
+    final skeletonHero = t.getSize(find.byKey(HomeLoadingSkeleton.heroKey));
+    final skeletonRail = railItemHeight(
+      find.byKey(HomeLoadingSkeleton.railKey).first,
+    );
+
+    gate.complete();
+    await t.pumpAndSettle();
+
+    final loadedHero = t.getSize(find.byKey(const Key('all-home-hero')));
+    final loadedRail =
+        railItemHeight(find.byKey(const Key('all-continue-watching')));
+
+    expect(skeletonHero.height, closeTo(loadedHero.height, 1));
+    // Every All servers card carries its server name, so the loaded rail is
+    // the captioned height the skeleton assumes.
+    final expected = ContinueWatchingCard.heightFor(
+      t.element(find.byKey(const Key('all-continue-watching'))),
+      hasCaption: true,
+    );
+    expect(skeletonRail, expected);
+    expect(loadedRail, expected);
   });
 
   testWidgets('loading shows the skeleton', (t) async {

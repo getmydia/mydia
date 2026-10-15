@@ -63,7 +63,9 @@ Future<PickerChoice?> showSourcePicker(
   required SourceId? currentId,
 }) {
   final list = SourcePickerList(currentId: currentId);
-  if (!Breakpoints.isDesktop(anchorContext)) {
+  // The rail starts at the same width, and its switcher always opens the
+  // popover.
+  if (!Breakpoints.showsRail(anchorContext)) {
     return showModalBottomSheet<PickerChoice>(
       context: anchorContext,
       backgroundColor: AppColors.surfaceVariant,
@@ -93,15 +95,38 @@ class _Popover extends StatelessWidget {
   final Rect anchor;
   final Widget child;
 
+  /// The narrowest the popover gets: the expanded rail's row width. An anchor
+  /// narrower than this (the rail's 48px compact switcher) would otherwise
+  /// give a popover its rows overflow.
+  static const double minWidth = Breakpoints.railExpandedWidth - 2 * 12;
+
+  /// Anchors narrower than this are icon-only buttons (the compact switcher
+  /// is 48); anything wider is a labelled header whose width is kept.
+  static const double compactAnchorMax = 96;
+
+  /// Gap between a narrow anchor and the popover beside it.
+  static const double sideGap = 8;
+
   @override
   Widget build(BuildContext context) {
-    final top = anchor.bottom + 4;
+    final narrow = anchor.width < compactAnchorMax;
+    final screen = MediaQuery.sizeOf(context);
+    // A wide anchor (expanded rail, drawer) hangs the popover under it. A
+    // narrow one is a rail icon, so the popover opens to its right, level
+    // with it, rather than covering the rail.
+    final top = narrow ? anchor.top : anchor.bottom + 4;
+    final left = narrow
+        ? math.max(
+            0.0,
+            math.min(anchor.right + sideGap, screen.width - minWidth - sideGap),
+          )
+        : anchor.left;
     return Stack(
       children: [
         Positioned(
-          left: anchor.left,
+          left: left,
           top: top,
-          width: anchor.width,
+          width: narrow ? minWidth : anchor.width,
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxHeight:

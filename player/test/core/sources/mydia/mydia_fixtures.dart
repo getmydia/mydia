@@ -76,6 +76,14 @@ Map<String, dynamic> movie(String id,
       },
       'files': [file('f-$id')],
       'isFavorite': true,
+      'cast': [
+        {
+          'name': 'Tomas Reyne',
+          'character': 'Beekeeper',
+          'profileUrl': 'https://img.example/tomas.jpg'
+        },
+      ],
+      'trailerUrl': 'https://video.example/orchard-trailer',
     };
 
 Map<String, dynamic> show(String id,

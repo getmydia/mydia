@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/theme/colors.dart';
+import '../../core/layout/breakpoints.dart';
+import '../../core/theme/ambient_tint/ambient_tint.dart';
+import '../screens/sources/source_drawer_button.dart';
+import 'shell_rail_inset.dart';
 import 'window_chrome/window_title_row.dart';
 
 /// The pinned header of the movie, show and episode detail screens.
 ///
-/// The hero art runs to the window's top edge, behind the window controls,
-/// and the title row (back, cast) sits in the band on top of it. Before the
+/// The hero art runs to the window's top and left edges, behind the window
+/// controls and under the floating rail, and the title row (back, cast) sits
+/// in the band on top of it, beside the rail (`ShellRailInset`). Before the
 /// window-control band existed, each of these screens reserved a flat
 /// `AppBar`-height strip and put its own translucent back button and cast
 /// button in `leading`/`actions`; that strip is gone, and this builder is
@@ -30,7 +34,8 @@ SliverAppBar detailHeroAppBar({
     toolbarHeight: rowHeight,
     pinned: true,
     stretch: true,
-    backgroundColor: AppColors.background,
+    backgroundColor: AmbientTint.of(context).ground,
+    surfaceTintColor: Colors.transparent,
     automaticallyImplyLeading: false,
     // NavigationToolbar centers `title` by default and only sizes it to its
     // intrinsic width, which would leave `WindowTitleRow`'s own cast button
@@ -41,9 +46,28 @@ SliverAppBar detailHeroAppBar({
     // against, exactly as it does in `WindowTitleBar`'s `AppBar` slot.
     centerTitle: false,
     titleSpacing: 0,
-    title: SizedBox(
-      width: double.infinity,
-      child: WindowTitleRow(leading: back),
+    // The bar and its art span the page, under the rail; the title row sits
+    // beside it, so the back button never lands under the rail.
+    title: Padding(
+      padding: EdgeInsets.only(left: ShellRailInset.of(context)),
+      child: SizedBox(
+        width: double.infinity,
+        child: WindowTitleRow(
+          // The detail pages sit in the shell's Scaffold, so on a phone the
+          // drawer is one tap away, at the leading edge as on the listing
+          // pages: menu first, then back.
+          leading:
+              Breakpoints.isMobile(context) && SourceDrawerButton.shellHasDrawer
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SourceDrawerButton(color: Colors.white),
+                        back,
+                      ],
+                    )
+                  : back,
+        ),
+      ),
     ),
     flexibleSpace: FlexibleSpaceBar(
       stretchModes: const [

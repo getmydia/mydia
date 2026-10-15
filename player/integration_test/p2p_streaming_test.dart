@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:player/app.dart';
 import 'helpers/e2e_api_client.dart';
 import 'helpers/login_helpers.dart';
 import 'helpers/streaming_helpers.dart';
@@ -149,11 +147,7 @@ void main() {
       debugPrint('[P2P Streaming Test] Starting direct HTTP streaming test');
 
       // Launch the app
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MyApp(),
-        ),
-      );
+      await tester.pumpWidget(testApp());
 
       // Complete pairing
       await performPairing(tester);
@@ -220,11 +214,7 @@ void main() {
       debugPrint('[P2P Streaming Test] Starting P2P connection test');
 
       // Launch the app
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MyApp(),
-        ),
-      );
+      await tester.pumpWidget(testApp());
 
       // Complete pairing (this establishes P2P connection)
       await performPairing(tester);
@@ -257,11 +247,7 @@ void main() {
       debugPrint('[P2P Streaming Test] Starting full P2P streaming test');
 
       // Launch the app
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MyApp(),
-        ),
-      );
+      await tester.pumpWidget(testApp());
 
       // Complete pairing
       await performPairing(tester);
@@ -317,11 +303,7 @@ void main() {
           '[P2P Streaming Test] Starting streaming candidates query test');
 
       // Launch the app
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MyApp(),
-        ),
-      );
+      await tester.pumpWidget(testApp());
 
       // Complete pairing
       await performPairing(tester);
@@ -443,11 +425,7 @@ void main() {
       debugPrint('[P2P Streaming Test] Starting direct file streaming test');
 
       // Launch the app
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MyApp(),
-        ),
-      );
+      await tester.pumpWidget(testApp());
 
       // Complete pairing
       await performPairing(tester);
@@ -492,11 +470,7 @@ void main() {
       debugPrint('[P2P Streaming Test] Starting player navigation test');
 
       // Launch the app
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MyApp(),
-        ),
-      );
+      await tester.pumpWidget(testApp());
 
       // Complete pairing
       await performPairing(tester);

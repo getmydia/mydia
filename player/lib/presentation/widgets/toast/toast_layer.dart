@@ -13,7 +13,7 @@ import 'toaster.dart';
 /// `app.dart` mounts this in `MaterialApp.router`'s `builder`, so a toast
 /// outlives the route that showed it and scales with `TvCanvas` like the
 /// rest of the UI. The pill centres in whatever the registered
-/// `ToastObstruction`s leave free: right of the desktop sidebar, above the
+/// `ToastObstruction`s leave free: right of the floating rail, above the
 /// mobile dock, the cast bar and the visible playback controls.
 class ToastLayer extends StatefulWidget {
   const ToastLayer({super.key, required this.child});

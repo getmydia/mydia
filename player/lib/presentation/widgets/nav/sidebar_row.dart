@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../focus_highlight.dart';
+import 'rail_scope.dart';
 
 /// Individual sidebar navigation item
 class SidebarRow extends StatefulWidget {
@@ -81,8 +83,70 @@ class _SidebarRowState extends State<SidebarRow> {
 
   static const _menuWidth = 36.0;
 
+  /// The rail's geometry: a 48x48 icon box with the label beside it. The
+  /// selection fill and ring wrap the icon box, which is the part that stays
+  /// on screen while the rail is collapsed.
+  Widget _buildRail(RailScope rail) {
+    final isSelected = widget.isSelected && !widget.isDisabled;
+    return RailEntry(
+      tooltip: widget.label,
+      labelsVisible: rail.labelsVisible,
+      onTap: widget.isDisabled ? null : widget.onTap,
+      iconBox: FocusHighlight(
+        focusNode: widget.focusNode,
+        onActivate: widget.isDisabled ? null : widget.onTap,
+        borderRadius:
+            const BorderRadius.all(Radius.circular(AppTheme.radiusNavItem)),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isSelected
+                ? Colors.white.withValues(alpha: 0.18)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppTheme.radiusNavItem),
+            border: isSelected
+                ? Border.all(color: AppColors.primary, width: 2)
+                : null,
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              Icon(
+                isSelected ? widget.selectedIcon : widget.icon,
+                size: 22,
+                color: widget.isDisabled
+                    ? AppColors.textDisabled
+                    : isSelected
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+              ),
+              if (widget.badge != null)
+                Positioned(top: 8, right: 8, child: widget.badge!),
+            ],
+          ),
+        ),
+      ),
+      label: Text(
+        widget.label,
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+          color: widget.isDisabled
+              ? AppColors.textDisabled
+              : isSelected
+                  ? AppColors.textPrimary
+                  : AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final rail = RailScope.maybeOf(context);
+    if (rail != null && !widget.isEditing) return _buildRail(rail);
     final isSelected = widget.isSelected && !widget.isDisabled;
 
     // An anchor cannot be reordered or hidden, so while editing it reads as
