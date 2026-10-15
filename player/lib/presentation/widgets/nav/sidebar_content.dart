@@ -37,6 +37,7 @@ class SidebarContent extends ConsumerWidget {
     this.selectedRowFocusNode,
     this.rail = false,
     this.railLabelsVisible = false,
+    this.railFooter,
   });
 
   final String location;
@@ -65,6 +66,10 @@ class SidebarContent extends ConsumerWidget {
   /// header (the rail's footer carries the edit toggle). Edit mode is an
   /// explicit, expanded-only action and switches back to the full layout.
   final bool rail;
+
+  /// The rail's own controls (expand, pin, edit). They go above the anchored
+  /// rows rather than under them, so Settings is always the rail's last entry.
+  final Widget? railFooter;
 
   /// Whether the rail's labels are showing, which only decides whether the
   /// icon-only tooltips are needed. The labels' fade belongs to the rows.
@@ -275,6 +280,7 @@ class SidebarContent extends ConsumerWidget {
                           ref.read(sidebarLayoutControllerProvider).unhide(id),
                     ),
                   ),
+                  if (railFooter case final footer?) footer,
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Divider(
@@ -412,6 +418,7 @@ class SidebarContent extends ConsumerWidget {
                 initialFilter: MediaFilter.allMovies,
               ),
             ),
+          if (railFooter case final footer?) footer,
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Divider(

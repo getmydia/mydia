@@ -17,7 +17,8 @@ import 'rail_scope.dart';
 import 'sidebar_content.dart';
 
 /// Floating navigation rail: collapsed to icons at rest, expanding over the
-/// content (never reflowing it) on hover, focus or pin.
+/// content (never reflowing it) on hover, focus, pin or its expand button.
+/// The button is what a touch screen has, since touch never hovers.
 class FloatingRail extends ConsumerStatefulWidget {
   const FloatingRail({
     super.key,
@@ -51,6 +52,9 @@ class FloatingRail extends ConsumerStatefulWidget {
 class _FloatingRailState extends ConsumerState<FloatingRail> {
   bool _hovered = false;
   bool _focused = false;
+
+  /// Opened with the expand button; stays open until dismissed.
+  bool _opened = false;
   Timer? _hoverTimer;
 
   /// The footer's edit button. Leaving edit mode disposes the edit bar's
@@ -59,7 +63,7 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
   final FocusNode _editFocus = FocusNode(debugLabel: 'rail-edit');
 
   bool get _pinned => ref.read(railPinnedProvider);
-  bool _expandedFor(bool pinned) => pinned || _hovered || _focused;
+  bool _expandedFor(bool pinned) => pinned || _hovered || _focused || _opened;
 
   @override
   void dispose() {
@@ -83,7 +87,16 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
     _setExpanded(() {
       _hovered = false;
       _focused = false;
+      _opened = false;
     });
+  }
+
+  /// The expand button. Collapsing a pinned rail unpins it, or the button
+  /// would do nothing.
+  void _toggle(bool expanded) {
+    if (!expanded) return _setExpanded(() => _opened = true);
+    if (_pinned) ref.read(railPinnedProvider.notifier).toggle();
+    _collapse();
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
@@ -196,28 +209,22 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
                         alignment: Alignment.topLeft,
                         minWidth: Breakpoints.railExpandedWidth,
                         maxWidth: Breakpoints.railExpandedWidth,
-                        child: Column(
-                          children: [
-                            Expanded(
-                              child: SidebarContent(
-                                rail: true,
-                                railLabelsVisible: expanded,
-                                location: widget.location,
-                                onNavigate: _navigate,
-                                isOffline: widget.isOffline,
-                                selectedRowFocusNode:
-                                    widget.selectedRowFocusNode,
-                                backToMydiaWidget: widget.showBackToMydia
-                                    ? const BackToMydiaButton()
-                                    : null,
-                              ),
-                            ),
-                            _RailFooter(
-                              expanded: expanded,
-                              pinned: pinned,
-                              editFocus: _editFocus,
-                            ),
-                          ],
+                        child: SidebarContent(
+                          rail: true,
+                          railLabelsVisible: expanded,
+                          location: widget.location,
+                          onNavigate: _navigate,
+                          isOffline: widget.isOffline,
+                          selectedRowFocusNode: widget.selectedRowFocusNode,
+                          backToMydiaWidget: widget.showBackToMydia
+                              ? const BackToMydiaButton()
+                              : null,
+                          railFooter: _RailFooter(
+                            expanded: expanded,
+                            pinned: pinned,
+                            editFocus: _editFocus,
+                            onToggle: () => _toggle(expanded),
+                          ),
                         ),
                       ),
                     ),
@@ -232,67 +239,85 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
   }
 }
 
-/// Pin and edit-sidebar actions under the rows. It always reserves its height
-/// so the rows above never move; while the rail is collapsed the buttons are
-/// invisible, inert and out of focus traversal.
+/// The rail's expand button, then pin and edit-sidebar. The expand button
+/// sits in the rows' icon column in both states; pin and edit are invisible,
+/// inert and out of focus traversal while the rail is collapsed.
 class _RailFooter extends ConsumerWidget {
   const _RailFooter({
     required this.expanded,
     required this.pinned,
     required this.editFocus,
+    required this.onToggle,
   });
 
   final bool expanded;
   final bool pinned;
   final FocusNode editFocus;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final editing = ref.watch(sidebarEditModeProvider);
-    return Padding(
-      padding: const EdgeInsets.only(left: 12, bottom: 8),
-      child: SizedBox(
-        height: RailScope.rowHeight,
-        child: ExcludeFocus(
-          excluding: !expanded,
-          child: ExcludeSemantics(
+    return SizedBox(
+      height: RailScope.rowHeight,
+      child: Row(
+        children: [
+          // Pointer-only while collapsed: focus expands the rail on its own.
+          ExcludeFocus(
             excluding: !expanded,
-            child: IgnorePointer(
-              ignoring: !expanded,
-              child: RailLabel(
-                visible: expanded,
-                child: Row(
-                  children: [
-                    IconButton(
-                      key: const Key('rail-pin'),
-                      tooltip: pinned ? 'Unpin sidebar' : 'Pin sidebar',
-                      onPressed: () =>
-                          ref.read(railPinnedProvider.notifier).toggle(),
-                      icon: Icon(
-                        pinned
-                            ? Icons.push_pin_rounded
-                            : Icons.push_pin_outlined,
+            child: IconButton(
+              key: const Key('rail-toggle'),
+              tooltip: expanded ? 'Collapse sidebar' : 'Expand sidebar',
+              onPressed: onToggle,
+              color: AppColors.textSecondary,
+              icon: Icon(
+                expanded
+                    ? Icons.keyboard_double_arrow_left_rounded
+                    : Icons.keyboard_double_arrow_right_rounded,
+              ),
+            ),
+          ),
+          ExcludeFocus(
+            excluding: !expanded,
+            child: ExcludeSemantics(
+              excluding: !expanded,
+              child: IgnorePointer(
+                ignoring: !expanded,
+                child: RailLabel(
+                  visible: expanded,
+                  child: Row(
+                    children: [
+                      IconButton(
+                        key: const Key('rail-pin'),
+                        tooltip: pinned ? 'Unpin sidebar' : 'Pin sidebar',
+                        onPressed: () =>
+                            ref.read(railPinnedProvider.notifier).toggle(),
+                        icon: Icon(
+                          pinned
+                              ? Icons.push_pin_rounded
+                              : Icons.push_pin_outlined,
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      key: const Key('rail-edit'),
-                      focusNode: editFocus,
-                      tooltip: 'Edit sidebar',
-                      onPressed: () =>
-                          ref.read(sidebarEditModeProvider.notifier).toggle(),
-                      icon: Icon(
-                        Icons.edit_outlined,
-                        color: editing
-                            ? AppColors.primary
-                            : AppColors.textSecondary,
+                      IconButton(
+                        key: const Key('rail-edit'),
+                        focusNode: editFocus,
+                        tooltip: 'Edit sidebar',
+                        onPressed: () =>
+                            ref.read(sidebarEditModeProvider.notifier).toggle(),
+                        icon: Icon(
+                          Icons.edit_outlined,
+                          color: editing
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

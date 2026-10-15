@@ -572,6 +572,52 @@ void main() {
       expect(store.railPinned, isTrue);
     });
 
+    testWidgets('a touch on the expand button opens the rail until dismissed',
+        (tester) async {
+      await _pumpRail(tester);
+      const toggle = Key('rail-toggle');
+
+      // tester.tap is a touch: no hover ever reaches the rail.
+      await tester.tap(find.byKey(toggle));
+      await tester.pumpAndSettle();
+      expect(_railWidth(tester), 272);
+      expect(find.byKey(_scrimKey), findsOneWidget);
+
+      await tester.tap(find.byKey(_scrimKey), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(_railWidth(tester), 72);
+
+      await tester.tap(find.byKey(toggle));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(toggle));
+      await tester.pumpAndSettle();
+      expect(_railWidth(tester), 72, reason: 'the button collapses it too');
+    });
+
+    testWidgets('collapsing a pinned rail from the button unpins it',
+        (tester) async {
+      final store = await _pumpRail(tester, pinned: true);
+      expect(_railWidth(tester), 272);
+
+      await tester.tap(find.byKey(const Key('rail-toggle')));
+      await tester.pumpAndSettle();
+      expect(_railWidth(tester), 72);
+      expect(store.railPinned, isFalse);
+    });
+
+    testWidgets('Settings is the last entry, below the rail controls',
+        (tester) async {
+      await _pumpRail(tester);
+      final settings =
+          tester.getRect(find.byKey(const ValueKey('source-nav-settings')));
+      final toggle = tester.getRect(find.byKey(const Key('rail-toggle')));
+      expect(toggle.top, lessThan(settings.top));
+      expect(tester.getRect(find.byKey(const Key('rail-pin'))).top,
+          lessThan(settings.top));
+      // Same icon column as the rows.
+      expect(toggle.center.dx, closeTo(settings.left + 24, 1));
+    });
+
     testWidgets('finishing an edit from the keyboard keeps focus in the rail',
         (tester) async {
       final row = FocusNode(debugLabel: 'row');
