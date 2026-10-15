@@ -142,8 +142,8 @@ class CollectionDetailScreen extends ConsumerWidget {
     final provider = sourcePagesProvider(pages);
     final itemsData = ref.watch(provider).whenData((paged) => paged.items);
 
-    // This is a full-window route (pushed outside the shell), and so the sole
-    // owner of the title-bar band here: the body has to sit under
+    // The route sits in the shell, but this screen draws its own title row, so
+    // it owns the title-bar band here: the body has to sit under
     // `removeBand`, or the ambient `MediaQuery.padding.top` still carries the
     // band on top of the app bar's own reserved height.
     return WindowChromeInsets.removeBand(
