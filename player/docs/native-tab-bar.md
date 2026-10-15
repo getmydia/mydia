@@ -127,10 +127,22 @@ Native computes the inset from the selected tab's `safeAreaInsets.bottom`,
 which already includes the bar, the accessory and the home indicator. The box
 is also a bottom `ToastObstruction`, so toasts sit above the bar.
 
-The bar is visible when the shell's route is current (no route of any kind
-is on top of it: not the immersive player, not a dialog, not a bottom sheet)
-and the drawer is closed (`AppShell.nativeBarVisible`). A native bar must not
-sit over a Flutter sheet.
+The bar is visible when all three hold (`AppShell.nativeBarVisible`):
+
+- the shell's route is current on the root navigator (no page, dialog or
+  sheet above it: not the immersive player),
+- no popup is on the ShellRoute's own navigator, and
+- the drawer is closed.
+
+A native bar must not sit over a Flutter sheet. The second rule exists because
+`showModalBottomSheet` defaults to `useRootNavigator: false` (and `showDialog`
+does when asked), so called from a content screen they land on the shell
+navigator, which leaves the shell's root route current. `ShellPopupObserver` (wired as the ShellRoute's
+`observers`, read by `AppShell`) reports whether any `PopupRoute` is in that
+navigator's stack. It only hides the native bar: it never feeds
+`ReportedNativeBar`, so a popup does not bring the floating cast pill back
+(only a page over the shell does, via `PageCoverObserver`). The unsupported
+path never reads it.
 `NativeTabBar.dispose` hides it, so leaving the mobile layout (rotation to a
 sidebar width, sign-out) takes the bar with it. The bar starts hidden, so a
 launch that never reaches the shell (login, startup errors) shows nothing.

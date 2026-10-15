@@ -387,6 +387,7 @@ GoRouter appRouter(Ref ref) {
       // Shell route for main app with bottom navigation
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
+        observers: [ref.read(shellPopupObserverProvider)],
         builder: (context, state, child) => AppShell(
           location: state.matchedLocation,
           child: child,

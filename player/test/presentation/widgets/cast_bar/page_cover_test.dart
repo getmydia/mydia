@@ -243,4 +243,94 @@ void main() {
       expect(log.last, isTrue);
     });
   });
+
+  group('ShellPopupObserver', () {
+    test('only a popup in the stack counts', () {
+      final page = MaterialPageRoute<void>(builder: (_) => const SizedBox());
+      expect(ShellPopupObserver.hasPopupRoute([page]), isFalse);
+      expect(ShellPopupObserver.hasPopupRoute([page, _Popup()]), isTrue);
+    });
+
+    // A nested navigator stands in for the ShellRoute's: showDialog and
+    // showModalBottomSheet land on it with useRootNavigator: false.
+    Future<ShellPopupObserver> pumpNested(WidgetTester tester) async {
+      final observer = ShellPopupObserver();
+      addTearDown(observer.dispose);
+      await tester.pumpWidget(MaterialApp(
+        home: Navigator(
+          observers: [observer],
+          onGenerateRoute: (_) => MaterialPageRoute<void>(
+            builder: (_) => Scaffold(
+              body: Builder(
+                builder: (context) => Column(children: [
+                  ElevatedButton(
+                    key: const Key('dialog'),
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      useRootNavigator: false,
+                      builder: (_) => const AlertDialog(title: Text('Hi')),
+                    ),
+                    child: const Text('dialog'),
+                  ),
+                  ElevatedButton(
+                    key: const Key('sheet'),
+                    onPressed: () => showModalBottomSheet<void>(
+                      context: context,
+                      builder: (_) => const SizedBox(height: 100),
+                    ),
+                    child: const Text('sheet'),
+                  ),
+                ]),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      return observer;
+    }
+
+    testWidgets('a dialog on the shell navigator is a popup until popped',
+        (tester) async {
+      final observer = await pumpNested(tester);
+      expect(observer.hasPopup, isFalse);
+
+      var notified = 0;
+      observer.addListener(() => notified++);
+      await tester.tap(find.byKey(const Key('dialog')));
+      await tester.pumpAndSettle();
+      expect(observer.hasPopup, isTrue);
+      expect(notified, greaterThan(0));
+
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pumpAndSettle();
+      expect(observer.hasPopup, isFalse);
+    });
+
+    testWidgets('a bottom sheet on the shell navigator is a popup until popped',
+        (tester) async {
+      final observer = await pumpNested(tester);
+
+      await tester.tap(find.byKey(const Key('sheet')));
+      await tester.pumpAndSettle();
+      expect(observer.hasPopup, isTrue);
+
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pumpAndSettle();
+      expect(observer.hasPopup, isFalse);
+    });
+  });
+
+  test('nativeBarVisible is false while a popup is on the shell navigator', () {
+    expect(
+      AppShell.nativeBarVisible(
+          shellCurrent: true, drawerOpen: false, shellPopup: true),
+      isFalse,
+    );
+    expect(
+      AppShell.nativeBarVisible(
+          shellCurrent: true, drawerOpen: false, shellPopup: false),
+      isTrue,
+    );
+  });
 }

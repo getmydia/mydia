@@ -159,24 +159,29 @@ class AppShell extends ConsumerStatefulWidget {
         ),
       );
 
-  /// Whether the native tab bar should show: the shell's route is current
-  /// (no route of any kind above it: not the immersive player, not a dialog
-  /// or bottom sheet, so the bar never sits over a Flutter sheet) and the
-  /// drawer is closed. The mobile-layout condition is the branch this is
-  /// called from.
+  /// Whether the native tab bar should show: the shell's route is current on
+  /// the root navigator (no page, dialog or sheet above it: not the immersive
+  /// player), no popup is on the shell's own navigator ([shellPopup], from
+  /// `ShellPopupObserver`: a sheet (or a dialog with `useRootNavigator:
+  /// false`) shown from a content screen lands there and leaves the shell
+  /// route current), and the drawer is closed. The native bar is drawn above
+  /// the whole Flutter view, so it must never sit over a Flutter sheet. The
+  /// mobile-layout condition is the branch this is called from.
   @visibleForTesting
   static bool nativeBarVisible({
     required bool shellCurrent,
     required bool drawerOpen,
+    bool shellPopup = false,
   }) =>
-      shellCurrent && !drawerOpen;
+      shellCurrent && !drawerOpen && !shellPopup;
 
   /// Whether the shell reports the native bar to `ReportedNativeBar`, which
   /// makes `CastBarLayer` stand the floating cast pill down. Unlike
   /// [nativeBarVisible] this ignores popups: only a PAGE over the shell
   /// ([coveredByPage], from `PageCoverObserver`) brings the pill back. A
   /// dialog or the native accessory's own cast sheet must not, or the pill
-  /// would paint over it.
+  /// would paint over it. A popup on the shell navigator (`shellPopup` of
+  /// [nativeBarVisible]) is a popup too, and is deliberately not an input.
   @visibleForTesting
   static bool nativeBarReported({
     required bool native,
@@ -191,6 +196,7 @@ class AppShell extends ConsumerStatefulWidget {
     required bool native,
     required bool drawerOpen,
     required bool shellCurrent,
+    bool shellPopup = false,
     required String location,
     required List<SourceNavEntry> entries,
     required bool isOffline,
@@ -204,7 +210,10 @@ class AppShell extends ConsumerStatefulWidget {
         entries: entries,
         onNavigate: onNavigate,
         visible: nativeBarVisible(
-            shellCurrent: shellCurrent, drawerOpen: drawerOpen),
+          shellCurrent: shellCurrent,
+          drawerOpen: drawerOpen,
+          shellPopup: shellPopup,
+        ),
         isOffline: isOffline,
         showBackToMydia: showBackToMydia,
         settingsBadge: settingsBadge,
@@ -324,6 +333,11 @@ class _AppShellState extends ConsumerState<AppShell>
       _coverObserver?.removeListener(_onRouteChanged);
       _coverObserver = cover..addListener(_onRouteChanged);
     }
+    final popups = ref.read(shellPopupObserverProvider);
+    if (_popupObserver != popups) {
+      _popupObserver?.removeListener(_onRouteChanged);
+      _popupObserver = popups..addListener(_onRouteChanged);
+    }
     final router = GoRouter.of(context);
     if (_router != router) {
       _router?.routerDelegate.removeListener(_onRouteChanged);
@@ -337,6 +351,7 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   PageCoverObserver? _coverObserver;
+  ShellPopupObserver? _popupObserver;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
@@ -361,6 +376,7 @@ class _AppShellState extends ConsumerState<AppShell>
     WidgetsBinding.instance.removeObserver(this);
     _router?.routerDelegate.removeListener(_onRouteChanged);
     _coverObserver?.removeListener(_onRouteChanged);
+    _popupObserver?.removeListener(_onRouteChanged);
     _collectionAutoSync?.dispose();
     _sidebarFocusNode.dispose();
     _sidebarScopeNode.dispose();
@@ -536,6 +552,9 @@ class _AppShellState extends ConsumerState<AppShell>
     final route = ModalRoute.of(context);
     // Any route above the shell (page, dialog, sheet) hides the native bar.
     final shellCurrent = route?.isCurrent ?? true;
+    // A dialog or sheet on the shell's own navigator hides it too. This never
+    // feeds the cast pill below: a popup must not bring the pill back.
+    final shellPopup = _popupObserver?.hasPopup ?? false;
     // Only a page above the shell brings the floating cast pill back.
     final coveredByPage = _coverObserver?.isCovered(route) ?? false;
 
@@ -596,6 +615,7 @@ class _AppShellState extends ConsumerState<AppShell>
             native: native,
             drawerOpen: _drawerOpen,
             shellCurrent: shellCurrent,
+            shellPopup: shellPopup,
             location: location,
             entries: bottomNavEntries(
               ref.watch(sourceNavEntriesProvider(location)),
