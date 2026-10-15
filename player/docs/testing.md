@@ -85,6 +85,25 @@ exists in the schema, so a regression fails there. That guard is root-fields-onl
 and codegen is still the real validator. `no_orphan_documents_test.dart` fails
 on a document nothing sends.
 
+## Tests share an isolate in CI
+
+CI runs the VM suite as one bundle (see `workflow.md`), so a file inherits
+whatever global state earlier files left behind. Three helpers in
+`test/test_utils/` close the leaks that bundle exposed. Read each one's dartdoc
+before using it.
+
+- **`useRealHttp()`** (`real_http.dart`): call first in `main()` of any file that
+  talks to a real local server. flutter_test's binding mocks `HttpOverrides.global`
+  to answer 400, and a bundled run has always initialised it already.
+- **`noHiveOverrides`** (`no_downloads.dart`): add to the container of any test
+  that removes an account, so it never opens Hive. `noCollectionSyncOverride` is
+  the collection-sync half of it; if your container already overrides
+  `collectionSyncBoxProvider`, use `noDownloadsOverride` instead, because
+  Riverpod rejects duplicate overrides.
+- **`useInMemorySubtitlePrefs()`** (`in_memory_subtitle_prefs.dart`): call in
+  `main()` of any file that mounts `SubtitleTrackSelectorSheet`, so the language
+  prefs box is opened in memory and never touches disk.
+
 ## E2E harness layout
 
 The E2E server runs the production image built from the root `Dockerfile`.

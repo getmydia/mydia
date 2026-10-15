@@ -47,6 +47,26 @@ check the command carried the flag. The full suite was about 2115 tests as of
 ./dev flutter test --concurrency=1 [paths]
 ```
 
+CI does not run this command. `Test / Player` runs the suite as one bundle with
+`very_good test --concurrency 1`, which compiles every test file into a single
+entrypoint instead of compiling each separately, the cost that took 16 of the
+job's 20 minutes. Bundled, every file shares one isolate, so a test that passes
+here and fails in CI has leaked global state into, or picked it up from,
+another file: `HttpOverrides.global` after a widget test initialised the
+binding, a Hive box left open, a singleton cache. Fix the leak. The
+`skip_very_good_optimization` tag is only for files that cannot compile or run
+in a VM bundle at all (`@TestOn('browser')`, the macOS goldens). Reproduce the
+CI run locally with:
+
+```
+./dev flutter pub global activate very_good_cli 1.5.0   # once
+./dev flutter pub global run very_good_cli:very_good test --concurrency 1
+```
+
+Its pass count should match the per-file run's (about 7,600 as of 2026-10-15);
+`--concurrency 1` is needed there too, because very_good runs opted-out files in
+the same `flutter test` call.
+
 There is no `./dev player test` and no `./dev player analyze`. Both were invented
 while writing a plan on 2026-08-12 and shipped into an agent prompt file, breaking
 the first player task. `./dev player` takes only setup, build, icons, shell,
