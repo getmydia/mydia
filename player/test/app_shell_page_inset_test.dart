@@ -131,6 +131,10 @@ void main() {
     unawaited(router.push<void>('/s/$_id/movie/m1'));
     await _settle(tester);
     expect(tester.getTopLeft(find.byType(DetailHeroBackground)).dx, 0);
-    expect(tester.getRect(find.byTooltip('Back')).left, lessThan(24));
+    // No rail inset: the drawer's Menu button leads the row, Back follows.
+    final menu = tester.getRect(find.byTooltip('Menu'));
+    expect(menu.left, lessThan(24));
+    expect(tester.getRect(find.byTooltip('Back')).left,
+        greaterThanOrEqualTo(menu.right));
   });
 }
