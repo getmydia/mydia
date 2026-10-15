@@ -538,9 +538,10 @@ with `mode=max`), 2.2 GB in one `flutter-macos-stable-*` SDK entry, and only
 about 0.7 GB for everything `ci.yml` needs. Warm PR CI measured about 8 minutes
 and cold about 20, so the cure was to get the big entries out of the budget:
 
-- The Windows and macOS Flutter SDKs are not cached (`player-windows.yml`,
-  `player-macos.yml`, `player-ios.yml`; their comments explain the choice). The
-  SDK download costs about a minute.
+- No workflow caches the Flutter SDK (`subosito/flutter-action` without
+  `cache: true`). Once the Docker blobs were gone, `ci-player.yml` took their
+  place: about 2 GB per platform per player PR. The SDK download costs about a
+  minute. Pub caches are small and stay.
 - Docker layer caches no longer use `type=gha`. They are `type=registry` tags
   named `buildcache*` on the existing public GHCR packages, which do not count
   against the Actions cache: `:buildcache-sqlite` and `:buildcache-postgres`

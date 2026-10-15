@@ -150,13 +150,16 @@ jobs:
         if: needs.changes.outputs.player == 'true'
         uses: actions/checkout@v7
 
+      # No `cache: true` on any Setup Flutter step in this file. Each SDK entry
+      # is about 2 GB per platform per PR, and a few open player PRs pushed the
+      # repo past GitHub's 10 GB Actions cache limit, evicting ci.yml's Mix and
+      # cargo caches (2026-10-15). Downloading the SDK costs about a minute.
       - name: Setup Flutter
         if: needs.changes.outputs.player == 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version-file: player/.fvmrc
           channel: stable
-          cache: true
 
       # --enforce-lockfile fails the job when pubspec.lock does not resolve on
       # the .fvmrc SDK, instead of quietly re-resolving and testing a different
@@ -281,7 +284,6 @@ jobs:
         with:
           flutter-version-file: player/.fvmrc
           channel: stable
-          cache: true
 
       - name: Install dependencies
         if: needs.changes.outputs.player == 'true'
@@ -396,7 +398,6 @@ jobs:
         with:
           flutter-version-file: player/.fvmrc
           channel: 'stable'
-          cache: true
 
       - name: Cache pub dependencies
         if: steps.check_platform.outputs.enabled == 'true'
@@ -552,7 +553,6 @@ jobs:
         with:
           flutter-version-file: player/.fvmrc
           channel: 'stable'
-          cache: true
 
       - name: Setup Java
         if: needs.changes.outputs.player == 'true'
