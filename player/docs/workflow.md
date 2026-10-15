@@ -55,7 +55,9 @@ that passes here and fails in CI has leaked global state into, or picked it up
 from, another file: `HttpOverrides.global` after a widget test initialised the
 binding, a Hive box left open, a singleton cache. Fix the leak. The
 `skip_very_good_optimization` tag is only for files that cannot compile or run
-in a VM bundle at all (`@TestOn('browser')`, the macOS goldens). Reproduce the
+in a VM bundle at all (`@TestOn('browser')`, the macOS goldens). A new
+`@TestOn` file other than `@TestOn('vm')` needs the tag, and the `Test / Player`
+job checks this before running. Reproduce the
 CI run locally with:
 
 ```

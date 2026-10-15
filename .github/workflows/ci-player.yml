@@ -180,6 +180,23 @@ jobs:
         if: needs.changes.outputs.player == 'true'
         run: dart analyze --fatal-infos
 
+      - name: Check @TestOn files are tagged out of the bundle
+        # A bundle ignores per-file @TestOn, and the compile error it produces
+        # for an untagged browser test ("dart:js_interop is not available")
+        # does not name the cause. Fail here with the file instead.
+        if: needs.changes.outputs.player == 'true'
+        run: |
+          set -euo pipefail
+          bad=0
+          for f in $(git ls-files 'test/*_test.dart'); do
+            if grep -E '^@TestOn\(' "$f" | grep -qv "^@TestOn('vm')" \
+              && ! grep -q 'skip_very_good_optimization' "$f"; then
+              echo "::error file=player/$f::@TestOn other than 'vm' needs @Tags(['skip_very_good_optimization']): the very_good bundle cannot compile it"
+              bad=1
+            fi
+          done
+          exit "$bad"
+
       - name: Install very_good_cli
         if: needs.changes.outputs.player == 'true'
         run: dart pub global activate very_good_cli 1.5.0
