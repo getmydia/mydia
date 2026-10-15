@@ -250,8 +250,8 @@ jobs:
           set -euo pipefail
           FAIL=0
           for name in "Test" "Test / PostgreSQL" "Test / E2E Browser"; do
-            count=$(yq "[.jobs[] | select(.name == \"$name\")] | length" .github/workflows/ci.yml)
-            cond=$(yq ".jobs[] | select(.name == \"$name\") | .if" .github/workflows/ci.yml)
+            count=$(yq -r "[.jobs[] | select(.name == \"$name\")] | length" .github/workflows/ci.yml)
+            cond=$(yq -r ".jobs[] | select(.name == \"$name\") | .if" .github/workflows/ci.yml)
             if [ "$count" != "1" ] || [ "$cond" != "always()" ]; then
               echo "::error::required check '$name' must be on exactly one job with if: always() (found $count job(s), if: $cond)"
               FAIL=1
@@ -406,6 +406,8 @@ jobs:
 
   dialyzer:
     name: Dialyzer
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -448,6 +450,8 @@ jobs:
 
   rust:
     name: Rust
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -578,7 +582,9 @@ jobs:
           DEVENV
 
   test-e2e:
-    name: Test / E2E Browser
+    name: Test / E2E Browser (run)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -636,6 +642,19 @@ jobs:
   test-postgres-result:
     name: Test / PostgreSQL
     needs: [changes, test-postgres]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to pass or skip
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
+
+  test-e2e-result:
+    name: Test / E2E Browser
+    needs: [changes, test-e2e]
     if: always()
     runs-on: ubuntu-latest
     steps:
