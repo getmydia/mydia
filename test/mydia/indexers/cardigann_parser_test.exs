@@ -386,6 +386,20 @@ defmodule Mydia.Indexers.CardigannParserTest do
     end
   end
 
+  describe "requestDelay" do
+    test "is read from the camelCase key definitions use" do
+      yaml =
+        String.replace(
+          @minimal_public_indexer,
+          "encoding: UTF-8\n",
+          "encoding: UTF-8\nrequestDelay: 3\n"
+        )
+
+      assert {:ok, parsed} = CardigannParser.parse_definition(yaml)
+      assert parsed.request_delay == 3
+    end
+  end
+
   describe "parse_search_config/1" do
     test "keeps each path's inputs, inheritinputs, response and followredirect" do
       yaml_data = %{

@@ -154,12 +154,12 @@ defmodule Mydia.Indexers.Cardigann.Bench.Metrics do
 
   # -- M4 ------------------------------------------------------------------
 
-  # A definition's `requestDelay` makes the wasm host (RateLimiter) sleep outside
-  # the timed network call, so that sleep lands in "wall minus network" for wasm.
-  # The Elixir engine never honours it (its parser reads the key `requestdelay`,
-  # and every definition spells it `requestDelay`), so the delay would bias M4
-  # against wasm only. Rows with a delay are therefore excluded from the gating
-  # figure; `overhead_all` keeps the raw figure.
+  # A definition's `requestDelay` makes both engines wait on the RateLimiter
+  # between requests, outside the timed network call, so the wait lands in
+  # "wall minus network". A search of several pages waits more than a one-page
+  # search, so a delayed definition would skew the comparison. Rows with a delay
+  # are therefore excluded from the gating figure; `overhead_all` keeps the raw
+  # figure.
   defp no_delay?(row), do: (row[:request_delay_ms] || 0) == 0
 
   # The gating M4 sample: one (definition, query) where all three engines

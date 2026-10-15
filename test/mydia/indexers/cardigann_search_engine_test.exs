@@ -727,9 +727,9 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
   end
 
   describe "rate limiting" do
-    test "respects request_delay setting" do
+    test "spaces requests to one definition by request_delay, without delaying the first" do
       definition = %Parsed{
-        id: "test",
+        id: "rate-#{System.unique_integer([:positive])}",
         name: "Test",
         description: "Test indexer",
         language: "en-US",
@@ -745,34 +745,32 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         },
         login: nil,
         download: nil,
+        # 100ms interval
         request_delay: 0.1,
-        # 100ms delay
         follow_redirect: false
       }
 
-      params = %{
-        query_params: %{},
-        headers: [],
-        method: :get
-      }
+      params = %{query_params: %{}, headers: [], method: :get}
 
-      start_time = System.monotonic_time(:millisecond)
+      request = fn ->
+        started = System.monotonic_time(:millisecond)
 
-      # This will fail to connect, but we're just testing the delay
-      CardigannSearchEngine.execute_http_request(
-        definition,
-        "https://invalid-domain.example",
-        params,
-        %{},
-        %{}
-      )
+        # Fails to connect; only the throttle timing matters.
+        CardigannSearchEngine.execute_http_request(
+          definition,
+          "https://invalid-domain.example",
+          params,
+          %{},
+          %{}
+        )
 
-      end_time = System.monotonic_time(:millisecond)
-      elapsed = end_time - start_time
+        System.monotonic_time(:millisecond) - started
+      end
 
-      # Should have delayed for at least 100ms
-      # We allow some margin for test execution
-      assert elapsed >= 90
+      # The first request is not delayed (the request itself fails fast).
+      assert request.() < 90
+      # The second one waits out the interval since the first.
+      assert request.() >= 90
     end
   end
 

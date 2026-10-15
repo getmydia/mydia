@@ -177,7 +177,7 @@ defmodule Mydia.Indexers.CardigannParser do
         login: login,
         download: parse_download_config(yaml_data),
         settings: parse_settings(yaml_data),
-        request_delay: Map.get(yaml_data, "requestdelay"),
+        request_delay: Map.get(yaml_data, "requestDelay") || Map.get(yaml_data, "requestdelay"),
         # Jackett follows redirects on search requests, and no definition in the
         # corpus sets this key, so a `false` default meant Mydia followed none
         # of them. A definition that genuinely needs the raw 3xx sets

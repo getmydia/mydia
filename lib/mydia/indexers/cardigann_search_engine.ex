@@ -67,6 +67,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.FlareSolverr
+  alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.FlareSolverr.ClearanceCache
 
   require Logger
@@ -806,11 +807,12 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   defp apply_rate_limit(%Parsed{request_delay: nil}), do: :ok
 
-  defp apply_rate_limit(%Parsed{request_delay: delay}) when is_number(delay) do
-    # Convert delay to milliseconds if needed (some definitions use seconds)
+  defp apply_rate_limit(%Parsed{id: definition_id, request_delay: delay}) when is_number(delay) do
+    # Convert delay to milliseconds if needed (some definitions use seconds).
+    # It is a minimum interval between requests to one definition, so the first
+    # request goes straight out.
     delay_ms = if delay < 10, do: trunc(delay * 1000), else: trunc(delay)
-    Process.sleep(delay_ms)
-    :ok
+    RateLimiter.throttle("cardigann:" <> definition_id, delay_ms)
   end
 
   defp build_request_options(definition, url, request_params, user_config, config) do

@@ -295,8 +295,8 @@ Page 1 is the search: it gets mirror failover, FlareSolverr and the login
 session, and its error is the search's error. Later pages
 (`Cardigann.SearchPages`) are best effort. They are pinned to the mirror
 page 1 answered on (`response.base_url`, `pin_base_url: true`), reuse its
-session and clearance, wait out `requestDelay` like any request, and stop at
-the first failed or empty page. Rows are de-duplicated within the indexer by
+session and clearance, and stop at the first failed or empty page. Requests to
+one definition are spaced by its `requestDelay`. Rows are de-duplicated within the indexer by
 info hash, then download URL.
 
 Each path keeps its own `inputs` (merged over the search inputs unless
