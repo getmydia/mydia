@@ -190,6 +190,7 @@ void main() {
     final stuck = ProviderContainer(overrides: [
       downloadManagerProvider
           .overrideWith((ref) => Completer<DownloadService>().future),
+      noCollectionSyncOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
     ]);
@@ -207,6 +208,7 @@ void main() {
       final c = ProviderContainer(overrides: [
         sourceCacheProvider.overrideWithValue(cache),
         downloadManagerProvider.overrideWith((ref) => gate.future),
+        noCollectionSyncOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ]);
@@ -247,6 +249,7 @@ void main() {
         sourceCacheProvider.overrideWithValue(cache),
         downloadManagerProvider
             .overrideWith((ref) => Completer<DownloadService>().future),
+        noCollectionSyncOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ]);

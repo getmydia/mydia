@@ -198,6 +198,7 @@ void main() {
       await secrets.writeAccountToken(third.account, 't3');
       final c = ProviderContainer(overrides: [
         sourceCacheProvider.overrideWithValue(_ThrowingCache()),
+        ...noHiveOverrides,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(secrets),
       ]);
