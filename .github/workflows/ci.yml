@@ -488,8 +488,14 @@ jobs:
         run: devenv shell -- cargo test --manifest-path native/mydia_subsync/Cargo.toml
 
   test-postgres:
-    name: Test / PostgreSQL
+    name: Test / PostgreSQL (${{ matrix.partition }}/3)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3]
 
     services:
       postgres:
@@ -539,9 +545,14 @@ jobs:
       # `services: postgres` container. DATABASE_TYPE is set here (not at job/eval
       # level) so the compile-time adapter is Postgres without devenv defining an
       # unused devenv-managed Postgres service at eval time (KTD4).
+      #
+      # DATABASE_NAME is set explicitly, so config/test.exs's MIX_TEST_PARTITION
+      # suffix does not apply. Each shard has its own Postgres container, so they
+      # do not collide.
       - name: Test (PostgreSQL) under devenv
         env:
           MYDIA_TEST_S3_REQUIRED: "1"
+          MIX_TEST_PARTITION: ${{ matrix.partition }}
         run: |
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
@@ -563,7 +574,7 @@ jobs:
           mix ecto.create
           mix ecto.migrate
           mix ecto.migrations
-          mix test --cover --warnings-as-errors
+          mix test --partitions 3 --warnings-as-errors
           DEVENV
 
   test-e2e:
@@ -612,6 +623,19 @@ jobs:
   test:
     name: Test
     needs: [changes, guards, lint, test-sqlite]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to pass or skip
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
+
+  test-postgres-result:
+    name: Test / PostgreSQL
+    needs: [changes, test-postgres]
     if: always()
     runs-on: ubuntu-latest
     steps:
