@@ -75,7 +75,7 @@ bool hidesNativeHls(String contentType, {required bool hlsJsUsable}) {
 Future<void> prepareHlsEngine() => platform.prepareHlsEngine();
 
 /// Destroys the hls.js instances attached to [player]'s element and pauses
-/// it. Call immediately before every `player.dispose()`.
+/// it. Call both immediately before and right after every `player.dispose()`.
 ///
 /// media_kit 1.2.6 creates a `new Hls(...)` on every web `open()` and never
 /// destroys it. Its `dispose()` then clears the element's `src`, which closes
@@ -86,6 +86,11 @@ Future<void> prepareHlsEngine() => platform.prepareHlsEngine();
 /// keeps requesting segments from a session the server already ended.
 /// Destroying the instances first detaches them cleanly, so there is nothing
 /// left to recover.
+///
+/// After as well, because media_kit runs `open()` and `dispose()` under one
+/// lock: an `open()` still queued when the first release ran then attaches a
+/// new hls.js, and `dispose()` clears the `src` under it. The element stays
+/// readable once disposed, so the second release finds that instance.
 ///
 /// `Player.open()` on an existing web player would leak one too, but web never
 /// reuses a `Player` across sources (see `player/docs/playback.md`, "The

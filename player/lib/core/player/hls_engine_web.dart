@@ -92,7 +92,9 @@ void _installAttachTracker() {
     if (media.isA<JSObject>()) {
       final element = media as JSObject;
       final list = _hlsByMedia.get(element) ?? JSArray<JSObject>();
-      list.callMethod<JSAny?>('push'.toJS, self);
+      // hls.js's `recoverMediaError` attaches the same instance again.
+      final seen = list.callMethod<JSBoolean>('includes'.toJS, self).toDart;
+      if (!seen) list.callMethod<JSAny?>('push'.toJS, self);
       _hlsByMedia.set(element, list);
     }
     return original.callAsFunction(self, media);

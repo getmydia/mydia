@@ -2635,6 +2635,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _videoController = null;
       releaseHlsEngine(player);
       await player.dispose();
+      // Again, for an `open()` still queued on media_kit's lock: see
+      // `releaseHlsEngine`.
+      releaseHlsEngine(player);
     }
     return true;
   }
@@ -4922,9 +4925,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _player = null;
     _videoController = null;
     // Before `dispose()`, or the hls.js media_kit leaks restarts playback on
-    // the detached element: see `releaseHlsEngine`.
-    if (player != null) releaseHlsEngine(player);
-    player?.dispose();
+    // the detached element, and again once it completes, because an `open()`
+    // queued on media_kit's lock can attach a new hls.js after the first
+    // release: see `releaseHlsEngine`. `dispose()` cannot be awaited here, so
+    // the second release rides its future; a failure surfaces exactly as the
+    // bare `dispose()` did.
+    if (player != null) {
+      releaseHlsEngine(player);
+      unawaited(player.dispose().whenComplete(() => releaseHlsEngine(player)));
+    }
     _focusNode.dispose();
     _osdPlayPauseFocus.dispose();
     _scrub.dispose();
@@ -5336,6 +5345,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (player != null) releaseHlsEngine(player);
     await player?.dispose();
+    if (player != null) releaseHlsEngine(player);
   }
 
   /// Rebuilds local playback when casting stops.

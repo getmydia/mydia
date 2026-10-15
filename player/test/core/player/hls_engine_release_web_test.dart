@@ -83,6 +83,16 @@ void main() {
     expect(_destroyed(unrelated), 0);
   });
 
+  test('an instance attached twice is destroyed once', () {
+    final video = _video();
+    final instance = _attach(hls, video);
+    instance.callMethod<JSAny?>('attachMedia'.toJS, video);
+
+    releaseHlsOnElement(video);
+
+    expect(_destroyed(instance), 1);
+  });
+
   test('pauses the element', () {
     final video = _video();
     var pauses = 0;

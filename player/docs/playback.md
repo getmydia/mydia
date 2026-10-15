@@ -160,8 +160,9 @@ to the screen's `_attachSource`, waits for the position stream to advance
 (60 s bound), then ends the old session. Native opens the new media on the
 live `Player`. Web disposes and recreates it: media_kit 1.2.6's web backend
 stacks an hls.js instance per `open()` and never destroys the old one.
-Every dispose is preceded by `releaseHlsEngine`, which destroys those
-instances: left alive, hls.js 1.7 answers the closed MediaSource by
+Every dispose is preceded and followed by `releaseHlsEngine`, which
+destroys those instances (the second call catches an `open()` that was still
+queued on media_kit's lock when the first ran): left alive, hls.js 1.7 answers the closed MediaSource by
 re-attaching and calling `play()`, so a disposed player kept playing audio
 off-screen.
 

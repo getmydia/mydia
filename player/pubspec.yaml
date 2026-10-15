@@ -4,9 +4,9 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  # Floor raised from 3.3.0 to 3.5.0 for a dependency that has since been
-  # removed. The Flutter pinned in player/.fvmrc ships a much newer Dart, and
-  # nothing below 3.5.0 is tested, so the floor stays.
+  # The floor is 3.6.0 because `toJSCaptureThis`, used by hls_engine_web.dart,
+  # arrived in Dart 3.6. The Flutter pinned in player/.fvmrc ships a much newer
+  # Dart, and nothing below the floor is tested.
   sdk: '>=3.6.0 <4.0.0'
   # Chooses the Flutter that Dependabot resolves pubspec.lock with. Dependabot
   # never reads .fvmrc; it takes the newest stable release this range allows.
