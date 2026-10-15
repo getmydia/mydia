@@ -288,7 +288,8 @@ running, and master's copy of the same job succeeded an hour into the hang. Trea
 any "Install <deps>" step as the suspect when a job outlives its siblings.
 
 **Test dies building a wasm plugin, with no error text at all.** Seen 2026-08-28
-on PR #593, where the `Test (SQLite) under devenv` step printed
+on PR #593, when `Test` was still a single job and its `Test (SQLite) under
+devenv` step printed
 
 ```text
 [plugins] compiling simkl_sync -> priv/plugins/simkl_sync.wasm
@@ -299,8 +300,10 @@ on PR #593, where the `Test (SQLite) under devenv` step printed
 and stopped at 2m43s, before a single test ran. There is no `error:`, no
 `cannot download`, no crate name, and grepping the log for any failure keyword
 returns nothing but unrelated `::error::` strings from the guard steps' own `echo`
-lines. The only tell is the runtime: a healthy `Test` job is about 20 minutes, so a
-sub-3-minute red on `Test` means it died in setup. Re-running cleared it and the
+lines. The only tell is the runtime: a healthy `Test` job then took about 20
+minutes, so a sub-3-minute red meant it died in setup. Today the same step runs
+in each `Test (SQLite N/4)` shard and a healthy shard takes a few minutes, so
+compare a red shard against its siblings. Re-running cleared it and the
 same SHA then compiled both plugins fine. Check the diff for `native/`, `*.rs`,
 `Cargo*`, `priv/plugins/` or `*.nix` first; if it touches none of them, it cannot
 have affected the wasip2 component build.
@@ -561,8 +564,8 @@ same latent dependency. Seen on PR #515.
 **Media-detail rail `render_async` timeouts.**
 `MediaLive.Show.RecommendationsRailTest` and `MediaLive.Show.FranchiseSectionTest`
 fail as `** (RuntimeError) expected async processes to finish within 5000ms`. The
-tell is that a different test in the pair fails on each run while `Test` (SQLite)
-passes the whole suite on the same commit. These tests warm some caches but the
+tell is that a different test in the pair fails on each run while the SQLite
+shards (`Test (SQLite N/4)`) pass the whole suite on the same commit. These tests warm some caches but the
 detail page still makes un-warmed lookups that escape to the live relay, so a slow
 relay round trip under CI load blows the budget. SQLite hides it by serializing
 (`max_cases: 1`). Observed on PR #536: Postgres passed, then failed twice on

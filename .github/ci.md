@@ -497,14 +497,17 @@ The SQLite suite runs as four shards (`Test (SQLite N/4)`) and the PostgreSQL
 suite as three (`Test / PostgreSQL (N/3)`), each a separate runner using
 `mix test --partitions`. SQLite stays at `max_cases: 1` inside every runner,
 since the suite shares one writer per database; each shard has its own
-`mydia_test.db`, so the constraint holds. `--partitions` assigns files by hash
+`mydia_test.db` (a fixed path, so this holds because shards are separate
+runners, not because of a partition suffix), and the constraint holds. `--partitions` assigns files by hash
 and not by duration. If one shard runs well over the others, raise the count
 in the matrix and in the `--partitions` argument rather than moving files by
 hand.
 
 The names `Test`, `Test / PostgreSQL` and `Test / E2E Browser` are required by
 the Master ruleset, and they sit on three aggregator jobs (`test`,
-`test-postgres-result`, `test-e2e-result`), not on the gated jobs. Each has
+`test-postgres-result`, `test-e2e-result`), not on the gated jobs. `Test`
+needs `Guards`, `Lint` and the SQLite shards, so it covers more than the suite.
+Each has
 `if: always()` and a step that fails unless every job it needs concluded
 `success` or `skipped`, so the aggregator itself concludes success or failure
 and never `skipped`. The real E2E job is named `Test / E2E Browser (run)` for
@@ -513,11 +516,16 @@ required-check aggregators` step in `Guards` checks with `yq` that each
 required name sits on exactly one job whose `if` is `always()`. See
 `ci-flakes.md`, "Why the list was short".
 
-Every devenv job starts with the `.github/actions/setup-devenv` composite
-action, which installs Nix, Cachix and devenv and restores the caches. It
-caches `deps/`, `_build` plus `priv/native`, and `native/*/target`. The cargo
-target cache exists because a `_build` miss used to rebuild the iroh-based
-Rustler crates from scratch.
+`Lint`, the SQLite and PostgreSQL shards, `Dialyzer`, `Rust` and the E2E job
+start with the `.github/actions/setup-devenv` composite action, which installs
+Nix, Cachix and devenv. `Changes`, `Guards` and the aggregators do not use it.
+By default the action also restores `deps/`, `_build` plus `priv/native`, and
+`native/*/target`. `Rust` turns both the Elixir caches and the cargo cache off,
+since it builds no Mix project. The PostgreSQL shards keep their own `_build`
+key family, `build-v2-devenv-postgres`, because their compile differs from the
+SQLite one; every other job shares `build-v2-devenv`. The cargo target cache
+exists because a `_build` miss used to rebuild the iroh-based Rustler crates
+from scratch.
 
 The Actions cache has a 10 GB limit per repository, and it is evicted least
 recently used first. On 2026-10-15 it held 10.6 GB, 3.8 GB of that two
