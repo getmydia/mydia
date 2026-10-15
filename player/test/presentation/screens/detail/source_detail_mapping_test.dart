@@ -91,6 +91,27 @@ void main() {
     expect(v.episodeCode, 'S01E01');
   });
 
+  test('episode art: still from the summary, show art from the detail', () {
+    String? path(DetailArt? art) => art is SourceArt ? art.ref.path : null;
+
+    final v = episodeViewFromSourceDetail(
+      ItemDetail(
+        summary: ItemSummary(
+          ref: fakeEpisode(1).ref,
+          title: 'Invented Episode 1',
+          backdrop: const ArtworkRef('/still'),
+        ),
+        showBackdrop: const ArtworkRef('/backdrop'),
+        showPoster: const ArtworkRef('/poster'),
+      ),
+      features: features,
+    );
+
+    expect(path(v.still), '/still');
+    expect(path(v.showBackdrop), '/backdrop');
+    expect(path(v.showPoster), '/poster');
+  });
+
   test('progress from user state', () {
     expect(progressFromUserState(const UserState(), 100), isNull);
     expect(progressFromUserState(const UserState(watched: true), 100)?.watched,
