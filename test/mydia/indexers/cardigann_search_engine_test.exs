@@ -159,7 +159,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       assert url =~ "season=1"
     end
 
-    test "selects correct path based on categories" do
+    test "selects the first path whose site categories map to the query" do
       definition = %Parsed{
         id: "test",
         name: "Test",
@@ -168,11 +168,17 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         type: "public",
         encoding: "UTF-8",
         links: ["https://example.com"],
-        capabilities: %{modes: %{}},
+        capabilities: %{
+          modes: %{},
+          categorymappings: [
+            %{"id" => "1", "cat" => "Movies"},
+            %{"id" => "2", "cat" => "TV"}
+          ]
+        },
         search: %{
           paths: [
-            %{path: "/movies", categories: [2000]},
-            %{path: "/tv", categories: [5000]},
+            %{path: "/movies", categories: ["1"]},
+            %{path: "/tv", categories: ["2"]},
             %{path: "/all"}
           ],
           inputs: %{},
@@ -183,17 +189,26 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         download: nil
       }
 
-      # Should select TV path
-      assert {:ok, url} = CardigannSearchEngine.build_search_url(definition, categories: [5000])
-      assert url == "https://example.com/tv"
+      assert {:ok, "https://example.com/tv"} =
+               CardigannSearchEngine.build_search_url(definition, categories: [5000])
 
-      # Should select movies path
-      assert {:ok, url} = CardigannSearchEngine.build_search_url(definition, categories: [2000])
-      assert url == "https://example.com/movies"
+      assert {:ok, "https://example.com/movies"} =
+               CardigannSearchEngine.build_search_url(definition, categories: [2000])
 
-      # Should select first path (movies) when no categories match
-      assert {:ok, url} = CardigannSearchEngine.build_search_url(definition, categories: [8000])
-      assert url == "https://example.com/movies"
+      # /all has no categories, so it is the only path an unmapped query runs.
+      assert {:ok, "https://example.com/all"} =
+               CardigannSearchEngine.build_search_url(definition, categories: [8000])
+
+      assert {:ok, [%{path: "/movies"}, %{path: "/all"}]} =
+               CardigannSearchEngine.matching_search_paths(definition, categories: [2000])
+
+      assert {:ok, [_, _, _]} = CardigannSearchEngine.matching_search_paths(definition, [])
+
+      assert {:ok, "https://example.com/tv"} =
+               CardigannSearchEngine.build_search_url(definition,
+                 categories: [2000],
+                 search_path: %{path: "/tv"}
+               )
     end
 
     test "handles missing base URL" do

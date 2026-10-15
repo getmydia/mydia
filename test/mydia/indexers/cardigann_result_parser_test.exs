@@ -1898,13 +1898,13 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
       html_path = %{
         path: "/html",
         response: %{type: "html"},
-        categories: [5000]
+        categories: ["5"]
       }
 
       xml_path = %{
         path: "/xml",
         response: %{type: "xml"},
-        categories: [2000]
+        categories: ["2"]
       }
 
       definition = %Parsed{
@@ -1913,7 +1913,12 @@ defmodule Mydia.Indexers.CardigannResultParserTest do
         type: "public",
         links: ["https://example.com"],
         encoding: "UTF-8",
-        capabilities: %{},
+        capabilities: %{
+          categorymappings: [
+            %{"id" => "2", "cat" => "Movies"},
+            %{"id" => "5", "cat" => "TV"}
+          ]
+        },
         settings: [],
         search: %{
           paths: [html_path, xml_path],

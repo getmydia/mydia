@@ -62,6 +62,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.Cardigann.LoggedOut
   alias Mydia.Indexers.Cardigann.RequestHeaders
+  alias Mydia.Indexers.Cardigann.SearchPaths
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.Adapter.Error
@@ -90,7 +91,9 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           config: map() | nil,
           settings: [map()] | nil,
           base_url: String.t() | nil,
-          on_promote: (String.t() -> term()) | nil
+          on_promote: (String.t() -> term()) | nil,
+          search_path: map() | nil,
+          pin_base_url: boolean()
         ]
 
   @type http_response :: %{
@@ -702,36 +705,35 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   @doc """
-  Selects the search path config for the given search options.
+  Returns every search path a query runs, in definition order.
 
-  Matches category-specific paths when categories are provided, otherwise
-  returns the first configured path.
+  Definitions paginate by listing one path per page; see
+  `Mydia.Indexers.Cardigann.SearchPaths` for the category rule.
   """
-  @spec select_search_path(Parsed.t(), search_opts()) :: {:ok, map()} | {:error, Error.t()}
-  def select_search_path(%Parsed{search: %{paths: paths}}, opts) do
-    categories = Keyword.get(opts, :categories, [])
-
-    # Find the first path that matches the categories, or use the first path
-    selected_path =
-      if categories != [] do
-        # Find a path that matches the categories, or default to first path
-        Enum.find(paths, fn path ->
-          path_categories = Map.get(path, :categories, [])
-          # Match if path has matching categories
-          path_categories != [] && Enum.any?(categories, &(&1 in path_categories))
-        end) || List.first(paths)
-      else
-        List.first(paths)
-      end
-
-    case selected_path do
-      nil -> {:error, Error.search_failed("No search path configured")}
-      path -> {:ok, path}
-    end
+  @spec matching_search_paths(Parsed.t(), search_opts()) ::
+          {:ok, [map(), ...]} | {:error, Error.t()}
+  def matching_search_paths(%Parsed{search: %{paths: [_ | _] = paths}} = definition, opts) do
+    mappings = Map.get(definition.capabilities || %{}, :categorymappings) || []
+    {:ok, SearchPaths.matching(paths, Keyword.get(opts, :categories, []), mappings)}
   end
 
-  def select_search_path(%Parsed{}, _opts) do
-    {:error, Error.search_failed("No search path configured")}
+  def matching_search_paths(%Parsed{}, _opts),
+    do: {:error, Error.search_failed("No search path configured")}
+
+  @doc """
+  The search path one request uses: `opts[:search_path]` when the caller names
+  one (a later page of a multi-page search), otherwise the first path
+  `matching_search_paths/2` returns.
+  """
+  @spec select_search_path(Parsed.t(), search_opts()) :: {:ok, map()} | {:error, Error.t()}
+  def select_search_path(%Parsed{} = definition, opts) do
+    case Keyword.get(opts, :search_path) do
+      %{} = path ->
+        {:ok, path}
+
+      _ ->
+        with {:ok, [first | _]} <- matching_search_paths(definition, opts), do: {:ok, first}
+    end
   end
 
   # Render a template string using the CardigannTemplate engine
