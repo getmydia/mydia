@@ -1,6 +1,6 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
@@ -48,4 +48,33 @@ void main() {
     );
     expect(seed, isNull);
   });
+
+  testWidgets('a stalled decode times out and lets go of the stream',
+      (tester) async {
+    final stalled = _StalledImage();
+    final seed = await tester.runAsync(
+      () => extractTint(stalled, timeout: const Duration(milliseconds: 50)),
+    );
+    expect(seed, isNull);
+    // The image cache holds a listener of its own while the load is pending.
+    imageCache.clear();
+    expect(stalled.completer.listening, isFalse);
+  });
+}
+
+/// Never yields a frame, like artwork stuck on a dead connection.
+class _StalledImage extends ImageProvider<_StalledImage> {
+  final completer = _StalledCompleter();
+
+  @override
+  Future<_StalledImage> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture(this);
+
+  @override
+  ImageStreamCompleter loadImage(_StalledImage key, ImageDecoderCallback _) =>
+      completer;
+}
+
+class _StalledCompleter extends ImageStreamCompleter {
+  bool get listening => hasListeners;
 }

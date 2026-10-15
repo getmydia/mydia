@@ -32,10 +32,14 @@ Future<Color?> tintFromPixels(List<int> argbPixels) async {
 }
 
 /// Decodes [provider] (already sized, see `tintDecodeWidth`) and returns its
-/// seed colour, or null when the decode fails or the art is grey.
-Future<Color?> extractTint(ImageProvider provider) async {
+/// seed colour, or null when the decode fails, takes longer than
+/// [timeout], or the art is grey.
+Future<Color?> extractTint(
+  ImageProvider provider, {
+  Duration timeout = const Duration(seconds: 10),
+}) async {
   try {
-    final image = await _decode(provider);
+    final image = await _decode(provider, timeout);
     try {
       final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (data == null) return null;
@@ -70,7 +74,7 @@ List<int> _argbPixels(ByteData rgba) {
   return out;
 }
 
-Future<ui.Image> _decode(ImageProvider provider) {
+Future<ui.Image> _decode(ImageProvider provider, Duration timeout) {
   final completer = Completer<ui.Image>();
   final stream = provider.resolve(ImageConfiguration.empty);
   late final ImageStreamListener listener;
@@ -86,5 +90,10 @@ Future<ui.Image> _decode(ImageProvider provider) {
     },
   );
   stream.addListener(listener);
-  return completer.future.timeout(const Duration(seconds: 10));
+  // A stalled load must not keep the listener, and so the image stream,
+  // alive after the caller has given up on it.
+  return completer.future.timeout(timeout, onTimeout: () {
+    stream.removeListener(listener);
+    throw TimeoutException('artwork decode', timeout);
+  });
 }
