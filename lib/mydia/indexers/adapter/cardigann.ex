@@ -116,27 +116,44 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
         with {:ok, first_rows} <- parse.(first_path, response) do
           handle_flaresolverr_result(definition, flaresolverr_result)
 
-          later_rows =
-            if first_rows == [],
-              do: [],
-              else:
-                SearchPages.collect(
-                  parsed,
-                  later_paths,
-                  search_opts,
-                  user_config,
-                  flaresolverr_opts,
-                  Map.get(response, :base_url),
-                  parse
-                )
+          rows =
+            collect_later_pages(
+              first_rows,
+              {parsed, later_paths, search_opts, user_config, flaresolverr_opts},
+              response,
+              parse
+            )
 
-          {:ok, apply_search_filters(SearchPages.dedupe(first_rows ++ later_rows), opts)}
+          {:ok, apply_search_filters(rows, opts)}
         end
       end
     else
       Logger.debug("Cardigann search skipped - feature disabled")
       {:ok, []}
     end
+  end
+
+  # An empty page 1 ends the search; otherwise the later pages are best effort.
+  defp collect_later_pages([], _page_args, _response, _parse), do: []
+
+  defp collect_later_pages(
+         first_rows,
+         {parsed, later_paths, search_opts, user_config, flaresolverr_opts},
+         response,
+         parse
+       ) do
+    later_rows =
+      SearchPages.collect(
+        parsed,
+        later_paths,
+        search_opts,
+        user_config,
+        flaresolverr_opts,
+        Map.get(response, :base_url),
+        parse
+      )
+
+    SearchPages.dedupe(first_rows ++ later_rows)
   end
 
   # Each page is parsed with its own search path, so a path's declared response

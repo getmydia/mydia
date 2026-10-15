@@ -54,7 +54,6 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:ok, response} = CardigannSearchEngine.execute_search(definition, opts)
   """
 
-  alias Mydia.Indexers.Cardigann.AdapterSupport
   alias Mydia.Indexers.Cardigann.BlockPage
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
@@ -63,6 +62,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.Cardigann.LoggedOut
   alias Mydia.Indexers.Cardigann.RequestHeaders
   alias Mydia.Indexers.Cardigann.SearchPaths
+  alias Mydia.Indexers.Cardigann.SearchRequest
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.Adapter.Error
@@ -148,7 +148,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   def execute_search(%Parsed{} = definition, opts, user_config, flaresolverr_opts)
       when is_list(opts) do
-    candidates = search_candidates(definition, opts)
+    candidates = SearchRequest.candidates(definition, opts)
 
     case candidates do
       [] ->
@@ -166,23 +166,6 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
         )
     end
   end
-
-  # A later page of a multi-page search must hit the mirror page 1 answered on,
-  # so `pin_base_url: true` tries `opts[:base_url]` alone.
-  defp search_candidates(definition, opts) do
-    base_url = Keyword.get(opts, :base_url)
-
-    if Keyword.get(opts, :pin_base_url, false) and is_binary(base_url) and base_url != "",
-      do: [String.trim_trailing(base_url, "/")],
-      else: AdapterSupport.search_candidates(definition, base_url)
-  end
-
-  # Records which mirror answered, so the later pages of a search can be pinned to it.
-  defp with_base_url({:ok, response}, base_url),
-    do: {:ok, Map.put(response, :base_url, base_url)}
-
-  defp with_base_url({:ok, response, markers}, base_url),
-    do: {:ok, Map.put(response, :base_url, base_url), markers}
 
   defp try_candidates(
          _definition,
@@ -230,7 +213,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       cond do
         elem(result, 0) == :ok ->
           if candidate != first_tried, do: promote(opts, candidate)
-          with_base_url(result, candidate)
+          SearchRequest.with_base_url(result, candidate)
 
         retryable_failure?(result) and rest != [] ->
           try_candidates(
@@ -431,7 +414,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
        %{
          query_params: build_query_params(definition, path, opts),
          headers: build_headers(definition),
-         method: path_method(path),
+         method: SearchRequest.method(path),
          follow_redirect: Map.get(path, :follow_redirect)
        }}
     end
@@ -787,7 +770,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   defp build_query_params(%Parsed{} = definition, path, opts) do
-    base_params = request_inputs(definition, path)
+    base_params = SearchRequest.inputs(definition, path)
     allow_empty = Map.get(definition.search, :allow_empty_inputs, false) == true
 
     # Build template context
@@ -813,28 +796,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end)
   end
 
-  # A path's own inputs are added to the search-level ones and win on a clash;
-  # `inheritinputs: false` sends the path's inputs alone.
-  defp request_inputs(%Parsed{search: search}, path) do
-    path_inputs = Map.get(path, :inputs) || %{}
-
-    if Map.get(path, :inherit_inputs, true) == false,
-      do: path_inputs,
-      else: Map.merge(Map.get(search, :inputs) || %{}, path_inputs)
-  end
-
   defp build_headers(%Parsed{search: search}) do
     case Map.get(search, :headers) do
       nil -> []
       headers when is_map(headers) -> Map.to_list(headers)
       headers when is_list(headers) -> headers
-    end
-  end
-
-  defp path_method(path) do
-    case path |> Map.get(:method, "get") |> to_string() |> String.downcase() do
-      "post" -> :post
-      _ -> :get
     end
   end
 
@@ -845,14 +811,6 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     delay_ms = if delay < 10, do: trunc(delay * 1000), else: trunc(delay)
     Process.sleep(delay_ms)
     :ok
-  end
-
-  # A search path's own `followredirect` overrides the definition's.
-  defp follow_redirect?(definition, request_params) do
-    case Map.get(request_params, :follow_redirect) do
-      nil -> definition.follow_redirect == true
-      value -> value == true
-    end
   end
 
   defp build_request_options(definition, url, request_params, user_config, config) do
@@ -873,7 +831,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       # it (see the note on session_cookie_pairs/4). Definition cookies are not
       # credentials, so they alone do not disable redirects.
       redirect:
-        follow_redirect?(definition, request_params) and not session_attached? and
+        SearchRequest.follow_redirect?(definition, request_params) and not session_attached? and
           not clearance_attached?,
       retry: false
     ]
