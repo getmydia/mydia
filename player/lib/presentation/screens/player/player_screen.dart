@@ -286,12 +286,15 @@ class PlayerScreen extends ConsumerStatefulWidget {
       ) &&
       !isTablet;
 
-  /// A tablet by the usual Material threshold: 600 logical pixels on the
-  /// display's short side. Measured on the display, not the window, so an iPad
-  /// in a narrow split-screen window still counts as a tablet.
+  /// Material's tablet breakpoint, in logical pixels on the display's short side.
+  static const double _tabletShortestSide = 600;
+
+  /// A tablet by the usual Material threshold. Measured on the display, not the
+  /// window, so an iPad in a narrow split-screen window still counts as a
+  /// tablet.
   @visibleForTesting
   static bool isTabletSized({required Size logicalScreenSize}) =>
-      logicalScreenSize.shortestSide >= 600;
+      logicalScreenSize.shortestSide >= _tabletShortestSide;
 
   /// Resolves an arrow key to its meaning for this input tier and OSD state.
   ///

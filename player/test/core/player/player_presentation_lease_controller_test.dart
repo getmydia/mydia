@@ -17,6 +17,33 @@ const normal = <DeviceOrientation>[
   DeviceOrientation.landscapeRight,
 ];
 
+const immersive = _SystemUiRequest(SystemUiMode.immersiveSticky, null);
+
+const restored = _SystemUiRequest(
+  SystemUiMode.manual,
+  SystemUiOverlay.values,
+);
+
+/// A system UI request, compared by mode and overlays.
+class _SystemUiRequest {
+  const _SystemUiRequest(this.mode, this.overlays);
+
+  final SystemUiMode mode;
+  final List<SystemUiOverlay>? overlays;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _SystemUiRequest &&
+      other.mode == mode &&
+      listEquals(other.overlays, overlays);
+
+  @override
+  int get hashCode => Object.hash(mode, Object.hashAll(overlays ?? const []));
+
+  @override
+  String toString() => '_SystemUiRequest($mode, $overlays)';
+}
+
 void main() {
   group('PlayerPresentationLeaseController', () {
     test('the first owner hides system UI and requests landscape', () async {
@@ -26,7 +53,7 @@ void main() {
       await pumpEventQueue();
 
       expect(harness.attempted, <Object>[
-        SystemUiMode.immersiveSticky,
+        immersive,
         landscape,
       ]);
     });
@@ -39,14 +66,14 @@ void main() {
       harness.controller.acquire(owner, lockLandscape: false);
       await pumpEventQueue();
 
-      expect(harness.attempted, <Object>[SystemUiMode.immersiveSticky]);
+      expect(harness.attempted, <Object>[immersive]);
       harness.attempted.clear();
 
       harness.controller.release(owner);
       harness.runDeferred();
       await pumpEventQueue();
 
-      expect(harness.attempted, <Object>[SystemUiMode.edgeToEdge, normal]);
+      expect(harness.attempted, <Object>[restored, normal]);
     });
 
     test('incoming acquire before outgoing release never restores', () async {
@@ -79,7 +106,7 @@ void main() {
       await pumpEventQueue();
 
       expect(harness.attempted, <Object>[
-        SystemUiMode.immersiveSticky,
+        immersive,
         landscape,
       ]);
     });
@@ -100,7 +127,7 @@ void main() {
       harness.runDeferred();
       await pumpEventQueue();
 
-      expect(harness.attempted, <Object>[SystemUiMode.edgeToEdge, normal]);
+      expect(harness.attempted, <Object>[restored, normal]);
     });
 
     test('duplicate owner operations cannot restore another owner', () async {
@@ -114,7 +141,7 @@ void main() {
       await pumpEventQueue();
 
       expect(harness.attempted, <Object>[
-        SystemUiMode.immersiveSticky,
+        immersive,
         landscape,
       ]);
       harness.attempted.clear();
@@ -130,7 +157,7 @@ void main() {
       harness.runDeferred();
       await pumpEventQueue();
 
-      expect(harness.attempted, <Object>[SystemUiMode.edgeToEdge, normal]);
+      expect(harness.attempted, <Object>[restored, normal]);
     });
 
     test('a slow enter still lands before the restore', () async {
@@ -143,15 +170,15 @@ void main() {
       harness.runDeferred();
       await pumpEventQueue();
 
-      expect(harness.attempted, <Object>[SystemUiMode.immersiveSticky]);
+      expect(harness.attempted, <Object>[immersive]);
 
       gate.complete();
       await pumpEventQueue();
 
       expect(harness.attempted, <Object>[
-        SystemUiMode.immersiveSticky,
+        immersive,
         landscape,
-        SystemUiMode.edgeToEdge,
+        restored,
         normal,
       ]);
     });
@@ -172,9 +199,9 @@ void main() {
 
       expect(reported, hasLength(1));
       expect(harness.attempted, <Object>[
-        SystemUiMode.immersiveSticky,
+        immersive,
         landscape,
-        SystemUiMode.edgeToEdge,
+        restored,
         normal,
       ]);
     });
@@ -208,7 +235,8 @@ class _Harness {
       PlayerPresentationLeaseController(
     orientationApplier: (orientations) =>
         _record(List<DeviceOrientation>.of(orientations)),
-    systemUiModeApplier: _record,
+    systemUiModeApplier: (mode, {overlays}) =>
+        _record(_SystemUiRequest(mode, overlays)),
     deferredFrameScheduler: scheduled.add,
   );
 

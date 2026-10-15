@@ -6,7 +6,10 @@ import 'package:flutter/widgets.dart';
 typedef OrientationApplier = Future<void> Function(
   List<DeviceOrientation> orientations,
 );
-typedef SystemUiModeApplier = Future<void> Function(SystemUiMode mode);
+typedef SystemUiModeApplier = Future<void> Function(
+  SystemUiMode mode, {
+  List<SystemUiOverlay>? overlays,
+});
 typedef DeferredFrameScheduler = void Function(VoidCallback callback);
 
 /// How the device is presented while a player route is open on native mobile:
@@ -71,7 +74,14 @@ class PlayerPresentationLeaseController {
     final generation = ++_restoreGeneration;
     _defer(() {
       if (generation != _restoreGeneration || _owners.isNotEmpty) return;
-      _enqueue(() => _applySystemUiMode(SystemUiMode.edgeToEdge));
+      // Matches what media_kit's exitNativeFullscreen did on player exit. The
+      // app never sets edgeToEdge, so restoring it would change Android < 15.
+      _enqueue(
+        () => _applySystemUiMode(
+          SystemUiMode.manual,
+          overlays: SystemUiOverlay.values,
+        ),
+      );
       _enqueue(() => _applyOrientations(_normalOrientations));
     });
   }
