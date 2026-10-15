@@ -12,10 +12,11 @@ defmodule Mydia.Repo.Migrations.CancelSnoozeLoopedRefreshJobs do
   same few minutes and re-read the same seasons from the shared relay over and
   over. One fresh run is enough: the next crontab tick inserts it.
 
-  Only `scheduled` rows are touched, which is where a snoozed job waits. Rows
-  for a single item (`MetadataRefresh` with a `media_item_id`) are inserted
-  `available` and never snooze, so they are unaffected. The statement is
-  portable across SQLite and PostgreSQL.
+  Only `scheduled` rows that have snoozed are touched. `Mydia.Jobs.MetadataBackfill`
+  also inserts `scheduled` per-item `MetadataRefresh` rows, but those never
+  snooze, so they carry no `"snoozed"` key in `meta` and run as planned.
+  `meta` is TEXT on SQLite and jsonb on PostgreSQL; casting it to text makes
+  the key check portable.
   """
 
   def up do
@@ -24,6 +25,7 @@ defmodule Mydia.Repo.Migrations.CancelSnoozeLoopedRefreshJobs do
     SET state = 'cancelled', cancelled_at = CURRENT_TIMESTAMP
     WHERE worker IN ('Mydia.Jobs.MetadataRefresh', 'Mydia.Jobs.AiringEpisodeRefresh')
       AND state = 'scheduled'
+      AND CAST(meta AS TEXT) LIKE '%"snoozed"%'
     """)
   end
 
