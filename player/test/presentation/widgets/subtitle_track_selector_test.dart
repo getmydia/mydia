@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
@@ -677,30 +676,14 @@ void main() {
   testWidgets(
       'a language outside the curated chip roster still gets a chip and '
       'can be adjusted', (tester) async {
-    // Opened with `bytes:`, which puts Hive on its in-memory storage
-    // backend: every read and write becomes a completed `Future.value()`
-    // with no file touched, and no `Hive.init` path to point anywhere.
-    //
-    // That is load-bearing, not tidiness. `testWidgets` runs its body in a
-    // fake-async zone, and toggling a chip below fires
-    // `SubtitleLanguagePrefs.save` -- so a disk-backed box leaves a real
-    // file write outstanding that the zone never drives. An earlier version
-    // of this test opened one under `Directory.systemTemp` and did exactly
-    // that: it hung until the ten minute per-test timeout, and then failed
-    // the next two tests in this file with `'!inTest': is not true`,
-    // because a test that times out never releases the binding.
-    final box = await Hive.openBox<List<dynamic>>(
-      SubtitleLanguagePrefs.boxName,
-      bytes: Uint8List(0),
-    );
+    // The in-memory box `useInMemorySubtitlePrefs()` opens in setUp. It must
+    // stay in memory: toggling a chip below fires `SubtitleLanguagePrefs.save`,
+    // and a disk-backed box leaves a write the fake-async zone never drives.
+    final box = Hive.box<List<dynamic>>(SubtitleLanguagePrefs.boxName);
     // Written directly, bypassing `save`, to seed a language the curated
     // roster in `subtitle_track_selector.dart` does not include -- the
     // scenario a device locale outside that fixed list produces.
     await box.put('languages', ['th', 'en']);
-    // `deleteFromDisk` is unsupported on a memory box and there is nothing
-    // on disk to clean up; closing is what unregisters the name so a later
-    // test does not inherit this box.
-    addTearDown(box.close);
 
     await tester.pumpWidget(_host(
       onSearch: (_) async =>
