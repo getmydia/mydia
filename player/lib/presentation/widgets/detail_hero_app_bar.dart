@@ -15,7 +15,7 @@ import 'window_chrome/window_title_row.dart';
 /// window-control band existed, each of these screens reserved a flat
 /// `AppBar`-height strip and put its own translucent back button and cast
 /// button in `leading`/`actions`; that strip is gone, and this builder is
-/// what replaced it everywhere at once, so the three screens cannot drift
+/// what replaced it everywhere at once, so the two screens cannot drift
 /// out of alignment with each other or with the rest of the app's chrome.
 /// Callers must be under `WindowChromeInsets.removeBand` (via the caller's
 /// `Scaffold`), otherwise the ambient `MediaQuery` padding still reserves

@@ -197,6 +197,16 @@ void main() {
       );
     });
 
+    test('Go to show on an episode with no known show opens the episode', () {
+      final episode = _ref(ItemKind.episode, 'ep-9');
+      final target = MediaContextTarget(item: episode);
+
+      expect(
+        mediaContextLocation(MediaContextAction.goToShow, target),
+        detailLocation(SourceTarget(episode)),
+      );
+    });
+
     test('Go to show on a non-episode opens the show', () {
       final target = MediaContextTarget(
         item: _ref(ItemKind.season, 'se-1'),

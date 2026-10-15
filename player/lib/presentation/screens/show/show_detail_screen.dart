@@ -60,6 +60,8 @@ class ShowDetailScreen extends ConsumerWidget {
   final int? initialSeason;
 
   /// Opened from an episode: its id, selected in the hero rather than next up.
+  /// Passed together with [initialSeason] (the episode's season); on its own
+  /// the hero falls back to the selected season's first episode.
   final String? initialEpisode;
 
   @override
@@ -143,7 +145,8 @@ class ShowDetailScreen extends ConsumerWidget {
     final selectedEpisode = resolveSelectedEpisode(selectedEpisodeId, episodes);
     // Season listings carry one stub file per episode. The hero needs the
     // real versions for its quality label, picker and download button, so it
-    // reads the selected episode's detail (cached) and keeps the stub until that lands or if it fails.
+    // reads the selected episode's detail (cached) and keeps the stub until
+    // that lands or if it fails.
     final heroEpisode = _withDetailFiles(ref, selectedEpisode);
 
     return CustomScrollView(

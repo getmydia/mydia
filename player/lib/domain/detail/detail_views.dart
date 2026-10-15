@@ -137,10 +137,6 @@ class EpisodeView {
   /// The id the show screen's selection state holds.
   String get id => target.id;
 
-  /// An episode's art: the still, else the show's backdrop, else
-  /// the show's poster.
-  DetailArt? get heroArt => still ?? showBackdrop ?? showPoster;
-
   bool get watched => progress?.watched ?? false;
 
   String get episodeCode => 'S${seasonNumber.toString().padLeft(2, '0')}'

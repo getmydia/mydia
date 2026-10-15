@@ -75,11 +75,6 @@ final seasonActionsProvider =
   ),
 );
 
-final episodeActionsProvider =
-    Provider.autoDispose.family<EpisodeActions, DetailTarget>(
-  (ref, target) => ref.read(sourceEpisodeProvider(target.ref).notifier),
-);
-
 /// The freshness banner's keys.
 List<QueryKey> freshnessKeys(DetailTarget target) => [
       SourceKeys.item(target.ref),
