@@ -19,7 +19,7 @@ import '../../../core/player/codec_support.dart';
 import '../../../core/player/hls_engine.dart';
 import '../../../core/player/media_start.dart';
 import '../../../core/player/subtitle_cues.dart';
-import '../../../core/player/player_orientation_lease_controller.dart';
+import '../../../core/player/player_presentation_lease_controller.dart';
 import '../../../core/player/progress_reporter.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/player/subtitle_stream_index.dart';
@@ -257,17 +257,44 @@ class PlayerScreen extends ConsumerStatefulWidget {
   }) =>
       supportsKeyboardShortcuts || directionalPrimary;
 
-  /// Whether to pin the display to landscape on entering playback.
+  /// Whether the player route takes the presentation lease at all: system
+  /// bars hidden for the whole session on native mobile.
   ///
-  /// A television is already landscape and has no sensor to rotate, so the
-  /// request is at best a no-op. It reads `isMobile`, which Android TV
-  /// answers true, so it needs the directional term to opt back out.
+  /// A television reads `isMobile` true on Android TV but has no system bars
+  /// to hide and no rotation to pin, so the directional term opts it out.
   @visibleForTesting
-  static bool wantsForcedLandscape({
+  static bool wantsImmersivePresentation({
     required bool isMobile,
     required bool directionalPrimary,
   }) =>
       isMobile && !directionalPrimary;
+
+  /// Whether to pin the display to landscape on entering playback.
+  ///
+  /// Phones only. A tablet follows the device, as Infuse and Plex do, and on
+  /// iPad the app supports multitasking, so iPadOS would ignore the request
+  /// anyway.
+  @visibleForTesting
+  static bool wantsForcedLandscape({
+    required bool isMobile,
+    required bool directionalPrimary,
+    required bool isTablet,
+  }) =>
+      wantsImmersivePresentation(
+        isMobile: isMobile,
+        directionalPrimary: directionalPrimary,
+      ) &&
+      !isTablet;
+
+  /// Material's tablet breakpoint, in logical pixels on the display's short side.
+  static const double _tabletShortestSide = 600;
+
+  /// A tablet by the usual Material threshold. Measured on the display, not the
+  /// window, so an iPad in a narrow split-screen window still counts as a
+  /// tablet.
+  @visibleForTesting
+  static bool isTabletSized({required Size logicalScreenSize}) =>
+      logicalScreenSize.shortestSide >= _tabletShortestSide;
 
   /// Resolves an arrow key to its meaning for this input tier and OSD state.
   ///
@@ -1010,16 +1037,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// `LateInitializationError` there instead of letting `dispose` finish.
   PlayerWindowSizer? _windowSizer;
 
-  /// Identity handle for this screen's orientation lease. The controller
+  /// Identity handle for this screen's presentation lease. The controller
   /// tracks owners by identity, so a route replacement (a different player
   /// route, not an episode advance, which reuses this State) has a handle
-  /// distinct from this one's, and only the last release restores normal
-  /// orientations.
-  final Object _orientationLeaseOwner = Object();
+  /// distinct from this one's, and only the last release restores the system
+  /// bars and normal orientations.
+  final Object _presentationLeaseOwner = Object();
 
   /// Whether [initState] acquired the lease above, so [dispose] releases only
   /// what this screen actually owns.
-  bool _ownsOrientationLease = false;
+  bool _ownsPresentationLease = false;
 
   /// Tracks local playback activity so global cast bars are suppressed
   /// during active on-device playback.
@@ -1081,13 +1108,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Keep one shared lease for the complete player route lifetime. During a
     // route replacement (a different player route, not an episode advance,
     // which reuses this State), the incoming and outgoing screens hand this
-    // lease off without briefly restoring portrait-capable orientations.
-    _ownsOrientationLease = PlayerScreen.wantsForcedLandscape(
+    // lease off without briefly restoring the system bars or orientations.
+    _ownsPresentationLease = PlayerScreen.wantsImmersivePresentation(
       isMobile: PlatformFeatures.isMobile,
       directionalPrimary: InputCapabilities.directionalPrimary,
     );
-    if (_ownsOrientationLease) {
-      playerOrientationLeaseController.acquire(_orientationLeaseOwner);
+    if (_ownsPresentationLease) {
+      playerPresentationLeaseController.acquire(
+        _presentationLeaseOwner,
+        lockLandscape: PlayerScreen.wantsForcedLandscape(
+          isMobile: PlatformFeatures.isMobile,
+          directionalPrimary: InputCapabilities.directionalPrimary,
+          isTablet: PlayerScreen.isTabletSized(
+            logicalScreenSize: _logicalDisplaySize(),
+          ),
+        ),
+      );
     }
 
     // Register beforeunload handler for web to terminate HLS session on tab close
@@ -1130,7 +1166,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// the new file here, so anything that must still address the old one
   /// (its progress save) takes [previous]'s identity explicitly.
   ///
-  /// Screen-scoped state (window sizer, fullscreen, orientation lease, proxy
+  /// Screen-scoped state (window sizer, fullscreen, presentation lease, proxy
   /// hold) is deliberately untouched: this is the same screen, and tearing
   /// any of it down would exit fullscreen or reshape the window on every
   /// episode advance.
@@ -4554,6 +4590,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         planPlayback(inputs.copyWith(choice: QualityChoice.auto)));
   }
 
+  /// The physical display in logical pixels. Read from the display rather
+  /// than `MediaQuery` so split-screen does not shrink a tablet into a phone,
+  /// and because `initState` has no inherited widgets yet.
+  static Size _logicalDisplaySize() {
+    final display =
+        WidgetsBinding.instance.platformDispatcher.views.first.display;
+    return display.size / display.devicePixelRatio;
+  }
+
   void _onChromeVisibilityChanged() {
     if (_chromeVisibility.visible) return;
     if (_chromeFocusNode.hasFocus) _focusNode.requestFocus();
@@ -4790,7 +4835,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       });
     }
 
-    // Order matters twice over. Stop listening *first*: in `systemUi` mode
+    // Order matters twice over. Stop listening *first*: on Windows
     // `exit()` reports the transition synchronously, and the resulting
     // `setState` would assert — by the time `State.dispose` runs, the element
     // is already defunct (`StatefulElement.unmount` calls `super.unmount()`
@@ -4822,10 +4867,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       unawaited(windowSizer.detach());
     }
 
-    // Final release restores normal orientations after the handoff frame. A
-    // replacement PlayerScreen cancels that restore by acquiring its lease.
-    if (_ownsOrientationLease) {
-      playerOrientationLeaseController.release(_orientationLeaseOwner);
+    // Final release restores the system bars and normal orientations after
+    // the handoff frame. A replacement PlayerScreen cancels that restore by
+    // acquiring its lease.
+    if (_ownsPresentationLease) {
+      playerPresentationLeaseController.release(_presentationLeaseOwner);
     }
 
     // Save progress before disposing (fire and forget - can't await in

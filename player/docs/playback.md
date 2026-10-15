@@ -527,7 +527,8 @@ updates the existing `PlayerScreen` State instead of building a new one.
    per-file field.
 
 The screen-scoped pieces stay attached: fullscreen, the window sizer, the
-orientation lease and the media proxy hold. A per-file page key would give
+presentation lease (system bars hidden, and landscape on phones) and the
+media proxy hold. A per-file page key would give
 each episode a fresh State, but its `dispose` would exit fullscreen and hand
 the window back on every advance.
 
