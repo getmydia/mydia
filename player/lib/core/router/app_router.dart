@@ -44,6 +44,7 @@ import '../../presentation/screens/downloads/downloads_screen.dart';
 import '../../presentation/widgets/app_shell.dart';
 import '../config/web_config.dart' show isInstanceHostedWeb;
 import 'navigator_keys.dart';
+import 'page_cover_observer.dart';
 import 'legacy_routes.dart';
 
 part 'app_router.g.dart';
@@ -278,6 +279,7 @@ GoRouter appRouter(Ref ref) {
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
+    observers: [ref.read(pageCoverObserverProvider)],
     initialLocation: initialLocation,
     debugLogDiagnostics: true,
     refreshListenable: refreshNotifier,
@@ -385,6 +387,7 @@ GoRouter appRouter(Ref ref) {
       // Shell route for main app with bottom navigation
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
+        observers: [ref.read(shellPopupObserverProvider)],
         builder: (context, state, child) => AppShell(
           location: state.matchedLocation,
           child: child,

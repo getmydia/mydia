@@ -31,6 +31,7 @@ import 'core/logging/log_platform.dart';
 import 'core/logging/log_sink.dart';
 import 'core/logging/log_store.dart';
 import 'core/logging/log_uploader.dart';
+import 'core/platform/native_tab_bar_support.dart';
 import 'core/player/input_capabilities.dart';
 import 'core/navigation/sidebar_layout_providers.dart';
 import 'core/relay/relay_api_client.dart' show metadataRelayBaseUrl;
@@ -209,7 +210,14 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
       rustInit: (!kIsWeb || kWebP2pEnabled)
           ? () => RustLib.init().timeout(_rustInitTimeout)
           : null,
-      inputCapabilities: InputCapabilities.initialize,
+      // Both are one-shot platform probes read synchronously in `build`
+      // afterwards, so they share the step. Neither throws.
+      inputCapabilities: () async {
+        await Future.wait<void>([
+          InputCapabilities.initialize(),
+          NativeTabBarSupport.initialize(),
+        ]);
+      },
       hiveCache: () async {
         // `initAppHive` sets the Hive base path itself, because
         // `initHiveForFlutter` hard-wires it to the user's Documents folder.
