@@ -49,8 +49,8 @@ check the command carried the flag. The full suite was about 2115 tests as of
 
 CI does not run this command. `Test / Player` runs the suite as one bundle with
 `very_good test --concurrency 1`, which compiles every test file into a single
-entrypoint instead of compiling each separately, the cost that took 16 of the
-job's 20 minutes. Bundled, every file shares one isolate, so a test that passes
+entrypoint instead of compiling each separately, the cost that took 760 of the
+test step's 988 seconds. Bundled, every file shares one isolate, so a test that passes
 here and fails in CI has leaked global state into, or picked it up from,
 another file: `HttpOverrides.global` after a widget test initialised the
 binding, a Hive box left open, a singleton cache. Fix the leak. The
