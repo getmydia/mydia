@@ -18,6 +18,7 @@ import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/shell_rail_inset.dart';
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
+import '../detail/play_item.dart';
 import 'source_home_hero_backdrop.dart';
 
 class SourceHomeHero extends ConsumerWidget {
@@ -137,7 +138,7 @@ class SourceHomeHero extends ConsumerWidget {
         const SizedBox(height: 20),
         _HeroActions(
           wide: wide,
-          onPlay: open,
+          onPlay: () => playItem(context, ref, item.ref),
           secondaryLabel: isEpisode ? 'All episodes' : 'More info',
           onSecondary: open,
         ),
