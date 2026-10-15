@@ -80,6 +80,49 @@ defmodule Mydia.Indexers.Cardigann.SearchPagesTest do
     end
   end
 
+  describe "collect/7 requestDelay against the paging budget" do
+    test "a later page whose throttle wait outlasts the budget is not requested" do
+      {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+      {:ok, port} = :inet.port(listener)
+      on_exit(fn -> :gen_tcp.close(listener) end)
+
+      parsed = %Parsed{
+        id: "pages-delay-#{System.unique_integer([:positive])}",
+        name: "Pages Delay",
+        links: ["http://localhost:#{port}"],
+        request_delay: 5,
+        search: %{paths: [%{path: "/p2"}], inputs: %{}}
+      }
+
+      # Page 1 took the first slot; the next one is 5 s away.
+      :ok = Mydia.Indexers.RateLimiter.throttle("cardigann:" <> parsed.id, 5_000)
+
+      parse = fn _path, _response -> flunk("the throttled page must not be parsed") end
+      deadline = System.monotonic_time(:millisecond) + 300
+
+      {{elapsed_us, rows}, log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          :timer.tc(fn ->
+            SearchPages.collect(
+              parsed,
+              [%{path: "/p2"}],
+              [paging_deadline: deadline],
+              %{},
+              %{},
+              "http://localhost:#{port}",
+              parse
+            )
+          end)
+        end)
+
+      assert rows == []
+      assert elapsed_us < 1_000_000
+      assert log =~ "requestDelay"
+      # Nothing connected to the server.
+      assert {:error, :timeout} = :gen_tcp.accept(listener, 0)
+    end
+  end
+
   describe "dedupe/1" do
     test "keeps every row that has no download url" do
       rows = [result("one", nil), result("two", nil), result("three", "")]

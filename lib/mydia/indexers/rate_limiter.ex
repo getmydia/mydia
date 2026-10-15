@@ -109,40 +109,64 @@ defmodule Mydia.Indexers.RateLimiter do
   call (and any call after the delay has already elapsed) returns immediately.
   """
   @spec throttle(String.t(), non_neg_integer()) :: :ok
-  def throttle(_indexer_id, delay_ms) when delay_ms <= 0, do: :ok
+  def throttle(indexer_id, delay_ms) do
+    :ok = throttle(indexer_id, delay_ms, :infinity)
+  end
 
-  def throttle(indexer_id, delay_ms) when is_integer(delay_ms) do
+  @doc """
+  Like `throttle/2`, but gives up instead of waiting longer than `max_wait_ms`.
+
+  When the next slot is further away than `max_wait_ms` it returns
+  `{:error, :over_budget}` without reserving the slot, so a refused caller does
+  not push back the callers behind it.
+  """
+  @spec throttle(String.t(), non_neg_integer(), non_neg_integer() | :infinity) ::
+          :ok | {:error, :over_budget}
+  def throttle(_indexer_id, delay_ms, _max_wait) when delay_ms <= 0, do: :ok
+
+  def throttle(indexer_id, delay_ms, max_wait) when is_integer(delay_ms) do
     key = {:throttle, indexer_id, :next}
     now = System.monotonic_time(:millisecond)
 
     if :ets.insert_new(@table_name, {key, now + delay_ms}) do
       :ok
     else
-      reserve_slot(key, delay_ms)
+      reserve_slot(key, delay_ms, max_wait)
     end
   end
 
-  defp reserve_slot(key, delay_ms) do
+  defp reserve_slot(key, delay_ms, max_wait) do
     now = System.monotonic_time(:millisecond)
 
     case :ets.lookup(@table_name, key) do
-      [{^key, next}] -> claim_slot(key, next, now, delay_ms)
-      [] -> throttle(elem(key, 1), delay_ms)
+      [{^key, next}] -> claim_slot(key, next, now, delay_ms, max_wait)
+      [] -> throttle(elem(key, 1), delay_ms, max_wait)
     end
   end
 
   # Takes the slot after `next` if nobody else did in the meantime, else tries again.
-  defp claim_slot(key, next, now, delay_ms) do
+  # Refuses without taking it when the wait would exceed `max_wait`.
+  defp claim_slot(key, next, now, delay_ms, max_wait) do
     slot = max(next, now)
-    spec = [{{key, next}, [], [{{{:const, key}, slot + delay_ms}}]}]
 
-    if :ets.select_replace(@table_name, spec) == 1 do
-      if slot > now, do: Process.sleep(slot - now)
-      :ok
+    if over_budget?(slot - now, max_wait) do
+      {:error, :over_budget}
     else
-      reserve_slot(key, delay_ms)
+      spec = [{{key, next}, [], [{{{:const, key}, slot + delay_ms}}]}]
+      finish_claim(:ets.select_replace(@table_name, spec), key, slot - now, delay_ms, max_wait)
     end
   end
+
+  defp finish_claim(1, _key, wait, _delay_ms, _max_wait) do
+    if wait > 0, do: Process.sleep(wait)
+    :ok
+  end
+
+  defp finish_claim(_lost, key, _wait, delay_ms, max_wait),
+    do: reserve_slot(key, delay_ms, max_wait)
+
+  defp over_budget?(_wait, :infinity), do: false
+  defp over_budget?(wait, max_wait), do: wait > max_wait
 
   @doc """
   Gets statistics for rate limit usage.

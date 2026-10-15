@@ -40,4 +40,33 @@ defmodule Mydia.Indexers.RateLimiterThrottleTest do
     assert RateLimiter.check_rate_limit(id, 1) == :ok
     assert RateLimiter.get_stats(id).requests_last_minute == 0
   end
+
+  describe "throttle/3" do
+    test "refuses a slot beyond max_wait and leaves the slot unconsumed" do
+      id = unique_id()
+      :ok = RateLimiter.throttle(id, 400)
+
+      assert {:error, :over_budget} = RateLimiter.throttle(id, 400, 50)
+      assert {:error, :over_budget} = RateLimiter.throttle(id, 400, 50)
+
+      # The refused calls took nothing: the next real caller still gets the
+      # slot one delay after the first call, not two.
+      {us, :ok} = :timer.tc(fn -> RateLimiter.throttle(id, 400) end)
+      assert us >= 300_000
+      assert us < 600_000
+    end
+
+    test "sleeps and returns :ok when the slot is within max_wait" do
+      id = unique_id()
+      :ok = RateLimiter.throttle(id, 200)
+      {us, result} = :timer.tc(fn -> RateLimiter.throttle(id, 200, 1_000) end)
+      assert result == :ok
+      assert us >= 150_000
+    end
+
+    test "the first call and a zero delay return immediately" do
+      assert :ok = RateLimiter.throttle(unique_id(), 500, 0)
+      assert :ok = RateLimiter.throttle(unique_id(), 0, 0)
+    end
+  end
 end

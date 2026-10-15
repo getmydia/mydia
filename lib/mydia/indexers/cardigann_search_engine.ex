@@ -448,10 +448,12 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   @spec execute_http_request(Parsed.t(), String.t(), map(), map(), map()) ::
           {:ok, http_response()} | {:error, Error.t()}
   def execute_http_request(%Parsed{} = definition, url, request_params, user_config, config) do
-    # Apply rate limiting if configured
-    apply_rate_limit(definition)
+    with :ok <- apply_rate_limit(definition, request_params) do
+      do_execute_http_request(definition, url, request_params, user_config, config)
+    end
+  end
 
-    # Build request options
+  defp do_execute_http_request(definition, url, request_params, user_config, config) do
     req_opts = build_request_options(definition, url, request_params, user_config, config)
 
     Logger.debug("Cardigann search request: #{request_params.method} #{url}")
@@ -524,7 +526,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   def execute_download_request(definition, url, request_params, user_config, config, hops) do
-    apply_rate_limit(definition)
+    :ok = apply_rate_limit(definition, %{})
 
     req_opts =
       definition
@@ -807,14 +809,26 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
-  defp apply_rate_limit(%Parsed{request_delay: nil}), do: :ok
+  defp apply_rate_limit(%Parsed{request_delay: nil}, _request_params), do: :ok
 
-  defp apply_rate_limit(%Parsed{id: definition_id, request_delay: delay}) when is_number(delay) do
+  defp apply_rate_limit(%Parsed{id: definition_id, request_delay: delay}, request_params)
+       when is_number(delay) do
     # Convert delay to milliseconds if needed (some definitions use seconds).
     # It is a minimum interval between requests to one definition, so the first
     # request goes straight out.
     delay_ms = if delay < 10, do: trunc(delay * 1000), else: trunc(delay)
-    RateLimiter.throttle("cardigann:" <> definition_id, delay_ms)
+    key = "cardigann:" <> definition_id
+
+    # A later page carries the paging time it has left; it must not queue past it.
+    case Map.fetch(request_params, :receive_timeout) do
+      {:ok, budget_ms} ->
+        with {:error, :over_budget} <- RateLimiter.throttle(key, delay_ms, budget_ms) do
+          {:error, Error.search_failed("Paging budget spent waiting for requestDelay")}
+        end
+
+      :error ->
+        RateLimiter.throttle(key, delay_ms)
+    end
   end
 
   defp build_request_options(definition, url, request_params, user_config, config) do
