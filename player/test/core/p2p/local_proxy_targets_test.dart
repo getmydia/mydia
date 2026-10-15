@@ -5,9 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/p2p/media_route.dart';
 
+import '../../test_utils/real_http.dart';
 import 'test_p2p_service.dart';
 
 void main() {
+  useRealHttp();
+
   late TestP2pService p2p;
   late LocalProxyService proxy;
   final playback = Object();
