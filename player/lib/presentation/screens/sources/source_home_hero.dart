@@ -34,15 +34,18 @@ class SourceHomeHero extends ConsumerWidget {
               width: SourceBackdrop.artworkWidth,
             )))
             .value;
-    // The shell's ambient backdrop follows the hero's artwork.
-    // BackdropSource has no header support, so a credentialed URL would fail
-    // to load: fall back to the static backdrop for those.
-    final ambientUrl = (request?.headers.isEmpty ?? true) ? request?.url : null;
+    // The shell's ambient backdrop and tint follow the hero's artwork,
+    // credentials included.
     publishBackdropSource(
       ref,
-      ambientUrl == null
+      request == null
           ? BackdropSource.none
-          : BackdropSource(imageUrl: ambientUrl, id: item.ref.externalId),
+          : BackdropSource(
+              imageUrl: request.url,
+              id: item.ref.externalId,
+              headers: request.headers,
+              cacheKey: request.cacheKey,
+            ),
     );
 
     final size = MediaQuery.of(context).size;

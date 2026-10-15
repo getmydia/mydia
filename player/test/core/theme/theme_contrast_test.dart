@@ -16,6 +16,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/colors.dart';
 
 /// WCAG 2.1 relative luminance. Flutter's `Color.r/g/b` are already 0..1
@@ -73,6 +74,20 @@ void main() {
             '${ratio.toStringAsFixed(2)}:1. This is the defect the Projection '
             'Booth palette fixed; it must not come back.',
       );
+    });
+
+    test('white primary buttons clear $_textFloor:1 for their label', () {
+      final ratio = _contrast(AppColors.background, const Color(0xFFFFFFFF));
+      expect(ratio, greaterThanOrEqualTo(_textFloor));
+    });
+
+    test('secondary button label clears $_textFloor:1 on its fill', () {
+      final fill = Color.alphaBlend(
+        AppTheme.secondaryButtonFill,
+        AppColors.background,
+      );
+      final ratio = _contrast(AppColors.textPrimary, fill);
+      expect(ratio, greaterThanOrEqualTo(_textFloor));
     });
 
     test('input placeholder text clears $_textFloor:1 on the field fill', () {

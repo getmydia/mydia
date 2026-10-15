@@ -1,8 +1,12 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/depth_tokens.dart';
+
+/// Which ambient tint colour a glass surface fills with.
+enum GlassTint { ground, surface }
 
 /// A single reusable frosted-glass surface that subsumes the player's three
 /// ad-hoc `BackdropFilter` variants (app bar, modal, card hover overlay), plus
@@ -28,6 +32,9 @@ import '../../core/theme/depth_tokens.dart';
 /// [BackdropGroup] and pass `grouped: true` so they share a single backdrop
 /// rendering pass (uses [BackdropFilter.grouped]). Faux surfaces ignore
 /// [grouped] — there is no backdrop pass to share.
+///
+/// [GlassSurface.appBar], [GlassSurface.modal] and [GlassSurface.chrome]
+/// follow the ambient tint ([AmbientTint]); faux, hoverOverlay and osd do not.
 class GlassSurface extends StatelessWidget {
   /// Gaussian blur sigma applied behind the surface. Ignored when [live] is
   /// false.
@@ -60,6 +67,11 @@ class GlassSurface extends StatelessWidget {
   /// nothing and adds no widget.
   final List<BoxShadow> shadows;
 
+  /// When set and [fillColor] and [gradient] are null, the fill is this
+  /// colour of the nearest [AmbientTint] at [tintOpacity].
+  final GlassTint? tint;
+  final double tintOpacity;
+
   final Widget? child;
 
   const GlassSurface({
@@ -72,14 +84,16 @@ class GlassSurface extends StatelessWidget {
     this.border,
     this.grouped = false,
     this.shadows = const <BoxShadow>[],
+    this.tint,
+    this.tintOpacity = DepthTokens.chromeFillOpacity,
     this.child,
   });
 
-  /// App-bar chrome glass: chrome blur sigma, [AppColors.background] fill at the
+  /// App-bar chrome glass: chrome blur sigma, the ambient ground fill at the
   /// chrome fill opacity, no border, square corners. Pass [opacity] to override
   /// the fill alpha (0.85 for the library/downloads bars, the chrome token
   /// elsewhere). The default fill clears the R10 legibility floor.
-  GlassSurface.appBar({
+  const GlassSurface.appBar({
     Key? key,
     double opacity = DepthTokens.chromeFillOpacity,
     bool grouped = false,
@@ -87,7 +101,8 @@ class GlassSurface extends StatelessWidget {
   }) : this(
           key: key,
           blurSigma: DepthTokens.blurChrome,
-          fillColor: AppColors.background.withValues(alpha: opacity),
+          tint: GlassTint.ground,
+          tintOpacity: opacity,
           grouped: grouped,
           child: child,
         );
@@ -101,12 +116,34 @@ class GlassSurface extends StatelessWidget {
   }) : this(
           key: key,
           blurSigma: DepthTokens.blurModal,
-          fillColor:
-              AppColors.surface.withValues(alpha: DepthTokens.modalFillOpacity),
+          tint: GlassTint.surface,
+          tintOpacity: DepthTokens.modalFillOpacity,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: AppColors.border.withValues(alpha: 0.2),
           ),
+          grouped: grouped,
+          child: child,
+        );
+
+  /// Chrome glass that follows the ambient tint: nav rail, bottom bar, cast
+  /// pill and sidebars. Fill is the tint's surface at [opacity].
+  const GlassSurface.chrome({
+    Key? key,
+    double opacity = DepthTokens.chromeFillOpacity,
+    BorderRadius borderRadius = BorderRadius.zero,
+    BoxBorder? border,
+    List<BoxShadow> shadows = const <BoxShadow>[],
+    bool grouped = false,
+    Widget? child,
+  }) : this(
+          key: key,
+          blurSigma: DepthTokens.blurChrome,
+          tint: GlassTint.surface,
+          tintOpacity: opacity,
+          borderRadius: borderRadius,
+          border: border,
+          shadows: shadows,
           grouped: grouped,
           child: child,
         );
@@ -205,7 +242,18 @@ class GlassSurface extends StatelessWidget {
         );
 
   @override
-  Widget build(BuildContext context) => _withShadow(_surface());
+  Widget build(BuildContext context) {
+    final tint = this.tint;
+    final fill = fillColor ??
+        (tint == null || gradient != null
+            ? null
+            : switch (tint) {
+                GlassTint.ground => AmbientTint.of(context).ground,
+                GlassTint.surface => AmbientTint.of(context).surface,
+              }
+                .withValues(alpha: tintOpacity));
+    return _withShadow(_surface(fill));
+  }
 
   Widget _withShadow(Widget surface) {
     if (shadows.isEmpty) return surface;
@@ -215,28 +263,28 @@ class GlassSurface extends StatelessWidget {
     );
   }
 
-  Widget _surface() {
+  Widget _surface(Color? fill) {
     // Faux-glass: no BackdropFilter at all (R8).
     if (!live) {
       return RepaintBoundary(
-        child: ClipRRect(borderRadius: borderRadius, child: _fill()),
+        child: ClipRRect(borderRadius: borderRadius, child: _fill(fill)),
       );
     }
 
     final filter = ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma);
     final backdrop = grouped
-        ? BackdropFilter.grouped(filter: filter, child: _fill())
-        : BackdropFilter(filter: filter, child: _fill());
+        ? BackdropFilter.grouped(filter: filter, child: _fill(fill))
+        : BackdropFilter(filter: filter, child: _fill(fill));
 
     return RepaintBoundary(
       child: ClipRRect(borderRadius: borderRadius, child: backdrop),
     );
   }
 
-  Widget _fill() {
+  Widget _fill(Color? fill) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: gradient == null ? fillColor : null,
+        color: gradient == null ? fill : null,
         gradient: gradient,
         borderRadius: borderRadius,
         border: border,

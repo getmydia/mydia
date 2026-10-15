@@ -8,7 +8,9 @@ abstract final class DockGlass {
   static const double blurSigma = 10;
   static const double sideMargin = 12;
 
-  static Color get fill => AppColors.surface.withValues(alpha: 0.7);
+  /// Fill alpha. The colour is the ambient tint's surface, applied by
+  /// `GlassSurface.chrome`.
+  static const double fillOpacity = 0.7;
 
   static Border get border =>
       Border.all(color: AppColors.border.withValues(alpha: 0.2));

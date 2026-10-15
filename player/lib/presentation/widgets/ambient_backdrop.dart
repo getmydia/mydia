@@ -1,9 +1,11 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 
 import '../../core/cache/artwork_decode.dart';
 import '../../core/cache/poster_cache_manager.dart';
+import '../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../core/theme/colors.dart';
 import '../../core/ui/reduced_motion.dart';
 import 'artwork_image.dart';
@@ -36,6 +38,12 @@ class AmbientBackdrop extends StatefulWidget {
   /// treated as a single stable layer.
   final String? id;
 
+  /// Request headers the artwork needs (credentialed sources).
+  final Map<String, String> headers;
+
+  /// Disk-cache identity when [imageUrl] depends on the current connection.
+  final String? cacheKey;
+
   /// Sigma of the gaussian blur applied to the artwork.
   final double blurSigma;
 
@@ -47,6 +55,8 @@ class AmbientBackdrop extends StatefulWidget {
     super.key,
     this.imageUrl,
     this.id,
+    this.headers = const {},
+    this.cacheKey,
     this.blurSigma = 40,
     this.crossfadeDuration = const Duration(milliseconds: 600),
   });
@@ -62,7 +72,10 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
     // Pre-warm the incoming artwork before the AnimatedSwitcher key swaps so
     // the crossfade does not stall on first decode (plan U4 / R2).
     final url = widget.imageUrl;
-    if (url != null && url != oldWidget.imageUrl) {
+    if (url != null &&
+        (url != oldWidget.imageUrl ||
+            widget.cacheKey != oldWidget.cacheKey ||
+            !mapEquals(widget.headers, oldWidget.headers))) {
       // Must build the same provider _ArtworkLayer resolves, decode width
       // included, or this warms a cache entry nothing reads and every
       // backdrop decodes twice.
@@ -72,6 +85,8 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
           cacheManager: BackdropCacheManager(),
           decodeWidth:
               viewportDecodeWidth(context, sourceWidth: backdropSourceWidth),
+          headers: widget.headers.isEmpty ? null : widget.headers,
+          cacheKey: widget.cacheKey,
         ),
         context,
       );
@@ -88,7 +103,7 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
         fit: StackFit.expand,
         children: [
           // Constant dark base so the scrim never brightens mid-crossfade.
-          const ColoredBox(color: AppColors.background),
+          ColoredBox(color: AmbientTint.of(context).ground),
           AnimatedSwitcher(
             duration: duration,
             // Keep both layers stacked during the fade so the outgoing artwork
@@ -144,6 +159,8 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
     return _ArtworkLayer(
       key: ValueKey('ambient-${widget.id ?? url}'),
       imageUrl: url,
+      headers: widget.headers,
+      cacheKey: widget.cacheKey,
       blurSigma: widget.blurSigma,
     );
   }
@@ -153,11 +170,15 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
 /// [ImageFiltered] (never a live [BackdropFilter]).
 class _ArtworkLayer extends StatelessWidget {
   final String imageUrl;
+  final Map<String, String> headers;
+  final String? cacheKey;
   final double blurSigma;
 
   const _ArtworkLayer({
     super.key,
     required this.imageUrl,
+    required this.headers,
+    required this.cacheKey,
     required this.blurSigma,
   });
 
@@ -174,6 +195,8 @@ class _ArtworkLayer extends StatelessWidget {
           ),
           child: ArtworkImage(
             imageUrl: imageUrl,
+            headers: headers.isEmpty ? null : headers,
+            cacheKey: cacheKey,
             fit: BoxFit.cover,
             cacheManager: BackdropCacheManager(),
             // Viewport width rather than a LayoutBuilder, so it matches the
@@ -202,6 +225,9 @@ class _ArtworkLayer extends StatelessWidget {
 /// colour and top-of-scrim alpha, and both are asserted against worst-case
 /// bright artwork in `ambient_backdrop_contrast_test`. Naming only the alpha
 /// here is what let the base colour drift to a navy literal unnoticed.
+///
+/// Not tinted: a tinted scrim over white artwork drops textSecondary to about
+/// 2.6:1.
 class AmbientBackdropScrim extends StatelessWidget {
   const AmbientBackdropScrim({super.key});
 
@@ -250,16 +276,14 @@ class _StaticFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
+    final tint = AmbientTint.of(context);
+    return DecoratedBox(
       decoration: BoxDecoration(
         gradient: RadialGradient(
-          center: Alignment(0, -0.6),
+          center: const Alignment(0, -0.6),
           radius: 1.4,
-          colors: [
-            AppColors.surface,
-            AppColors.background,
-          ],
-          stops: [0.0, 1.0],
+          colors: [tint.surface, tint.ground],
+          stops: const [0.0, 1.0],
         ),
       ),
     );

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/layout/breakpoints.dart';
-import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../glass_surface.dart';
 import '../toast/toast_obstruction.dart';
@@ -74,11 +73,7 @@ class GlassSidebarPanel extends StatelessWidget {
         width: Breakpoints.sidebarWidth,
         child: DecoratedBox(
           decoration: const BoxDecoration(boxShadow: DepthTokens.chrome),
-          child: GlassSurface(
-            blurSigma: DepthTokens.blurChrome,
-            fillColor: AppColors.surface.withValues(
-              alpha: DepthTokens.chromeFillOpacity,
-            ),
+          child: GlassSurface.chrome(
             border: const Border(
               right: BorderSide(
                 color: DepthTokens.rimColor,

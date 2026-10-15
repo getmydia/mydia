@@ -28,20 +28,21 @@ Widget _host(Widget child) => MaterialApp(
 BackdropFilter _backdropOf(WidgetTester tester) =>
     tester.widget<BackdropFilter>(find.byType(BackdropFilter));
 
-BoxDecoration _fillOf(WidgetTester tester) =>
-    tester.widget<DecoratedBox>(
+BoxDecoration _fillOf(WidgetTester tester) => tester
+    .widget<DecoratedBox>(
       find.descendant(
         of: find.byType(BackdropFilter),
         matching: find.byType(DecoratedBox),
       ),
-    ).decoration as BoxDecoration;
+    )
+    .decoration as BoxDecoration;
 
 void main() {
   group('GlassSurface.appBar token glass (R4/R10)', () {
     testWidgets('default bar: chrome sigma + fill clears the legibility floor',
         (tester) async {
       await tester.pumpWidget(
-        _host(GlassSurface.appBar(child: const SizedBox(height: 56))),
+        _host(const GlassSurface.appBar(child: SizedBox(height: 56))),
       );
 
       expect(
@@ -56,13 +57,16 @@ void main() {
       expect(fill.a, greaterThanOrEqualTo(DepthTokens.glassLegibilityFloor));
       // Translucent so the ambient backdrop tints it (R5).
       expect(fill.a, lessThan(1.0));
-      expect(fill, AppColors.background.withValues(alpha: DepthTokens.chromeFillOpacity));
+      expect(
+          fill,
+          AppColors.background
+              .withValues(alpha: DepthTokens.chromeFillOpacity));
     });
 
     testWidgets('library/downloads bar (opacity 0.85) clears the floor',
         (tester) async {
       await tester.pumpWidget(
-        _host(GlassSurface.appBar(opacity: 0.85, child: const SizedBox())),
+        _host(const GlassSurface.appBar(opacity: 0.85, child: SizedBox())),
       );
 
       final fill = _fillOf(tester).color!;

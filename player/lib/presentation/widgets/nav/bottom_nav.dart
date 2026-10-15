@@ -64,9 +64,8 @@ class BottomNav extends StatelessWidget {
               borderRadius: BorderRadius.circular(22),
               boxShadow: DockGlass.shadow,
             ),
-            child: GlassSurface(
-              blurSigma: DockGlass.blurSigma,
-              fillColor: DockGlass.fill,
+            child: GlassSurface.chrome(
+              opacity: DockGlass.fillOpacity,
               borderRadius: BorderRadius.circular(22),
               border: DockGlass.border,
               child: Padding(

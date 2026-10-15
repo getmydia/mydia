@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/ambient_tint/ambient_tint.dart';
+import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -35,7 +37,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         _host(
-            GlassSurface.appBar(child: const SizedBox(width: 50, height: 50))),
+            const GlassSurface.appBar(child: SizedBox(width: 50, height: 50))),
       );
 
       expect(find.byType(BackdropFilter), findsOneWidget);
@@ -50,7 +52,7 @@ void main() {
 
     testWidgets('honors an explicit opacity override (0.85)', (tester) async {
       await tester.pumpWidget(
-        _host(GlassSurface.appBar(opacity: 0.85, child: const SizedBox())),
+        _host(const GlassSurface.appBar(opacity: 0.85, child: SizedBox())),
       );
       final decoration = _decoratedBoxOf(tester).decoration as BoxDecoration;
       expect(
@@ -173,11 +175,11 @@ void main() {
         'real one adds a blur pass', (tester) async {
       await tester.pumpWidget(
         _host(
-          Column(
+          const Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              GlassSurface.appBar(child: const Text('real')),
-              const GlassSurface.faux(child: Text('faux')),
+              GlassSurface.appBar(child: Text('real')),
+              GlassSurface.faux(child: Text('faux')),
             ],
           ),
         ),
@@ -329,9 +331,9 @@ void main() {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                GlassSurface.appBar(
+                const GlassSurface.appBar(
                   grouped: true,
-                  child: const Text('one'),
+                  child: Text('one'),
                 ),
                 GlassSurface.modal(
                   grouped: true,
@@ -353,7 +355,7 @@ void main() {
   group('child rendering', () {
     testWidgets('renders its child in every preset', (tester) async {
       for (final surface in [
-        GlassSurface.appBar(child: const Text('appbar')),
+        const GlassSurface.appBar(child: Text('appbar')),
         GlassSurface.modal(child: const Text('modal')),
         GlassSurface.hoverOverlay(child: const Text('hover')),
       ]) {
@@ -366,7 +368,7 @@ void main() {
 
     testWidgets('wraps the blur region in a RepaintBoundary', (tester) async {
       await tester.pumpWidget(
-        _host(GlassSurface.appBar(child: const SizedBox())),
+        _host(const GlassSurface.appBar(child: SizedBox())),
       );
       expect(
         find.ancestor(
@@ -375,6 +377,40 @@ void main() {
         ),
         findsWidgets,
       );
+    });
+  });
+
+  group('tinted fills', () {
+    final warm = AmbientTintColors.fromSeed(const Color(0xFF9F4A2F));
+
+    Widget tinted(Widget child) => MaterialApp(
+          home: Scaffold(
+            body: AmbientTint(colors: warm, child: Center(child: child)),
+          ),
+        );
+
+    testWidgets('appBar fills with the tinted ground', (tester) async {
+      await tester.pumpWidget(tinted(
+          const GlassSurface.appBar(child: SizedBox(width: 50, height: 50))));
+      final box = _decoratedBoxOf(tester).decoration as BoxDecoration;
+      expect(box.color,
+          warm.ground.withValues(alpha: DepthTokens.chromeFillOpacity));
+    });
+
+    testWidgets('chrome fills with the tinted surface', (tester) async {
+      await tester.pumpWidget(tinted(
+          const GlassSurface.chrome(child: SizedBox(width: 50, height: 50))));
+      final box = _decoratedBoxOf(tester).decoration as BoxDecoration;
+      expect(box.color,
+          warm.surface.withValues(alpha: DepthTokens.chromeFillOpacity));
+    });
+
+    testWidgets('modal fills with the tinted surface', (tester) async {
+      await tester.pumpWidget(tinted(
+          GlassSurface.modal(child: const SizedBox(width: 50, height: 50))));
+      final box = _decoratedBoxOf(tester).decoration as BoxDecoration;
+      expect(box.color,
+          warm.surface.withValues(alpha: DepthTokens.modalFillOpacity));
     });
   });
 }

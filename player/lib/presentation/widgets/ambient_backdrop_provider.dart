@@ -1,5 +1,5 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -9,23 +9,47 @@ part 'ambient_backdrop_provider.g.dart';
 ///
 /// A null [imageUrl] means "no per-title artwork" — the backdrop shows its calm
 /// static fallback (grids, settings). [id] is the stable identity used to key
-/// the crossfade so equal sources don't re-trigger a transition.
+/// the crossfade so equal sources don't re-trigger a transition. [headers] and
+/// [cacheKey] carry what credentialed artwork needs to load and to be cached.
 @immutable
 class BackdropSource {
   final String? imageUrl;
   final String? id;
 
-  const BackdropSource({this.imageUrl, this.id});
+  /// Request headers the artwork needs. Plex, Jellyfin and Stash put the
+  /// credential here; it never goes in [imageUrl].
+  final Map<String, String> headers;
+
+  /// Disk-cache identity when [imageUrl] depends on the current connection.
+  final String? cacheKey;
+
+  const BackdropSource({
+    this.imageUrl,
+    this.id,
+    this.headers = const {},
+    this.cacheKey,
+  });
 
   /// The static-fallback source (no artwork).
   static const BackdropSource none = BackdropSource();
 
   @override
   bool operator ==(Object other) =>
-      other is BackdropSource && other.imageUrl == imageUrl && other.id == id;
+      other is BackdropSource &&
+      other.imageUrl == imageUrl &&
+      other.id == id &&
+      other.cacheKey == cacheKey &&
+      mapEquals(other.headers, headers);
 
   @override
-  int get hashCode => Object.hash(imageUrl, id);
+  int get hashCode => Object.hash(
+        imageUrl,
+        id,
+        cacheKey,
+        Object.hashAllUnordered(
+          headers.entries.map((e) => Object.hash(e.key, e.value)),
+        ),
+      );
 }
 
 /// Carries the current shell backdrop source as two layers:

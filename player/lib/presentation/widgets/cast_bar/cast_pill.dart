@@ -24,9 +24,8 @@ class CastPill extends StatelessWidget {
       child: DecoratedBox(
         decoration:
             BoxDecoration(borderRadius: radius, boxShadow: DockGlass.shadow),
-        child: GlassSurface(
-          blurSigma: DockGlass.blurSigma,
-          fillColor: DockGlass.fill,
+        child: GlassSurface.chrome(
+          opacity: DockGlass.fillOpacity,
           borderRadius: radius,
           border: DockGlass.border,
           // Transparent Material so IconButton ink and tooltips still work

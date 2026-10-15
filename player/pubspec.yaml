@@ -32,6 +32,9 @@ dependencies:
   riverpod_annotation: ^4.0.0
   go_router: ^18.0.1
   collection: ^1.19.1
+  # HCT colour space plus the quantizer and scorer the ambient tint uses.
+  # Pinned to the version Flutter's SDK resolves, so it never forces a solve.
+  material_color_utilities: ^0.13.0
   gql: ^1.0.1
   meta: ^1.19.0
   # >=10.3.1 pulls flutter_secure_storage_darwin >=0.3.2. Earlier darwin builds
@@ -127,6 +130,7 @@ flutter:
 
   assets:
     - assets/fonts/Inter-LICENSE.txt
+    - assets/fonts/Outfit-LICENSE.txt
 
   fonts:
     - family: Inter
@@ -138,4 +142,12 @@ flutter:
         - asset: assets/fonts/Inter-SemiBold.ttf
           weight: 600
         - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+    - family: Outfit
+      fonts:
+        - asset: assets/fonts/Outfit-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Outfit-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Outfit-Bold.ttf
           weight: 700

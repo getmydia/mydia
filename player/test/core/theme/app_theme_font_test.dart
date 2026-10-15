@@ -4,13 +4,69 @@
 
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:yaml/yaml.dart';
 
 void main() {
   test('the theme declares Inter', () {
     expect(AppTheme.darkTheme.textTheme.bodyMedium?.fontFamily, 'Inter');
+  });
+
+  test('display, headline and title styles use Outfit; body and label Inter',
+      () {
+    final t = AppTheme.darkTheme.textTheme;
+    for (final s in [
+      t.displayLarge,
+      t.displayMedium,
+      t.displaySmall,
+      t.headlineLarge,
+      t.headlineMedium,
+      t.headlineSmall,
+      t.titleLarge,
+      t.titleMedium,
+      t.titleSmall,
+    ]) {
+      expect(s?.fontFamily, 'Outfit');
+    }
+    for (final s in [
+      t.bodyLarge,
+      t.bodyMedium,
+      t.bodySmall,
+      t.labelLarge,
+      t.labelMedium,
+      t.labelSmall,
+    ]) {
+      expect(s?.fontFamily, 'Inter');
+    }
+  });
+
+  test('pubspec declares Outfit at 500, 600 and 700', () {
+    final fonts = ((loadYaml(File('pubspec.yaml').readAsStringSync())
+        as YamlMap)['flutter'] as YamlMap)['fonts'] as YamlList;
+    final outfit =
+        fonts.cast<YamlMap>().firstWhere((f) => f['family'] == 'Outfit');
+    final weights = [
+      for (final f in outfit['fonts'] as YamlList) (f as YamlMap)['weight'],
+    ];
+    expect(weights, [500, 600, 700]);
+    for (final f in outfit['fonts'] as YamlList) {
+      expect(File((f as YamlMap)['asset'] as String).existsSync(), isTrue);
+    }
+  });
+
+  test('primary buttons are white with a near-black Outfit label', () {
+    final theme = AppTheme.darkTheme;
+    for (final style in [
+      theme.filledButtonTheme.style!,
+      theme.elevatedButtonTheme.style!,
+    ]) {
+      expect(style.backgroundColor!.resolve({}), const Color(0xFFFFFFFF));
+      expect(style.foregroundColor!.resolve({}), AppColors.background);
+      expect(style.textStyle!.resolve({})!.fontFamily, 'Outfit');
+    }
   });
 
   test('pubspec declares an Inter family with correct structure', () {
@@ -104,5 +160,18 @@ void main() {
     // Verify it contains SIL license text
     final content = File(path).readAsStringSync();
     expect(content, contains('Open Font License'));
+  });
+
+  test('Outfit license is declared as an asset', () {
+    final pubspec =
+        loadYaml(File('pubspec.yaml').readAsStringSync()) as YamlMap;
+    final assets = (pubspec['flutter'] as YamlMap)['assets'] as YamlList;
+    expect(assets, contains('assets/fonts/Outfit-LICENSE.txt'));
+  });
+
+  test('Outfit license file exists and is the SIL OFL', () {
+    const path = 'assets/fonts/Outfit-LICENSE.txt';
+    expect(File(path).existsSync(), isTrue);
+    expect(File(path).readAsStringSync(), contains('Open Font License'));
   });
 }

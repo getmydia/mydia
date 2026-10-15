@@ -97,7 +97,7 @@ void main() async {
     () async {
       WidgetsFlutterBinding.ensureInitialized();
 
-      // Register the bundled Inter font's license. Deliberately out here
+      // Register the bundled Inter and Outfit fonts' licenses. Deliberately out here
       // rather than in `_startApp`: `addLicense` only stores the callback,
       // and the `rootBundle` read inside it does not run until someone opens
       // the licenses page. There is no startup step to fail, so it needs
@@ -106,6 +106,9 @@ void main() async {
         final license =
             await rootBundle.loadString('assets/fonts/Inter-LICENSE.txt');
         yield LicenseEntryWithLineBreaks(<String>['Inter'], license);
+        final outfit =
+            await rootBundle.loadString('assets/fonts/Outfit-LICENSE.txt');
+        yield LicenseEntryWithLineBreaks(<String>['Outfit'], outfit);
       });
 
       await _startApp(crashReporter, logSink);
