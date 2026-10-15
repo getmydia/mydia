@@ -102,6 +102,7 @@ Future<void> _pumpScreen(
   List<String>? pushedRoutes,
   Size size = const Size(800, 600),
   int? initialSeason,
+  String? initialEpisode,
 }) {
   final byseason = episodes ??
       {
@@ -116,6 +117,7 @@ Future<void> _pumpScreen(
     ShowDetailScreen.target(
       target: const SourceTarget(_show),
       initialSeason: initialSeason,
+      initialEpisode: initialEpisode,
     ),
     [source],
     size: size,
@@ -259,6 +261,54 @@ void main() {
 
     expect(find.text('S1 · E1'), findsOneWidget);
     expect(find.text('S2 · E1'), findsNothing);
+  });
+
+  testWidgets('initialEpisode selects that episode instead of next up',
+      (tester) async {
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      initialSeason: 1,
+      initialEpisode: 'ep-1-3',
+    );
+    await tester.pumpAndSettle();
+
+    // Next up is E2 by default; the screen was opened on E3.
+    expect(find.text('S1 · E3'), findsOneWidget);
+    expect(find.textContaining('Next Up'), findsNothing);
+  });
+
+  testWidgets('initialEpisode in a later season opens on that season',
+      (tester) async {
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      initialSeason: 2,
+      initialEpisode: 'ep-2-2',
+      episodes: twoSeasons,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('S2 · E2'), findsOneWidget);
+  });
+
+  testWidgets('initialEpisode seeds once and a later episode tap sticks',
+      (tester) async {
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      initialSeason: 1,
+      initialEpisode: 'ep-1-3',
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Episode 1').last);
+    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('S1 · E1'), findsOneWidget);
+    expect(find.text('S1 · E3'), findsNothing);
   });
 
   testWidgets('hero shows the release year under the title', (tester) async {

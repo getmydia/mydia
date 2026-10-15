@@ -50,23 +50,31 @@ class ShowDetailScreen extends ConsumerWidget {
     super.key,
     required this.target,
     this.initialSeason,
+    this.initialEpisode,
   });
 
   final DetailTarget target;
 
-  /// Opened from a season: start on it rather than next up.
+  /// Opened from a season or an episode: start on that season rather than
+  /// next up.
   final int? initialSeason;
+
+  /// Opened from an episode: its id, selected in the hero rather than next up.
+  final String? initialEpisode;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final showAsync = ref.watch(showViewProvider(target));
-    // Held from the first frame so the season `_InitialSeasonSeed` selects
-    // survives while the show is still loading.
+    // Held from the first frame so the selections `_InitialSelectionSeed`
+    // makes survive while the show is still loading: both providers are
+    // autoDispose, and nothing else listens to them until the show lands.
     ref.watch(selectedSeasonProvider(target.ref));
+    ref.watch(selectedEpisodeProvider(target.ref));
 
-    return _InitialSeasonSeed(
+    return _InitialSelectionSeed(
       show: target.ref,
       season: initialSeason,
+      episode: initialEpisode,
       child: DetailScreenFrame<ShowView>(
         target: target,
         value: showAsync,
@@ -110,12 +118,13 @@ class ShowDetailScreen extends ConsumerWidget {
     final key = target.ref;
     final selectedEpisodeId = ref.watch(selectedEpisodeProvider(key));
 
-    // A screen opened on a season never seeds next up: that would pull the
-    // selection back off the season it was opened on.
+    // A screen opened on a season or an episode never seeds next up: that
+    // would pull the selection back off what it was opened on.
     final nextUpId = show.nextUpEpisodeId;
     final nextUpSeason = show.nextUpSeasonNumber;
     if (selectedEpisodeId == null &&
         initialSeason == null &&
+        initialEpisode == null &&
         nextUpId != null &&
         nextUpSeason != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -134,8 +143,7 @@ class ShowDetailScreen extends ConsumerWidget {
     final selectedEpisode = resolveSelectedEpisode(selectedEpisodeId, episodes);
     // Season listings carry one stub file per episode. The hero needs the
     // real versions for its quality label, picker and download button, so it
-    // reads the selected episode's detail (cached, shared with the episode
-    // screen) and keeps the stub until that lands or if it fails.
+    // reads the selected episode's detail (cached) and keeps the stub until that lands or if it fails.
     final heroEpisode = _withDetailFiles(ref, selectedEpisode);
 
     return CustomScrollView(
@@ -352,32 +360,42 @@ class ShowDetailScreen extends ConsumerWidget {
   }
 }
 
-/// Selects [season] once, on the first frame of a screen opened from a season.
-/// The latch lives in this State, so a later season tap is never reverted.
-class _InitialSeasonSeed extends ConsumerStatefulWidget {
-  const _InitialSeasonSeed({
+/// Selects [season] and [episode] once, on the first frame of a screen opened
+/// from a season or an episode. The latch lives in this State, so a later tap
+/// is never reverted.
+class _InitialSelectionSeed extends ConsumerStatefulWidget {
+  const _InitialSelectionSeed({
     required this.show,
     required this.season,
+    required this.episode,
     required this.child,
   });
 
   final ItemRef show;
   final int? season;
+  final String? episode;
   final Widget child;
 
   @override
-  ConsumerState<_InitialSeasonSeed> createState() => _InitialSeasonSeedState();
+  ConsumerState<_InitialSelectionSeed> createState() =>
+      _InitialSelectionSeedState();
 }
 
-class _InitialSeasonSeedState extends ConsumerState<_InitialSeasonSeed> {
+class _InitialSelectionSeedState extends ConsumerState<_InitialSelectionSeed> {
   @override
   void initState() {
     super.initState();
     final season = widget.season;
-    if (season == null) return;
+    final episode = widget.episode;
+    if (season == null && episode == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(selectedSeasonProvider(widget.show).notifier).select(season);
+      if (season != null) {
+        ref.read(selectedSeasonProvider(widget.show).notifier).select(season);
+      }
+      if (episode != null) {
+        ref.read(selectedEpisodeProvider(widget.show).notifier).select(episode);
+      }
     });
   }
 
