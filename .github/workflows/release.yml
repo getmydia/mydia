@@ -310,9 +310,13 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
             org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
-          cache-from: type=gha,scope=docker-${{ matrix.db }}
-          # Only amd64 writes cache to avoid arm64 overwriting with different layers
-          cache-to: ${{ matrix.arch == 'amd64' && format('type=gha,mode=max,scope=docker-{0}', matrix.db) || '' }}
+          # The layer cache is a registry tag (buildcache-<db>) on the public
+          # image package, shared with ci-docker.yml, not the 10 GB Actions
+          # cache (see .github/ci.md).
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.db }}
+          # Only amd64 writes cache to avoid arm64 overwriting with different layers.
+          # A rehearsal writes nothing to ghcr, the cache tag included.
+          cache-to: ${{ (matrix.arch == 'amd64' && !inputs.dry_run) && format('type=registry,ref={0}/{1}:buildcache-{2},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true', env.REGISTRY, env.IMAGE_NAME, matrix.db) || '' }}
 
   docker-merge:
     name: Docker / ${{ matrix.db }} / Merge

@@ -530,9 +530,31 @@ from scratch.
 The Actions cache has a 10 GB limit per repository, and it is evicted least
 recently used first. On 2026-10-15 it held 10.6 GB, 3.8 GB of that two
 `flutter-windows` SDK entries, so eviction had been dropping the 155 MB `_build`
-cache and about 5 of 12 PR runs recompiled deps and NIFs from scratch. The
-Windows Flutter SDK is therefore not cached in `player-windows.yml`, whose comment
-explains the choice. Check the budget with:
+cache and about 5 of 12 PR runs recompiled deps and NIFs from scratch. Dropping
+the Windows SDK cache was not enough. Later that day the cache held 10.79 GB:
+7.2 GB in 163 `buildkit-blob-*` entries (Docker `type=gha` layer caches written
+with `mode=max`), 2.2 GB in one `flutter-macos-stable-*` SDK entry, and only
+about 0.7 GB for everything `ci.yml` needs. Warm PR CI measured about 8 minutes
+and cold about 20, so the cure was to get the big entries out of the budget:
+
+- The Windows and macOS Flutter SDKs are not cached (`player-windows.yml`,
+  `player-macos.yml`, `player-ios.yml`; their comments explain the choice). The
+  SDK download costs about a minute.
+- Docker layer caches no longer use `type=gha`. They are `type=registry` tags
+  named `buildcache*` on the existing public GHCR packages, which do not count
+  against the Actions cache: `:buildcache-sqlite` and `:buildcache-postgres`
+  (written by `ci-docker.yml` and, for amd64 only, `release.yml`) and
+  `:buildcache-cwasm-<arch>` (`cardigann-cwasm.yml`, never on pull requests) on
+  the main image package, `metadata-relay:buildcache` (`ci-relay.yml` publish,
+  and `ci-player-e2e.yml` on push) and `player-e2e-toolbox:buildcache`
+  (`publish-toolbox`). `ci-player-e2e.yml` only reads the server tags. Tags on
+  existing packages rather than a new package, because a new package starts
+  private and fork PRs and anonymous pulls must be able to read the cache.
+  Exports use `mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true`,
+  which GHCR needs for cache manifests and which keeps a failed cache push from
+  failing the build.
+
+Check the budget with:
 
 ```bash
 gh api repos/getmydia/mydia/actions/cache/usage
