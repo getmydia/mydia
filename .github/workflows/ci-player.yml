@@ -190,7 +190,7 @@ jobs:
           bad=0
           for f in $(git ls-files 'test/*_test.dart'); do
             if grep -E '^@TestOn\(' "$f" | grep -qv "^@TestOn('vm')" \
-              && ! grep -q 'skip_very_good_optimization' "$f"; then
+              && ! grep -qE "^@Tags\(\[.*['\"]skip_very_good_optimization['\"]" "$f"; then
               echo "::error file=player/$f::@TestOn other than 'vm' needs @Tags(['skip_very_good_optimization']): the very_good bundle cannot compile it"
               bad=1
             fi
