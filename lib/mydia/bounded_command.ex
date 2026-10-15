@@ -22,8 +22,6 @@ defmodule Mydia.BoundedCommand do
   """
   @spec run(String.t(), [String.t()], timeout()) :: {:ok, binary()} | {:error, error()}
   def run(name, args, timeout) do
-    IO.inspect(name)
-
     case System.find_executable(name) do
       nil ->
         {:error, :not_found}
