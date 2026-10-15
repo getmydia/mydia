@@ -448,8 +448,10 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   @spec execute_http_request(Parsed.t(), String.t(), map(), map(), map()) ::
           {:ok, http_response()} | {:error, Error.t()}
   def execute_http_request(%Parsed{} = definition, url, request_params, user_config, config) do
-    with :ok <- apply_rate_limit(definition, request_params) do
-      do_execute_http_request(definition, url, request_params, user_config, config)
+    throttle = fn -> apply_rate_limit(definition, request_params) end
+
+    with {:ok, params} <- SearchRequest.throttled(request_params, throttle) do
+      do_execute_http_request(definition, url, params, user_config, config)
     end
   end
 

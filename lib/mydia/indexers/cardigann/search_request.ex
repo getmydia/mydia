@@ -4,6 +4,7 @@ defmodule Mydia.Indexers.Cardigann.SearchRequest do
   sends, its HTTP method and redirect flag, and which mirror answered.
   """
 
+  alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.AdapterSupport
   alias Mydia.Indexers.CardigannDefinition.Parsed
 
@@ -58,6 +59,28 @@ defmodule Mydia.Indexers.Cardigann.SearchRequest do
       _ -> request_params
     end
   end
+
+  # The requestDelay wait comes out of the budget the request has left, so a
+  # page cannot overrun it by the time it queued. No `:receive_timeout` means no
+  # budget, and the request is untouched.
+  @spec throttled(map(), (-> :ok | {:error, Error.t()})) :: {:ok, map()} | {:error, Error.t()}
+  def throttled(request_params, throttle) do
+    started = System.monotonic_time(:millisecond)
+
+    with :ok <- throttle.() do
+      after_throttle(request_params, System.monotonic_time(:millisecond) - started)
+    end
+  end
+
+  @spec after_throttle(map(), integer()) :: {:ok, map()} | {:error, Error.t()}
+  def after_throttle(%{receive_timeout: budget} = request_params, waited_ms) do
+    case budget - max(waited_ms, 0) do
+      left when left > 0 -> {:ok, %{request_params | receive_timeout: left}}
+      _ -> {:error, Error.search_failed("Paging budget spent waiting for requestDelay")}
+    end
+  end
+
+  def after_throttle(request_params, _waited_ms), do: {:ok, request_params}
 
   @spec receive_timeout(map()) :: pos_integer()
   def receive_timeout(request_params),
