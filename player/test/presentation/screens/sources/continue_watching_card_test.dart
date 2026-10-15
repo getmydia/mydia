@@ -87,6 +87,26 @@ void main() {
     expect(find.textContaining('S1 · E2'), findsNothing);
   });
 
+  testWidgets('an episode without a show title keeps its place in the caption',
+      (tester) async {
+    await _pump(
+      tester,
+      const ItemSummary(
+        ref: ItemRef(
+          sourceId: fakeSourceId,
+          kind: ItemKind.episode,
+          externalId: 'saltmarsh-2',
+        ),
+        title: 'The Low Tide',
+        subtitle: 'S1 · E2',
+        durationSeconds: 3600,
+        userState: UserState(watched: false, progressSeconds: 600),
+      ),
+    );
+    expect(find.text('The Low Tide'), findsOneWidget);
+    expect(find.text('S1 · E2'), findsOneWidget);
+  });
+
   testWidgets('the trailing label renders when given and not otherwise',
       (tester) async {
     await _pump(tester, _item());

@@ -131,6 +131,9 @@ class _AllServersListingScreenState
                         onTap: resuming
                             ? () => playItem(context, ref, item.ref)
                             : null,
+                        onContextMenu: resuming
+                            ? (c) => showAllServersContinueMenu(c, ref, item)
+                            : null,
                       );
                     },
                   ),

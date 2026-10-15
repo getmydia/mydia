@@ -46,7 +46,11 @@ class ContinueWatchingCard extends ConsumerWidget {
   static bool hasTimeLeftFor(ItemSummary item) => _timeLeft(item) != null;
 
   static String _captionOf(ItemSummary item, String? trailingLabel) => [
-        if (item.showTitle != null) ...[item.subtitle, item.title],
+        if (item.ref.kind == ItemKind.episode) ...[
+          item.subtitle,
+          // The first line is the show title only when the item has one.
+          if (item.showTitle != null) item.title,
+        ],
         trailingLabel,
       ].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
 

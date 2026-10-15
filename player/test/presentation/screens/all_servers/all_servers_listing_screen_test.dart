@@ -145,6 +145,21 @@ void main() {
     expect(Uri.parse(pushed.last).path, '/s/${a.id.value}/player/a1');
   });
 
+  testWidgets('Continue Watching long press offers Details', (t) async {
+    final s = fakeServer('a');
+    final a = FakeMergedSource(s, resuming: [
+      item(s, 'a1', lastPlayedAt: DateTime.utc(2024, 1, 1)),
+    ]);
+    final pushed = await pump(t, [a, FakeMergedSource(fakeServer('b'))],
+        listing: AllServersListing.continueWatching);
+    await t.longPress(find.byKey(ValueKey('all-poster-${a.id.value}-a1')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('all-continue-details')));
+    await t.pumpAndSettle();
+    expect(pushed.last, startsWith('/s/${a.id.value}/'));
+    expect(Uri.parse(pushed.last).path, isNot(contains('/player/')));
+  });
+
   testWidgets('Recently Added still opens the item', (t) async {
     final s = fakeServer('a');
     final a = FakeMergedSource(s, recent: [
