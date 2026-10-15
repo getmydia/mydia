@@ -294,6 +294,11 @@ class ItemSummary {
       };
 }
 
+/// An episode's place in its series, `S1 · E3`, or null without both numbers.
+/// Every source's episode summaries carry this as their `subtitle`.
+String? episodeSubtitle(int? season, int? episode) =>
+    season == null || episode == null ? null : 'S$season · E$episode';
+
 enum MediaStreamKind { audio, subtitle }
 
 @immutable

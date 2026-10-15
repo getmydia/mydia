@@ -351,4 +351,32 @@ void main() {
     expect(v.directPlaySupported, false);
     expect(mediaVersion({'id': 'f2'}).directPlaySupported, isNull);
   });
+
+  test('an episode names its place in the series', () {
+    final ep = episodeSummary(s, fx.episode('e-21', season: 2, number: 1));
+    expect(ep.subtitle, 'S2 · E1');
+
+    final resuming = continueWatchingSummary(s, {
+      'id': 'e-22',
+      'type': 'EPISODE',
+      'title': 'Low Tide',
+      'showTitle': 'Lantern Street',
+      'seasonNumber': 2,
+      'episodeNumber': 3,
+    });
+    expect(resuming!.subtitle, 'S2 · E3');
+
+    final movie = continueWatchingSummary(s, {
+      'id': 'm-1',
+      'type': 'MOVIE',
+      'title': 'Paper Lanterns',
+    });
+    expect(movie!.subtitle, isNull);
+  });
+
+  test('episodeSubtitle needs both numbers', () {
+    expect(episodeSubtitle(1, 3), 'S1 · E3');
+    expect(episodeSubtitle(null, 3), isNull);
+    expect(episodeSubtitle(1, null), isNull);
+  });
 }

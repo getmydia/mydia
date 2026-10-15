@@ -110,9 +110,7 @@ ItemSummary? plexSummary(SourceId sourceId, Map<String, dynamic> m) {
   return ItemSummary(
     ref: ItemRef(sourceId: sourceId, kind: kind, externalId: id),
     title: m['title'] as String? ?? '',
-    subtitle: episode && index != null && parentIndex != null
-        ? 'S$parentIndex · E$index'
-        : null,
+    subtitle: episode ? episodeSubtitle(parentIndex, index) : null,
     showTitle: episode ? m['grandparentTitle'] as String? : null,
     year: m['year'] as int?,
     // An episode's own thumb is a landscape still: the show's poster suits a
