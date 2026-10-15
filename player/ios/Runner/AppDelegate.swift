@@ -57,8 +57,10 @@ import AVFoundation
   private func configureAudioSession() {
     do {
       let audioSession = AVAudioSession.sharedInstance()
-      // Set category to playback to enable AirPlay
-      try audioSession.setCategory(.playback, mode: .moviePlayback, options: [.allowAirPlay, .allowBluetooth])
+      // Playback already routes to AirPlay and Bluetooth A2DP. The
+      // .allowAirPlay and .allowBluetooth(HFP) options are only valid with
+      // .playAndRecord; passing them here fails the whole call with -50.
+      try audioSession.setCategory(.playback, mode: .moviePlayback)
       try audioSession.setActive(true)
     } catch {
       print("Failed to configure audio session for AirPlay: \(error)")
