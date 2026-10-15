@@ -30,7 +30,7 @@ Future<void> _removeFirstCard(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('lists what is in progress and opens an item on that source',
+  testWidgets('lists what is in progress and plays an item from that source',
       (tester) async {
     final a = FakeCapableSource()
       ..continueWatchingResult = [_inProgress(1), _inProgress(2)];
@@ -42,7 +42,9 @@ void main() {
 
     await tester.tap(find.text('Invented Film 2'));
     await tester.pumpAndSettle();
-    expect(pushed.last, '/s/acc1:owner:aa11/movie/m2');
+    final played = Uri.parse(pushed.last);
+    expect(played.path, '/s/acc1:owner:aa11/player/m2');
+    expect(played.queryParameters['fileId'], 'part-1');
   });
 
   testWidgets('shows the listing of the source it is scoped to',
@@ -160,16 +162,41 @@ void main() {
     expect(find.text('Invented Episode 2'), findsOneWidget);
   });
 
-  testWidgets('a source that cannot dismiss an entry offers no menu',
+  testWidgets('an episode poster names its series and its place',
+      (tester) async {
+    await _pump(
+      tester,
+      FakeCapableSource()
+        ..continueWatchingResult = [
+          const ItemSummary(
+            ref: ItemRef(
+                sourceId: fakeSourceId,
+                kind: ItemKind.episode,
+                externalId: 'e3'),
+            title: 'Invented Episode 3',
+            showTitle: 'Invented Series',
+            subtitle: 'S1 · E3',
+            userState: UserState(progressSeconds: 60),
+            durationSeconds: 1800,
+          ),
+        ],
+    );
+    expect(find.text('Invented Series · S1 · E3'), findsOneWidget);
+  });
+
+  testWidgets('the menu offers details, and removal only where allowed',
       (tester) async {
     final a = FakeCapableSource()
       ..continueWatchingResult = [_inProgress(1)]
       ..removable = false;
-    await _pump(tester, a);
+    final pushed = await _pump(tester, a);
 
     await tester.longPress(find.byType(MediaPoster).first);
     await tester.pumpAndSettle();
-
     expect(find.text('Remove from Continue Watching'), findsNothing);
+
+    await tester.tap(find.text('Movie details'));
+    await tester.pumpAndSettle();
+    expect(pushed.last, '/s/acc1:owner:aa11/movie/m1');
   });
 }

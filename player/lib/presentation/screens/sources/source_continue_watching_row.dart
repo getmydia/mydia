@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/player/best_file.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -15,6 +14,7 @@ import '../../../domain/sources/source_error.dart';
 import '../../widgets/media_context_menu.dart';
 import '../../widgets/toast/toaster.dart';
 import '../detail/detail_links.dart';
+import '../detail/play_item.dart';
 import 'continue_watching_card.dart';
 import 'source_browse_providers.dart';
 import 'source_poster_row.dart';
@@ -69,7 +69,7 @@ class _SourceContinueWatchingRowState
       posterFor: (context, item) => ContinueWatchingCard(
         key: ValueKey('source-continue-${item.ref.externalId}'),
         item: item,
-        onTap: () => _play(context, ref, item.ref),
+        onTap: () => playItem(context, ref, item.ref),
         onContextMenu: (cardContext) => _openMenu(
           cardContext,
           ref,
@@ -105,38 +105,6 @@ class _SourceContinueWatchingRowState
 }
 
 enum _Action { details, remove }
-
-/// Plays the item's best version for this screen. The session resumes from
-/// the detail's saved position on its own.
-Future<void> _play(BuildContext context, WidgetRef ref, ItemRef item) async {
-  final source = ref.read(mediaSourceProvider(item.sourceId));
-  if (source == null) return;
-  final toaster = Toaster.of(context);
-  final screenWidth = MediaQuery.sizeOf(context).width;
-  final ItemDetail detail;
-  try {
-    detail = await source.item(item);
-  } catch (e) {
-    toaster.show(
-      e is SourceException ? e.viewerMessage : 'Could not open this title.',
-      kind: ToastKind.error,
-    );
-    return;
-  }
-  final fileId = await pickBestVersionId(detail.versions, screenWidth);
-  if (fileId == null) {
-    toaster.show('This title has nothing to play.', kind: ToastKind.error);
-    return;
-  }
-  if (!context.mounted) return;
-  await context.push(sourcePlayerLocation(
-    detail.summary.ref,
-    fileId: fileId,
-    title: detail.summary.title,
-  ));
-  if (!context.mounted) return;
-  invalidateSourceItemWrites(ref, item);
-}
 
 Future<void> _openMenu(
   BuildContext cardContext,

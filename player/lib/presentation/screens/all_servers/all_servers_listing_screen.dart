@@ -9,6 +9,7 @@ import '../../../domain/merged/merged_result.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/browse_grid.dart';
+import '../detail/play_item.dart';
 import '../sources/source_drawer_button.dart';
 import '../sources/source_error_view.dart';
 import '../sources/source_listing_screen.dart' show SourceEmptyState;
@@ -119,10 +120,22 @@ class _AllServersListingScreenState
                     key: const Key('all-listing-grid'),
                     scrollTopPadding: 8,
                     itemCount: items.length,
-                    itemBuilder: (context, index) => AllServersPoster(
-                      item: items[index],
-                      extraCopies: merged.extraCopies[items[index].ref] ?? 0,
-                    ),
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      final resuming =
+                          widget.listing == AllServersListing.continueWatching;
+                      return AllServersPoster(
+                        item: item,
+                        extraCopies: merged.extraCopies[item.ref] ?? 0,
+                        caption: resuming ? showEpisodeCaption(item) : null,
+                        onTap: resuming
+                            ? () => playItem(context, ref, item.ref)
+                            : null,
+                        onContextMenu: resuming
+                            ? (c) => showAllServersContinueMenu(c, ref, item)
+                            : null,
+                      );
+                    },
                   ),
                 ),
             },

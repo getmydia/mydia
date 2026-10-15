@@ -9,6 +9,7 @@ import '../../../domain/sources/item.dart';
 import '../../widgets/media_context_menu.dart';
 import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
+import '../detail/play_item.dart';
 import '../sources/source_browse_providers.dart';
 import '../sources/source_listing_screen.dart';
 
@@ -31,14 +32,21 @@ class _ContinueWatchingScreenState
   final Set<ItemRef> _hidden = {};
 
   void _openMenu(BuildContext posterContext, ItemSummary item) {
+    final removable = ref
+            .read(mediaSourceProvider(widget.sourceId))
+            ?.as<ContinueWatching>()
+            ?.canRemoveFromContinueWatching(item) ??
+        false;
     showMediaContextMenu(
       posterContext,
       target: MediaContextTarget(
         item: item.ref,
-        continueWatching: item.dismissRef,
+        show: item.showRef,
+        hasFile: true,
+        tapPlays: true,
+        continueWatching: removable ? item.dismissRef : null,
       ),
-      // Unreachable: with `tapPlays` false the menu never offers Play.
-      onPlay: () {},
+      onPlay: () => playItem(context, ref, item.ref),
       onRemoveFromContinueWatching: () => _remove(item),
     );
   }
@@ -71,9 +79,6 @@ class _ContinueWatchingScreenState
   Widget build(BuildContext context) {
     final sourceId = widget.sourceId;
     final provider = sourceContinueWatchingProvider(sourceId);
-    final continueWatching =
-        ref.watch(mediaSourceProvider(sourceId))?.as<ContinueWatching>();
-
     return SourceListingScreen(
       sourceId: sourceId,
       icon: Icons.play_circle_outline_rounded,
@@ -88,22 +93,16 @@ class _ContinueWatchingScreenState
       onRetry: () => ref.invalidate(provider),
       errorTitle: 'Failed to load continue watching',
       emptyTitle: 'Nothing in progress.',
-      // `tapPlays` stays false: this grid opens the title, it does not play
-      // it. That suppresses the navigation entries, which would only repeat
-      // the tap, and leaves the removal. A source that cannot dismiss an
-      // entry gets no menu rather than one that opens empty.
+      // A tap plays, as on the home row; the menu carries details and removal.
       posterFor: (context, item, open) {
-        final removable =
-            continueWatching?.canRemoveFromContinueWatching(item) ?? false;
+        // Null for a movie, so SourcePoster falls back to the year.
         return SourcePoster(
           key: ValueKey('source-poster-${item.ref.externalId}'),
           item: item,
-          subtitle: item.showTitle,
-          onTap: open,
-          onContextMenu: removable
-              ? (posterContext) => _openMenu(posterContext, item)
-              : null,
-          showMenuButton: removable,
+          subtitle: showEpisodeCaption(item),
+          onTap: () => playItem(context, ref, item.ref),
+          onContextMenu: (posterContext) => _openMenu(posterContext, item),
+          showMenuButton: true,
         );
       },
     );

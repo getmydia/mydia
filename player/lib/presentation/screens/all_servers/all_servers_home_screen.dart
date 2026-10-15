@@ -8,17 +8,15 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
-import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/merged/merged_result.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
-import '../../widgets/media_context_menu.dart';
 import '../../widgets/shell_rail_inset.dart';
-import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
+import '../detail/play_item.dart';
 import '../home/home_loading_skeleton.dart';
 import '../sources/home_header.dart';
 import '../sources/continue_watching_card.dart';
@@ -186,8 +184,8 @@ class AllServersHomeScreen extends ConsumerWidget {
                     'all-poster-${item.ref.sourceId.value}-${item.ref.externalId}'),
                 item: item,
                 trailingLabel: continueLabel(item),
-                onTap: () => context.push(allServersItemLocation(item.ref)),
-                onContextMenu: (c) => _menu(c, ref, item),
+                onTap: () => playItem(context, ref, item.ref),
+                onContextMenu: (c) => showAllServersContinueMenu(c, ref, item),
               ),
             ),
           if (movieItems.isNotEmpty)
@@ -230,51 +228,5 @@ class AllServersHomeScreen extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  Future<void> _menu(BuildContext c, WidgetRef ref, ItemSummary item) async {
-    final source = ref
-        .read(allServersSourcesProvider)
-        .where((s) => s.id == item.ref.sourceId)
-        .firstOrNull;
-    final cw = source?.as<ContinueWatching>();
-    final removable = cw?.canRemoveFromContinueWatching(item) ?? false;
-    final position = popupPositionBelow(c);
-    if (position == null) return;
-    final choice = await showMenu<String>(
-      context: c,
-      position: position,
-      items: [
-        const PopupMenuItem(
-            key: Key('all-continue-details'),
-            value: 'details',
-            child: Text('Details')),
-        if (removable)
-          const PopupMenuItem(
-              key: Key('all-continue-remove'),
-              value: 'remove',
-              child: Text('Remove from Continue Watching')),
-      ],
-    );
-    if (choice == null || !c.mounted) return;
-    switch (choice) {
-      case 'details':
-        await c.push(allServersItemLocation(item.ref));
-      case 'remove':
-        if (cw == null) return;
-        final toaster = Toaster.of(c);
-        try {
-          await cw.removeFromContinueWatching(item.dismissRef);
-        } catch (e) {
-          toaster.show(
-            e is SourceException
-                ? e.viewerMessage
-                : 'Could not remove this title.',
-            kind: ToastKind.error,
-          );
-          return;
-        }
-        ref.invalidate(allServersContinueWatchingProvider);
-    }
   }
 }

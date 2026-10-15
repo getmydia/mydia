@@ -155,6 +155,8 @@ ItemSummary episodeSummary(
     ItemSummary(
       ref: _ref(sid, ItemKind.episode, e['id'] as String),
       title: e['title'] as String? ?? '',
+      subtitle: episodeSubtitle(
+          e['seasonNumber'] as int?, e['episodeNumber'] as int?),
       showTitle: showTitle ?? _map(e['show'])['title'] as String?,
       poster: _art(e['thumbnailUrl']),
       // The thumbnail is a landscape still, which is what the show page's
@@ -181,6 +183,9 @@ ItemSummary? continueWatchingSummary(SourceId sid, Map<String, dynamic> c) {
   return ItemSummary(
     ref: _ref(sid, kind, c['id'] as String),
     title: c['title'] as String? ?? '',
+    subtitle: kind == ItemKind.episode
+        ? episodeSubtitle(c['seasonNumber'] as int?, c['episodeNumber'] as int?)
+        : null,
     showTitle: c['showTitle'] as String?,
     poster: _art(artwork['posterUrl']),
     backdrop: _art(artwork['backdropUrl']),

@@ -15,7 +15,10 @@ import 'package:player/core/sources/cache/source_keys.dart';
 import 'package:player/core/sources/cache/source_rules.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/cache/invalidation_target.dart';
+import 'package:player/core/sources/capabilities.dart';
+import 'package:player/core/sources/media_source.dart' show SourceCapability;
 import 'package:player/domain/sources/hub.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/presentation/screens/home/home_loading_skeleton.dart';
@@ -28,6 +31,22 @@ import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../../test_utils/toast_harness.dart';
 import 'fake_media_source.dart';
+
+/// Hubs whose first item is a show, from a source that knows next up.
+class _ShowHeroSource extends FakeHubSource implements NextUp {
+  _ShowHeroSource() : super(resuming: []) {
+    hubList = [
+      const Hub(id: 'shows', title: 'Shows', items: [fakeShow]),
+    ];
+  }
+
+  @override
+  Set<SourceCapability> get capabilities =>
+      {...super.capabilities, SourceCapability.nextUp};
+
+  @override
+  Future<ItemSummary?> nextUp(ItemRef show) async => fakeEpisode(2);
+}
 
 class _RecordingInvalidator implements Invalidator {
   final targets = <InvalidationTarget>[];
@@ -178,7 +197,8 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: row, matching: find.text('S1 · E2')),
+        find.descendant(
+            of: row, matching: find.text('S1 · E2 · Invented Episode 2')),
         findsOneWidget,
       );
     });
@@ -411,11 +431,25 @@ void main() {
       expect(find.byType(SourceHomeHero), findsNothing);
     });
 
-    testWidgets('the hero play button opens the item', (tester) async {
+    testWidgets('the hero play button plays the item', (tester) async {
       final pushed = await pumpHome(tester, source());
       await tester.tap(find.byKey(const Key('source-home-hero-play')));
       await tester.pumpAndSettle();
+      expect(Uri.parse(pushed.last).path, '/s/acc1:owner:aa11/player/m1');
+    });
+
+    testWidgets('the hero secondary button opens the item', (tester) async {
+      final pushed = await pumpHome(tester, source());
+      await tester.tap(find.byKey(const Key('source-home-hero-more')));
+      await tester.pumpAndSettle();
       expect(pushed.last, '/s/acc1:owner:aa11/movie/m1');
+    });
+
+    testWidgets('a featured show plays its next-up episode', (tester) async {
+      final pushed = await pumpHome(tester, _ShowHeroSource());
+      await tester.tap(find.byKey(const Key('source-home-hero-play')));
+      await tester.pumpAndSettle();
+      expect(Uri.parse(pushed.last).path, '/s/acc1:owner:aa11/player/e2');
     });
 
     // Requires --dart-define=MYDIA_FORCE_TV=true; CI runs it in the

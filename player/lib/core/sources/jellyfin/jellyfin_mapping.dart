@@ -120,9 +120,7 @@ ItemSummary? jellyfinSummary(SourceId sourceId, Map<String, dynamic> json) {
   return ItemSummary(
     ref: ItemRef(sourceId: sourceId, kind: kind, externalId: id),
     title: json['Name'] as String? ?? 'Untitled',
-    subtitle: episode && index != null && parentIndex != null
-        ? 'S$parentIndex · E$index'
-        : null,
+    subtitle: episode ? episodeSubtitle(parentIndex, index) : null,
     showTitle: episode ? json['SeriesName'] as String? : null,
     year: json['ProductionYear'] as int?,
     poster: seriesPoster ??

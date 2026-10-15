@@ -266,15 +266,22 @@ class _RailFooter extends ConsumerWidget {
           // Pointer-only while collapsed: focus expands the rail on its own.
           ExcludeFocus(
             excluding: !expanded,
-            child: IconButton(
-              key: const Key('rail-toggle'),
-              tooltip: expanded ? 'Collapse sidebar' : 'Expand sidebar',
-              onPressed: onToggle,
-              color: AppColors.textSecondary,
-              icon: Icon(
-                expanded
-                    ? Icons.keyboard_double_arrow_left_rounded
-                    : Icons.keyboard_double_arrow_right_rounded,
+            // Pinned to the rows' 48px icon box: desktop's compact density
+            // would otherwise shrink the button to 40px, 4px left of the
+            // row icons.
+            child: SizedBox.square(
+              dimension: RailScope.iconBox,
+              child: IconButton(
+                key: const Key('rail-toggle'),
+                tooltip: expanded ? 'Collapse sidebar' : 'Expand sidebar',
+                onPressed: onToggle,
+                color: AppColors.textSecondary,
+                visualDensity: VisualDensity.standard,
+                icon: Icon(
+                  expanded
+                      ? Icons.keyboard_double_arrow_left_rounded
+                      : Icons.keyboard_double_arrow_right_rounded,
+                ),
               ),
             ),
           ),

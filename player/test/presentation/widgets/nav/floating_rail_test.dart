@@ -394,6 +394,20 @@ void main() {
   });
 
   group('one geometry, only width and label opacity animate', () {
+    testWidgets('the collapsed toggle sits in the rows\' icon column',
+        (tester) async {
+      await _pumpRail(tester);
+      final row = tester.getCenter(find
+          .descendant(
+              of: find.byKey(const ValueKey('source-nav-settings')),
+              matching: find.byType(Icon))
+          .first);
+      final toggle = tester.getCenter(find.descendant(
+          of: find.byKey(const Key('rail-toggle')),
+          matching: find.byType(Icon)));
+      expect(toggle.dx, closeTo(row.dx, 0.5));
+    }, variant: TargetPlatformVariant.desktop());
+
     testWidgets('icons never move while the rail expands and collapses',
         (tester) async {
       await _pumpRail(tester, showBackToMydia: true);

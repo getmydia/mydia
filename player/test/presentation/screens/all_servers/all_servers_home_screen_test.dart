@@ -38,6 +38,7 @@ Future<List<String>> pump(WidgetTester tester, List<MediaSource> sources,
     overrides: [
       allServersSourcesProvider.overrideWithValue(sources),
       sourcesProvider.overrideWithValue([for (final s in sources) s.source]),
+      for (final s in sources) mediaSourceProvider(s.id).overrideWithValue(s),
       allServersNeedSignInProvider.overrideWithValue(const []),
       sourceArtworkProvider.overrideWith((ref, key) async => null),
     ],
@@ -148,12 +149,12 @@ void main() {
     expect(find.byKey(const Key('all-unavailable-banner')), findsNothing);
   });
 
-  testWidgets('tapping a card opens its detail route', (t) async {
+  testWidgets('tapping a Continue Watching card plays it', (t) async {
     final a = serverWith('a'), b = serverWith('b');
     final pushed = await pump(t, [a, b]);
     await t.tap(find.byKey(ValueKey('all-poster-${a.id.value}-a1')));
     await t.pumpAndSettle();
-    expect(pushed.last, startsWith('/s/${a.id.value}/'));
+    expect(Uri.parse(pushed.last).path, '/s/${a.id.value}/player/a1');
   });
 
   testWidgets('every server failing shows the error view', (t) async {
@@ -204,7 +205,9 @@ void main() {
     expect(t.widget(card), isA<ContinueWatchingCard>());
     expect(find.descendant(of: card, matching: find.text('Saltmarsh')),
         findsOneWidget);
-    expect(find.descendant(of: card, matching: find.text('S1 · E2 · Server a')),
+    expect(
+        find.descendant(
+            of: card, matching: find.text('S1 · E2 · The Low Tide · Server a')),
         findsOneWidget,
         reason: 'the episode line carries the server name');
   });

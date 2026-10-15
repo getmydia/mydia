@@ -67,10 +67,9 @@ List<MediaContextAction> mediaContextActionsFor(MediaContextTarget target) {
   // run, since `_openMenu` routes Play through a nullable `onItemActivate`.
   // That is a Play entry that silently does nothing.
   //
-  // The gate stops at navigation. Removing a title is not a second route to
-  // somewhere the tap already goes, and the `/continue-watching` grid opens
-  // details on tap, so gating it here would leave the one surface most in need
-  // of the action without any way to reach it.
+  // The gate stops at navigation. Removing a title is not a navigation entry
+  // and duplicates nothing a tap does, so it is never gated by `tapPlays`;
+  // gating it would strip the action from the surfaces that most need it.
   final navigation = target.tapPlays
       ? [
           if (target.hasFile) MediaContextAction.play,
