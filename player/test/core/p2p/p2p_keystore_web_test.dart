@@ -1,6 +1,9 @@
 // Runs only under `flutter test --platform chrome`; there is no IndexedDB in
 // the VM test runner. A VM run skips this file rather than failing it.
 @TestOn('browser')
+// Out of very_good's bundle: it compiles every bundled file for the VM, and
+// this one imports browser-only libraries. `Run browser tests` covers it.
+@Tags(['skip_very_good_optimization'])
 library;
 
 import 'dart:typed_data';
