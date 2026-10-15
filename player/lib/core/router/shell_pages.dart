@@ -7,9 +7,9 @@ import '../../presentation/widgets/shell_rail_inset.dart';
 
 /// Shell routes that paint full-bleed themselves and so are not wrapped in a
 /// `ShellPageInset`: the Home screens (the hero's backdrop runs under the
-/// rail) and the movie, show, season and episode pages (art and ground run
-/// under it). They read `ShellRailInset` and inset their own text, controls
-/// and rows.
+/// rail) and the movie and show pages, which seasons and episodes open (art
+/// and ground run under it). They read `ShellRailInset` and inset their own
+/// text, controls and rows.
 const Set<String> fullBleedShellRoutes = {
   'source_root',
   'all_servers',

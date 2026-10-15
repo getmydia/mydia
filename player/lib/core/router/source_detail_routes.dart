@@ -7,11 +7,10 @@ import '../../domain/detail/detail_target.dart';
 import '../../domain/sources/item.dart';
 import '../../presentation/screens/collections/collection_detail_screen.dart';
 import '../../presentation/screens/detail/detail_links.dart';
-import '../../presentation/screens/episode/episode_detail_screen.dart';
 import '../../presentation/screens/movie/movie_detail_screen.dart';
 import '../../presentation/screens/show/show_detail_screen.dart';
 import '../../presentation/screens/sources/source_item_screen.dart';
-import '../../presentation/screens/sources/source_season_route.dart';
+import '../../presentation/screens/sources/source_show_selection_route.dart';
 import '../sources/source.dart';
 
 ItemRef _refOf(GoRouterState state, ItemKind kind) => ItemRef(
@@ -71,13 +70,14 @@ List<GoRoute> sourceDetailRoutes() => [
         path: '/s/:sourceId/season/:itemId',
         name: 'source_season_detail',
         builder: (context, state) =>
-            SourceSeasonRoute(season: _refOf(state, ItemKind.season)),
+            SourceShowSelectionRoute(item: _refOf(state, ItemKind.season)),
       ),
+      // An episode has no page of its own: it opens its show with the
+      // episode selected.
       GoRoute(
         path: '/s/:sourceId/episode/:itemId',
         name: 'source_episode_detail',
-        builder: (context, state) => EpisodeDetailScreen.target(
-          target: SourceTarget(_refOf(state, ItemKind.episode)),
-        ),
+        builder: (context, state) =>
+            SourceShowSelectionRoute(item: _refOf(state, ItemKind.episode)),
       ),
     ];

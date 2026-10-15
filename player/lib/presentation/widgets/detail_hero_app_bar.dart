@@ -7,7 +7,7 @@ import '../screens/sources/source_drawer_button.dart';
 import 'shell_rail_inset.dart';
 import 'window_chrome/window_title_row.dart';
 
-/// The pinned header of the movie, show and episode detail screens.
+/// The pinned header of the movie and show detail screens.
 ///
 /// The hero art runs to the window's top and left edges, behind the window
 /// controls and under the floating rail, and the title row (back, cast) sits
@@ -103,8 +103,8 @@ SliverAppBar detailHeroAppBar({
   );
 }
 
-/// The back control for [detailHeroAppBar]'s title row on the movie, show
-/// and episode screens.
+/// The back control for [detailHeroAppBar]'s title row on the movie and
+/// show screens.
 ///
 /// Flat like the rest of the title row: the top scrim [detailHeroAppBar]
 /// paints keeps the white glyph legible over bright art. Pops when the

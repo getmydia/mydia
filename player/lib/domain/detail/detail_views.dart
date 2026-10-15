@@ -1,4 +1,4 @@
-/// What the movie, show and episode screens render, whichever server
+/// What the movie and show screens render, whichever server
 /// answered. A screen offers an action only when the view lists the matching
 /// [DetailFeature].
 library;
@@ -137,7 +137,7 @@ class EpisodeView {
   /// The id the show screen's selection state holds.
   String get id => target.id;
 
-  /// The episode page's hero art: the still, else the show's backdrop, else
+  /// An episode's art: the still, else the show's backdrop, else
   /// the show's poster.
   DetailArt? get heroArt => still ?? showBackdrop ?? showPoster;
 

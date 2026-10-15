@@ -27,8 +27,8 @@ const Key _heroKey = Key('detail-hero');
 
 /// The loaded-hero shape of the detail screens: a `CustomScrollView` whose
 /// first sliver is `detailHeroAppBar`, pinned, carrying the back button in its
-/// title row and the hero art in its flexible space. The movie, show and
-/// episode screens cannot be mounted here without their provider graphs.
+/// title row and the hero art in its flexible space. The movie and show
+/// screens cannot be mounted here without their provider graphs.
 Widget _detailScreenLike({
   required WindowChromeInsets insets,
   double statusBar = 0,
