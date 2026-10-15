@@ -15,6 +15,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job reads the repository and nothing more. Jobs that need less or more
+# say so themselves.
+permissions:
+  contents: read
+
 env:
   MIX_ENV: test
   # Wasmex carries a local patch in its Rust half (patches/wasmex), so it is
@@ -75,6 +80,7 @@ jobs:
               - 'mix.lock'
               - '.credo.exs'
               - '.credo.ratchet.exs'
+              - '.dialyzer_ignore.exs'
               - '.formatter.exs'
               - '.elixir-version'
               - '.otp-version'
@@ -343,8 +349,10 @@ jobs:
   # The SQLite suite runs with max_cases: 1 (test/test_helper.exs), so one
   # runner took 642s for it (549s of that sync, 2026-10-15). Each shard is its
   # own runner with its own mydia_test.db, so SQLite still sees one writer.
-  # --partitions assigns test files by hash, not duration; if one shard runs
-  # much longer than the others, raise the count rather than hand-balancing.
+  # --partitions sorts the test files and deals them out round-robin, not by
+  # duration, so adding a file can shift later files to another shard; if one
+  # shard runs much longer than the others, raise the count rather than
+  # hand-balancing.
   test-sqlite:
     name: Test (SQLite ${{ matrix.partition }}/4)
     needs: changes
@@ -631,6 +639,7 @@ jobs:
     name: Test
     needs: [changes, guards, lint, test-sqlite]
     if: always()
+    permissions: {}
     runs-on: ubuntu-latest
     steps:
       - name: Require every needed job to pass or skip
@@ -644,6 +653,7 @@ jobs:
     name: Test / PostgreSQL
     needs: [changes, test-postgres]
     if: always()
+    permissions: {}
     runs-on: ubuntu-latest
     steps:
       - name: Require every needed job to pass or skip
@@ -657,6 +667,7 @@ jobs:
     name: Test / E2E Browser
     needs: [changes, test-e2e]
     if: always()
+    permissions: {}
     runs-on: ubuntu-latest
     steps:
       - name: Require every needed job to pass or skip
