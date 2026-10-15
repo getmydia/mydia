@@ -11,7 +11,8 @@ are unchanged.
 | Swift | `ios/Runner/MydiaTabBarController.swift` | the window root: tab bar, accessory, inset reports, touch pass-through |
 | Swift | `ios/Runner/NativeTabBarPlugin.swift` | owns the `mydia/native-tab-bar` channel and drives the controller |
 | Swift | `ios/Runner/CastAccessoryView.swift` | the accessory's content view and its model |
-| Swift | `ios/Runner/AppDelegate.swift` | `installNativeTabBar()`, the root swap |
+| Swift | `ios/Runner/AppDelegate.swift` | creates `NativeTabBarPlugin` when the implicit engine starts |
+| Swift | `ios/Runner/SceneDelegate.swift` | `installNativeTabBar()`, the root swap |
 | Dart | `lib/core/platform/native_tab_bar_support.dart` | `NativeTabBarSupport`, the once-at-startup probe |
 | Dart | `lib/core/platform/native_tab_bar_channel.dart` | `NativeTabBarChannel`, `NativeTab`, `NativeAccessory`, the events |
 | Dart | `lib/presentation/widgets/nav/native_tab_bar.dart` | `NativeTabBar`, the shell's `bottomNavigationBar` on this path |
@@ -42,13 +43,22 @@ false unless they set `NativeTabBarSupport.debugOverride` (reset it in
 
 ## Root swap ordering
 
-`installNativeTabBar()` replaces `window.rootViewController` with a
-`MydiaTabBarController` that holds the `FlutterViewController` as a child. It
-must stay the last step before `super.application(...)` in
-`didFinishLaunching`: `FlutterAppDelegate` resolves `registrar(forPlugin:)`
-through `window.rootViewController as? FlutterViewController`, and that cast
-stops matching once the tab controller is the root. Every plugin registered
-after the swap would get no registrar.
+The app uses the UIScene lifecycle. Built against the iOS 27 SDK, an app
+without a scene manifest traps inside UIKit at launch
+(`_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`), before
+Flutter draws anything: the device shows a blank screen.
+
+Two callbacks run in this order at launch:
+
+1. `AppDelegate.didInitializeImplicitFlutterEngine` runs when the storyboard's
+   `FlutterViewController` creates its engine. It registers every plugin
+   through the engine bridge's `pluginRegistry` and creates
+   `NativeTabBarPlugin`. The registry belongs to the engine, so registration
+   no longer depends on the window root and has no ordering constraint
+   against the swap.
+2. `SceneDelegate.scene(_:willConnectTo:options:)` calls `super` first, then
+   `installNativeTabBar()`, which replaces `window.rootViewController` with a
+   `MydiaTabBarController` that holds the `FlutterViewController` as a child.
 
 The Flutter view controller is added once as a child, pinned full screen
 beneath the tab content, and never moved afterwards. Re-parenting it sends the
@@ -61,7 +71,9 @@ matching `childFor...` and `supportedInterfaceOrientations` overrides.
 
 If the root is not a `FlutterViewController` when the swap runs, the swap is
 skipped and logged: `[NativeTabBar] root swap skipped: window or
-FlutterViewController root missing`. `isSupported` then answers false and the
+FlutterViewController root missing`. If the engine callback has not created
+the plugin yet, it logs `[NativeTabBar] root swap skipped: plugin not
+registered`. `isSupported` then answers false and the
 app runs on the Flutter dock.
 
 ## Touch pass-through
@@ -300,10 +312,9 @@ From the shipped build:
 
 ## Known limits
 
-- Status-bar tap scroll-to-top after the root swap is unverified:
-  `FlutterAppDelegate` forwards some behavior only when the root is a
-  `FlutterViewController`, and the root is now the tab controller. Check on
-  device.
+- Status-bar tap scroll-to-top after the root swap is unverified: Flutter
+  forwards some behavior only when the root is a `FlutterViewController`, and
+  the root is now the tab controller. Check on device.
 - Cast artwork in the native accessory is fetched by `URLSession` and is
   subject to App Transport Security. Plain-http artwork fails to load and the
   accessory keeps the state symbol.

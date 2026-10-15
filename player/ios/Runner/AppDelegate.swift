@@ -3,30 +3,39 @@ import UIKit
 import AVFoundation
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
-  private var privacyEnabled = false
-  private var privacyCover: UIView?
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  /// Read by `SceneDelegate` when the scene resigns active.
+  private(set) var privacyEnabled = false
 
-  /// Owns `mydia/native-tab-bar`. Kept alive for the app's lifetime.
-  private var nativeTabBarPlugin: NativeTabBarPlugin?
+  /// Owns `mydia/native-tab-bar`. Kept alive for the app's lifetime;
+  /// `SceneDelegate` attaches it to the tab bar controller.
+  private(set) var nativeTabBarPlugin: NativeTabBarPlugin?
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-
     // Configure audio session for AirPlay
     configureAudioSession()
 
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  // Runs when the storyboard's FlutterViewController creates its engine,
+  // before the scene connects. Registering through the engine's own registry
+  // keeps working after `SceneDelegate` replaces the window root.
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    let registry = engineBridge.pluginRegistry
+    GeneratedPluginRegistrant.register(with: registry)
+
     // Register AirPlay platform channel
-    if let controller = window?.rootViewController as? FlutterViewController {
-      AirPlayChannelHandler.register(with: registrar(forPlugin: "AirPlayChannelHandler")!)
+    if let airPlayRegistrar = registry.registrar(forPlugin: "AirPlayChannelHandler") {
+      AirPlayChannelHandler.register(with: airPlayRegistrar)
     }
 
     // Window privacy: blur the app switcher snapshot while a locked or
     // hidden server is open.
-    if let privacyRegistrar = registrar(forPlugin: "WindowPrivacy") {
+    if let privacyRegistrar = registry.registrar(forPlugin: "WindowPrivacy") {
       FlutterMethodChannel(name: "dev.mydia.player/privacy",
                            binaryMessenger: privacyRegistrar.messenger())
         .setMethodCallHandler { [weak self] call, result in
@@ -40,50 +49,9 @@ import AVFoundation
         }
     }
 
-    // Must stay the last step before `super`: `FlutterAppDelegate` finds each
-    // plugin registrar through `window.rootViewController as? FlutterViewController`,
-    // which stops matching once the tab bar controller becomes the root.
-    installNativeTabBar()
-
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-  }
-
-  /// On iOS 26 iPhones, puts a native tab bar over the Flutter view.
-  /// Everywhere else the root stays the `FlutterViewController` and the
-  /// plugin only answers `isSupported` with false.
-  private func installNativeTabBar() {
-    guard let registrar = registrar(forPlugin: "NativeTabBarPlugin") else { return }
-    let plugin = NativeTabBarPlugin(messenger: registrar.messenger())
-    nativeTabBarPlugin = plugin
-
-    #if compiler(>=6.2)
-    guard #available(iOS 26.0, *),
-          UIDevice.current.userInterfaceIdiom == .phone else { return }
-    guard let window, let flutter = window.rootViewController as? FlutterViewController else {
-      NSLog("[NativeTabBar] root swap skipped: window or FlutterViewController root missing")
-      return
+    if let tabBarRegistrar = registry.registrar(forPlugin: "NativeTabBarPlugin") {
+      nativeTabBarPlugin = NativeTabBarPlugin(messenger: tabBarRegistrar.messenger())
     }
-    let tabs = MydiaTabBarController(flutterViewController: flutter)
-    plugin.attach(tabs)
-    window.rootViewController = tabs
-    #endif
-  }
-
-  // The app switcher snapshots the window after this returns.
-  override func applicationWillResignActive(_ application: UIApplication) {
-    super.applicationWillResignActive(application)
-    guard privacyEnabled, privacyCover == nil, let window = window else { return }
-    let cover = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
-    cover.frame = window.bounds
-    cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    window.addSubview(cover)
-    privacyCover = cover
-  }
-
-  override func applicationDidBecomeActive(_ application: UIApplication) {
-    super.applicationDidBecomeActive(application)
-    privacyCover?.removeFromSuperview()
-    privacyCover = nil
   }
 
   private func configureAudioSession() {
