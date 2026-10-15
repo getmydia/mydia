@@ -8,10 +8,12 @@ are unchanged.
 
 | Side | File | Job |
 | --- | --- | --- |
-| Swift | `ios/Runner/MydiaTabBarController.swift` | the window root: tab bar, accessory, inset reports, touch pass-through |
+| Swift | `ios/Runner/MydiaRootViewController.swift` | the window root: holds Flutter and the tab controller, routes touches |
+| Swift | `ios/Runner/MydiaTabBarController.swift` | the tab bar, the accessory, inset reports, `hitTestBar` |
 | Swift | `ios/Runner/NativeTabBarPlugin.swift` | owns the `mydia/native-tab-bar` channel and drives the controller |
 | Swift | `ios/Runner/CastAccessoryView.swift` | the accessory's content view and its model |
-| Swift | `ios/Runner/AppDelegate.swift` | `installNativeTabBar()`, the root swap |
+| Swift | `ios/Runner/AppDelegate.swift` | creates `NativeTabBarPlugin` when the implicit engine starts |
+| Swift | `ios/Runner/SceneDelegate.swift` | `installNativeTabBar()`, the root swap |
 | Dart | `lib/core/platform/native_tab_bar_support.dart` | `NativeTabBarSupport`, the once-at-startup probe |
 | Dart | `lib/core/platform/native_tab_bar_channel.dart` | `NativeTabBarChannel`, `NativeTab`, `NativeAccessory`, the events |
 | Dart | `lib/presentation/widgets/nav/native_tab_bar.dart` | `NativeTabBar`, the shell's `bottomNavigationBar` on this path |
@@ -42,41 +44,71 @@ false unless they set `NativeTabBarSupport.debugOverride` (reset it in
 
 ## Root swap ordering
 
-`installNativeTabBar()` replaces `window.rootViewController` with a
-`MydiaTabBarController` that holds the `FlutterViewController` as a child. It
-must stay the last step before `super.application(...)` in
-`didFinishLaunching`: `FlutterAppDelegate` resolves `registrar(forPlugin:)`
-through `window.rootViewController as? FlutterViewController`, and that cast
-stops matching once the tab controller is the root. Every plugin registered
-after the swap would get no registrar.
+The app uses the UIScene lifecycle. Built against the iOS 27 SDK, an app
+without a scene manifest traps inside UIKit at launch
+(`_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`), before
+Flutter draws anything: the device shows a blank screen.
 
-The Flutter view controller is added once as a child, pinned full screen
-beneath the tab content, and never moved afterwards. Re-parenting it sends the
-app lifecycle `inactive`, which pauses playback and raises the privacy blur.
+Two callbacks run in this order at launch:
+
+1. `AppDelegate.didInitializeImplicitFlutterEngine` runs when the storyboard's
+   `FlutterViewController` creates its engine. It registers every plugin
+   through the engine bridge's `pluginRegistry` and creates
+   `NativeTabBarPlugin`. The registry belongs to the engine, so registration
+   no longer depends on the window root and has no ordering constraint
+   against the swap.
+2. `SceneDelegate.scene(_:willConnectTo:options:)` calls `super` first, then
+   `installNativeTabBar()`, which replaces `window.rootViewController` with a
+   `MydiaRootViewController`.
+
+## The container root
+
+`MydiaRootViewController` is a plain `UIViewController` with two children,
+both full screen: the `FlutterViewController` at the bottom and
+`MydiaTabBarController` above it, with a clear background.
+
+The Flutter view must never be a subview of the tab controller's view.
+`UITabBarController` on iOS 26 and later owns its view's subviews and drops
+any it did not add: an earlier revision inserted the Flutter view there, and
+on device it ended up with no superview at all. Home showed a stale frame that
+took no touches, the tab controller's opaque black view showed through on the
+first tab change, and Dart stopped answering `select` once Flutter left the
+window. A plain container leaves its subviews alone and forwards appearance
+calls to Flutter unchanged.
+
+The Flutter view controller is added once and never moved afterwards.
+Re-parenting it sends the app lifecycle `inactive`, which pauses playback and
+raises the privacy blur.
 
 Flutter, not the tab controller, owns the status bar, the home indicator,
 orientation and the edge gestures (the immersive player changes all four). The
-tab controller forwards each decision to the Flutter controller through the
-matching `childFor...` and `supportedInterfaceOrientations` overrides.
+root forwards each decision to the Flutter controller through the matching
+`childFor...` and `supportedInterfaceOrientations` overrides.
 
 If the root is not a `FlutterViewController` when the swap runs, the swap is
 skipped and logged: `[NativeTabBar] root swap skipped: window or
-FlutterViewController root missing`. `isSupported` then answers false and the
+FlutterViewController root missing`. If the engine callback has not created
+the plugin yet, it logs `[NativeTabBar] root swap skipped: plugin not
+registered`. `isSupported` then answers false and the
 app runs on the Flutter dock.
 
-## Touch pass-through
+## Touch routing
 
-The tab controller's content must never take a touch from Flutter. Each tab
-hosts a `PassThroughViewController` whose view returns nil from `hitTest`.
-UIKit also wraps the selected tab's view in private container views that sit
-above the Flutter view, and a container whose subviews all miss claims the
-touch itself. `viewDidLayoutSubviews` therefore walks up from the selected
-tab's view and turns `isUserInteractionEnabled` off on each container, stopping
-at the root view or at any ancestor of the tab bar or the accessory, which must
-stay interactive.
+The root's view (`RootTouchView`) decides every hit test itself. It asks
+`MydiaTabBarController.hitTestBar`, which runs the tab controller view's
+normal `hitTest` and keeps the result only when it lies inside the tab bar or
+the accessory's host. Anything else, and every point while the bar is hidden,
+goes to `flutterView.hitTest`. UIKit's private tab containers cover the whole
+screen and would claim touches meant for Flutter, so the rule never trusts
+them.
 
-If touches stop reaching Flutter after an OS update, this walk is the first
-place to look.
+The accessory's host is the outermost wrapper of `CastAccessoryView` that is
+still shorter than the screen (its glass capsule), so a tap on the capsule's
+padding counts. Each tab still hosts a `PassThroughViewController` whose view
+returns nil from `hitTest`.
+
+If touches stop reaching Flutter, or the bar stops taking them, after an OS
+update, `hitTestBar` and `accessoryHost()` are the first places to look.
 
 ## The channel contract
 
@@ -252,18 +284,22 @@ Not verifiable on the simulator without a signed-in session and interaction:
 tab taps, touch pass-through, scrolling, text entry, the accessory states, the
 sheet, the drawer, the player, rotation, VoiceOver.
 
-### Device gate: pending
+### Device gate: in progress
 
-Nothing below has been run on a physical iOS 26 iPhone. Fill this in after the
-TestFlight run, one line per item with the date, app version, iPhone model and
+Fill this in one line per item with the date, app version, iPhone model and
 iOS version. Do not record a line that was not observed.
+
+2026-10-15, iPhone 15 Pro Max, iOS 27.0.1, profile build from Xcode 27,
+container root: Home takes touches and every tab switch renders, with no black
+screen. Before the container root the same device reproduced both failures,
+and a hierarchy dump showed the Flutter view with no superview.
 
 From the spike (the lifecycle and plugin checks the simulator cannot show):
 
 - [ ] Backgrounding and returning does not pause playback or raise the privacy
   blur spuriously (the Flutter view controller is never re-parented).
-- [ ] Plugins that present UIKit (share sheet, pickers) work with the tab
-  controller as root.
+- [ ] Plugins that present UIKit (share sheet, pickers) work with
+  `MydiaRootViewController` as root.
 - [ ] AirPlay route picker and the audio session still work.
 - [ ] Rotation, status bar and home indicator follow Flutter.
 - [ ] Touches reach Flutter everywhere outside the bar and accessory (taps,
@@ -300,10 +336,9 @@ From the shipped build:
 
 ## Known limits
 
-- Status-bar tap scroll-to-top after the root swap is unverified:
-  `FlutterAppDelegate` forwards some behavior only when the root is a
-  `FlutterViewController`, and the root is now the tab controller. Check on
-  device.
+- Status-bar tap scroll-to-top after the root swap is unverified: Flutter
+  forwards some behavior only when the root is a `FlutterViewController`, and
+  the root is now `MydiaRootViewController`. Check on device.
 - Cast artwork in the native accessory is fetched by `URLSession` and is
   subject to App Transport Security. Plain-http artwork fails to load and the
   accessory keeps the state symbol.

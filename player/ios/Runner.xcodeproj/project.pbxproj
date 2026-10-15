@@ -13,6 +13,8 @@
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		A1B2C3D51ED2DC5600515810 /* AirPlayChannelHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D41ED2DC5600515810 /* AirPlayChannelHandler.swift */; };
 		7AB0C0DE0000000000000002 /* MydiaTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE0000000000000001 /* MydiaTabBarController.swift */; };
+		7AB0C0DE0000000000000008 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE0000000000000007 /* SceneDelegate.swift */; };
+		7AB0C0DE000000000000000A /* MydiaRootViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE0000000000000009 /* MydiaRootViewController.swift */; };
 		7AB0C0DE0000000000000004 /* CastAccessoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE0000000000000003 /* CastAccessoryView.swift */; };
 		7AB0C0DE0000000000000006 /* NativeTabBarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB0C0DE0000000000000005 /* NativeTabBarPlugin.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
@@ -58,6 +60,8 @@
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A1B2C3D41ED2DC5600515810 /* AirPlayChannelHandler.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AirPlayChannelHandler.swift; sourceTree = "<group>"; };
 		7AB0C0DE0000000000000001 /* MydiaTabBarController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MydiaTabBarController.swift; sourceTree = "<group>"; };
+		7AB0C0DE0000000000000007 /* SceneDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		7AB0C0DE0000000000000009 /* MydiaRootViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MydiaRootViewController.swift; sourceTree = "<group>"; };
 		7AB0C0DE0000000000000003 /* CastAccessoryView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CastAccessoryView.swift; sourceTree = "<group>"; };
 		7AB0C0DE0000000000000005 /* NativeTabBarPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NativeTabBarPlugin.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
@@ -147,6 +151,8 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				A1B2C3D41ED2DC5600515810 /* AirPlayChannelHandler.swift */,
 				7AB0C0DE0000000000000001 /* MydiaTabBarController.swift */,
+				7AB0C0DE0000000000000007 /* SceneDelegate.swift */,
+				7AB0C0DE0000000000000009 /* MydiaRootViewController.swift */,
 				7AB0C0DE0000000000000003 /* CastAccessoryView.swift */,
 				7AB0C0DE0000000000000005 /* NativeTabBarPlugin.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
@@ -410,6 +416,8 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				A1B2C3D51ED2DC5600515810 /* AirPlayChannelHandler.swift in Sources */,
 				7AB0C0DE0000000000000002 /* MydiaTabBarController.swift in Sources */,
+				7AB0C0DE0000000000000008 /* SceneDelegate.swift in Sources */,
+				7AB0C0DE000000000000000A /* MydiaRootViewController.swift in Sources */,
 				7AB0C0DE0000000000000004 /* CastAccessoryView.swift in Sources */,
 				7AB0C0DE0000000000000006 /* NativeTabBarPlugin.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,

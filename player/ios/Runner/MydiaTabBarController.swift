@@ -27,21 +27,19 @@ extension NativeTabSpec {
   }
 }
 
-/// The window root on iOS 26 iPhones: a real tab bar over the Flutter view.
+/// A real tab bar over the Flutter view on iOS 26 iPhones.
 ///
-/// Flutter draws every screen. The `FlutterViewController` is added once as a
-/// child, pinned full screen beneath the tab content, and never re-parented:
-/// moving it sends the app lifecycle `inactive`, which pauses playback and
-/// raises the privacy blur. Each tab hosts an empty, touch-transparent
-/// controller, so every touch outside the bar and the accessory reaches
-/// Flutter.
+/// Flutter draws every screen. This controller is a sibling above the
+/// `FlutterViewController`, both children of `MydiaRootViewController`, and
+/// never holds Flutter itself: `UITabBarController` owns its view's subviews
+/// and drops any it did not add, which took the Flutter view out of the
+/// window. Each tab hosts an empty, clear controller, and the root routes
+/// every touch outside the bar and the accessory to Flutter (`hitTestBar`).
 ///
 /// Flutter's route decides the selection. A tap is reported through
 /// `onTabSelected` and refused here; Dart navigates and answers with `select`.
 @available(iOS 26.0, *)
 final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegate {
-  let flutterViewController: FlutterViewController
-
   var onTabSelected: ((String) -> Void)?
   var onInsetsChanged: ((Double) -> Void)?
   var onAccessoryTapped: (() -> Void)?
@@ -62,8 +60,7 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
 
   private lazy var accessory = UITabAccessory(contentView: accessoryView)
 
-  init(flutterViewController: FlutterViewController) {
-    self.flutterViewController = flutterViewController
+  init() {
     super.init(nibName: nil, bundle: nil)
   }
 
@@ -75,14 +72,8 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
     delegate = self
     overrideUserInterfaceStyle = .dark
     tabBarMinimizeBehavior = .never
-    view.backgroundColor = .black
-
-    addChild(flutterViewController)
-    let flutterView: UIView = flutterViewController.view
-    flutterView.frame = view.bounds
-    flutterView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    view.insertSubview(flutterView, at: 0)
-    flutterViewController.didMove(toParent: self)
+    // Flutter draws beneath this view; anything opaque here hides it.
+    view.backgroundColor = .clear
 
     // Hidden until Dart asks for it, so a launch that never reaches the shell
     // (login, startup errors) shows no empty bar.
@@ -91,23 +82,20 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
 
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
-    passTouchesThroughContentContainers()
     reportInsets()
   }
 
-  // Flutter owns the status bar, the home indicator, orientation and edge
-  // gestures (the immersive player changes all four). The root controller is
-  // the one UIKit asks, so it forwards each to Flutter.
-  override var childForStatusBarStyle: UIViewController? { flutterViewController }
-  override var childForStatusBarHidden: UIViewController? { flutterViewController }
-  override var childForHomeIndicatorAutoHidden: UIViewController? { flutterViewController }
-  override var childForScreenEdgesDeferringSystemGestures: UIViewController? {
-    flutterViewController
+  /// The view under `point` (in this controller's view) when it belongs to
+  /// the tab bar or the accessory, nil otherwise. Nil while the bar is
+  /// hidden, so a hidden bar never takes a touch from Flutter.
+  func hitTestBar(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    guard barVisible, let hit = view.hitTest(point, with: event) else { return nil }
+    if hit.isDescendant(of: tabBar) { return hit }
+    if bottomAccessory != nil, let host = accessoryHost(), hit.isDescendant(of: host) {
+      return hit
+    }
+    return nil
   }
-  override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-    flutterViewController.supportedInterfaceOrientations
-  }
-  override var shouldAutorotate: Bool { flutterViewController.shouldAutorotate }
 
   // MARK: Driven by Dart
 
@@ -208,24 +196,22 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
     onInsetsChanged?(inset)
   }
 
-  /// UIKit wraps the selected tab's view in private container views that sit
-  /// above the Flutter view, and a container whose subviews all miss claims
-  /// the touch itself. Those containers are made non-interactive too,
-  /// stopping at any that holds the tab bar or the accessory.
-  private func passTouchesThroughContentContainers() {
-    var node = selectedViewController?.view?.superview
-    while let container = node,
-          container !== view,
-          !tabBar.isDescendant(of: container),
-          !accessoryView.isDescendant(of: container) {
-      container.isUserInteractionEnabled = false
-      node = container.superview
+  /// The accessory's outermost private wrapper (its glass capsule) that is
+  /// still smaller than the screen, so a tap on the capsule's padding counts.
+  /// UIKit also nests the accessory in full-screen containers; those stop the
+  /// walk, or every touch would count as an accessory touch.
+  private func accessoryHost() -> UIView? {
+    var host: UIView = accessoryView
+    while let parent = host.superview, parent !== view,
+          parent.bounds.height < view.bounds.height {
+      host = parent
     }
+    return host
   }
 }
 
-/// A tab's content: transparent and never hit, so touches fall through to
-/// the Flutter view underneath.
+/// A tab's content: transparent and never hit. The root routes touches by
+/// `hitTestBar`, so this only keeps a stray content view from ever answering.
 @available(iOS 26.0, *)
 final class PassThroughViewController: UIViewController {
   var onSafeAreaChange: (() -> Void)?
