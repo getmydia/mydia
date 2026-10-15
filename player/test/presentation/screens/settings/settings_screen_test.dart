@@ -208,6 +208,7 @@ Future<void> _pump(
           noDownloadsOverride
         else
           downloadManagerProvider.overrideWith((ref) async => downloads),
+        noCollectionSyncOverride,
         sourceStoreProvider.overrideWith((ref) async => sources),
         sourceSecretsProvider.overrideWithValue(secrets),
         remoteControlSettingsProvider.overrideWith(

@@ -59,7 +59,7 @@ void main() {
       (tester) async {
     final store = InMemorySourceStore();
     final container = ProviderContainer(overrides: [
-      noDownloadsOverride,
+      ...noHiveOverrides,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
       loginDeviceInfoProvider.overrideWithValue(_FakeDeviceInfo()),

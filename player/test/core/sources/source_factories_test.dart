@@ -75,7 +75,7 @@ Future<ProviderContainer> containerFor({
     await storage.write(e.key, e.value);
   }
   final container = ProviderContainer(overrides: [
-    noDownloadsOverride,
+    ...noHiveOverrides,
     sourceStoreProvider.overrideWith((ref) async => store),
     sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
     sourceHttpProvider.overrideWithValue(http),
@@ -180,7 +180,7 @@ void main() {
     final storage = _FlakyStorage('source/st1/account_token');
     await storage.write('source/st1/account_token', FakeStashServer.apiKey);
     final c = ProviderContainer(overrides: [
-      noDownloadsOverride,
+      ...noHiveOverrides,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       sourceHttpProvider.overrideWithValue(SourceHttp(client: stash.client)),

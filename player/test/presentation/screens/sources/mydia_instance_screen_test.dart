@@ -123,6 +123,7 @@ void main() {
           noDownloadsOverride
         else
           downloadManagerProvider.overrideWith((ref) async => downloads),
+        noCollectionSyncOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(secrets),
         mediaSourceProvider
