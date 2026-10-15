@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -102,6 +103,9 @@ Future<void> _pumpScreen(
   List<String>? pushedRoutes,
   Size size = const Size(800, 600),
   int? initialSeason,
+  String? initialEpisode,
+  // Rebuilds the same screen with a new initialEpisode when it changes.
+  ValueListenable<String?>? initialEpisodes,
 }) {
   final byseason = episodes ??
       {
@@ -111,12 +115,19 @@ Future<void> _pumpScreen(
     episodes: byseason,
     nextUpEpisode: nextUp ?? (defaultNextUp ? _episode(2) : null),
   );
+  Widget screen(String? episode) => ShowDetailScreen.target(
+        target: const SourceTarget(_show),
+        initialSeason: initialSeason,
+        initialEpisode: episode,
+      );
   return pumpDetailScreen(
     tester,
-    ShowDetailScreen.target(
-      target: const SourceTarget(_show),
-      initialSeason: initialSeason,
-    ),
+    initialEpisodes == null
+        ? screen(initialEpisode)
+        : ValueListenableBuilder<String?>(
+            valueListenable: initialEpisodes,
+            builder: (context, episode, _) => screen(episode),
+          ),
     [source],
     size: size,
     routes: [
@@ -259,6 +270,74 @@ void main() {
 
     expect(find.text('S1 · E1'), findsOneWidget);
     expect(find.text('S2 · E1'), findsNothing);
+  });
+
+  testWidgets('initialEpisode selects that episode instead of next up',
+      (tester) async {
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      initialSeason: 1,
+      initialEpisode: 'ep-1-3',
+    );
+    await tester.pumpAndSettle();
+
+    // Next up is E2 by default; the screen was opened on E3.
+    expect(find.text('S1 · E3'), findsOneWidget);
+    expect(find.textContaining('Next Up'), findsNothing);
+  });
+
+  testWidgets('initialEpisode in a later season opens on that season',
+      (tester) async {
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      initialSeason: 2,
+      initialEpisode: 'ep-2-2',
+      episodes: twoSeasons,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('S2 · E2'), findsOneWidget);
+  });
+
+  testWidgets('initialEpisode seeds once and a later episode tap sticks',
+      (tester) async {
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      initialSeason: 1,
+      initialEpisode: 'ep-1-3',
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Episode 1').last);
+    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('S1 · E1'), findsOneWidget);
+    expect(find.text('S1 · E3'), findsNothing);
+  });
+
+  testWidgets('a new initialEpisode on the same screen reselects',
+      (tester) async {
+    final requested = ValueNotifier<String?>('ep-1-3');
+    addTearDown(requested.dispose);
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      initialSeason: 1,
+      initialEpisodes: requested,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('S1 · E3'), findsOneWidget);
+
+    requested.value = 'ep-1-1';
+    await tester.pumpAndSettle();
+
+    expect(find.text('S1 · E1'), findsOneWidget);
+    expect(find.text('S1 · E3'), findsNothing);
   });
 
   testWidgets('hero shows the release year under the title', (tester) async {

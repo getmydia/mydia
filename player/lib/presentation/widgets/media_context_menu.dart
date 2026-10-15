@@ -10,7 +10,6 @@ import '../screens/detail/detail_links.dart';
 enum MediaContextAction {
   play,
   goToShow,
-  episodeDetails,
   movieDetails,
   removeFromContinueWatching,
 }
@@ -63,7 +62,7 @@ class MediaContextTarget {
 List<MediaContextAction> mediaContextActionsFor(MediaContextTarget target) {
   // A card whose own tap opens the title earns no *navigation* entry. Gating
   // only `movieDetails` on this left two holes: an episode target got
-  // `episodeDetails` regardless, duplicating what its tap already did, and any
+  // a details entry regardless, duplicating what its tap already did, and any
   // target with a file got `play` even where the rail had no play handler to
   // run, since `_openMenu` routes Play through a nullable `onItemActivate`.
   // That is a Play entry that silently does nothing.
@@ -75,8 +74,10 @@ List<MediaContextAction> mediaContextActionsFor(MediaContextTarget target) {
   final navigation = target.tapPlays
       ? [
           if (target.hasFile) MediaContextAction.play,
-          if (target.show != null) MediaContextAction.goToShow,
-          if (target.isEpisode) MediaContextAction.episodeDetails,
+          // An episode's own location opens its show with it selected, so
+          // the show need not be known.
+          if (target.show != null || target.isEpisode)
+            MediaContextAction.goToShow,
           if (target.isMovie) MediaContextAction.movieDetails,
         ]
       : const <MediaContextAction>[];
@@ -92,7 +93,6 @@ List<MediaContextAction> mediaContextActionsFor(MediaContextTarget target) {
 String mediaContextLabel(MediaContextAction action) => switch (action) {
       MediaContextAction.play => 'Play',
       MediaContextAction.goToShow => 'Go to show',
-      MediaContextAction.episodeDetails => 'Episode details',
       MediaContextAction.movieDetails => 'Movie details',
       MediaContextAction.removeFromContinueWatching =>
         'Remove from Continue Watching',
@@ -102,10 +102,31 @@ String mediaContextLabel(MediaContextAction action) => switch (action) {
 IconData mediaContextIcon(MediaContextAction action) => switch (action) {
       MediaContextAction.play => Icons.play_arrow_rounded,
       MediaContextAction.goToShow => Icons.tv_rounded,
-      MediaContextAction.episodeDetails => Icons.info_outline_rounded,
       MediaContextAction.movieDetails => Icons.info_outline_rounded,
       MediaContextAction.removeFromContinueWatching =>
         Icons.remove_circle_outline_rounded,
+    };
+
+/// Where a navigation entry goes, or null for entries that do not navigate.
+///
+/// "Go to show" on an episode opens the episode's own location, which shows
+/// its series with that episode selected rather than next up.
+String? mediaContextLocation(
+  MediaContextAction action,
+  MediaContextTarget target,
+) =>
+    switch (action) {
+      MediaContextAction.goToShow when target.isEpisode =>
+        detailLocation(SourceTarget(target.item)),
+      MediaContextAction.goToShow => switch (target.show) {
+          final show? => detailLocation(SourceTarget(show)),
+          null => null,
+        },
+      MediaContextAction.movieDetails =>
+        detailLocation(SourceTarget(target.item)),
+      MediaContextAction.play ||
+      MediaContextAction.removeFromContinueWatching =>
+        null,
     };
 
 /// Where a popup menu opens to sit under [context]'s card, or null when
@@ -179,15 +200,11 @@ Future<void> showMediaContextMenu(
   switch (selected) {
     case MediaContextAction.play:
       onPlay();
-    case MediaContextAction.goToShow:
-      final show = target.show;
-      if (show != null) {
-        await context.push<void>(detailLocation(SourceTarget(show)));
-      }
-    case MediaContextAction.episodeDetails:
-    case MediaContextAction.movieDetails:
-      await context.push<void>(detailLocation(SourceTarget(target.item)));
     case MediaContextAction.removeFromContinueWatching:
       onRemoveFromContinueWatching?.call();
+    case MediaContextAction.goToShow:
+    case MediaContextAction.movieDetails:
+      final location = mediaContextLocation(selected, target);
+      if (location != null) await context.push<void>(location);
   }
 }

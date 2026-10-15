@@ -561,8 +561,9 @@ GoRouter appRouter(Ref ref) {
           ),
           sourceCollectionRoute(),
           sourceItemRoute(),
-          // Movie, show, season and episode pages sit in the shell too, so
-          // the rail stays beside them; only the player is immersive.
+          // Movie and show pages (which seasons and episodes open) sit in the
+          // shell too, so the rail stays beside them; only the player is
+          // immersive.
           ...sourceDetailRoutes(),
           sourceSearchRoute(),
           for (final (path, name, build) in _sourceListings)

@@ -157,8 +157,8 @@ ItemSummary episodeSummary(
       title: e['title'] as String? ?? '',
       showTitle: showTitle ?? _map(e['show'])['title'] as String?,
       poster: _art(e['thumbnailUrl']),
-      // The thumbnail is a landscape still, which is what the episode page
-      // and its rows read as a backdrop.
+      // The thumbnail is a landscape still, which is what the show page's
+      // episode rail reads as a backdrop.
       backdrop: _art(e['thumbnailUrl']),
       durationSeconds: _minutes(e['runtime']),
       userState: _progress(e['progress']),
@@ -357,7 +357,7 @@ ItemDetail episodeDetail(SourceId sid, Map<String, dynamic> e) {
   return ItemDetail(
     summary: summary,
     overview: e['overview'] as String?,
-    // What the episode page shows while the episode has no still.
+    // The art a download of this episode falls back to without a still.
     showBackdrop: _art(showArtwork['backdropUrl']),
     showPoster: _art(showArtwork['posterUrl']),
     versions: [

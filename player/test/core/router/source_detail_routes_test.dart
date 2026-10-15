@@ -8,7 +8,6 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/detail/detail_links.dart';
-import 'package:player/presentation/screens/episode/episode_detail_screen.dart';
 import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
 import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/screens/sources/source_error_view.dart';
@@ -25,6 +24,12 @@ class _OrphanSeason extends FakeMediaSource {
   @override
   Future<ItemDetail> item(ItemRef ref) async =>
       const ItemDetail(summary: fakeSeason);
+}
+
+class _OrphanEpisode extends FakeMediaSource {
+  @override
+  Future<ItemDetail> item(ItemRef ref) async =>
+      ItemDetail(summary: fakeEpisode(1));
 }
 
 class _CountingSource extends FakeMediaSource {
@@ -125,9 +130,51 @@ void main() {
     expect(router.state.uri.path, '/s/$_id/show/s1');
   });
 
-  testWidgets('a source episode opens the episode screen', (tester) async {
-    await pumpRouterAt(tester, '/s/$_id/item/episode/e1');
-    expect(find.byType(EpisodeDetailScreen), findsOneWidget);
+  testWidgets('a source episode on the generic route opens its show',
+      (tester) async {
+    final router = await pumpRouterAt(tester, '/s/$_id/item/episode/e2');
+    expect(router.state.uri.path, '/s/$_id/episode/e2');
+    expect(find.byType(ShowDetailScreen), findsOneWidget);
+    expect(find.text('S1 · E2'), findsOneWidget);
+  });
+
+  testWidgets('an episode opens its show with that episode selected',
+      (tester) async {
+    // Without the selection the hero would fall back to the first episode.
+    await pumpRouterAt(tester, '/s/$_id/episode/e2');
+    expect(find.byType(ShowDetailScreen), findsOneWidget);
+    expect(find.text('S1 · E2'), findsOneWidget);
+    expect(find.text('S1 · E1'), findsNothing);
+  });
+
+  // go_router keys a page by its path pattern, so going from one episode to
+  // another reuses the page and its State rather than mounting a new one.
+  testWidgets('going to another episode of the same show reselects',
+      (tester) async {
+    final router = await pumpRouterAt(tester, '/s/$_id/episode/e1');
+    expect(find.text('S1 · E1'), findsOneWidget);
+
+    router.go('/s/$_id/episode/e2');
+    await tester.pumpAndSettle();
+
+    expect(find.text('S1 · E2'), findsOneWidget);
+    expect(find.text('S1 · E1'), findsNothing);
+  });
+
+  testWidgets('an episode wins over next up', (tester) async {
+    await pumpRouterAt(
+      tester,
+      '/s/$_id/episode/e1',
+      fake: FakeDetailSource(nextUpEpisode: fakeEpisode(2)),
+    );
+    expect(find.text('S1 · E1'), findsOneWidget);
+    expect(find.textContaining('Next Up'), findsNothing);
+  });
+
+  testWidgets('an episode without a show shows an error', (tester) async {
+    await pumpRouterAt(tester, '/s/$_id/episode/e1', fake: _OrphanEpisode());
+    expect(find.byType(ShowDetailScreen), findsNothing);
+    expect(find.byType(SourceErrorView), findsOneWidget);
   });
 
   testWidgets('a source video keeps the generic screen', (tester) async {

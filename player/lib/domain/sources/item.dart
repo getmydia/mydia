@@ -453,7 +453,7 @@ class ItemDetail {
   final ItemRef? show;
   final ItemRef? season;
 
-  /// For an episode: its show's artwork, which the episode page falls back
+  /// For an episode: its show's artwork, which an episode download falls back
   /// to when the episode has no still of its own.
   final ArtworkRef? showBackdrop;
   final ArtworkRef? showPoster;
