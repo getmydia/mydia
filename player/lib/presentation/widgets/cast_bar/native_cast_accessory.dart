@@ -97,13 +97,20 @@ class _NativeCastAccessoryState extends ConsumerState<NativeCastAccessory> {
         _sheetOpen = true;
         // The router's root navigator, so the sheet covers the shell; the
         // fallback is for widget tests, which have no router.
-        unawaited(
-          showCastControlsSheet(
-            rootNavigatorKey.currentContext ?? context,
-          ).whenComplete(() {
-            if (mounted) _sheetOpen = false;
-          }),
-        );
+        try {
+          unawaited(
+            showCastControlsSheet(
+              rootNavigatorKey.currentContext ?? context,
+            ).whenComplete(() {
+              if (mounted) _sheetOpen = false;
+            }),
+          );
+        } catch (e) {
+          // A synchronous throw (no navigator) never reaches whenComplete,
+          // which would leave every later tap ignored.
+          _sheetOpen = false;
+          debugPrint('[NativeCastAccessory] cast sheet failed to open: $e');
+        }
       case NativeAccessoryPlayPause():
         unawaited(_togglePlayback());
       case NativeTabSelected() || NativeInsetsChanged():

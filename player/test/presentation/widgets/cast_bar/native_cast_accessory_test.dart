@@ -268,6 +268,48 @@ void main() {
       expect(find.byType(CastControlsSheet), findsNothing);
     });
 
+    testWidgets('a sheet that throws on open does not block later taps',
+        (tester) async {
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(_channel, (_) async => null);
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(_channel, null));
+      final container = ProviderContainer(overrides: [
+        castBarStateProvider.overrideWithValue(const CastBarIdle(_device)),
+        nativeTabBarChannelProvider.overrideWith((ref) {
+          final channel = NativeTabBarChannel(channel: _channel);
+          ref.onDispose(channel.dispose);
+          return channel;
+        }),
+      ]);
+      addTearDown(container.dispose);
+      // No MaterialApp, so no Navigator: showCastControlsSheet throws
+      // synchronously.
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const Directionality(
+          textDirection: TextDirection.ltr,
+          child: NativeCastAccessory(),
+        ),
+      ));
+      await tester.pump();
+
+      final logged = <String>[];
+      final original = debugPrint;
+      debugPrint = (message, {wrapWidth}) => logged.add(message ?? '');
+      try {
+        await fromNative(tester, 'accessoryTapped');
+        await fromNative(tester, 'accessoryTapped');
+        await tester.pump();
+      } finally {
+        debugPrint = original;
+      }
+
+      final failures =
+          logged.where((m) => m.contains('cast sheet failed to open'));
+      expect(failures, hasLength(2));
+    });
+
     testWidgets('a second tap while the sheet is open opens no second sheet',
         (tester) async {
       await pump(tester, state: const CastBarIdle(_device));
