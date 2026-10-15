@@ -27,6 +27,7 @@
 /// `player/docs/playback.md` for where it sits in the playback story.
 library;
 
+import 'package:media_kit/media_kit.dart' show Player;
 import 'hls_engine_stub.dart' if (dart.library.js_interop) 'hls_engine_web.dart'
     as platform;
 
@@ -72,3 +73,23 @@ bool hidesNativeHls(String contentType, {required bool hlsJsUsable}) {
 /// Never throws. A failure to load leaves the browser's own engine in place,
 /// which is what shipped before this existed. A no-op off the web.
 Future<void> prepareHlsEngine() => platform.prepareHlsEngine();
+
+/// Destroys the hls.js instances attached to [player]'s element and pauses
+/// it. Call immediately before every `player.dispose()`.
+///
+/// media_kit 1.2.6 creates a `new Hls(...)` on every web `open()` and never
+/// destroys it. Its `dispose()` then clears the element's `src`, which closes
+/// the MediaSource out from under that orphan; hls.js 1.7 reads the close as a
+/// media error, re-attaches a fresh MediaSource, and its interstitial
+/// scheduler calls `play()`. The element is off the page by then, so the
+/// viewer hears the episode carry on with nothing on screen, and the orphan
+/// keeps requesting segments from a session the server already ended.
+/// Destroying the instances first detaches them cleanly, so there is nothing
+/// left to recover.
+///
+/// `Player.open()` on an existing web player would leak one too, but web never
+/// reuses a `Player` across sources (see `player/docs/playback.md`, "The
+/// switch"), so disposal is the only place this is needed.
+///
+/// Never throws. A no-op off the web.
+void releaseHlsEngine(Player player) => platform.releaseHlsEngine(player);

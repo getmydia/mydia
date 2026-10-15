@@ -16,6 +16,13 @@ import 'dart:js_interop_unsafe';
 // ignore: implementation_imports
 import 'package:media_kit/src/player/web/utils/hls.dart' as media_kit_hls;
 
+import 'package:media_kit/media_kit.dart' show Player;
+// `WebPlayer` is exported conditionally and the analyzer resolves it to the
+// stub, which owns no element; see `subtitle_cues_web.dart`.
+// ignore: implementation_imports
+import 'package:media_kit/src/player/web/player/real.dart' as media_kit_web;
+import 'package:web/web.dart' as web;
+
 import 'hls_engine.dart';
 
 @JS('HTMLMediaElement')
@@ -48,6 +55,81 @@ bool _hlsJsUsable() {
 
 bool _installed = false;
 
+@JS('WeakMap')
+extension type _WeakMap._(JSObject _) implements JSObject {
+  external _WeakMap();
+  external JSArray<JSObject>? get(JSObject key);
+  external void set(JSObject key, JSArray<JSObject> value);
+  external bool delete(JSObject key);
+}
+
+/// Every hls.js instance media_kit attached, by the element it attached to.
+/// Weak, so a dropped element takes its list with it.
+final _WeakMap _hlsByMedia = _WeakMap();
+
+/// Marks a prototype whose `attachMedia` is already wrapped. On the prototype,
+/// not in a Dart flag, because a different `Hls` (a reload of hls.js, a test's
+/// stub) brings a fresh prototype that needs wrapping too.
+const String _trackedMarker = '__mydiaTracksAttachMedia';
+
+/// Wraps `Hls.prototype.attachMedia` to record each instance against its
+/// media element, so [releaseHlsOnElement] can find what media_kit dropped.
+///
+/// The prototype, for the same reason as the `canPlayType` override: media_kit
+/// builds its `Hls` privately and hands it to nobody. The wrapper forwards
+/// every call unchanged. Idempotent per prototype; does nothing when hls.js
+/// is not on the page.
+void _installAttachTracker() {
+  final hls = _hls;
+  if (hls == null) return;
+  final prototype = hls.getProperty<JSObject?>('prototype'.toJS);
+  if (prototype == null) return;
+  if (prototype.has(_trackedMarker)) return;
+  final original = prototype.getProperty<JSFunction?>('attachMedia'.toJS);
+  if (original == null) return;
+
+  JSAny? wrapper(JSObject self, JSAny? media) {
+    if (media.isA<JSObject>()) {
+      final element = media as JSObject;
+      final list = _hlsByMedia.get(element) ?? JSArray<JSObject>();
+      list.callMethod<JSAny?>('push'.toJS, self);
+      _hlsByMedia.set(element, list);
+    }
+    return original.callAsFunction(self, media);
+  }
+
+  prototype.setProperty('attachMedia'.toJS, wrapper.toJSCaptureThis);
+  prototype.setProperty(_trackedMarker.toJS, true.toJS);
+}
+
+/// Destroys every hls.js instance recorded for [element], forgets them, and
+/// pauses [element]. Never throws: one instance failing to destroy must not
+/// spare the others or stop the caller's teardown.
+void releaseHlsOnElement(web.HTMLMediaElement element) {
+  final list = _hlsByMedia.get(element);
+  _hlsByMedia.delete(element);
+  if (list != null) {
+    for (final hls in list.toDart) {
+      try {
+        hls.callMethod<JSAny?>('destroy'.toJS);
+      } catch (_) {
+        // Keep going: the rest still need destroying.
+      }
+    }
+  }
+  try {
+    element.pause();
+  } catch (_) {
+    // Nothing more to do for an element that will not pause.
+  }
+}
+
+void releaseHlsEngine(Player player) {
+  final platform = player.platform;
+  if (platform is! media_kit_web.WebPlayer) return;
+  releaseHlsOnElement(platform.element);
+}
+
 /// Replaces `HTMLMediaElement.prototype.canPlayType` with a wrapper that
 /// answers `''` for HLS content types while hls.js can run.
 ///
@@ -58,8 +140,7 @@ bool _installed = false;
 /// The original is invoked against a detached `<video>` created before the
 /// patch, rather than against the caller's element. `canPlayType` answers from
 /// the browser's codec tables and not from element state, so the answer is the
-/// same either way, and a fixed receiver avoids having to smuggle `this`
-/// through a Dart closure, which `dart:js_interop` does not carry.
+/// same either way, and a fixed receiver keeps the wrapper a plain function.
 void _installNativeHlsOverride() {
   if (_installed) return;
 
@@ -93,4 +174,5 @@ Future<void> prepareHlsEngine() async {
     // engine in place, which is what shipped before this existed.
   }
   _installNativeHlsOverride();
+  _installAttachTracker();
 }
