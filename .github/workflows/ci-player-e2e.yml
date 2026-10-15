@@ -130,7 +130,7 @@ jobs:
           # builds but is missing from `relevant` is unreachable on a PR that
           # touches only that path, which has been the root cause of two
           # separate bugs here (the production Dockerfile, then
-          # rust-toolchain.toml). player/.fvmrc, player/pubspec.lock and
+          # rust-toolchain.toml). player/.fvmrc and
           # player/Dockerfile.test don't need their own entries: 'player/**'
           # already covers them.
           filters: |
@@ -160,9 +160,14 @@ jobs:
               - 'mix.exs'
               - 'mix.lock'
               - 'Dockerfile'
+            # player/pubspec.lock is deliberately absent. The image's pub cache
+            # is only a warm start: run-tests.sh runs `pub get
+            # --enforce-lockfile` against the checkout, which fetches whatever
+            # a new lock adds. Rebuilding for a lock change cost ~4 min and
+            # tested nothing the pull path does not. publish-toolbox still
+            # rebuilds on every master push, so the warm cache catches up.
             toolbox:
               - 'player/.fvmrc'
-              - 'player/pubspec.lock'
               - 'player/Dockerfile.test'
               - 'rust-toolchain.toml'
             relay:
