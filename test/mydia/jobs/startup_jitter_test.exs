@@ -70,7 +70,7 @@ defmodule Mydia.Jobs.StartupJitterTest do
             Path.expand(path) != @helper,
             source = File.read!(path),
             String.contains?(source, ["StartupJitter.delay", ":snooze"]),
-            Regex.match?(~r/attempt\s*(==|<=|<)\s*1\b/, source),
+            Regex.match?(~r/attempt\s*(==\s*1|<=\s*1|<\s*2)\b/, source),
             do: path
 
       assert offenders == [],
@@ -79,10 +79,12 @@ defmodule Mydia.Jobs.StartupJitterTest do
     end
   end
 
+  # A typespec names the snooze tuple without building one, including on the
+  # continuation line of a wrapped @spec.
   defp snooze_tuple?(line) do
     trimmed = String.trim_leading(line)
 
-    String.contains?(line, "{:snooze,") and not String.starts_with?(trimmed, ["@spec", "#"]) and
-      not Regex.match?(~r/^\s*\|/, line)
+    String.contains?(line, "{:snooze,") and not String.starts_with?(trimmed, ["@spec", "#", "|"]) and
+      not Regex.match?(~r/\{:snooze,\s*(pos_|non_neg_)?integer\(\)\}/, line)
   end
 end
