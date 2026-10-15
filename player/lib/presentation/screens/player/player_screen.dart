@@ -19,7 +19,7 @@ import '../../../core/player/codec_support.dart';
 import '../../../core/player/hls_engine.dart';
 import '../../../core/player/media_start.dart';
 import '../../../core/player/subtitle_cues.dart';
-import '../../../core/player/player_orientation_lease_controller.dart';
+import '../../../core/player/player_presentation_lease_controller.dart';
 import '../../../core/player/progress_reporter.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/player/subtitle_stream_index.dart';
@@ -1010,16 +1010,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// `LateInitializationError` there instead of letting `dispose` finish.
   PlayerWindowSizer? _windowSizer;
 
-  /// Identity handle for this screen's orientation lease. The controller
+  /// Identity handle for this screen's presentation lease. The controller
   /// tracks owners by identity, so a route replacement (a different player
   /// route, not an episode advance, which reuses this State) has a handle
-  /// distinct from this one's, and only the last release restores normal
-  /// orientations.
-  final Object _orientationLeaseOwner = Object();
+  /// distinct from this one's, and only the last release restores the system
+  /// bars and normal orientations.
+  final Object _presentationLeaseOwner = Object();
 
   /// Whether [initState] acquired the lease above, so [dispose] releases only
   /// what this screen actually owns.
-  bool _ownsOrientationLease = false;
+  bool _ownsPresentationLease = false;
 
   /// Tracks local playback activity so global cast bars are suppressed
   /// during active on-device playback.
@@ -1082,12 +1082,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // route replacement (a different player route, not an episode advance,
     // which reuses this State), the incoming and outgoing screens hand this
     // lease off without briefly restoring portrait-capable orientations.
-    _ownsOrientationLease = PlayerScreen.wantsForcedLandscape(
+    _ownsPresentationLease = PlayerScreen.wantsForcedLandscape(
       isMobile: PlatformFeatures.isMobile,
       directionalPrimary: InputCapabilities.directionalPrimary,
     );
-    if (_ownsOrientationLease) {
-      playerOrientationLeaseController.acquire(_orientationLeaseOwner);
+    if (_ownsPresentationLease) {
+      playerPresentationLeaseController.acquire(
+        _presentationLeaseOwner,
+        lockLandscape: true,
+      );
     }
 
     // Register beforeunload handler for web to terminate HLS session on tab close
@@ -1130,7 +1133,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// the new file here, so anything that must still address the old one
   /// (its progress save) takes [previous]'s identity explicitly.
   ///
-  /// Screen-scoped state (window sizer, fullscreen, orientation lease, proxy
+  /// Screen-scoped state (window sizer, fullscreen, presentation lease, proxy
   /// hold) is deliberately untouched: this is the same screen, and tearing
   /// any of it down would exit fullscreen or reshape the window on every
   /// episode advance.
@@ -4822,10 +4825,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       unawaited(windowSizer.detach());
     }
 
-    // Final release restores normal orientations after the handoff frame. A
-    // replacement PlayerScreen cancels that restore by acquiring its lease.
-    if (_ownsOrientationLease) {
-      playerOrientationLeaseController.release(_orientationLeaseOwner);
+    // Final release restores the system bars and normal orientations after
+    // the handoff frame. A replacement PlayerScreen cancels that restore by
+    // acquiring its lease.
+    if (_ownsPresentationLease) {
+      playerPresentationLeaseController.release(_presentationLeaseOwner);
     }
 
     // Save progress before disposing (fire and forget - can't await in
