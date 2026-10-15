@@ -104,8 +104,15 @@ void main() {
 
     group('cueFor', () {
       final cues = ThumbnailService.parseVtt(_serverVtt);
-      final service =
-          ThumbnailService(serverUrl: 'https://media.example', authToken: 't');
+      late ThumbnailService service;
+      // Built per test, not in the group body: constructing it creates an
+      // HttpClient, and at declaration time that runs outside any test zone,
+      // which flutter_test's HttpOverrides rejects once another file in the
+      // same isolate has initialised the binding.
+      setUp(() {
+        service = ThumbnailService(
+            serverUrl: 'https://media.example', authToken: 't');
+      });
 
       test('the cue covering the time', () {
         expect(service.cueFor(cues, 200)!.startTime, 144.0);
