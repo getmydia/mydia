@@ -1440,6 +1440,29 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       }
     end
 
+    test "a successful response records the mirror that answered", %{
+      dead_url: dead_url,
+      live_url: live_url
+    } do
+      assert {:ok, %{base_url: ^live_url}} =
+               CardigannSearchEngine.execute_search(
+                 parsed_for([dead_url, live_url]),
+                 [query: "x"],
+                 %{},
+                 %{}
+               )
+    end
+
+    test "pin_base_url tries only the given mirror", %{dead_url: dead_url, live_url: live_url} do
+      assert {:error, %Error{type: :connection_failed}} =
+               CardigannSearchEngine.execute_search(
+                 parsed_for([dead_url, live_url]),
+                 [query: "x", base_url: dead_url, pin_base_url: true],
+                 %{},
+                 %{}
+               )
+    end
+
     test "advances to the next candidate on a transport failure", %{
       dead_url: dead_url,
       live_url: live_url
@@ -1984,6 +2007,43 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                CardigannSearchEngine.execute_search(definition, [query: "x", categories: []], %{})
 
       assert title =~ "Blocked"
+    end
+  end
+
+  describe "execute_search/4 with several search paths" do
+    test "without :search_path only the first matching path is requested" do
+      # The health check and LiveCheck call this way and must stay one request.
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/p1", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>row</td></tr></table></body></html>"
+        )
+      end)
+
+      parsed = %Parsed{
+        id: "two-pages",
+        name: "Two Pages",
+        type: "public",
+        links: ["http://localhost:#{bypass.port}"],
+        legacylinks: [],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/p1"}, %{path: "/p2"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, %{status: 200}} =
+               CardigannSearchEngine.execute_search(parsed, [query: "x"], %{}, %{})
     end
   end
 end

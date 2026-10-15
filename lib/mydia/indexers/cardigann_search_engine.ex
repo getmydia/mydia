@@ -97,10 +97,12 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
         ]
 
   @type http_response :: %{
-          status: integer(),
+          required(:status) => integer(),
           # Req decodes a JSON response into a map or a list.
-          body: String.t() | map() | list(),
-          headers: [{String.t(), String.t()}]
+          required(:body) => String.t() | map() | list(),
+          required(:headers) => [{String.t(), String.t()}],
+          # The mirror that answered; set by execute_search/4.
+          optional(:base_url) => String.t()
         }
 
   @type flaresolverr_opts :: %{
@@ -146,7 +148,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   def execute_search(%Parsed{} = definition, opts, user_config, flaresolverr_opts)
       when is_list(opts) do
-    candidates = AdapterSupport.search_candidates(definition, Keyword.get(opts, :base_url))
+    candidates = search_candidates(definition, opts)
 
     case candidates do
       [] ->
@@ -164,6 +166,23 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
         )
     end
   end
+
+  # A later page of a multi-page search must hit the mirror page 1 answered on,
+  # so `pin_base_url: true` tries `opts[:base_url]` alone.
+  defp search_candidates(definition, opts) do
+    base_url = Keyword.get(opts, :base_url)
+
+    if Keyword.get(opts, :pin_base_url, false) and is_binary(base_url) and base_url != "",
+      do: [String.trim_trailing(base_url, "/")],
+      else: AdapterSupport.search_candidates(definition, base_url)
+  end
+
+  # Records which mirror answered, so the later pages of a search can be pinned to it.
+  defp with_base_url({:ok, response}, base_url),
+    do: {:ok, Map.put(response, :base_url, base_url)}
+
+  defp with_base_url({:ok, response, markers}, base_url),
+    do: {:ok, Map.put(response, :base_url, base_url), markers}
 
   defp try_candidates(
          _definition,
@@ -211,7 +230,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       cond do
         elem(result, 0) == :ok ->
           if candidate != first_tried, do: promote(opts, candidate)
-          result
+          with_base_url(result, candidate)
 
         retryable_failure?(result) and rest != [] ->
           try_candidates(
