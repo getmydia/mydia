@@ -110,7 +110,6 @@ class WebFullscreenCore {
       case FullscreenMode.nativeVideoElement:
         _enterVideo();
       case FullscreenMode.osWindow:
-      case FullscreenMode.systemUi:
       case FullscreenMode.unsupported:
         return;
     }
@@ -139,7 +138,6 @@ class WebFullscreenCore {
           ));
         }
       case FullscreenMode.osWindow:
-      case FullscreenMode.systemUi:
       case FullscreenMode.unsupported:
         return;
     }
@@ -158,7 +156,6 @@ class WebFullscreenCore {
         FullscreenMode.documentElement => true,
         FullscreenMode.nativeVideoElement => _videoBound,
         FullscreenMode.osWindow => true,
-        FullscreenMode.systemUi => true,
         FullscreenMode.unsupported => false,
       };
 

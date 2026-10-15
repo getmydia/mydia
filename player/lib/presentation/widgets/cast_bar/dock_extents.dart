@@ -23,6 +23,8 @@ class DockExtents extends InheritedWidget {
     required this.onCastBar,
     required this.onSidebar,
     required this.onDrawer,
+    this.nativeBar = false,
+    this.onNativeBar,
     required super.child,
   });
 
@@ -43,6 +45,11 @@ class DockExtents extends InheritedWidget {
   final ValueChanged<double> onSidebar;
   final ValueChanged<bool> onDrawer;
 
+  /// Whether the native iOS tab bar is showing over the shell, in which case
+  /// its accessory is the cast bar and the floating one stands down.
+  final bool nativeBar;
+  final ValueChanged<bool>? onNativeBar;
+
   /// Rebuilds the caller when a height changes.
   static DockExtents? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<DockExtents>();
@@ -57,7 +64,8 @@ class DockExtents extends InheritedWidget {
       old.dock != dock ||
       old.castBar != castBar ||
       old.sidebar != sidebar ||
-      old.drawerOpen != drawerOpen;
+      old.drawerOpen != drawerOpen ||
+      old.nativeBar != nativeBar;
 }
 
 /// Reports [child]'s laid-out extent along [axis] (its height by default)
@@ -133,37 +141,44 @@ class _ReportedExtentState extends State<ReportedExtent> {
       _SizeProbe(onSize: _onLayout, child: widget.child);
 }
 
-/// Reports whether the mobile nav drawer is [open] to [DockExtents.onDrawer],
-/// and reports it closed when this widget goes away, so a shell torn down
-/// with its drawer open cannot leave the cast bar hidden.
-class ReportedDrawer extends StatefulWidget {
-  const ReportedDrawer({super.key, required this.open, required this.child});
+/// Reports a bool to the `DockExtents` callback [select] picks, deferred past
+/// the frame, and reports false when it goes away so a torn-down shell
+/// cannot leave the cast bar hidden.
+class ReportedFlag extends StatefulWidget {
+  const ReportedFlag({
+    super.key,
+    required this.value,
+    required this.select,
+    required this.child,
+  });
 
-  final bool open;
+  final bool value;
+  final ValueChanged<bool>? Function(DockExtents extents) select;
   final Widget child;
 
   @override
-  State<ReportedDrawer> createState() => _ReportedDrawerState();
+  State<ReportedFlag> createState() => _ReportedFlagState();
 }
 
-class _ReportedDrawerState extends State<ReportedDrawer> {
+class _ReportedFlagState extends State<ReportedFlag> {
   /// Cached because `dispose` cannot look up inherited widgets.
-  ValueChanged<bool>? _onDrawer;
+  ValueChanged<bool>? _callback;
 
-  /// Last value reported; the layer starts out assuming closed.
+  /// Last value reported; the layer starts out assuming false.
   bool _last = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _onDrawer = DockExtents.reporterOf(context)?.onDrawer;
-    _report(widget.open);
+    final extents = DockExtents.reporterOf(context);
+    _callback = extents == null ? null : widget.select(extents);
+    _report(widget.value);
   }
 
   @override
-  void didUpdateWidget(ReportedDrawer old) {
+  void didUpdateWidget(ReportedFlag old) {
     super.didUpdateWidget(old);
-    if (old.open != widget.open) _report(widget.open);
+    if (old.value != widget.value) _report(widget.value);
   }
 
   @override
@@ -174,16 +189,51 @@ class _ReportedDrawerState extends State<ReportedDrawer> {
 
   // Deferred like ReportedExtent's reports: the receiver calls setState,
   // which must not happen while this subtree is building.
-  void _report(bool open) {
-    if (open == _last) return;
-    _last = open;
-    final onDrawer = _onDrawer;
-    if (onDrawer == null) return;
-    SchedulerBinding.instance.addPostFrameCallback((_) => onDrawer(open));
+  void _report(bool value) {
+    if (value == _last) return;
+    _last = value;
+    final callback = _callback;
+    if (callback == null) return;
+    SchedulerBinding.instance.addPostFrameCallback((_) => callback(value));
   }
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+/// Reports whether the mobile nav drawer is [open] to [DockExtents.onDrawer].
+class ReportedDrawer extends StatelessWidget {
+  const ReportedDrawer({super.key, required this.open, required this.child});
+
+  final bool open;
+  final Widget child;
+
+  static ValueChanged<bool>? _select(DockExtents e) => e.onDrawer;
+
+  @override
+  Widget build(BuildContext context) =>
+      ReportedFlag(value: open, select: _select, child: child);
+}
+
+/// Reports whether the native tab bar is [shown] to [DockExtents.onNativeBar].
+///
+/// [shown] means the native bar owns the cast UI: false only off the native
+/// path or while a page covers the shell. A popup over the shell leaves it true.
+class ReportedNativeBar extends StatelessWidget {
+  const ReportedNativeBar({
+    super.key,
+    required this.shown,
+    required this.child,
+  });
+
+  final bool shown;
+  final Widget child;
+
+  static ValueChanged<bool>? _select(DockExtents e) => e.onNativeBar;
+
+  @override
+  Widget build(BuildContext context) =>
+      ReportedFlag(value: shown, select: _select, child: child);
 }
 
 class _SizeProbe extends SingleChildRenderObjectWidget {

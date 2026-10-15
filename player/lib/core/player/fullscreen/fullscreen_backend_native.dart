@@ -14,10 +14,11 @@ FullscreenBackend createFullscreenBackend({
 }) =>
     NativeFullscreenBackend(onChange: onChange);
 
-/// Native fullscreen, behaviour-identical to what `PlayerScreen` did before
-/// this controller existed: it calls the same two media_kit helpers, which
-/// branch internally between `SystemUiMode.immersiveSticky` on mobile and a
-/// method channel on desktop (`video_texture.dart:479`).
+/// Native desktop fullscreen. It calls the two media_kit helpers, which drive
+/// the OS window through a method channel (`video_texture.dart:479`). On native
+/// mobile it reports [FullscreenMode.unsupported]: there
+/// `PlayerPresentationLeaseController` hides the system bars for the whole
+/// player session, so there is nothing to toggle.
 ///
 /// What is new is where state comes from. On desktop it republishes the
 /// existing `windowFullscreen` signal rather than assuming, so the green
@@ -32,36 +33,42 @@ class NativeFullscreenBackend implements FullscreenBackend {
   NativeFullscreenBackend({
     required this.onChange,
     @visibleForTesting ValueNotifier<bool>? windowSignal,
+    @visibleForTesting bool? isDesktop,
     @visibleForTesting bool? isWindows,
     @visibleForTesting VoidCallback? onEnterNative,
     @visibleForTesting VoidCallback? onExitNative,
   })  : _windowSignal = windowSignal,
+        _isDesktop = isDesktop,
         _isWindows = isWindows,
         _onEnterNative = onEnterNative ?? defaultEnterNativeFullscreen,
         _onExitNative = onExitNative ?? defaultExitNativeFullscreen;
 
   final ValueChanged<bool> onChange;
   final ValueNotifier<bool>? _windowSignal;
+  final bool? _isDesktop;
   final bool? _isWindows;
   final VoidCallback _onEnterNative;
   final VoidCallback _onExitNative;
 
+  bool get _effectiveIsDesktop => _isDesktop ?? PlatformFeatures.isDesktop;
   bool get _effectiveIsWindows => _isWindows ?? PlatformFeatures.isWindows;
   ValueNotifier<bool> get _effectiveWindowSignal =>
       _windowSignal ?? windowFullscreenSignal;
 
-  /// Both native routes exist unconditionally, so this never moves. It is a
-  /// notifier rather than a constant only because the interface is shaped for
-  /// web, where readiness genuinely changes.
-  final ValueNotifier<bool> _ready = ValueNotifier<bool>(true);
+  /// Fixed for the life of the backend: desktop always has a window to
+  /// fullscreen, and native mobile never has a route. It is a notifier rather
+  /// than a constant only because the interface is shaped for web, where
+  /// readiness genuinely changes.
+  late final ValueNotifier<bool> _ready =
+      ValueNotifier<bool>(_effectiveIsDesktop);
 
   @override
   ValueListenable<bool> get ready => _ready;
 
   @override
-  FullscreenMode get mode => PlatformFeatures.isDesktop
+  FullscreenMode get mode => _effectiveIsDesktop
       ? FullscreenMode.osWindow
-      : FullscreenMode.systemUi;
+      : FullscreenMode.unsupported;
 
   @override
   FullscreenReport get report =>
@@ -81,30 +88,25 @@ class NativeFullscreenBackend implements FullscreenBackend {
 
   @override
   void enter() {
+    if (mode == FullscreenMode.unsupported) return;
     _onEnterNative();
-    // Mobile has no system event callback for `setEnabledSystemUIMode`, and
     // Windows has no OS-level fullscreen event callback (Win32 borderless
     // fullscreen is just a resized style-stripped window, and media_kit_video
-    // does not emit window events). Both report optimistically, and on Windows
-    // we also keep the app-wide `windowFullscreenSignal` in sync.
+    // does not emit window events), so it reports optimistically and keeps
+    // the app-wide `windowFullscreenSignal` in sync.
     if (_effectiveIsWindows) {
       _effectiveWindowSignal.value = true;
-    }
-    if (mode == FullscreenMode.systemUi ||
-        (_effectiveIsWindows && !_listening)) {
-      onChange(true);
+      if (!_listening) onChange(true);
     }
   }
 
   @override
   void exit() {
+    if (mode == FullscreenMode.unsupported) return;
     _onExitNative();
     if (_effectiveIsWindows) {
       _effectiveWindowSignal.value = false;
-    }
-    if (mode == FullscreenMode.systemUi ||
-        (_effectiveIsWindows && !_listening)) {
-      onChange(false);
+      if (!_listening) onChange(false);
     }
   }
 

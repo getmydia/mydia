@@ -1,18 +1,13 @@
 /// How this build can present the player fullscreen.
 ///
-/// Resolved once per `FullscreenController`. [osWindow] and [systemUi] do not
-/// change which platform call the native backend makes — media_kit's helper
-/// branches internally on `Platform.isAndroid || Platform.isIOS`
-/// (`media_kit_video/lib/src/video/video_texture.dart:479`). The distinction
-/// exists only to decide whether the controller's state can be event-sourced.
+/// Resolved once per `FullscreenController`. Native mobile has no entry: the
+/// player route is immersive for its whole lifetime (see
+/// PlayerPresentationLeaseController), so there is nothing to toggle and the
+/// native backend reports [unsupported] there.
 enum FullscreenMode {
   /// Native desktop. The OS window goes fullscreen and `windowFullscreen`
   /// reports it, so state is authoritative.
   osWindow,
-
-  /// Native mobile. `SystemChrome.setEnabledSystemUIMode` has no callback, so
-  /// this is the one mode whose state is necessarily optimistic.
-  systemUi,
 
   /// Web with the standard Fullscreen API. Mydia's own chrome survives, which
   /// is why this is preferred wherever it works.
@@ -94,7 +89,6 @@ FullscreenMode demoteWebMode({
     case FullscreenMode.nativeVideoElement:
       return FullscreenMode.unsupported;
     case FullscreenMode.osWindow:
-    case FullscreenMode.systemUi:
     case FullscreenMode.unsupported:
       return current;
   }

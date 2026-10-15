@@ -16,6 +16,9 @@ Deeper reference lives alongside this file in `player/docs/`:
 - [playback.md](docs/playback.md) - who decides direct play, copy or
   transcode, how a source is verified and replaced, and the failure memory.
 - [downloads.md](docs/downloads.md) - the one download pipeline, plans per source, records keyed by source, offline progress sync.
+- [native-tab-bar.md](docs/native-tab-bar.md) - the iOS 26 native tab bar: root swap
+  ordering, touch pass-through, the `mydia/native-tab-bar` channel, insets and the
+  cast accessory.
 
 ## Project Overview
 

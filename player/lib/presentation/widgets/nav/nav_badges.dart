@@ -7,6 +7,20 @@ import '../connection_status_dot.dart';
 import 'bottom_nav.dart';
 import 'sidebar_row.dart';
 
+/// Whether the Settings badge should mark a waiting app update.
+///
+/// Not a synchronous UpdateHost.current() guess, which cannot tell a
+/// sideloaded Android install from a Play one and used to hide this badge
+/// on the one platform that most needs it. createUpdateBackend never
+/// builds a backend anywhere self-update is unsupported, so an
+/// availableUpdate below already proves the platform qualifies.
+bool settingsUpdatePending(WidgetRef ref, {bool? supportedOverride}) {
+  final supported = supportedOverride ?? true;
+  return supported &&
+      !PlatformFeatures.isMacOS &&
+      ref.watch(updateProvider).availableUpdate != null;
+}
+
 /// The badge on the Settings nav item.
 ///
 /// Carries two independent signals on one 14px mark: connection tone as
@@ -29,15 +43,8 @@ class SettingsBadge extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Not a synchronous UpdateHost.current() guess, which cannot tell a
-    // sideloaded Android install from a Play one and used to hide this badge
-    // on the one platform that most needs it. createUpdateBackend never
-    // builds a backend anywhere self-update is unsupported, so an
-    // availableUpdate below already proves the platform qualifies.
-    final supported = supportedOverride ?? true;
-    final updatePending = supported &&
-        !PlatformFeatures.isMacOS &&
-        ref.watch(updateProvider).availableUpdate != null;
+    final updatePending =
+        settingsUpdatePending(ref, supportedOverride: supportedOverride);
 
     return ConnectionStatusDot(
       location: location,
