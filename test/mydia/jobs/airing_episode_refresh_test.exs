@@ -30,13 +30,26 @@ defmodule Mydia.Jobs.AiringEpisodeRefreshTest do
       assert seconds <= 900
     end
 
-    test "a later attempt runs the pass" do
-      assert :ok = perform_job(AiringEpisodeRefresh, %{"scope" => "all"}, attempt: 2)
+    # Oban 2.24 rolls attempt back on snooze, so the wake-up is still attempt 1.
+    test "the wake-up after a snooze runs the pass" do
+      assert :ok =
+               perform_job(AiringEpisodeRefresh, %{"scope" => "all"},
+                 attempt: 1,
+                 meta: %{"snoozed" => 1}
+               )
+    end
+
+    test "a retry after a real failure runs the pass" do
+      assert :ok =
+               perform_job(AiringEpisodeRefresh, %{"scope" => "all"},
+                 attempt: 2,
+                 meta: %{"snoozed" => 1}
+               )
     end
 
     test "an unknown scope is cancelled rather than retried" do
       assert {:cancel, _reason} =
-               perform_job(AiringEpisodeRefresh, %{"scope" => "sometimes"}, attempt: 2)
+               perform_job(AiringEpisodeRefresh, %{"scope" => "sometimes"})
     end
   end
 

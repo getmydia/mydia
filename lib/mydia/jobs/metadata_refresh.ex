@@ -20,7 +20,7 @@ defmodule Mydia.Jobs.MetadataRefresh do
 
   require Logger
   alias Mydia.Accounts.Scope
-  alias Mydia.Jobs.PassFailures
+  alias Mydia.Jobs.{PassFailures, StartupJitter}
   alias Mydia.Media
   alias Mydia.Media.Refresh
 
@@ -66,22 +66,16 @@ defmodule Mydia.Jobs.MetadataRefresh do
   end
 
   @impl Oban.Worker
-  def perform(%Oban.Job{attempt: attempt, args: %{"refresh_all" => true} = raw_args}) do
+  def perform(%Oban.Job{args: %{"refresh_all" => true} = raw_args} = job) do
     args = Args.parse(raw_args)
 
     # Spread load across self-hosted instances hitting the shared metadata relay
     # at 05:00 Sunday. Snoozing releases the queue slot instead of holding it for
-    # up to half an hour, and Oban increments max_attempts so the jitter does not
-    # consume one of the pass's real attempts.
-    if attempt == 1 and not args.skip_delay do
-      delay_seconds = :rand.uniform(@max_startup_delay_seconds)
+    # up to half an hour, and does not consume one of the pass's real attempts.
+    jitter =
+      if args.skip_delay, do: :run, else: StartupJitter.delay(job, @max_startup_delay_seconds)
 
-      Logger.info("Metadata refresh scheduled, snoozing #{delay_seconds}s to spread relay load")
-
-      {:snooze, delay_seconds}
-    else
-      run_all()
-    end
+    with :run <- jitter, do: run_all()
   end
 
   # Manual trigger from the UI sends empty args.

@@ -127,8 +127,13 @@ defmodule Mydia.Jobs.MetadataRefreshTest do
       assert seconds <= 1800
     end
 
-    test "runs the pass on a later attempt" do
-      assert :ok = perform_job(MetadataRefresh, %{"refresh_all" => true}, attempt: 2)
+    # Oban 2.24 rolls attempt back on snooze, so the wake-up is still attempt 1.
+    test "runs the pass on the wake-up after a snooze" do
+      assert :ok =
+               perform_job(MetadataRefresh, %{"refresh_all" => true},
+                 attempt: 1,
+                 meta: %{"snoozed" => 1}
+               )
     end
 
     test "runs immediately when skip_delay is set" do
