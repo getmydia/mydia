@@ -65,6 +65,7 @@ jobs:
               - 'config/**'
               - 'priv/**'
               - 'native/**'
+              - 'nix/**'
               - 'plugins/**'
               - 'plugins-extra/**'
               - 'patches/**'
@@ -85,7 +86,7 @@ jobs:
               - 'player/flutter-version.nix'
               - 'player/lib/graphql/**'
               - 'player/lib/core/language/language_equivalents.dart'
-              - '.github/workflows/ci.yml'
+              - '.github/workflows/**'
               - '.github/actions/setup-devenv/**'
             rust:
               - 'native/**'
