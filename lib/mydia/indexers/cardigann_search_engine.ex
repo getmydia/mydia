@@ -94,7 +94,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           base_url: String.t() | nil,
           on_promote: (String.t() -> term()) | nil,
           search_path: map() | nil,
-          pin_base_url: boolean()
+          pin_base_url: boolean(),
+          request_timeout_ms: pos_integer() | nil
         ]
 
   @type http_response :: %{
@@ -417,7 +418,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
          headers: build_headers(definition),
          method: SearchRequest.method(path),
          follow_redirect: Map.get(path, :follow_redirect)
-       }}
+       }
+       |> SearchRequest.put_timeout(opts)}
     end
   end
 
@@ -826,8 +828,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
     base_opts = [
       headers: headers,
-      receive_timeout: 30_000,
-      connect_options: [timeout: 10_000],
+      receive_timeout: SearchRequest.receive_timeout(request_params),
+      connect_options: [timeout: SearchRequest.connect_timeout(request_params)],
       # Neither a session cookie nor a clearance cookie (cf_clearance) may ride
       # a redirect to another host: Req carries a manual cookie header across
       # it (see the note on session_cookie_pairs/4). Definition cookies are not

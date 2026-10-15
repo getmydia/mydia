@@ -47,7 +47,11 @@ defmodule Mydia.Indexers.Cardigann.SearchPages do
     paths
     |> Enum.with_index(2)
     |> Enum.reduce_while([], fn {path, number}, pages ->
-      fetch = fn -> fetch_page(parsed, path, page_opts, user_config, flaresolverr_opts, parse) end
+      fetch = fn remaining_ms ->
+        opts = with_request_timeout(page_opts, remaining_ms)
+        fetch_page(parsed, path, opts, user_config, flaresolverr_opts, parse)
+      end
+
       next_page(fetch, parsed.name, number, deadline, pages)
     end)
     |> Enum.reverse()
@@ -55,11 +59,13 @@ defmodule Mydia.Indexers.Cardigann.SearchPages do
   end
 
   defp next_page(fetch, name, number, deadline, pages) do
-    if past_deadline?(deadline) do
+    remaining_ms = remaining_ms(deadline)
+
+    if remaining_ms != nil and remaining_ms <= 0 do
       Logger.debug("Cardigann #{name}: paging budget spent, not requesting page #{number}")
       {:halt, pages}
     else
-      case fetch.() do
+      case fetch.(remaining_ms) do
         {:ok, []} -> {:halt, pages}
         {:ok, rows} -> {:cont, [rows | pages]}
         {:error, reason} -> page_failed(name, number, reason, pages)
@@ -76,8 +82,15 @@ defmodule Mydia.Indexers.Cardigann.SearchPages do
     {:halt, pages}
   end
 
-  defp past_deadline?(nil), do: false
-  defp past_deadline?(deadline), do: System.monotonic_time(:millisecond) >= deadline
+  defp remaining_ms(nil), do: nil
+  defp remaining_ms(deadline), do: deadline - System.monotonic_time(:millisecond)
+
+  # A page started just inside the budget must not hold the search for the
+  # engine's full connect and receive timeouts.
+  defp with_request_timeout(opts, nil), do: opts
+
+  defp with_request_timeout(opts, remaining_ms),
+    do: Keyword.put(opts, :request_timeout_ms, remaining_ms)
 
   defp fetch_page(parsed, path, page_opts, user_config, flaresolverr_opts, parse) do
     opts = Keyword.put(page_opts, :search_path, path)

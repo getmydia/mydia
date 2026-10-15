@@ -45,6 +45,32 @@ defmodule Mydia.Indexers.Cardigann.SearchRequest do
     end
   end
 
+  @default_receive_timeout 30_000
+  @default_connect_timeout 10_000
+
+  # A caller with a deadline names the time it has left as `:request_timeout_ms`.
+  # It caps both timeouts of that one request, and without it they stay as they
+  # were, so page 1, the health check and downloads are unchanged.
+  @spec put_timeout(map(), keyword()) :: map()
+  def put_timeout(request_params, opts) do
+    case Keyword.get(opts, :request_timeout_ms) do
+      ms when is_integer(ms) -> Map.put(request_params, :receive_timeout, max(ms, 1))
+      _ -> request_params
+    end
+  end
+
+  @spec receive_timeout(map()) :: pos_integer()
+  def receive_timeout(request_params),
+    do:
+      min(
+        Map.get(request_params, :receive_timeout, @default_receive_timeout),
+        @default_receive_timeout
+      )
+
+  @spec connect_timeout(map()) :: pos_integer()
+  def connect_timeout(request_params),
+    do: min(receive_timeout(request_params), @default_connect_timeout)
+
   # A search path's own `followredirect` overrides the definition's.
   @spec follow_redirect?(Parsed.t(), map()) :: boolean()
   def follow_redirect?(definition, request_params) do

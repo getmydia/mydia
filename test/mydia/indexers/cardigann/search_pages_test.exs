@@ -41,6 +41,43 @@ defmodule Mydia.Indexers.Cardigann.SearchPagesTest do
 
       refute_received :parsed
     end
+
+    test "a page started near the deadline cannot outlast the time remaining" do
+      # A server that accepts the connection and never answers: only the
+      # request's own receive timeout can end the wait.
+      {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+      {:ok, port} = :inet.port(listener)
+      on_exit(fn -> :gen_tcp.close(listener) end)
+
+      parsed = %Parsed{
+        id: "pages-timeout",
+        name: "Pages Timeout",
+        links: ["http://localhost:#{port}"],
+        search: %{paths: [%{path: "/p2"}], inputs: %{}}
+      }
+
+      parse = fn _path, _response -> flunk("the slow page must not be parsed") end
+      deadline = System.monotonic_time(:millisecond) + 100
+
+      {{elapsed_us, rows}, _log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          :timer.tc(fn ->
+            SearchPages.collect(
+              parsed,
+              [%{path: "/p2"}],
+              [paging_deadline: deadline],
+              %{},
+              %{},
+              "http://localhost:#{port}",
+              parse
+            )
+          end)
+        end)
+
+      assert rows == []
+      # Without the cap the request waits the engine's full 30 s receive timeout.
+      assert elapsed_us < 2_000_000
+    end
   end
 
   describe "dedupe/1" do
