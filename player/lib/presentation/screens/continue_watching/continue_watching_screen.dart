@@ -95,10 +95,13 @@ class _ContinueWatchingScreenState
       posterFor: (context, item, open) {
         final removable =
             continueWatching?.canRemoveFromContinueWatching(item) ?? false;
+        // Null for a movie, so SourcePoster falls back to the year.
+        final caption =
+            [item.showTitle, item.subtitle].whereType<String>().join(' · ');
         return SourcePoster(
           key: ValueKey('source-poster-${item.ref.externalId}'),
           item: item,
-          subtitle: item.showTitle,
+          subtitle: caption.isEmpty ? null : caption,
           onTap: open,
           onContextMenu: removable
               ? (posterContext) => _openMenu(posterContext, item)

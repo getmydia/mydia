@@ -37,8 +37,8 @@ class ContinueWatchingCard extends ConsumerWidget {
   static const double _progressGap = 8;
   static const double _barHeight = 4;
 
-  /// Whether the card shows a caption line: an episode's place in its series,
-  /// or a [trailingLabel] such as a server name.
+  /// Whether the card shows a caption line: an episode's place in its series and
+  /// its title, or a [trailingLabel] such as a server name.
   static bool hasCaptionFor(ItemSummary item, {String? trailingLabel}) =>
       _captionOf(item, trailingLabel).isNotEmpty;
 
@@ -46,7 +46,7 @@ class ContinueWatchingCard extends ConsumerWidget {
   static bool hasTimeLeftFor(ItemSummary item) => _timeLeft(item) != null;
 
   static String _captionOf(ItemSummary item, String? trailingLabel) => [
-        if (item.showTitle != null) item.subtitle,
+        if (item.showTitle != null) ...[item.subtitle, item.title],
         trailingLabel,
       ].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
 

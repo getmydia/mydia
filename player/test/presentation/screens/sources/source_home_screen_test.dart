@@ -178,7 +178,8 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: row, matching: find.text('S1 · E2')),
+        find.descendant(
+            of: row, matching: find.text('S1 · E2 · Invented Episode 2')),
         findsOneWidget,
       );
     });

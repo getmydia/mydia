@@ -160,6 +160,28 @@ void main() {
     expect(find.text('Invented Episode 2'), findsOneWidget);
   });
 
+  testWidgets('an episode poster names its series and its place',
+      (tester) async {
+    await _pump(
+      tester,
+      FakeCapableSource()
+        ..continueWatchingResult = [
+          const ItemSummary(
+            ref: ItemRef(
+                sourceId: fakeSourceId,
+                kind: ItemKind.episode,
+                externalId: 'e3'),
+            title: 'Invented Episode 3',
+            showTitle: 'Invented Series',
+            subtitle: 'S1 · E3',
+            userState: UserState(progressSeconds: 60),
+            durationSeconds: 1800,
+          ),
+        ],
+    );
+    expect(find.text('Invented Series · S1 · E3'), findsOneWidget);
+  });
+
   testWidgets('a source that cannot dismiss an entry offers no menu',
       (tester) async {
     final a = FakeCapableSource()

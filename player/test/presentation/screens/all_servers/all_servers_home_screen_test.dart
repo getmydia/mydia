@@ -204,7 +204,9 @@ void main() {
     expect(t.widget(card), isA<ContinueWatchingCard>());
     expect(find.descendant(of: card, matching: find.text('Saltmarsh')),
         findsOneWidget);
-    expect(find.descendant(of: card, matching: find.text('S1 · E2 · Server a')),
+    expect(
+        find.descendant(
+            of: card, matching: find.text('S1 · E2 · The Low Tide · Server a')),
         findsOneWidget,
         reason: 'the episode line carries the server name');
   });
