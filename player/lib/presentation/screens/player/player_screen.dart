@@ -257,17 +257,41 @@ class PlayerScreen extends ConsumerStatefulWidget {
   }) =>
       supportsKeyboardShortcuts || directionalPrimary;
 
-  /// Whether to pin the display to landscape on entering playback.
+  /// Whether the player route takes the presentation lease at all: system
+  /// bars hidden for the whole session on native mobile.
   ///
-  /// A television is already landscape and has no sensor to rotate, so the
-  /// request is at best a no-op. It reads `isMobile`, which Android TV
-  /// answers true, so it needs the directional term to opt back out.
+  /// A television reads `isMobile` true on Android TV but has no system bars
+  /// to hide and no rotation to pin, so the directional term opts it out.
   @visibleForTesting
-  static bool wantsForcedLandscape({
+  static bool wantsImmersivePresentation({
     required bool isMobile,
     required bool directionalPrimary,
   }) =>
       isMobile && !directionalPrimary;
+
+  /// Whether to pin the display to landscape on entering playback.
+  ///
+  /// Phones only. A tablet follows the device, as Infuse and Plex do, and on
+  /// iPad the app supports multitasking, so iPadOS would ignore the request
+  /// anyway.
+  @visibleForTesting
+  static bool wantsForcedLandscape({
+    required bool isMobile,
+    required bool directionalPrimary,
+    required bool isTablet,
+  }) =>
+      wantsImmersivePresentation(
+        isMobile: isMobile,
+        directionalPrimary: directionalPrimary,
+      ) &&
+      !isTablet;
+
+  /// A tablet by the usual Material threshold: 600 logical pixels on the
+  /// display's short side. Measured on the display, not the window, so an iPad
+  /// in a narrow split-screen window still counts as a tablet.
+  @visibleForTesting
+  static bool isTabletSized({required Size logicalScreenSize}) =>
+      logicalScreenSize.shortestSide >= 600;
 
   /// Resolves an arrow key to its meaning for this input tier and OSD state.
   ///
@@ -1081,15 +1105,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Keep one shared lease for the complete player route lifetime. During a
     // route replacement (a different player route, not an episode advance,
     // which reuses this State), the incoming and outgoing screens hand this
-    // lease off without briefly restoring portrait-capable orientations.
-    _ownsPresentationLease = PlayerScreen.wantsForcedLandscape(
+    // lease off without briefly restoring the system bars or orientations.
+    _ownsPresentationLease = PlayerScreen.wantsImmersivePresentation(
       isMobile: PlatformFeatures.isMobile,
       directionalPrimary: InputCapabilities.directionalPrimary,
     );
     if (_ownsPresentationLease) {
       playerPresentationLeaseController.acquire(
         _presentationLeaseOwner,
-        lockLandscape: true,
+        lockLandscape: PlayerScreen.wantsForcedLandscape(
+          isMobile: PlatformFeatures.isMobile,
+          directionalPrimary: InputCapabilities.directionalPrimary,
+          isTablet: PlayerScreen.isTabletSized(
+            logicalScreenSize: _logicalDisplaySize(),
+          ),
+        ),
       );
     }
 
@@ -4555,6 +4585,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (inputs == null) return kAutoPreferenceSubtitle;
     return autoDeliverySubtitle(
         planPlayback(inputs.copyWith(choice: QualityChoice.auto)));
+  }
+
+  /// The physical display in logical pixels. Read from the display rather
+  /// than `MediaQuery` so split-screen does not shrink a tablet into a phone,
+  /// and because `initState` has no inherited widgets yet.
+  static Size _logicalDisplaySize() {
+    final display =
+        WidgetsBinding.instance.platformDispatcher.views.first.display;
+    return display.size / display.devicePixelRatio;
   }
 
   void _onChromeVisibilityChanged() {
