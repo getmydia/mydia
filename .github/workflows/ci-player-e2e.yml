@@ -42,7 +42,7 @@ jobs:
     #
     # This job builds a toolchain image (Flutter, GTK, mpv). The E2E tests do
     # not validate it. The test container bind-mounts the repo at /workspace
-    # and runs `flutter pub get`, `build_runner` and `flutter test -d linux`
+    # and runs `flutter pub get --enforce-lockfile`, `build_runner` and `flutter test -d linux`
     # at runtime, so the tests exercise the commit's player source against
     # this toolchain, never the toolchain itself. A green test run is not
     # evidence the image is good, and a red one is not evidence it is bad.
