@@ -330,6 +330,7 @@ jobs:
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
           skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
           elixir-caches: 'false'
+          cargo-cache: 'false'
 
       # Same script as the native-rust pre-commit hook, so a commit made
       # outside devenv (which skips the hook) is still gated here.

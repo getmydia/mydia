@@ -18,7 +18,7 @@ inputs:
     default: build-v2-devenv
   cargo-cache:
     description: "'true' to restore and save native/*/target."
-    default: 'false'
+    default: 'true'
 
 runs:
   using: composite
@@ -84,6 +84,21 @@ runs:
         key: ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
         restore-keys: |
           ${{ runner.os }}-${{ inputs.build-cache-prefix }}-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
+
+    # Rustler builds native/mydia_p2p and native/mydia_subsync in release mode
+    # during `mix compile`, into each crate's own target/. On a _build cache
+    # miss that took 2m22s from scratch (2026-10-15, iroh dominates). Restoring
+    # target/ from the nearest Cargo.lock match means only the workspace crates
+    # recompile. wasmex needs nothing here: its target/ sits under deps/, which
+    # the deps cache already carries whole.
+    - name: Cache cargo targets
+      if: inputs.cargo-cache == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: native/*/target
+        key: ${{ runner.os }}-cargo-v1-${{ hashFiles('native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-v1-${{ hashFiles('native/**/Cargo.lock', 'rust-toolchain.toml') }}-
 
     # Materialize the devenv toolchain with a retry BEFORE the test step. Nix
     # evaluation can transiently fail with "path '…/test-timeout.patch' is not
