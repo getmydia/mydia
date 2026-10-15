@@ -750,15 +750,20 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         follow_redirect: false
       }
 
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, "ok")
+      end)
+
       params = %{query_params: %{}, headers: [], method: :get}
 
       request = fn ->
         started = System.monotonic_time(:millisecond)
 
-        # Fails to connect; only the throttle timing matters.
         CardigannSearchEngine.execute_http_request(
           definition,
-          "https://invalid-domain.example",
+          "http://localhost:#{bypass.port}/search",
           params,
           %{},
           %{}
@@ -767,10 +772,10 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         System.monotonic_time(:millisecond) - started
       end
 
-      # The first request is not delayed (the request itself fails fast).
-      assert request.() < 90
+      # The first request is not delayed (a local endpoint answers in a few ms).
+      assert request.() < 80
       # The second one waits out the interval since the first.
-      assert request.() >= 90
+      assert request.() >= 80
     end
   end
 
