@@ -387,6 +387,47 @@ defmodule Mydia.Indexers.CardigannParserTest do
   end
 
   describe "parse_search_config/1" do
+    test "keeps each path's inputs, inheritinputs, response and followredirect" do
+      yaml_data = %{
+        "search" => %{
+          "paths" => [
+            %{"path" => "/p1"},
+            %{
+              "path" => "/api",
+              "inputs" => %{"page" => "2"},
+              "inheritinputs" => false,
+              "response" => %{"type" => "json", "noResultsMessage" => "none"},
+              "followredirect" => false
+            }
+          ],
+          "inputs" => %{"q" => "{{ .Keywords }}"},
+          "rows" => "tr",
+          "fields" => %{
+            "title" => "td:nth-child(1)",
+            "size" => "td:nth-child(2)",
+            "seeders" => "td:nth-child(3)"
+          }
+        }
+      }
+
+      assert {:ok, %{paths: [first, second]}} = CardigannParser.parse_search_config(yaml_data)
+
+      assert first == %{
+               path: "/p1",
+               categories: [],
+               method: "get",
+               inputs: %{},
+               inherit_inputs: true,
+               response: nil,
+               follow_redirect: nil
+             }
+
+      assert second.inputs == %{"page" => "2"}
+      assert second.inherit_inputs == false
+      assert second.response == %{"type" => "json", "noResultsMessage" => "none"}
+      assert second.follow_redirect == false
+    end
+
     test "extracts search configuration with single path" do
       yaml_data = %{
         "search" => %{

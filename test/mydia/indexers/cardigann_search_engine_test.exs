@@ -343,6 +343,86 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
   end
 
   describe "build_request_params/2" do
+    defp two_path_definition(paths) do
+      %Parsed{
+        id: "two-path",
+        name: "Two Path",
+        type: "public",
+        encoding: "UTF-8",
+        links: ["https://example.com"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: paths,
+          inputs: %{"q" => "{{ .Keywords }}", "sort" => "seeders"},
+          rows: %{selector: "tr"},
+          fields: %{title: %{selector: "td.title"}}
+        },
+        login: nil,
+        download: nil
+      }
+    end
+
+    test "a path's inputs are added to the search inputs and win on a clash" do
+      page2 = %{path: "/s", inputs: %{"page" => "2", "sort" => "date"}}
+      definition = two_path_definition([%{path: "/s"}, page2])
+
+      assert {:ok, params} =
+               CardigannSearchEngine.build_request_params(definition,
+                 query: "Ubuntu",
+                 search_path: page2
+               )
+
+      assert params.query_params == %{"q" => "Ubuntu", "sort" => "date", "page" => "2"}
+    end
+
+    test "inherit_inputs false sends the path's inputs alone" do
+      page2 = %{path: "/s", inputs: %{"page" => "2"}, inherit_inputs: false}
+      definition = two_path_definition([%{path: "/s"}, page2])
+
+      assert {:ok, params} =
+               CardigannSearchEngine.build_request_params(definition,
+                 query: "Ubuntu",
+                 search_path: page2
+               )
+
+      assert params.query_params == %{"page" => "2"}
+    end
+
+    test "the method comes from the same path as the URL" do
+      get_page = %{path: "/one", method: "get"}
+      post_page = %{path: "/two", method: "post"}
+      definition = two_path_definition([get_page, post_page])
+
+      assert {:ok, %{method: :get}} =
+               CardigannSearchEngine.build_request_params(definition, query: "x")
+
+      assert {:ok, %{method: :post}} =
+               CardigannSearchEngine.build_request_params(definition,
+                 query: "x",
+                 search_path: post_page
+               )
+
+      assert {:ok, "https://example.com/two"} =
+               CardigannSearchEngine.build_search_url(definition,
+                 query: "x",
+                 search_path: post_page
+               )
+    end
+
+    test "carries the path's follow_redirect, nil when the path sets none" do
+      page2 = %{path: "/s", follow_redirect: false}
+      definition = two_path_definition([%{path: "/s"}, page2])
+
+      assert {:ok, %{follow_redirect: nil}} =
+               CardigannSearchEngine.build_request_params(definition, query: "x")
+
+      assert {:ok, %{follow_redirect: false}} =
+               CardigannSearchEngine.build_request_params(definition,
+                 query: "x",
+                 search_path: page2
+               )
+    end
+
     test "builds basic GET request params" do
       definition = %Parsed{
         id: "test",
@@ -1683,6 +1763,27 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
   end
 
   describe "redirect handling" do
+    test "a path's followredirect: false overrides the definition's true" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "/moved")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      parsed = redirecting_definition("http://localhost:#{bypass.port}", true)
+      path = %{path: "/search", follow_redirect: false}
+
+      assert {:error, %Error{message: "Redirected (HTTP 302)" <> _}} =
+               CardigannSearchEngine.execute_search(
+                 parsed,
+                 [query: "ubuntu", search_path: path],
+                 %{},
+                 %{}
+               )
+    end
+
     test "follows a redirect by default" do
       bypass = Bypass.open()
 

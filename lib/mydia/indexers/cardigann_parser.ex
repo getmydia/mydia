@@ -217,11 +217,17 @@ defmodule Mydia.Indexers.CardigannParser do
     end
   end
 
+  # A path is one request, usually one page. Its own inputs, response type and
+  # redirect flag apply to that request only.
   defp normalize_path_entry(path_map) do
     %{
       path: Map.fetch!(path_map, "path"),
       categories: Map.get(path_map, "categories", []),
-      method: Map.get(path_map, "method", "get")
+      method: Map.get(path_map, "method", "get"),
+      inputs: Map.get(path_map, "inputs") || %{},
+      inherit_inputs: Map.get(path_map, "inheritinputs", true) != false,
+      response: Map.get(path_map, "response"),
+      follow_redirect: Map.get(path_map, "followredirect")
     }
   end
 

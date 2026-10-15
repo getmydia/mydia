@@ -395,7 +395,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   ## Returns
 
-  - `{:ok, params}` - Map with :query_params, :headers, :method
+  - `{:ok, params}` - Map with :query_params, :headers, :method, :follow_redirect
   - `{:error, reason}` - Parameter building error
 
   ## Examples
@@ -407,17 +407,15 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   @spec build_request_params(Parsed.t(), search_opts()) ::
           {:ok, map()} | {:error, Error.t()}
   def build_request_params(%Parsed{} = definition, opts) do
-    query_params = build_query_params(definition, opts)
-    headers = build_headers(definition)
-    method = get_http_method(definition, opts)
-
-    params = %{
-      query_params: query_params,
-      headers: headers,
-      method: method
-    }
-
-    {:ok, params}
+    with {:ok, path} <- select_search_path(definition, opts) do
+      {:ok,
+       %{
+         query_params: build_query_params(definition, path, opts),
+         headers: build_headers(definition),
+         method: path_method(path),
+         follow_redirect: Map.get(path, :follow_redirect)
+       }}
+    end
   end
 
   @doc """
@@ -769,9 +767,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
-  defp build_query_params(%Parsed{} = definition, opts) do
-    # Start with inputs from the definition
-    base_params = Map.get(definition.search, :inputs, %{})
+  defp build_query_params(%Parsed{} = definition, path, opts) do
+    base_params = request_inputs(definition, path)
     allow_empty = Map.get(definition.search, :allow_empty_inputs, false) == true
 
     # Build template context
@@ -797,6 +794,16 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end)
   end
 
+  # A path's own inputs are added to the search-level ones and win on a clash;
+  # `inheritinputs: false` sends the path's inputs alone.
+  defp request_inputs(%Parsed{search: search}, path) do
+    path_inputs = Map.get(path, :inputs) || %{}
+
+    if Map.get(path, :inherit_inputs, true) == false,
+      do: path_inputs,
+      else: Map.merge(Map.get(search, :inputs) || %{}, path_inputs)
+  end
+
   defp build_headers(%Parsed{search: search}) do
     case Map.get(search, :headers) do
       nil -> []
@@ -805,23 +812,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
-  defp get_http_method(%Parsed{search: %{paths: paths}}, opts) do
-    categories = Keyword.get(opts, :categories, [])
-
-    # Find the selected path's method
-    selected_path =
-      if categories != [] do
-        Enum.find(paths, List.first(paths), fn path ->
-          path_categories = Map.get(path, :categories, [])
-          path_categories == [] || Enum.any?(categories, &(&1 in path_categories))
-        end)
-      else
-        List.first(paths)
-      end
-
-    method_str = Map.get(selected_path || %{}, :method, "get")
-
-    case String.downcase(method_str) do
+  defp path_method(path) do
+    case path |> Map.get(:method, "get") |> to_string() |> String.downcase() do
       "post" -> :post
       _ -> :get
     end
@@ -834,6 +826,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     delay_ms = if delay < 10, do: trunc(delay * 1000), else: trunc(delay)
     Process.sleep(delay_ms)
     :ok
+  end
+
+  # A search path's own `followredirect` overrides the definition's.
+  defp follow_redirect?(definition, request_params) do
+    case Map.get(request_params, :follow_redirect) do
+      nil -> definition.follow_redirect == true
+      value -> value == true
+    end
   end
 
   defp build_request_options(definition, url, request_params, user_config, config) do
@@ -854,7 +854,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       # it (see the note on session_cookie_pairs/4). Definition cookies are not
       # credentials, so they alone do not disable redirects.
       redirect:
-        definition.follow_redirect == true and not session_attached? and
+        follow_redirect?(definition, request_params) and not session_attached? and
           not clearance_attached?,
       retry: false
     ]
