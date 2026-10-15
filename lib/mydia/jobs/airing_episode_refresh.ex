@@ -23,23 +23,19 @@ defmodule Mydia.Jobs.AiringEpisodeRefresh do
 
   require Logger
 
-  alias Mydia.Jobs.PassFailures
+  alias Mydia.Jobs.{PassFailures, StartupJitter}
   alias Mydia.Media
   alias Mydia.Media.AiringRefresh
 
   @job_name "airing_episode_refresh"
 
   # Spread installs hitting the shared relay at the same crontab minute.
-  # Snoozing releases the queue slot, and Oban raises max_attempts so the
-  # jitter does not consume a real attempt.
+  # Snoozing releases the queue slot and does not consume a real attempt.
   @max_startup_delay_seconds 15 * 60
 
   @impl Oban.Worker
-  def perform(%Oban.Job{attempt: attempt, args: %{"scope" => scope}})
-      when scope in ["hot", "all"] do
-    if attempt == 1 do
-      {:snooze, :rand.uniform(@max_startup_delay_seconds)}
-    else
+  def perform(%Oban.Job{args: %{"scope" => scope}} = job) when scope in ["hot", "all"] do
+    with :run <- StartupJitter.delay(job, @max_startup_delay_seconds) do
       scope |> scope_atom() |> run()
     end
   end

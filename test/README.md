@@ -391,6 +391,17 @@ Two consequences worth knowing before you spend a cycle on them:
 asserted on the returned `Ecto.Changeset`. Only `Oban.insert/1` needs a live
 instance.
 
+## perform_job/3 cannot test a snooze
+
+`perform_job/3` takes `attempt` and `meta` from the caller, so a snooze test
+only checks the test author's model of Oban. Since Oban 2.24 a snooze rolls
+`attempt` back and bumps `meta["snoozed"]`. `MetadataRefresh` and
+`AiringEpisodeRefresh` snoozed on `attempt == 1`, their tests passed by
+calling the wake-up `attempt: 2`, and in production every cron run snoozed
+forever for a month. Snooze through `Mydia.Jobs.StartupJitter`, and prove a
+snooze terminates by draining a real queue twice, as
+`test/mydia/jobs/startup_jitter_test.exs` does.
+
 ## Oban.insert_all bypasses worker uniqueness
 
 `Oban.insert_all/1` does not honour a worker's `unique: [period: N, fields: [...]]`
