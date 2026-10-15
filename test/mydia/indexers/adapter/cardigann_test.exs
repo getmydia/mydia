@@ -1,6 +1,8 @@
 defmodule Mydia.Indexers.Adapter.CardigannTest do
   use Mydia.DataCase, async: true
 
+  import ExUnit.CaptureLog
+
   alias Mydia.Indexers.Adapter.Cardigann
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.Cardigann.TemplateContext
@@ -960,6 +962,119 @@ defmodule Mydia.Indexers.Adapter.CardigannTest do
       assert context.keywords == "The Matrix"
       assert context.query.series == "The Matrix"
       assert context.config == %{"sort" => "seeders"}
+    end
+  end
+
+  describe "search/3 across several search paths" do
+    # Replaces the single `path:` of sample_yaml/1 with a `paths:` list.
+    defp use_paths(definition, bypass, paths_yaml) do
+      yaml =
+        String.replace(
+          sample_yaml("http://localhost:#{bypass.port}"),
+          "  path: /search/{{ .Keywords }}/\n",
+          "  paths:\n" <> paths_yaml
+        )
+
+      definition |> Ecto.Changeset.change(%{definition: yaml}) |> Repo.update!()
+    end
+
+    defp hash(n), do: n |> Integer.to_string(16) |> String.pad_leading(40, "0")
+
+    defp page(rows) do
+      body =
+        for {title, n} <- rows, into: "" do
+          """
+          <tr><td class="title"><a href="/t/#{n}">#{title}</a></td>
+          <td class="download"><a href="magnet:?xt=urn:btih:#{hash(n)}">d</a></td>
+          <td class="size">1 GB</td><td class="seeders">5</td><td class="leechers">1</td>
+          <td class="category">Movies</td></tr>
+          """
+        end
+
+      ~s(<html><body><table class="results"><tr><th>Header</th></tr>#{body}</table></body></html>)
+    end
+
+    defp serve(bypass, path, html) do
+      Bypass.expect_once(bypass, "GET", path, fn conn ->
+        conn |> Plug.Conn.put_resp_content_type("text/html") |> Plug.Conn.resp(200, html)
+      end)
+    end
+
+    @config %{type: :cardigann, name: "Test Indexer", indexer_id: "test-indexer"}
+
+    @two_pages "    - path: /p1/{{ .Keywords }}/\n    - path: /p2/{{ .Keywords }}/\n"
+
+    test "merges every page and drops a release a later page repeats", %{
+      definition: definition,
+      bypass: bypass
+    } do
+      use_paths(definition, bypass, @two_pages)
+      serve(bypass, "/p1/zq/", page([{"Quiet Harbor 2041", 1}, {"Paper Lanterns S01", 2}]))
+      serve(bypass, "/p2/zq/", page([{"Paper Lanterns S01", 2}, {"Glass Orchard", 3}]))
+
+      assert {:ok, results} = Cardigann.search(@config, "zq")
+
+      assert Enum.map(results, & &1.title) ==
+               ["Quiet Harbor 2041", "Paper Lanterns S01", "Glass Orchard"]
+    end
+
+    test "a failed later page keeps the earlier pages and logs a warning", %{
+      definition: definition,
+      bypass: bypass
+    } do
+      use_paths(definition, bypass, @two_pages)
+      serve(bypass, "/p1/zq/", page([{"Quiet Harbor 2041", 1}]))
+
+      Bypass.expect_once(bypass, "GET", "/p2/zq/", fn conn ->
+        Plug.Conn.resp(conn, 500, "boom")
+      end)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, [%{title: "Quiet Harbor 2041"}]} = Cardigann.search(@config, "zq")
+        end)
+
+      assert log =~ "page 2"
+    end
+
+    test "an empty page ends paging", %{definition: definition, bypass: bypass} do
+      use_paths(
+        definition,
+        bypass,
+        @two_pages <> "    - path: /p3/{{ .Keywords }}/\n"
+      )
+
+      serve(bypass, "/p1/zq/", page([{"Quiet Harbor 2041", 1}]))
+      serve(bypass, "/p2/zq/", page([]))
+      # No /p3 route: Bypass fails the test if it is requested.
+
+      assert {:ok, [%{title: "Quiet Harbor 2041"}]} = Cardigann.search(@config, "zq")
+    end
+
+    test "an empty first page requests no later page", %{definition: definition, bypass: bypass} do
+      use_paths(definition, bypass, @two_pages)
+      serve(bypass, "/p1/zq/", page([]))
+
+      assert {:ok, []} = Cardigann.search(@config, "zq")
+    end
+
+    test "only the paths whose categories match the query are requested", %{
+      definition: definition,
+      bypass: bypass
+    } do
+      use_paths(definition, bypass, """
+          - path: /movies/{{ .Keywords }}/
+            categories: [2000]
+          - path: /tv/{{ .Keywords }}/
+            categories: [5000]
+          - path: /all/{{ .Keywords }}/
+      """)
+
+      serve(bypass, "/movies/zq/", page([{"Quiet Harbor 2041", 1}]))
+      serve(bypass, "/all/zq/", page([{"Glass Orchard", 3}]))
+
+      assert {:ok, results} = Cardigann.search(@config, "zq", categories: [2000])
+      assert Enum.map(results, & &1.title) == ["Quiet Harbor 2041", "Glass Orchard"]
     end
   end
 end
