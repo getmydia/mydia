@@ -17,7 +17,14 @@ void main() {
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('collection_sync_test');
     Hive.init(dir.path);
-    box = await Hive.openBox<Map<dynamic, dynamic>>('collection_sync');
+    // Not 'collection_sync': Hive keeps one process-wide map of boxes being
+    // opened, and an earlier file in the bundle's shared isolate can leave
+    // that name in it forever (an open started under testWidgets never
+    // finishes), so `openBox` of the production name waits on it for good.
+    // The box is handed in through the provider override, so its name is free.
+    box = await Hive.openBox<Map<dynamic, dynamic>>(
+        'collection_sync_test_${dir.uri.pathSegments.where((s) => s.isNotEmpty).last}'
+            .toLowerCase());
   });
 
   tearDown(() async {

@@ -53,7 +53,10 @@ entrypoint instead of compiling each separately, the cost that took 760 of the
 test step's 988 seconds. Bundled, every file shares one isolate, so a test
 that passes here and fails in CI has leaked global state into, or picked it up
 from, another file: `HttpOverrides.global` after a widget test initialised the
-binding, a Hive box left open, a singleton cache. Fix the leak. The
+binding, a Hive box left open, a singleton cache. very_good orders the bundled
+files by filesystem listing, which differs between machines, so a local green
+bundle can still fail in CI on a different order; a CI-only bundle failure is
+still a leak. Fix the leak. The
 `skip_very_good_optimization` tag is only for files that cannot compile or run
 in a VM bundle at all (`@TestOn('browser')`, the macOS goldens). A new
 `@TestOn` file other than `@TestOn('vm')` needs the tag, and the `Test / Player`
