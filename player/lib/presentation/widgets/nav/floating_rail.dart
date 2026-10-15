@@ -40,7 +40,8 @@ class FloatingRail extends ConsumerStatefulWidget {
   /// Back or Escape inside the rail: the shell returns focus to content.
   final VoidCallback? onExitRequested;
 
-  /// Extra top clearance for macOS traffic lights.
+  /// Extra top clearance: the macOS traffic lights, or the status bar on a
+  /// device with no window chrome.
   final double topInset;
 
   static const Duration hoverDelay = Duration(milliseconds: 200);

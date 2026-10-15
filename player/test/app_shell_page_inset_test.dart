@@ -65,6 +65,17 @@ Future<void> _settle(WidgetTester tester) async {
 void main() {
   final inset = Breakpoints.railContentInset(pinned: false);
 
+  testWidgets('the rail clears a tablet status bar', (tester) async {
+    tester.view.padding = const FakeViewPadding(top: 24);
+    final (_, router) = await _pumpApp(tester, size: const Size(1180, 820));
+    router.go('/s/$_id/search');
+    await _settle(tester);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('floating-rail'))).dy,
+      24 + Breakpoints.railInset,
+    );
+  });
+
   testWidgets('a page opened over another never moves it, on any frame',
       (tester) async {
     final (_, router) = await _pumpApp(tester);

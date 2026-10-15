@@ -563,7 +563,14 @@ class _AppShellState extends ConsumerState<AppShell>
                       ? _sidebarFocusNode
                       : null,
                   onExitRequested: onExitRequested,
-                  topInset: chrome.leading > 0 ? chrome.height : 0,
+                  // Clears the macOS traffic lights; with no window chrome
+                  // (phones, tablets, web) the top padding is the status
+                  // bar instead, which the rail must clear too.
+                  topInset: chrome.leading > 0
+                      ? chrome.height
+                      : chrome.isZero
+                          ? MediaQuery.paddingOf(context).top
+                          : 0,
                 ),
               ),
             ),
