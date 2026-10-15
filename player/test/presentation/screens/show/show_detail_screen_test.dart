@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -103,6 +104,8 @@ Future<void> _pumpScreen(
   Size size = const Size(800, 600),
   int? initialSeason,
   String? initialEpisode,
+  // Rebuilds the same screen with a new initialEpisode when it changes.
+  ValueListenable<String?>? initialEpisodes,
 }) {
   final byseason = episodes ??
       {
@@ -112,13 +115,19 @@ Future<void> _pumpScreen(
     episodes: byseason,
     nextUpEpisode: nextUp ?? (defaultNextUp ? _episode(2) : null),
   );
+  Widget screen(String? episode) => ShowDetailScreen.target(
+        target: const SourceTarget(_show),
+        initialSeason: initialSeason,
+        initialEpisode: episode,
+      );
   return pumpDetailScreen(
     tester,
-    ShowDetailScreen.target(
-      target: const SourceTarget(_show),
-      initialSeason: initialSeason,
-      initialEpisode: initialEpisode,
-    ),
+    initialEpisodes == null
+        ? screen(initialEpisode)
+        : ValueListenableBuilder<String?>(
+            valueListenable: initialEpisodes,
+            builder: (context, episode, _) => screen(episode),
+          ),
     [source],
     size: size,
     routes: [
@@ -306,6 +315,26 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pump();
     await tester.pump();
+
+    expect(find.text('S1 · E1'), findsOneWidget);
+    expect(find.text('S1 · E3'), findsNothing);
+  });
+
+  testWidgets('a new initialEpisode on the same screen reselects',
+      (tester) async {
+    final requested = ValueNotifier<String?>('ep-1-3');
+    addTearDown(requested.dispose);
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      initialSeason: 1,
+      initialEpisodes: requested,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('S1 · E3'), findsOneWidget);
+
+    requested.value = 'ep-1-1';
+    await tester.pumpAndSettle();
 
     expect(find.text('S1 · E1'), findsOneWidget);
     expect(find.text('S1 · E3'), findsNothing);

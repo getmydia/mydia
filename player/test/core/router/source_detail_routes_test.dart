@@ -147,6 +147,20 @@ void main() {
     expect(find.text('S1 · E1'), findsNothing);
   });
 
+  // go_router keys a page by its path pattern, so going from one episode to
+  // another reuses the page and its State rather than mounting a new one.
+  testWidgets('going to another episode of the same show reselects',
+      (tester) async {
+    final router = await pumpRouterAt(tester, '/s/$_id/episode/e1');
+    expect(find.text('S1 · E1'), findsOneWidget);
+
+    router.go('/s/$_id/episode/e2');
+    await tester.pumpAndSettle();
+
+    expect(find.text('S1 · E2'), findsOneWidget);
+    expect(find.text('S1 · E1'), findsNothing);
+  });
+
   testWidgets('an episode wins over next up', (tester) async {
     await pumpRouterAt(
       tester,

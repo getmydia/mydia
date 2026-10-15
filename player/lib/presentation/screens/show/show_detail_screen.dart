@@ -388,6 +388,23 @@ class _InitialSelectionSeedState extends ConsumerState<_InitialSelectionSeed> {
   @override
   void initState() {
     super.initState();
+    _seed();
+  }
+
+  /// A screen rebuilt in place for another selection, such as a route that
+  /// keeps its page across parameter changes, seeds again. An unchanged
+  /// request does not, so it never reverts a tap.
+  @override
+  void didUpdateWidget(_InitialSelectionSeed oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.show != widget.show ||
+        oldWidget.season != widget.season ||
+        oldWidget.episode != widget.episode) {
+      _seed();
+    }
+  }
+
+  void _seed() {
     final season = widget.season;
     final episode = widget.episode;
     if (season == null && episode == null) return;
