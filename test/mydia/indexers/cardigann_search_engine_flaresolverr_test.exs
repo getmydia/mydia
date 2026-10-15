@@ -238,6 +238,52 @@ defmodule Mydia.Indexers.CardigannSearchEngineFlareSolverrTest do
                  %{enabled: false}
                )
     end
+
+    test "a later page pinned to the solved mirror reuses the clearance without a second solve",
+         %{site: site, fs: fs, base: base} do
+      test_pid = self()
+      hits = :counters.new(1, [])
+
+      Bypass.expect(site, "GET", "/p1", fn conn ->
+        :counters.add(hits, 1, 1)
+
+        if :counters.get(hits, 1) == 1,
+          do: challenge(conn),
+          else: Plug.Conn.resp(conn, 200, "<html><body>page one</body></html>")
+      end)
+
+      Bypass.expect_once(site, "GET", "/p2", fn conn ->
+        send(test_pid, {:page2_headers, conn.req_headers})
+        Plug.Conn.resp(conn, 200, "<html><body>page two</body></html>")
+      end)
+
+      Bypass.expect_once(fs, "POST", "/v1", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        solution(conn, Jason.decode!(body))
+      end)
+
+      page2 = %{path: "/p2"}
+      definition = scoped_definition([base], [%{path: "/p1"}, page2])
+
+      assert {:ok, first, _markers} =
+               CardigannSearchEngine.execute_search(definition, [query: "x"], %{}, %{
+                 enabled: false
+               })
+
+      assert first.base_url == base
+
+      assert {:ok, second} =
+               CardigannSearchEngine.execute_search(
+                 definition,
+                 [query: "x", search_path: page2, base_url: first.base_url, pin_base_url: true],
+                 %{},
+                 %{enabled: false}
+               )
+
+      assert second.body =~ "page two"
+      assert_receive {:page2_headers, headers}
+      assert Enum.any?(headers, fn {k, v} -> k == "cookie" and v =~ "cf_clearance=solved" end)
+    end
   end
 
   describe "when every FlareSolverr slot stays taken" do

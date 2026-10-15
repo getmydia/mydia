@@ -54,7 +54,6 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:ok, response} = CardigannSearchEngine.execute_search(definition, opts)
   """
 
-  alias Mydia.Indexers.Cardigann.AdapterSupport
   alias Mydia.Indexers.Cardigann.BlockPage
   alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Cardigann.FlareSolverrFlow
@@ -62,10 +61,13 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   alias Mydia.Indexers.Cardigann.TemplateContext
   alias Mydia.Indexers.Cardigann.LoggedOut
   alias Mydia.Indexers.Cardigann.RequestHeaders
+  alias Mydia.Indexers.Cardigann.SearchPaths
+  alias Mydia.Indexers.Cardigann.SearchRequest
   alias Mydia.Indexers.CardigannDefinition.Parsed
   alias Mydia.Indexers.CardigannTemplate
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.FlareSolverr
+  alias Mydia.Indexers.RateLimiter
   alias Mydia.Indexers.FlareSolverr.ClearanceCache
 
   require Logger
@@ -90,14 +92,19 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           config: map() | nil,
           settings: [map()] | nil,
           base_url: String.t() | nil,
-          on_promote: (String.t() -> term()) | nil
+          on_promote: (String.t() -> term()) | nil,
+          search_path: map() | nil,
+          pin_base_url: boolean(),
+          request_timeout_ms: pos_integer() | nil
         ]
 
   @type http_response :: %{
-          status: integer(),
+          required(:status) => integer(),
           # Req decodes a JSON response into a map or a list.
-          body: String.t() | map() | list(),
-          headers: [{String.t(), String.t()}]
+          required(:body) => String.t() | map() | list(),
+          required(:headers) => [{String.t(), String.t()}],
+          # The mirror that answered; set by execute_search/4.
+          optional(:base_url) => String.t()
         }
 
   @type flaresolverr_opts :: %{
@@ -143,7 +150,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   def execute_search(%Parsed{} = definition, opts, user_config, flaresolverr_opts)
       when is_list(opts) do
-    candidates = AdapterSupport.search_candidates(definition, Keyword.get(opts, :base_url))
+    candidates = SearchRequest.candidates(definition, opts)
 
     case candidates do
       [] ->
@@ -208,7 +215,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       cond do
         elem(result, 0) == :ok ->
           if candidate != first_tried, do: promote(opts, candidate)
-          result
+          SearchRequest.with_base_url(result, candidate)
 
         retryable_failure?(result) and rest != [] ->
           try_candidates(
@@ -392,29 +399,28 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
   ## Returns
 
-  - `{:ok, params}` - Map with :query_params, :headers, :method
+  - `{:ok, params}` - Map with :query_params, :headers, :method, :follow_redirect
   - `{:error, reason}` - Parameter building error
 
   ## Examples
 
       iex> definition = %Parsed{search: %{inputs: %{"type" => "search"}}}
       iex> build_request_params(definition, query: "test")
-      {:ok, %{query_params: %{"type" => "search"}, headers: [], method: :get}}
+      {:ok, %{query_params: %{"type" => "search"}, headers: [], method: :get, follow_redirect: nil}}
   """
   @spec build_request_params(Parsed.t(), search_opts()) ::
           {:ok, map()} | {:error, Error.t()}
   def build_request_params(%Parsed{} = definition, opts) do
-    query_params = build_query_params(definition, opts)
-    headers = build_headers(definition)
-    method = get_http_method(definition, opts)
-
-    params = %{
-      query_params: query_params,
-      headers: headers,
-      method: method
-    }
-
-    {:ok, params}
+    with {:ok, path} <- select_search_path(definition, opts) do
+      {:ok,
+       %{
+         query_params: build_query_params(definition, path, opts),
+         headers: build_headers(definition),
+         method: SearchRequest.method(path),
+         follow_redirect: Map.get(path, :follow_redirect)
+       }
+       |> SearchRequest.put_timeout(opts)}
+    end
   end
 
   @doc """
@@ -442,10 +448,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   @spec execute_http_request(Parsed.t(), String.t(), map(), map(), map()) ::
           {:ok, http_response()} | {:error, Error.t()}
   def execute_http_request(%Parsed{} = definition, url, request_params, user_config, config) do
-    # Apply rate limiting if configured
-    apply_rate_limit(definition)
+    throttle = fn -> apply_rate_limit(definition, request_params) end
 
-    # Build request options
+    with {:ok, params} <- SearchRequest.throttled(request_params, throttle) do
+      do_execute_http_request(definition, url, params, user_config, config)
+    end
+  end
+
+  defp do_execute_http_request(definition, url, request_params, user_config, config) do
     req_opts = build_request_options(definition, url, request_params, user_config, config)
 
     Logger.debug("Cardigann search request: #{request_params.method} #{url}")
@@ -518,7 +528,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   def execute_download_request(definition, url, request_params, user_config, config, hops) do
-    apply_rate_limit(definition)
+    :ok = apply_rate_limit(definition, %{})
 
     req_opts =
       definition
@@ -702,36 +712,35 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   end
 
   @doc """
-  Selects the search path config for the given search options.
+  Returns every search path a query runs, in definition order.
 
-  Matches category-specific paths when categories are provided, otherwise
-  returns the first configured path.
+  Definitions paginate by listing one path per page; see
+  `Mydia.Indexers.Cardigann.SearchPaths` for the category rule.
   """
-  @spec select_search_path(Parsed.t(), search_opts()) :: {:ok, map()} | {:error, Error.t()}
-  def select_search_path(%Parsed{search: %{paths: paths}}, opts) do
-    categories = Keyword.get(opts, :categories, [])
-
-    # Find the first path that matches the categories, or use the first path
-    selected_path =
-      if categories != [] do
-        # Find a path that matches the categories, or default to first path
-        Enum.find(paths, fn path ->
-          path_categories = Map.get(path, :categories, [])
-          # Match if path has matching categories
-          path_categories != [] && Enum.any?(categories, &(&1 in path_categories))
-        end) || List.first(paths)
-      else
-        List.first(paths)
-      end
-
-    case selected_path do
-      nil -> {:error, Error.search_failed("No search path configured")}
-      path -> {:ok, path}
-    end
+  @spec matching_search_paths(Parsed.t(), search_opts()) ::
+          {:ok, [map(), ...]} | {:error, Error.t()}
+  def matching_search_paths(%Parsed{search: %{paths: [_ | _] = paths}} = definition, opts) do
+    mappings = Map.get(definition.capabilities || %{}, :categorymappings) || []
+    {:ok, SearchPaths.matching(paths, Keyword.get(opts, :categories, []), mappings)}
   end
 
-  def select_search_path(%Parsed{}, _opts) do
-    {:error, Error.search_failed("No search path configured")}
+  def matching_search_paths(%Parsed{}, _opts),
+    do: {:error, Error.search_failed("No search path configured")}
+
+  @doc """
+  The search path one request uses: `opts[:search_path]` when the caller names
+  one (a later page of a multi-page search), otherwise the first path
+  `matching_search_paths/2` returns.
+  """
+  @spec select_search_path(Parsed.t(), search_opts()) :: {:ok, map()} | {:error, Error.t()}
+  def select_search_path(%Parsed{} = definition, opts) do
+    case Keyword.get(opts, :search_path) do
+      %{} = path ->
+        {:ok, path}
+
+      _ ->
+        with {:ok, [first | _]} <- matching_search_paths(definition, opts), do: {:ok, first}
+    end
   end
 
   # Render a template string using the CardigannTemplate engine
@@ -767,9 +776,8 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
-  defp build_query_params(%Parsed{} = definition, opts) do
-    # Start with inputs from the definition
-    base_params = Map.get(definition.search, :inputs, %{})
+  defp build_query_params(%Parsed{} = definition, path, opts) do
+    base_params = SearchRequest.inputs(definition, path)
     allow_empty = Map.get(definition.search, :allow_empty_inputs, false) == true
 
     # Build template context
@@ -803,35 +811,26 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     end
   end
 
-  defp get_http_method(%Parsed{search: %{paths: paths}}, opts) do
-    categories = Keyword.get(opts, :categories, [])
+  defp apply_rate_limit(%Parsed{request_delay: nil}, _request_params), do: :ok
 
-    # Find the selected path's method
-    selected_path =
-      if categories != [] do
-        Enum.find(paths, List.first(paths), fn path ->
-          path_categories = Map.get(path, :categories, [])
-          path_categories == [] || Enum.any?(categories, &(&1 in path_categories))
-        end)
-      else
-        List.first(paths)
-      end
-
-    method_str = Map.get(selected_path || %{}, :method, "get")
-
-    case String.downcase(method_str) do
-      "post" -> :post
-      _ -> :get
-    end
-  end
-
-  defp apply_rate_limit(%Parsed{request_delay: nil}), do: :ok
-
-  defp apply_rate_limit(%Parsed{request_delay: delay}) when is_number(delay) do
-    # Convert delay to milliseconds if needed (some definitions use seconds)
+  defp apply_rate_limit(%Parsed{id: definition_id, request_delay: delay}, request_params)
+       when is_number(delay) do
+    # Convert delay to milliseconds if needed (some definitions use seconds).
+    # It is a minimum interval between requests to one definition, so the first
+    # request goes straight out.
     delay_ms = if delay < 10, do: trunc(delay * 1000), else: trunc(delay)
-    Process.sleep(delay_ms)
-    :ok
+    key = "cardigann:" <> definition_id
+
+    # A later page carries the paging time it has left; it must not queue past it.
+    case Map.fetch(request_params, :receive_timeout) do
+      {:ok, budget_ms} ->
+        with {:error, :over_budget} <- RateLimiter.throttle(key, delay_ms, budget_ms) do
+          {:error, Error.search_failed("Paging budget spent waiting for requestDelay")}
+        end
+
+      :error ->
+        RateLimiter.throttle(key, delay_ms)
+    end
   end
 
   defp build_request_options(definition, url, request_params, user_config, config) do
@@ -845,14 +844,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
     base_opts = [
       headers: headers,
-      receive_timeout: 30_000,
-      connect_options: [timeout: 10_000],
+      receive_timeout: SearchRequest.receive_timeout(request_params),
+      connect_options: [timeout: SearchRequest.connect_timeout(request_params)],
       # Neither a session cookie nor a clearance cookie (cf_clearance) may ride
       # a redirect to another host: Req carries a manual cookie header across
       # it (see the note on session_cookie_pairs/4). Definition cookies are not
       # credentials, so they alone do not disable redirects.
       redirect:
-        definition.follow_redirect == true and not session_attached? and
+        SearchRequest.follow_redirect?(definition, request_params) and not session_attached? and
           not clearance_attached?,
       retry: false
     ]

@@ -55,6 +55,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
 
   alias Mydia.Indexers.{CardigannParser, CardigannSearchEngine, CardigannResultParser}
   alias Mydia.Indexers.{CardigannDefinition, CardigannFeatureFlags}
+  alias Mydia.Indexers.Cardigann.SearchPages
   alias Mydia.Indexers.Cardigann.SessionManager
   alias Mydia.Indexers.CardigannHealthCheck
   alias Mydia.Indexers.Adapter.Error
@@ -96,43 +97,88 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
       with {:ok, definition} <- fetch_definition(config),
            {:ok, parsed} <- parse_definition(definition),
            {:ok, search_opts} <- build_search_opts(parsed, definition, query, opts),
+           {:ok, [first_path | later_paths]} <-
+             CardigannSearchEngine.matching_search_paths(parsed, search_opts),
+           search_opts <- Keyword.put(search_opts, :paging_deadline, paging_deadline()),
            flaresolverr_opts <- build_flaresolverr_opts(definition),
-           {:ok, response, flaresolverr_result} <-
+           # Only page 1 runs inside the session, so LoggedOut judges page 1 and
+           # a relogin retries page 1 alone.
+           {:ok, response, {flaresolverr_result, user_config}} <-
              SessionManager.with_session(parsed, definition, fn user_config ->
                execute_search_with_flaresolverr(
                  parsed,
-                 search_opts,
+                 Keyword.put(search_opts, :search_path, first_path),
                  user_config,
                  flaresolverr_opts
                )
              end) do
-        # Build template context for filter rendering
-        template_context = build_template_context_for_parsing(parsed, search_opts)
+        parse = page_parser(parsed, definition, config, search_opts)
 
-        # Get base URL for resolving relative URLs
-        base_url =
-          definition.active_link || List.first(Mydia.Indexers.Cardigann.Links.candidates(parsed)) ||
-            ""
-
-        # Parse results with template context and base URL
-        with {:ok, search_path} <- CardigannSearchEngine.select_search_path(parsed, search_opts),
-             {:ok, results} <-
-               CardigannResultParser.parse_results(parsed, response, config.name,
-                 template_context: template_context,
-                 base_url: base_url,
-                 search_path: search_path
-               ) do
-          # Handle FlareSolverr result (update flags)
+        with {:ok, first_rows} <- parse.(first_path, response) do
           handle_flaresolverr_result(definition, flaresolverr_result)
 
-          # Apply filters from opts if present
-          filtered_results = apply_search_filters(results, opts)
-          {:ok, filtered_results}
+          rows =
+            collect_later_pages(
+              first_rows,
+              {parsed, later_paths, search_opts, user_config, flaresolverr_opts},
+              response,
+              parse
+            )
+
+          {:ok, apply_search_filters(rows, opts)}
         end
       end
     else
       Logger.debug("Cardigann search skipped - feature disabled")
       {:ok, []}
+    end
+  end
+
+  # Later pages stop once this much time has passed since the search began, so a
+  # slow site cannot push the whole search past its caller's deadline.
+  @paging_budget_ms 15_000
+
+  defp paging_deadline, do: System.monotonic_time(:millisecond) + @paging_budget_ms
+
+  # An empty page 1 ends the search; otherwise the later pages are best effort.
+  defp collect_later_pages([], _page_args, _response, _parse), do: []
+
+  defp collect_later_pages(
+         first_rows,
+         {parsed, later_paths, search_opts, user_config, flaresolverr_opts},
+         response,
+         parse
+       ) do
+    later_rows =
+      SearchPages.collect(
+        parsed,
+        later_paths,
+        search_opts,
+        user_config,
+        flaresolverr_opts,
+        Map.get(response, :base_url),
+        parse
+      )
+
+    SearchPages.dedupe(first_rows ++ later_rows)
+  end
+
+  # Each page is parsed with its own search path, so a path's declared response
+  # type applies to that page only.
+  defp page_parser(parsed, definition, config, search_opts) do
+    template_context = build_template_context_for_parsing(parsed, search_opts)
+
+    base_url =
+      definition.active_link || List.first(Mydia.Indexers.Cardigann.Links.candidates(parsed)) ||
+        ""
+
+    fn path, response ->
+      CardigannResultParser.parse_results(parsed, response, config.name,
+        template_context: template_context,
+        # The mirror that answered, which differs from the first link after failover.
+        base_url: Map.get(response, :base_url) || base_url,
+        search_path: path
+      )
     end
   end
 
@@ -149,10 +195,10 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
            flaresolverr_opts
          ) do
       {:ok, response, markers} ->
-        {:ok, response, {:flaresolverr_markers, markers}}
+        {:ok, response, {{:flaresolverr_markers, markers}, user_config}}
 
       {:ok, response} ->
-        {:ok, response, :no_flaresolverr}
+        {:ok, response, {:no_flaresolverr, user_config}}
 
       {:error, _} = error ->
         error

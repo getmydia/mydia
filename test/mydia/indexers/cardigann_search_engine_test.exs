@@ -159,7 +159,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       assert url =~ "season=1"
     end
 
-    test "selects correct path based on categories" do
+    test "selects the first path whose site categories map to the query" do
       definition = %Parsed{
         id: "test",
         name: "Test",
@@ -168,11 +168,17 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         type: "public",
         encoding: "UTF-8",
         links: ["https://example.com"],
-        capabilities: %{modes: %{}},
+        capabilities: %{
+          modes: %{},
+          categorymappings: [
+            %{"id" => "1", "cat" => "Movies"},
+            %{"id" => "2", "cat" => "TV"}
+          ]
+        },
         search: %{
           paths: [
-            %{path: "/movies", categories: [2000]},
-            %{path: "/tv", categories: [5000]},
+            %{path: "/movies", categories: ["1"]},
+            %{path: "/tv", categories: ["2"]},
             %{path: "/all"}
           ],
           inputs: %{},
@@ -183,17 +189,26 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         download: nil
       }
 
-      # Should select TV path
-      assert {:ok, url} = CardigannSearchEngine.build_search_url(definition, categories: [5000])
-      assert url == "https://example.com/tv"
+      assert {:ok, "https://example.com/tv"} =
+               CardigannSearchEngine.build_search_url(definition, categories: [5000])
 
-      # Should select movies path
-      assert {:ok, url} = CardigannSearchEngine.build_search_url(definition, categories: [2000])
-      assert url == "https://example.com/movies"
+      assert {:ok, "https://example.com/movies"} =
+               CardigannSearchEngine.build_search_url(definition, categories: [2000])
 
-      # Should select first path (movies) when no categories match
-      assert {:ok, url} = CardigannSearchEngine.build_search_url(definition, categories: [8000])
-      assert url == "https://example.com/movies"
+      # /all has no categories, so it is the only path an unmapped query runs.
+      assert {:ok, "https://example.com/all"} =
+               CardigannSearchEngine.build_search_url(definition, categories: [8000])
+
+      assert {:ok, [%{path: "/movies"}, %{path: "/all"}]} =
+               CardigannSearchEngine.matching_search_paths(definition, categories: [2000])
+
+      assert {:ok, [_, _, _]} = CardigannSearchEngine.matching_search_paths(definition, [])
+
+      assert {:ok, "https://example.com/tv"} =
+               CardigannSearchEngine.build_search_url(definition,
+                 categories: [2000],
+                 search_path: %{path: "/tv"}
+               )
     end
 
     test "handles missing base URL" do
@@ -328,6 +343,86 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
   end
 
   describe "build_request_params/2" do
+    defp two_path_definition(paths) do
+      %Parsed{
+        id: "two-path",
+        name: "Two Path",
+        type: "public",
+        encoding: "UTF-8",
+        links: ["https://example.com"],
+        capabilities: %{modes: %{}},
+        search: %{
+          paths: paths,
+          inputs: %{"q" => "{{ .Keywords }}", "sort" => "seeders"},
+          rows: %{selector: "tr"},
+          fields: %{title: %{selector: "td.title"}}
+        },
+        login: nil,
+        download: nil
+      }
+    end
+
+    test "a path's inputs are added to the search inputs and win on a clash" do
+      page2 = %{path: "/s", inputs: %{"page" => "2", "sort" => "date"}}
+      definition = two_path_definition([%{path: "/s"}, page2])
+
+      assert {:ok, params} =
+               CardigannSearchEngine.build_request_params(definition,
+                 query: "Ubuntu",
+                 search_path: page2
+               )
+
+      assert params.query_params == %{"q" => "Ubuntu", "sort" => "date", "page" => "2"}
+    end
+
+    test "inherit_inputs false sends the path's inputs alone" do
+      page2 = %{path: "/s", inputs: %{"page" => "2"}, inherit_inputs: false}
+      definition = two_path_definition([%{path: "/s"}, page2])
+
+      assert {:ok, params} =
+               CardigannSearchEngine.build_request_params(definition,
+                 query: "Ubuntu",
+                 search_path: page2
+               )
+
+      assert params.query_params == %{"page" => "2"}
+    end
+
+    test "the method comes from the same path as the URL" do
+      get_page = %{path: "/one", method: "get"}
+      post_page = %{path: "/two", method: "post"}
+      definition = two_path_definition([get_page, post_page])
+
+      assert {:ok, %{method: :get}} =
+               CardigannSearchEngine.build_request_params(definition, query: "x")
+
+      assert {:ok, %{method: :post}} =
+               CardigannSearchEngine.build_request_params(definition,
+                 query: "x",
+                 search_path: post_page
+               )
+
+      assert {:ok, "https://example.com/two"} =
+               CardigannSearchEngine.build_search_url(definition,
+                 query: "x",
+                 search_path: post_page
+               )
+    end
+
+    test "carries the path's follow_redirect, nil when the path sets none" do
+      page2 = %{path: "/s", follow_redirect: false}
+      definition = two_path_definition([%{path: "/s"}, page2])
+
+      assert {:ok, %{follow_redirect: nil}} =
+               CardigannSearchEngine.build_request_params(definition, query: "x")
+
+      assert {:ok, %{follow_redirect: false}} =
+               CardigannSearchEngine.build_request_params(definition,
+                 query: "x",
+                 search_path: page2
+               )
+    end
+
     test "builds basic GET request params" do
       definition = %Parsed{
         id: "test",
@@ -632,9 +727,9 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
   end
 
   describe "rate limiting" do
-    test "respects request_delay setting" do
+    test "spaces requests to one definition by request_delay, without delaying the first" do
       definition = %Parsed{
-        id: "test",
+        id: "rate-#{System.unique_integer([:positive])}",
         name: "Test",
         description: "Test indexer",
         language: "en-US",
@@ -650,34 +745,37 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
         },
         login: nil,
         download: nil,
+        # 100ms interval
         request_delay: 0.1,
-        # 100ms delay
         follow_redirect: false
       }
 
-      params = %{
-        query_params: %{},
-        headers: [],
-        method: :get
-      }
+      bypass = Bypass.open()
 
-      start_time = System.monotonic_time(:millisecond)
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        Plug.Conn.resp(conn, 200, "ok")
+      end)
 
-      # This will fail to connect, but we're just testing the delay
-      CardigannSearchEngine.execute_http_request(
-        definition,
-        "https://invalid-domain.example",
-        params,
-        %{},
-        %{}
-      )
+      params = %{query_params: %{}, headers: [], method: :get}
 
-      end_time = System.monotonic_time(:millisecond)
-      elapsed = end_time - start_time
+      request = fn ->
+        started = System.monotonic_time(:millisecond)
 
-      # Should have delayed for at least 100ms
-      # We allow some margin for test execution
-      assert elapsed >= 90
+        CardigannSearchEngine.execute_http_request(
+          definition,
+          "http://localhost:#{bypass.port}/search",
+          params,
+          %{},
+          %{}
+        )
+
+        System.monotonic_time(:millisecond) - started
+      end
+
+      # The first request is not delayed (a local endpoint answers in a few ms).
+      assert request.() < 80
+      # The second one waits out the interval since the first.
+      assert request.() >= 80
     end
   end
 
@@ -1345,6 +1443,29 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
       }
     end
 
+    test "a successful response records the mirror that answered", %{
+      dead_url: dead_url,
+      live_url: live_url
+    } do
+      assert {:ok, %{base_url: ^live_url}} =
+               CardigannSearchEngine.execute_search(
+                 parsed_for([dead_url, live_url]),
+                 [query: "x"],
+                 %{},
+                 %{}
+               )
+    end
+
+    test "pin_base_url tries only the given mirror", %{dead_url: dead_url, live_url: live_url} do
+      assert {:error, %Error{type: :connection_failed}} =
+               CardigannSearchEngine.execute_search(
+                 parsed_for([dead_url, live_url]),
+                 [query: "x", base_url: dead_url, pin_base_url: true],
+                 %{},
+                 %{}
+               )
+    end
+
     test "advances to the next candidate on a transport failure", %{
       dead_url: dead_url,
       live_url: live_url
@@ -1668,6 +1789,27 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
   end
 
   describe "redirect handling" do
+    test "a path's followredirect: false overrides the definition's true" do
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "/moved")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      parsed = redirecting_definition("http://localhost:#{bypass.port}", true)
+      path = %{path: "/search", follow_redirect: false}
+
+      assert {:error, %Error{message: "Redirected (HTTP 302)" <> _}} =
+               CardigannSearchEngine.execute_search(
+                 parsed,
+                 [query: "ubuntu", search_path: path],
+                 %{},
+                 %{}
+               )
+    end
+
     test "follows a redirect by default" do
       bypass = Bypass.open()
 
@@ -1868,6 +2010,43 @@ defmodule Mydia.Indexers.CardigannSearchEngineTest do
                CardigannSearchEngine.execute_search(definition, [query: "x", categories: []], %{})
 
       assert title =~ "Blocked"
+    end
+  end
+
+  describe "execute_search/4 with several search paths" do
+    test "without :search_path only the first matching path is requested" do
+      # The health check and LiveCheck call this way and must stay one request.
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/p1", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          "<html><body><table><tr><td>row</td></tr></table></body></html>"
+        )
+      end)
+
+      parsed = %Parsed{
+        id: "two-pages",
+        name: "Two Pages",
+        type: "public",
+        links: ["http://localhost:#{bypass.port}"],
+        legacylinks: [],
+        encoding: "UTF-8",
+        capabilities: %{},
+        settings: [],
+        search: %{
+          paths: [%{path: "/p1"}, %{path: "/p2"}],
+          inputs: %{},
+          headers: nil,
+          keywordsfilters: [],
+          rows: %{selector: "tr"},
+          fields: %{}
+        }
+      }
+
+      assert {:ok, %{status: 200}} =
+               CardigannSearchEngine.execute_search(parsed, [query: "x"], %{}, %{})
     end
   end
 end
