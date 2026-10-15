@@ -39,23 +39,76 @@ env:
 # explicitly. Their shared setup lives in .github/actions/setup-devenv.
 
 jobs:
-  test:
-    name: Test
+  # Decides which areas a PR touches. Jobs gated on these outputs conclude
+  # `skipped` when nothing relevant changed; none of them carries a required
+  # check name (see the aggregators at the end of this file). On push and
+  # workflow_dispatch both outputs are forced true, so master runs everything.
+  changes:
+    name: Changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend == 'true' }}
+      rust: ${{ github.event_name != 'pull_request' || steps.filter.outputs.rust == 'true' }}
+    steps:
+      - name: Detect relevant changes
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            backend:
+              - 'lib/**'
+              - 'test/**'
+              - 'config/**'
+              - 'priv/**'
+              - 'native/**'
+              - 'plugins/**'
+              - 'plugins-extra/**'
+              - 'patches/**'
+              - 'assets/**'
+              - 'mix.exs'
+              - 'mix.lock'
+              - '.credo.exs'
+              - '.credo.ratchet.exs'
+              - '.formatter.exs'
+              - '.elixir-version'
+              - '.otp-version'
+              - 'beam-version.nix'
+              - 'devenv.nix'
+              - 'devenv.lock'
+              - 'devenv.yaml'
+              - 'rust-toolchain.toml'
+              - 'scripts/**'
+              - 'player/flutter-version.nix'
+              - 'player/lib/graphql/**'
+              - 'player/lib/core/language/language_equivalents.dart'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/setup-devenv/**'
+            rust:
+              - 'native/**'
+              - 'plugins/**'
+              - 'rust-toolchain.toml'
+              - 'scripts/check-rust.sh'
+              - 'scripts/check-plugins.sh'
+              - 'devenv.nix'
+              - 'devenv.lock'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/setup-devenv/**'
 
+  # Shell-only guards over files outside the Elixir tree (Dockerfile,
+  # devenv.nix, player/flatpak, player/appimage). They need no Nix and take
+  # seconds, so they run on every PR whatever it touches.
+  guards:
+    name: Guards
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
-          # mix mydia.ratchet compares against the merge base with origin/master.
-          fetch-depth: 0
           persist-credentials: false
-
-      - name: Set up devenv
-        uses: ./.github/actions/setup-devenv
-        with:
-          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
       # Guard the single source: the Rust version lives in rust-toolchain.toml
       # alone. Each pattern matches one mechanism that used to hold a hand-copied
@@ -187,6 +240,41 @@ jobs:
           fi
           grep -q 'processes\.phoenix\.after = \[ "mydia:ecto@succeeded" \]' devenv.nix || {
             echo "::error::phoenix must wait for mydia:ecto@succeeded, or it boots against an unmigrated database"; exit 1; }
+
+      # The three required contexts in the Master ruleset must never conclude
+      # `skipped` (.github/ci-flakes.md, "Why the list was short"). Each lives on
+      # an aggregator whose only job-level condition is always().
+      - name: Guard the required-check aggregators
+        run: |
+          set -euo pipefail
+          FAIL=0
+          for name in "Test" "Test / PostgreSQL" "Test / E2E Browser"; do
+            count=$(yq "[.jobs[] | select(.name == \"$name\")] | length" .github/workflows/ci.yml)
+            cond=$(yq ".jobs[] | select(.name == \"$name\") | .if" .github/workflows/ci.yml)
+            if [ "$count" != "1" ] || [ "$cond" != "always()" ]; then
+              echo "::error::required check '$name' must be on exactly one job with if: always() (found $count job(s), if: $cond)"
+              FAIL=1
+            fi
+          done
+          exit "$FAIL"
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          # mix mydia.ratchet compares against the merge base with origin/master.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
+        with:
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
       # RustFS is the S3 server for the :s3 storage tests. It runs the same
       # `mydia-s3` script as local dev, so port and credentials come from
