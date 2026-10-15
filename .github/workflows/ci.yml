@@ -30,8 +30,9 @@ env:
   CARGO_HTTP_MULTIPLEXING: "false"
   CARGO_NET_RETRY: "10"
 
-# The devenv jobs below (lint, test-sqlite, dialyzer, test-postgres, e2e) run their steps inside a single `devenv shell --
-# bash` heredoc so the environment evaluates once and `_build` stays warm across
+# The devenv jobs below (lint, test-sqlite, dialyzer, test-postgres, e2e) run
+# their steps inside a single `devenv shell -- bash` heredoc so the environment
+# evaluates once and `_build` stays warm across
 # steps (mirrors `./dev mix precommit`, dev:159-211). The toolchain (Elixir, OTP,
 # Rust + wasm32-wasip2, Node, ffmpeg, chromium/chromedriver) comes from
 # devenv.nix. GitHub sets CI=true, which makes devenv.nix skip its enterShell

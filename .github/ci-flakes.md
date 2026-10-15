@@ -106,6 +106,12 @@ job `skipped`, and whether a ruleset counts a skipped required check as satisfie
 is configuration-dependent. `grep -n "^    if:" .github/workflows/ci-player.yml`
 must return nothing; that is the whole safety net.
 
+`ci.yml` uses a second pattern that meets the same rule. Its gated jobs carry
+non-required names and conclude `skipped` when nothing relevant changed; the
+required names sit on aggregator jobs with `if: always()` that conclude success
+or failure. The `Guard the required-check aggregators` step in `ci.yml` is that
+file's safety net.
+
 Measured behaviour on real PRs: on one touching `native/`, `Build / Web` ran
 4m17s and `Test / Player` 12m57s. On one touching only `site/`, they reported
 `pass` in 2s and 4s.
