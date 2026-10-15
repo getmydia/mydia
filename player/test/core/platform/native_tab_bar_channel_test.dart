@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/platform/native_tab_bar_channel.dart';
@@ -38,6 +40,49 @@ void main() {
             .encodeMethodCall(MethodCall(method, arguments)),
         (_) {},
       );
+
+  group('a failed send', () {
+    test('is sent again by an identical call', () async {
+      var fail = true;
+      messenger.setMockMethodCallHandler(_channel, (call) async {
+        calls.add(call);
+        if (fail) throw PlatformException(code: 'boom');
+        return null;
+      });
+      await bar.setVisible(true);
+      await bar.setTabs(const [_home]);
+      await bar.select('home');
+      await bar.setAccessory(const NativeAccessory(title: 'Cast'));
+      expect(calls, hasLength(4));
+      fail = false;
+      await bar.setVisible(true);
+      await bar.setTabs(const [_home]);
+      await bar.select('home');
+      await bar.setAccessory(const NativeAccessory(title: 'Cast'));
+      expect(calls, hasLength(8));
+      await bar.setVisible(true);
+      expect(calls, hasLength(8));
+    });
+
+    test('does not reset a newer value set while it was in flight', () async {
+      final first = Completer<void>();
+      var n = 0;
+      messenger.setMockMethodCallHandler(_channel, (call) async {
+        calls.add(call);
+        if (n++ == 0) {
+          await first.future;
+          throw PlatformException(code: 'boom');
+        }
+        return null;
+      });
+      final failing = bar.setVisible(true);
+      await bar.setVisible(false);
+      first.complete();
+      await failing;
+      await bar.setVisible(false);
+      expect(calls.map((c) => c.arguments), [true, false]);
+    });
+  });
 
   test('setTabs sends maps and skips an identical list', () async {
     await bar.setTabs(const [_home, _settings]);

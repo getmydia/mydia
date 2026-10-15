@@ -147,41 +147,67 @@ class NativeTabBarChannel {
   Future<void> setTabs(List<NativeTab> tabs) {
     final sent = _tabs;
     if (sent != null && listEquals(sent, tabs)) return Future.value();
-    _tabs = List.unmodifiable(tabs);
-    return _invoke('setTabs', [for (final tab in tabs) tab.toMap()]);
+    final value = List<NativeTab>.unmodifiable(tabs);
+    _tabs = value;
+    return _send('setTabs', [for (final tab in tabs) tab.toMap()], () {
+      if (identical(_tabs, value)) _tabs = null;
+    });
   }
 
   Future<void> select(String id) {
     if (id == _selected) return Future.value();
     _selected = id;
-    return _invoke('select', id);
+    return _send('select', id, () {
+      if (_selected == id) _selected = null;
+    });
   }
 
   Future<void> setVisible(bool visible) {
     if (visible == _visible) return Future.value();
     _visible = visible;
-    return _invoke('setVisible', visible);
+    return _send('setVisible', visible, () {
+      if (_visible == visible) _visible = null;
+    });
   }
 
   Future<void> setAccessory(NativeAccessory? accessory) {
     if (accessory == _accessory) return Future.value();
     _accessory = accessory;
-    return _invoke('setAccessory', accessory?.toMap());
+    return _send('setAccessory', accessory?.toMap(), () {
+      if (_accessory == accessory) _accessory = _unsentAccessory;
+    });
   }
+
+  // A sentinel no real accessory equals, so a failed send is retried even
+  // when the failed value was null (which otherwise means "none sent").
+  static const _unsentAccessory = NativeAccessory(title: '\u0000unsent');
 
   void dispose() {
     _channel.setMethodCallHandler(null);
     unawaited(_events.close());
   }
 
-  Future<void> _invoke(String method, Object? arguments) async {
+  /// Sends, and when the send fails runs [invalidate] so the dedup cache does
+  /// not claim a value native never received. [invalidate] only clears the
+  /// cache when it still holds the failed value.
+  Future<void> _send(
+    String method,
+    Object? arguments,
+    void Function() invalidate,
+  ) async {
+    if (!await _invoke(method, arguments)) invalidate();
+  }
+
+  Future<bool> _invoke(String method, Object? arguments) async {
     try {
       await _channel.invokeMethod<void>(method, arguments);
+      return true;
     } on MissingPluginException catch (e) {
       debugPrint('[NativeTabBar] $method: plugin missing: $e');
     } on PlatformException catch (e) {
       debugPrint('[NativeTabBar] $method failed: $e');
     }
+    return false;
   }
 
   Future<Object?> _onCall(MethodCall call) async {
