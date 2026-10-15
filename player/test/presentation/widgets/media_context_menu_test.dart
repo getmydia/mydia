@@ -7,7 +7,9 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/source.dart';
+import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/presentation/screens/detail/detail_links.dart';
 import 'package:player/presentation/widgets/media_context_menu.dart';
 
 const _source = SourceId('a:b:c');
@@ -19,7 +21,7 @@ final _show = _ref(ItemKind.show, 'show-1');
 
 void main() {
   group('mediaContextActionsFor', () {
-    test('an Up Next episode offers play, its show, and its own details', () {
+    test('an Up Next episode offers play and its show', () {
       final target = MediaContextTarget(
         item: _ref(ItemKind.episode, 'ep-1'),
         show: _show,
@@ -30,7 +32,6 @@ void main() {
       expect(mediaContextActionsFor(target), [
         MediaContextAction.play,
         MediaContextAction.goToShow,
-        MediaContextAction.episodeDetails,
       ]);
     });
 
@@ -60,7 +61,8 @@ void main() {
       );
     });
 
-    test('an episode with no known show omits Go to show', () {
+    // An episode's location opens its show, so the show need not be known.
+    test('an episode with no known show still offers Go to show', () {
       final target = MediaContextTarget(
         item: _ref(ItemKind.episode, 'ep-3'),
         hasFile: true,
@@ -69,7 +71,7 @@ void main() {
 
       expect(
         mediaContextActionsFor(target),
-        isNot(contains(MediaContextAction.goToShow)),
+        contains(MediaContextAction.goToShow),
       );
     });
 
@@ -85,7 +87,7 @@ void main() {
     // Regression for the two holes left by gating only movieDetails on
     // tapPlays. A playable episode on a rail with no play handler used to be
     // offered Play, which routes through a nullable onItemActivate and would
-    // have done nothing, plus an Episode details entry duplicating its own tap.
+    // have done nothing, plus a details entry duplicating its own tap.
     test('a playable episode whose tap navigates earns an empty menu', () {
       final target = MediaContextTarget(
         item: _ref(ItemKind.episode, 'ep-4'),
@@ -163,7 +165,6 @@ void main() {
       expect(mediaContextActionsFor(target), [
         MediaContextAction.play,
         MediaContextAction.goToShow,
-        MediaContextAction.episodeDetails,
         MediaContextAction.removeFromContinueWatching,
       ]);
     });
@@ -182,6 +183,51 @@ void main() {
         MediaContextAction.movieDetails,
         MediaContextAction.removeFromContinueWatching,
       ]);
+    });
+  });
+
+  group('mediaContextLocation', () {
+    test('Go to show on an episode opens the episode on its show', () {
+      final episode = _ref(ItemKind.episode, 'ep-1');
+      final target = MediaContextTarget(item: episode, show: _show);
+
+      expect(
+        mediaContextLocation(MediaContextAction.goToShow, target),
+        detailLocation(SourceTarget(episode)),
+      );
+    });
+
+    test('Go to show on a non-episode opens the show', () {
+      final target = MediaContextTarget(
+        item: _ref(ItemKind.season, 'se-1'),
+        show: _show,
+      );
+
+      expect(
+        mediaContextLocation(MediaContextAction.goToShow, target),
+        detailLocation(SourceTarget(_show)),
+      );
+    });
+
+    test('Movie details opens the movie', () {
+      final movie = _ref(ItemKind.movie, 'mv-1');
+      expect(
+        mediaContextLocation(
+          MediaContextAction.movieDetails,
+          MediaContextTarget(item: movie),
+        ),
+        detailLocation(SourceTarget(movie)),
+      );
+    });
+
+    test('non-navigation entries have no location', () {
+      final target = MediaContextTarget(item: _ref(ItemKind.movie, 'mv-1'));
+      expect(mediaContextLocation(MediaContextAction.play, target), isNull);
+      expect(
+        mediaContextLocation(
+            MediaContextAction.removeFromContinueWatching, target),
+        isNull,
+      );
     });
   });
 }
