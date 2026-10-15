@@ -35,9 +35,9 @@ class SceneDelegate: FlutterSceneDelegate {
       NSLog("[NativeTabBar] root swap skipped: window or FlutterViewController root missing")
       return
     }
-    let tabs = MydiaTabBarController(flutterViewController: flutter)
-    plugin.attach(tabs)
-    window.rootViewController = tabs
+    let root = MydiaRootViewController(flutterViewController: flutter)
+    plugin.attach(root.tabs)
+    window.rootViewController = root
     #endif
   }
 
