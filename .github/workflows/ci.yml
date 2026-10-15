@@ -15,6 +15,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job reads the repository and nothing more. Jobs that need less or more
+# say so themselves.
+permissions:
+  contents: read
+
 env:
   MIX_ENV: test
   # Wasmex carries a local patch in its Rust half (patches/wasmex), so it is
@@ -30,100 +35,88 @@ env:
   CARGO_HTTP_MULTIPLEXING: "false"
   CARGO_NET_RETRY: "10"
 
-# The three Elixir jobs below run their steps inside a single `devenv shell --
-# bash` heredoc so the environment evaluates once and `_build` stays warm across
+# The devenv jobs below (lint, test-sqlite, dialyzer, test-postgres, e2e) run
+# their steps inside a single `devenv shell -- bash` heredoc so the environment
+# evaluates once and `_build` stays warm across
 # steps (mirrors `./dev mix precommit`, dev:159-211). The toolchain (Elixir, OTP,
 # Rust + wasm32-wasip2, Node, ffmpeg, chromium/chromedriver) comes from
 # devenv.nix. GitHub sets CI=true, which makes devenv.nix skip its enterShell
 # setup tasks (KTD7) — each job runs the equivalent setup (hex/rebar/deps/ecto)
-# explicitly. The Nix/Cachix/devenv setup steps are duplicated across the three
-# jobs; a composite action (U2) is a deferred DRY follow-up.
+# explicitly. Their shared setup lives in .github/actions/setup-devenv.
 
 jobs:
-  test:
-    name: Test
+  # Decides which areas a PR touches. Jobs gated on these outputs conclude
+  # `skipped` when nothing relevant changed; none of them carries a required
+  # check name (see the aggregators at the end of this file). On push and
+  # workflow_dispatch both outputs are forced true, so master runs everything.
+  changes:
+    name: Changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend == 'true' }}
+      rust: ${{ github.event_name != 'pull_request' || steps.filter.outputs.rust == 'true' }}
+    steps:
+      - name: Detect relevant changes
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            backend:
+              - 'lib/**'
+              - 'test/**'
+              - 'config/**'
+              - 'priv/**'
+              - 'native/**'
+              - 'nix/**'
+              - 'plugins/**'
+              - 'plugins-extra/**'
+              - 'patches/**'
+              - 'assets/**'
+              - 'mix.exs'
+              - 'mix.lock'
+              - '.credo.exs'
+              - '.credo.ratchet.exs'
+              - '.dialyzer_ignore.exs'
+              - '.formatter.exs'
+              - '.elixir-version'
+              - '.otp-version'
+              - 'beam-version.nix'
+              - 'devenv.nix'
+              - 'devenv.lock'
+              - 'devenv.yaml'
+              - 'rust-toolchain.toml'
+              - 'scripts/**'
+              - 'player/flutter-version.nix'
+              - 'player/lib/graphql/**'
+              - 'player/lib/core/language/language_equivalents.dart'
+              - '.github/workflows/**'
+              - '.github/actions/setup-devenv/**'
+            rust:
+              - 'native/**'
+              - 'plugins/**'
+              - 'rust-toolchain.toml'
+              - 'scripts/check-rust.sh'
+              - 'scripts/check-plugins.sh'
+              - 'devenv.nix'
+              - 'devenv.lock'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/setup-devenv/**'
 
+  # Shell-only guards over files outside the Elixir tree (Dockerfile,
+  # devenv.nix, player/flatpak, player/appimage). They need no Nix and take
+  # seconds, so they run on every PR whatever it touches.
+  guards:
+    name: Guards
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
-          # mix mydia.ratchet compares against the merge base with origin/master.
-          fetch-depth: 0
           persist-credentials: false
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      # Reads devenv's public cache (pre-built common packages, no auth) plus the
-      # project cache; pushes the project's own derivations only on same-repo
-      # events, so fork PRs never receive or use the token (KTD1).
-      - name: Setup Cachix
-        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
-        with:
-          name: mydia
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          extraPullNames: devenv
-          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-
-      # Pin the devenv CLI to the SAME nixpkgs the repo locks (KTD6); rev mirrors
-      # devenv.lock's nixpkgs node — bump both together.
-      - name: Install devenv
-        run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
-
-      # patches/** is in the deps and build keys because `mix deps.get`
-      # patches deps/ in place (deps.patch in mix.exs) and rebuilds what it
-      # patched. Without it a pre-patch deps/ cache is restored and re-patched
-      # on every run, and a pre-patch _build keeps the unpatched Exqlite NIF,
-      # which test/mydia/repo/exqlite_patch_test.exs then fails on.
-      - name: Cache dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: deps
-          key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}
-          restore-keys: |
-            ${{ runner.os }}-deps-devenv-
-
-      - name: Cache build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # priv/native travels with _build, not separately. Rustler writes the
-          # NIF to priv/native (gitignored) and records "built" in a manifest
-          # under _build. Caching only _build restores the manifest without the
-          # .so, so `mix compile` skips the crate and every caller then fails
-          # with "module Mydia.P2p is not available", which points nowhere near
-          # the cache.
-          path: |
-            _build
-            priv/native
-          # The native hash is part of the key AND the restore prefix. _build
-          # holds the compiled Rustler NIF, so restoring a tree built from
-          # different Rust sources yields a stale .so. When that .so lacks a
-          # newly added export the whole module fails to load, and every caller
-          # reports "module Mydia.P2p is not available" rather than anything
-          # pointing at the cache.
-          key: ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
-          restore-keys: |
-            ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
-
-      # Materialize the devenv toolchain with a retry BEFORE the test step. Nix
-      # evaluation can transiently fail with "path '…/test-timeout.patch' is not
-      # valid" when a substituted nixpkgs source (e.g. ffmpeg's libopus) lands
-      # incompletely from the binary cache. Isolating the env build here means a
-      # single flaky substitution is retried cheaply, and the real test step runs
-      # against an already-warm store without retries masking genuine failures.
-      - name: Warm devenv environment
-        run: |
-          for attempt in 1 2 3; do
-            if devenv shell -- true; then exit 0; fi
-            echo "::warning::devenv shell attempt $attempt failed"
-            [ "$attempt" -lt 3 ] && sleep 15
-          done
-          echo "::error::devenv environment failed to materialize after 3 attempts"
-          exit 1
 
       # Guard the single source: the Rust version lives in rust-toolchain.toml
       # alone. Each pattern matches one mechanism that used to hold a hand-copied
@@ -256,26 +249,44 @@ jobs:
           grep -q 'processes\.phoenix\.after = \[ "mydia:ecto@succeeded" \]' devenv.nix || {
             echo "::error::phoenix must wait for mydia:ecto@succeeded, or it boots against an unmigrated database"; exit 1; }
 
-      # RustFS is the S3 server for the :s3 storage tests. It runs the same
-      # `mydia-s3` script as local dev, so port and credentials come from
-      # devenv.nix. The test step sets MYDIA_TEST_S3_REQUIRED so a server that
-      # failed to start fails the job instead of silently skipping those tests.
-      - name: Start RustFS
+      # The three required contexts in the Master ruleset must never conclude
+      # `skipped` (.github/ci-flakes.md, "Why the list was short"). Each lives on
+      # an aggregator whose only job-level condition is always().
+      - name: Guard the required-check aggregators
         run: |
-          # One devenv shell starts the server and polls it. Two shells started
-          # together race to replace devenv's GC-root symlink and the loser
-          # exits 1 with "Failed to remove existing GC root". devenv shell also
-          # prints its banner on stdout, so capturing `printenv` through it
-          # yields the banner too, which is why the poll runs inside.
-          if devenv shell -- bash -c 'setsid nohup mydia-s3 < /dev/null > rustfs.log 2>&1 & for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
-            exit 0
-          fi
-          cat rustfs.log
-          exit 1
+          set -euo pipefail
+          FAIL=0
+          for name in "Test" "Test / PostgreSQL" "Test / E2E Browser"; do
+            count=$(yq -r "[.jobs[] | select(.name == \"$name\")] | length" .github/workflows/ci.yml)
+            cond=$(yq -r ".jobs[] | select(.name == \"$name\") | .if" .github/workflows/ci.yml)
+            if [ "$count" != "1" ] || [ "$cond" != "always()" ]; then
+              echo "::error::required check '$name' must be on exactly one job with if: always() (found $count job(s), if: $cond)"
+              FAIL=1
+            fi
+          done
+          exit "$FAIL"
 
-      - name: Test (SQLite) under devenv
-        env:
-          MYDIA_TEST_S3_REQUIRED: "1"
+  lint:
+    name: Lint
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          # mix mydia.ratchet compares against the merge base with origin/master.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
+        with:
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+
+      - name: Lint under devenv
         run: |
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
@@ -333,17 +344,79 @@ jobs:
           if [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
             UNUSED_CHECK=true mix compile --force || true
           fi
+          DEVENV
+
+  # The SQLite suite runs with max_cases: 1 (test/test_helper.exs), so one
+  # runner took 642s for it (549s of that sync, 2026-10-15). Each shard is its
+  # own runner with its own mydia_test.db, so SQLite still sees one writer.
+  # --partitions sorts the test files and deals them out round-robin, not by
+  # duration, so adding a file can shift later files to another shard; if one
+  # shard runs much longer than the others, raise the count rather than
+  # hand-balancing.
+  test-sqlite:
+    name: Test (SQLite ${{ matrix.partition }}/4)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3, 4]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
+        with:
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+
+      # RustFS is the S3 server for the :s3 storage tests. It runs the same
+      # `mydia-s3` script as local dev, so port and credentials come from
+      # devenv.nix. The test step sets MYDIA_TEST_S3_REQUIRED so a server that
+      # failed to start fails the job instead of silently skipping those tests.
+      - name: Start RustFS
+        run: |
+          # One devenv shell starts the server and polls it. Two shells started
+          # together race to replace devenv's GC-root symlink and the loser
+          # exits 1 with "Failed to remove existing GC root". devenv shell also
+          # prints its banner on stdout, so capturing `printenv` through it
+          # yields the banner too, which is why the poll runs inside.
+          if devenv shell -- bash -c 'setsid nohup mydia-s3 < /dev/null > rustfs.log 2>&1 & for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
+            exit 0
+          fi
+          cat rustfs.log
+          exit 1
+
+      - name: Test (SQLite) under devenv
+        env:
+          MYDIA_TEST_S3_REQUIRED: "1"
+          MIX_TEST_PARTITION: ${{ matrix.partition }}
+        run: |
+          devenv shell -- bash <<'DEVENV'
+          set -euo pipefail
+          export MIX_ENV=test
+          mix local.hex --force --if-missing
+          mix local.rebar --force --if-missing
+          mix deps.get
+          mix compile --warnings-as-errors
           # Soft: downloads the published Cardigann wasm guest (or copies a local
           # build); exits 0 when the asset is not published yet (a PR that changes
           # the guest), so tests needing it skip. See native/cardigann_guest/README.md.
           mix mydia.cardigann_guest fetch
           mix ecto.create
           mix ecto.migrate
-          mix test --cover --warnings-as-errors
+          mix test --partitions 4 --warnings-as-errors
           DEVENV
 
   dialyzer:
     name: Dialyzer
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -352,54 +425,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
         with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
-        with:
-          name: mydia
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          extraPullNames: devenv
-          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-
-      - name: Install devenv
-        run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
-
-      - name: Cache dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: deps
-          key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}
-          restore-keys: |
-            ${{ runner.os }}-deps-devenv-
-
-      # Same key as the Test job, so this restores the _build/test and
-      # priv/native it saved. See the Test job for why both are cached together.
-      - name: Cache build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            _build
-            priv/native
-          key: ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
-          restore-keys: |
-            ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
-
-      # See the Test job: retried so one flaky Nix substitution does not fail
-      # the real step.
-      - name: Warm devenv environment
-        run: |
-          for attempt in 1 2 3; do
-            if devenv shell -- true; then exit 0; fi
-            echo "::warning::devenv shell attempt $attempt failed"
-            [ "$attempt" -lt 3 ] && sleep 15
-          done
-          echo "::error::devenv environment failed to materialize after 3 attempts"
-          exit 1
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
       # Keyed on the toolchain, dependency patches and lock, in that order. A lock
       # change may restore the previous PLT and rebuild incrementally. A patch
@@ -429,38 +459,21 @@ jobs:
 
   rust:
     name: Rust
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
         with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
-        with:
-          name: mydia
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          extraPullNames: devenv
-          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-
-      - name: Install devenv
-        run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
-
-      - name: Warm devenv environment
-        run: |
-          for attempt in 1 2 3; do
-            if devenv shell -- true; then exit 0; fi
-            echo "::warning::devenv shell attempt $attempt failed"
-            [ "$attempt" -lt 3 ] && sleep 15
-          done
-          echo "::error::devenv environment failed to materialize after 3 attempts"
-          exit 1
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          elixir-caches: 'false'
+          cargo-cache: 'false'
 
       # Same script as the native-rust pre-commit hook, so a commit made
       # outside devenv (which skips the hook) is still gated here.
@@ -488,8 +501,14 @@ jobs:
         run: devenv shell -- cargo test --manifest-path native/mydia_subsync/Cargo.toml
 
   test-postgres:
-    name: Test / PostgreSQL
+    name: Test / PostgreSQL (${{ matrix.partition }}/3)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3]
 
     services:
       postgres:
@@ -510,65 +529,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
         with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
-        with:
-          name: mydia
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          extraPullNames: devenv
-          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-
-      - name: Install devenv
-        run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
-
-      # patches/** is in the deps and build keys because `mix deps.get`
-      # patches deps/ in place (deps.patch in mix.exs) and rebuilds what it
-      # patched. Without it a pre-patch deps/ cache is restored and re-patched
-      # on every run, and a pre-patch _build keeps the unpatched Exqlite NIF,
-      # which test/mydia/repo/exqlite_patch_test.exs then fails on.
-      - name: Cache dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: deps
-          key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}
-          restore-keys: |
-            ${{ runner.os }}-deps-devenv-
-
-      - name: Cache build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # priv/native travels with _build, not separately. Rustler writes the
-          # NIF to priv/native (gitignored) and records "built" in a manifest
-          # under _build. Caching only _build restores the manifest without the
-          # .so, so `mix compile` skips the crate and every caller then fails
-          # with "module Mydia.P2p is not available", which points nowhere near
-          # the cache.
-          path: |
-            _build
-            priv/native
-          # See the `test` job: the native hash must gate the restore too, or a
-          # stale NIF comes back and the module fails to load.
-          key: ${{ runner.os }}-build-v2-devenv-postgres-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
-          restore-keys: |
-            ${{ runner.os }}-build-v2-devenv-postgres-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
-
-      # See the `test` job for why the environment is warmed (with retry) before
-      # the test step — guards against transient Nix substitution failures.
-      - name: Warm devenv environment
-        run: |
-          for attempt in 1 2 3; do
-            if devenv shell -- true; then exit 0; fi
-            echo "::warning::devenv shell attempt $attempt failed"
-            [ "$attempt" -lt 3 ] && sleep 15
-          done
-          echo "::error::devenv environment failed to materialize after 3 attempts"
-          exit 1
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          build-cache-prefix: build-v2-devenv-postgres
 
       # RustFS is the S3 server for the :s3 storage tests. It runs the same
       # `mydia-s3` script as local dev, so port and credentials come from
@@ -592,9 +558,14 @@ jobs:
       # `services: postgres` container. DATABASE_TYPE is set here (not at job/eval
       # level) so the compile-time adapter is Postgres without devenv defining an
       # unused devenv-managed Postgres service at eval time (KTD4).
+      #
+      # DATABASE_NAME is set explicitly, so config/test.exs's MIX_TEST_PARTITION
+      # suffix does not apply. Each shard has its own Postgres container, so they
+      # do not collide.
       - name: Test (PostgreSQL) under devenv
         env:
           MYDIA_TEST_S3_REQUIRED: "1"
+          MIX_TEST_PARTITION: ${{ matrix.partition }}
         run: |
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
@@ -616,81 +587,24 @@ jobs:
           mix ecto.create
           mix ecto.migrate
           mix ecto.migrations
-          mix test --cover --warnings-as-errors
+          mix test --partitions 3 --warnings-as-errors
           DEVENV
 
   test-e2e:
-    name: Test / E2E Browser
+    name: Test / E2E Browser (run)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
         with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
-        with:
-          name: mydia
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          extraPullNames: devenv
-          skipPush: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-
-      - name: Install devenv
-        run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
-
-      # patches/** is in the deps and build keys because `mix deps.get`
-      # patches deps/ in place (deps.patch in mix.exs) and rebuilds what it
-      # patched. Without it a pre-patch deps/ cache is restored and re-patched
-      # on every run, and a pre-patch _build keeps the unpatched Exqlite NIF,
-      # which test/mydia/repo/exqlite_patch_test.exs then fails on.
-      - name: Cache dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: deps
-          key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}
-          restore-keys: |
-            ${{ runner.os }}-deps-devenv-
-
-      - name: Cache build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # priv/native travels with _build, not separately. Rustler writes the
-          # NIF to priv/native (gitignored) and records "built" in a manifest
-          # under _build. Caching only _build restores the manifest without the
-          # .so, so `mix compile` skips the crate and every caller then fails
-          # with "module Mydia.P2p is not available", which points nowhere near
-          # the cache.
-          path: |
-            _build
-            priv/native
-          # The native hash is part of the key AND the restore prefix. _build
-          # holds the compiled Rustler NIF, so restoring a tree built from
-          # different Rust sources yields a stale .so. When that .so lacks a
-          # newly added export the whole module fails to load, and every caller
-          # reports "module Mydia.P2p is not available" rather than anything
-          # pointing at the cache.
-          key: ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
-          restore-keys: |
-            ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
-
-      # See the `test` job for why the environment is warmed (with retry) before
-      # the test step — guards against transient Nix substitution failures (this
-      # job hit the libopus "path is not valid" flake most often).
-      - name: Warm devenv environment
-        run: |
-          for attempt in 1 2 3; do
-            if devenv shell -- true; then exit 0; fi
-            echo "::warning::devenv shell attempt $attempt failed"
-            [ "$attempt" -lt 3 ] && sleep 15
-          done
-          echo "::error::devenv environment failed to materialize after 3 attempts"
-          exit 1
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
       # chromium + chromedriver come from devenv (devenv.nix sets CHROME_PATH /
       # CHROMEDRIVER_PATH); run-feature-tests.sh finds chromium on PATH and honors
@@ -716,3 +630,49 @@ jobs:
           name: wallaby-screenshots
           path: tmp/wallaby_screenshots/
           retention-days: 7
+
+  # Required contexts live on these aggregators, never on gated jobs: a job
+  # skipped by `if:` concludes `skipped`, and whether the ruleset counts that as
+  # passing is configuration-dependent (.github/ci-flakes.md). These always run
+  # and conclude success or failure. `Guards` enforces the always() condition.
+  test:
+    name: Test
+    needs: [changes, guards, lint, test-sqlite]
+    if: always()
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to pass or skip
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
+
+  test-postgres-result:
+    name: Test / PostgreSQL
+    needs: [changes, test-postgres]
+    if: always()
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to pass or skip
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
+
+  test-e2e-result:
+    name: Test / E2E Browser
+    needs: [changes, test-e2e]
+    if: always()
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to pass or skip
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null

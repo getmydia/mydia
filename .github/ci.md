@@ -66,8 +66,8 @@ downstream, since the build aborts before the Rust crate vendoring even starts.
 nothing else may name either. `beam-version.nix` resolves the pair from one
 nixpkgs beam set and throws when the pinned nixpkgs lacks the OTP set or the
 Elixir attribute under it. `devenv.nix` imports that resolver and is the
-toolchain for both local development and all three Elixir jobs in `ci.yml`,
-which run their steps inside `devenv shell`. `nix/packages/flake-module.nix`
+toolchain for both local development and every devenv job in `ci.yml`, which
+run their steps inside `devenv shell`. `nix/packages/flake-module.nix`
 imports it too, for the release build and the NixOS module VM tests.
 
 The Dockerfile's builder is digest-pinned and cannot read a file, so
@@ -419,13 +419,14 @@ Four gotchas around it:
 ### The Dialyzer job
 
 `ci.yml`'s `Dialyzer` job runs `mix dialyzer --format github` in `MIX_ENV=test`
-and fails on any finding. It reuses the Test job's `Cache build` key, so it
-restores the same `_build/test` and `priv/native`. The PLTs live in `priv/plts`
+and fails on any finding. It shares the SQLite shards' `Cache build` key (the
+default `build-cache-prefix`), so it restores the same `_build/test` and
+`priv/native`. The PLTs live in `priv/plts`
 under their own cache, keyed on `.elixir-version`, `.otp-version`, `patches/**` and `mix.lock`
 (in that order), with a restore prefix on the toolchain and patches so a lock
 change rebuilds incrementally. A patch change never restores an older PLT, since
 dialyxir compares dependency versions, not beam contents.
-The Test job greps `mix.exs` for `ignore_warnings`, `lib/` and `test/support/` for `@dialyzer`,
+The `Lint` job greps `mix.exs` for `ignore_warnings`, `lib/` and `test/support/` for `@dialyzer`,
 and checks for a `.dialyzer_ignore.exs` file (Dialyxir loads it by default without any
 `mix.exs` setting). It fails if any of the three appears. The policy is in `CONTRIBUTING.md`.
 
@@ -439,8 +440,8 @@ clippy)" (`scripts/check-rust.sh`) and "Lint wasm plugins (fmt + clippy)"
 so a crate added there is gated locally and in CI at the same time. `server/` has
 its own workflow, `ci-server.yml`.
 
-Both Elixir test jobs run `mix test --warnings-as-errors`, which aborts the run
-after the tests finish when a test file emitted a compile warning. LiveViewTest
+The SQLite and PostgreSQL shards run `mix test --warnings-as-errors`, which
+aborts the run after the tests finish when a test file emitted a compile warning. LiveViewTest
 warnings raise through `config :phoenix_live_view, :test_warnings, :raise` in
 `config/test.exs`, so they fail the individual test instead.
 
@@ -451,7 +452,9 @@ The regression signal is already free on every run: ExUnit's
 here, because `test/test_helper.exs` pins `max_cases: 1` on SQLite and
 `Mydia.DataCase` forces database tests to `async: false`, so the suite is
 overwhelmingly serial and a slowdown shows up as sync time climbing. Measured on
-master 2026-09-03: `876.4 seconds (59.1s async, 817.3s sync)`.
+master 2026-09-03: `876.4 seconds (59.1s async, 817.3s sync)`. Since the suite
+is sharded (below), each shard prints its own line, so compare a shard against
+the same shard rather than against that whole-suite figure.
 
 To find *which* tests are slow, profile on demand rather than in CI:
 
@@ -465,6 +468,98 @@ test timeout to `:infinity` (`mix help test`; ExUnit's `max_cases/1` checks
 `opts[:trace]` before any explicit `--max-cases`). On the PostgreSQL job that
 silently serializes the whole suite, and on both jobs it means a hung test runs
 until the GitHub job timeout instead of failing fast.
+
+## ci.yml: path gate, shards and aggregators
+
+Measured 2026-10-15, before this layout: `ci.yml`'s PR median was 20 minutes,
+the SQLite suite took 642s on one runner (549s of it sync, `max_cases: 1`) and
+the PostgreSQL suite 560s (506.6s sync). The workflow is now a graph of a gate,
+parallel lanes and three aggregators.
+
+The `changes` job runs `dorny/paths-filter` on pull requests and emits two
+outputs, `backend` and `rust`. `Lint`, the SQLite and PostgreSQL shards,
+`Dialyzer` and the E2E job run only when `backend` is true; `Rust` runs when
+`rust` is true. On push and `workflow_dispatch` the filter step is skipped and
+both outputs are forced true, so master always runs everything. The filter is an
+allowlist: a PR touching only paths missing from the `backend` list skips the
+whole Elixir suite and still goes green. Any new top-level input to the build,
+such as a new directory the compile reads or a new version pin file, must be
+added to `backend` in the same PR.
+
+`Guards` is outside the gate and runs on every PR. It checks Dockerfile,
+`devenv.nix`, flatpak and appimage files rather than Elixir, needs no Nix and
+takes seconds. `Lint` holds what used to precede the tests in the old `Test`
+job: compile with warnings as errors, format, the Credo, Dialyzer and
+DEPRECATED guard greps, `mix credo --strict` and the ratchet. The
+tests no longer run with `--cover`, which the old jobs passed to `mix test`.
+
+The SQLite suite runs as four shards (`Test (SQLite N/4)`) and the PostgreSQL
+suite as three (`Test / PostgreSQL (N/3)`), each a separate runner using
+`mix test --partitions`. SQLite stays at `max_cases: 1` inside every runner,
+since the suite shares one writer per database; each shard has its own
+`mydia_test.db` (a fixed path, so this holds because shards are separate
+runners, not because of a partition suffix), and the constraint holds. `--partitions` sorts the test files and
+deals them out round-robin, not by duration, so adding a test file can shift
+later files to another shard. If one shard runs well over the others, raise the count
+in the matrix and in the `--partitions` argument rather than moving files by
+hand.
+
+The names `Test`, `Test / PostgreSQL` and `Test / E2E Browser` are required by
+the Master ruleset, and they sit on three aggregator jobs (`test`,
+`test-postgres-result`, `test-e2e-result`), not on the gated jobs. `Test`
+needs `Guards`, `Lint` and the SQLite shards, so it covers more than the suite.
+Each has
+`if: always()` and a step that fails unless every job it needs concluded
+`success` or `skipped`, so the aggregator itself concludes success or failure
+and never `skipped`. The real E2E job is named `Test / E2E Browser (run)` for
+that reason, and its screenshot artifact hangs off it. The `Guard the
+required-check aggregators` step in `Guards` checks with `yq` that each
+required name sits on exactly one job whose `if` is `always()`. See
+`ci-flakes.md`, "Why the list was short".
+
+`Lint`, the SQLite and PostgreSQL shards, `Dialyzer`, `Rust` and the E2E job
+start with the `.github/actions/setup-devenv` composite action, which installs
+Nix, Cachix and devenv. `Changes`, `Guards` and the aggregators do not use it.
+By default the action also restores `deps/`, `_build` plus `priv/native`, and
+`native/*/target`. `Rust` turns both the Elixir caches and the cargo cache off,
+since it builds no Mix project. The PostgreSQL shards keep their own `_build`
+key family, `build-v2-devenv-postgres`, because their compile differs from the
+SQLite one; every other job shares `build-v2-devenv`. The cargo target cache
+exists because a `_build` miss used to rebuild the iroh-based Rustler crates
+from scratch.
+
+The Actions cache has a 10 GB limit per repository, and it is evicted least
+recently used first. On 2026-10-15 it held 10.6 GB, 3.8 GB of that two
+`flutter-windows` SDK entries, so eviction had been dropping the 155 MB `_build`
+cache and about 5 of 12 PR runs recompiled deps and NIFs from scratch. Dropping
+the Windows SDK cache was not enough. Later that day the cache held 10.79 GB:
+7.2 GB in 163 `buildkit-blob-*` entries (Docker `type=gha` layer caches written
+with `mode=max`), 2.2 GB in one `flutter-macos-stable-*` SDK entry, and only
+about 0.7 GB for everything `ci.yml` needs. Warm PR CI measured about 8 minutes
+and cold about 20, so the cure was to get the big entries out of the budget:
+
+- The Windows and macOS Flutter SDKs are not cached (`player-windows.yml`,
+  `player-macos.yml`, `player-ios.yml`; their comments explain the choice). The
+  SDK download costs about a minute.
+- Docker layer caches no longer use `type=gha`. They are `type=registry` tags
+  named `buildcache*` on the existing public GHCR packages, which do not count
+  against the Actions cache: `:buildcache-sqlite` and `:buildcache-postgres`
+  (written by `ci-docker.yml` and, for amd64 only, `release.yml`) and
+  `:buildcache-cwasm-<arch>` (`cardigann-cwasm.yml`, never on pull requests) on
+  the main image package, `metadata-relay:buildcache` (`ci-relay.yml` publish,
+  and `ci-player-e2e.yml` on push) and `player-e2e-toolbox:buildcache`
+  (`publish-toolbox`). `ci-player-e2e.yml` only reads the server tags. Tags on
+  existing packages rather than a new package, because a new package starts
+  private and fork PRs and anonymous pulls must be able to read the cache.
+  Exports use `mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true`,
+  which GHCR needs for cache manifests and which keeps a failed cache push from
+  failing the build.
+
+Check the budget with:
+
+```bash
+gh api repos/getmydia/mydia/actions/cache/usage
+```
 
 ## The precompiled Cardigann guest
 

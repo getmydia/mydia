@@ -34,7 +34,7 @@ need chromedriver. devenv provides chromium and chromedriver in-shell and sets
 `CHROME_PATH` / `CHROMEDRIVER_PATH`, so no extra setup is required.
 
 Screenshots of failures land in `tmp/wallaby_screenshots/`. CI uploads them as an
-artifact on the `Test / E2E Browser` job.
+artifact on the `Test / E2E Browser (run)` job.
 
 ## What belongs in a browser test
 

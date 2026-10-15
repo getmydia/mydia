@@ -49,7 +49,8 @@ jobs:
     #
     # Gating on the test job also created a deadlock that does not
     # self-recover: a failing or timed-out test run blocked both the registry
-    # tag AND the player-toolbox cache scope from ever refreshing, so the next
+    # tag AND the player-e2e-toolbox:buildcache layer cache from ever
+    # refreshing, so the next
     # push started from the same cold state that caused the failure. See the
     # timeout-minutes comment on test-player-e2e.
     permissions:
@@ -77,8 +78,10 @@ jobs:
           file: ./player/Dockerfile.test
           push: true
           tags: ghcr.io/${{ github.repository }}/player-e2e-toolbox:master
-          cache-from: type=gha,scope=player-toolbox
-          cache-to: type=gha,mode=max,scope=player-toolbox
+          # Layer cache is a registry tag on the same public package, not the
+          # Actions cache (see .github/ci.md).
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/player-e2e-toolbox:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/player-e2e-toolbox:buildcache,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true
 
   test-player-e2e:
     name: Test / Player E2E
@@ -95,8 +98,8 @@ jobs:
     #
     # publish-toolbox now runs independently of this job's outcome: it has no
     # `needs: test-player-e2e`, and it is the sole writer of the
-    # player-toolbox cache scope. A timed-out or failed run here no longer
-    # starves the toolbox registry tag or its cache, so the cap is purely a
+    # player-e2e-toolbox:buildcache layer cache. A timed-out or failed run here
+    # no longer starves the toolbox registry tag or its cache, so the cap is purely a
     # runaway guard now, not a deadlock prevention mechanism.
     #
     # Measured cold non-PR runs on this design are 22m48s and 25m22s, so 30
@@ -104,9 +107,11 @@ jobs:
     # cost of a generous runaway guard is nothing, and there is no deadlock
     # cost left to weigh against it.
     timeout-minutes: 60
+    # write, not read: push runs export the relay layer cache to the
+    # metadata-relay:buildcache tag (see "Resolve toolbox and relay images").
     permissions:
       contents: read
-      packages: read
+      packages: write
 
     steps:
       - name: Checkout
@@ -196,28 +201,6 @@ jobs:
         if: steps.should.outputs.run == 'true'
         uses: docker/setup-buildx-action@v4
 
-      # Exposes ACTIONS_RUNTIME_TOKEN and ACTIONS_CACHE_URL/ACTIONS_RESULTS_URL
-      # to the job environment. GitHub injects those into actions only, never
-      # into `run:` steps, and both resolve steps below call `docker buildx
-      # build` from a `run:` step. Without this, every `--cache-from` and
-      # `--cache-to type=gha` in this job is a SILENT no-op: BuildKit skips the
-      # cache backend and the build succeeds anyway, so nothing points at the
-      # problem.
-      #
-      # Measured on run 33444861643, a green master push, before this step
-      # existed: the only build that logged `importing cache manifest` was the
-      # `Publish / Toolbox` job, which uses `docker/build-push-action`. The
-      # server build imported no manifest and produced zero CACHED layers
-      # across a 12m30s run. The `player-toolbox` cache scope had exactly one
-      # entry ever, written by that same action-based job.
-      #
-      # Do NOT delete this as redundant with setup-buildx-action. That action
-      # creates the builder; it does not put the runtime token in the
-      # environment of later `run:` steps.
-      - name: Expose GitHub Actions runtime for BuildKit
-        if: steps.should.outputs.run == 'true'
-        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
-
       # The resolve steps below replace the former `docker compose build`.
       # They pull by default and build only what a PR actually changed, which
       # removes the cold-build cost from the common path rather than trying to
@@ -236,13 +219,17 @@ jobs:
       # cold build that cannot finish inside the job budget never exports a
       # cache. That is addressed from both ends: pulls mean most runs never
       # build at all, and the relay build below still exports cache on push
-      # runs so a cold run leaves something warm behind. The toolbox scope is
+      # runs so a cold run leaves something warm behind. The toolbox cache is
       # no longer written from here; publish-toolbox writes it instead.
       #
-      # Both halves of that only became true on 2026-09-01, when the runtime
-      # step above was added. Every cache flag in this job was inert before
-      # then, so any build timing recorded in these comments and dated earlier
-      # describes a fully cold build with no cache reads or writes.
+      # The layer caches are registry tags (`buildcache`, `buildcache-sqlite`)
+      # on the public GHCR packages, read here without a login, so they work
+      # from these `run:` steps with no runtime token. Until 2026-09-01 they
+      # were Actions-cache (GHA) layer caches, which were a silent no-op from a `run:` step
+      # (BuildKit skips a cache backend it has no token for and the build
+      # succeeds anyway), so any build timing recorded in these comments and
+      # dated earlier describes a fully cold build with no cache reads or
+      # writes.
       - name: Log in to registry
         if: steps.should.outputs.run == 'true'
         uses: docker/login-action@v4
@@ -275,7 +262,7 @@ jobs:
               --file Dockerfile \
               --build-arg DATABASE_TYPE=sqlite \
               --build-arg BUILD_COMMIT=${{ github.sha }} \
-              --cache-from type=gha,scope=docker-sqlite \
+              --cache-from type=registry,ref=ghcr.io/${{ github.repository }}:buildcache-sqlite \
               --load \
               --tag "$IMAGE" \
               .
@@ -293,17 +280,18 @@ jobs:
 
           # cache-to here is a deliberate, narrow exception to the
           # cache-from-only rule that governs this workflow everywhere else.
-          # That rule exists so this workflow never writes to ci-docker.yml's
-          # docker-sqlite scope: the GHA cache is capped at 10 GB with LRU
-          # eviction, and docker-sqlite is populated by a different workflow,
-          # so writing to it here would evict entries that workflow depends
-          # on. relay-master is an exception: only ci-relay.yml and this job
-          # ever write to it, and ci-relay.yml runs only on metadata-relay
-          # paths so concurrency is rare. publish-toolbox owns the
-          # player-toolbox scope exclusively since publish-toolbox stopped
-          # waiting on this job's test result, which is what used to justify
-          # populating that scope from here; this job reads the scope but
-          # does not write it. Populating relay on push builds means even a
+          # That rule exists so this workflow never writes the
+          # `:buildcache-sqlite` tag that ci-docker.yml and release.yml own:
+          # a registry cache tag is overwritten wholesale by each export, so a
+          # write here would replace the layers those workflows built from
+          # the real master commit with this job's. `:buildcache` on the
+          # metadata-relay package is an exception: only ci-relay.yml and
+          # this job ever write to it, and ci-relay.yml runs only on
+          # metadata-relay paths so concurrency is rare. publish-toolbox owns
+          # the player-e2e-toolbox `:buildcache` tag exclusively since
+          # publish-toolbox stopped waiting on this job's test result, which
+          # is what used to justify populating it from here; this job reads
+          # the tag but does not write it. Populating relay on push builds means even a
           # timed-out first run leaves a warm cache behind, so the next push
           # is fast instead of repeating the same cold build.
           # Restricted to push events only, to match the registry tags
@@ -311,10 +299,11 @@ jobs:
           # pull_request build's layers are not something master's cache
           # should be seeded from, and neither is a workflow_dispatch build's:
           # a manual run from a feature branch, such as while smoke testing
-          # this workflow, must not seed the shared relay-master scope.
+          # this workflow, must not seed the shared relay cache tag.
+          RELAY_CACHE_REF=ghcr.io/${{ github.repository }}/metadata-relay:buildcache
           RELAY_CACHE_TO=()
           if [ "${{ github.event_name }}" = "push" ]; then
-            RELAY_CACHE_TO=(--cache-to type=gha,mode=max,scope=relay-master)
+            RELAY_CACHE_TO=(--cache-to "type=registry,ref=${RELAY_CACHE_REF},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true")
           fi
 
           TOOLBOX=ghcr.io/${{ github.repository }}/player-e2e-toolbox:master
@@ -333,7 +322,7 @@ jobs:
             TOOLBOX=player-e2e-toolbox:pr
             docker buildx build \
               --file player/Dockerfile.test \
-              --cache-from type=gha,scope=player-toolbox \
+              --cache-from type=registry,ref=ghcr.io/${{ github.repository }}/player-e2e-toolbox:buildcache \
               --load --tag "$TOOLBOX" .
           fi
 
@@ -353,7 +342,7 @@ jobs:
             RELAY=metadata-relay:pr
             docker buildx build \
               --file metadata-relay/Dockerfile \
-              --cache-from type=gha,scope=relay-master \
+              --cache-from type=registry,ref=${RELAY_CACHE_REF} \
               "${RELAY_CACHE_TO[@]}" \
               --load --tag "$RELAY" .
           fi

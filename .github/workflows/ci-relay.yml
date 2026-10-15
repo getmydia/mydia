@@ -116,8 +116,10 @@ jobs:
           file: ./metadata-relay/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}/metadata-relay:master
-          cache-from: type=gha,scope=relay-master
-          cache-to: type=gha,mode=max,scope=relay-master
+          # Layer cache is a registry tag on the same public package, not the
+          # Actions cache (see .github/ci.md).
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/metadata-relay:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/metadata-relay:buildcache,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true
 
   status:
     name: Status Check

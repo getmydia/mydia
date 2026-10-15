@@ -61,6 +61,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
+      packages: write
     outputs:
       tag: ${{ steps.names.outputs.tag }}
       skip: ${{ steps.names.outputs.skip }}
@@ -116,14 +117,33 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
         if: steps.names.outputs.skip != 'true' && steps.guest.outputs.missing != 'true'
 
+      # Only to push the layer cache. Pull requests read it anonymously (the
+      # package is public) and never write it.
+      - name: Login to registry
+        if: >-
+          github.event_name != 'pull_request' &&
+          steps.names.outputs.skip != 'true' && steps.guest.outputs.missing != 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The layer cache is a registry tag on the public image package
+      # (buildcache-cwasm-<arch>), not the 10 GB Actions cache (.github/ci.md).
       - name: Precompile
         if: steps.names.outputs.skip != 'true' && steps.guest.outputs.missing != 'true'
         run: |
+          cache_ref="ghcr.io/${GH_REPO}:buildcache-cwasm-${MATRIX_ARCH}"
+          cache_to=()
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            cache_to=(--cache-to "type=registry,ref=${cache_ref},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true")
+          fi
           docker buildx build --target cwasm-out \
             --build-context guest=guest \
             --build-arg CWASM_ASSET="${CWASM_ASSET}" \
-            --cache-from "type=gha,scope=cwasm-${MATRIX_ARCH}" \
-            --cache-to "type=gha,mode=max,scope=cwasm-${MATRIX_ARCH}" \
+            --cache-from "type=registry,ref=${cache_ref}" \
+            "${cache_to[@]}" \
             --output type=local,dest=out .
           ls -l out
           # A build that exits 0 without both files must not look like "guest
@@ -134,6 +154,7 @@ jobs:
         env:
           CWASM_ASSET: ${{ steps.names.outputs.asset }}
           MATRIX_ARCH: ${{ matrix.arch }}
+          EVENT_NAME: ${{ github.event_name }}
 
       - name: Upload for this run
         if: steps.names.outputs.skip != 'true' && steps.guest.outputs.missing != 'true'

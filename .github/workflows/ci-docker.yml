@@ -69,5 +69,7 @@ jobs:
             BUILD_COMMIT=${{ github.sha }}
           push: ${{ github.event_name == 'push' }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag }}
-          cache-from: type=gha,scope=docker-${{ matrix.db }}
-          cache-to: type=gha,mode=max,scope=docker-${{ matrix.db }}
+          # Layer cache lives in a registry tag on the public GHCR package, not
+          # the 10 GB Actions cache it used to crowd out (see .github/ci.md).
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.db }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.db }},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true
