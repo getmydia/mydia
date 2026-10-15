@@ -2633,6 +2633,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (identical(_player, player)) {
       _player = null;
       _videoController = null;
+      releaseHlsEngine(player);
       await player.dispose();
     }
     return true;
@@ -4920,6 +4921,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final player = _player;
     _player = null;
     _videoController = null;
+    // Before `dispose()`, or the hls.js media_kit leaks restarts playback on
+    // the detached element: see `releaseHlsEngine`.
+    if (player != null) releaseHlsEngine(player);
     player?.dispose();
     _focusNode.dispose();
     _osdPlayPauseFocus.dispose();
@@ -5330,6 +5334,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _progressService?.stopSync();
     _stopStatsCollector();
 
+    if (player != null) releaseHlsEngine(player);
     await player?.dispose();
   }
 
