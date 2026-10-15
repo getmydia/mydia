@@ -99,6 +99,7 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
            {:ok, search_opts} <- build_search_opts(parsed, definition, query, opts),
            {:ok, [first_path | later_paths]} <-
              CardigannSearchEngine.matching_search_paths(parsed, search_opts),
+           search_opts <- Keyword.put(search_opts, :paging_deadline, paging_deadline()),
            flaresolverr_opts <- build_flaresolverr_opts(definition),
            # Only page 1 runs inside the session, so LoggedOut judges page 1 and
            # a relogin retries page 1 alone.
@@ -132,6 +133,12 @@ defmodule Mydia.Indexers.Adapter.Cardigann do
       {:ok, []}
     end
   end
+
+  # Later pages stop once this much time has passed since the search began, so a
+  # slow site cannot push the whole search past its caller's deadline.
+  @paging_budget_ms 15_000
+
+  defp paging_deadline, do: System.monotonic_time(:millisecond) + @paging_budget_ms
 
   # An empty page 1 ends the search; otherwise the later pages are best effort.
   defp collect_later_pages([], _page_args, _response, _parse), do: []

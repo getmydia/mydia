@@ -405,7 +405,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
 
       iex> definition = %Parsed{search: %{inputs: %{"type" => "search"}}}
       iex> build_request_params(definition, query: "test")
-      {:ok, %{query_params: %{"type" => "search"}, headers: [], method: :get}}
+      {:ok, %{query_params: %{"type" => "search"}, headers: [], method: :get, follow_redirect: nil}}
   """
   @spec build_request_params(Parsed.t(), search_opts()) ::
           {:ok, map()} | {:error, Error.t()}

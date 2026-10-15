@@ -296,7 +296,9 @@ session, and its error is the search's error. Later pages
 (`Cardigann.SearchPages`) are best effort. They are pinned to the mirror
 page 1 answered on (`response.base_url`, `pin_base_url: true`), reuse its
 session and clearance, and stop at the first failed or empty page. Requests to
-one definition are spaced by its `requestDelay`. Rows are de-duplicated within the indexer by
+one definition are spaced by its `requestDelay`. Paging also stops once 15
+seconds have passed since the search began, so a slow site returns the pages it
+has instead of losing the whole search to the caller's deadline. Rows are de-duplicated within the indexer by
 info hash, then download URL.
 
 Each path keeps its own `inputs` (merged over the search inputs unless

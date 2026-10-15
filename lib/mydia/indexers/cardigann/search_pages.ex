@@ -9,6 +9,11 @@ defmodule Mydia.Indexers.Cardigann.SearchPages do
   page 1 answered on and reuses page 1's session and FlareSolverr clearance. A
   failed page is logged and ends paging, and so does an empty one, because the
   site has run out of results.
+
+  Paging also has a time budget. The caller passes `:paging_deadline` (a
+  `System.monotonic_time(:millisecond)` value) in the search options, and no
+  later page starts once it has passed. A search killed by its own deadline
+  loses page 1's rows too, so a slow site returns the pages it has instead.
   """
 
   alias Mydia.Indexers.CardigannDefinition.Parsed
@@ -32,6 +37,8 @@ defmodule Mydia.Indexers.Cardigann.SearchPages do
         base_url,
         parse
       ) do
+    {deadline, search_opts} = Keyword.pop(search_opts, :paging_deadline)
+
     page_opts =
       search_opts
       |> Keyword.delete(:on_promote)
@@ -40,25 +47,37 @@ defmodule Mydia.Indexers.Cardigann.SearchPages do
     paths
     |> Enum.with_index(2)
     |> Enum.reduce_while([], fn {path, number}, pages ->
-      case fetch_page(parsed, path, page_opts, user_config, flaresolverr_opts, parse) do
-        {:ok, []} ->
-          {:halt, pages}
-
-        {:ok, rows} ->
-          {:cont, [rows | pages]}
-
-        {:error, reason} ->
-          Logger.warning(
-            "Cardigann #{parsed.name}: search page #{number} failed, keeping the earlier pages: " <>
-              inspect(reason)
-          )
-
-          {:halt, pages}
-      end
+      fetch = fn -> fetch_page(parsed, path, page_opts, user_config, flaresolverr_opts, parse) end
+      next_page(fetch, parsed.name, number, deadline, pages)
     end)
     |> Enum.reverse()
     |> Enum.concat()
   end
+
+  defp next_page(fetch, name, number, deadline, pages) do
+    if past_deadline?(deadline) do
+      Logger.debug("Cardigann #{name}: paging budget spent, not requesting page #{number}")
+      {:halt, pages}
+    else
+      case fetch.() do
+        {:ok, []} -> {:halt, pages}
+        {:ok, rows} -> {:cont, [rows | pages]}
+        {:error, reason} -> page_failed(name, number, reason, pages)
+      end
+    end
+  end
+
+  defp page_failed(name, number, reason, pages) do
+    Logger.warning(
+      "Cardigann #{name}: search page #{number} failed, keeping the earlier pages: " <>
+        inspect(reason)
+    )
+
+    {:halt, pages}
+  end
+
+  defp past_deadline?(nil), do: false
+  defp past_deadline?(deadline), do: System.monotonic_time(:millisecond) >= deadline
 
   defp fetch_page(parsed, path, page_opts, user_config, flaresolverr_opts, parse) do
     opts = Keyword.put(page_opts, :search_path, path)
@@ -75,13 +94,15 @@ defmodule Mydia.Indexers.Cardigann.SearchPages do
 
   Pages overlap when the site's listing shifts between requests. A release is
   the same when its magnet carries the same info hash, otherwise when its
-  download URL is the same.
+  download URL is the same. A row with no download URL is never a repeat.
   """
   @spec dedupe([SearchResult.t()]) :: [SearchResult.t()]
   def dedupe(results), do: Enum.uniq_by(results, &identity/1)
 
+  defp identity(%SearchResult{download_url: url}) when url in [nil, ""], do: {:row, make_ref()}
+
   defp identity(%SearchResult{download_url: url}) do
-    case Regex.run(~r/urn:btih:([a-z0-9]+)/i, url || "") do
+    case Regex.run(~r/urn:btih:([a-z0-9]+)/i, url) do
       [_, hash] -> {:hash, String.downcase(hash)}
       nil -> {:url, url}
     end
