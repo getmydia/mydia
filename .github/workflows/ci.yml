@@ -30,7 +30,7 @@ env:
   CARGO_HTTP_MULTIPLEXING: "false"
   CARGO_NET_RETRY: "10"
 
-# The three Elixir jobs below run their steps inside a single `devenv shell --
+# The devenv jobs below (lint, test-sqlite, dialyzer, test-postgres, e2e) run their steps inside a single `devenv shell --
 # bash` heredoc so the environment evaluates once and `_build` stays warm across
 # steps (mirrors `./dev mix precommit`, dev:159-211). The toolchain (Elixir, OTP,
 # Rust + wasm32-wasip2, Node, ffmpeg, chromium/chromedriver) comes from
@@ -259,8 +259,10 @@ jobs:
           done
           exit "$FAIL"
 
-  test:
-    name: Test
+  lint:
+    name: Lint
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -277,26 +279,7 @@ jobs:
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
           skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
-      # RustFS is the S3 server for the :s3 storage tests. It runs the same
-      # `mydia-s3` script as local dev, so port and credentials come from
-      # devenv.nix. The test step sets MYDIA_TEST_S3_REQUIRED so a server that
-      # failed to start fails the job instead of silently skipping those tests.
-      - name: Start RustFS
-        run: |
-          # One devenv shell starts the server and polls it. Two shells started
-          # together race to replace devenv's GC-root symlink and the loser
-          # exits 1 with "Failed to remove existing GC root". devenv shell also
-          # prints its banner on stdout, so capturing `printenv` through it
-          # yields the banner too, which is why the poll runs inside.
-          if devenv shell -- bash -c 'setsid nohup mydia-s3 < /dev/null > rustfs.log 2>&1 & for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
-            exit 0
-          fi
-          cat rustfs.log
-          exit 1
-
-      - name: Test (SQLite) under devenv
-        env:
-          MYDIA_TEST_S3_REQUIRED: "1"
+      - name: Lint under devenv
         run: |
           devenv shell -- bash <<'DEVENV'
           set -euo pipefail
@@ -354,13 +337,71 @@ jobs:
           if [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
             UNUSED_CHECK=true mix compile --force || true
           fi
+          DEVENV
+
+  # The SQLite suite runs with max_cases: 1 (test/test_helper.exs), so one
+  # runner took 642s for it (549s of that sync, 2026-10-15). Each shard is its
+  # own runner with its own mydia_test.db, so SQLite still sees one writer.
+  # --partitions assigns test files by hash, not duration; if one shard runs
+  # much longer than the others, raise the count rather than hand-balancing.
+  test-sqlite:
+    name: Test (SQLite ${{ matrix.partition }}/4)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3, 4]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
+        with:
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+
+      # RustFS is the S3 server for the :s3 storage tests. It runs the same
+      # `mydia-s3` script as local dev, so port and credentials come from
+      # devenv.nix. The test step sets MYDIA_TEST_S3_REQUIRED so a server that
+      # failed to start fails the job instead of silently skipping those tests.
+      - name: Start RustFS
+        run: |
+          # One devenv shell starts the server and polls it. Two shells started
+          # together race to replace devenv's GC-root symlink and the loser
+          # exits 1 with "Failed to remove existing GC root". devenv shell also
+          # prints its banner on stdout, so capturing `printenv` through it
+          # yields the banner too, which is why the poll runs inside.
+          if devenv shell -- bash -c 'setsid nohup mydia-s3 < /dev/null > rustfs.log 2>&1 & for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
+            exit 0
+          fi
+          cat rustfs.log
+          exit 1
+
+      - name: Test (SQLite) under devenv
+        env:
+          MYDIA_TEST_S3_REQUIRED: "1"
+          MIX_TEST_PARTITION: ${{ matrix.partition }}
+        run: |
+          devenv shell -- bash <<'DEVENV'
+          set -euo pipefail
+          export MIX_ENV=test
+          mix local.hex --force --if-missing
+          mix local.rebar --force --if-missing
+          mix deps.get
+          mix compile --warnings-as-errors
           # Soft: downloads the published Cardigann wasm guest (or copies a local
           # build); exits 0 when the asset is not published yet (a PR that changes
           # the guest), so tests needing it skip. See native/cardigann_guest/README.md.
           mix mydia.cardigann_guest fetch
           mix ecto.create
           mix ecto.migrate
-          mix test --cover --warnings-as-errors
+          mix test --partitions 4 --warnings-as-errors
           DEVENV
 
   dialyzer:
@@ -563,3 +604,20 @@ jobs:
           name: wallaby-screenshots
           path: tmp/wallaby_screenshots/
           retention-days: 7
+
+  # Required contexts live on these aggregators, never on gated jobs: a job
+  # skipped by `if:` concludes `skipped`, and whether the ruleset counts that as
+  # passing is configuration-dependent (.github/ci-flakes.md). These always run
+  # and conclude success or failure. `Guards` enforces the always() condition.
+  test:
+    name: Test
+    needs: [changes, guards, lint, test-sqlite]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to pass or skip
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '[.[] | .result] | all(. == "success" or . == "skipped")' > /dev/null
