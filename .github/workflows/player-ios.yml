@@ -118,8 +118,8 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
 
-      # No `cache: true`: the macOS Flutter SDK cache entry is ~2.2 GB, shared
-      # by this workflow and player-macos.yml, and it crowded ci.yml's caches
+      # No `cache: true`: the macOS SDK cache entry is about 2 GB, shared by
+      # this workflow and player-macos.yml, and it crowded ci.yml's caches
       # out of the 10 GB Actions cache budget (2026-10-15). Downloading the SDK
       # costs about a minute.
       - name: Setup Flutter

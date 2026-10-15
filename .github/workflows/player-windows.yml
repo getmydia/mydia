@@ -37,7 +37,7 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
 
-      # No `cache: true`: the Windows Flutter SDK is ~1.9 GB per cache entry,
+      # No `cache: true`: the Windows SDK is about 2 GB per cache entry,
       # and two of them pushed the repo past GitHub's 10 GB Actions cache limit,
       # which evicted ci.yml's _build cache and made PR CI recompile from
       # scratch (2026-10-15). Downloading the SDK costs about a minute.
