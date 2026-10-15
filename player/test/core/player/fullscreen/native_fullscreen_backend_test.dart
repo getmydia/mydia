@@ -16,6 +16,7 @@ void main() {
 
       final backend = NativeFullscreenBackend(
         onChange: changes.add,
+        isDesktop: true,
         windowSignal: windowSignal,
         isWindows: true,
         onEnterNative: () => nativeEnterCalls++,
@@ -46,6 +47,7 @@ void main() {
 
       final backend = NativeFullscreenBackend(
         onChange: changes.add,
+        isDesktop: true,
         windowSignal: windowSignal,
         isWindows: true,
         onEnterNative: () => nativeEnterCalls++,
@@ -78,6 +80,7 @@ void main() {
 
       final backend = NativeFullscreenBackend(
         onChange: changes.add,
+        isDesktop: true,
         windowSignal: windowSignal,
         isWindows: false,
         onEnterNative: () => nativeEnterCalls++,
@@ -97,6 +100,7 @@ void main() {
 
       final backend = NativeFullscreenBackend(
         onChange: changes.add,
+        isDesktop: true,
         windowSignal: windowSignal,
         isWindows: false,
         onEnterNative: () {},
@@ -122,6 +126,7 @@ void main() {
 
       final backend = NativeFullscreenBackend(
         onChange: changes.add,
+        isDesktop: true,
         windowSignal: windowSignal,
         isWindows: false,
         onEnterNative: () {},
@@ -137,6 +142,33 @@ void main() {
       windowSignal.value = true;
       // Should not have received the update after dispose
       expect(changes, [false]);
+    });
+
+    test(
+        'on native mobile there is no fullscreen route: the player is '
+        'already immersive, so the button must not draw', () {
+      final changes = <bool>[];
+      var nativeEnterCalls = 0;
+      var nativeExitCalls = 0;
+
+      final backend = NativeFullscreenBackend(
+        onChange: changes.add,
+        isDesktop: false,
+        isWindows: false,
+        onEnterNative: () => nativeEnterCalls++,
+        onExitNative: () => nativeExitCalls++,
+      );
+      addTearDown(backend.dispose);
+
+      expect(backend.mode, FullscreenMode.unsupported);
+      expect(backend.ready.value, isFalse);
+
+      backend.enter();
+      backend.exit();
+
+      expect(nativeEnterCalls, 0);
+      expect(nativeExitCalls, 0);
+      expect(changes, isEmpty);
     });
   });
 }

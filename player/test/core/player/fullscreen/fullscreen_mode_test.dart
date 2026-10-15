@@ -101,8 +101,8 @@ void main() {
       );
     });
 
-    test('the native modes are not web routes and never demote', () {
-      for (final mode in [FullscreenMode.osWindow, FullscreenMode.systemUi]) {
+    test('the native desktop mode is not a web route and never demotes', () {
+      for (final mode in [FullscreenMode.osWindow]) {
         expect(
           demoteWebMode(
             current: mode,

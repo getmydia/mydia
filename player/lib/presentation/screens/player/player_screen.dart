@@ -4832,7 +4832,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       });
     }
 
-    // Order matters twice over. Stop listening *first*: in `systemUi` mode
+    // Order matters twice over. Stop listening *first*: on Windows
     // `exit()` reports the transition synchronously, and the resulting
     // `setState` would assert — by the time `State.dispose` runs, the element
     // is already defunct (`StatefulElement.unmount` calls `super.unmount()`
