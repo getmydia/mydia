@@ -51,6 +51,10 @@ void main() {
 
   tearDown(() async {
     await database.close();
+    // The container also opens download_settings. Left open with its directory
+    // deleted, it breaks the next Hive.close() in the same isolate, which in
+    // CI's bundled run is another file's.
+    await Hive.close();
     if (await hiveDir.exists()) await hiveDir.delete(recursive: true);
   });
 

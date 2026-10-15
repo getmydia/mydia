@@ -12,6 +12,7 @@ import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 
+import '../../test_utils/in_memory_subtitle_prefs.dart';
 import '../../test_utils/osd_contrast.dart';
 
 const _existing = SubtitleTrack(
@@ -111,6 +112,8 @@ Widget _host({
 }
 
 void main() {
+  useInMemorySubtitlePrefs();
+
   testWidgets('opens on the OSD material with legible text', (tester) async {
     await tester.pumpWidget(_host(
       onSearch: (_) async => const SubtitleSearchOutcome(

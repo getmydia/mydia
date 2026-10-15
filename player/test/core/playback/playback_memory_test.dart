@@ -246,6 +246,10 @@ void main() {
           tempDir.deleteSync(recursive: true);
         } catch (_) {}
       });
+      // The provider recovers into a box that stays open. Closed here, before
+      // the directory goes, so it cannot break the next Hive.close() in the
+      // same isolate (another file's, in CI's bundled run).
+      addTearDown(Hive.close);
 
       const boxName = 'corrupt_provider_box';
       final boxFile = File('${tempDir.path}/$boxName.hive');

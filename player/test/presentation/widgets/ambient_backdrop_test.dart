@@ -334,6 +334,14 @@ void main() {
             .image;
 
         expect(rendered, boundedProvider);
+
+        // Sync the cache manager's deferred work: its store schedules a 10 s
+        // cleanup timer once its first lookup lands, and when an earlier file
+        // has left the shared manager usable that timer would otherwise be
+        // pending when the tree is disposed.
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 200)));
+        await tester.pump(const Duration(seconds: 11));
       });
     });
   });
