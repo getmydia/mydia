@@ -13,9 +13,17 @@ import 'package:player/presentation/widgets/source_artwork.dart';
 import '../../../domain/merged/fake_merged_source.dart';
 import '../../../test_utils/toast_harness.dart';
 
-Future<void> pump(WidgetTester tester, List<MediaSource> sources,
+Future<List<String>> pump(WidgetTester tester, List<MediaSource> sources,
     {required AllServersListing listing, LibraryKind? kind}) async {
+  final pushed = <String>[];
   final router = GoRouter(routes: [
+    GoRoute(
+      path: '/s/:id/:kind/:item',
+      builder: (_, s) {
+        pushed.add(s.uri.toString());
+        return const SizedBox();
+      },
+    ),
     GoRoute(
       path: '/',
       builder: (_, __) => AllServersListingScreen(listing: listing, kind: kind),
@@ -27,12 +35,14 @@ Future<void> pump(WidgetTester tester, List<MediaSource> sources,
     overrides: [
       allServersSourcesProvider.overrideWithValue(sources),
       sourcesProvider.overrideWithValue([for (final s in sources) s.source]),
+      for (final s in sources) mediaSourceProvider(s.id).overrideWithValue(s),
       allServersNeedSignInProvider.overrideWithValue(const []),
       sourceArtworkProvider.overrideWith((ref, key) async => null),
     ],
     child: MaterialApp.router(routerConfig: router, builder: toastLayerBuilder),
   ));
   await tester.pumpAndSettle();
+  return pushed;
 }
 
 const shared = ExternalIds(tmdb: '1');
@@ -121,5 +131,30 @@ void main() {
         ],
         listing: AllServersListing.favorites);
     expect(find.byType(AllServersPoster), findsNWidgets(2));
+  });
+
+  testWidgets('Continue Watching plays on tap', (t) async {
+    final s = fakeServer('a');
+    final a = FakeMergedSource(s, resuming: [
+      item(s, 'a1', lastPlayedAt: DateTime.utc(2024, 1, 1)),
+    ]);
+    final pushed = await pump(t, [a, FakeMergedSource(fakeServer('b'))],
+        listing: AllServersListing.continueWatching);
+    await t.tap(find.byKey(ValueKey('all-poster-${a.id.value}-a1')));
+    await t.pumpAndSettle();
+    expect(Uri.parse(pushed.last).path, '/s/${a.id.value}/player/a1');
+  });
+
+  testWidgets('Recently Added still opens the item', (t) async {
+    final s = fakeServer('a');
+    final a = FakeMergedSource(s, recent: [
+      item(s, 'm1', addedAt: DateTime.utc(2024, 1, 2)),
+    ]);
+    final pushed = await pump(t, [a, FakeMergedSource(fakeServer('b'))],
+        listing: AllServersListing.recentlyAdded);
+    await t.tap(find.byKey(ValueKey('all-poster-${a.id.value}-m1')));
+    await t.pumpAndSettle();
+    expect(pushed.last, startsWith('/s/${a.id.value}/'));
+    expect(Uri.parse(pushed.last).path, isNot(contains('/player/')));
   });
 }

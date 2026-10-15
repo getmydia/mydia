@@ -19,6 +19,7 @@ import '../../widgets/media_context_menu.dart';
 import '../../widgets/shell_rail_inset.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
+import '../detail/play_item.dart';
 import '../home/home_loading_skeleton.dart';
 import '../sources/home_header.dart';
 import '../sources/continue_watching_card.dart';
@@ -186,7 +187,7 @@ class AllServersHomeScreen extends ConsumerWidget {
                     'all-poster-${item.ref.sourceId.value}-${item.ref.externalId}'),
                 item: item,
                 trailingLabel: continueLabel(item),
-                onTap: () => context.push(allServersItemLocation(item.ref)),
+                onTap: () => playItem(context, ref, item.ref),
                 onContextMenu: (c) => _menu(c, ref, item),
               ),
             ),

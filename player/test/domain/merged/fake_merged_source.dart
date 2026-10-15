@@ -258,7 +258,17 @@ class FakeMergedSource extends MediaSource
       const Page(items: []);
 
   @override
-  Future<ItemDetail> item(ItemRef ref) => throw UnimplementedError();
+  Future<ItemDetail> item(ItemRef ref) async {
+    await _wait();
+    final known = [...resuming, ...movies, ...shows, ...recent, ...favs]
+        .where((i) => i.ref == ref)
+        .firstOrNull;
+    return ItemDetail(
+      summary:
+          known ?? ItemSummary(ref: ref, title: 'Invented ${ref.externalId}'),
+      versions: [MediaVersion(id: 'v-${ref.externalId}', container: 'mkv')],
+    );
+  }
 
   @override
   Future<Page<ItemSummary>> children(ItemRef parent, {Cursor? cursor}) async =>

@@ -37,6 +37,7 @@ class AllServersPoster extends ConsumerWidget {
     this.caption,
     this.onContextMenu,
     this.extraCopies = 0,
+    this.onTap,
   });
 
   final ItemSummary item;
@@ -47,6 +48,9 @@ class AllServersPoster extends ConsumerWidget {
   /// Shown before the server name, such as `Show · S1 · E2`.
   final String? caption;
   final void Function(BuildContext posterContext)? onContextMenu;
+
+  /// Null opens the item.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -59,7 +63,7 @@ class AllServersPoster extends ConsumerWidget {
         caption ?? item.year?.toString(),
         allServersServerLabel(server, extraCopies)
       ].whereType<String>().join(' · '),
-      onTap: () => context.push(allServersItemLocation(item.ref)),
+      onTap: onTap ?? () => context.push(allServersItemLocation(item.ref)),
       onContextMenu: onContextMenu,
     );
   }
