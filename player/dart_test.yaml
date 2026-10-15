@@ -1,0 +1,4 @@
+tags:
+  # Files very_good test keeps out of its single-isolate bundle. See
+  # player/docs/workflow.md.
+  skip_very_good_optimization:

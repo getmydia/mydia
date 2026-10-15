@@ -9,6 +9,9 @@
 // never sees this page's requests. A symlink rather than a copy so the file
 // under test cannot drift from the file that ships.
 @TestOn('browser')
+// Out of very_good's bundle: it compiles every bundled file for the VM, and
+// this one imports browser-only libraries. `Run browser tests` covers it.
+@Tags(['skip_very_good_optimization'])
 library;
 
 import 'package:flutter_test/flutter_test.dart';

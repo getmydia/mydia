@@ -40,12 +40,37 @@ At default concurrency the player suite silently drops 2 to 4 test files while
 still exiting 0 and printing "All tests passed!". Reproduced across several runs;
 `--concurrency=1` reliably ran every file. This is not a flake you can retry past,
 because the failure mode is silence. When a subagent or plan step reports green,
-check the command carried the flag. The full suite was about 2115 tests as of
-2026-08-12, so a materially lower number is the symptom.
+check the command carried the flag. The full suite was about 7,600 tests as of
+2026-10-15, so a materially lower number is the symptom.
 
 ```
 ./dev flutter test --concurrency=1 [paths]
 ```
+
+CI does not run this command. `Test / Player` runs the suite as one bundle with
+`very_good test --concurrency 1`, which compiles every test file into a single
+entrypoint instead of compiling each separately, the cost that took 760 of the
+test step's 988 seconds. Bundled, every file shares one isolate, so a test
+that passes here and fails in CI has leaked global state into, or picked it up
+from, another file: `HttpOverrides.global` after a widget test initialised the
+binding, a Hive box left open, a singleton cache. very_good orders the bundled
+files by filesystem listing, which differs between machines, so a local green
+bundle can still fail in CI on a different order; a CI-only bundle failure is
+still a leak. Fix the leak. The
+`skip_very_good_optimization` tag is only for files that cannot compile or run
+in a VM bundle at all (`@TestOn('browser')`, the macOS goldens). A new
+`@TestOn` file other than `@TestOn('vm')` needs the tag, and the `Test / Player`
+job checks this before running. Reproduce the
+CI run locally with:
+
+```
+./dev flutter pub global activate very_good_cli 1.5.0   # once
+./dev flutter pub global run very_good_cli:very_good test --concurrency 1
+```
+
+Its pass count should match the per-file run's; `--concurrency 1` is needed
+there too, because very_good runs opted-out files in
+the same `flutter test` call.
 
 There is no `./dev player test` and no `./dev player analyze`. Both were invented
 while writing a plan on 2026-08-12 and shipped into an agent prompt file, breaking

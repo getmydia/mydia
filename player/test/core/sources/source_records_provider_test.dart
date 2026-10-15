@@ -59,7 +59,7 @@ void main() {
     cache = InMemorySourceCache();
     container = ProviderContainer(overrides: [
       sourceCacheProvider.overrideWithValue(cache),
-      noDownloadsOverride,
+      ...noHiveOverrides,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
     ]);
@@ -190,6 +190,7 @@ void main() {
     final stuck = ProviderContainer(overrides: [
       downloadManagerProvider
           .overrideWith((ref) => Completer<DownloadService>().future),
+      noCollectionSyncOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
     ]);
@@ -207,6 +208,7 @@ void main() {
       final c = ProviderContainer(overrides: [
         sourceCacheProvider.overrideWithValue(cache),
         downloadManagerProvider.overrideWith((ref) => gate.future),
+        noCollectionSyncOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ]);
@@ -247,6 +249,7 @@ void main() {
         sourceCacheProvider.overrideWithValue(cache),
         downloadManagerProvider
             .overrideWith((ref) => Completer<DownloadService>().future),
+        noCollectionSyncOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ]);
@@ -351,7 +354,7 @@ void main() {
     final c = ProviderContainer(overrides: [
       sourceStoreProvider.overrideWith((ref) async => failing),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
-      noDownloadsOverride,
+      ...noHiveOverrides,
     ]);
     addTearDown(c.dispose);
     await failing.putAccount(plexRecord());
@@ -372,7 +375,7 @@ void main() {
     expect((await store.load()).activeId, id);
 
     final restarted = ProviderContainer(overrides: [
-      noDownloadsOverride,
+      ...noHiveOverrides,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
     ]);

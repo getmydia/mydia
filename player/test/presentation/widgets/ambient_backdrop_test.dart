@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cache/artwork_decode.dart';
@@ -334,6 +336,27 @@ void main() {
             .image;
 
         expect(rendered, boundedProvider);
+
+        // Sync the cache manager's deferred work: its store schedules a 10 s
+        // cleanup timer once its first lookup lands, and when an earlier file
+        // has left the shared manager usable that timer would otherwise be
+        // pending when the tree is disposed. Poll in real time, bounded at
+        // about 5 s, until a probe lookup completes: that means the store's
+        // lookups have landed and the timer is scheduled, so the pump below
+        // fires it. A lone run has no usable store, the probe never
+        // completes and no timer is ever scheduled, so giving up at the
+        // bound is correct there, not a failure.
+        await tester.runAsync(() async {
+          final deadline = DateTime.now().add(const Duration(seconds: 5));
+          var settled = false;
+          unawaited(BackdropCacheManager()
+              .getFileFromCache('ambient-backdrop-test-drain-probe')
+              .then((_) => settled = true, onError: (_) => settled = true));
+          while (!settled && DateTime.now().isBefore(deadline)) {
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+          }
+        });
+        await tester.pump(const Duration(seconds: 11));
       });
     });
   });

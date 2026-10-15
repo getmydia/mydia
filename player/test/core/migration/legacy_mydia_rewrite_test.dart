@@ -91,6 +91,10 @@ void main() {
 
   tearDown(() async {
     await downloads.close();
+    // Closes rw_progress_N too. Leaving it open with its directory deleted
+    // breaks the next Hive.close() in the same isolate, which in CI's bundled
+    // test run is another file's.
+    await Hive.close();
     if (await hiveDir.exists()) await hiveDir.delete(recursive: true);
   });
 

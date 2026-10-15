@@ -180,11 +180,40 @@ jobs:
         if: needs.changes.outputs.player == 'true'
         run: dart analyze --fatal-infos
 
-      - name: Run tests
-        # --concurrency=1: the default concurrency silently drops 2-4 test
-        # files while still exiting 0, so this is load-bearing, not cosmetic.
+      - name: Check @TestOn files are tagged out of the bundle
+        # A bundle ignores per-file @TestOn, and the compile error it produces
+        # for an untagged browser test ("dart:js_interop is not available")
+        # does not name the cause. Fail here with the file instead.
         if: needs.changes.outputs.player == 'true'
-        run: flutter test --concurrency=1
+        run: |
+          set -euo pipefail
+          bad=0
+          for f in $(git ls-files 'test/*_test.dart'); do
+            if grep -E '^@TestOn\(' "$f" | grep -qv "^@TestOn('vm')" \
+              && ! grep -qE "^@Tags\(\[.*['\"]skip_very_good_optimization['\"]" "$f"; then
+              echo "::error file=player/$f::@TestOn other than 'vm' needs @Tags(['skip_very_good_optimization']): the very_good bundle cannot compile it"
+              bad=1
+            fi
+          done
+          exit "$bad"
+
+      - name: Install very_good_cli
+        if: needs.changes.outputs.player == 'true'
+        run: dart pub global activate very_good_cli 1.5.0
+
+      - name: Run tests
+        # Compiles the suite once instead of once per file, which was 760 of
+        # this step's 988 seconds. very_good generates test/.test_optimizer.dart
+        # importing every *_test.dart, so all files share one isolate: a test
+        # that fails only here has leaked global state, and the fix is the
+        # leak, not an opt-out. Files tagged skip_very_good_optimization run
+        # separately in the same flutter test call.
+        #
+        # --concurrency 1 is still load-bearing: very_good passes -j 4 by
+        # default, and at default concurrency flutter test silently drops
+        # 2-4 files while exiting 0.
+        if: needs.changes.outputs.player == 'true'
+        run: dart pub global run very_good_cli:very_good test --concurrency 1
 
       - name: Run television-tier tests
         # `directionalPrimary` is compile-time influenced, so the VM run above

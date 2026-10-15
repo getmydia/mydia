@@ -2,6 +2,9 @@
 // ManagedMediaSource are browser globals that dart:js_interop reads directly,
 // and codec_support_web.dart is not reachable from a VM test run at all.
 @TestOn('browser')
+// Out of very_good's bundle: it compiles every bundled file for the VM, and
+// this one imports browser-only libraries. `Run browser tests` covers it.
+@Tags(['skip_very_good_optimization'])
 library;
 
 import 'package:flutter_test/flutter_test.dart';

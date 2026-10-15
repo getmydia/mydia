@@ -14,7 +14,7 @@ import 'source_json_test.dart' show plexRecord;
 
 ProviderContainer _container(InMemorySourceStore store, {SourceCache? cache}) {
   final c = ProviderContainer(overrides: [
-    noDownloadsOverride,
+    ...noHiveOverrides,
     if (cache != null) sourceCacheProvider.overrideWithValue(cache),
     sourceStoreProvider.overrideWith((ref) async => store),
     sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -198,6 +198,7 @@ void main() {
       await secrets.writeAccountToken(third.account, 't3');
       final c = ProviderContainer(overrides: [
         sourceCacheProvider.overrideWithValue(_ThrowingCache()),
+        ...noHiveOverrides,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(secrets),
       ]);

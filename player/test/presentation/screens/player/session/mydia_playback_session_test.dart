@@ -15,6 +15,7 @@ import 'package:player/presentation/screens/player/session/source_playback_sessi
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 
 import '../../../../test_utils/mydia_test_source.dart';
+import '../../../../test_utils/real_http.dart';
 import '../../../../test_utils/scripted_mydia_transport.dart';
 import '../player_screen_test_harness.dart';
 
@@ -79,6 +80,9 @@ Future<String> _directPlayUrl(MydiaPlaybackSession s, Object owner) async {
 }
 
 void main() {
+  // The streaming test serves a playlist from a real loopback server.
+  useRealHttp();
+
   group('candidates', () {
     test('asks about the file and maps the offer', () async {
       final server = _answering(streamingCandidatesResponse(

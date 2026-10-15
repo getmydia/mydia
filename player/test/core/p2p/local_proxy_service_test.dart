@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 
+import '../../test_utils/real_http.dart';
 import 'media_proxy_conformance.dart';
 import 'test_p2p_service.dart';
 
@@ -23,6 +24,8 @@ class HttpResult {
 }
 
 void main() {
+  useRealHttp();
+
   mediaProxyConformanceTests('LocalProxyService', LocalProxyService.new);
 
   group('LocalProxyService', () {

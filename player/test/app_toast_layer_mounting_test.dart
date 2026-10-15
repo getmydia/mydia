@@ -42,19 +42,25 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    final container = ProviderContainer(overrides: [
-      sidebarLayoutStoreProvider
-          .overrideWithValue(InMemorySidebarLayoutStore()),
-      sourcesLoadingProvider.overrideWithValue(false),
-      hasMydiaProvider.overrideWithValue(true),
-      // The router sends `/` to the active source, and to /sources/add when
-      // there is none, so the shell only mounts with a source stored.
-      thirdPartySourcesProvider.overrideWithValue(const [testMydiaSource]),
-      castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      castSessionProvider.overrideWith((ref) => Stream.value(_session)),
-      castSessionManagerProvider
-          .overrideWith((ref) => Completer<CastSessionManager>().future),
-    ]);
+    final container = ProviderContainer(
+        // The shell's per-source feeds call the real client, which fails (a
+        // 400 under flutter_test's HttpOverrides once the bundle has a
+        // binding) and would schedule Riverpod's retry timers past the test.
+        retry: (_, __) => null,
+        overrides: [
+          sidebarLayoutStoreProvider
+              .overrideWithValue(InMemorySidebarLayoutStore()),
+          sourcesLoadingProvider.overrideWithValue(false),
+          hasMydiaProvider.overrideWithValue(true),
+          // The router sends `/` to the active source, and to /sources/add when
+          // there is none, so the shell only mounts with a source stored.
+          thirdPartySourcesProvider.overrideWithValue(const [testMydiaSource]),
+          castCapabilitiesProvider
+              .overrideWithValue(const CastCapabilities.full()),
+          castSessionProvider.overrideWith((ref) => Stream.value(_session)),
+          castSessionManagerProvider
+              .overrideWith((ref) => Completer<CastSessionManager>().future),
+        ]);
     addTearDown(container.dispose);
 
     await tester.pumpWidget(UncontrolledProviderScope(

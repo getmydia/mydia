@@ -30,6 +30,9 @@
 // glyph *identity* is `icon_family_test.dart`'s job, not this file's.
 
 @TestOn('mac-os')
+// Out of very_good's bundle, where @TestOn no longer applies and these
+// macOS-generated goldens would run (and fail) on Linux.
+@Tags(['skip_very_good_optimization'])
 library;
 
 import 'dart:ui' as ui;

@@ -11,6 +11,8 @@ import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/queue_player_screen.dart';
+import 'package:player/presentation/screens/settings/settings_controller.dart'
+    show settingsServiceProvider;
 
 import 'package:player/core/sources/store/source_records.dart'
     show mydiaSourceIdOf;
@@ -18,6 +20,7 @@ import 'package:player/core/sources/store/source_records.dart'
 import '../../../core/sources/mydia/fake_mydia_transport.dart';
 import '../../../core/sources/mydia/mydia_account_harness.dart';
 import '../../../core/sources/mydia/mydia_source_test.dart' show guest, sid;
+import 'player_screen_test_harness.dart' show FakeSettingsService;
 
 MydiaSource _mydiaSource() => MydiaSource(
       source: guest,
@@ -53,6 +56,10 @@ String _queueParam() => base64Url.encode(utf8.encode(jsonEncode([
 Future<void> _pump(WidgetTester tester, {required bool withSource}) async {
   await tester.pumpWidget(ProviderScope(
     overrides: [
+      // The real service reads flutter_secure_storage, whose future never
+      // completes under testWidgets and stays in NativeAuthStorage's static
+      // in-flight map, wedging later files that share the bundle's isolate.
+      settingsServiceProvider.overrideWithValue(FakeSettingsService()),
       localProxyServiceProvider
           .overrideWithValue(LocalProxyService.forTesting()),
       legacyMydiaSourceIdProvider.overrideWithValue(withSource ? sid : null),
@@ -88,6 +95,7 @@ void main() {
         ),
       },
       overrides: [
+        settingsServiceProvider.overrideWithValue(FakeSettingsService()),
         localProxyServiceProvider
             .overrideWithValue(LocalProxyService.forTesting()),
         mediaSourceProvider(id).overrideWithValue(

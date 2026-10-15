@@ -59,7 +59,7 @@ Future<
     await writeMydiaCredentials(secrets, record.account, creds);
   }
   final container = ProviderContainer(overrides: [
-    noDownloadsOverride,
+    ...noHiveOverrides,
     sourceStoreProvider.overrideWith((ref) async => store),
     sourceSecretsProvider.overrideWithValue(secrets),
     ...overrides,

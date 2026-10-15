@@ -163,7 +163,7 @@ void main() {
     AuthService? auth,
   }) {
     final c = ProviderContainer(overrides: [
-      noDownloadsOverride,
+      ...noHiveOverrides,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(secrets)),
       loginDeviceInfoProvider.overrideWithValue(_FakeDeviceInfo()),

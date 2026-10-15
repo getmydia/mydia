@@ -8,6 +8,7 @@ import 'package:player/core/p2p/disk_space.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/p2p/range_spool.dart';
 
+import '../../test_utils/real_http.dart';
 import 'fake_range_stream.dart';
 import 'proxy_fetch.dart';
 import 'test_p2p_service.dart';
@@ -46,6 +47,8 @@ class RawRangeClient {
 }
 
 void main() {
+  useRealHttp();
+
   late TestP2pService p2p;
   late LocalProxyService proxy;
   late Directory tempRoot;

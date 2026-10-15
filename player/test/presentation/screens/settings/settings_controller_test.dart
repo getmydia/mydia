@@ -1,14 +1,23 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/settings/settings_providers.dart';
+import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 
 import '../../../core/sources/mydia/mydia_account_harness.dart';
+import '../../../test_utils/mock_auth_storage.dart';
 
 void main() {
   Future<UserSettings> load(Map<String, MydiaCredentials> accounts) async {
-    final h = await mydiaAccountHarness(accounts);
+    // In-memory settings: the real service reads flutter_secure_storage, and
+    // an earlier file in a shared isolate can leave a never-completing read of
+    // the same key in NativeAuthStorage's static in-flight map.
+    final h = await mydiaAccountHarness(accounts, overrides: [
+      coreSettingsServiceProvider
+          .overrideWithValue(SettingsService(storage: MockAuthStorage())),
+    ]);
     addTearDown(h.container.dispose);
     await h.container.read(sourceRecordsProvider.future);
     return h.container.read(settingsControllerProvider.future);

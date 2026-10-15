@@ -166,7 +166,7 @@ void main() {
       _Auth(DeviceAuthResult.unavailable),
       pins,
       overrides: [
-        noDownloadsOverride,
+        ...noHiveOverrides,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ],

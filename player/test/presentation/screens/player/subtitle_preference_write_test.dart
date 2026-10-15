@@ -43,6 +43,7 @@ import 'package:player/core/remote/remote_target_controller.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 
+import '../../../test_utils/in_memory_subtitle_prefs.dart';
 import '../../../test_utils/probed_tracks.dart';
 import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
@@ -295,6 +296,8 @@ void _pickRemotely(ProviderContainer container, String? trackId) {
 }
 
 void main() {
+  useInMemorySubtitlePrefs();
+
   testWidgets(
       'a track picked from the remote is written back with its '
       'language and flags', (tester) async {

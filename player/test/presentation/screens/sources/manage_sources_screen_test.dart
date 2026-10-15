@@ -65,7 +65,7 @@ Future<InMemorySourceStore> _removeGuest(
   await store.putAccount(_guestRecord());
   await tester.pumpWidget(ProviderScope(
     overrides: [
-      noDownloadsOverride,
+      ...noHiveOverrides,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       p2pServiceProvider.overrideWithValue(p2p),
@@ -89,7 +89,7 @@ Future<void> _pumpRouted(
   await store.putAccount(record);
   await tester.pumpWidget(ProviderScope(
     overrides: [
-      noDownloadsOverride,
+      ...noHiveOverrides,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
     ],
@@ -140,7 +140,7 @@ void main() {
     await store.putAccount(plexRecord());
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        noDownloadsOverride,
+        ...noHiveOverrides,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ],
@@ -171,7 +171,7 @@ void main() {
     ]));
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        noDownloadsOverride,
+        ...noHiveOverrides,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -188,7 +188,7 @@ void main() {
     await store.putAccount(jellyfinRecord);
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        noDownloadsOverride,
+        ...noHiveOverrides,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -210,7 +210,7 @@ void main() {
         .copyWith(serverLocks: const {'abc123': SourceLock.hidden}));
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        noDownloadsOverride,
+        ...noHiveOverrides,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -246,7 +246,7 @@ void main() {
     final pins = PinStore(storage, iterations: 1000);
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        noDownloadsOverride,
+        ...noHiveOverrides,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
         pinStoreProvider.overrideWithValue(pins),
@@ -329,7 +329,7 @@ void main() {
     await store.putAccount(testMydiaRecord());
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        noDownloadsOverride,
+        ...noHiveOverrides,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),

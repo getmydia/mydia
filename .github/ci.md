@@ -562,6 +562,19 @@ Check the budget with:
 gh api repos/getmydia/mydia/actions/cache/usage
 ```
 
+## The player suite runs as one bundle
+
+`Test / Player` runs `very_good test --concurrency 1`, not `flutter test`.
+Measured on 2026-10-15, 760 of the per-file run's 988 seconds were compiling
+666 test files one at a time; the bundle compiles once. Leak rules and the
+local repro command are in `player/docs/workflow.md`. The browser and
+television-tier steps still use plain `flutter test` on enumerated files.
+
+`Test / Player E2E` rebuilds its toolbox image only when `player/.fvmrc`,
+`player/Dockerfile.test` or `rust-toolchain.toml` change. A `pubspec.lock`
+change pulls the master image, and the run's own `pub get --enforce-lockfile`
+fetches the difference.
+
 ## The precompiled Cardigann guest
 
 `cardigann-cwasm.yml` precompiles the published Cardigann guest to a `.cwasm`

@@ -55,7 +55,7 @@ ProviderContainer _container(
 }) {
   final c = ProviderContainer(overrides: [
     sourceCacheProvider.overrideWithValue(InMemorySourceCache()),
-    noDownloadsOverride,
+    ...noHiveOverrides,
     isWebProvider.overrideWithValue(isWeb),
     sourceStoreProvider.overrideWith((ref) async => store),
     sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
