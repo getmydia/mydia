@@ -82,9 +82,12 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
   private var lastNodes: [SidebarNode]?
   private var items: [SidebarItem] = []
   private var itemsById: [String: SidebarItem] = [:]
+  /// The group each grouped row sits in, to expand it for `select`.
+  private var groupById: [String: SidebarItem] = [:]
   private var selectedId: String?
-  /// The event that last reported a row; see `selectionIndexesForProposedSelection`.
-  private var reportedEvent: NSEvent?
+  /// The key press or click that last reported a row; see
+  /// `selectionIndexesForProposedSelection`.
+  private var reportedGesture: String?
 
   private static let cellId = NSUserInterfaceItemIdentifier("SidebarRow")
   private static let groupCellId = NSUserInterfaceItemIdentifier("SidebarGroup")
@@ -117,19 +120,23 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
     guard nodes != lastNodes else { return }
     lastNodes = nodes
     itemsById = [:]
+    groupById = [:]
     items = nodes.map { node in
       switch node {
       case .row(let spec):
         return remember(SidebarItem(row: spec))
       case .group(let title, let rows):
-        return SidebarItem(
+        let group = SidebarItem(
           groupTitle: title, children: rows.map { remember(SidebarItem(row: $0)) })
+        for row in rows { groupById[row.id] = group }
+        return group
       }
     }
     outlineView.reloadData()
     outlineView.expandItem(nil, expandChildren: true)
     applySelection(logMissing: false)
   }
+
 
   /// Highlights the row with `id`, or clears the highlight for nil.
   func select(_ id: String?) {
@@ -146,6 +153,11 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
     guard let id = selectedId else {
       outlineView.deselectAll(nil)
       return
+    }
+    // A row inside a group the viewer collapsed has no row index until the
+    // group opens.
+    if let group = groupById[id], !outlineView.isItemExpanded(group) {
+      outlineView.expandItem(group)
     }
     guard let item = itemsById[id], case let row = outlineView.row(forItem: item), row >= 0 else {
       if logMissing { NSLog("[NativeTabBar] select: unknown tab id %@", id) }
@@ -179,28 +191,41 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
 
   /// Reports the viewer's pick and keeps the selection where Dart put it.
   ///
-  /// Because the answer never changes the selection, AppKit's keyboard
-  /// navigation does not stop at one proposal: a single Down arrow proposes
-  /// every following row in turn (observed: one key press, twelve proposals).
-  /// So only the first enabled row proposed by a given key press or
-  /// mouse-down is reported, which also skips group headers and disabled
-  /// rows on the way. Drags and other tracking events report nothing.
-  /// `shouldSelectItem` is not implemented; AppKit skips it when this is.
+  /// Because the answer never changes the selection, AppKit does not stop
+  /// at one proposal: a single Down arrow proposes every following row in
+  /// turn (observed: one key press, twelve proposals), and a click proposes
+  /// its row twice on the mouse-up (never on the mouse-down). So only the
+  /// first enabled row a given key press or click proposes is reported,
+  /// which also skips group headers and disabled rows on the way. Drags
+  /// report nothing. `shouldSelectItem` is not implemented; AppKit skips it
+  /// when this is.
   func outlineView(
     _ outlineView: NSOutlineView,
     selectionIndexesForProposedSelection proposedSelectionIndexes: IndexSet
   ) -> IndexSet {
     guard let event = NSApp.currentEvent,
-      event.type == .keyDown || event.type == .leftMouseDown,
-      event !== reportedEvent,
+      let gesture = Self.gesture(of: event),
+      gesture != reportedGesture,
       let row = proposedSelectionIndexes.first,
       let spec = (outlineView.item(atRow: row) as? SidebarItem)?.row, spec.enabled
     else {
       return outlineView.selectedRowIndexes
     }
-    reportedEvent = event
+    reportedGesture = gesture
     onSelect?(spec.id)
     return outlineView.selectedRowIndexes
+  }
+
+  /// Identifies the key press or click `event` belongs to, or nil for events
+  /// that never report. A click's down and up share an `eventNumber`;
+  /// `eventNumber` is only valid on mouse events, so key presses use their
+  /// timestamp.
+  private static func gesture(of event: NSEvent) -> String? {
+    switch event.type {
+    case .keyDown: return "key \(event.timestamp)"
+    case .leftMouseDown, .leftMouseUp: return "click \(event.eventNumber)"
+    default: return nil
+    }
   }
 
   func outlineView(

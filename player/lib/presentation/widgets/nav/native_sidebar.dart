@@ -141,10 +141,24 @@ String nativeSidebarSymbol(String id) {
   return 'line.3.horizontal.decrease.circle';
 }
 
+/// Builtin pages that go under the Library heading when [nativeSidebarFor]
+/// groups rows. Every other row in the middle (the listings and saved
+/// filters) goes under Filters.
+const Set<String> kLibrarySidebarIds = {
+  'home',
+  'continue_watching',
+  'movies',
+  'shows',
+  'calendar',
+};
+
 /// The sidebar for one shell location. Mirrors `SidebarContent`: Search
 /// leads, the source's rows scroll in the middle with New filter after them,
 /// All servers lists its servers, and the app's own rows close the list with
 /// Settings last.
+///
+/// [grouped] (macOS) splits the middle rows under Library and Filters
+/// headings, keeping their order within each; New filter closes Filters.
 NativeSidebar nativeSidebarFor({
   required List<SourceNavEntry> entries,
   required List<NativeSidebarServer> servers,
@@ -153,6 +167,7 @@ NativeSidebar nativeSidebarFor({
   required bool showBackToMydia,
   required String? sourceHeader,
   String? settingsBadge,
+  bool grouped = false,
 }) {
   // The floating bar leads with the iPhone bar's first three rows. Past
   // about four tabs iPadOS pages it, so the rest stay a toggle away.
@@ -174,6 +189,22 @@ NativeSidebar nativeSidebarFor({
         inTabBar: entry.id == 'search' || barIds.contains(entry.id),
       );
 
+  final middle = [
+    for (final entry in entries)
+      if (!entry.anchored) entry,
+  ];
+  bool isLibrary(SourceNavEntry entry) =>
+      kLibrarySidebarIds.contains(entry.id) || entry.id.startsWith('library-');
+  final newFilter = canFilter
+      ? NativeSidebarItem(
+          id: kNewFilterId,
+          title: 'New filter',
+          symbol: 'plus',
+          enabled: !isOffline,
+          kind: NativeSidebarItemKind.action,
+        )
+      : null;
+
   final sections = [
     NativeSidebarSection(id: 'leading', items: [
       if (showBackToMydia)
@@ -193,18 +224,21 @@ NativeSidebar nativeSidebarFor({
       for (final entry in entries)
         if (entry.anchored && entry.id == 'search') destination(entry),
     ]),
-    NativeSidebarSection(id: 'main', items: [
-      for (final entry in entries)
-        if (!entry.anchored) destination(entry),
-      if (canFilter)
-        NativeSidebarItem(
-          id: kNewFilterId,
-          title: 'New filter',
-          symbol: 'plus',
-          enabled: !isOffline,
-          kind: NativeSidebarItemKind.action,
-        ),
-    ]),
+    if (grouped) ...[
+      NativeSidebarSection(id: 'library', title: 'Library', items: [
+        for (final entry in middle)
+          if (isLibrary(entry)) destination(entry),
+      ]),
+      NativeSidebarSection(id: 'filters', title: 'Filters', items: [
+        for (final entry in middle)
+          if (!isLibrary(entry)) destination(entry),
+        if (newFilter != null) newFilter,
+      ]),
+    ] else
+      NativeSidebarSection(id: 'main', items: [
+        for (final entry in middle) destination(entry),
+        if (newFilter != null) newFilter,
+      ]),
     NativeSidebarSection(id: 'servers', title: 'Servers', items: [
       for (final server in servers)
         NativeSidebarItem(
