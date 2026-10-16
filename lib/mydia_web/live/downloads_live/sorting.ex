@@ -95,7 +95,7 @@ defmodule MydiaWeb.DownloadsLive.Sorting do
   defp sort_spec("imported_asc"), do: {&imported_sort_key/1, {:asc, DateTime}}
   defp sort_spec(_unknown), do: {& &1.inserted_at, {:desc, DateTime}}
 
-  defp sort_name(download), do: String.downcase(ListView.display_title(download) || "")
+  defp sort_name(download), do: String.downcase(ListView.display_title(download))
 
   defp status_rank(download) do
     # Stall state overrides the client status for sorting: a soft-stall groups
