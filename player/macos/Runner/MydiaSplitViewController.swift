@@ -19,8 +19,17 @@ final class MydiaSplitViewController: NSSplitViewController {
   var onSidebarCollapsedChanged: ((Bool) -> Void)?
 
   /// The viewer's own choice, kept while a covering page forces a collapse.
-  private var viewerCollapsed = false
+  /// Stored separately from the split view's autosave, which would also
+  /// remember a forced collapse and start the next launch collapsed.
+  private var viewerCollapsed = UserDefaults.standard.bool(
+    forKey: MydiaSplitViewController.viewerCollapsedKey) {
+    didSet { UserDefaults.standard.set(viewerCollapsed, forKey: Self.viewerCollapsedKey) }
+  }
+  private static let viewerCollapsedKey = "MydiaSidebarViewerCollapsed"
   private var forcedCollapsed = false
+
+  /// Whether a covering page (the player) has hidden the sidebar and toolbar.
+  var chromeForcedHidden: Bool { forcedCollapsed }
   private var observation: NSKeyValueObservation?
 
   init(flutter: FlutterViewController, sidebar: NSViewController) {
@@ -56,23 +65,34 @@ final class MydiaSplitViewController: NSSplitViewController {
 
   override func viewDidAppear() {
     super.viewDidAppear()
+    if !forcedCollapsed { sidebarItem.isCollapsed = viewerCollapsed }
     // A first launch has no autosaved width; start at 240.
     if UserDefaults.standard.object(forKey: "NSSplitView Subview Frames MydiaSidebar") == nil {
       splitView.setPosition(240, ofDividerAt: 0)
     }
   }
 
-  /// False collapses the sidebar for a page that covers the shell; true
-  /// restores whatever the viewer had.
+  /// False collapses the sidebar and hides the toolbar (its toggle) for a
+  /// page that covers the shell, the player; true restores whatever the
+  /// viewer had.
   func setChromeVisible(_ visible: Bool) {
     if visible {
       guard forcedCollapsed else { return }
       forcedCollapsed = false
+      setToolbarVisible(true)
       sidebarItem.animator().isCollapsed = viewerCollapsed
     } else {
       guard !forcedCollapsed else { return }
       forcedCollapsed = true
+      setToolbarVisible(false)
       sidebarItem.animator().isCollapsed = true
     }
+  }
+
+  /// Fullscreen hides the toolbar on its own (`MainFlutterWindow`), so leave
+  /// it hidden there.
+  private func setToolbarVisible(_ visible: Bool) {
+    guard let window = view.window, !window.styleMask.contains(.fullScreen) else { return }
+    window.toolbar?.isVisible = visible
   }
 }

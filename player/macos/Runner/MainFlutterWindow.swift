@@ -122,7 +122,10 @@ class MainFlutterWindow: NSWindow, NSToolbarDelegate {
     ) { [weak self] _ in self?.toolbar?.isVisible = false }
     center.addObserver(
       forName: NSWindow.didExitFullScreenNotification, object: self, queue: .main
-    ) { [weak self] _ in self?.toolbar?.isVisible = true }
+    ) { [weak self] _ in
+      // Not over the player, which hides the toolbar along with the sidebar.
+      self?.toolbar?.isVisible = !split.chromeForcedHidden
+    }
 
     super.awakeFromNib()
   }

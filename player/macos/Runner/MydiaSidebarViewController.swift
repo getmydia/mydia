@@ -7,6 +7,8 @@ struct SidebarRowSpec: Equatable {
   let symbol: String
   let badge: String?
   let enabled: Bool
+  /// A command (Edit sidebar) rather than a place to go.
+  let isAction: Bool
 
   init?(channelValue: Any?) {
     guard let map = channelValue as? [String: Any],
@@ -19,6 +21,7 @@ struct SidebarRowSpec: Equatable {
     self.symbol = symbol
     badge = map["badge"] as? String
     enabled = (map["enabled"] as? Bool) ?? true
+    isAction = (map["kind"] as? String) == "action"
   }
 }
 
@@ -29,19 +32,34 @@ enum SidebarNode: Equatable {
   case group(title: String, rows: [SidebarRowSpec])
 }
 
-/// Turns a `setSidebar` payload into outline nodes.
-func sidebarNodes(from payload: Any?) -> [SidebarNode] {
-  let sections = ((payload as? [String: Any])?["sections"] as? [Any]) ?? []
+/// What the macOS sidebar shows for one `setSidebar` payload.
+///
+/// The `trailing` section (Edit sidebar, Downloads, Settings) is the app's
+/// own, not the library's, so it leaves the scrolling list as the Mac
+/// pattern has it: its places pin to a footer, and its commands move to the
+/// sidebar's context menu and the View menu.
+struct SidebarModel: Equatable {
   var nodes: [SidebarNode] = []
-  for case let section as [String: Any] in sections {
-    let rows = ((section["items"] as? [Any]) ?? []).compactMap(SidebarRowSpec.init(channelValue:))
-    if let title = section["title"] as? String, !title.isEmpty {
-      nodes.append(.group(title: title, rows: rows))
-    } else {
-      nodes.append(contentsOf: rows.map(SidebarNode.row))
+  var footer: [SidebarRowSpec] = []
+  var commands: [SidebarRowSpec] = []
+
+  init() {}
+
+  init(payload: Any?) {
+    let sections = ((payload as? [String: Any])?["sections"] as? [Any]) ?? []
+    for case let section as [String: Any] in sections {
+      let rows = ((section["items"] as? [Any]) ?? []).compactMap(
+        SidebarRowSpec.init(channelValue:))
+      if section["id"] as? String == "trailing" {
+        footer += rows.filter { !$0.isAction }
+        commands += rows.filter(\.isAction)
+      } else if let title = section["title"] as? String, !title.isEmpty {
+        nodes.append(.group(title: title, rows: rows))
+      } else {
+        nodes.append(contentsOf: rows.map(SidebarNode.row))
+      }
     }
   }
-  return nodes
 }
 
 /// The outline view's item. `NSOutlineView` keys items by identity, so each
@@ -66,8 +84,9 @@ private final class SidebarItem: NSObject {
   var isGroup: Bool { groupTitle != nil }
 }
 
-/// The macOS sidebar pane: a source-list outline view of the rows Dart sends
-/// over `mydia/native-tab-bar`.
+/// The macOS sidebar pane: a scrolling source list of the rows Dart sends
+/// over `mydia/native-tab-bar`, and a footer pinned below it for the app's
+/// own places (see `SidebarModel`).
 ///
 /// Dart owns selection. A click or arrow key reports the row through
 /// `onSelect` and leaves the highlight alone; Dart navigates and calls
@@ -78,9 +97,15 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
   /// Called with a row's id when the viewer picks an enabled row.
   var onSelect: ((String) -> Void)?
 
+  /// The model's commands, for the View menu.
+  private(set) var commands: [SidebarRowSpec] = []
+
   private let outlineView = NSOutlineView()
-  private var lastNodes: [SidebarNode]?
+  private let footerView = NSOutlineView()
+  private var footerHeight: NSLayoutConstraint?
+  private var lastModel: SidebarModel?
   private var items: [SidebarItem] = []
+  private var footerItems: [SidebarItem] = []
   private var itemsById: [String: SidebarItem] = [:]
   /// The group each grouped row sits in, to expand it for `select`.
   private var groupById: [String: SidebarItem] = [:]
@@ -94,34 +119,68 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
   private static let badgeTag = 1
 
   override func loadView() {
-    let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("SidebarColumn"))
-    outlineView.addTableColumn(column)
-    outlineView.outlineTableColumn = column
-    outlineView.style = .sourceList
-    outlineView.headerView = nil
-    outlineView.floatsGroupRows = false
-    outlineView.rowSizeStyle = .default
-    outlineView.allowsEmptySelection = true
-    // Cmd+A, Shift+arrow and Cmd+click would otherwise propose sets.
-    outlineView.allowsMultipleSelection = false
-    outlineView.dataSource = self
-    outlineView.delegate = self
+    let list = Self.scrollView(for: outlineView, delegate: self)
+    list.hasVerticalScroller = true
+    let footer = Self.scrollView(for: footerView, delegate: self)
+    footer.verticalScrollElasticity = .none
+    let separator = NSBox()
+    separator.boxType = .separator
 
-    let scrollView = NSScrollView()
-    scrollView.documentView = outlineView
-    scrollView.hasVerticalScroller = true
-    scrollView.drawsBackground = false
-    view = scrollView
+    let root = NSView()
+    for view in [list, separator, footer] as [NSView] {
+      view.translatesAutoresizingMaskIntoConstraints = false
+      root.addSubview(view)
+    }
+    let height = footer.heightAnchor.constraint(equalToConstant: 0)
+    footerHeight = height
+    NSLayoutConstraint.activate([
+      list.topAnchor.constraint(equalTo: root.topAnchor),
+      list.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+      list.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+      separator.topAnchor.constraint(equalTo: list.bottomAnchor),
+      separator.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+      separator.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
+      footer.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 4),
+      footer.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+      footer.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+      footer.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -6),
+      height,
+    ])
+    view = root
   }
 
-  /// Shows `nodes`, keeping the current selection. A payload equal to the
+  private static func scrollView(
+    for outline: NSOutlineView, delegate: MydiaSidebarViewController
+  ) -> NSScrollView {
+    let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("SidebarColumn"))
+    outline.addTableColumn(column)
+    outline.outlineTableColumn = column
+    outline.style = .sourceList
+    outline.headerView = nil
+    outline.floatsGroupRows = false
+    outline.rowSizeStyle = .default
+    outline.allowsEmptySelection = true
+    // Cmd+A, Shift+arrow and Cmd+click would otherwise propose sets.
+    outline.allowsMultipleSelection = false
+    outline.dataSource = delegate
+    outline.delegate = delegate
+
+    let scrollView = NSScrollView()
+    scrollView.documentView = outline
+    scrollView.drawsBackground = false
+    return scrollView
+  }
+
+  /// Shows `model`, keeping the current selection. A model equal to the
   /// last one is ignored.
-  func apply(_ nodes: [SidebarNode]) {
-    guard nodes != lastNodes else { return }
-    lastNodes = nodes
+  func apply(_ model: SidebarModel) {
+    guard model != lastModel else { return }
+    lastModel = model
     itemsById = [:]
     groupById = [:]
-    items = nodes.map { node in
+    footerItems = model.footer.map { remember(SidebarItem(row: $0)) }
+    commands = model.commands
+    items = model.nodes.map { node in
       switch node {
       case .row(let spec):
         return remember(SidebarItem(row: spec))
@@ -134,9 +193,40 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
     }
     outlineView.reloadData()
     outlineView.expandItem(nil, expandChildren: true)
+    footerView.reloadData()
+    let rows = footerView.numberOfRows
+    footerHeight?.constant = rows > 0 ? footerView.rect(ofRow: rows - 1).maxY : 0
+    let menu = commandMenu()
+    outlineView.menu = menu
+    footerView.menu = menu
     applySelection(logMissing: false)
   }
 
+  /// Runs the command row `id` (Edit sidebar) the way a click on its row
+  /// used to.
+  func perform(command id: String) {
+    guard let spec = commands.first(where: { $0.id == id }), spec.enabled else { return }
+    onSelect?(spec.id)
+  }
+
+  private func commandMenu() -> NSMenu? {
+    guard !commands.isEmpty else { return nil }
+    let menu = NSMenu()
+    menu.autoenablesItems = false
+    for spec in commands {
+      let item = NSMenuItem(
+        title: "\(spec.title)…", action: #selector(commandChosen(_:)), keyEquivalent: "")
+      item.target = self
+      item.representedObject = spec.id
+      item.isEnabled = spec.enabled
+      menu.addItem(item)
+    }
+    return menu
+  }
+
+  @objc private func commandChosen(_ sender: NSMenuItem) {
+    if let id = sender.representedObject as? String { perform(command: id) }
+  }
 
   /// Highlights the row with `id`, or clears the highlight for nil.
   func select(_ id: String?) {
@@ -152,6 +242,7 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
   private func applySelection(logMissing: Bool) {
     guard let id = selectedId else {
       outlineView.deselectAll(nil)
+      footerView.deselectAll(nil)
       return
     }
     // A row inside a group the viewer collapsed has no row index until the
@@ -159,24 +250,31 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
     if let group = groupById[id], !outlineView.isItemExpanded(group) {
       outlineView.expandItem(group)
     }
-    guard let item = itemsById[id], case let row = outlineView.row(forItem: item), row >= 0 else {
+    let inFooter = footerItems.contains { $0.row?.id == id }
+    let target = inFooter ? footerView : outlineView
+    (inFooter ? outlineView : footerView).deselectAll(nil)
+    guard let item = itemsById[id], case let row = target.row(forItem: item), row >= 0 else {
       if logMissing { NSLog("[NativeTabBar] select: unknown tab id %@", id) }
-      outlineView.deselectAll(nil)
+      target.deselectAll(nil)
       return
     }
-    outlineView.selectRowIndexes([row], byExtendingSelection: false)
+    target.selectRowIndexes([row], byExtendingSelection: false)
   }
 
   // MARK: NSOutlineViewDataSource
 
   func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
-    guard let item = item as? SidebarItem else { return items.count }
+    guard let item = item as? SidebarItem else { return roots(of: outlineView).count }
     return item.children.count
   }
 
   func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
-    guard let item = item as? SidebarItem else { return items[index] }
+    guard let item = item as? SidebarItem else { return roots(of: outlineView)[index] }
     return item.children[index]
+  }
+
+  private func roots(of outline: NSOutlineView) -> [SidebarItem] {
+    outline === footerView ? footerItems : items
   }
 
   func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
@@ -233,12 +331,12 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
   ) -> NSView? {
     guard let item = item as? SidebarItem else { return nil }
     if let title = item.groupTitle {
-      let cell = dequeue(Self.groupCellId) { Self.makeGroupCell() }
+      let cell = dequeue(Self.groupCellId, in: outlineView) { Self.makeGroupCell() }
       cell.textField?.stringValue = title
       return cell
     }
     guard let spec = item.row else { return nil }
-    let cell = dequeue(Self.cellId) { Self.makeRowCell() }
+    let cell = dequeue(Self.cellId, in: outlineView) { Self.makeRowCell() }
     cell.textField?.stringValue = spec.title
     cell.textField?.textColor = spec.enabled ? .labelColor : .disabledControlTextColor
     cell.imageView?.image = Self.symbolImage(spec.symbol, description: spec.title)
@@ -251,9 +349,10 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
   }
 
   private func dequeue(
-    _ id: NSUserInterfaceItemIdentifier, make: () -> NSTableCellView
+    _ id: NSUserInterfaceItemIdentifier, in outline: NSOutlineView,
+    make: () -> NSTableCellView
   ) -> NSTableCellView {
-    if let cell = outlineView.makeView(withIdentifier: id, owner: self) as? NSTableCellView {
+    if let cell = outline.makeView(withIdentifier: id, owner: self) as? NSTableCellView {
       return cell
     }
     let cell = make()

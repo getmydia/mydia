@@ -14,6 +14,8 @@ final class NativeTabBarPlugin: NSObject {
   private var loggedIgnored: Set<String> = []
   private var lastChrome: Double?
   private var observers: [NSObjectProtocol] = []
+  /// The View menu items `installCommands` added, removed on the next call.
+  private var viewMenuItems: [NSMenuItem] = []
 
   init(
     messenger: FlutterBinaryMessenger, split: MydiaSplitViewController,
@@ -64,7 +66,8 @@ final class NativeTabBarPlugin: NSObject {
     case "isSupported": result(true)
     case "layout": result(["sidebar": true])
     case "setSidebar":
-      sidebar?.apply(sidebarNodes(from: call.arguments))
+      sidebar?.apply(SidebarModel(payload: call.arguments))
+      installCommands()
       // The first report goes out on the Flutter view's first frame change,
       // before Dart listens; resend so Dart's insets are never left null.
       lastChrome = nil
@@ -84,6 +87,36 @@ final class NativeTabBarPlugin: NSObject {
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  /// Puts the sidebar's commands (Edit sidebar) at the top of the View menu.
+  private func installCommands() {
+    guard
+      let viewMenu = NSApp.mainMenu?.items.first(where: { $0.title == "View" })?.submenu
+    else { return }
+    viewMenuItems.forEach(viewMenu.removeItem)
+    viewMenuItems = []
+    // AppKit retitles it Show/Hide Sidebar as the pane changes.
+    let toggle = NSMenuItem(
+      title: "Show Sidebar", action: #selector(NSSplitViewController.toggleSidebar(_:)),
+      keyEquivalent: "s")
+    toggle.keyEquivalentModifierMask = [.command, .control]
+    viewMenuItems.append(toggle)
+    for spec in sidebar?.commands ?? [] {
+      let item = NSMenuItem(
+        title: "\(spec.title)…", action: #selector(commandChosen(_:)), keyEquivalent: "")
+      item.target = self
+      item.representedObject = spec.id
+      viewMenuItems.append(item)
+    }
+    viewMenuItems.append(.separator())
+    for (index, item) in viewMenuItems.enumerated() {
+      viewMenu.insertItem(item, at: index)
+    }
+  }
+
+  @objc private func commandChosen(_ sender: NSMenuItem) {
+    if let id = sender.representedObject as? String { sidebar?.perform(command: id) }
   }
 
   /// The width of the Flutter pane's title band, from its leading edge, that
@@ -138,5 +171,12 @@ final class NativeTabBarPlugin: NSObject {
       if let found = findToggle(in: subview) { return found }
     }
     return nil
+  }
+}
+
+extension NativeTabBarPlugin: NSMenuItemValidation {
+  func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    guard let id = menuItem.representedObject as? String else { return true }
+    return sidebar?.commands.first(where: { $0.id == id })?.enabled ?? false
   }
 }
