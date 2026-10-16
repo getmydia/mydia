@@ -56,11 +56,18 @@ final class NativeTabBarPlugin: NSObject {
 
   private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
-    case "mode": result("sidebar")
+    case "mode":
+      // A fresh Dart isolate (first launch, hot restart) asks this first and
+      // has missed any earlier report, so the next one must go out.
+      lastChrome = nil
+      result("sidebar")
     case "isSupported": result(true)
     case "layout": result(["sidebar": true])
     case "setSidebar":
       sidebar?.apply(sidebarNodes(from: call.arguments))
+      // The first report goes out on the Flutter view's first frame change,
+      // before Dart listens; resend so Dart's insets are never left null.
+      lastChrome = nil
       reportInsets()
       result(nil)
     case "select":

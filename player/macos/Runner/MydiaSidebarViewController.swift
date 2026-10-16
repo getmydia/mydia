@@ -99,6 +99,8 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
     outlineView.floatsGroupRows = false
     outlineView.rowSizeStyle = .default
     outlineView.allowsEmptySelection = true
+    // Cmd+A, Shift+arrow and Cmd+click would otherwise propose sets.
+    outlineView.allowsMultipleSelection = false
     outlineView.dataSource = self
     outlineView.delegate = self
 
@@ -128,7 +130,6 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
     outlineView.expandItem(nil, expandChildren: true)
     applySelection(logMissing: false)
   }
-
 
   /// Highlights the row with `id`, or clears the highlight for nil.
   func select(_ id: String?) {

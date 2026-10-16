@@ -13,8 +13,9 @@ import '../../../core/navigation/sidebar_layout_providers.dart';
 import '../../../core/theme/colors.dart';
 import 'sidebar_content.dart';
 
-/// Opens on the root navigator, so the native sidebar hides while it is up
-/// (`AppShell.nativeBarVisible`), and ends edit mode however it closes.
+/// Opens on the root navigator, so the iPad native sidebar hides while it is
+/// up (`AppShell.nativeBarVisible`), and ends edit mode however it closes.
+/// The macOS sidebar is its own pane and stays, as it does for every popup.
 Future<void> showSidebarEditSheet({
   required BuildContext context,
   required WidgetRef ref,
