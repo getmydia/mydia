@@ -2,15 +2,15 @@
 import Flutter
 import UIKit
 
-/// The window root on iOS 26 iPhones: a plain container holding the Flutter
-/// view and, above it, the native tab bar.
+/// The window root on iOS 26 iPhones and iPads: a plain container holding
+/// the Flutter view and, above it, the native tab bar or sidebar.
 ///
 /// The `FlutterViewController` is added once, full screen at the bottom, and
 /// never moved: re-parenting it sends the app lifecycle `inactive`, which
 /// pauses playback and raises the privacy blur. A plain container forwards
 /// appearance calls to it unchanged, so Flutter keeps rendering through tab
 /// changes. `MydiaTabBarController` sits on top, clear, and only ever takes
-/// touches on the bar and the accessory (`RootTouchView`).
+/// touches on its own chrome (`RootTouchView`).
 @available(iOS 26.0, *)
 final class MydiaRootViewController: UIViewController {
   let flutterViewController: FlutterViewController
@@ -60,7 +60,7 @@ final class MydiaRootViewController: UIViewController {
     child.didMove(toParent: self)
   }
 
-  /// The bar or the accessory when the touch lands on one; Flutter otherwise.
+  /// The native chrome when the touch lands on it; Flutter otherwise.
   private func route(_ point: CGPoint, with event: UIEvent?) -> UIView? {
     let tabsView: UIView = tabs.view
     if let hit = tabs.hitTestBar(view.convert(point, to: tabsView), with: event) {

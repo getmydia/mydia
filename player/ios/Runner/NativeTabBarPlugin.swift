@@ -4,9 +4,9 @@ import UIKit
 /// Owns `mydia/native-tab-bar` (lib/core/platform/native_tab_bar_channel.dart)
 /// and drives `MydiaTabBarController` from it.
 ///
-/// Created on every iOS version. Only an iOS 26 iPhone with a 26 SDK build
-/// gets a controller attached; everywhere else `isSupported` answers false and
-/// Dart never sends anything else.
+/// Created on every iOS version. Only an iOS 26 iPhone or iPad with a 26 SDK
+/// build gets a controller attached; everywhere else `mode` answers "none"
+/// (and `isSupported` false) and Dart never sends anything else.
 final class NativeTabBarPlugin: NSObject {
   static let channelName = "mydia/native-tab-bar"
 
@@ -31,8 +31,14 @@ final class NativeTabBarPlugin: NSObject {
     tabs.onTabSelected = { [weak self] id in
       self?.channel.invokeMethod("tabSelected", arguments: id)
     }
-    tabs.onInsetsChanged = { [weak self] bottom in
-      self?.channel.invokeMethod("insetsChanged", arguments: bottom)
+    tabs.onInsetsChanged = { [weak self] top, leading, bottom in
+      self?.channel.invokeMethod(
+        "insetsChanged",
+        arguments: ["top": top, "leading": leading, "bottom": bottom]
+      )
+    }
+    tabs.onLayoutChanged = { [weak self] sidebar in
+      self?.channel.invokeMethod("layoutChanged", arguments: ["sidebar": sidebar])
     }
     tabs.onAccessoryTapped = { [weak self] in
       self?.channel.invokeMethod("accessoryTapped", arguments: nil)
@@ -47,11 +53,21 @@ final class NativeTabBarPlugin: NSObject {
     #if compiler(>=6.2)
     if #available(iOS 26.0, *), let tabs = controller as? MydiaTabBarController {
       switch call.method {
+      case "mode":
+        result(tabs.usesSidebar ? "sidebar" : "bar")
       case "isSupported":
         result(true)
+      case "layout":
+        result(["sidebar": tabs.isSidebarLayout])
       case "setTabs":
         let specs = (call.arguments as? [Any] ?? []).compactMap(NativeTabSpec.init(channelValue:))
         tabs.setTabs(specs)
+        result(nil)
+      case "setSidebar":
+        let map = call.arguments as? [String: Any]
+        let sections = (map?["sections"] as? [Any] ?? [])
+          .compactMap(NativeSidebarSectionSpec.init(channelValue:))
+        tabs.setSidebar(sections)
         result(nil)
       case "select":
         if let id = call.arguments as? String { tabs.select(id) }
@@ -68,9 +84,12 @@ final class NativeTabBarPlugin: NSObject {
       return
     }
     #endif
-    if call.method == "isSupported" {
+    switch call.method {
+    case "mode":
+      result("none")
+    case "isSupported":
       result(false)
-    } else {
+    default:
       result(nil)
     }
   }

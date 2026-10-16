@@ -20,13 +20,13 @@ class SceneDelegate: FlutterSceneDelegate {
     installNativeTabBar()
   }
 
-  /// On iOS 26 iPhones, puts a native tab bar over the Flutter view.
-  /// Everywhere else the root stays the `FlutterViewController` and the
-  /// plugin only answers `isSupported` with false.
+  /// On iOS 26 iPhones, puts a native tab bar over the Flutter view; on
+  /// iOS 26 iPads, a native sidebar. Everywhere else the root stays the
+  /// `FlutterViewController` and the plugin answers `mode` with "none".
   private func installNativeTabBar() {
     #if compiler(>=6.2)
     guard #available(iOS 26.0, *),
-          UIDevice.current.userInterfaceIdiom == .phone else { return }
+          [.phone, .pad].contains(UIDevice.current.userInterfaceIdiom) else { return }
     guard let plugin = appDelegate?.nativeTabBarPlugin else {
       NSLog("[NativeTabBar] root swap skipped: plugin not registered")
       return
