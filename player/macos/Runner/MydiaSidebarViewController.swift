@@ -83,6 +83,8 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
   private var items: [SidebarItem] = []
   private var itemsById: [String: SidebarItem] = [:]
   private var selectedId: String?
+  /// The event that last reported a row; see `selectionIndexesForProposedSelection`.
+  private var reportedEvent: NSEvent?
 
   private static let cellId = NSUserInterfaceItemIdentifier("SidebarRow")
   private static let groupCellId = NSUserInterfaceItemIdentifier("SidebarGroup")
@@ -126,6 +128,7 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
     outlineView.expandItem(nil, expandChildren: true)
     applySelection(logMissing: false)
   }
+
 
   /// Highlights the row with `id`, or clears the highlight for nil.
   func select(_ id: String?) {
@@ -173,11 +176,30 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
     (item as? SidebarItem)?.isGroup ?? false
   }
 
-  func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
-    if let spec = (item as? SidebarItem)?.row, spec.enabled {
-      onSelect?(spec.id)
+  /// Reports the viewer's pick and keeps the selection where Dart put it.
+  ///
+  /// Because the answer never changes the selection, AppKit's keyboard
+  /// navigation does not stop at one proposal: a single Down arrow proposes
+  /// every following row in turn (observed: one key press, twelve proposals).
+  /// So only the first enabled row proposed by a given key press or
+  /// mouse-down is reported, which also skips group headers and disabled
+  /// rows on the way. Drags and other tracking events report nothing.
+  /// `shouldSelectItem` is not implemented; AppKit skips it when this is.
+  func outlineView(
+    _ outlineView: NSOutlineView,
+    selectionIndexesForProposedSelection proposedSelectionIndexes: IndexSet
+  ) -> IndexSet {
+    guard let event = NSApp.currentEvent,
+      event.type == .keyDown || event.type == .leftMouseDown,
+      event !== reportedEvent,
+      let row = proposedSelectionIndexes.first,
+      let spec = (outlineView.item(atRow: row) as? SidebarItem)?.row, spec.enabled
+    else {
+      return outlineView.selectedRowIndexes
     }
-    return false
+    reportedEvent = event
+    onSelect?(spec.id)
+    return outlineView.selectedRowIndexes
   }
 
   func outlineView(
