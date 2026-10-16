@@ -6,6 +6,7 @@ defmodule MydiaWeb.DashboardLive.ComponentsTest do
   alias MydiaWeb.DashboardLive.HealthComponents
   alias MydiaWeb.DashboardLive.EditHomeComponents
   alias Mydia.Health.Rollup
+  alias Mydia.Indexers.CardigannSummary
   alias Mydia.Accounts.HomeLayout.Widget
 
   test "quick_action_card renders link with title and description" do
@@ -98,7 +99,7 @@ defmodule MydiaWeb.DashboardLive.ComponentsTest do
     assert html =~ "FlareSolverr: down"
   end
 
-  test "system_health_widget hides tiles with :none state and handles empty trash" do
+  test "system_health_widget hides empty client and media-server tiles but keeps indexers" do
     empty_rollup = %Rollup{healthy: 0, unhealthy: 0, unknown: 0, total: 0, state: :none}
     trash_summary = %{count: 0, bytes: 0}
 
@@ -113,12 +114,57 @@ defmodule MydiaWeb.DashboardLive.ComponentsTest do
       )
 
     refute html =~ "health-tile-clients"
-    refute html =~ "health-tile-indexers"
+    document = LazyHTML.from_fragment(html)
+    indexers = LazyHTML.query(document, "#health-tile-indexers")
+    assert LazyHTML.text(indexers) =~ "Not set up"
+    assert LazyHTML.query(document, "#health-tile-indexers .badge-ghost") |> Enum.count() == 1
     refute html =~ "health-tile-media-servers"
     assert html =~ "health-tile-duplicates"
     assert html =~ "None"
     assert html =~ "health-tile-trash"
     assert html =~ "Empty"
+  end
+
+  test "indexers tile shows the Cardigann engine line when the library has trackers" do
+    rollup = %Rollup{healthy: 3, unhealthy: 0, unknown: 0, total: 3, state: :ok}
+    empty = %Rollup{healthy: 0, unhealthy: 0, unknown: 0, total: 0, state: :none}
+
+    html =
+      render_component(&HealthComponents.system_health_widget/1,
+        clients_rollup: empty,
+        indexers_rollup: rollup,
+        media_servers_rollup: empty,
+        duplicates_state: :none,
+        duplicates_count: 0,
+        trash_summary: %{count: 0, bytes: 0},
+        cardigann_summary: %CardigannSummary{engine: :builtin, enabled: 7, installed: 10}
+      )
+
+    document = LazyHTML.from_fragment(html)
+    subline = LazyHTML.query(document, "#health-tile-indexers #cardigann-engine-subline")
+    assert LazyHTML.text(subline) =~ "Cardigann: Built-in · 7/10"
+    assert LazyHTML.attribute(subline, "title") == ["Cardigann: Built-in · 7/10"]
+  end
+
+  test "indexers tile hides the Cardigann line with no summary or an empty library" do
+    rollup = %Rollup{healthy: 1, unhealthy: 0, unknown: 0, total: 1, state: :ok}
+    empty = %Rollup{healthy: 0, unhealthy: 0, unknown: 0, total: 0, state: :none}
+
+    for summary <- [nil, %CardigannSummary{engine: :builtin, enabled: 0, installed: 0}] do
+      html =
+        render_component(&HealthComponents.system_health_widget/1,
+          clients_rollup: empty,
+          indexers_rollup: rollup,
+          media_servers_rollup: empty,
+          duplicates_state: :none,
+          duplicates_count: 0,
+          trash_summary: %{count: 0, bytes: 0},
+          cardigann_summary: summary
+        )
+
+      document = LazyHTML.from_fragment(html)
+      assert LazyHTML.query(document, "#cardigann-engine-subline") |> Enum.empty?()
+    end
   end
 
   test "edit_home_modal renders visible widgets, hidden divider, and action buttons" do

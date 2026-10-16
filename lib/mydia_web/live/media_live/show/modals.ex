@@ -775,12 +775,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :close_after_grab, :boolean, default: false
   attr :download_error, :any, default: nil
   attr :results_empty?, :boolean, required: true
-  # Whether the accumulated (pre-filter) result pool is still empty. Gates the
-  # filters bar: see the comment on it below for why this is not
-  # `results_empty?`.
+  # Whether the accumulated (pre-filter) result pool is still empty. Gates the filters
+  # bar; the comment on it below says why this is not `results_empty?`.
   attr :raw_results_empty?, :boolean, default: true
-  attr :indexer_errors, :list, default: []
   attr :indexer_progress, :map, default: %{}
+  attr :cardigann_summary, Mydia.Indexers.CardigannSummary, default: nil
   attr :streams, :map, required: true
   attr :quality_filter, :string, default: nil
   attr :source_filter, :string, default: nil
@@ -921,6 +920,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <div class="px-4">
             <.indexer_search_status
               progress={@indexer_progress}
+              cardigann={@cardigann_summary}
               retry_event="retry_indexer"
               retest_paused_event="retest_paused"
             />

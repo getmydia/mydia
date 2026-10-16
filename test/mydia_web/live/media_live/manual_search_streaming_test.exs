@@ -2,6 +2,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   use MydiaWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import Mydia.IndexersFixtures
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
@@ -291,6 +292,24 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
              "#manual-search-existing",
              "Glass.Harbor.2019.1080p.WEB-DL.x265.mkv"
            )
+  end
+
+  # The tracker is installed but disabled so the search never fans out to it;
+  # an enabled one would send a real request to the fixture's example.com link.
+  test "the progress summary names the Cardigann engine and library counts", %{conn: conn} do
+    features = Application.get_env(:mydia, :features, [])
+    Application.put_env(:mydia, :features, Keyword.put(features, :cardigann_enabled, true))
+    on_exit(fn -> Application.put_env(:mydia, :features, features) end)
+
+    cardigann_definition_fixture(%{in_library: true, enabled: false})
+    media_item = media_item_fixture(%{title: "Glass Harbor", type: "movie"})
+    pending_indexer_fixture("slow-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    assert has_element?(view, "#indexer-search-cardigann", "· 0/1")
   end
 
   # Positive control for the refutation above: once an indexer reports

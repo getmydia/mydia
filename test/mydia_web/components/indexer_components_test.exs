@@ -3,6 +3,7 @@ defmodule MydiaWeb.IndexerComponentsTest do
 
   import Phoenix.LiveViewTest
 
+  alias Mydia.Indexers.CardigannSummary
   alias Mydia.Indexers.Structs.IndexerProgress
   alias Mydia.Indexers.Structs.PausedIndexer
   alias MydiaWeb.IndexerComponents
@@ -414,6 +415,40 @@ defmodule MydiaWeb.IndexerComponentsTest do
       assert Enum.empty?(LazyHTML.query(document, "#indexer-paused-p"))
       assert Enum.empty?(LazyHTML.query(document, "#indexer-search-paused-count"))
       assert Enum.empty?(LazyHTML.query(document, "#indexer-retest-paused-p"))
+    end
+  end
+
+  describe "Cardigann badge" do
+    defp one_pending_row do
+      %{"a" => %IndexerProgress{indexer_id: "a", indexer: "Alpha", status: :pending}}
+    end
+
+    test "shows the engine and library counts in the summary" do
+      html =
+        render_component(&IndexerComponents.indexer_search_status/1,
+          progress: one_pending_row(),
+          cardigann: %CardigannSummary{engine: :prowlarr, enabled: 7, installed: 10}
+        )
+
+      badge =
+        html |> LazyHTML.from_fragment() |> LazyHTML.query("summary #indexer-search-cardigann")
+
+      assert LazyHTML.text(badge) =~ "Cardigann: Prowlarr-based · 7/10"
+    end
+
+    test "is absent without a summary or with an empty library" do
+      for summary <- [nil, %CardigannSummary{engine: :builtin, enabled: 0, installed: 0}] do
+        html =
+          render_component(&IndexerComponents.indexer_search_status/1,
+            progress: one_pending_row(),
+            cardigann: summary
+          )
+
+        assert html
+               |> LazyHTML.from_fragment()
+               |> LazyHTML.query("#indexer-search-cardigann")
+               |> Enum.empty?()
+      end
     end
   end
 end
