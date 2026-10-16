@@ -1,12 +1,14 @@
-# The native iOS 26 tab bar and iPad sidebar
+# The native iOS 26 tab bar, iPad sidebar and macOS sidebar
 
 On an iPhone running iOS 26 the player replaces the Flutter dock with a real
 `UITabBarController` tab bar (Liquid Glass), and the floating cast bar with
 its bottom accessory. On an iPad running iPadOS 26 the same controller runs
 in `.tabSidebar` mode and replaces the Flutter rail with a native sidebar (see
-[iPad sidebar](#ipad-sidebar)). Flutter still draws every screen. Everywhere
-else (older iOS, Android, desktop, web) `BottomNav`, the rail and the floating
-cast bar are unchanged.
+[iPad sidebar](#ipad-sidebar)). On macOS an AppKit split view puts a native
+source-list sidebar beside the Flutter pane, served by the same channel (see
+[macOS sidebar](#macos-sidebar)). Flutter still draws every screen. Everywhere
+else (older iOS, Android, Windows, Linux, web) `BottomNav`, the rail and the
+floating cast bar are unchanged.
 
 | Side | File | Job |
 | --- | --- | --- |
@@ -371,6 +373,76 @@ a dev server:
   row.
 - No `unknown SF Symbol` or `unknown tab id` lines.
 
+## macOS sidebar
+
+The macOS window's content is a `MydiaSplitViewController`: a sidebar
+`NSSplitViewItem` holding `MydiaSidebarViewController` (a source-list
+`NSOutlineView`) and a content item holding the `FlutterViewController`.
+
+| File | Job |
+| --- | --- |
+| `macos/Runner/MydiaSplitViewController.swift` | the two panes, collapse on `setVisible`, the viewer's collapsed state |
+| `macos/Runner/MydiaSidebarViewController.swift` | the outline view and the `setSidebar` payload model |
+| `macos/Runner/NativeTabBarPlugin.swift` | owns `mydia/native-tab-bar` on macOS, measures `chromeLeading` |
+| `macos/Runner/MainFlutterWindow.swift` | builds the split view, the toolbar, the title band rule |
+
+The Flutter controller is added to the split view once in
+`MainFlutterWindow.awakeFromNib` and never re-parented, for the same reason
+the iOS container root exists: moving the engine's view between controllers
+is what broke touches and rendering on iPhone. `contentViewController` is the
+split view, so code that needs the Flutter controller (the Sparkle and
+window chrome channels in `AppDelegate`) reaches it through
+`MainFlutterWindow.flutterViewController`.
+
+### Channel differences
+
+Same method names and payloads as iOS, with these differences:
+
+- `mode` always answers `"sidebar"` and `layout` always `{"sidebar": true}`.
+  The pane never turns into a bar, so `layoutChanged` is never sent.
+- `setTabs` and `setAccessory` are ignored (logged once each).
+- `setSidebar` follows the iPad rule: untitled sections become top-level
+  rows, titled ones (Servers) become groups.
+- Dart owns selection. A click or an arrow key reports `tabSelected` and
+  leaves the highlight alone; only `select` moves it.
+- `setVisible(false)` collapses the sidebar for a page that covers the shell
+  (the player). `setVisible(true)` restores whatever the viewer had, so a
+  sidebar the viewer collapsed with the toggle stays collapsed afterwards.
+  Dialogs, sheets and the source picker do not hide the pane: it is a
+  separate pane, not an overlay.
+- `insetsChanged` carries a `chromeLeading` key: how much of the Flutter
+  pane's title band, from its leading edge, the window chrome covers. While
+  the sidebar shows, the traffic lights and the toggle sit over the sidebar
+  and it is 0. While it is collapsed, it is the trailing edge of the lights
+  and the toggle minus the pane's leading edge, plus the 9pt gap
+  `kMacTrafficLightsWidth` keeps. Measured at 132 on macOS 27. It is 0 in
+  fullscreen. It is measured on every frame change of the Flutter view,
+  because the collapse callback fires before the animated pane has moved.
+  The system toggle item has no public `view`, so the plugin finds the
+  title-bar control whose action is `toggleSidebar(_:)`.
+
+### Title band
+
+The toolbar carries only `.toggleSidebar` and `.sidebarTrackingSeparator`,
+which keeps the toggle over the sidebar pane. The band is still 40pt
+(`frame.height - contentLayoutRect.height`, measured with the toggle
+present), matching `kMacTitleBarOverlap`. `sendEvent` diverts title band
+double-clicks to Flutter only over the Flutter pane; over the sidebar pane
+AppKit's own title bar runs the system action.
+
+### Collapsing
+
+The content pane has a 480pt minimum and the sidebar
+`canCollapseFromWindowResize`, so a live resize narrower than both minimums
+collapses the sidebar. A programmatic `setFrame` does not: it stops at the
+window's minimum width (720 with a 240pt sidebar). The toolbar toggle
+restores it. The width is autosaved under `MydiaSidebar`; a first launch
+starts at 240.
+
+### Editing
+
+Edit sidebar opens as a dialog on desktop rather than a sheet.
+
 ## Embed mode
 
 When the player is embedded in Mydia, the bar leads with a `Mydia` back item
@@ -488,6 +560,36 @@ version. Do not record a line that was not observed.
 - [ ] A hardware keyboard and a trackpad reach the sidebar.
 - [ ] No `unknown SF Symbol` or `unknown tab id` lines in the device log.
 
+### macOS device gate: not started
+
+Fill in one line per item with the date, app version, Mac model and macOS
+version. Do not record a line that was not observed.
+
+Recorded without a person at the Mac (2026-10-16, macOS 27.0.1, Xcode 27.0,
+release build, NSLog self-test): the channel answers `mode` and `layout`;
+`setChromeVisible(false)` collapses and `true` restores the shown state;
+`chromeLeading` is 132 collapsed and 0 shown; the title band is 40.
+
+- [ ] Rows and order match the Flutter rail on master for one server; the
+  header row opens the picker beside the sidebar; switching servers updates
+  the rows; All servers shows the Servers group and switching from it works.
+- [ ] Dragging the window narrow collapses the sidebar; the toolbar toggle
+  restores it; the shell never shows the phone bottom bar at any width.
+- [ ] Sidebar shown: content title rows start at the pane's leading edge.
+  Sidebar collapsed: content title rows clear the lights and the toggle.
+- [ ] A title band double-click over the Flutter pane and over the sidebar
+  each run the system action once.
+- [ ] Keyboard: Tab into the sidebar, arrows move and navigate, type-select
+  works.
+- [ ] New filter opens; Edit sidebar opens as a dialog, a reorder shows after
+  Done, a click outside closes it without popping the page.
+- [ ] Dialogs, sheets and the picker leave the sidebar alone.
+- [ ] The player collapses the sidebar; leaving restores it; a sidebar the
+  viewer collapsed stays collapsed after the player.
+- [ ] Fullscreen: toolbar hidden, sidebar usable, no stray chrome inset.
+- [ ] Sparkle "Check for Updates" and the app menu still work.
+- [ ] No `unknown SF Symbol` or `unknown tab id` lines in the log.
+
 ## Known limits
 
 - Status-bar tap scroll-to-top after the root swap is unverified: Flutter
@@ -502,8 +604,20 @@ version. Do not record a line that was not observed.
   UIKit's, toggled by its own button.
 - iPad: while a Flutter popup is open (the source picker, a sheet), the whole
   native sidebar fades out, leaving its strip empty in landscape.
+- macOS: while the sidebar is collapsed the toggle sits in the Flutter pane's
+  title band, so a double-click on it is diverted to Flutter like any other
+  band double-click.
+- macOS: building the Rust core with Xcode 27 fails with `E0463 can't find
+  crate for tokio_macros`, because Xcode 27's `strip` writes proc-macro
+  dylibs dyld rejects (`mis-aligned LINKEDIT string pool`). Build with
+  `CARGO_PROFILE_RELEASE_STRIP=false
+  CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=false ./dev player macos build`
+  until that is fixed.
 
 ## Adding a Swift file to the Runner
+
+The same four entries apply to `macos/Runner.xcodeproj/project.pbxproj`;
+mirror `MainFlutterWindow.swift`'s entries for a macOS file.
 
 `ios/Runner.xcodeproj/project.pbxproj` is edited by hand, and each new Swift
 file needs four entries, with one unique ID per entry (the bar's files use the
