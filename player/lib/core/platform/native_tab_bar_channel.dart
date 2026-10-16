@@ -116,6 +116,7 @@ class NativeInsets {
     this.leading = 0,
     this.bottom = 0,
     this.chromeLeading = 0,
+    this.reportsChrome = false,
   });
 
   final double top;
@@ -132,6 +133,10 @@ class NativeInsets {
   /// [isZero]: it describes the window, not whether the sidebar is shown.
   final double chromeLeading;
 
+  /// Whether the report carried a `chromeLeading` key (macOS does, iPhone and
+  /// iPad never). Such a report is meaningful even when every value is 0.
+  final bool reportsChrome;
+
   bool get isZero => top == 0 && leading == 0 && bottom == 0;
 
   /// Reads the map the iPad and macOS send, or the bare bottom the iPhone sends.
@@ -142,6 +147,7 @@ class NativeInsets {
             top: top.toDouble(),
             leading: leading.toDouble(),
             bottom: bottom.toDouble(),
+            reportsChrome: value.containsKey('chromeLeading'),
             chromeLeading: switch (value['chromeLeading']) {
               num chrome => chrome.toDouble(),
               _ => 0,
@@ -156,15 +162,17 @@ class NativeInsets {
       other.top == top &&
       other.leading == leading &&
       other.bottom == bottom &&
-      other.chromeLeading == chromeLeading;
+      other.chromeLeading == chromeLeading &&
+      other.reportsChrome == reportsChrome;
 
   @override
-  int get hashCode => Object.hash(top, leading, bottom, chromeLeading);
+  int get hashCode =>
+      Object.hash(top, leading, bottom, chromeLeading, reportsChrome);
 
   @override
   String toString() =>
       'NativeInsets(top: $top, leading: $leading, bottom: $bottom, '
-      'chromeLeading: $chromeLeading)';
+      'chromeLeading: $chromeLeading, reportsChrome: $reportsChrome)';
 }
 
 /// The native chrome's insets changed. All zero while it is hidden.

@@ -43,7 +43,7 @@ class NativeSidebarInsets extends Notifier<NativeInsets?> {
     final events =
         ref.watch(nativeTabBarChannelProvider).events.listen((event) {
       if (event is NativeInsetsChanged &&
-          (!event.insets.isZero || event.insets.chromeLeading > 0)) {
+          (!event.insets.isZero || event.insets.reportsChrome)) {
         state = event.insets;
       }
     });

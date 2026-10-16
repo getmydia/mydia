@@ -45,7 +45,27 @@ void main() {
     await fromNative('insetsChanged',
         {'top': 0.0, 'leading': 0.0, 'bottom': 0.0, 'chromeLeading': 124.0});
     expect(container.read(nativeSidebarInsetsProvider),
-        const NativeInsets(chromeLeading: 124));
+        const NativeInsets(chromeLeading: 124, reportsChrome: true));
+  });
+
+  test('a later chromeLeading 0 report replaces a collapsed one', () async {
+    final container = containerAnswering(null);
+    container.read(nativeSidebarInsetsProvider);
+    await fromNative('insetsChanged',
+        {'top': 0.0, 'leading': 0.0, 'bottom': 0.0, 'chromeLeading': 124.0});
+    await fromNative('insetsChanged',
+        {'top': 0.0, 'leading': 0.0, 'bottom': 0.0, 'chromeLeading': 0.0});
+    expect(container.read(nativeSidebarInsetsProvider)?.chromeLeading, 0);
+  });
+
+  test('an all-zero report without the key is still dropped', () async {
+    final container = containerAnswering(null);
+    container.read(nativeSidebarInsetsProvider);
+    await fromNative(
+        'insetsChanged', {'top': 0.0, 'leading': 300.0, 'bottom': 0.0});
+    await fromNative(
+        'insetsChanged', {'top': 0.0, 'leading': 0.0, 'bottom': 0.0});
+    expect(container.read(nativeSidebarInsetsProvider)?.leading, 300);
   });
 
   test('regular starts true and takes the queried layout', () async {
