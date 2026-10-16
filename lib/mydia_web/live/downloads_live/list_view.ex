@@ -187,26 +187,18 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   end
 
   @spec display_title(map()) :: String.t()
-  def display_title(download) do
-    cond do
-      # Episode download - show parent show title
-      is_map(download.episode) ->
-        if is_map(download.episode.media_item) do
-          download.episode.media_item.title
-        else
-          # Fallback to direct media_item if episode.media_item is not loaded
-          if is_map(download.media_item), do: download.media_item.title, else: "Unknown Show"
-        end
+  # Episode download - show parent show title
+  def display_title(%{episode: %{media_item: %{title: title}}}), do: title
 
-      # Movie or show-level download
-      is_map(download.media_item) && download.media_item.title ->
-        download.media_item.title
+  # Fallback to direct media_item if episode.media_item is not loaded
+  def display_title(%{episode: %{}, media_item: %{title: title}}), do: title
+  def display_title(%{episode: %{}}), do: "Unknown Show"
 
-      # Fallback to torrent title
-      true ->
-        download.title
-    end
-  end
+  # Movie or show-level download
+  def display_title(%{media_item: %{title: title}}) when title not in [nil, false], do: title
+
+  # Fallback to torrent title
+  def display_title(download), do: download.title
 
   # An import problem that should be surfaced on the row even though the torrent
   # client still reports the download as completed/seeding. The torrent finishing
