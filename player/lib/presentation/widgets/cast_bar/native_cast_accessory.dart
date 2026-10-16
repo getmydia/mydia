@@ -113,7 +113,9 @@ class _NativeCastAccessoryState extends ConsumerState<NativeCastAccessory> {
         }
       case NativeAccessoryPlayPause():
         unawaited(_togglePlayback());
-      case NativeTabSelected() || NativeInsetsChanged():
+      case NativeTabSelected() ||
+            NativeInsetsChanged() ||
+            NativeLayoutChanged():
         break;
     }
   }

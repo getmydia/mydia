@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -106,11 +107,63 @@ final class NativeTabSelected extends NativeTabBarEvent {
   final String id;
 }
 
-/// The bar plus the accessory, measured from the screen bottom with the home
-/// indicator included. 0 while the bar is hidden.
-final class NativeInsetsChanged extends NativeTabBarEvent {
-  const NativeInsetsChanged(this.bottom);
+/// Where the native chrome sits over the Flutter view, in points. Each edge
+/// is 0 while the chrome is hidden.
+@immutable
+class NativeInsets {
+  const NativeInsets({this.top = 0, this.leading = 0, this.bottom = 0});
+
+  final double top;
+
+  /// The content's leading edge: the sidebar's width while it shows.
+  final double leading;
+
+  /// The bar plus the accessory plus the home indicator.
   final double bottom;
+
+  bool get isZero => top == 0 && leading == 0 && bottom == 0;
+
+  /// Reads the map the iPad sends, or the bare bottom the iPhone sends.
+  static NativeInsets? fromChannel(Object? value) => switch (value) {
+        num() => NativeInsets(bottom: value.toDouble()),
+        {'top': num top, 'leading': num leading, 'bottom': num bottom} =>
+          NativeInsets(
+            top: top.toDouble(),
+            leading: leading.toDouble(),
+            bottom: bottom.toDouble(),
+          ),
+        _ => null,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is NativeInsets &&
+      other.top == top &&
+      other.leading == leading &&
+      other.bottom == bottom;
+
+  @override
+  int get hashCode => Object.hash(top, leading, bottom);
+
+  @override
+  String toString() =>
+      'NativeInsets(top: $top, leading: $leading, bottom: $bottom)';
+}
+
+/// The native chrome's insets changed. All zero while it is hidden.
+final class NativeInsetsChanged extends NativeTabBarEvent {
+  const NativeInsetsChanged(this.insets);
+  final NativeInsets insets;
+
+  /// What the iPhone bar reads.
+  double get bottom => insets.bottom;
+}
+
+/// The iPad's width class changed. [sidebar] is true at regular width, where
+/// the sidebar shows; false at compact width, where iPadOS shows a tab bar.
+final class NativeLayoutChanged extends NativeTabBarEvent {
+  const NativeLayoutChanged({required this.sidebar});
+  final bool sidebar;
 }
 
 final class NativeAccessoryTapped extends NativeTabBarEvent {
@@ -136,6 +189,7 @@ class NativeTabBarChannel {
   final _events = StreamController<NativeTabBarEvent>.broadcast();
 
   List<NativeTab>? _tabs;
+  Map<String, Object?>? _sidebar;
   String? _selected;
   bool? _visible;
 
@@ -149,9 +203,41 @@ class NativeTabBarChannel {
     if (sent != null && listEquals(sent, tabs)) return Future.value();
     final value = List<NativeTab>.unmodifiable(tabs);
     _tabs = value;
+    // Native's tabs are now the bar's, not the sidebar's.
+    _sidebar = null;
     return _send('setTabs', [for (final tab in tabs) tab.toMap()], () {
       if (identical(_tabs, value)) _tabs = null;
     });
+  }
+
+  Future<void> setSidebar(Map<String, Object?> payload) {
+    final sent = _sidebar;
+    if (sent != null && const DeepCollectionEquality().equals(sent, payload)) {
+      return Future.value();
+    }
+    _sidebar = payload;
+    // Native now holds the sidebar's tabs, not the bar's.
+    _tabs = null;
+    return _send('setSidebar', payload, () {
+      if (identical(_sidebar, payload)) _sidebar = null;
+    });
+  }
+
+  /// Asks native for the width class once: true at regular width (sidebar
+  /// shown), false at compact width. Null when it cannot answer.
+  Future<bool?> queryLayout() async {
+    try {
+      final answer = await _channel.invokeMethod<Object?>('layout');
+      return switch (answer) {
+        {'sidebar': bool sidebar} => sidebar,
+        _ => null,
+      };
+    } on MissingPluginException catch (e) {
+      debugPrint('[NativeTabBar] layout: plugin missing: $e');
+    } on PlatformException catch (e) {
+      debugPrint('[NativeTabBar] layout failed: $e');
+    }
+    return null;
   }
 
   Future<void> select(String id) {
@@ -214,8 +300,14 @@ class NativeTabBarChannel {
     final arguments = call.arguments;
     final NativeTabBarEvent? event = switch (call.method) {
       'tabSelected' when arguments is String => NativeTabSelected(arguments),
-      'insetsChanged' when arguments is num =>
-        NativeInsetsChanged(arguments.toDouble()),
+      'insetsChanged' => switch (NativeInsets.fromChannel(arguments)) {
+          final insets? => NativeInsetsChanged(insets),
+          null => null,
+        },
+      'layoutChanged' => switch (arguments) {
+          {'sidebar': bool sidebar} => NativeLayoutChanged(sidebar: sidebar),
+          _ => null,
+        },
       'accessoryTapped' => const NativeAccessoryTapped(),
       'accessoryPlayPause' => const NativeAccessoryPlayPause(),
       _ => null,

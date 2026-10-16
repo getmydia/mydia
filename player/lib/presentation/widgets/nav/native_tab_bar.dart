@@ -143,7 +143,9 @@ class _NativeTabBarState extends ConsumerState<NativeTabBar> {
         if (bottom > 0 && bottom != _inset && mounted) {
           setState(() => _inset = bottom);
         }
-      case NativeAccessoryTapped() || NativeAccessoryPlayPause():
+      case NativeAccessoryTapped() ||
+            NativeAccessoryPlayPause() ||
+            NativeLayoutChanged():
         break;
     }
   }

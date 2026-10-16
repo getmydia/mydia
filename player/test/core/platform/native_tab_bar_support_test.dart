@@ -22,6 +22,7 @@ void main() {
         .setMockMethodCallHandler(NativeTabBarSupport.channel, null);
     debugDefaultTargetPlatformOverride = null;
     NativeTabBarSupport.debugOverride = null;
+    NativeTabBarSupport.debugOverrideMode = null;
     NativeTabBarSupport.debugReset();
   });
 
@@ -39,17 +40,20 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('iOS answering true: supported', (tester) async {
+  testWidgets('iOS answering bar: supported', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    answer(() async => true);
+    answer(() async => 'bar');
     await NativeTabBarSupport.initialize();
     expect(NativeTabBarSupport.supported, isTrue);
-    expect(calls.single.method, 'isSupported');
+    expect(NativeTabBarSupport.mode, NativeTabBarMode.bar);
+    expect(calls.single.method, 'mode');
     debugDefaultTargetPlatformOverride = null;
   });
 
   for (final (name, reply) in <(String, Future<Object?> Function())>[
     ('false', () async => false),
+    ('banana', () async => 'banana'),
+    ('none', () async => 'none'),
     ('null', () async => null),
     ('a PlatformException', () async => throw PlatformException(code: 'x')),
   ]) {
@@ -89,5 +93,24 @@ void main() {
   testWidgets('debugOverride wins', (tester) async {
     NativeTabBarSupport.debugOverride = true;
     expect(NativeTabBarSupport.supported, isTrue);
+  });
+
+  testWidgets('mode answers sidebar on an iPad', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    answer(() async => 'sidebar');
+    await NativeTabBarSupport.initialize();
+    expect(NativeTabBarSupport.mode, NativeTabBarMode.sidebar);
+    expect(NativeTabBarSupport.supported, isTrue);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  test('debugOverride true still means the bar', () {
+    NativeTabBarSupport.debugOverride = true;
+    expect(NativeTabBarSupport.mode, NativeTabBarMode.bar);
+  });
+
+  test('debugOverrideMode wins', () {
+    NativeTabBarSupport.debugOverrideMode = NativeTabBarMode.sidebar;
+    expect(NativeTabBarSupport.mode, NativeTabBarMode.sidebar);
   });
 }

@@ -164,4 +164,65 @@ void main() {
     });
     await bar.setVisible(true);
   });
+
+  group('sidebar', () {
+    const payload = <String, Object?>{
+      'sections': [
+        {'id': 'main', 'title': null, 'items': <Object?>[]},
+      ],
+    };
+
+    test('setSidebar sends once for equal payloads', () async {
+      await bar.setSidebar(payload);
+      await bar.setSidebar({...payload});
+      expect(calls.map((c) => c.method), ['setSidebar']);
+    });
+
+    test('setTabs and setSidebar invalidate each other', () async {
+      await bar.setSidebar(payload);
+      await bar.setTabs(const [_home]);
+      await bar.setSidebar(payload);
+      await bar.setTabs(const [_home]);
+      expect(calls.map((c) => c.method),
+          ['setSidebar', 'setTabs', 'setSidebar', 'setTabs']);
+    });
+
+    test('insetsChanged reads a map', () async {
+      final events = <NativeTabBarEvent>[];
+      bar.events.listen(events.add);
+      await fromNative(
+          'insetsChanged', {'top': 50.0, 'leading': 320.0, 'bottom': 20.0});
+      await Future<void>.delayed(Duration.zero);
+      final event = events.single as NativeInsetsChanged;
+      expect(
+          event.insets, const NativeInsets(top: 50, leading: 320, bottom: 20));
+      expect(event.bottom, 20);
+    });
+
+    test('insetsChanged still reads a bare bottom', () async {
+      final events = <NativeTabBarEvent>[];
+      bar.events.listen(events.add);
+      await fromNative('insetsChanged', 83.0);
+      await Future<void>.delayed(Duration.zero);
+      expect((events.single as NativeInsetsChanged).insets,
+          const NativeInsets(bottom: 83));
+    });
+
+    test('layoutChanged becomes an event', () async {
+      final events = <NativeTabBarEvent>[];
+      bar.events.listen(events.add);
+      await fromNative('layoutChanged', {'sidebar': false});
+      await Future<void>.delayed(Duration.zero);
+      expect((events.single as NativeLayoutChanged).sidebar, isFalse);
+    });
+
+    test('queryLayout answers the native value, null on failure', () async {
+      messenger.setMockMethodCallHandler(_channel,
+          (call) async => call.method == 'layout' ? {'sidebar': true} : null);
+      expect(await bar.queryLayout(), isTrue);
+      messenger.setMockMethodCallHandler(
+          _channel, (call) async => throw PlatformException(code: 'x'));
+      expect(await bar.queryLayout(), isNull);
+    });
+  });
 }
