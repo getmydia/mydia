@@ -44,6 +44,7 @@ defmodule Mydia.Settings.DownloadClientConfig do
           port: integer() | nil,
           use_ssl: boolean(),
           url_base: String.t() | nil,
+          web_ui_url: String.t() | nil,
           username: String.t() | nil,
           password: String.t() | nil,
           api_key: String.t() | nil,
@@ -94,6 +95,7 @@ defmodule Mydia.Settings.DownloadClientConfig do
     field :port, :integer
     field :use_ssl, :boolean, default: false
     field :url_base, :string
+    field :web_ui_url, :string
     field :username, :string
     field :password, :string
     field :api_key, :string
@@ -128,6 +130,7 @@ defmodule Mydia.Settings.DownloadClientConfig do
       :port,
       :use_ssl,
       :url_base,
+      :web_ui_url,
       :username,
       :password,
       :api_key,
@@ -146,6 +149,7 @@ defmodule Mydia.Settings.DownloadClientConfig do
     |> apply_debrid_grace_default(attrs)
     |> validate_by_type()
     |> validate_external_torrents()
+    |> validate_web_ui_url()
     |> validate_remote_fetch_config()
     |> validate_number(:priority, greater_than: 0)
     |> validate_number(:incomplete_grace_minutes, greater_than: 0)
@@ -224,6 +228,76 @@ defmodule Mydia.Settings.DownloadClientConfig do
         |> validate_required([:host, :port])
         |> validate_number(:port, greater_than: 0, less_than: 65536)
     end
+  end
+
+  # Default web UI path per client type, appended to url_base (or to the base
+  # shown here when url_base is blank). Types missing from this map have no web
+  # UI Mydia can point at: rtorrent's is a separate ruTorrent install, and
+  # blackhole and debrid have no client to open.
+  @web_ui_paths %{
+    qbittorrent: {"/", ""},
+    transmission: {"/transmission/", "web/"},
+    rqbit: {"/", "web/"},
+    sabnzbd: {"/", ""},
+    nzbget: {"/", ""}
+  }
+
+  @doc """
+  The address a browser should use to open this client's own web UI.
+
+  An explicit `web_ui_url` wins. Otherwise it is derived from the connection
+  settings, which is right unless Mydia reaches the client by a name the
+  browser cannot resolve (an internal Docker hostname, say). nil when the type
+  has no web UI.
+  """
+  @spec web_ui_url(t()) :: String.t() | nil
+  def web_ui_url(%__MODULE__{web_ui_url: url} = config) do
+    if valid_web_ui_url?(url), do: url, else: derived_web_ui_url(config)
+  end
+
+  defp derived_web_ui_url(%{type: type, host: host} = config)
+       when is_binary(host) and host != "" do
+    case Map.fetch(@web_ui_paths, type) do
+      {:ok, {default_base, suffix}} ->
+        scheme = if config.use_ssl, do: "https", else: "http"
+        authority = if config.port, do: "#{host}:#{config.port}", else: host
+        "#{scheme}://#{authority}#{normalize_base(config.url_base || default_base)}#{suffix}"
+
+      :error ->
+        nil
+    end
+  end
+
+  defp derived_web_ui_url(_config), do: nil
+
+  defp normalize_base(""), do: "/"
+
+  defp normalize_base(base) do
+    base = if String.starts_with?(base, "/"), do: base, else: "/" <> base
+    if String.ends_with?(base, "/"), do: base, else: base <> "/"
+  end
+
+  @doc "Whether `url` is an absolute http(s) address with a host."
+  @spec valid_web_ui_url?(term()) :: boolean()
+  def valid_web_ui_url?(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host}
+      when scheme in ["http", "https"] and is_binary(host) and host != "" ->
+        true
+
+      _ ->
+        false
+    end
+  end
+
+  def valid_web_ui_url?(_url), do: false
+
+  defp validate_web_ui_url(changeset) do
+    validate_change(changeset, :web_ui_url, fn :web_ui_url, url ->
+      if valid_web_ui_url?(url),
+        do: [],
+        else: [web_ui_url: "must be an http:// or https:// address"]
+    end)
   end
 
   # `:category_only` needs a client that reports a category or label back.

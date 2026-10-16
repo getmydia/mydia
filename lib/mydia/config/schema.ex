@@ -352,6 +352,7 @@ defmodule Mydia.Config.Schema do
       field :port, :integer
       field :use_ssl, :boolean, default: false
       field :url_base, :string
+      field :web_ui_url, :string
       field :username, :string
       field :password, :string
       field :api_key, :string
@@ -800,6 +801,7 @@ defmodule Mydia.Config.Schema do
       :port,
       :use_ssl,
       :url_base,
+      :web_ui_url,
       :username,
       :password,
       :api_key,

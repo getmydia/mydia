@@ -15,6 +15,86 @@ defmodule Mydia.Settings.DownloadClientConfigTest do
     api_key: "test-api-key"
   }
 
+  defp client(attrs) do
+    struct!(
+      DownloadClientConfig,
+      Map.merge(
+        %{
+          type: :qbittorrent,
+          host: "qbit.lan",
+          port: 8080,
+          use_ssl: false,
+          url_base: nil,
+          web_ui_url: nil
+        },
+        attrs
+      )
+    )
+  end
+
+  describe "web_ui_url/1" do
+    test "an explicit web_ui_url wins" do
+      assert DownloadClientConfig.web_ui_url(client(%{web_ui_url: "https://qbit.example.org/"})) ==
+               "https://qbit.example.org/"
+    end
+
+    test "an invalid explicit value falls back to the derived URL" do
+      assert DownloadClientConfig.web_ui_url(client(%{web_ui_url: "qbit.example.org"})) ==
+               "http://qbit.lan:8080/"
+    end
+
+    test "derives a URL per client type" do
+      assert DownloadClientConfig.web_ui_url(client(%{})) == "http://qbit.lan:8080/"
+      assert DownloadClientConfig.web_ui_url(client(%{use_ssl: true})) == "https://qbit.lan:8080/"
+
+      assert DownloadClientConfig.web_ui_url(client(%{url_base: "qbt"})) ==
+               "http://qbit.lan:8080/qbt/"
+
+      assert DownloadClientConfig.web_ui_url(client(%{type: :transmission, port: 9091})) ==
+               "http://qbit.lan:9091/transmission/web/"
+
+      assert DownloadClientConfig.web_ui_url(client(%{type: :transmission, url_base: "/tr/"})) ==
+               "http://qbit.lan:8080/tr/web/"
+
+      assert DownloadClientConfig.web_ui_url(client(%{type: :rqbit, port: 3030})) ==
+               "http://qbit.lan:3030/web/"
+
+      assert DownloadClientConfig.web_ui_url(client(%{type: :sabnzbd, url_base: "/sabnzbd"})) ==
+               "http://qbit.lan:8080/sabnzbd/"
+
+      assert DownloadClientConfig.web_ui_url(client(%{type: :nzbget, port: nil})) ==
+               "http://qbit.lan/"
+    end
+
+    test "is nil for clients without a web UI Mydia can reach" do
+      for type <- [:rtorrent, :blackhole, :debrid] do
+        assert DownloadClientConfig.web_ui_url(client(%{type: type})) == nil
+      end
+
+      assert DownloadClientConfig.web_ui_url(client(%{host: nil})) == nil
+    end
+  end
+
+  describe "web_ui_url validation" do
+    test "accepts http and https addresses" do
+      assert {:ok, config} =
+               Settings.create_download_client_config(
+                 Map.put(@valid_attrs, :web_ui_url, "https://sab.example.org/sabnzbd")
+               )
+
+      assert config.web_ui_url == "https://sab.example.org/sabnzbd"
+    end
+
+    test "rejects anything else" do
+      for bad <- ["ftp://sab.example.org", "notaurl", "http://"] do
+        assert {:error, changeset} =
+                 Settings.create_download_client_config(Map.put(@valid_attrs, :web_ui_url, bad))
+
+        assert %{web_ui_url: [_]} = errors_on(changeset)
+      end
+    end
+  end
+
   describe "rqbit client type" do
     @rqbit_attrs %{
       name: "test-rqbit",

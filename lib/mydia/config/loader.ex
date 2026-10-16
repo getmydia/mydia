@@ -462,6 +462,7 @@ defmodule Mydia.Config.Loader do
       |> put_if_present(:port, System.get_env("#{prefix}PORT"), &parse_integer/1)
       |> put_if_present(:use_ssl, System.get_env("#{prefix}USE_SSL"), &parse_boolean/1)
       |> put_if_present(:url_base, System.get_env("#{prefix}URL_BASE"))
+      |> put_if_present(:web_ui_url, System.get_env("#{prefix}WEB_UI_URL"), &parse_web_ui_url/1)
       |> put_if_present(:username, System.get_env("#{prefix}USERNAME"))
       |> put_if_present(:password, System.get_env("#{prefix}PASSWORD"))
       |> put_if_present(:api_key, System.get_env("#{prefix}API_KEY"))
@@ -890,6 +891,20 @@ defmodule Mydia.Config.Loader do
   defp put_if_present(map, _key, nil), do: map
   defp put_if_present(map, _key, ""), do: map
   defp put_if_present(map, key, value), do: Map.put(map, key, value)
+
+  # An unusable address must not stop the app from booting: drop it, say why,
+  # and let DownloadClientConfig.web_ui_url/1 derive one from host and port.
+  defp parse_web_ui_url(value) do
+    if Mydia.Settings.DownloadClientConfig.valid_web_ui_url?(value) do
+      {:ok, value}
+    else
+      Logger.warning(
+        "Ignoring DOWNLOAD_CLIENT_<N>_WEB_UI_URL #{inspect(value)}: expected an http:// or https:// address"
+      )
+
+      :error
+    end
+  end
 
   defp parse_integer(value) when is_integer(value), do: {:ok, value}
 

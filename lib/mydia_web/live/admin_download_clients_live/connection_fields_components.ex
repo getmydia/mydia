@@ -199,6 +199,16 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
         />
       </div>
 
+      <.input
+        field={@download_client_form[:web_ui_url]}
+        type="url"
+        label="Web UI URL (optional)"
+        placeholder="https://qbittorrent.example.org"
+      />
+      <p class="text-xs text-base-content/60 -mt-2">
+        Address your browser uses to open this client. Leave blank to use host and port.
+      </p>
+
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <.input
           field={@download_client_form[:download_directory]}
