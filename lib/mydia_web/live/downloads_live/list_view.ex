@@ -162,6 +162,10 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   def media_item_id(%{episode: %{media_item_id: id}}) when is_binary(id), do: id
   def media_item_id(_download), do: nil
 
+  @doc "True while the download has no measurable percentage (provider-side waits)."
+  @spec progress_indeterminate?(map()) :: boolean()
+  def progress_indeterminate?(download), do: download.status in ["queued", "checking"]
+
   @metadata_struct_keys ~w(size seeders leechers quality season_pack season_number download_protocol)
 
   @doc """

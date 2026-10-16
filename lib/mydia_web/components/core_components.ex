@@ -608,7 +608,9 @@ defmodule MydiaWeb.CoreComponents do
 
       <%!-- Backdrop --%>
       <form method="dialog" class="modal-backdrop">
-        <button :if={@on_cancel} type="button" phx-click={@on_cancel}>close</button>
+        <button :if={@on_cancel} id={"#{@id}-backdrop"} type="button" phx-click={@on_cancel}>
+          close
+        </button>
       </form>
     </dialog>
     """

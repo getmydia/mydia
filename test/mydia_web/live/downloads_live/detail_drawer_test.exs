@@ -5,6 +5,7 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawerTest do
   import Mydia.AccountsFixtures
   import Mydia.DownloadsFixtures
   import Mydia.MediaFixtures
+  import Mydia.MetadataCacheHelpers
 
   setup %{conn: conn} do
     %{conn: log_in_user(conn, admin_user_fixture())}
@@ -75,6 +76,49 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawerTest do
     {:ok, view, _html} = live(conn, ~p"/downloads?download=#{download.id}")
 
     assert has_element?(view, "#download-detail")
+    assert has_element?(view, "#download-detail-release")
     refute render(view) =~ "SECRETKEY123"
+  end
+
+  test "Escape closes the drawer", %{conn: conn} do
+    download = queued()
+    {:ok, view, _html} = live(conn, ~p"/downloads?download=#{download.id}")
+
+    view |> element("#download-detail") |> render_keydown(%{"key" => "Escape"})
+
+    assert_patch(view, ~p"/downloads")
+    refute has_element?(view, "#download-detail")
+  end
+
+  test "the backdrop closes the drawer", %{conn: conn} do
+    download = queued()
+    {:ok, view, _html} = live(conn, ~p"/downloads?download=#{download.id}")
+
+    view |> element("#download-detail-backdrop") |> render_click()
+
+    assert_patch(view, ~p"/downloads")
+    refute has_element?(view, "#download-detail")
+  end
+
+  test "the timeline lists only the events reached", %{conn: conn} do
+    download = queued()
+    {:ok, view, _html} = live(conn, ~p"/downloads?download=#{download.id}")
+
+    assert has_element?(view, "#download-detail-event-grabbed")
+    refute has_element?(view, "#download-detail-event-imported")
+  end
+
+  test "Change match closes the drawer so the match dialog is not hidden behind it", %{
+    conn: conn
+  } do
+    download = queued()
+    # The match dialog searches on open; keep that off the network.
+    warm_movie_search_cache(download.title, [], [])
+    {:ok, view, _html} = live(conn, ~p"/downloads?download=#{download.id}")
+
+    view |> element("#drawer-change-match-#{download.id}") |> render_click()
+
+    refute has_element?(view, "#download-detail")
+    assert has_element?(view, "#match-modal")
   end
 end

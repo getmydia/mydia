@@ -189,6 +189,12 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
+  # Drops ?download=<id> from the URL; a no-op when no drawer is open.
+  defp close_drawer(%{assigns: %{drawer_id: nil}} = socket), do: socket
+
+  defp close_drawer(socket),
+    do: push_patch(socket, to: downloads_path(socket, download: nil))
+
   # Builds /downloads?... from the current state with `overrides` applied.
   # Defaults (Queue tab, nil values) are left out so links stay short.
   defp downloads_path(socket, overrides) do
@@ -262,7 +268,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   def handle_event("close_details", _params, socket) do
-    {:noreply, push_patch(socket, to: downloads_path(socket, download: nil))}
+    {:noreply, close_drawer(socket)}
   end
 
   def handle_event("sort", %{"sort_by" => sort_by}, socket)
@@ -719,7 +725,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
           |> MatchDialog.open(download, mode_atom(mode))
           |> then(&MatchDialog.search(&1, &1.query))
 
-        {:noreply, assign(socket, :match_modal, dialog)}
+        {:noreply, socket |> assign(:match_modal, dialog) |> close_drawer()}
       end)
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -1784,7 +1790,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # ("checking") — have no measurable percentage. Rendering a 0%-filled bar
   # there reads as "stuck"; these phases get an indeterminate (animated) bar
   # plus the phase label instead of a frozen "0%".
-  defp progress_indeterminate?(download), do: download.status in ["queued", "checking"]
+  defp progress_indeterminate?(download), do: ListView.progress_indeterminate?(download)
 
   # Color modifier for the DaisyUI `status` dot shown at the start of each row.
   defp status_dot_class(status) do
