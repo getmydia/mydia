@@ -8,6 +8,7 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
   import MydiaWeb.CoreComponents, only: [icon: 1]
 
   alias Mydia.Health.Rollup
+  alias Mydia.Indexers.CardigannSummary
   alias MydiaWeb.AdminNav
 
   @doc "Renders the full System Health widget section."
@@ -19,6 +20,7 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
   attr :trash_summary, :map, required: true
   attr :flaresolverr_enabled, :boolean, default: false
   attr :flaresolverr_status, :atom, default: :checking
+  attr :cardigann_summary, CardigannSummary, default: nil
 
   def system_health_widget(assigns) do
     ~H"""
@@ -35,11 +37,14 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
           rollup={@clients_rollup}
         />
 
+        <%!-- Always shown, unlike the other service tiles: with nothing set up
+             it is the shortcut to the Indexers page. --%>
         <.health_tile
-          :if={@indexers_rollup.state != :none}
           id="health-tile-indexers"
           nav_key={:indexers}
           rollup={@indexers_rollup}
+          empty_label="Not set up"
+          cardigann={@cardigann_summary}
           flaresolverr_enabled={@flaresolverr_enabled}
           flaresolverr_status={@flaresolverr_status}
         />
@@ -73,6 +78,12 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
   attr :flaresolverr_enabled, :boolean, default: false
   attr :flaresolverr_status, :atom, default: :checking
 
+  attr :empty_label, :string,
+    default: nil,
+    doc: "badge text when the rollup has nothing to count"
+
+  attr :cardigann, CardigannSummary, default: nil
+
   def health_tile(assigns) do
     page = AdminNav.fetch!(assigns.nav_key)
     assigns = assign(assigns, :page, page)
@@ -92,8 +103,16 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
         <div class="mt-2">
           <div class="flex items-center gap-2">
             <span class={["badge badge-sm font-medium", state_badge_class(@rollup.state)]}>
-              {Rollup.label(@rollup)}
+              {if @rollup.state == :none, do: @empty_label, else: Rollup.label(@rollup)}
             </span>
+          </div>
+
+          <div
+            :if={@cardigann && @cardigann.installed > 0}
+            id="cardigann-engine-subline"
+            class="text-xs text-base-content/60 mt-1.5 truncate"
+          >
+            {CardigannSummary.label(@cardigann)}
           </div>
 
           <div

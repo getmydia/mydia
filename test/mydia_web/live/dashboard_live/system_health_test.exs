@@ -5,8 +5,11 @@ defmodule MydiaWeb.DashboardLive.SystemHealthTest do
   import Mydia.AccountsFixtures
   import Mydia.MetadataCacheHelpers
   import MydiaWeb.AuthHelpers
+  import Mydia.IndexersFixtures
 
   alias Mydia.Accounts
+  alias Mydia.Indexers.CardigannDefinition
+  alias Mydia.Repo
   alias Mydia.Settings
 
   setup do
@@ -24,18 +27,36 @@ defmodule MydiaWeb.DashboardLive.SystemHealthTest do
     refute has_element?(view, "#system-health-widget")
   end
 
-  test "omits tiles when no service is configured", %{conn: conn} do
+  test "omits empty client and media-server tiles but keeps the indexers tile", %{conn: conn} do
     admin = user_fixture(%{role: "admin"})
     {:ok, view, _html} = live(log_in_user(conn, admin), ~p"/")
 
-    # No clients or indexers configured in fresh test
     refute has_element?(view, "#health-tile-clients")
-    refute has_element?(view, "#health-tile-indexers")
     refute has_element?(view, "#health-tile-media-servers")
+
+    # Indexers stays as the way in to set one up
+    assert has_element?(view, ~s(#health-tile-indexers[href="/admin/indexers"]))
+    assert has_element?(view, "#health-tile-indexers .badge-ghost", "Not set up")
+    refute has_element?(view, "#cardigann-engine-subline")
 
     # Duplicates and trash are always shown
     assert has_element?(view, "#health-tile-duplicates")
     assert has_element?(view, "#health-tile-trash")
+  end
+
+  test "Cardigann library trackers alone keep the indexers tile and its health", %{conn: conn} do
+    admin = user_fixture(%{role: "admin"})
+
+    cardigann_definition_fixture(%{enabled: true})
+    |> CardigannDefinition.health_check_changeset(%{health_status: "healthy"})
+    |> Repo.update!()
+
+    cardigann_definition_fixture(%{in_library: true, enabled: false})
+
+    {:ok, view, _html} = live(log_in_user(conn, admin), ~p"/")
+
+    assert has_element?(view, "#health-tile-indexers .badge-success", "1/1 healthy")
+    assert has_element?(view, "#cardigann-engine-subline", "· 1/2")
   end
 
   test "degraded rollup renders amber and links to /admin/clients", %{conn: conn} do
