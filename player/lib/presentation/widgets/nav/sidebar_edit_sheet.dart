@@ -1,9 +1,11 @@
-/// The sidebar's edit mode in a sheet, for the native iPad sidebar, which
-/// cannot arrange the viewer's whole layout itself.
+/// The sidebar's edit mode, in a sheet on touch platforms and a dialog on
+/// desktop, for the native sidebars, which cannot arrange the viewer's whole
+/// layout themselves.
 library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -24,21 +26,47 @@ Future<void> showSidebarEditSheet({
   // Read before the await: the caller can unmount while the sheet is up (the
   // iPad going compact swaps the host out), and the provider outlives it.
   final editMode = ref.read(sidebarEditModeProvider.notifier);
-  await showModalBottomSheet<void>(
-    context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    showDragHandle: true,
-    backgroundColor: AppColors.surfaceVariant,
-    builder: (_) => _EditSheet(location: location),
-  );
+  final desktop = switch (defaultTargetPlatform) {
+    TargetPlatform.macOS ||
+    TargetPlatform.linux ||
+    TargetPlatform.windows =>
+      true,
+    _ => false,
+  };
+  if (desktop) {
+    // A bottom sheet reads as a phone affordance in a desktop window.
+    await showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      builder: (_) => Dialog(
+        backgroundColor: AppColors.surfaceVariant,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420, maxHeight: 640),
+          child: _EditSheet(location: location, inDialog: true),
+        ),
+      ),
+    );
+  } else {
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: AppColors.surfaceVariant,
+      builder: (_) => _EditSheet(location: location),
+    );
+  }
   editMode.exit();
 }
 
 class _EditSheet extends ConsumerWidget {
-  const _EditSheet({required this.location});
+  const _EditSheet({required this.location, this.inDialog = false});
 
   final String location;
+
+  /// In a dialog the height comes from the dialog's own constraints; the
+  /// sheet takes 80% of the screen.
+  final bool inDialog;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -52,16 +80,29 @@ class _EditSheet extends ConsumerWidget {
         Navigator.of(context).pop();
       }
     });
-    return SizedBox(
-      key: const Key('sidebar-edit-sheet'),
-      height: MediaQuery.sizeOf(context).height * 0.8,
-      child: SafeArea(
-        child: SidebarContent(
-          location: location,
-          // Edit mode has no navigation: its rows arrange, they do not open.
-          onNavigate: (_) {},
-          isOffline: false,
-        ),
+    final content = SafeArea(
+      child: SidebarContent(
+        location: location,
+        // Edit mode has no navigation: its rows arrange, they do not open.
+        onNavigate: (_) {},
+        isOffline: false,
+      ),
+    );
+    if (!inDialog) {
+      return SizedBox(
+        key: const Key('sidebar-edit-sheet'),
+        height: MediaQuery.sizeOf(context).height * 0.8,
+        child: content,
+      );
+    }
+    // SidebarContent lays out with Expanded, so it needs a tight height: fill
+    // whatever the dialog allows.
+    return LayoutBuilder(
+      builder: (context, constraints) => SizedBox(
+        key: const Key('sidebar-edit-sheet'),
+        width: constraints.maxWidth,
+        height: constraints.maxHeight,
+        child: content,
       ),
     );
   }
