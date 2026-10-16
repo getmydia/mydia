@@ -134,7 +134,6 @@ class LogUploader {
   final DateTime Function() _now;
 
   bool _active = false;
-  DateTime? _until;
   Timer? _timer;
   int _unsent = 0;
   bool _busy = false;
@@ -156,15 +155,11 @@ class LogUploader {
   @visibleForTesting
   Duration get backoff => _backoff;
 
-  /// Starts continuous upload, sending nothing timestamped after [until].
+  /// Starts continuous upload.
   ///
   /// [resetCursor] moves the cursor past everything already written, so
   /// nothing captured before the user chose to share is sent.
-  Future<void> activate({
-    required DateTime? until,
-    required bool resetCursor,
-  }) async {
-    _until = until;
+  Future<void> activate({required bool resetCursor}) async {
     if (resetCursor) {
       // Bump before the await below, not after: it closes the window where
       // a drain already in flight (started before this call, from an
@@ -180,27 +175,16 @@ class LogUploader {
     _timer = Timer.periodic(interval, (_) => unawaited(tick()));
   }
 
-  /// Stops continuous upload, after one last attempt when [finalAttempt].
-  Future<void> deactivate({bool finalAttempt = false}) async {
+  /// Stops continuous upload.
+  Future<void> deactivate() async {
     if (!_active) return;
-    // Bumped first, before the optional final tick: a drain already mid-
-    // flight from an earlier timer tick snapshotted the previous
-    // generation, so this immediately marks it stale. The final-attempt
-    // drain started below reads the generation fresh when it begins, so
-    // this bump does not cancel the very drain it is about to ask for.
+    // A drain already mid-flight from an earlier timer tick snapshotted the
+    // previous generation, so this bump marks it stale immediately.
     _generation++;
     _timer?.cancel();
     _timer = null;
     _store.onFlushed = null;
-    try {
-      if (finalAttempt) {
-        _notBefore = null;
-        await tick();
-      }
-    } finally {
-      _active = false;
-      _until = null;
-    }
+    _active = false;
   }
 
   /// Uploads what is waiting now, for the app going to the background.
@@ -297,18 +281,10 @@ class LogUploader {
     bool stale() => generation != _generation || !_active;
 
     final meta = (await _loadMeta()).toJson(kind: 'stream');
-    // Snapshotted once: deactivate() can null out _until while this loop is
-    // mid-flight (it runs across several awaited sends), and a later batch
-    // must still honor the bound the caller activated with.
-    final untilMs = _until?.millisecondsSinceEpoch;
     var cursor = await _store.loadCursor() ?? await _store.endCursor();
     var budget = maxBatchBytes;
     while (true) {
-      final batch = await _store.read(
-        from: cursor,
-        maxBytes: budget,
-        untilMs: untilMs,
-      );
+      final batch = await _store.read(from: cursor, maxBytes: budget);
       if (batch.isEmpty && !batch.gap) {
         // Stale here too: `stale()` becoming true while this read was in
         // flight must stop the cursor from being pushed to `batch.next`.

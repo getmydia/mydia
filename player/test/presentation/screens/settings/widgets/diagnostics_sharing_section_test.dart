@@ -14,21 +14,28 @@ import '../../../../test_utils/memory_log_store.dart';
 import '../../../../test_utils/toast_harness.dart';
 
 class _FakeDiagnostics extends DiagnosticsController {
-  _FakeDiagnostics(this.initial, {this.failSelect = false, this.onSend});
+  _FakeDiagnostics(this.initial, {this.failWrites = false, this.onSend});
 
   final DiagnosticsState initial;
-  final bool failSelect;
+  final bool failWrites;
   final Future<String> Function(String? note)? onSend;
-  final selected = <DiagnosticsChoice>[];
+  final calls = <String>[];
 
   @override
   Future<DiagnosticsState> build() async => initial;
 
   @override
-  Future<void> select(DiagnosticsChoice choice) async {
-    if (failSelect) throw Exception('keyring refused');
-    selected.add(choice);
-    state = AsyncData(DiagnosticsState(choice: choice));
+  Future<void> setCrashes(bool on) async {
+    if (failWrites) throw Exception('keyring refused');
+    calls.add('crashes:$on');
+    state = AsyncData(state.requireValue.copyWith(crashes: on));
+  }
+
+  @override
+  Future<void> setLogs(bool on) async {
+    if (failWrites) throw Exception('keyring refused');
+    calls.add('logs:$on');
+    state = AsyncData(state.requireValue.copyWith(logs: on));
   }
 
   @override
@@ -38,15 +45,8 @@ class _FakeDiagnostics extends DiagnosticsController {
 /// A controller whose `build()` never completes, so the section stays in the
 /// no-value state for the whole test.
 class _PendingDiagnostics extends DiagnosticsController {
-  final selected = <DiagnosticsChoice>[];
-
   @override
   Future<DiagnosticsState> build() => Completer<DiagnosticsState>().future;
-
-  @override
-  Future<void> select(DiagnosticsChoice choice) async {
-    selected.add(choice);
-  }
 }
 
 LogUploader _uploader() => LogUploader(
@@ -65,19 +65,15 @@ LogUploader _uploader() => LogUploader(
       compress: (bytes) => bytes,
     );
 
-Future<_FakeDiagnostics> _pump(
-  WidgetTester tester, {
-  DiagnosticsState initial = DiagnosticsState.off,
+Future<void> _pumpWith(
+  WidgetTester tester,
+  DiagnosticsController controller, {
   bool canShareLogs = true,
-  bool failSelect = false,
-  Future<String> Function(String? note)? onSend,
 }) async {
-  final fake =
-      _FakeDiagnostics(initial, failSelect: failSelect, onSend: onSend);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        diagnosticsProvider.overrideWith(() => fake),
+        diagnosticsProvider.overrideWith(() => controller),
         logUploaderProvider
             .overrideWithValue(canShareLogs ? _uploader() : null),
       ],
@@ -91,66 +87,80 @@ Future<_FakeDiagnostics> _pump(
   );
   await tester.pump();
   await tester.pump();
+}
+
+Future<_FakeDiagnostics> _pump(
+  WidgetTester tester, {
+  DiagnosticsState initial = DiagnosticsState.off,
+  bool canShareLogs = true,
+  bool failWrites = false,
+  Future<String> Function(String? note)? onSend,
+}) async {
+  final fake =
+      _FakeDiagnostics(initial, failWrites: failWrites, onSend: onSend);
+  await _pumpWith(tester, fake, canShareLogs: canShareLogs);
   return fake;
 }
 
-Finder _choice(DiagnosticsChoice choice) =>
-    find.byKey(Key('diagnostics-level-${choice.keySuffix}'));
+const _crashes = Key('diagnostics-crashes');
+const _logs = Key('diagnostics-logs');
+
+Finder _switchOf(Key row) =>
+    find.descendant(of: find.byKey(row), matching: find.byType(Switch));
+
+Switch _switch(WidgetTester tester, Key row) =>
+    tester.widget<Switch>(_switchOf(row));
 
 void main() {
-  testWidgets('shows every choice with the stored one checked', (tester) async {
+  testWidgets('each switch shows its stored value', (tester) async {
     await _pump(tester,
-        initial: const DiagnosticsState(choice: DiagnosticsChoice.logsForever));
+        initial: const DiagnosticsState(crashes: true, logs: false));
 
-    for (final choice in DiagnosticsChoice.values) {
-      expect(_choice(choice), findsOneWidget);
-    }
-    expect(
-      find.descendant(
-          of: _choice(DiagnosticsChoice.logsForever),
-          matching: find.byIcon(Icons.check_circle)),
-      findsOneWidget,
-    );
-    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    expect(_switch(tester, _crashes).value, isTrue);
+    expect(_switch(tester, _logs).value, isFalse);
     expect(find.byKey(const Key('diagnostics-send-logs')), findsOneWidget);
   });
 
-  testWidgets('a timed choice says when it ends', (tester) async {
-    final until = DateTime(2026, 9, 29, 14).toUtc();
-    await _pump(tester,
-        initial: DiagnosticsState(
-            choice: DiagnosticsChoice.logs24h, logsUntil: until));
-
-    expect(find.text('Until Sep 29, 14:00'), findsOneWidget);
-  });
-
-  testWidgets('tapping a choice selects it', (tester) async {
+  testWidgets('flipping a switch calls its own setter', (tester) async {
     final fake = await _pump(tester);
 
-    await tester.tap(_choice(DiagnosticsChoice.logs7d));
+    await tester.tap(_switchOf(_logs));
+    await tester.pump();
+    await tester.tap(_switchOf(_crashes));
     await tester.pump();
 
-    expect(fake.selected, [DiagnosticsChoice.logs7d]);
+    expect(fake.calls, ['logs:true', 'crashes:true']);
+    expect(_switch(tester, _logs).value, isTrue);
+    expect(_switch(tester, _crashes).value, isTrue);
   });
 
-  testWidgets('a choice that cannot be saved says so', (tester) async {
-    await _pump(tester, failSelect: true);
+  testWidgets('a change that cannot be saved says so', (tester) async {
+    await _pump(tester, failWrites: true);
 
-    await tester.tap(_choice(DiagnosticsChoice.crashes));
+    await tester.tap(_switchOf(_crashes));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Could not save that choice'), findsOneWidget);
+    expect(_switch(tester, _crashes).value, isFalse);
   });
 
-  testWidgets('without a log store only the crash choices remain',
-      (tester) async {
+  testWidgets('without a log store only crash reports remain', (tester) async {
     await _pump(tester, canShareLogs: false);
 
-    expect(_choice(DiagnosticsChoice.off), findsOneWidget);
-    expect(_choice(DiagnosticsChoice.crashes), findsOneWidget);
-    expect(_choice(DiagnosticsChoice.logs24h), findsNothing);
-    expect(_choice(DiagnosticsChoice.logsForever), findsNothing);
+    expect(find.byKey(_crashes), findsOneWidget);
+    expect(find.byKey(_logs), findsNothing);
+    expect(find.byKey(const Key('diagnostics-send-logs')), findsNothing);
+  });
+
+  testWidgets('while loading both switches are off and disabled',
+      (tester) async {
+    await _pumpWith(tester, _PendingDiagnostics());
+
+    for (final row in [_crashes, _logs]) {
+      expect(_switch(tester, row).value, isFalse);
+      expect(_switch(tester, row).onChanged, isNull);
+    }
     expect(find.byKey(const Key('diagnostics-send-logs')), findsNothing);
   });
 
@@ -218,40 +228,5 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('LOG-7K2QX9'), findsOneWidget);
-  });
-
-  testWidgets(
-      'while the choice is still loading nothing is selected and taps do '
-      'nothing', (tester) async {
-    final pending = _PendingDiagnostics();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          diagnosticsProvider.overrideWith(() => pending),
-          logUploaderProvider.overrideWithValue(_uploader()),
-        ],
-        child: const MaterialApp(
-          builder: toastLayerBuilder,
-          home: Scaffold(
-            body: SingleChildScrollView(child: DiagnosticsSharingSection()),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(find.byIcon(Icons.check_circle), findsNothing);
-    expect(find.byKey(const Key('diagnostics-send-logs')), findsNothing);
-
-    await tester.tap(_choice(DiagnosticsChoice.crashes));
-    await tester.pump();
-
-    expect(pending.selected, isEmpty);
-  });
-
-  test('untilLabel', () {
-    expect(untilLabel(null), isNull);
-    expect(
-        untilLabel(DateTime(2026, 1, 3, 9, 5).toUtc()), 'Until Jan 3, 09:05');
   });
 }

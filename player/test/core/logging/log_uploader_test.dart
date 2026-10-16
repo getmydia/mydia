@@ -109,7 +109,7 @@ void main() {
     test('uploads new records every minute and advances the cursor', () {
       fakeAsync((async) {
         final h = _Harness(async);
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(3);
 
@@ -130,7 +130,7 @@ void main() {
       fakeAsync((async) {
         final h = _Harness(async);
         h.write(2);
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(1);
 
@@ -145,7 +145,7 @@ void main() {
         final h = _Harness(async);
         h.write(3);
         h.store.savedCursor = const LogCursor('mem', 1);
-        h.uploader.activate(until: null, resetCursor: false);
+        h.uploader.activate(resetCursor: false);
 
         async.elapse(const Duration(seconds: 61));
 
@@ -156,7 +156,7 @@ void main() {
     test('sends early once enough is waiting', () {
       fakeAsync((async) {
         final h = _Harness(async);
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
 
         h.write(40, message: 'x' * 8000);
@@ -166,65 +166,8 @@ void main() {
       });
     });
 
-    test('never sends records after logs_until', () {
-      fakeAsync((async) {
-        final h = _Harness(async);
-        final until = _Harness.start.add(const Duration(seconds: 30));
-        h.uploader.activate(until: until, resetCursor: true);
-        async.flushMicrotasks();
-        h.write(1, at: _Harness.start.add(const Duration(seconds: 10)));
-        h.write(1, at: _Harness.start.add(const Duration(seconds: 40)));
-
-        async.elapse(const Duration(seconds: 61));
-
-        expect(h.messages(0), ['line 0']);
-      });
-    });
-
     test(
-        'turning sharing off mid-drain cannot leak a record past the '
-        'original logs_until', () {
-      fakeAsync((async) {
-        late final _Harness h;
-        h = _Harness(
-          async,
-          maxBatchBytes: 100,
-          onRequest: (callIndex) {
-            // Simulates the Diagnostics choice being turned off (or the
-            // window expiring) while a multi-batch drain is still in
-            // flight: deactivate() nulls _until as a side effect.
-            if (callIndex == 0) h.uploader.deactivate();
-          },
-        );
-        final until = _Harness.start.add(const Duration(seconds: 30));
-        h.uploader.activate(until: until, resetCursor: true);
-        async.flushMicrotasks();
-        h.write(2, at: _Harness.start.add(const Duration(seconds: 10)));
-        h.write(1, at: _Harness.start.add(const Duration(seconds: 40)));
-
-        async.elapse(const Duration(seconds: 61));
-
-        expect(h.uploader.isActive, isFalse);
-        expect(h.requests, isNotEmpty);
-        for (final request in h.requests) {
-          for (final line in request.lines) {
-            expect(
-              line['t'],
-              lessThanOrEqualTo(until.millisecondsSinceEpoch),
-              reason: 'a line after logs_until must never be uploaded',
-            );
-          }
-        }
-
-        final requestsAtDeactivate = h.requests.length;
-        async.elapse(const Duration(minutes: 10));
-        expect(h.requests.length, requestsAtDeactivate,
-            reason: 'a stale drain must not keep sending after deactivate()');
-      });
-    });
-
-    test(
-        'deactivate() mid-drain with no logs_until stops further requests '
+        'deactivate() mid-drain stops further requests '
         'and never sends a record written after it', () {
       fakeAsync((async) {
         late final _Harness h;
@@ -241,7 +184,7 @@ void main() {
             }
           },
         );
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(6);
 
@@ -280,7 +223,7 @@ void main() {
             if (callIndex == 0) h.uploader.deactivate();
           },
         );
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(6);
 
@@ -292,7 +235,7 @@ void main() {
         // a reset cursor meant to skip exactly this kind of backlog.
         h.write(2, message: 'while-off');
 
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(1, message: 'after-reactivate');
 
@@ -313,7 +256,7 @@ void main() {
     test('a failed batch is retried, then the cursor advances', () {
       fakeAsync((async) {
         final h = _Harness(async, statuses: [503, 204]);
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(1);
 
@@ -330,7 +273,7 @@ void main() {
     test('backoff doubles up to its cap', () {
       fakeAsync((async) {
         final h = _Harness(async, statuses: [503]);
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(1);
 
@@ -346,7 +289,7 @@ void main() {
       fakeAsync((async) {
         final h = _Harness(async,
             statuses: [429, 204], headers: {'retry-after': '300'});
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(1);
 
@@ -368,7 +311,7 @@ void main() {
           statuses: [413, 204],
           maxBatchBytes: 200340,
         );
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(4, message: 'x' * 50000);
         final written = [for (var i = 0; i < 4; i++) '${'x' * 50000} $i'];
@@ -401,7 +344,7 @@ void main() {
           statuses: [413],
           maxBatchBytes: 1024 * 1024,
         );
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(20);
 
@@ -437,7 +380,7 @@ void main() {
           statuses: [413, 204, 429, 204],
           maxBatchBytes: 120510,
         );
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(6, message: 'x' * 20000);
         final written = [for (var i = 0; i < 6; i++) '${'x' * 20000} $i'];
@@ -475,7 +418,7 @@ void main() {
           statuses: [413, 503, 204],
           maxBatchBytes: 200340,
         );
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(4, message: 'x' * 50000);
         final written = [for (var i = 0; i < 4; i++) '${'x' * 50000} $i'];
@@ -498,7 +441,7 @@ void main() {
     test('400 drops the batch and moves on', () {
       fakeAsync((async) {
         final h = _Harness(async, statuses: [400, 204]);
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(2);
 
@@ -514,7 +457,7 @@ void main() {
     test('404 waits an hour', () {
       fakeAsync((async) {
         final h = _Harness(async, statuses: [404, 204]);
-        h.uploader.activate(until: null, resetCursor: true);
+        h.uploader.activate(resetCursor: true);
         async.flushMicrotasks();
         h.write(1);
 
@@ -533,7 +476,7 @@ void main() {
         h.write(3);
         h.store.droppedBefore = 2;
         h.store.savedCursor = const LogCursor('mem', 1);
-        h.uploader.activate(until: null, resetCursor: false);
+        h.uploader.activate(resetCursor: false);
 
         async.elapse(const Duration(seconds: 61));
 
@@ -542,25 +485,6 @@ void main() {
         expect(lines.first['l'], 'warn');
         expect(lines.first['msg'], contains('gap'));
         expect(lines.last['msg'], 'line 2');
-      });
-    });
-
-    test('deactivate with a final attempt sends what is left, then stops', () {
-      fakeAsync((async) {
-        final h = _Harness(async);
-        h.uploader.activate(until: null, resetCursor: true);
-        async.flushMicrotasks();
-        h.write(2);
-
-        h.uploader.deactivate(finalAttempt: true);
-        async.flushMicrotasks();
-
-        expect(h.requests, hasLength(1));
-        expect(h.uploader.isActive, isFalse);
-
-        h.write(1);
-        async.elapse(const Duration(minutes: 5));
-        expect(h.requests, hasLength(1));
       });
     });
   });

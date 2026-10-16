@@ -5,87 +5,103 @@ import 'package:player/core/settings/settings_service.dart';
 import '../../test_utils/mock_auth_storage.dart';
 
 void main() {
-  final now = DateTime.utc(2026, 9, 22, 12);
+  DiagnosticsSettings settingsWith(MockAuthStorage storage) =>
+      DiagnosticsSettings(storage: storage);
 
-  DiagnosticsSettings settingsWith(MockAuthStorage storage, {DateTime? at}) =>
-      DiagnosticsSettings(storage: storage, now: () => at ?? now);
+  test('defaults to off and writes nothing', () async {
+    final storage = MockAuthStorage();
 
-  test('defaults to off', () async {
-    expect(await settingsWith(MockAuthStorage()).load(), DiagnosticsState.off);
+    expect(await settingsWith(storage).load(), DiagnosticsState.off);
+    expect(storage.contents, isEmpty);
   });
 
-  test('round-trips every choice', () async {
-    for (final choice in DiagnosticsChoice.values) {
-      final settings = settingsWith(MockAuthStorage());
-      final state = DiagnosticsState.chosen(choice, now);
+  test('round-trips every combination', () async {
+    for (final crashes in [false, true]) {
+      for (final logs in [false, true]) {
+        final settings = settingsWith(MockAuthStorage());
+        final state = DiagnosticsState(crashes: crashes, logs: logs);
 
-      await settings.save(state);
+        await settings.save(state);
 
-      expect(await settings.load(), state, reason: choice.name);
+        expect(await settings.load(), state, reason: '$state');
+      }
     }
   });
 
-  test('a timed choice ends after its window', () {
-    expect(DiagnosticsState.chosen(DiagnosticsChoice.logs24h, now).logsUntil,
-        now.add(const Duration(hours: 24)));
-    expect(DiagnosticsState.chosen(DiagnosticsChoice.logs7d, now).logsUntil,
-        now.add(const Duration(days: 7)));
-    expect(
-        DiagnosticsState.chosen(DiagnosticsChoice.logsForever, now).logsUntil,
-        isNull);
+  group('a save whose second write fails stores neither switch', () {
+    test('restores the crash switch it overwrote', () async {
+      final storage = MockAuthStorage();
+      await settingsWith(storage).save(DiagnosticsState.off);
+      storage.failWriteKeys.add(DiagnosticsSettings.logsKey);
+
+      await expectLater(
+        settingsWith(storage)
+            .save(const DiagnosticsState(crashes: true, logs: true)),
+        throwsA(anything),
+      );
+
+      expect(await settingsWith(storage).load(), DiagnosticsState.off);
+    });
+
+    test('removes a crash switch that was not stored before', () async {
+      final storage = MockAuthStorage();
+      storage.failWriteKeys.add(DiagnosticsSettings.logsKey);
+
+      await expectLater(
+        settingsWith(storage)
+            .save(const DiagnosticsState(crashes: true, logs: false)),
+        throwsA(anything),
+      );
+
+      expect(storage.containsKey(DiagnosticsSettings.crashesKey), isFalse);
+    });
   });
 
-  test('an ended timed choice loads as crashes and is stored that way',
-      () async {
-    final storage = MockAuthStorage();
-    await settingsWith(storage)
-        .save(DiagnosticsState.chosen(DiagnosticsChoice.logs24h, now));
+  test('copyWith changes only the named switch', () {
+    const state = DiagnosticsState(crashes: true, logs: false);
 
-    final later = settingsWith(storage, at: now.add(const Duration(hours: 25)));
-
-    expect(await later.load(),
-        const DiagnosticsState(choice: DiagnosticsChoice.crashes));
-    expect(await storage.read(DiagnosticsSettings.choiceKey), 'crashes');
-    expect(await storage.read(DiagnosticsSettings.untilKey), isNull);
+    expect(state.copyWith(logs: true),
+        const DiagnosticsState(crashes: true, logs: true));
+    expect(state.copyWith(crashes: false), DiagnosticsState.off);
   });
 
-  test('logs until turned off never ends', () async {
-    final storage = MockAuthStorage();
-    await settingsWith(storage)
-        .save(DiagnosticsState.chosen(DiagnosticsChoice.logsForever, now));
+  group('migrates the five-way choice', () {
+    const expected = {
+      'off': DiagnosticsState.off,
+      'crashes': DiagnosticsState(crashes: true, logs: false),
+      'logs_24h': DiagnosticsState(crashes: true, logs: false),
+      'logs_7d': DiagnosticsState(crashes: true, logs: false),
+      'logs_forever': DiagnosticsState(crashes: true, logs: true),
+      'something_newer': DiagnosticsState.off,
+    };
 
-    final muchLater =
-        settingsWith(storage, at: now.add(const Duration(days: 400)));
+    for (final MapEntry(key: choice, value: state) in expected.entries) {
+      test(choice, () async {
+        final storage = MockAuthStorage();
+        await storage.write(DiagnosticsSettings.legacyChoiceKey, choice);
+        await storage.write(DiagnosticsSettings.legacyUntilKey, '123');
 
-    expect((await muchLater.load()).choice, DiagnosticsChoice.logsForever);
-  });
-
-  test('logsActiveAt follows the choice and its end', () {
-    final timed = DiagnosticsState.chosen(DiagnosticsChoice.logs24h, now);
-    expect(timed.logsActiveAt(now), isTrue);
-    expect(timed.logsActiveAt(now.add(const Duration(hours: 25))), isFalse);
-    expect(DiagnosticsState.off.logsActiveAt(now), isFalse);
-    expect(
-        const DiagnosticsState(choice: DiagnosticsChoice.crashes)
-            .logsActiveAt(now),
-        isFalse);
-  });
-
-  test('crashes are shared by every choice but off', () {
-    for (final choice in DiagnosticsChoice.values) {
-      expect(DiagnosticsState(choice: choice).crashesEnabled,
-          choice != DiagnosticsChoice.off);
+        expect(await settingsWith(storage).load(), state);
+        expect(storage.contents[DiagnosticsSettings.crashesKey],
+            '${state.crashes}');
+        expect(storage.contents[DiagnosticsSettings.logsKey], '${state.logs}');
+        expect(
+            storage.contents.containsKey(DiagnosticsSettings.legacyChoiceKey),
+            isFalse);
+        expect(storage.contents.containsKey(DiagnosticsSettings.legacyUntilKey),
+            isFalse);
+      });
     }
   });
 
-  test('migrates an opted-in crash consent to crashes', () async {
+  test('migrates an opted-in crash consent to crash reports on', () async {
     final storage = MockAuthStorage();
     await storage.write(DiagnosticsSettings.legacyCrashKey, 'true');
 
     expect(await settingsWith(storage).load(),
-        const DiagnosticsState(choice: DiagnosticsChoice.crashes));
+        const DiagnosticsState(crashes: true, logs: false));
     expect(await storage.read(DiagnosticsSettings.legacyCrashKey), isNull);
-    expect(await storage.read(DiagnosticsSettings.choiceKey), 'crashes');
+    expect(await storage.read(DiagnosticsSettings.crashesKey), 'true');
   });
 
   test('migrates an opted-out crash consent to off', () async {
@@ -106,14 +122,13 @@ void main() {
     expect(first, matches(RegExp(r'^[0-9a-f-]{36}$')));
   });
 
-  test('signing out does not clear the diagnostics choice', () async {
+  test('signing out does not clear the switches', () async {
     final storage = MockAuthStorage();
-    await settingsWith(storage)
-        .save(DiagnosticsState.chosen(DiagnosticsChoice.logsForever, now));
+    const state = DiagnosticsState(crashes: true, logs: true);
+    await settingsWith(storage).save(state);
 
     await SettingsService(storage: storage).clearSettings();
 
-    expect((await settingsWith(storage).load()).choice,
-        DiagnosticsChoice.logsForever);
+    expect(await settingsWith(storage).load(), state);
   });
 }

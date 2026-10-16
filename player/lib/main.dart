@@ -323,7 +323,7 @@ Future<void> _recordSession(LogSink sink) async {
   }
 }
 
-/// The uploader behind the Diagnostics choice, or null without a log store.
+/// The uploader behind the Diagnostics log switch, or null without a log store.
 LogUploader? _buildLogUploader(LogSink? sink, LogStore? store) {
   if (sink == null || store == null) return null;
   final settings = DiagnosticsSettings();
