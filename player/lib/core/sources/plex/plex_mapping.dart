@@ -3,7 +3,6 @@
 library;
 
 import '../../../domain/models/media_segment.dart';
-import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../source.dart';
@@ -155,39 +154,6 @@ ExternalIds plexExternalIds(Object? guids) {
     }
   }
   return ExternalIds(tmdb: tmdb, tvdb: tvdb, imdb: imdb);
-}
-
-/// Plex's own Continue Watching and On Deck hubs. The Continue Watching row
-/// already shows them.
-const plexContinueHubIds = {'home.continue', 'home.ondeck'};
-
-/// A home hub, or null when it is one of [plexContinueHubIds] or holds
-/// nothing this app plays. [libraryIds] are the sections a hub may link to;
-/// Plex hubs carry no section id of their own, so it comes from the items.
-Hub? plexHub(
-  SourceId sourceId,
-  Map<String, dynamic> h, {
-  required Set<String> libraryIds,
-}) {
-  final hubId = h['hubIdentifier'];
-  if (hubId is! String || plexContinueHubIds.contains(hubId)) return null;
-  final metadata = [
-    for (final m in (h['Metadata'] as List? ?? const []))
-      if (m is Map) m.cast<String, dynamic>(),
-  ];
-  final items =
-      metadata.map((m) => plexSummary(sourceId, m)).whereType<ItemSummary>();
-  if (items.isEmpty) return null;
-  final sections = {for (final m in metadata) '${m['librarySectionID']}'};
-  final section = sections.length == 1 ? sections.single : null;
-  return Hub(
-    id: hubId,
-    title: h['title'] as String? ?? '',
-    items: items.toList(),
-    library: section != null && libraryIds.contains(section)
-        ? LibraryRef(sourceId: sourceId, id: section)
-        : null,
-  );
 }
 
 List<String> _tags(Object? list) => [

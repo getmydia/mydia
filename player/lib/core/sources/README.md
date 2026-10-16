@@ -292,7 +292,7 @@ each leaf provider in `source_browse_providers.dart` and
 has a time for its key, always fetches, and stores what comes back as JSON
 in the `source_cache` Hive box. Keys are `QueryKey`s named
 `<sourceId>/<op>` (`SourceKeys`), where `op` is one of `SourceOps.all`
-(libraries, browse, item, children, continueWatching, hubs, similar,
+(libraries, browse, item, children, continueWatching, similar,
 collections, collectionItems, calendar, unwatched, favorites,
 recentlyAdded). The fetch log, `FreshnessHeader`, `WatcherRegistry` and
 `Invalidator` all work on these keys. `Invalidator.invalidateAll`, the
@@ -440,10 +440,12 @@ hidden behind the bottom dock.
 A source's home shows Continue Watching first when the source implements
 `ContinueWatching` (Plex: `/hubs/continueWatching/items`; Stash: scenes
 with a resume point, last played first; Jellyfin: `/UserItems/Resume`, then
-`/Shows/NextUp` for shows with nothing under way, 20 in all). Then come the
-server's own rows when it implements `HomeHubs` (Plex's `/hubs`, minus
-`home.continue` and `home.ondeck`), otherwise one row per library. A failed
-Continue Watching hides its row; failed hubs fall back to the library rows.
+`/Shows/NextUp` for shows with nothing under way, 20 in all). Then come
+Recently Added and Favorites for a source that implements them, and one row
+per library, the same for every source. A failed Continue Watching hides
+its row while Recently Added still answers; when both fail the server is left
+out as unavailable (named in the banner, or the error view when it is the
+only server).
 Removing from Continue Watching is a Plex
 `PUT /actions/removeFromContinueWatching`, a Stash `sceneSaveActivity` with
 a zero resume point (which works on every Stash the source supports;
@@ -519,7 +521,7 @@ skips that directory.
 
 1. A `MediaSource` subclass with its mapping and client, plus the shared
    contract suite in `test/core/sources/media_source_contract.dart`.
-   `ContinueWatching`, `HomeHubs`, `Similar`, `Favorites`, `NextUp`,
+   `ContinueWatching`, `Similar`, `Favorites`, `NextUp`,
    `RecentlyAdded` and `SkipSegments` are optional; a source that implements one also lists
    the matching `SourceCapability`.
 2. A `SourceKind` value and a case in `source_factories.dart`.

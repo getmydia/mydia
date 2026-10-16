@@ -45,7 +45,7 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
 
   # `<Op>NoIds` documents are the same operation minus the external-id fields,
   # so they take exactly the variables of `<Op>`.
-  @no_ids_ops ~w(CollectionItems HomeRows UnwatchedListing FavoritesListing
+  @no_ids_ops ~w(CollectionItems UnwatchedListing FavoritesListing
                  MydiaContinueWatching RecentlyAddedFull Search)
 
   defp variables(s) do
@@ -76,7 +76,6 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
       "Calendar" => %{"start" => "2000-01-01", "end" => "2100-01-01"},
       "Collections" => %{"first" => 10},
       "CollectionItems" => %{"collectionId" => s.collection.id, "first" => 10},
-      "HomeRows" => %{"recentlyAddedLimit" => 10, "favoritesLimit" => 10},
       "MoviesFiltered" => %{
         "first" => 10,
         "sort" => %{"field" => "TITLE", "direction" => "ASC"}

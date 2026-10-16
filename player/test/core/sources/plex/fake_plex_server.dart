@@ -22,10 +22,6 @@ class FakePlexServer {
   /// Set to make the transcode decision refuse the conversion.
   bool refuseTranscode = false;
 
-  /// Set to make `/hubs` also answer a repeated hub id and a hub holding
-  /// more movies than a row may show.
-  bool crowdedHubs = false;
-
   /// Set to make the show answer without an `OnDeck` entry.
   bool nothingOnDeck = false;
 
@@ -246,77 +242,6 @@ class FakePlexServer {
             {..._movie('103', 'A Quiet Orbit', 2015), 'viewOffset': 1800000},
           ],
         });
-      case '/hubs':
-        return _container({
-          'Hub': [
-            {
-              'hubIdentifier': 'home.continue',
-              'title': 'Continue Watching',
-              'type': 'mixed',
-              'Metadata': [resumingEpisode],
-            },
-            {
-              'hubIdentifier': 'home.ondeck',
-              'title': 'On Deck',
-              'type': 'mixed',
-              'Metadata': [resumingEpisode],
-            },
-            {
-              'hubIdentifier': 'home.movies.recent',
-              'title': 'Recently Added in Films',
-              'type': 'movie',
-              'Metadata': [
-                _movie('104', 'Paper Harbour', 2023),
-                _movie('105', 'Nine Copper Bells', 2012),
-              ],
-            },
-            {
-              'hubIdentifier': 'home.mixed.released',
-              'title': 'Recently Released',
-              'type': 'mixed',
-              'Metadata': [
-                _movie('101', 'The Lantern Keeper', 2019),
-                showSummary,
-              ],
-            },
-            if (crowdedHubs) ...[
-              {
-                'hubIdentifier': 'home.movies.recent',
-                'title': 'Recently Added in Films, again',
-                'type': 'movie',
-                'Metadata': [_movie('101', 'The Lantern Keeper', 2019)],
-              },
-              {
-                'hubIdentifier': 'home.movies.long',
-                'title': 'A Long Shelf',
-                'type': 'movie',
-                'Metadata': [
-                  for (var i = 0; i < 25; i++)
-                    _movie('${700 + i}', 'Shelf Film $i', 2000 + i),
-                ],
-              },
-            ],
-            {
-              'hubIdentifier': 'home.music.recent',
-              'title': 'Recently Added in Music',
-              'type': 'album',
-              'Metadata': [
-                {
-                  'ratingKey': '901',
-                  'type': 'album',
-                  'title': 'Lowtide Hymns',
-                  'librarySectionID': 3,
-                },
-              ],
-            },
-            {
-              'hubIdentifier': 'home.television.recent',
-              'title': 'Recently Added in Series',
-              'type': 'episode',
-              'Metadata': <Object>[],
-            },
-          ],
-        });
       case '/actions/removeFromContinueWatching':
         return http.Response('', 200);
       case '/:/scrobble':
@@ -381,7 +306,7 @@ class FakePlexServer {
         ],
       };
 
-  /// Episode 402, mid-way, as Continue Watching and the hubs return it.
+  /// Episode 402, mid-way, as Continue Watching returns it.
   static Map<String, dynamic> get resumingEpisode => {
         'ratingKey': '402',
         'type': 'episode',

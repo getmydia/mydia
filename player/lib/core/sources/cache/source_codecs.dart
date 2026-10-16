@@ -2,7 +2,6 @@
 library;
 
 import '../../../domain/sources/collection.dart';
-import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 
@@ -25,13 +24,6 @@ Object? encodeCollections(List<SourceCollection> collections) =>
 
 List<SourceCollection> decodeCollections(Object? json) =>
     [for (final e in json! as List) SourceCollection.fromJson(_map(e))];
-
-/// Null means the source has no hubs, which is a value worth caching.
-Object? encodeHubs(List<Hub>? hubs) =>
-    hubs == null ? null : [for (final h in hubs) h.toJson()];
-
-List<Hub>? decodeHubs(Object? json) =>
-    json == null ? null : [for (final e in json as List) Hub.fromJson(_map(e))];
 
 Object? encodeSummaryPage(Page<ItemSummary> page) =>
     page.toJson((i) => i.toJson());

@@ -19,7 +19,6 @@ import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/models/media_stream.dart';
 import '../../../domain/sources/collection.dart';
-import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
@@ -181,6 +180,24 @@ final sourceRecentlyAddedProvider =
   retry: (_, __) => null,
 );
 
+/// The first page of the source's favorites, for the Home row. Empty for a
+/// source without the listing. Same retry rule as Continue Watching.
+final sourceFavoritesRowProvider =
+    StreamProvider.autoDispose.family<List<ItemSummary>, SourceId>(
+  (ref, id) {
+    final favorites = requireSource(ref, id).as<FavoritesListing>();
+    if (favorites == null) return Stream.value(const []);
+    return createSourceWatcher(
+      ref,
+      key: SourceKeys.favoritesRow(id),
+      fetch: () async => (await favorites.favorites()).items,
+      encode: encodeSummaries,
+      decode: decodeSummaries,
+    ).stream;
+  },
+  retry: (_, __) => null,
+);
+
 /// The files of [item] for the Media Info panel. Not cached: it is read on
 /// demand, and a source without the capability is an error the panel shows.
 final sourceMediaInfoProvider =
@@ -189,23 +206,6 @@ final sourceMediaInfoProvider =
     final info = requireSource(ref, item.sourceId).as<MediaInfo>();
     if (info == null) throw const SourceException.unsupported();
     return info.mediaInfo(item);
-  },
-  retry: (_, __) => null,
-);
-
-/// Null for a source without hubs, whose home keeps one row per library.
-final sourceHubsProvider =
-    StreamProvider.autoDispose.family<List<Hub>?, SourceId>(
-  (ref, id) {
-    final hubs = requireSource(ref, id).as<HomeHubs>();
-    if (hubs == null) return Stream.value(null);
-    return createSourceWatcher<List<Hub>?>(
-      ref,
-      key: SourceKeys.hubs(id),
-      fetch: hubs.hubs,
-      encode: encodeHubs,
-      decode: decodeHubs,
-    ).stream;
   },
   retry: (_, __) => null,
 );
@@ -234,9 +234,21 @@ void invalidateSourceContainerWrites(
         .read(invalidatorProvider)
         .invalidate(SourceRules.watchedChanged(item.sourceId)));
 
-/// [item] was dismissed from Continue Watching; only the rail and the hubs
-/// change.
+/// [item] was dismissed from Continue Watching; only the rail
+/// changes.
 void invalidateSourceContinueWatchingWrites(WidgetRef ref, ItemRef item) =>
-    unawaited(ref
-        .read(invalidatorProvider)
+    _invalidateContinueWatchingRemoved(ref.read(invalidatorProvider), item);
+
+/// [invalidateSourceContinueWatchingWrites] through a container, for a
+/// removal that finishes after its row is unmounted.
+void invalidateSourceContinueWatchingContainerWrites(
+  ProviderContainer container,
+  ItemRef item,
+) =>
+    _invalidateContinueWatchingRemoved(
+        container.read(invalidatorProvider), item);
+
+void _invalidateContinueWatchingRemoved(
+        Invalidator invalidator, ItemRef item) =>
+    unawaited(invalidator
         .invalidate(SourceRules.continueWatchingRemoved(item.sourceId)));

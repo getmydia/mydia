@@ -328,10 +328,6 @@ const guest = Source(
           recentlyAdded('m-1', addedAt: '2024-05-01T00:00:00Z'),
         ],
       };
-  t.handlers['HomeRows'] = (_) => {
-        'recentlyAdded': [listing('m-4')],
-        'favorites': [listing('s-1', type: 'TV_SHOW')],
-      };
   t.handlers['Collections'] = (_) => {
         'collections': [collection('c1'), collection('c2', type: 'smart')],
       };

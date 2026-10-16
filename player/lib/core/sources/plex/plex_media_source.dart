@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import '../../../domain/models/download_option.dart';
 import '../../../domain/models/download_plan.dart';
 import '../../../domain/models/media_segment.dart';
-import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
@@ -23,7 +22,6 @@ class PlexMediaSource extends MediaSource
         Searchable,
         ContinueWatching,
         RecentlyAdded,
-        HomeHubs,
         Similar,
         NextUp,
         SkipSegments,
@@ -47,7 +45,6 @@ class PlexMediaSource extends MediaSource
         SourceCapability.searchable,
         SourceCapability.continueWatching,
         SourceCapability.recentlyAdded,
-        SourceCapability.hubs,
         SourceCapability.similar,
         SourceCapability.nextUp,
         SourceCapability.skipSegments,
@@ -237,26 +234,6 @@ class PlexMediaSource extends MediaSource
         '/actions/removeFromContinueWatching',
         {'ratingKey': ref.externalId},
       );
-
-  @override
-  Future<List<Hub>> hubs() async {
-    if (_sectionKinds == null) await libraries();
-    final libraryIds = _sectionKinds?.keys.toSet() ?? const <String>{};
-    final body = await client.container('/hubs', {'count': '$_rowLimit'});
-    final seen = <String>{};
-    return [
-      for (final h in (body['Hub'] as List? ?? const []))
-        if (h is Map)
-          if (plexHub(id, h.cast<String, dynamic>(), libraryIds: libraryIds)
-              case final hub? when seen.add(hub.id))
-            Hub(
-              id: hub.id,
-              title: hub.title,
-              items: hub.items.take(_rowLimit).toList(),
-              library: hub.library,
-            ),
-    ];
-  }
 
   /// Its own request, so a marker failure never costs the detail screen.
   @override

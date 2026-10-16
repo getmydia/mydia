@@ -13,7 +13,6 @@ import '../../../domain/models/media_stream.dart';
 import '../../../domain/models/remote_device.dart';
 import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/sources/collection.dart';
-import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
@@ -88,7 +87,6 @@ class MydiaSource extends MediaSource
         UnwatchedListing,
         FavoritesListing,
         MediaInfo,
-        HomeHubs,
         RemoteTargets {
   MydiaSource({
     required this.source,
@@ -130,7 +128,6 @@ class MydiaSource extends MediaSource
         SourceCapability.unwatchedListing,
         SourceCapability.favoritesListing,
         SourceCapability.mediaInfo,
-        SourceCapability.hubs,
         SourceCapability.remoteTargets,
       };
 
@@ -556,28 +553,6 @@ class MydiaSource extends MediaSource
     final node = data[movie ? 'movie' : 'episode'];
     final files = node is Map<String, dynamic> ? node['files'] : null;
     return [for (final f in _maps(files)) mediaFileInfoFromJson(f)];
-  }
-
-  @override
-  Future<List<Hub>> hubs() async {
-    final data = await client.query(documentNodeQueryHomeRows,
-        fallback: documentNodeQueryHomeRowsNoIds,
-        variables: const {
-          'recentlyAddedLimit': _rowLimit,
-          'favoritesLimit': 10,
-        });
-    Hub row(String hubId, String title, Object? list) => Hub(
-          id: hubId,
-          title: title,
-          items: [
-            for (final m in _maps(list))
-              if (listingSummary(id, m) case final s?) s,
-          ],
-        );
-    return [
-      row('recently-added', 'Recently Added', data['recentlyAdded']),
-      row('favorites', 'Favorites', data['favorites']),
-    ].where((h) => h.items.isNotEmpty).toList();
   }
 
   @override

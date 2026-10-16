@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:player/core/cache/invalidation_target.dart';
+import 'package:player/core/cache/watcher_registry.dart';
+import 'package:player/core/sources/cache/source_rules.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
@@ -14,7 +18,9 @@ import '../../../domain/merged/fake_merged_source.dart';
 import '../../../test_utils/toast_harness.dart';
 
 Future<List<String>> pump(WidgetTester tester, List<MediaSource> sources,
-    {required AllServersListing listing, LibraryKind? kind}) async {
+    {required AllServersListing listing,
+    LibraryKind? kind,
+    List<Override> extra = const []}) async {
   final pushed = <String>[];
   final router = GoRouter(routes: [
     GoRoute(
@@ -38,11 +44,23 @@ Future<List<String>> pump(WidgetTester tester, List<MediaSource> sources,
       for (final s in sources) mediaSourceProvider(s.id).overrideWithValue(s),
       allServersNeedSignInProvider.overrideWithValue(const []),
       sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ...extra,
     ],
     child: MaterialApp.router(routerConfig: router, builder: toastLayerBuilder),
   ));
   await tester.pumpAndSettle();
   return pushed;
+}
+
+class _RecordingInvalidator implements Invalidator {
+  final calls = <List<InvalidationTarget>>[];
+
+  @override
+  Future<void> invalidate(Iterable<InvalidationTarget> targets) async =>
+      calls.add(targets.toList());
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
 const shared = ExternalIds(tmdb: '1');
@@ -158,6 +176,24 @@ void main() {
     await t.pumpAndSettle();
     expect(pushed.last, startsWith('/s/${a.id.value}/'));
     expect(Uri.parse(pushed.last).path, isNot(contains('/player/')));
+  });
+
+  testWidgets('removing from Continue Watching refreshes the source\'s row',
+      (t) async {
+    final s = fakeServer('a');
+    final a = FakeMergedSource(s, resuming: [
+      item(s, 'a1', lastPlayedAt: DateTime.utc(2024, 1, 1)),
+    ]);
+    final recorder = _RecordingInvalidator();
+    await pump(t, [a, FakeMergedSource(fakeServer('b'))],
+        listing: AllServersListing.continueWatching,
+        extra: [invalidatorProvider.overrideWithValue(recorder)]);
+    await t.longPress(find.byKey(ValueKey('all-poster-${a.id.value}-a1')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('all-continue-remove')));
+    await t.pumpAndSettle();
+    expect(recorder.calls.expand((c) => c),
+        containsAll(SourceRules.continueWatchingRemoved(a.id)));
   });
 
   testWidgets('Recently Added still opens the item', (t) async {

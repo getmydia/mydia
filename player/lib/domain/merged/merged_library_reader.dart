@@ -11,6 +11,7 @@ import '../sources/collection.dart';
 import '../sources/item.dart';
 import '../sources/library.dart';
 import 'merge_key.dart';
+import 'merge_rows.dart';
 import 'merged_grid.dart';
 import 'merged_result.dart';
 import 'merged_search.dart';
@@ -81,10 +82,8 @@ class LiveMergedReader implements MergedLibraryReader {
   MergedResult<List<ItemSummary>> _row(MergedResult<List<List<ItemSummary>>> r,
       DateTime? Function(ItemSummary) at,
       {int limit = 20}) {
-    final all = newestFirst(r.value, at,
-        limit: r.value.fold(0, (n, l) => n + l.length));
-    final d = dedupe(all, _order);
-    return MergedResult(d.items.take(limit).toList(),
+    final d = mergeNewest(r.value, _order, at, limit: limit);
+    return MergedResult(d.items,
         unavailable: r.unavailable,
         skipped: r.skipped,
         extraCopies: d.extraCopies);
@@ -181,20 +180,7 @@ class LiveMergedReader implements MergedLibraryReader {
       } while (cursor != null && all.length < perSourceCap);
       return all.take(perSourceCap).toList();
     }, const <ItemSummary>[]);
-    String key(ItemSummary i) => (i.sortTitle ?? i.title).toLowerCase();
-    // List.sort is not stable: ties fall back to server order, then each
-    // server's own order, so equal titles never swap between loads.
-    final entries = [
-      for (var s = 0; s < r.value.length; s++)
-        for (var i = 0; i < r.value[s].length; i++)
-          (item: r.value[s][i], s: s, i: i),
-    ]..sort((x, y) {
-        final c = key(x.item).compareTo(key(y.item));
-        if (c != 0) return c;
-        final s = x.s.compareTo(y.s);
-        return s != 0 ? s : x.i.compareTo(y.i);
-      });
-    final d = dedupe([for (final e in entries) e.item], _order);
+    final d = mergeAlphabetical(r.value, _order);
     return MergedResult(d.items,
         unavailable: r.unavailable,
         skipped: r.skipped,

@@ -5,7 +5,6 @@ import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/models/media_stream.dart';
 import 'package:player/domain/navigation/media_filter.dart';
 import 'package:player/domain/sources/collection.dart';
-import 'package:player/domain/sources/hub.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 
@@ -22,7 +21,6 @@ class FakeCapableSource extends FakeMediaSource
         UnwatchedListing,
         FavoritesListing,
         MediaInfo,
-        HomeHubs,
         RecentlyAdded,
         ContinueWatching,
         Downloadable {
@@ -54,7 +52,6 @@ class FakeCapableSource extends FakeMediaSource
   List<Page<ItemSummary>> unwatchedPages = const [Page(items: [])];
   List<Page<ItemSummary>> favoritePages = const [Page(items: [])];
   List<MediaFileInfo> mediaInfoResult = const [];
-  List<Hub> hubsResult = const [];
   List<ItemSummary> recentlyAddedResult = const [];
 
   @override
@@ -66,7 +63,6 @@ class FakeCapableSource extends FakeMediaSource
         SourceCapability.unwatchedListing,
         SourceCapability.favoritesListing,
         SourceCapability.mediaInfo,
-        SourceCapability.hubs,
         SourceCapability.recentlyAdded,
         SourceCapability.continueWatching,
         SourceCapability.downloadable,
@@ -120,12 +116,6 @@ class FakeCapableSource extends FakeMediaSource
   Future<List<MediaFileInfo>> mediaInfo(ItemRef ref) async {
     calls.add('mediaInfo(${ref.externalId})');
     return mediaInfoResult;
-  }
-
-  @override
-  Future<List<Hub>> hubs() async {
-    calls.add('hubs()');
-    return hubsResult;
   }
 
   @override

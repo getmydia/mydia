@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
-import 'package:player/domain/sources/hub.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/sources/source_error.dart';
@@ -237,6 +236,9 @@ class FakeResumingSource extends FakeMediaSource implements ContinueWatching {
   /// When set, [continueWatching] waits on it before answering.
   Completer<void>? hold;
 
+  /// When set, [removeFromContinueWatching] waits on it before answering.
+  Completer<void>? removeHold;
+
   /// Refs [canRemoveFromContinueWatching] answers false for.
   final unremovable = <ItemRef>{};
 
@@ -258,44 +260,12 @@ class FakeResumingSource extends FakeMediaSource implements ContinueWatching {
 
   @override
   Future<void> removeFromContinueWatching(ItemRef ref) async {
+    await removeHold?.future;
     if (removeError case final e?) throw e;
     removed.add(ref);
     resuming = [
       for (final item in resuming)
         if (item.ref != ref) item,
-    ];
-  }
-}
-
-/// A source with Continue Watching and server hubs, as Plex has.
-class FakeHubSource extends FakeResumingSource implements HomeHubs {
-  FakeHubSource({super.resuming});
-
-  SourceException? hubsError;
-
-  /// Replaces the default two hubs when set.
-  List<Hub>? hubList;
-
-  @override
-  Set<SourceCapability> get capabilities =>
-      {...super.capabilities, SourceCapability.hubs};
-
-  @override
-  Future<List<Hub>> hubs() async {
-    if (hubsError case final e?) throw e;
-    if (hubList case final list?) return list;
-    return [
-      Hub(
-        id: 'home.movies.recent',
-        title: 'Recently Added in Films',
-        items: [fakeMovie(5), fakeMovie(6)],
-        library: FakeMediaSource.movies,
-      ),
-      Hub(
-        id: 'home.mixed.released',
-        title: 'Recently Released',
-        items: [fakeMovie(7), fakeShow],
-      ),
     ];
   }
 }

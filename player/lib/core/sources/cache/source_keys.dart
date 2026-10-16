@@ -17,7 +17,6 @@ abstract final class SourceOps {
   static const String item = 'item';
   static const String children = 'children';
   static const String continueWatching = 'continueWatching';
-  static const String hubs = 'hubs';
   static const String similar = 'similar';
   static const String collections = 'collections';
   static const String collectionItems = 'collectionItems';
@@ -42,7 +41,6 @@ abstract final class SourceOps {
     item,
     children,
     continueWatching,
-    hubs,
     similar,
   };
 }
@@ -73,8 +71,6 @@ abstract final class SourceKeys {
   static QueryKey continueWatching(SourceId id) =>
       QueryKey(operation(id, SourceOps.continueWatching));
 
-  static QueryKey hubs(SourceId id) => QueryKey(operation(id, SourceOps.hubs));
-
   static QueryKey collections(SourceId id) =>
       QueryKey(operation(id, SourceOps.collections));
 
@@ -90,6 +86,12 @@ abstract final class SourceKeys {
 
   static QueryKey favorites(SourceId id) =>
       QueryKey(operation(id, SourceOps.favorites));
+
+  /// The Home Favorites row: the first page as a plain list. In the favorites
+  /// family, so every favorites rule refreshes it, but under its own key: the
+  /// paged listing stores pages under [favorites] with another codec.
+  static QueryKey favoritesRow(SourceId id) =>
+      QueryKey(operation(id, SourceOps.favorites), const {'row': 'home'});
 
   static QueryKey recentlyAdded(SourceId id) =>
       QueryKey(operation(id, SourceOps.recentlyAdded));

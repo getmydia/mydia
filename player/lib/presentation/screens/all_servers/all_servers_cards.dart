@@ -15,6 +15,8 @@ import '../../widgets/media_context_menu.dart';
 import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
 import '../detail/detail_links.dart';
+import '../sources/source_browse_providers.dart'
+    show invalidateSourceContinueWatchingContainerWrites;
 import 'all_servers_providers.dart';
 
 export '../../../domain/navigation/all_servers_locations.dart';
@@ -108,6 +110,8 @@ Future<void> showAllServersContinueMenu(
     case 'remove':
       if (cw == null) return;
       final toaster = Toaster.of(c);
+      // The removal can outlive the caller; a container does not.
+      final container = ProviderScope.containerOf(c, listen: false);
       try {
         await cw.removeFromContinueWatching(item.dismissRef);
       } catch (e) {
@@ -119,6 +123,10 @@ Future<void> showAllServersContinueMenu(
         );
         return;
       }
-      ref.invalidate(allServersContinueWatchingProvider);
+      container.invalidate(allServersContinueWatchingProvider);
+      // Home reads each server's cached rail and stays mounted under the
+      // listing.
+      invalidateSourceContinueWatchingContainerWrites(
+          container, item.dismissRef);
   }
 }

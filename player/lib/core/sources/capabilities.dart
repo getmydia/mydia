@@ -9,7 +9,6 @@ import '../../domain/models/media_stream.dart';
 import '../../domain/models/remote_device.dart';
 import '../../domain/navigation/media_filter.dart';
 import '../../domain/sources/collection.dart';
-import '../../domain/sources/hub.dart';
 import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
 import '../remote/remote_roster.dart';
@@ -33,13 +32,6 @@ abstract interface class ContinueWatching {
   bool canRemoveFromContinueWatching(ItemSummary item);
 
   Future<void> removeFromContinueWatching(ItemRef ref);
-}
-
-/// The server's own home rows.
-abstract interface class HomeHubs {
-  /// In the server's order. Never holds Continue Watching or On Deck, which
-  /// the Continue Watching row already shows.
-  Future<List<Hub>> hubs();
 }
 
 /// Items like the one the viewer is looking at. A source implementing this

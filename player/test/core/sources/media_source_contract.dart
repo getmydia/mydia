@@ -123,8 +123,6 @@ void runMediaSourceContract(
           caps.contains(SourceCapability.searchable));
       expect(f.source.as<ContinueWatching>() != null,
           caps.contains(SourceCapability.continueWatching));
-      expect(f.source.as<HomeHubs>() != null,
-          caps.contains(SourceCapability.hubs));
     });
 
     test('a source that lists a capability returns it', () async {

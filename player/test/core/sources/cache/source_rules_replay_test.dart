@@ -20,7 +20,6 @@ void main() {
       expect(
         _ops(SourceRules.watchedChanged(_a)),
         containsAll(<String>{
-          SourceOps.hubs,
           SourceOps.continueWatching,
           SourceOps.browse,
           SourceOps.unwatched,
@@ -38,7 +37,6 @@ void main() {
       expect(
         _ops(SourceRules.watchedChanged(_a)),
         containsAll(<String>{
-          SourceOps.hubs,
           SourceOps.continueWatching,
           SourceOps.browse,
           SourceOps.unwatched,
@@ -55,7 +53,6 @@ void main() {
       expect(
         _ops(SourceRules.offlineProgressSynced(_a)),
         containsAll(<String>{
-          SourceOps.hubs,
           SourceOps.continueWatching,
           SourceOps.browse,
           SourceOps.unwatched,
@@ -73,7 +70,6 @@ void main() {
         _ops(SourceRules.favoriteChanged(_a)),
         containsAll(<String>{
           SourceOps.favorites,
-          SourceOps.hubs,
           SourceOps.browse,
           SourceOps.item,
         }),
@@ -82,7 +78,7 @@ void main() {
 
     test('continueWatchingRemoved: the rail and home only', () {
       expect(_ops(SourceRules.continueWatchingRemoved(_a)),
-          {SourceOps.continueWatching, SourceOps.hubs});
+          {SourceOps.continueWatching});
     });
 
     test('nothing reaches another source', () {

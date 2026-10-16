@@ -13,8 +13,9 @@ import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/source_error.dart';
+import 'package:player/presentation/screens/home/home_scope.dart';
+import 'package:player/presentation/screens/home/home_screen.dart';
 import 'package:player/presentation/screens/sources/source_error_view.dart';
-import 'package:player/presentation/screens/sources/source_home_screen.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/offline_banner.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
@@ -105,7 +106,7 @@ void main() {
     final router = GoRouter(routes: [
       GoRoute(
         path: '/',
-        builder: (_, __) => const SourceHomeScreen(sourceId: fakeSourceId),
+        builder: (_, __) => const HomeScreen(scope: OneServer(fakeSourceId)),
       ),
     ]);
     await tester.binding.setSurfaceSize(const Size(1280, 900));
@@ -124,7 +125,7 @@ void main() {
 
     // The libraries row lists the same fake films, so look inside the row
     // that only the stored answer can fill.
-    final row = find.byKey(const Key('source-continue-watching'));
+    final row = find.byKey(const Key('home-continue-watching'));
     expect(row, findsOneWidget);
     for (final title in ['Invented Film 1', 'Invented Film 2']) {
       expect(

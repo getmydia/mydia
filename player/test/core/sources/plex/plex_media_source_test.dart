@@ -302,10 +302,9 @@ void main() {
   });
 
   group('home', () {
-    test('declares Continue Watching and hubs', () {
+    test('declares Continue Watching', () {
       final caps = build().source.capabilities;
       expect(caps, contains(SourceCapability.continueWatching));
-      expect(caps, contains(SourceCapability.hubs));
     });
 
     test('Continue Watching maps the flat list, capped at 20', () async {
@@ -326,33 +325,6 @@ void main() {
       expect(episode.poster, const ArtworkRef('/library/metadata/201/thumb/1'));
       expect(
           episode.backdrop, const ArtworkRef('/library/metadata/402/thumb/1'));
-    });
-
-    test('hubs drop Continue Watching, On Deck, music and empty hubs',
-        () async {
-      final hubs = await build().source.hubs();
-      expect(
-          hubs.map((h) => h.id), ['home.movies.recent', 'home.mixed.released']);
-      expect(hubs.first.title, 'Recently Added in Films');
-      expect(hubs.first.items.map((i) => i.ref.externalId), ['104', '105']);
-    });
-
-    test('hubs cap each row at 20 and drop a repeated hub id', () async {
-      final b = build();
-      b.server.crowdedHubs = true;
-      final hubs = await b.source.hubs();
-      expect(hubs.map((h) => h.id).toSet().length, hubs.length);
-      expect(hubs.map((h) => h.id), contains('home.movies.long'));
-      expect(hubs.firstWhere((h) => h.id == 'home.movies.long').items,
-          hasLength(20));
-      expect(hubs.first.title, 'Recently Added in Films');
-      expect(hubs.first.items.map((i) => i.ref.externalId), ['104', '105']);
-    });
-
-    test('a hub links to its library only when every item shares it', () async {
-      final hubs = await build().source.hubs();
-      expect(hubs.first.library, const LibraryRef(sourceId: sid, id: '1'));
-      expect(hubs.last.library, isNull);
     });
 
     test('remove sends a PUT with the rating key', () async {

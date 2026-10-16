@@ -16,7 +16,6 @@ enum SourceCapability {
   watchedState,
   searchable,
   continueWatching,
-  hubs,
   skipSegments,
   downloadable,
   castable,

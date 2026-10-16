@@ -37,14 +37,10 @@ void main() {
   });
 
   test('favorite and continue watching rules are narrow', () {
-    expect(_ops(SourceRules.favoriteChanged(_a)), {
-      SourceOps.item,
-      SourceOps.browse,
-      SourceOps.hubs,
-      SourceOps.favorites
-    });
+    expect(_ops(SourceRules.favoriteChanged(_a)),
+        {SourceOps.item, SourceOps.browse, SourceOps.favorites});
     expect(_ops(SourceRules.continueWatchingRemoved(_a)),
-        {SourceOps.continueWatching, SourceOps.hubs});
+        {SourceOps.continueWatching});
     expect(SourceRules.progressSynced, isEmpty);
   });
 
