@@ -19,6 +19,7 @@ import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
+import 'package:player/presentation/screens/all_servers/all_servers_cards.dart';
 import 'package:player/presentation/screens/home/home_loading_skeleton.dart';
 import 'package:player/presentation/screens/home/home_scope.dart';
 import 'package:player/presentation/screens/home/home_screen.dart';
@@ -567,6 +568,126 @@ void main() {
       }
       expect(find.byKey(const Key('home-continue-watching')), findsOneWidget);
       expect(find.text(cw1.title), findsWidgets);
+    });
+  });
+
+  group('labels and skeleton parity', () {
+    const ids = ExternalIds(tmdb: '7');
+
+    testWidgets('Continue Watching names its server, with +N for copies',
+        (t) async {
+      final a = fakeServer('a'), b = fakeServer('b');
+      await pumpHome(t, [
+        FakeMergedSource(a, resuming: [
+          item(a, 'a1', ids: ids, lastPlayedAt: DateTime.utc(2024, 1, 2)),
+          item(a, 'a2', lastPlayedAt: DateTime.utc(2024, 1, 1)),
+        ]),
+        FakeMergedSource(b, resuming: [
+          item(b, 'b1', ids: ids, lastPlayedAt: DateTime.utc(2024, 1, 1)),
+        ]),
+      ]);
+      final copies = find.byKey(ValueKey('home-continue-${a.id.value}-a1'));
+      expect(find.descendant(of: copies, matching: find.text('Server a +1')),
+          findsOneWidget);
+      final single = find.byKey(ValueKey('home-continue-${a.id.value}-a2'));
+      expect(find.descendant(of: single, matching: find.text('Server a')),
+          findsOneWidget);
+    });
+
+    testWidgets(
+        'Continue Watching renders landscape cards with the episode line',
+        (t) async {
+      final a = fakeServer('a'), b = fakeServer('b');
+      await pumpHome(t, [
+        FakeMergedSource(a, resuming: [
+          ItemSummary(
+            ref: ItemRef(
+                sourceId: a.id, kind: ItemKind.episode, externalId: 'e1'),
+            title: 'The Low Tide',
+            showTitle: 'Saltmarsh',
+            subtitle: 'S1 \u00b7 E2',
+            lastPlayedAt: DateTime.utc(2024, 1, 1),
+          ),
+        ]),
+        FakeMergedSource(b),
+      ]);
+      final card = find.byKey(ValueKey('home-continue-${a.id.value}-e1'));
+      expect(t.widget(card), isA<ContinueWatchingCard>());
+      expect(find.descendant(of: card, matching: find.text('Saltmarsh')),
+          findsOneWidget);
+      expect(
+          find.descendant(
+              of: card,
+              matching: find
+                  .text('S1 \u00b7 E2 \u00b7 The Low Tide \u00b7 Server a')),
+          findsOneWidget,
+          reason: 'the episode line carries the server name');
+    });
+
+    testWidgets('a Recently Added poster shows +1 for a title on both servers',
+        (t) async {
+      final a = fakeServer('a'), b = fakeServer('b');
+      await pumpHome(t, [
+        FakeMergedSource(a, recent: [
+          item(a, 'a1', ids: ids, addedAt: DateTime.utc(2024, 1, 2)),
+        ]),
+        FakeMergedSource(b, recent: [
+          item(b, 'b1', ids: ids, addedAt: DateTime.utc(2024, 1, 1)),
+        ]),
+      ]);
+      final rail = find.byKey(const Key('home-recent-movies'));
+      expect(find.descendant(of: rail, matching: find.byType(AllServersPoster)),
+          findsOneWidget,
+          reason: 'the two copies merge into one poster');
+      expect(find.descendant(of: rail, matching: find.textContaining('+1')),
+          findsOneWidget);
+    });
+
+    /// Height of the rail's card row: the ListView inside [rail].
+    double railHeight(WidgetTester t, Finder rail) => t
+        .getSize(find.descendant(of: rail, matching: find.byType(ListView)))
+        .height;
+
+    Future<void> expectRailParity(
+        WidgetTester t, List<MediaSource> sources, HomeScope scope) async {
+      final gate = Completer<void>();
+      for (final s in sources.whereType<FakeMergedSource>()) {
+        s.gate = gate;
+      }
+      await pumpHome(t, sources,
+          scope: scope, settle: false, size: const Size(1280, 800));
+      final skeleton =
+          railHeight(t, find.byKey(HomeLoadingSkeleton.railKey).first);
+      gate.complete();
+      await t.pumpAndSettle();
+      final rail = find.byKey(const Key('home-continue-watching'));
+      final expected =
+          ContinueWatchingCard.heightFor(t.element(rail), hasCaption: true);
+      expect(skeleton, expected, reason: 'skeleton rail height');
+      expect(railHeight(t, rail), expected, reason: 'loaded rail height');
+    }
+
+    testWidgets('the skeleton rail matches the loaded one, All servers',
+        (t) async {
+      await expectRailParity(
+          t, [serverWith('a'), serverWith('b')], const AllServers());
+    });
+
+    testWidgets('the skeleton rail matches the loaded one, one server',
+        (t) async {
+      final a = fakeServer('a');
+      final source = FakeMergedSource(a, resuming: [
+        ItemSummary(
+          ref:
+              ItemRef(sourceId: a.id, kind: ItemKind.episode, externalId: 'e1'),
+          title: 'The Low Tide',
+          showTitle: 'Saltmarsh',
+          subtitle: 'S1 \u00b7 E2',
+          durationSeconds: 3600,
+          lastPlayedAt: DateTime.utc(2024, 1, 1),
+        ),
+      ]);
+      await expectRailParity(t, [source], OneServer(source.id));
     });
   });
 }
