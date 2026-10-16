@@ -404,6 +404,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// fires once per playback rather than on every position tick.
   bool _watchedInvalidationSent = false;
 
+  /// The show and season this load plays, for up-next and navigation. Seeded
+  /// from the route on every load, then filled from the session's detail
+  /// when the route left them out (Continue Watching, the home hero, the
+  /// calendar). The route always wins.
+  String? _showId;
+  int? _seasonNumber;
+
   StreamSubscription<Duration>? _positionSubscription;
 
   /// Keeps the audio track list current as media_kit revises it. Detection
@@ -999,8 +1006,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           : (playing: player.state.playing, changes: player.stream.playing);
     },
     isEpisode: () => widget.mediaType == 'episode',
-    hasShow: () => widget.showId != null,
-    seasonNumber: () => widget.seasonNumber,
+    hasShow: () => _showId != null,
+    seasonNumber: () => _seasonNumber,
     isDownloadedSource: () => _isDownloadedSource,
     mounted: () => mounted,
     onChanged: () => setState(() {}),
@@ -1481,6 +1488,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _runtimeMinutes = null;
     _totalDuration = null;
     _serverSubtitleTracks = [];
+    _showId = widget.showId;
+    _seasonNumber = widget.seasonNumber;
     _upNext.clearSeason();
     _upNext.reset();
   }
@@ -2993,6 +3002,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _savedDurationSeconds = detail.savedDurationSeconds;
       _serverLastWatchedAt = detail.lastWatchedAt;
       _runtimeMinutes = detail.runtimeMinutes;
+      if (widget.mediaType == 'episode') {
+        _showId ??= detail.showId;
+        _seasonNumber ??= detail.seasonNumber;
+      }
       final tracks = detail.serverSubtitleTracks;
       if (tracks != null) {
         _serverSubtitleTracks = tracks;
@@ -3004,22 +3017,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  /// Every pre-play query at once. All of them read only `widget.*`, and each
-  /// was already failure-isolated; they used to run one after another.
+  /// Every pre-play query at once. All of them read only `widget.*` and the
+  /// per-load fields, and each was already failure-isolated; they used to
+  /// run one after another.
   ///
   /// The subtitle preference stays chained after the detail: applying it
   /// reads the tracks `_fetchDetail` builds from the detail.
-  /// Season episodes no longer waits for the detail to succeed, so a failed
-  /// detail now costs one extra query rather than skipping it.
+  /// Season episodes run in parallel when the route named the show and
+  /// season. When it did not, they run right after the detail, which is
+  /// what fills [_showId] and [_seasonNumber].
   Future<void> _fetchProgressAndEpisodes(int gen) {
+    final isEpisode = widget.mediaType == 'episode';
+    final seasonKnown = _showId != null && _seasonNumber != null;
     return runIsolated({
       'detail and subtitle preference': () async {
         await _fetchDetail(gen);
+        if (isEpisode && !seasonKnown) {
+          await runIsolated(
+              {'season episodes': () => _fetchSeasonEpisodes(gen)});
+        }
         await _fetchSubtitlePreference(gen);
       },
-      if (widget.mediaType == 'episode' &&
-          widget.showId != null &&
-          widget.seasonNumber != null)
+      if (isEpisode && seasonKnown)
         'season episodes': () => _fetchSeasonEpisodes(gen),
       'segments': () => _fetchSegments(gen),
       'subtitle offsets': () => _loadSubtitleOffsets(gen),
@@ -3355,8 +3374,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   Future<void> _fetchSeasonEpisodes(int gen) async {
-    final seasonNumber = widget.seasonNumber;
-    if (widget.showId == null || seasonNumber == null) return;
+    final seasonNumber = _seasonNumber;
+    if (_showId == null || seasonNumber == null) return;
     final episodes = await _session.seasonEpisodes(seasonNumber);
     if (episodes == null || !_isCurrentLoad(gen)) return;
     setState(
@@ -3396,9 +3415,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final isWatched = _progressService?.isWatched(player) == true;
     if (isWatched) {
-      debugPrint('Content is considered watched (90% complete)');
-
       if (!_watchedInvalidationSent) {
+        debugPrint('Content is considered watched (90% complete)');
         _watchedInvalidationSent = true;
         // Save the current position before invalidating: the server only
         // learns position/duration from a save (the periodic sync, or this
@@ -3539,7 +3557,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       fileId: fileId,
       title: title,
       seasonNumber: seasonNumber,
-      showId: widget.showId,
+      showId: _showId,
     ));
   }
 
@@ -5049,8 +5067,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // For an episode `widget.mediaId` is the episode's own id and
       // `widget.showId` is the underlying media item; for a movie
       // `widget.mediaId` is the media item itself and there is no episode.
-      mediaItemId:
-          widget.mediaType == 'episode' ? widget.showId : widget.mediaId,
+      mediaItemId: widget.mediaType == 'episode' ? _showId : widget.mediaId,
       episodeId: widget.mediaType == 'episode' ? widget.mediaId : null,
       title: widget.title ?? 'Untitled',
       subtitle: null,
@@ -5640,7 +5657,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             fileId: fileId,
             mediaId: widget.mediaId,
             mediaType: widget.mediaType,
-            showId: widget.showId,
+            showId: _showId,
           ),
       };
 

@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/sources/source.dart' show SourceId;
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 import 'package:player/presentation/widgets/video_controls/cast_chrome_icon.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
@@ -209,9 +211,54 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
   });
+
+  testWidgets(
+      'a route without show or season still finds the next episode from '
+      'the detail', (tester) async {
+    final session = _DetailNamesSeasonSession();
+    await _pumpEpisode(tester, session);
+    await pumpUntil(tester, () => session.seasonRequests.isNotEmpty);
+    expect(session.seasonRequests, [1]);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await pumpUntil(tester, () => find.text('landed e2').evaluate().isNotEmpty);
+    expect(session.locationShowIds, ['s1'],
+        reason: 'the next episode route carries the resolved show');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  testWidgets(
+      'a route with show and season asks for the season without waiting for '
+      'the detail', (tester) async {
+    final hold = Completer<void>();
+    final session = _DetailNamesSeasonSession(holdDetail: hold);
+    await _pumpEpisode(tester, session, showId: 's1', seasonNumber: 1);
+    await pumpUntil(tester, () => session.seasonRequests.isNotEmpty);
+    expect(hold.isCompleted, isFalse);
+    expect(session.seasonRequests, [1]);
+
+    hold.complete();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  testWidgets('the route season wins over the detail one', (tester) async {
+    final session = _DetailNamesSeasonSession();
+    await _pumpEpisode(tester, session, showId: 's1', seasonNumber: 3);
+    await pumpUntil(tester, () => session.seasonRequests.isNotEmpty);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(session.seasonRequests, [3]);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
 }
 
 class _SeasonSession extends FakePlaybackSession {
+  _SeasonSession({super.item});
+
   @override
   Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber) async => [
         const PlaybackEpisode(
@@ -225,9 +272,105 @@ class _SeasonSession extends FakePlaybackSession {
       ];
 }
 
+/// An episode session whose detail names the show and season, the way a
+/// Mydia or Plex detail does for a Continue Watching launch whose route
+/// carried neither. Records what the screen asked for.
+class _DetailNamesSeasonSession extends _SeasonSession {
+  _DetailNamesSeasonSession({this.holdDetail})
+      : super(
+          item: const ItemRef(
+            sourceId: SourceId('fake'),
+            kind: ItemKind.episode,
+            externalId: 'e1',
+          ),
+        );
+
+  /// When set, `detail()` waits on it, so a test can see what the screen
+  /// does before the detail answers.
+  final Completer<void>? holdDetail;
+
+  final seasonRequests = <int>[];
+  final locationShowIds = <String?>[];
+
+  @override
+  Future<PlaybackDetail?> detail() async {
+    await holdDetail?.future;
+    return const PlaybackDetail(showId: 's1', seasonNumber: 1);
+  }
+
+  @override
+  Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber) {
+    seasonRequests.add(seasonNumber);
+    return super.seasonEpisodes(seasonNumber);
+  }
+
+  @override
+  String episodeLocation({
+    required String episodeId,
+    required String fileId,
+    required String title,
+    required int seasonNumber,
+    required String? showId,
+  }) {
+    locationShowIds.add(showId);
+    return super.episodeLocation(
+      episodeId: episodeId,
+      fileId: fileId,
+      title: title,
+      seasonNumber: seasonNumber,
+      showId: showId,
+    );
+  }
+}
+
 class _CastableSession extends FakePlaybackSession {
   @override
   Set<PlaybackFeature> get features => const {PlaybackFeature.cast};
+}
+
+/// Mounts an episode PlayerScreen under a router whose `/fake/episode/:id`
+/// route stands in for the next episode.
+Future<_RecordingPlatformPlayer> _pumpEpisode(
+  WidgetTester tester,
+  FakePlaybackSession session, {
+  String? showId,
+  int? seasonNumber,
+}) async {
+  final container = buildPlayerScreenContainer(
+    connectionState: HarnessLink.direct(),
+    server: _recordingServer(<String>[]),
+    castManager: CapturingCastSessionManager(),
+    proxyService: TrackingLocalProxyService(),
+  );
+  addTearDown(container.dispose);
+  final fake = _RecordingPlatformPlayer();
+  final router = GoRouter(routes: [
+    GoRoute(
+      path: '/',
+      builder: (_, __) => PlayerScreen(
+        mediaId: 'e1',
+        mediaType: 'episode',
+        fileId: 'f1',
+        showId: showId,
+        seasonNumber: seasonNumber,
+        session: session,
+        createPlayer: () => Player(platformPlayer: fake),
+      ),
+    ),
+    GoRoute(
+      path: '/fake/episode/:id',
+      builder: (_, state) => Text('landed ${state.pathParameters['id']}'),
+    ),
+  ]);
+  await tester.pumpWidget(UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp.router(
+      builder: toastLayerBuilder,
+      routerConfig: router,
+    ),
+  ));
+  await pumpUntil(tester, () => fake.opened != null);
+  return fake;
 }
 
 Future<void> _pumpWithSession(
