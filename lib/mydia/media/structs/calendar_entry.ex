@@ -25,6 +25,7 @@ defmodule Mydia.Media.Structs.CalendarEntry do
   Artwork fields (raw metadata paths, not URLs):
   - `:poster_path` - The parent item's poster path, or nil
   - `:backdrop_path` - The parent item's backdrop path, or nil
+  - `:still_path` - The episode's own still, or nil (always nil for a movie)
 
   Player-only fields, populated after construction:
   - `:files` - Playable files for this entry. Defaults to `[]`; the
@@ -61,6 +62,7 @@ defmodule Mydia.Media.Structs.CalendarEntry do
     :has_downloads,
     :poster_path,
     :backdrop_path,
+    :still_path,
     files: []
   ]
 
@@ -78,6 +80,7 @@ defmodule Mydia.Media.Structs.CalendarEntry do
           has_downloads: boolean(),
           poster_path: String.t() | nil,
           backdrop_path: String.t() | nil,
+          still_path: String.t() | nil,
           files: [MediaFile.t()]
         }
 

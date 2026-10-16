@@ -18,7 +18,6 @@ class SettingsService {
   static const _defaultQualityKey = 'default_quality';
   static const _autoSkipSegmentsKey = 'auto_skip_segments';
   static const _librarySortKeyPrefix = 'library_sort_';
-  static const _calendarViewModeKey = 'calendar_view_mode';
   static const _statsOverlayEnabledKey = 'stats_overlay_enabled';
   static const _updateTrackKey = 'update_track';
 
@@ -77,19 +76,6 @@ class SettingsService {
     await _storage.write('$_librarySortKeyPrefix$libraryKey', encoded);
   }
 
-  /// Get the remembered calendar layout, as its stored string.
-  ///
-  /// Returns null when nothing has been stored yet; decoding, including the
-  /// default, belongs to the caller.
-  Future<String?> getCalendarViewMode() async {
-    return _storage.read(_calendarViewModeKey);
-  }
-
-  /// Set the remembered calendar layout, as its stored string.
-  Future<void> setCalendarViewMode(String mode) async {
-    await _storage.write(_calendarViewModeKey, mode);
-  }
-
   /// The release track this install follows, as its stored string.
   ///
   /// A device-level choice rather than an account preference, so
@@ -115,7 +101,6 @@ class SettingsService {
       _storage.delete(_autoSkipSegmentsKey),
       _storage.delete('${_librarySortKeyPrefix}movies'),
       _storage.delete('${_librarySortKeyPrefix}tvShows'),
-      _storage.delete(_calendarViewModeKey),
     ]);
   }
 }

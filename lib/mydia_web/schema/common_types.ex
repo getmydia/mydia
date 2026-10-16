@@ -816,7 +816,7 @@ defmodule MydiaWeb.Schema.CommonTypes do
          %{
            poster_url: Mydia.Metadata.ImageUrl.poster_url(entry.poster_path),
            backdrop_url: Mydia.Metadata.ImageUrl.backdrop_url(entry.backdrop_path),
-           thumbnail_url: nil
+           thumbnail_url: Mydia.Metadata.ImageUrl.still_url(entry.still_path, "w780")
          }}
       end)
     end

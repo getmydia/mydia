@@ -379,4 +379,38 @@ void main() {
     expect(episodeSubtitle(null, 3), isNull);
     expect(episodeSubtitle(1, null), isNull);
   });
+
+  group('calendarSummary', () {
+    Map<String, dynamic> episode(Map<String, dynamic> artwork) => {
+          'id': 'e1',
+          'kind': 'episode',
+          'airDate': '2026-10-16',
+          'title': 'The Tide Ledger',
+          'seasonNumber': 2,
+          'episodeNumber': 5,
+          'mediaItemId': 'm1',
+          'mediaItemTitle': 'The Lantern Coast',
+          'artwork': artwork,
+          'files': const <Object>[],
+        };
+
+    test('uses the episode still as the backdrop', () {
+      final item = calendarSummary(
+        s,
+        episode({
+          'thumbnailUrl': 'https://img/still.jpg',
+          'backdropUrl': 'https://img/show.jpg',
+        }),
+      );
+      expect(item.backdrop?.path, 'https://img/still.jpg');
+    });
+
+    test('falls back to the show backdrop when there is no still', () {
+      final item = calendarSummary(
+        s,
+        episode({'thumbnailUrl': null, 'backdropUrl': 'https://img/show.jpg'}),
+      );
+      expect(item.backdrop?.path, 'https://img/show.jpg');
+    });
+  });
 }

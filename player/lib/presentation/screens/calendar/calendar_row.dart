@@ -1,185 +1,104 @@
-// Resume: the player never trusts route absence as "no progress". The source
-// player route asks the source for the saved position of the item it plays,
-// and offers the resume dialog when that position clears the existing
-// thresholds. The calendar carries no progress, so every calendar-initiated
-// playback goes through the normal resume prompt, exactly like opening the
-// same episode from its own detail screen would.
-
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/player/best_file.dart';
-import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/sources/item.dart';
-import '../../widgets/play_button.dart';
-import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
+import 'calendar_artwork.dart';
 import 'calendar_dates.dart';
+import 'calendar_timeline.dart';
 
-/// One dated entry on the calendar, rendered as a single row.
+/// A calendar entry that cannot be played yet, as one compact line: a dimmed
+/// thumbnail, its title, its numbering and whether it is upcoming or missing.
 ///
-/// The row body opens the detail screen; the trailing control plays. Two
-/// separate targets, deliberately: a mistap on the body cannot start
-/// playback, and on Android TV a list of single-target rows gives the D-pad
-/// nothing to do horizontally, while this one gives it the play control to
-/// land on.
-class CalendarRow extends ConsumerWidget {
-  const CalendarRow({
-    super.key,
-    required this.entry,
-    required this.today,
-  });
+/// Playable entries get a [CalendarCard] instead; the size is the signal.
+/// Tapping the row opens the detail screen.
+class CalendarRow extends StatelessWidget {
+  const CalendarRow({super.key, required this.entry, required this.today});
 
   final ItemSummary entry;
 
   /// Injected rather than read from the clock so tests are deterministic.
   final DateTime today;
 
-  String get _id => entry.ref.externalId;
-
-  bool get _isMovie => entry.ref.kind == ItemKind.movie;
-
   bool get _isFuture {
     final day = entry.day;
     return day != null && day.isAfter(truncateToDay(today));
   }
 
-  String get _subtitle {
-    if (_isMovie) return 'Movie';
-
-    final season = (entry.parentIndex ?? 0).toString().padLeft(2, '0');
-    final episode = (entry.index ?? 0).toString().padLeft(2, '0');
-    final numbering = 'S${season}E$episode';
-
-    return entry.title.isEmpty ? numbering : '$numbering · ${entry.title}';
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final dimmed = !entry.isPlayable;
-
-    return InkWell(
-      key: ValueKey('calendar-row-$_id'),
-      onTap: () => context.push(detailLocation(SourceTarget(entry.ref))),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            _Poster(entry: entry, dimmed: dimmed),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _isMovie ? entry.title : entry.showTitle ?? '',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: dimmed
-                          ? AppColors.textDisabled
-                          : AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: dimmed
-                              ? AppColors.textDisabled
-                              : AppColors.textSecondary,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            _trailing(context, ref),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// The calendar listing only knows the default version, so a tap fetches
-  /// the item and picks the best version for this screen, as a local Play
-  /// button would.
-  Future<void> _playBest(BuildContext context, WidgetRef ref) async {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final source = ref.read(mediaSourceProvider(entry.ref.sourceId));
-    String? fileId = entry.defaultVersionId;
-    if (source != null) {
-      try {
-        final detail = await source.item(entry.ref);
-        fileId =
-            await pickBestVersionId(detail.versions, screenWidth) ?? fileId;
-      } catch (_) {
-        // Fall back to the listing's version: a calendar tap still plays.
-      }
-    }
-    if (!context.mounted) return;
-    await context.push(sourcePlayerLocation(
-      entry.ref,
-      fileId: fileId,
-      title: entry.title,
-    ));
-  }
-
-  Widget _trailing(BuildContext context, WidgetRef ref) {
-    if (entry.isPlayable) {
-      return PlayButton(
-        key: ValueKey('calendar-play-$_id'),
-        onPressed: () => _playBest(context, ref),
-      );
-    }
-
-    if (_isFuture) {
-      return _StatusChip(
-        key: ValueKey('calendar-upcoming-$_id'),
-        label: 'Upcoming',
-      );
-    }
-
-    return _StatusChip(
-      key: ValueKey('calendar-absent-$_id'),
-      label: 'Not in library',
-    );
-  }
-}
-
-class _Poster extends StatelessWidget {
-  const _Poster({required this.entry, required this.dimmed});
-
-  final ItemSummary entry;
-  final bool dimmed;
-
   @override
   Widget build(BuildContext context) {
-    const fallback = ColoredBox(color: AppColors.surfaceVariant);
-    final poster = entry.poster;
+    final id = entry.ref.externalId;
 
-    return Opacity(
-      opacity: dimmed ? 0.45 : 1,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: SizedBox(
-          width: 38,
-          height: 56,
-          child: poster == null
-              ? fallback
-              : SourceArtworkImage(
-                  sourceId: entry.ref.sourceId,
-                  art: poster,
-                  fallback: fallback,
+    return InkWell(
+      key: ValueKey('calendar-row-$id'),
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => context.push(detailLocation(SourceTarget(entry.ref))),
+      child: Row(
+        children: [
+          Opacity(
+            opacity: 0.5,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 64,
+                height: 36,
+                child: CalendarArtwork(entry: entry),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  entry.calendarTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: TimelineLayout.titleLine / 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-        ),
+                const SizedBox(height: 2),
+                SizedBox(
+                  height: TimelineLayout.subtitleLine *
+                      MediaQuery.textScalerOf(context).scale(1),
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          entry.calendarNumbering,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            height: TimelineLayout.subtitleLine / 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                      if (!entry.isPlayable) ...[
+                        const SizedBox(width: 6),
+                        _StatusChip(
+                          key: ValueKey(_isFuture
+                              ? 'calendar-upcoming-$id'
+                              : 'calendar-absent-$id'),
+                          label: _isFuture ? 'Upcoming' : 'Not in library',
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -193,14 +112,19 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: const TextStyle(fontSize: 10, color: AppColors.textDisabled),
+        style: const TextStyle(
+          fontSize: 10,
+          height: 1.2,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textDisabled,
+        ),
       ),
     );
   }

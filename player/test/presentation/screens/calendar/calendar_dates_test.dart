@@ -109,112 +109,52 @@ void main() {
     });
   });
 
-  group('formatDayHeader', () {
-    test('marks today', () {
-      expect(
-        formatDayHeader(DateTime(2026, 8, 27), DateTime(2026, 8, 27)),
-        'Thu 27 August · Today',
+  group('calendar text', () {
+    test('an episode is titled by its show and numbered', () {
+      final e = calendarEntry(
+        '1',
+        DateTime(2026, 10, 16),
+        title: 'The Tide Ledger',
+        season: 2,
+        episode: 5,
       );
+      expect(e.calendarTitle, 'A Show');
+      expect(e.calendarNumbering, 'S02E05');
+      expect(e.calendarSubtitle, 'S02E05 · The Tide Ledger');
     });
 
-    test('omits the year inside the current year', () {
-      expect(
-        formatDayHeader(DateTime(2026, 8, 20), DateTime(2026, 8, 27)),
-        'Thu 20 August',
+    test('a movie is titled by itself and labelled Movie', () {
+      final m = calendarEntry(
+        '2',
+        DateTime(2026, 10, 16),
+        kind: ItemKind.movie,
+        title: 'Brasswork',
       );
-    });
-
-    test('includes the year outside the current year', () {
-      expect(
-        formatDayHeader(DateTime(2027, 1, 4), DateTime(2026, 8, 27)),
-        'Mon 4 January 2027',
-      );
+      expect(m.calendarTitle, 'Brasswork');
+      expect(m.calendarNumbering, 'Movie');
+      expect(m.calendarSubtitle, 'Movie');
     });
   });
 
-  group('startOfWeek', () {
-    test('returns a Monday unchanged', () {
-      expect(startOfWeek(DateTime(2026, 9, 14)), DateTime(2026, 9, 14));
+  group('month helpers', () {
+    test('formatMonth omits the current year and names another', () {
+      final today = DateTime(2026, 10, 16);
+      expect(formatMonth(DateTime(2026, 11), today), 'November');
+      expect(formatMonth(DateTime(2027, 1), today), 'January 2027');
     });
 
-    test('walks a mid-week day back to Monday and drops the time', () {
-      expect(
-        startOfWeek(DateTime(2026, 9, 16, 15, 30)),
-        DateTime(2026, 9, 14),
-      );
+    test('formatMonthYear always names the year', () {
+      expect(formatMonthYear(DateTime(2026, 11)), 'November 2026');
     });
 
-    test('treats Sunday as the end of the week, not the start', () {
-      expect(startOfWeek(DateTime(2026, 9, 20)), DateTime(2026, 9, 14));
-    });
-
-    test('crosses a month boundary', () {
-      expect(startOfWeek(DateTime(2026, 10, 1)), DateTime(2026, 9, 28));
-    });
-
-    test('lands on midnight across a daylight-saving change', () {
-      // Nov 1 2026 is the US fall-back Sunday and Oct 25 the EU one. Only a
-      // DST-observing timezone can fail this, which is the point: a
-      // Duration-based subtraction is off by an hour there.
-      final monday = startOfWeek(DateTime(2026, 11, 1));
-      expect(monday, DateTime(2026, 10, 26));
-      expect(monday.hour, 0);
-      expect(startOfWeek(DateTime(2026, 10, 25)), DateTime(2026, 10, 19));
-    });
-  });
-
-  group('weeksInWindow', () {
-    test('covers the calendar window a day in September loads', () {
-      // calendarWindow(Sep 16 2026) is Aug 17 to Dec 15.
-      final weeks =
-          weeksInWindow(DateTime(2026, 8, 17), DateTime(2026, 12, 15));
-
-      expect(weeks.length, 18);
-      expect(weeks.first, DateTime(2026, 8, 17));
-      expect(weeks.last, DateTime(2026, 12, 14));
-    });
-
-    test('includes the partial weeks at either end', () {
-      expect(
-        weeksInWindow(DateTime(2026, 9, 16), DateTime(2026, 9, 27)),
-        [DateTime(2026, 9, 14), DateTime(2026, 9, 21)],
-      );
-    });
-
-    test('gives one week for a one-day window', () {
-      expect(
-        weeksInWindow(DateTime(2026, 9, 16), DateTime(2026, 9, 16)),
-        [DateTime(2026, 9, 14)],
-      );
-    });
-
-    test('keeps every Monday at midnight across a daylight-saving change', () {
-      final weeks =
-          weeksInWindow(DateTime(2026, 10, 19), DateTime(2026, 11, 2));
-
-      expect(weeks, [
-        DateTime(2026, 10, 19),
-        DateTime(2026, 10, 26),
-        DateTime(2026, 11, 2),
+    test('monthsInWindow lists every month the window touches', () {
+      expect(monthsInWindow(DateTime(2026, 9, 16), DateTime(2027, 1, 14)), [
+        DateTime(2026, 9),
+        DateTime(2026, 10),
+        DateTime(2026, 11),
+        DateTime(2026, 12),
+        DateTime(2027, 1),
       ]);
-      expect(weeks.every((week) => week.hour == 0), isTrue);
-    });
-  });
-
-  group('formatWeekLabel', () {
-    test('names the month once inside a month', () {
-      expect(formatWeekLabel(DateTime(2026, 9, 14)), 'Sep 14 – 20, 2026');
-    });
-
-    test('names both months across a month boundary', () {
-      expect(formatWeekLabel(DateTime(2026, 9, 28)), 'Sep 28 – Oct 4, 2026');
-    });
-
-    test('names both years across a year boundary', () {
-      expect(
-        formatWeekLabel(DateTime(2026, 12, 28)),
-        'Dec 28, 2026 – Jan 3, 2027',
-      );
     });
   });
 }

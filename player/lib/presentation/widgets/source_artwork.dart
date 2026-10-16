@@ -142,6 +142,7 @@ class SourceBackdrop extends ConsumerWidget {
     required this.sourceId,
     required this.art,
     this.height,
+    this.fallback,
   });
 
   static const artworkWidth = 1280;
@@ -150,11 +151,15 @@ class SourceBackdrop extends ConsumerWidget {
   final ArtworkRef? art;
   final double? height;
 
+  /// Shown while the picture loads, when it fails, and when there is nothing
+  /// to load. Without one, those states are an empty box, as before.
+  final Widget? fallback;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final request = _resolved(ref, sourceId, art, artworkWidth);
     if (request == null) {
-      return SizedBox(height: height, width: double.infinity);
+      return fallback ?? SizedBox(height: height, width: double.infinity);
     }
     return ArtworkImage(
       imageUrl: request.url,
@@ -164,6 +169,8 @@ class SourceBackdrop extends ConsumerWidget {
       fit: BoxFit.cover,
       width: double.infinity,
       height: height,
+      placeholder: fallback == null ? null : (_) => fallback!,
+      errorWidget: fallback == null ? null : (_) => fallback!,
     );
   }
 }
