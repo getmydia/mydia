@@ -102,11 +102,26 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
     if (day == null || geometry == null || controller == null) return;
     if (!controller.hasClients) return;
 
-    controller.animateTo(
-      math.min(geometry.offsetOf(day), controller.position.maxScrollExtent),
-      duration: _jumpDuration,
-      curve: Curves.easeOut,
-    );
+    _scrollTo(controller, geometry.offsetOf(day));
+  }
+
+  /// The list only estimates its length until it has laid out the end, so a
+  /// far target is clamped to a maximum that is still growing. Climb again
+  /// while the maximum keeps moving and the target is not yet reached.
+  Future<void> _scrollTo(ScrollController controller, double target) async {
+    var previous = controller.offset;
+    while (mounted && controller.hasClients) {
+      final goal = math.min(target, controller.position.maxScrollExtent);
+      if (goal <= previous) return;
+      await controller.animateTo(
+        goal,
+        duration: _jumpDuration,
+        curve: Curves.easeOut,
+      );
+      if (!mounted || !controller.hasClients) return;
+      if (controller.offset >= target - 0.5) return;
+      previous = goal;
+    }
   }
 
   void _reportMonth() {

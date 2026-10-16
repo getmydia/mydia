@@ -10,10 +10,11 @@ import '../../../domain/sources/item.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../sources/source_browse_providers.dart';
-import 'calendar_agenda_view.dart';
-import 'calendar_today_requests.dart';
-import 'calendar_view_mode.dart';
-import 'calendar_week_view.dart';
+import 'calendar_dates.dart';
+import 'calendar_jump_requests.dart';
+import 'calendar_month_sheet.dart';
+import 'calendar_timeline.dart';
+import 'calendar_timeline_view.dart';
 import 'calendar_window.dart';
 
 /// Whether [error] is this server saying it has no calendar. A player
@@ -32,12 +33,15 @@ class CalendarScreen extends ConsumerStatefulWidget {
 }
 
 class _CalendarScreenState extends ConsumerState<CalendarScreen> {
-  /// Pinged by the Today button. Whichever view is showing listens.
-  final CalendarTodayRequests _todayRequests = CalendarTodayRequests();
+  /// Fed by the Today button and the month sheet. The timeline listens.
+  final CalendarJumpRequests _jumps = CalendarJumpRequests();
+
+  /// The month at the top of the timeline. Null until it first reports.
+  DateTime? _month;
 
   @override
   void dispose() {
-    _todayRequests.dispose();
+    _jumps.dispose();
     super.dispose();
   }
 
@@ -47,9 +51,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     final data = ref.watch(sourceCalendarProvider(widget.sourceId));
     final window = calendarWindow(today);
     final key = SourceKeys.calendar(widget.sourceId, window.start, window.end);
-    // Null until storage answers. The body waits for it rather than mounting
-    // the default view and swapping, which would flash.
-    final mode = ref.watch(calendarViewModeControllerProvider).value;
+    final entries = data.value ?? const <ItemSummary>[];
 
     return BrowseScaffold(
       icon: Icons.calendar_month_outlined,
@@ -57,62 +59,63 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       queryKeys: [key],
       onRefresh: () => ref.read(invalidatorProvider).invalidate([key.target]),
       actions: [
-        if (mode != null) _viewToggle(mode),
+        if (entries.isNotEmpty) _monthButton(entries, today),
         TextButton(
-          onPressed: _todayRequests.request,
+          onPressed: () => _jumps.request(today),
           child: const Text('Today'),
         ),
       ],
-      body: (context, scrollTopPadding) => switch ((data, mode)) {
-        (AsyncData(:final value), final CalendarViewMode loadedMode) =>
-          _body(value, loadedMode, today, scrollTopPadding),
-        (AsyncError(:final error), _) => _error(error, scrollTopPadding),
+      body: (context, scrollTopPadding) => switch (data) {
+        AsyncData(:final value) => _body(value, today, scrollTopPadding),
+        AsyncError(:final error) => _error(error, scrollTopPadding),
         _ => const Center(child: CircularProgressIndicator()),
       },
     );
   }
 
-  /// Shows the icon of the view it switches to, like a two-state tab.
-  Widget _viewToggle(CalendarViewMode mode) {
-    final showingWeek = mode == CalendarViewMode.week;
+  Widget _monthButton(List<ItemSummary> entries, DateTime today) {
+    final month = _month ?? DateTime(today.year, today.month);
 
-    return IconButton(
-      key: const ValueKey('calendar-view-toggle'),
-      tooltip: showingWeek ? 'Agenda view' : 'Week view',
-      icon: Icon(
-        showingWeek ? Icons.view_agenda_outlined : Icons.view_week_outlined,
-      ),
-      onPressed: () =>
-          ref.read(calendarViewModeControllerProvider.notifier).select(
-                showingWeek ? CalendarViewMode.agenda : CalendarViewMode.week,
-              ),
+    return TextButton.icon(
+      key: const ValueKey('calendar-month-button'),
+      onPressed: () => _openMonthSheet(entries, today, month),
+      icon: const Icon(Icons.expand_more_rounded),
+      iconAlignment: IconAlignment.end,
+      label: Text(formatMonth(month, today)),
     );
+  }
+
+  Future<void> _openMonthSheet(
+    List<ItemSummary> entries,
+    DateTime today,
+    DateTime month,
+  ) async {
+    final window = calendarWindow(today);
+    final day = await showCalendarMonthSheet(
+      context,
+      windowStart: window.start,
+      windowEnd: window.end,
+      daySummaries: daySummaries(entries),
+      initialMonth: month,
+      today: today,
+    );
+    if (day != null) _jumps.request(day);
   }
 
   Widget _body(
     List<ItemSummary> entries,
-    CalendarViewMode mode,
     DateTime today,
     double scrollTopPadding,
   ) {
-    if (entries.isEmpty) {
-      return _empty(scrollTopPadding);
-    }
+    if (entries.isEmpty) return _empty(scrollTopPadding);
 
-    return switch (mode) {
-      CalendarViewMode.week => CalendarWeekView(
-          entries: entries,
-          today: today,
-          scrollTopPadding: scrollTopPadding,
-          todayRequests: _todayRequests,
-        ),
-      CalendarViewMode.agenda => CalendarAgendaView(
-          entries: entries,
-          today: today,
-          scrollTopPadding: scrollTopPadding,
-          todayRequests: _todayRequests,
-        ),
-    };
+    return CalendarTimelineView(
+      entries: entries,
+      today: today,
+      scrollTopPadding: scrollTopPadding,
+      jumpRequests: _jumps,
+      onMonthChanged: (month) => setState(() => _month = month),
+    );
   }
 
   Widget _empty(double scrollTopPadding) {
