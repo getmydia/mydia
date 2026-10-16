@@ -64,9 +64,22 @@ class DiagnosticsSettings {
     return DiagnosticsState(crashes: crashes == 'true', logs: logs == 'true');
   }
 
+  /// Stores both switches, or neither. When the second write fails the first
+  /// is put back, so a change the caller reports as failed (and so leaves
+  /// unapplied) cannot come back into force on the next launch.
   Future<void> save(DiagnosticsState state) async {
+    final previousCrashes = await _storage.read(crashesKey);
     await _storage.write(crashesKey, '${state.crashes}');
-    await _storage.write(logsKey, '${state.logs}');
+    try {
+      await _storage.write(logsKey, '${state.logs}');
+    } catch (_) {
+      if (previousCrashes == null) {
+        await _storage.delete(crashesKey);
+      } else {
+        await _storage.write(crashesKey, previousCrashes);
+      }
+      rethrow;
+    }
   }
 
   /// A random ID for log uploads, created on first use. Deliberately not the

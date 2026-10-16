@@ -265,7 +265,8 @@ void main() {
       h.controller.setCrashes(true);
       async.flushMicrotasks();
 
-      async.elapse(const Duration(seconds: 2));
+      // Each delayed read takes a second: build()'s two, then save()'s own.
+      async.elapse(const Duration(seconds: 5));
 
       // Built on the loaded value, so logs stay on and the cursor already on
       // disk is kept rather than reset to the end.

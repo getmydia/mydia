@@ -28,6 +28,35 @@ void main() {
     }
   });
 
+  group('a save whose second write fails stores neither switch', () {
+    test('restores the crash switch it overwrote', () async {
+      final storage = MockAuthStorage();
+      await settingsWith(storage).save(DiagnosticsState.off);
+      storage.failWriteKeys.add(DiagnosticsSettings.logsKey);
+
+      await expectLater(
+        settingsWith(storage)
+            .save(const DiagnosticsState(crashes: true, logs: true)),
+        throwsA(anything),
+      );
+
+      expect(await settingsWith(storage).load(), DiagnosticsState.off);
+    });
+
+    test('removes a crash switch that was not stored before', () async {
+      final storage = MockAuthStorage();
+      storage.failWriteKeys.add(DiagnosticsSettings.logsKey);
+
+      await expectLater(
+        settingsWith(storage)
+            .save(const DiagnosticsState(crashes: true, logs: false)),
+        throwsA(anything),
+      );
+
+      expect(storage.containsKey(DiagnosticsSettings.crashesKey), isFalse);
+    });
+  });
+
   test('copyWith changes only the named switch', () {
     const state = DiagnosticsState(crashes: true, logs: false);
 
