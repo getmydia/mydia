@@ -15,7 +15,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias Phoenix.PubSub
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.DownloadsLive.Components
+  alias MydiaWeb.DownloadsLive.ListView
   alias MydiaWeb.DownloadsLive.MatchDialog
+  import MydiaWeb.DownloadsLive.Format
   import MydiaWeb.Formatters
 
   require Logger
@@ -1603,46 +1605,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     MapSet.member?(assigns.selected_ids, id)
   end
 
-  defp format_speed(nil), do: "—"
-
-  defp format_speed(bytes_per_second) when is_number(bytes_per_second) do
-    cond do
-      bytes_per_second >= 1_048_576 ->
-        "#{Float.round(bytes_per_second / 1_048_576, 2)} MB/s"
-
-      bytes_per_second >= 1024 ->
-        "#{Float.round(bytes_per_second / 1024, 2)} KB/s"
-
-      true ->
-        "#{bytes_per_second} B/s"
-    end
-  end
-
-  defp format_eta(nil), do: "—"
-
-  defp format_eta(%DateTime{} = dt) do
-    now = DateTime.utc_now()
-    diff = DateTime.diff(dt, now, :second)
-
-    cond do
-      diff < 0 -> "Now"
-      diff < 60 -> "#{diff}s"
-      diff < 3600 -> "#{div(diff, 60)}m"
-      diff < 86400 -> "#{div(diff, 3600)}h"
-      true -> "#{div(diff, 86400)}d"
-    end
-  end
-
-  defp format_eta(seconds) when is_integer(seconds) do
-    cond do
-      seconds < 0 -> "Now"
-      seconds < 60 -> "#{seconds}s"
-      seconds < 3600 -> "#{div(seconds, 60)}m"
-      seconds < 86400 -> "#{div(seconds, 3600)}h"
-      true -> "#{div(seconds, 86400)}d"
-    end
-  end
-
   # A percentage is only meaningful when the client is reporting a real
   # byte-for-byte transfer. Provider-side waits — debrid magnet conversion,
   # queueing for a download slot ("queued"), or remote packaging
@@ -1666,23 +1628,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  defp status_badge_class(status) do
-    case status do
-      "completed" -> "badge-success"
-      "seeding" -> "badge-success"
-      "imported" -> "badge-success"
-      "failed" -> "badge-error"
-      "missing" -> "badge-error"
-      "cancelled" -> "badge-warning"
-      "downloading" -> "badge-primary"
-      "checking" -> "badge-info"
-      "queued" -> "badge-info"
-      "paused" -> "badge-warning"
-      "stalled" -> "badge-warning"
-      _ -> "badge-ghost"
-    end
-  end
-
   # Color modifier for the DaisyUI `status` dot shown at the start of each row.
   defp status_dot_class(status) do
     case status do
@@ -1691,24 +1636,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
       s when s in ["cancelled", "stalled", "paused"] -> "status-warning"
       s when s in ["checking", "queued"] -> "status-info"
       _ -> "status-neutral"
-    end
-  end
-
-  # An import problem that should be surfaced on the row even though the torrent
-  # client still reports the download as completed/seeding. The torrent finishing
-  # is only half the job — if the post-download import keeps failing (e.g. a
-  # filesystem permission error) the user otherwise sees a healthy "seeding" row
-  # with no hint that nothing landed in the library. Returns:
-  #
-  #   * `:failed`   — import failed terminally (no further automatic retries)
-  #   * `:retrying` — import failed but a retry is scheduled
-  #   * `nil`       — no import problem (not yet attempted, or already imported)
-  def import_issue(download) do
-    cond do
-      not is_nil(download.imported_at) -> nil
-      is_nil(download.import_failed_at) and is_nil(download.import_last_error) -> nil
-      not is_nil(download.import_next_retry_at) -> :retrying
-      true -> :failed
     end
   end
 
@@ -1730,39 +1657,17 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp import_issue_label(:failed), do: "Import failed"
   defp import_issue_label(:retrying), do: "Import retrying"
 
-  @doc false
-  # Returns `{class, label}` for the download's status badge. A soft-stall is a
-  # recoverable warning: progress has stopped but the download still occupies
-  # its episode and may auto-clear. There is no terminal stall badge — an
-  # escalated stall is rejected outright and the row no longer exists.
-  def status_badge(download) do
-    if soft_stalled?(download) do
-      {status_badge_class("stalled"), "Stalled"}
-    else
-      {status_badge_class(download.status), String.capitalize(download.status)}
-    end
-  end
+  # Kept on Index because existing tests call them as Index.import_issue/1 and
+  # Index.status_badge/1.
+  defdelegate import_issue(download), to: ListView
+  defdelegate status_badge(download), to: ListView
 
   # A removal is in flight for this row. Mydia.Jobs.RemoveDownload deletes the
   # row when it finishes, so until then the row only has to say so.
   defp removing?(download), do: not is_nil(download.removal_requested_at)
 
-  # A recoverable soft-stall: `stalled_since` set but not yet escalated to a
-  # terminal `import_failed_at` failure. Gated on the live "downloading" status
-  # so a download that pauses, completes, or goes client-unreachable after a
-  # soft-stall does not keep rendering a stale warning — `stalled_since` is only
-  # cleared while the download is observed downloading, so it can linger on a row
-  # that has since moved on.
-  defp soft_stalled?(download) do
-    download.status == "downloading" and StallDetector.soft_stalled?(download)
-  end
-
-  # Seconds since this download last moved a byte. Falls back to stalled_since
-  # for a row whose last_progress_at predates stall tracking.
-  defp stall_elapsed_seconds(download) do
-    reference = download.last_progress_at || download.stalled_since
-    DateTime.diff(DateTime.utc_now(), reference, :second)
-  end
+  defp soft_stalled?(download), do: ListView.soft_stalled?(download)
+  defp stall_elapsed_seconds(download), do: ListView.stall_elapsed_seconds(download)
 
   # Seconds left before DownloadMonitor gives up on this download. Derived from
   # the same StallDetector rule the monitor applies, so the number the operator
@@ -1794,23 +1699,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     if seconds < 60, do: "#{seconds}s ago", else: format_relative_time(as_of)
   end
 
-  defp format_ratio(nil), do: "0.00"
-  defp format_ratio(ratio) when is_float(ratio), do: Float.round(ratio, 2) |> to_string()
-  defp format_ratio(ratio) when is_integer(ratio), do: "#{ratio}.00"
-
-  defp format_relative_time(%DateTime{} = dt) do
-    now = DateTime.utc_now()
-    diff = DateTime.diff(now, dt, :second)
-
-    cond do
-      diff < 60 -> "just now"
-      diff < 3600 -> "#{div(diff, 60)}m ago"
-      diff < 86400 -> "#{div(diff, 3600)}h ago"
-      diff < 604_800 -> "#{div(diff, 86400)}d ago"
-      true -> Calendar.strftime(dt, "%b %d")
-    end
-  end
-
   # Whether Mydia adopted this download from a client rather than grabbing it
   # itself. Written by `UntrackedMatcher.create_download_record/3` (automatic)
   # and `Queue.adopt_external_torrent/3` (manual); "Added outside Mydia" is
@@ -1828,26 +1716,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp adopted_from_client?(_download), do: false
 
-  defp get_display_title(download) do
-    cond do
-      # Episode download - show parent show title
-      is_map(download.episode) ->
-        if is_map(download.episode.media_item) do
-          download.episode.media_item.title
-        else
-          # Fallback to direct media_item if episode.media_item is not loaded
-          if is_map(download.media_item), do: download.media_item.title, else: "Unknown Show"
-        end
-
-      # Movie or show-level download
-      is_map(download.media_item) && download.media_item.title ->
-        download.media_item.title
-
-      # Fallback to torrent title
-      true ->
-        download.title
-    end
-  end
+  defp get_display_title(download), do: ListView.display_title(download)
 
   defp get_episode_details(download) do
     cond do
@@ -1920,25 +1789,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
       "movie" -> {"🎬", "Movie", "badge-accent"}
       "tv_show" -> {"📺", "TV Show", "badge-info"}
       _ -> nil
-    end
-  end
-
-  defp format_protocol(:nzb), do: "Usenet"
-  defp format_protocol(:torrent), do: "Torrent"
-  defp format_protocol("nzb"), do: "Usenet"
-  defp format_protocol("torrent"), do: "Torrent"
-  defp format_protocol(_), do: nil
-
-  defp format_next_retry(%DateTime{} = dt) do
-    now = DateTime.utc_now()
-    diff = DateTime.diff(dt, now, :second)
-
-    cond do
-      diff < 0 -> "Retrying soon..."
-      diff < 60 -> "in #{diff}s"
-      diff < 3600 -> "in #{div(diff, 60)}m"
-      diff < 86400 -> "in #{div(diff, 3600)}h"
-      true -> "in #{div(diff, 86400)}d"
     end
   end
 end
