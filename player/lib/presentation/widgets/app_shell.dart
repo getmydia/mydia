@@ -1,5 +1,6 @@
 import 'dart:math' show max;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -284,6 +285,65 @@ class AppShell extends ConsumerStatefulWidget {
     final edge = insets.leading - safeLeft;
     return (edge > 0 ? edge : 0) + Breakpoints.railGap;
   }
+
+  /// On macOS the native sidebar is its own split-view pane, so the Flutter
+  /// view never sits under it. On iPad it floats over (or docks beside) the
+  /// one full-screen Flutter view.
+  @visibleForTesting
+  static bool nativeSidebarIsPane(TargetPlatform platform) =>
+      platform == TargetPlatform.macOS;
+
+  /// [nativeSidebarContentLeft], except beside the macOS pane where content
+  /// starts at 0.
+  @visibleForTesting
+  static double nativeSidebarContentLeftFor({
+    required TargetPlatform platform,
+    required NativeInsets? insets,
+    required double safeLeft,
+  }) =>
+      nativeSidebarIsPane(platform)
+          ? 0
+          : nativeSidebarContentLeft(insets: insets, safeLeft: safeLeft);
+
+  /// What the content keeps clear for the window controls beside the native
+  /// sidebar. On macOS the traffic lights sit over the sidebar while it
+  /// shows and over the content while it is collapsed; native reports which
+  /// as `chromeLeading`. Until it does, the constant reserve stays.
+  @visibleForTesting
+  static WindowChromeInsets nativeSidebarContentChrome({
+    required TargetPlatform platform,
+    required WindowChromeInsets chrome,
+    required NativeInsets? insets,
+  }) {
+    if (!nativeSidebarIsPane(platform)) return contentInsets(chrome);
+    if (insets == null || !insets.reportsChrome) return chrome;
+    final reported = insets.chromeLeading;
+    // AppKit keeps the lights on the physical left, which is the trailing
+    // edge under RTL (see `windowChromeInsetsFor`).
+    final rtl = chrome.leading == 0 && chrome.trailing > 0;
+    return rtl
+        ? chrome.copyWith(trailing: reported)
+        : chrome.copyWith(leading: reported);
+  }
+
+  /// Whether the native sidebar shows. The iPad sidebar floats over Flutter,
+  /// so it hides under any page, dialog or sheet. The macOS one is a separate
+  /// pane nothing can cover, so only a page over the shell (the immersive
+  /// player) collapses it.
+  @visibleForTesting
+  static bool nativeSidebarVisible({
+    required TargetPlatform platform,
+    required bool shellCurrent,
+    required bool shellPopup,
+    required bool coveredByPage,
+  }) =>
+      nativeSidebarIsPane(platform)
+          ? !coveredByPage
+          : nativeBarVisible(
+              shellCurrent: shellCurrent,
+              drawerOpen: false,
+              shellPopup: shellPopup,
+            );
 
   /// Raises the top padding to the native chrome's top inset (the floating
   /// tab bar iPadOS shows while the sidebar is hidden), so every screen's
@@ -678,11 +738,13 @@ class _AppShellState extends ConsumerState<AppShell>
     );
 
     if (showsRail) {
+      final platform = defaultTargetPlatform;
       final pinned = ref.watch(railPinnedProvider);
       final nativeInsets =
           nativeSidebar ? ref.watch(nativeSidebarInsetsProvider) : null;
       final contentLeft = nativeSidebar
-          ? AppShell.nativeSidebarContentLeft(
+          ? AppShell.nativeSidebarContentLeftFor(
+              platform: platform,
               insets: nativeInsets,
               safeLeft: MediaQuery.paddingOf(context).left,
             )
@@ -710,7 +772,13 @@ class _AppShellState extends ConsumerState<AppShell>
                   context,
                   nativeInsets,
                   WindowChromeInsets.scope(
-                    insets: AppShell.contentInsets(chrome),
+                    insets: nativeSidebar
+                        ? AppShell.nativeSidebarContentChrome(
+                            platform: platform,
+                            chrome: chrome,
+                            insets: nativeInsets,
+                          )
+                        : AppShell.contentInsets(chrome),
                     child: AppShell.contentGutter(
                       child: Column(
                         children: [
@@ -728,10 +796,11 @@ class _AppShellState extends ConsumerState<AppShell>
                     ? NativeSidebarHost(
                         location: location,
                         onNavigate: _navigateTo,
-                        visible: AppShell.nativeBarVisible(
+                        visible: AppShell.nativeSidebarVisible(
+                          platform: platform,
                           shellCurrent: shellCurrent,
-                          drawerOpen: false,
                           shellPopup: shellPopup,
+                          coveredByPage: coveredByPage,
                         ),
                         isOffline: isOffline,
                         showBackToMydia: showBackToMydia,
