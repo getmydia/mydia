@@ -564,22 +564,14 @@ defmodule MydiaWeb.CoreComponents do
   attr :show, :boolean, default: false
   attr :on_cancel, :any, default: nil
 
-  attr :placement, :string,
-    default: "middle",
-    values: ~w(middle end),
-    doc: "\"end\" slides in from the right"
-
-  attr :box_class, :any, default: nil
-  attr :rest, :global
-
   slot :title
   slot :inner_block, required: true
   slot :actions
 
   def modal(assigns) do
     ~H"""
-    <dialog id={@id} class={["modal", @placement == "end" && "modal-end"]} open={@show} {@rest}>
-      <div class={["modal-box", @box_class]}>
+    <dialog id={@id} class="modal" open={@show}>
+      <div class="modal-box">
         <h3 :if={@title != []} class="font-bold text-lg mb-4">
           {render_slot(@title)}
         </h3>
@@ -596,7 +588,6 @@ defmodule MydiaWeb.CoreComponents do
         <form method="dialog">
           <button
             :if={@on_cancel}
-            id={"#{@id}-close"}
             type="button"
             class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
             phx-click={@on_cancel}
@@ -608,9 +599,7 @@ defmodule MydiaWeb.CoreComponents do
 
       <%!-- Backdrop --%>
       <form method="dialog" class="modal-backdrop">
-        <button :if={@on_cancel} id={"#{@id}-backdrop"} type="button" phx-click={@on_cancel}>
-          close
-        </button>
+        <button :if={@on_cancel} type="button" phx-click={@on_cancel}>close</button>
       </form>
     </dialog>
     """
