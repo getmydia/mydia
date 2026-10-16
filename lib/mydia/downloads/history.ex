@@ -17,6 +17,7 @@ defmodule Mydia.Downloads.History do
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.Seedbox
+  alias Mydia.Downloads.StatusFilter
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Downloads.Structs.EnrichedDownload
   alias Mydia.Settings
@@ -247,7 +248,7 @@ defmodule Mydia.Downloads.History do
           with_client_state(enriched, :removed)
         end
       end)
-      |> apply_status_filters(opts[:filter] || :all)
+      |> StatusFilter.filter(opts[:filter] || :all)
     else
       # Get status from all clients
       client_statuses =
@@ -260,7 +261,7 @@ defmodule Mydia.Downloads.History do
         |> enrich_download_with_status(client_statuses, client_types, configured_names)
         |> with_removal_state(download)
       end)
-      |> apply_status_filters(opts[:filter] || :all)
+      |> StatusFilter.filter(opts[:filter] || :all)
     end
   end
 
@@ -895,49 +896,7 @@ defmodule Mydia.Downloads.History do
   it already returned, so a caller can fetch once and partition in memory.
   """
   @spec filter_downloads([EnrichedDownload.t()], atom()) :: [EnrichedDownload.t()]
-  def filter_downloads(downloads, filter), do: apply_status_filters(downloads, filter)
-
-  defp apply_status_filters(downloads, :all), do: downloads
-
-  defp apply_status_filters(downloads, :active) do
-    Enum.filter(downloads, fn d ->
-      # Active downloads are those that haven't been imported yet
-      # and are currently downloading, seeding, checking, paused, or queued.
-      # `queued` covers the debrid lifecycle phases where the provider is
-      # waiting on the swarm or Mydia's local fetcher hasn't claimed the
-      # ready job yet — without this they'd vanish from the queue tab.
-      is_nil(d.imported_at) and
-        d.status in ["downloading", "seeding", "checking", "paused", "queued", "grabbing"]
-    end)
-  end
-
-  defp apply_status_filters(downloads, :completed) do
-    Enum.filter(downloads, &(&1.status == "completed"))
-  end
-
-  # Filter for imported downloads (shown in Completed tab)
-  # These are downloads that have been successfully imported to the library
-  # but may still be seeding in the download client
-  defp apply_status_filters(downloads, :imported) do
-    Enum.filter(downloads, fn d ->
-      not is_nil(d.imported_at)
-    end)
-  end
-
-  defp apply_status_filters(downloads, :failed) do
-    Enum.filter(downloads, fn d ->
-      # Show downloads that failed in the client OR have import failures.
-      # Exclude unresolved_files, which has its own section.
-      (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at)) and
-        d.match_status != "unresolved_files"
-    end)
-  end
-
-  defp apply_status_filters(downloads, :unresolved_files) do
-    Enum.filter(downloads, fn d ->
-      d.match_status == "unresolved_files"
-    end)
-  end
+  def filter_downloads(downloads, filter), do: StatusFilter.filter(downloads, filter)
 
   defp config_to_map(config) do
     %{
