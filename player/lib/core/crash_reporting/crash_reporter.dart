@@ -54,7 +54,7 @@ class CrashReporter {
     return CrashReporter(
       client: http.Client(),
       endpoint: Uri.parse('$metadataRelayBaseUrl/crashes/report'),
-      loadConsent: () async => (await diagnostics().load()).crashesEnabled,
+      loadConsent: () async => (await diagnostics().load()).crashes,
       loadAppContext: loadCrashAppContext,
       isAvailable: !kIsWeb,
     );

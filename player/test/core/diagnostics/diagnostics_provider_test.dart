@@ -33,8 +33,11 @@ const _meta = LogUploadMeta(
   build: '150',
 );
 
+const _both = DiagnosticsState(crashes: true, logs: true);
+const _logsOnly = DiagnosticsState(crashes: false, logs: true);
+
 /// Delays reads and/or writes, so a test can control the relative order in
-/// which build()'s load() and a select()'s save() settle.
+/// which build()'s load() and a setter's save() settle.
 ///
 /// [delay] is mutable rather than final: a test can speed up (or slow down)
 /// calls made after a certain point without retroactively affecting ones
@@ -80,11 +83,10 @@ class _DelayedAuthStorage implements AuthStorage {
 
 class _Harness {
   _Harness({
-    DateTime Function()? now,
     bool available = true,
     Duration? slowSave,
     Duration? slowLoad,
-  }) : now = now ?? (() => DateTime.utc(2026, 9, 22, 12)) {
+  }) {
     if (slowSave != null) {
       delayedStorage =
           _DelayedAuthStorage(storage, slowSave, delayWrites: true);
@@ -92,10 +94,7 @@ class _Harness {
       delayedStorage = _DelayedAuthStorage(storage, slowLoad,
           delayReads: true, delayWrites: false);
     }
-    settings = DiagnosticsSettings(
-      storage: delayedStorage ?? storage,
-      now: this.now,
-    );
+    settings = DiagnosticsSettings(storage: delayedStorage ?? storage);
     reporter = CrashReporter(
       client: MockClient((_) async => http.Response('{}', 201)),
       endpoint: Uri.parse('https://relay.test/crashes/report'),
@@ -110,17 +109,17 @@ class _Harness {
       sessionId: 'sess0001',
       loadMeta: () async => _meta,
       compress: (bytes) => bytes,
-      now: this.now,
+      now: now,
     );
     container = ProviderContainer(overrides: [
       crashReporterProvider.overrideWithValue(reporter),
       diagnosticsSettingsProvider.overrideWithValue(settings),
       logUploaderProvider.overrideWithValue(uploader),
-      diagnosticsClockProvider.overrideWithValue(this.now),
     ]);
   }
 
-  final DateTime Function() now;
+  static DateTime now() => DateTime.utc(2026, 9, 22, 12);
+
   final storage = MockAuthStorage();
   final store = MemoryLogStore();
   _DelayedAuthStorage? delayedStorage;
@@ -134,6 +133,8 @@ class _Harness {
 
   Future<DiagnosticsState> get loaded =>
       container.read(diagnosticsProvider.future);
+
+  DiagnosticsState? get current => container.read(diagnosticsProvider).value;
 
   void writeRecord() => store.add(LogRecord(
         time: now(),
@@ -154,214 +155,147 @@ void main() {
       () async {
     final h = _Harness(available: false);
     addTearDown(h.dispose);
-    await h.storage.write(DiagnosticsSettings.choiceKey, 'logs_forever');
+    await h.settings.save(_both);
 
     expect(await h.loaded, DiagnosticsState.off);
     expect(h.uploader.isActive, isFalse);
   });
 
-  test('loads the stored choice and applies it', () async {
+  test('loads the stored switches and applies them', () async {
     final h = _Harness();
     addTearDown(h.dispose);
-    await h.settings
-        .save(const DiagnosticsState(choice: DiagnosticsChoice.logsForever));
+    await h.settings.save(_both);
 
-    expect((await h.loaded).choice, DiagnosticsChoice.logsForever);
+    expect(await h.loaded, _both);
     expect(await h.reporter.isEnabled(), isTrue);
     expect(h.uploader.isActive, isTrue);
   });
 
-  test('select stores the choice, tells the reporter and starts sharing',
+  test('setCrashes stores it and tells the reporter, leaving logs alone',
       () async {
     final h = _Harness();
     addTearDown(h.dispose);
     await h.loaded;
 
-    await h.controller.select(DiagnosticsChoice.logs24h);
+    await h.controller.setCrashes(true);
 
-    final stored = await h.settings.load();
-    expect(stored.choice, DiagnosticsChoice.logs24h);
-    expect(stored.logsUntil, h.now().add(const Duration(hours: 24)));
+    const expected = DiagnosticsState(crashes: true, logs: false);
+    expect(await h.settings.load(), expected);
+    expect(h.current, expected);
     expect(await h.reporter.isEnabled(), isTrue);
-    expect(h.uploader.isActive, isTrue);
-    expect(h.container.read(diagnosticsProvider).value?.choice,
-        DiagnosticsChoice.logs24h);
+    expect(h.uploader.isActive, isFalse);
+
+    await h.controller.setCrashes(false);
+
+    expect(await h.reporter.isEnabled(), isFalse);
   });
 
-  test('off stops crash reports and log sharing', () async {
+  test('setLogs starts and stops sharing without changing crash consent',
+      () async {
     final h = _Harness();
     addTearDown(h.dispose);
     await h.loaded;
-    await h.controller.select(DiagnosticsChoice.logsForever);
 
-    await h.controller.select(DiagnosticsChoice.off);
+    await h.controller.setLogs(true);
 
+    expect(await h.settings.load(), _logsOnly);
+    expect(h.uploader.isActive, isTrue);
     expect(await h.reporter.isEnabled(), isFalse);
+
+    await h.controller.setLogs(false);
+
+    expect(h.current, DiagnosticsState.off);
     expect(h.uploader.isActive, isFalse);
   });
 
-  test('turning sharing on skips logs already on disk', () async {
+  test('turning logs on skips logs already on disk', () async {
     final h = _Harness();
     addTearDown(h.dispose);
     h.writeRecord();
     h.writeRecord();
     await h.loaded;
 
-    await h.controller.select(DiagnosticsChoice.logsForever);
+    await h.controller.setLogs(true);
 
     expect(h.store.savedCursor, const LogCursor('mem', 2));
   });
 
-  test('changing the window while sharing keeps the cursor', () async {
+  test('changing crash reports while sharing logs keeps the cursor', () async {
     final h = _Harness();
     addTearDown(h.dispose);
-    await h.settings
-        .save(const DiagnosticsState(choice: DiagnosticsChoice.logsForever));
+    await h.settings.save(_logsOnly);
     h.store.savedCursor = const LogCursor('mem', 0);
     h.writeRecord();
     await h.loaded;
 
-    await h.controller.select(DiagnosticsChoice.logs7d);
+    await h.controller.setCrashes(true);
 
     expect(h.store.savedCursor, const LogCursor('mem', 0));
   });
 
-  test('a choice that cannot be stored changes nothing', () async {
+  test('a change that cannot be stored changes nothing', () async {
     final h = _Harness();
     addTearDown(h.dispose);
     await h.loaded;
     h.storage.failAllWrites = true;
 
-    await expectLater(
-        h.controller.select(DiagnosticsChoice.logsForever), throwsA(anything));
+    await expectLater(h.controller.setLogs(true), throwsA(anything));
 
-    expect(h.container.read(diagnosticsProvider).value, DiagnosticsState.off);
+    expect(h.current, DiagnosticsState.off);
     expect(h.uploader.isActive, isFalse);
   });
 
-  test('a timed choice falls back to crashes when it ends', () {
-    fakeAsync((async) {
-      final start = DateTime.utc(2026, 9, 22, 12);
-      final h = _Harness(now: () => start.add(async.elapsed));
-      h.container.read(diagnosticsProvider);
-      async.flushMicrotasks();
-
-      h.controller.select(DiagnosticsChoice.logs24h);
-      async.flushMicrotasks();
-      expect(h.uploader.isActive, isTrue);
-
-      async.elapse(const Duration(hours: 24, seconds: 1));
-
-      expect(h.container.read(diagnosticsProvider).value?.choice,
-          DiagnosticsChoice.crashes);
-      expect(h.uploader.isActive, isFalse);
-      h.container.dispose();
-    });
-  });
-
   test(
-      'a selection made while the provider is still building computes '
-      'wasSharing from the value build() was loading, not from the '
-      'still-loading state', () {
+      'a change made while the provider is still building layers on the '
+      'value build() was loading', () {
     fakeAsync((async) {
-      final start = DateTime.utc(2026, 9, 22, 12);
-      final h = _Harness(
-        now: () => start.add(async.elapsed),
-        slowLoad: const Duration(seconds: 1),
-      );
+      final h = _Harness(slowLoad: const Duration(seconds: 1));
       addTearDown(h.dispose);
 
       // Already sharing logs, with a cursor already advanced past what is
       // on disk. Writes are not delayed by slowLoad, so this settles
       // immediately.
-      h.settings
-          .save(const DiagnosticsState(choice: DiagnosticsChoice.logsForever));
+      h.settings.save(_logsOnly);
       async.flushMicrotasks();
       h.store.savedCursor = const LogCursor('mem', 5);
 
       // Trigger build(), which is now stuck on the delayed read (so `state`
-      // reads AsyncLoading, not yet the value build() is loading), then
-      // issue a selection before it settles.
+      // reads AsyncLoading), then change a switch before it settles.
       h.container.read(diagnosticsProvider);
-      h.controller.select(DiagnosticsChoice.logs24h);
+      h.controller.setCrashes(true);
       async.flushMicrotasks();
 
-      // Let the delayed read, and everything after it, settle.
       async.elapse(const Duration(seconds: 2));
 
-      expect(h.container.read(diagnosticsProvider).value?.choice,
-          DiagnosticsChoice.logs24h);
-      // wasSharing must reflect build()'s loaded value (already sharing),
-      // not the AsyncLoading state select() saw when it started, so the
-      // cursor already on disk is kept rather than reset to the end.
+      // Built on the loaded value, so logs stay on and the cursor already on
+      // disk is kept rather than reset to the end.
+      expect(h.current, _both);
       expect(h.store.savedCursor, const LogCursor('mem', 5));
       expect(h.uploader.isActive, isTrue);
     });
   });
 
-  test(
-      'an expiry that fires while a user selection is in flight does not '
-      'undo that selection', () {
+  test('two changes issued back to back both land, in order', () {
     fakeAsync((async) {
-      final start = DateTime.utc(2026, 9, 22, 12);
-      final h = _Harness(
-        now: () => start.add(async.elapsed),
-        slowSave: const Duration(seconds: 3),
-      );
+      final h = _Harness(slowSave: const Duration(seconds: 2));
       addTearDown(h.dispose);
 
       h.container.read(diagnosticsProvider);
       async.flushMicrotasks();
 
-      h.controller.select(DiagnosticsChoice.logs24h);
-      // Two delayed storage writes (choice, then the window's end) to let
-      // settle before reading the armed end time.
-      async.elapse(const Duration(seconds: 10));
-      expect(h.uploader.isActive, isTrue);
-      final until = h.container.read(diagnosticsProvider).value!.logsUntil!;
-
-      // Start a new, still-slow selection one second before the original
-      // timer is due, so that timer fires while this selection's save is
-      // still in flight.
-      async.elapse(until.difference(h.now()) - const Duration(seconds: 1));
-      h.controller.select(DiagnosticsChoice.logsForever);
-      async.elapse(const Duration(seconds: 12));
-
-      expect(h.container.read(diagnosticsProvider).value?.choice,
-          DiagnosticsChoice.logsForever);
-      expect(h.storage.contents[DiagnosticsSettings.choiceKey], 'logs_forever');
-      expect(h.uploader.isActive, isTrue);
-    });
-  });
-
-  test(
-      'two selections issued back to back apply in order, with the last '
-      'one winning', () {
-    fakeAsync((async) {
-      final start = DateTime.utc(2026, 9, 22, 12);
-      final h = _Harness(
-        now: () => start.add(async.elapsed),
-        slowSave: const Duration(seconds: 2),
-      );
-      addTearDown(h.dispose);
-
-      h.container.read(diagnosticsProvider);
-      async.flushMicrotasks();
-
-      // The first selection's save is slow (2s per write); let it reach its
+      // The first change's save is slow (2s per write); let it reach its
       // first delayed write, then speed up later calls before issuing the
-      // second selection, so a lack of serialization would let the second
-      // one finish first and the (still in-flight) first one clobber it
-      // afterward.
-      h.controller.select(DiagnosticsChoice.logs24h);
+      // second, so a lack of serialization would let the second compute its
+      // state from the stale one and clobber the first.
+      h.controller.setLogs(true);
       async.flushMicrotasks();
       h.delayedStorage!.delay = Duration.zero;
-      h.controller.select(DiagnosticsChoice.logsForever);
-      async.elapse(const Duration(seconds: 3));
+      h.controller.setCrashes(true);
+      async.elapse(const Duration(seconds: 5));
 
-      expect(h.container.read(diagnosticsProvider).value?.choice,
-          DiagnosticsChoice.logsForever);
-      expect(h.storage.contents[DiagnosticsSettings.choiceKey], 'logs_forever');
+      expect(h.current, _both);
+      expect(h.storage.contents[DiagnosticsSettings.crashesKey], 'true');
+      expect(h.storage.contents[DiagnosticsSettings.logsKey], 'true');
       expect(h.uploader.isActive, isTrue);
     });
   });

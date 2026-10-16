@@ -1,130 +1,72 @@
-/// What this device shares with the Mydia developers: nothing, crash reports,
-/// or crash reports and logs for a while.
+/// What this device shares with the Mydia developers: crash reports, logs,
+/// both or neither.
 ///
-/// One device-level choice replacing the old crash reporting toggle, stored
-/// through [AuthStorage] like that toggle was, so it survives sign-out.
-/// `DiagnosticsController` (`diagnostics_provider.dart`) is its only writer.
+/// Two device-level switches stored through [AuthStorage], so they survive
+/// sign-out. `DiagnosticsController` (`diagnostics_provider.dart`) is their
+/// only writer.
 library;
 
 import 'package:uuid/uuid.dart';
 
 import '../auth/auth_storage.dart';
 
-enum DiagnosticsChoice {
-  off('off', 'Off'),
-  crashes('crashes', 'Crashes only'),
-  logs24h('logs_24h', 'Crashes and logs for 24 hours'),
-  logs7d('logs_7d', 'Crashes and logs for 7 days'),
-  logsForever('logs_forever', 'Crashes and logs until I turn it off');
-
-  const DiagnosticsChoice(this.wireName, this.label);
-
-  final String wireName;
-  final String label;
-
-  /// For widget keys: `diagnostics-level-<keySuffix>`.
-  String get keySuffix => wireName.replaceAll('_', '-');
-
-  bool get sharesCrashes => this != off;
-
-  bool get sharesLogs =>
-      this == logs24h || this == logs7d || this == logsForever;
-
-  /// How long a timed choice lasts; null for the others.
-  Duration? get window => switch (this) {
-        logs24h => const Duration(hours: 24),
-        logs7d => const Duration(days: 7),
-        _ => null,
-      };
-
-  static DiagnosticsChoice? fromWire(String? value) {
-    for (final choice in values) {
-      if (choice.wireName == value) return choice;
-    }
-    return null;
-  }
-}
-
 class DiagnosticsState {
-  const DiagnosticsState({required this.choice, this.logsUntil});
+  const DiagnosticsState({required this.crashes, required this.logs});
 
-  static const off = DiagnosticsState(choice: DiagnosticsChoice.off);
+  static const off = DiagnosticsState(crashes: false, logs: false);
 
-  /// [choice] made at [now], with its end when it is timed.
-  factory DiagnosticsState.chosen(DiagnosticsChoice choice, DateTime now) {
-    final window = choice.window;
-    return DiagnosticsState(
-      choice: choice,
-      logsUntil: window == null ? null : now.toUtc().add(window),
-    );
-  }
+  /// Whether crash reports are sent.
+  final bool crashes;
 
-  final DiagnosticsChoice choice;
+  /// Whether logs are uploaded continuously.
+  final bool logs;
 
-  /// When a timed choice ends. Null for every other choice.
-  final DateTime? logsUntil;
-
-  bool get crashesEnabled => choice.sharesCrashes;
-
-  bool logsActiveAt(DateTime now) {
-    final until = logsUntil;
-    return choice.sharesLogs && (until == null || now.isBefore(until));
-  }
+  DiagnosticsState copyWith({bool? crashes, bool? logs}) => DiagnosticsState(
+        crashes: crashes ?? this.crashes,
+        logs: logs ?? this.logs,
+      );
 
   @override
   bool operator ==(Object other) =>
       other is DiagnosticsState &&
-      other.choice == choice &&
-      other.logsUntil == logsUntil;
+      other.crashes == crashes &&
+      other.logs == logs;
 
   @override
-  int get hashCode => Object.hash(choice, logsUntil);
+  int get hashCode => Object.hash(crashes, logs);
 
   @override
-  String toString() => 'DiagnosticsState($choice, until: $logsUntil)';
+  String toString() => 'DiagnosticsState(crashes: $crashes, logs: $logs)';
 }
 
 class DiagnosticsSettings {
-  DiagnosticsSettings({AuthStorage? storage, DateTime Function()? now})
-      : _storage = storage ?? getAuthStorage(),
-        _now = now ?? DateTime.now;
+  DiagnosticsSettings({AuthStorage? storage})
+      : _storage = storage ?? getAuthStorage();
 
-  static const choiceKey = 'diagnostics.choice';
-  static const untilKey = 'diagnostics.logs_until';
+  static const crashesKey = 'diagnostics.crashes';
+  static const logsKey = 'diagnostics.logs';
   static const deviceIdKey = 'diagnostics.device_id';
 
-  /// The crash reporting toggle this setting replaced. Read once, then deleted.
+  /// The five-way choice these switches replaced, and its timed end. Read
+  /// once, then deleted.
+  static const legacyChoiceKey = 'diagnostics.choice';
+  static const legacyUntilKey = 'diagnostics.logs_until';
+
+  /// The crash reporting toggle that choice replaced. Read once, then deleted.
   static const legacyCrashKey = 'crash_reporting_enabled';
 
   final AuthStorage _storage;
-  final DateTime Function() _now;
 
   Future<DiagnosticsState> load() async {
-    final choice = DiagnosticsChoice.fromWire(await _storage.read(choiceKey));
-    if (choice == null) return _migrate();
-
-    if (choice.window == null) return DiagnosticsState(choice: choice);
-
-    final untilMs = int.tryParse(await _storage.read(untilKey) ?? '');
-    final until = untilMs == null
-        ? null
-        : DateTime.fromMillisecondsSinceEpoch(untilMs, isUtc: true);
-    if (until == null || !_now().isBefore(until)) {
-      const ended = DiagnosticsState(choice: DiagnosticsChoice.crashes);
-      await save(ended);
-      return ended;
-    }
-    return DiagnosticsState(choice: choice, logsUntil: until);
+    final crashes = await _storage.read(crashesKey);
+    final logs = await _storage.read(logsKey);
+    if (crashes == null && logs == null) return _migrate();
+    return DiagnosticsState(crashes: crashes == 'true', logs: logs == 'true');
   }
 
   Future<void> save(DiagnosticsState state) async {
-    await _storage.write(choiceKey, state.choice.wireName);
-    final until = state.logsUntil;
-    if (until == null) {
-      await _storage.delete(untilKey);
-    } else {
-      await _storage.write(untilKey, '${until.millisecondsSinceEpoch}');
-    }
+    await _storage.write(crashesKey, '${state.crashes}');
+    await _storage.write(logsKey, '${state.logs}');
   }
 
   /// A random ID for log uploads, created on first use. Deliberately not the
@@ -138,14 +80,31 @@ class DiagnosticsSettings {
   }
 
   Future<DiagnosticsState> _migrate() async {
-    final legacy = await _storage.read(legacyCrashKey);
-    final state = legacy == 'true'
-        ? const DiagnosticsState(choice: DiagnosticsChoice.crashes)
-        : DiagnosticsState.off;
-    if (legacy != null) {
+    final choice = await _storage.read(legacyChoiceKey);
+    if (choice != null) {
+      final state = _fromLegacyChoice(choice);
       await save(state);
-      await _storage.delete(legacyCrashKey);
+      await _storage.delete(legacyChoiceKey);
+      await _storage.delete(legacyUntilKey);
+      return state;
     }
+
+    final legacy = await _storage.read(legacyCrashKey);
+    if (legacy == null) return DiagnosticsState.off;
+    final state = DiagnosticsState(crashes: legacy == 'true', logs: false);
+    await save(state);
+    await _storage.delete(legacyCrashKey);
     return state;
   }
+
+  /// A timed log window becomes logs off: the user agreed to a bounded
+  /// window, and an open-ended upload would share more than they chose.
+  static DiagnosticsState _fromLegacyChoice(String choice) => switch (choice) {
+        'crashes' ||
+        'logs_24h' ||
+        'logs_7d' =>
+          const DiagnosticsState(crashes: true, logs: false),
+        'logs_forever' => const DiagnosticsState(crashes: true, logs: true),
+        _ => DiagnosticsState.off,
+      };
 }
