@@ -41,6 +41,8 @@
       </div>
     </div>
 
+    <ListComponents.stats_bar summary={@summary} />
+
     <%!-- Toolbar: tabs + sort on one row --%>
     <div class="flex items-end justify-between gap-4 flex-wrap mb-4 border-b border-base-300">
       <div role="tablist" class="tabs tabs-border -mb-px">
@@ -140,25 +142,25 @@
 
     <%!-- Batch action bar --%>
     <%= if MapSet.size(@selected_ids) > 0 do %>
-      <div class="alert mb-4 shadow-lg">
+      <div class="alert alert-soft sticky top-0 z-10 mb-4 shadow-lg">
         <div class="flex-1">
           <span class="font-semibold">{MapSet.size(@selected_ids)} selected</span>
         </div>
-        <div class="flex gap-2">
+        <div class="join">
           <%= if @active_tab == :issues do %>
-            <button type="button" class="btn btn-sm btn-primary" phx-click="batch_retry">
+            <button type="button" class="btn btn-sm btn-primary join-item" phx-click="batch_retry">
               <.icon name="hero-arrow-path" class="w-4 h-4" /> Retry
             </button>
           <% end %>
           <button
             type="button"
-            class="btn btn-sm btn-error"
+            class="btn btn-sm btn-error join-item"
             phx-click="batch_delete"
             data-confirm="Delete selected downloads?"
           >
             <.icon name="hero-trash" class="w-4 h-4" /> Delete
           </button>
-          <button type="button" class="btn btn-sm btn-ghost" phx-click="toggle_select_all">
+          <button type="button" class="btn btn-sm join-item" phx-click="toggle_select_all">
             Clear
           </button>
         </div>
@@ -534,7 +536,7 @@
       <%!-- Loading indicator for infinite scroll --%>
       <%= if @has_more do %>
         <div class="flex justify-center py-4">
-          <span class="loading loading-spinner loading-md text-primary"></span>
+          <span class="loading loading-dots loading-md text-primary"></span>
         </div>
       <% end %>
     <% end %>

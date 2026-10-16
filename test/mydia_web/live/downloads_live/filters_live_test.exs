@@ -111,4 +111,24 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
 
     assert view |> element("#downloads-tab-queue-count") |> render() =~ "2"
   end
+
+  test "the stats bar is hidden with an empty queue and shown with one active download", %{
+    conn: conn
+  } do
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+    refute has_element?(view, "#downloads-stats")
+
+    queued("Fictional Salt Meridian")
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+    assert has_element?(view, "#downloads-stats")
+  end
+
+  test "removing a chip patches that filter away", %{conn: conn} do
+    queued("Fictional Salt Meridian")
+    {:ok, view, _html} = live(conn, ~p"/downloads?q=salt&status=queued")
+
+    view |> element("#downloads-filter-chip-q button") |> render_click()
+
+    assert_patch(view, ~p"/downloads?status=queued")
+  end
 end
