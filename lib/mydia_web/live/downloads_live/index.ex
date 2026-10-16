@@ -19,6 +19,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.DownloadsLive.Filters
   alias MydiaWeb.DownloadsLive.ListComponents
   alias MydiaWeb.DownloadsLive.ListView
+  alias MydiaWeb.DownloadsLive.Sorting
   alias MydiaWeb.DownloadsLive.Summary
   alias Mydia.Settings.DownloadClientConfig
   alias MydiaWeb.DownloadsLive.MatchDialog
@@ -41,53 +42,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # load. This timer re-polls + re-renders the Queue while work is active.
   @progress_refresh_interval_ms 3_000
 
-  # Sort options offered per tab. Real-time keys (progress, speeds, ETA, ratio)
-  # only exist after client-status enrichment, so sorting runs in the LiveView
-  # over the enriched list (see apply_sorting/2), not in the DB query.
-  @shared_sort_options [
-    {"added_desc", "Newest first"},
-    {"added_asc", "Oldest first"},
-    {"name_asc", "Name (A-Z)"},
-    {"name_desc", "Name (Z-A)"},
-    {"status_asc", "Status"},
-    {"size_desc", "Size (largest)"},
-    {"size_asc", "Size (smallest)"}
-  ]
-
-  @queue_sort_options [
-    {"progress_desc", "Progress (most)"},
-    {"progress_asc", "Progress (least)"},
-    {"dlspeed_desc", "Download speed"},
-    {"eta_asc", "ETA (soonest)"}
-  ]
-
-  @completed_sort_options [
-    {"ratio_desc", "Ratio (highest)"},
-    {"ratio_asc", "Ratio (lowest)"},
-    {"ulspeed_desc", "Upload speed"},
-    {"imported_desc", "Imported (newest)"},
-    {"imported_asc", "Imported (oldest)"}
-  ]
-
-  @allowed_sort_fields (@shared_sort_options ++ @queue_sort_options ++ @completed_sort_options)
-                       |> Enum.map(&elem(&1, 0))
-
-  # Rank for status sorting so states group sensibly (active work first) rather
-  # than sorting alphabetically. Unknown statuses fall to the end.
-  @status_rank %{
-    "downloading" => 0,
-    "checking" => 1,
-    "queued" => 2,
-    "paused" => 3,
-    "stalled" => 4,
-    "seeding" => 5,
-    "completed" => 6,
-    "imported" => 7,
-    "cancelled" => 8,
-    "failed" => 9,
-    "missing" => 10,
-    "unknown" => 11
-  }
+  @allowed_sort_fields Sorting.allowed_fields()
 
   @impl true
   def mount(_params, _session, socket) do
@@ -1359,7 +1314,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       all
       |> Downloads.filter_downloads(filter)
       |> ListView.filter(socket.assigns.filters)
-      |> apply_sorting(socket.assigns.sort_by)
+      |> Sorting.sort(socket.assigns.sort_by)
 
     # Apply pagination
     page = socket.assigns.page
@@ -1690,7 +1645,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
     Downloads.list_downloads_with_status(filter: filter, bounded: true)
     |> ListView.filter(socket.assigns.filters)
-    |> apply_sorting(socket.assigns.sort_by)
+    |> Sorting.sort(socket.assigns.sort_by)
     |> annotate_rematch_eligibility(socket.assigns.active_tab)
     |> annotate_auto_reject_cap()
   end
@@ -1726,64 +1681,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
       %{download | auto_reject_capped?: MapSet.member?(capped, download.media_item_id)}
     end)
   end
-
-  # Sorts the enriched download list by the active `sort_by` selection. Runs in
-  # the LiveView (not the DB) because real-time keys (progress, speeds, ETA,
-  # ratio) only exist after client-status enrichment. Missing values are guarded
-  # so they group deterministically rather than scatter or raise.
-  defp apply_sorting(downloads, sort_by) do
-    case sort_by do
-      "added_desc" -> Enum.sort_by(downloads, & &1.inserted_at, {:desc, DateTime})
-      "added_asc" -> Enum.sort_by(downloads, & &1.inserted_at, {:asc, DateTime})
-      "name_asc" -> Enum.sort_by(downloads, &sort_name/1, :asc)
-      "name_desc" -> Enum.sort_by(downloads, &sort_name/1, :desc)
-      "status_asc" -> Enum.sort_by(downloads, &status_rank/1, :asc)
-      "size_desc" -> Enum.sort_by(downloads, &(&1.size || 0), :desc)
-      "size_asc" -> Enum.sort_by(downloads, &(&1.size || 0), :asc)
-      "progress_desc" -> Enum.sort_by(downloads, &(&1.progress || 0.0), :desc)
-      "progress_asc" -> Enum.sort_by(downloads, &(&1.progress || 0.0), :asc)
-      "dlspeed_desc" -> Enum.sort_by(downloads, &(&1.download_speed || 0), :desc)
-      "ulspeed_desc" -> Enum.sort_by(downloads, &(&1.upload_speed || 0), :desc)
-      "ratio_desc" -> Enum.sort_by(downloads, &(&1.ratio || 0.0), :desc)
-      "ratio_asc" -> Enum.sort_by(downloads, &(&1.ratio || 0.0), :asc)
-      "eta_asc" -> Enum.sort_by(downloads, &eta_sort_key/1, :asc)
-      "imported_desc" -> Enum.sort_by(downloads, &imported_sort_key/1, {:desc, DateTime})
-      "imported_asc" -> Enum.sort_by(downloads, &imported_sort_key/1, {:asc, DateTime})
-      _ -> Enum.sort_by(downloads, & &1.inserted_at, {:desc, DateTime})
-    end
-  end
-
-  defp sort_name(download), do: String.downcase(get_display_title(download) || "")
-
-  defp status_rank(download) do
-    # Stall state overrides the client status for sorting: a soft-stall groups
-    # with warnings.
-    if soft_stalled?(download) do
-      Map.fetch!(@status_rank, "stalled")
-    else
-      Map.get(@status_rank, download.status, 99)
-    end
-  end
-
-  # ETA may be nil, an integer (seconds remaining), or a DateTime. Normalize to
-  # an integer so a single comparator works; nil sorts last (soonest first).
-  defp eta_sort_key(download) do
-    case download.eta do
-      nil -> 9_999_999_999
-      %DateTime{} = dt -> DateTime.diff(dt, DateTime.utc_now(), :second)
-      seconds when is_integer(seconds) -> seconds
-      _ -> 9_999_999_999
-    end
-  end
-
-  # imported_at is always present on the completed tab, but guard nil so the
-  # comparator never raises if called on a mixed list.
-  defp imported_sort_key(download), do: download.imported_at || download.inserted_at
-
-  # Sort options available for the given tab. Shared keys apply to every tab;
-  # queue- and completed-specific keys are only meaningful there.
-  defp sort_options(:completed), do: @shared_sort_options ++ @completed_sort_options
-  defp sort_options(_tab), do: @shared_sort_options ++ @queue_sort_options
 
   # View helpers
 

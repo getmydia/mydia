@@ -126,7 +126,7 @@
             title="Sort downloads"
           >
             <option
-              :for={{value, label} <- sort_options(@active_tab)}
+              :for={{value, label} <- Sorting.options(@active_tab)}
               value={value}
               selected={@sort_by == value}
             >
