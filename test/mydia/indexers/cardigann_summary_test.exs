@@ -4,7 +4,6 @@ defmodule Mydia.Indexers.CardigannSummaryTest do
 
   import Mydia.IndexersFixtures
 
-  alias Mydia.Indexers
   alias Mydia.Indexers.CardigannDefinition
   alias Mydia.Indexers.CardigannSummary
   alias Mydia.Repo
@@ -69,13 +68,6 @@ defmodule Mydia.Indexers.CardigannSummaryTest do
 
       assert CardigannSummary.build() == nil
     end
-
-    test "Indexers.cardigann_summary/0 delegates to it" do
-      :persistent_term.put(@active_key, :builtin)
-      cardigann_definition_fixture(%{enabled: true})
-
-      assert Indexers.cardigann_summary() == CardigannSummary.build()
-    end
   end
 
   describe "status_map/0" do
@@ -106,12 +98,6 @@ defmodule Mydia.Indexers.CardigannSummaryTest do
       cardigann_definition_fixture(%{enabled: true}) |> with_health("healthy")
 
       assert CardigannSummary.status_map() == %{}
-    end
-
-    test "Indexers.cardigann_status_map/0 delegates to it" do
-      cardigann_definition_fixture(%{enabled: true}) |> with_health("healthy")
-
-      assert Indexers.cardigann_status_map() == CardigannSummary.status_map()
     end
   end
 

@@ -11,6 +11,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias MydiaWeb.DashboardLive.RegionalComponents
   alias Mydia.Accounts.HomeLayout
   alias Mydia.Health.Rollup
+  alias Mydia.Indexers.CardigannSummary
   alias Mydia.Downloads.ClientHealth
   alias Mydia.Media
   alias Mydia.Media.RecentlyAdded
@@ -702,7 +703,7 @@ defmodule MydiaWeb.DashboardLive.Index do
     client_status = ClientHealth.status_map()
 
     indexer_status =
-      Map.merge(Mydia.Indexers.Health.status_map(), Mydia.Indexers.cardigann_status_map())
+      Map.merge(Mydia.Indexers.Health.status_map(), CardigannSummary.status_map())
 
     media_server_status =
       Mydia.MediaServer.Health.status_map(Mydia.Settings.list_media_server_configs())
@@ -715,7 +716,7 @@ defmodule MydiaWeb.DashboardLive.Index do
     |> assign(:clients_rollup, Rollup.from_status_map(client_status))
     |> assign(:indexers_rollup, Rollup.from_status_map(indexer_status))
     |> assign(:media_servers_rollup, Rollup.from_status_map(media_server_status))
-    |> assign(:cardigann_summary, Mydia.Indexers.cardigann_summary())
+    |> assign(:cardigann_summary, CardigannSummary.build())
     |> assign(:trash_summary, trash_summary)
     |> assign(:flaresolverr_enabled, flaresolverr_enabled)
     |> start_async(:duplicate_count, fn ->

@@ -74,8 +74,7 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:sort_by, :quality)
      |> assign(:results_empty?, false)
      |> assign(:indexer_errors, [])
-     |> assign(:indexer_progress, %{})
-     |> assign(:cardigann_summary, nil)
+     |> assign(indexer_progress: %{}, cardigann_summary: nil)
      |> assign(:search_id, 0)
      |> assign(:show_disambiguation_modal, false)
      |> assign(:metadata_matches, [])
@@ -1011,7 +1010,7 @@ defmodule MydiaWeb.SearchLive.Index do
     |> assign(:searching, true)
     |> assign(:search_id, search_id)
     |> assign(:indexer_progress, %{})
-    |> assign(:cardigann_summary, Indexers.cardigann_summary())
+    |> assign(:cardigann_summary, Indexers.CardigannSummary.build())
     |> assign(:indexer_errors, [])
     |> assign(:search_results_map, %{})
     |> assign(:raw_search_results_map, %{})
@@ -1358,7 +1357,6 @@ defmodule MydiaWeb.SearchLive.Index do
   defp indexer_type_badge_class(:prowlarr), do: "badge-primary"
   defp indexer_type_badge_class(:jackett), do: "badge-secondary"
   defp indexer_type_badge_class(:newznab), do: "badge-accent"
-  defp indexer_type_badge_class(:public), do: "badge-ghost"
   defp indexer_type_badge_class(_), do: "badge-ghost"
 
   defp indexer_type_label(:prowlarr), do: "Prowlarr"
