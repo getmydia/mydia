@@ -8,7 +8,6 @@ import 'package:player/core/layout/dock_insets.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/calendar/calendar_screen.dart';
-import 'package:player/presentation/screens/calendar/calendar_view_mode.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
@@ -32,8 +31,8 @@ List<ItemSummary> _tenDays() {
   ];
 }
 
-/// Twenty episodes all airing today, so the week view's single day overflows
-/// the viewport on its own.
+/// Twenty episodes all airing today, so one day overflows the viewport on its
+/// own.
 List<ItemSummary> _busyDay() {
   final today = DateTime.now();
   return [
@@ -46,20 +45,9 @@ List<ItemSummary> _busyDay() {
   ];
 }
 
-/// Pins the calendar layout without touching settings storage.
-class _FixedViewMode extends CalendarViewModeController {
-  _FixedViewMode(this.mode);
-
-  final CalendarViewMode mode;
-
-  @override
-  Future<CalendarViewMode> build() async => mode;
-}
-
 Future<void> _pumpCalendar(
   WidgetTester tester, {
   required List<ItemSummary> entries,
-  required CalendarViewMode mode,
 }) async {
   // Same 599-wide mobile layout and 34px home indicator as the library cases.
   tester.view.physicalSize = const Size(599, 800);
@@ -73,8 +61,6 @@ Future<void> _pumpCalendar(
         mediaSourceProvider(fakeSourceId)
             .overrideWithValue(FakeCapableSource()..calendarResult = entries),
         sourceArtworkProvider.overrideWith((ref, key) async => null),
-        calendarViewModeControllerProvider
-            .overrideWith(() => _FixedViewMode(mode)),
       ],
       child: shellHarness(child: const CalendarScreen(sourceId: fakeSourceId)),
     ),
@@ -150,11 +136,11 @@ void main() {
   });
 
   group('calendar', () {
-    testWidgets('scrolls the agenda footer clear of the dock', (tester) async {
+    testWidgets('scrolls the timeline footer clear of the dock',
+        (tester) async {
       await _pumpCalendar(
         tester,
         entries: _tenDays(),
-        mode: CalendarViewMode.agenda,
       );
 
       expectClearsDock(
@@ -168,7 +154,6 @@ void main() {
       await _pumpCalendar(
         tester,
         entries: _busyDay(),
-        mode: CalendarViewMode.week,
       );
 
       expectClearsDock(

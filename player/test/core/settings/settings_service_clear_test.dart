@@ -34,7 +34,6 @@ void main() {
     await service.setAutoSkipSegments(true);
     await service.setLibrarySort('movies', 'YEAR:ASC');
     await service.setLibrarySort('tvShows', 'RATING:DESC');
-    await service.setCalendarViewMode('agenda');
 
     await service.clearSettings();
 

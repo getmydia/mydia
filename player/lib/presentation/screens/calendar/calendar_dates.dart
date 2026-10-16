@@ -4,9 +4,8 @@
 /// send the window's `start`/`end` to the server, to decide which day
 /// section is "today", and to group and compare entries by calendar day.
 /// Kept in one file so those points cannot drift into subtly different
-/// definitions of "day" from one another. The week and month helpers live here
-/// for the same reason: a week is seven of those days, starting on a Monday,
-/// and a month is the days sharing a first.
+/// definitions of "day" from one another. The month helpers live here for the
+/// same reason: a month is the days sharing a first.
 library;
 
 import '../../../domain/sources/item.dart';
@@ -107,70 +106,6 @@ List<MapEntry<DateTime, List<ItemSummary>>> groupByDay(
   return groups.entries.toList();
 }
 
-/// The label above one day's entries.
-String formatDayHeader(DateTime day, DateTime today) {
-  final isToday = isSameDay(day, today);
-
-  final sameYear = day.year == today.year;
-  final weekday = weekdayAbbreviation(day);
-  final month = _monthNames[day.month - 1];
-
-  final formatted = sameYear
-      ? '$weekday ${day.day} $month'
-      : '$weekday ${day.day} $month ${day.year}';
-
-  return isToday ? '$formatted · Today' : formatted;
-}
-
-/// The Monday on or before [day], at local midnight.
-///
-/// Built by overflowing the day field, as `calendarWindow`
-/// does, rather than subtracting a `Duration`. `DateTime`'s constructor
-/// normalizes an out-of-range day by calendar arithmetic, so a week that
-/// contains a daylight-saving change still starts at midnight.
-DateTime startOfWeek(DateTime day) =>
-    DateTime(day.year, day.month, day.day - (day.weekday - DateTime.monday));
-
-/// The Monday of every week that touches `[start, end]`, oldest first.
-///
-/// One entry per page of the week strip. The first and last weeks are
-/// usually partial. Steps by overflowing the day field for the same
-/// daylight-saving reason as [startOfWeek].
-List<DateTime> weeksInWindow(DateTime start, DateTime end) {
-  final last = startOfWeek(end);
-  final weeks = <DateTime>[];
-
-  var week = startOfWeek(start);
-  while (!week.isAfter(last)) {
-    weeks.add(week);
-    week = DateTime(week.year, week.month, week.day + DateTime.daysPerWeek);
-  }
-
-  return weeks;
-}
-
-/// The week strip's title for the week starting [weekStart].
-///
-/// `Sep 14 – 20, 2026` inside a month, `Sep 28 – Oct 4, 2026` across one,
-/// and `Dec 28, 2026 – Jan 3, 2027` across a year.
-String formatWeekLabel(DateTime weekStart) {
-  final start = truncateToDay(weekStart);
-  final end = DateTime(start.year, start.month, start.day + 6);
-  final startMonth = _shortMonthName(start);
-  final endMonth = _shortMonthName(end);
-
-  if (start.year != end.year) {
-    return '$startMonth ${start.day}, ${start.year} – '
-        '$endMonth ${end.day}, ${end.year}';
-  }
-
-  if (start.month != end.month) {
-    return '$startMonth ${start.day} – $endMonth ${end.day}, ${end.year}';
-  }
-
-  return '$startMonth ${start.day} – ${end.day}, ${end.year}';
-}
-
 /// `October` for any day in October.
 String monthName(DateTime day) => _monthNames[day.month - 1];
 
@@ -197,6 +132,3 @@ List<DateTime> monthsInWindow(DateTime start, DateTime end) {
   }
   return months;
 }
-
-String _shortMonthName(DateTime day) =>
-    _monthNames[day.month - 1].substring(0, 3);
