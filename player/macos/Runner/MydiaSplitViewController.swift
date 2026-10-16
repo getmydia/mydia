@@ -27,9 +27,15 @@ final class MydiaSplitViewController: NSSplitViewController {
     self.flutter = flutter
     sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebar)
     sidebarItem.canCollapse = true
+    // Collapse rather than refuse when a live resize drags the window
+    // narrower than both panes' minimums.
+    sidebarItem.canCollapseFromWindowResize = true
     sidebarItem.minimumThickness = 180
     sidebarItem.maximumThickness = 320
     contentItem = NSSplitViewItem(viewController: flutter)
+    // AppKit collapses the sidebar only when the content pane's minimum
+    // cannot be met, so this floor is what makes a narrow window collapse it.
+    contentItem.minimumThickness = 480
     super.init(nibName: nil, bundle: nil)
     addSplitViewItem(sidebarItem)
     addSplitViewItem(contentItem)
