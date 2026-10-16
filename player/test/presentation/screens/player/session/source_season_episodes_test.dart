@@ -74,4 +74,10 @@ void main() {
       'seasonNumber': '1',
     });
   });
+
+  test('an episode detail reports its show and season', () async {
+    final detail = (await _TestSourceSession(FakeMediaSource()).detail())!;
+    expect(detail.showId, 's1');
+    expect(detail.seasonNumber, 1);
+  });
 }
