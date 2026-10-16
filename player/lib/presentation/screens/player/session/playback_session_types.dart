@@ -71,6 +71,8 @@ class PlaybackDetail {
     this.lastWatchedAt,
     this.runtimeMinutes,
     this.serverSubtitleTracks,
+    this.showId,
+    this.seasonNumber,
   });
 
   final int? savedPositionSeconds;
@@ -81,6 +83,14 @@ class PlaybackDetail {
   /// Null when the picked file was not found or carried no subtitle list;
   /// the screen then keeps the list it has.
   final List<SubtitleTrack>? serverSubtitleTracks;
+
+  /// The show an episode belongs to, in the session's own id space. Null for
+  /// a movie, or when the session cannot tell. Lets the screen find the
+  /// season for a route that did not name it.
+  final String? showId;
+
+  /// The episode's season number; null as for [showId].
+  final int? seasonNumber;
 }
 
 /// A subtitle preference that was fetched. [value] null means the viewer
