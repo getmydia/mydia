@@ -11,6 +11,7 @@
 
       <%!-- Utility actions --%>
       <div class="flex gap-2">
+        <ListComponents.client_shortcut client_urls={@client_urls} />
         <button type="button" class="btn btn-sm btn-ghost" phx-click="refresh">
           <.icon name="hero-arrow-path" class="w-4 h-4" />
           <span class="hidden sm:inline ml-1">Refresh</span>

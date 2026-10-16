@@ -1438,7 +1438,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp removed_client_groups do
     Downloads.removed_client_groups()
     |> Enum.map_reduce(MapSet.new(), fn group, taken ->
-      {slug, taken} = unique_slug(slugify(group.download_client), taken)
+      {slug, taken} = unique_slug(ListView.slugify(group.download_client), taken)
       {Map.put(group, :slug, slug), taken}
     end)
     |> elem(0)
@@ -1467,17 +1467,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
       next_free_slug(base, n + 1, taken)
     else
       {candidate, MapSet.put(taken, candidate)}
-    end
-  end
-
-  defp slugify(name) do
-    name
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9]+/, "-")
-    |> String.trim("-")
-    |> case do
-      "" -> "client"
-      slug -> slug
     end
   end
 

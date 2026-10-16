@@ -216,4 +216,57 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
       refute has_element?(view, "a#download-client-#{download.id}")
     end
   end
+
+  describe "open client shortcut" do
+    import Mydia.SettingsFixtures
+
+    test "links straight to the only client's web UI", %{conn: conn} do
+      download_client_config_fixture(%{
+        name: "Fictional Qbit",
+        web_ui_url: "https://qbit.example.org/",
+        enabled: false
+      })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      assert has_element?(
+               view,
+               "a#downloads-open-client[href='https://qbit.example.org/'][target='_blank']"
+             )
+    end
+
+    test "offers a menu when several clients have web UIs", %{conn: conn} do
+      download_client_config_fixture(%{
+        name: "Fictional Qbit",
+        web_ui_url: "https://qbit.example.org/",
+        enabled: false
+      })
+
+      download_client_config_fixture(%{
+        name: "Fictional Deluge",
+        web_ui_url: "https://deluge.example.org/",
+        enabled: false
+      })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      assert has_element?(view, "#downloads-open-client")
+      assert has_element?(view, "a[id^='downloads-open-client-']", "Fictional Qbit")
+
+      assert has_element?(
+               view,
+               "a#downloads-open-client-fictional-qbit[href='https://qbit.example.org/']"
+             )
+
+      assert has_element?(
+               view,
+               "a#downloads-open-client-fictional-deluge[href='https://deluge.example.org/']"
+             )
+    end
+
+    test "is absent without a client", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      refute has_element?(view, "#downloads-open-client")
+    end
+  end
 end

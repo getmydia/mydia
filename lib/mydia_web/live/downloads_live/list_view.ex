@@ -268,4 +268,16 @@ defmodule MydiaWeb.DownloadsLive.ListView do
     reference = download.last_progress_at || download.stalled_since
     DateTime.diff(DateTime.utc_now(), reference, :second)
   end
+
+  @doc "A DOM-id-safe slug for an operator-supplied client name."
+  def slugify(name) do
+    name
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/, "-")
+    |> String.trim("-")
+    |> case do
+      "" -> "client"
+      slug -> slug
+    end
+  end
 end

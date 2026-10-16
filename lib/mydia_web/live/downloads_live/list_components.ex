@@ -190,6 +190,65 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
     """
   end
 
+  attr :client_urls, :map, required: true
+
+  def client_shortcut(%{client_urls: urls} = assigns) when map_size(urls) == 1 do
+    {name, url} = urls |> Map.to_list() |> hd()
+    assigns = assign(assigns, name: name, url: url)
+
+    ~H"""
+    <a
+      id="downloads-open-client"
+      href={@url}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="btn btn-sm btn-ghost"
+      title={"Open #{@name}"}
+      aria-label={"Open #{@name}"}
+    >
+      <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" />
+      <span class="hidden sm:inline ml-1">Open {@name}</span>
+    </a>
+    """
+  end
+
+  def client_shortcut(%{client_urls: urls} = assigns) when map_size(urls) > 1 do
+    assigns = assign(assigns, :clients, Enum.sort_by(urls, fn {name, _url} -> name end))
+
+    ~H"""
+    <div class="dropdown dropdown-end z-20">
+      <button
+        id="downloads-open-client"
+        type="button"
+        tabindex="0"
+        class="btn btn-sm btn-ghost"
+        aria-label="Open download client"
+      >
+        <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" />
+        <span class="hidden sm:inline ml-1">Open client</span>
+      </button>
+      <ul
+        tabindex="0"
+        class="dropdown-content menu bg-base-100 rounded-box shadow-lg border border-base-300 w-52 p-2"
+      >
+        <li :for={{name, url} <- @clients}>
+          <a
+            id={"downloads-open-client-#{ListView.slugify(name)}"}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            phx-click={JS.dispatch("mydia:blur")}
+          >
+            {name}
+          </a>
+        </li>
+      </ul>
+    </div>
+    """
+  end
+
+  def client_shortcut(assigns), do: ~H""
+
   attr :id, :string, required: true
   attr :name, :string, required: true
   attr :url, :string, default: nil
