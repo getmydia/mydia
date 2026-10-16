@@ -99,6 +99,10 @@ class TimelineLayout {
   static const double monthLine = 14;
 
   final double contentWidth;
+
+  /// The view passes `textScaler.scale(1)`. With nonlinear text scaling
+  /// (Android 14+) the real line boxes are no taller than this linear
+  /// estimate, so the layout over-allocates rather than overflows.
   final double textScale;
 
   double get entryWidth => math.max(

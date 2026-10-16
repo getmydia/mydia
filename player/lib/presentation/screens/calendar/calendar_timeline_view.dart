@@ -193,6 +193,8 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
                   child: Center(
                     child: Text(
                       'That is everything scheduled in the next 90 days.',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
                         height: 16 / 12,

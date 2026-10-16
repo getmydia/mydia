@@ -91,8 +91,8 @@ String weekdayAbbreviation(DateTime day) =>
 ///
 /// The resolver already orders by air date, then playable first, then title,
 /// so this preserves order rather than re-sorting. Days with no entries never
-/// appear, which is the whole reason an agenda beats a grid on a small
-/// library.
+/// appear (the timeline adds today itself), so a sparse library gives a short
+/// list rather than a grid of empty days.
 List<MapEntry<DateTime, List<ItemSummary>>> groupByDay(
   List<ItemSummary> entries,
 ) {
