@@ -249,11 +249,13 @@ void main() {
       'the season episodes', (tester) async {
     final hold = Completer<void>();
     final session = _DetailNamesSeasonSession(holdSeason: hold);
-    await _pumpEpisode(tester, session);
+    final fake = await _pumpEpisode(tester, session);
     await pumpUntil(tester, () => session.seasonRequests.isNotEmpty);
     await pumpUntil(tester, () => session.preferenceRequests > 0);
     expect(session.preferenceRequests, greaterThan(0),
         reason: 'the preference must not wait for the season');
+    expect(fake.opened, isNotNull,
+        reason: 'playback must not wait for the season');
     expect(hold.isCompleted, isFalse);
 
     hold.complete();

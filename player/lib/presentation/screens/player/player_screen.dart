@@ -3025,20 +3025,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// reads the tracks `_fetchDetail` builds from the detail.
   /// Season episodes run in parallel with everything when the route named the
   /// show and season. When it did not, they wait for the detail, which fills
-  /// [_showId] and [_seasonNumber], then run in parallel with the subtitle
-  /// preference. Each is isolated, so a failing season fetch never skips the
-  /// preference.
+  /// [_showId] and [_seasonNumber], and then start in the background: nothing
+  /// here waits on them, so neither the subtitle preference nor playback is
+  /// held behind a lookup Up Next only needs by the credits.
+  /// [_fetchSeasonEpisodes] drops an answer for a load that is no longer
+  /// current.
   Future<void> _fetchProgressAndEpisodes(int gen) {
     final isEpisode = widget.mediaType == 'episode';
     final seasonKnown = _showId != null && _seasonNumber != null;
     return runIsolated({
       'detail and subtitle preference': () async {
         await _fetchDetail(gen);
-        await runIsolated({
-          if (isEpisode && !seasonKnown && _isCurrentLoad(gen))
-            'season episodes': () => _fetchSeasonEpisodes(gen),
-          'subtitle preference': () => _fetchSubtitlePreference(gen),
-        });
+        if (isEpisode && !seasonKnown && _isCurrentLoad(gen)) {
+          unawaited(
+            runIsolated({'season episodes': () => _fetchSeasonEpisodes(gen)}),
+          );
+        }
+        await _fetchSubtitlePreference(gen);
       },
       if (isEpisode && seasonKnown)
         'season episodes': () => _fetchSeasonEpisodes(gen),
