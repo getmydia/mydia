@@ -13,6 +13,8 @@ import '../../core/downloads/orphan_download_sweep.dart';
 import '../../core/focus/region_traversal_policy.dart';
 import '../../core/focus/sidebar_focus_boundary.dart';
 import '../../core/layout/window_chrome_inset.dart';
+import '../../core/platform/native_sidebar_state.dart';
+import '../../core/platform/native_tab_bar_channel.dart';
 import '../../core/platform/native_tab_bar_support.dart';
 import '../../domain/navigation/source_nav.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
@@ -34,6 +36,7 @@ import 'nav/current_source.dart';
 import 'nav/floating_rail.dart';
 import 'nav/mobile_drawer.dart';
 import 'nav/nav_badges.dart';
+import 'nav/native_sidebar_host.dart';
 import 'nav/native_tab_bar.dart';
 import 'offline_banner.dart';
 import 'shell_rail_inset.dart';
@@ -256,6 +259,54 @@ class AppShell extends ConsumerStatefulWidget {
           );
         },
       );
+
+  /// Whether the shell lays out for a sidebar. On the native iPad sidebar
+  /// the native width class decides, because at compact width iPadOS shows a
+  /// tab bar of every top-level tab, which only the phone payload fits.
+  @visibleForTesting
+  static bool showsSidebarLayout({
+    required NativeTabBarMode mode,
+    required bool nativeRegular,
+    required bool flutterShowsRail,
+  }) =>
+      mode == NativeTabBarMode.sidebar ? nativeRegular : flutterShowsRail;
+
+  /// The content column's leading inset beside the native sidebar, before
+  /// `railLayers` adds the safe area back. [insets.leading] already includes
+  /// it, so it is taken off here. Until native reports, the collapsed rail's
+  /// inset keeps the first frame from jumping.
+  @visibleForTesting
+  static double nativeSidebarContentLeft({
+    required NativeInsets? insets,
+    required double safeLeft,
+  }) {
+    if (insets == null) return Breakpoints.railContentInset(pinned: false);
+    final edge = insets.leading - safeLeft;
+    return (edge > 0 ? edge : 0) + Breakpoints.railGap;
+  }
+
+  /// Raises the top padding to the native chrome's top inset (the floating
+  /// tab bar iPadOS shows while the sidebar is hidden), so every screen's
+  /// title row clears it the way it clears the status bar.
+  static Widget _clearNativeTop(
+    BuildContext context,
+    NativeInsets? insets,
+    Widget child,
+  ) {
+    // No MediaQuery read until there is something to clear, so platforms
+    // without a native sidebar subscribe to nothing new.
+    final top = insets?.top ?? 0;
+    if (top <= 0) return child;
+    if (top <= MediaQuery.paddingOf(context).top) return child;
+    final data = MediaQuery.of(context);
+    return MediaQuery(
+      data: data.copyWith(
+        padding: data.padding.copyWith(top: top),
+        viewPadding: data.viewPadding.copyWith(top: top),
+      ),
+      child: child,
+    );
+  }
 
   /// Whether the native tab bar should show: the shell's route is current on
   /// the root navigator (no page, dialog or sheet above it: not the immersive
@@ -600,7 +651,21 @@ class _AppShellState extends ConsumerState<AppShell>
     // LayoutBuilder defers building to the layout phase, which can prevent
     // proper repaint propagation on mobile when combined with GlobalKey
     // on the Scaffold (causing the "stuck navigation" bug).
-    final showsRail = Breakpoints.showsRail(context);
+    final nativeMode = NativeTabBarSupport.mode;
+    final nativeSidebar = nativeMode == NativeTabBarMode.sidebar;
+    final showsRail = AppShell.showsSidebarLayout(
+      mode: nativeMode,
+      nativeRegular: nativeSidebar && ref.watch(nativeSidebarRegularProvider),
+      flutterShowsRail: Breakpoints.showsRail(context),
+    );
+    final route = ModalRoute.of(context);
+    // Any route above the shell (page, dialog, sheet) hides the native bar.
+    final shellCurrent = route?.isCurrent ?? true;
+    // A dialog or sheet on the shell's own navigator hides it too. This never
+    // feeds the cast pill below: a popup must not bring the pill back.
+    final shellPopup = _popupObserver?.hasPopup ?? false;
+    // Only a page above the shell brings the floating cast pill back.
+    final coveredByPage = _coverObserver?.isCovered(route) ?? false;
 
     // Shell-level ambient backdrop, fed by the active browse screen. Sits behind
     // the (now transparent) in-shell Scaffolds for all browse screens (plan U5).
@@ -614,7 +679,14 @@ class _AppShellState extends ConsumerState<AppShell>
 
     if (showsRail) {
       final pinned = ref.watch(railPinnedProvider);
-      final contentLeft = Breakpoints.railContentInset(pinned: pinned);
+      final nativeInsets =
+          nativeSidebar ? ref.watch(nativeSidebarInsetsProvider) : null;
+      final contentLeft = nativeSidebar
+          ? AppShell.nativeSidebarContentLeft(
+              insets: nativeInsets,
+              safeLeft: MediaQuery.paddingOf(context).left,
+            )
+          : Breakpoints.railContentInset(pinned: pinned);
       final chrome = WindowChromeInsets.of(context);
       return Scaffold(
         backgroundColor: Colors.transparent,
@@ -623,7 +695,9 @@ class _AppShellState extends ConsumerState<AppShell>
             Positioned.fill(child: backdrop),
             Positioned.fill(
               child: AppShell.railLayers(
-                regionsEnabled: InputCapabilities.directionalPrimary,
+                // UIKit owns focus in the native sidebar.
+                regionsEnabled:
+                    !nativeSidebar && InputCapabilities.directionalPrimary,
                 contentLeft: contentLeft,
                 railScope: _sidebarScopeNode,
                 contentScope: _contentScopeNode,
@@ -632,42 +706,61 @@ class _AppShellState extends ConsumerState<AppShell>
                 // reserve, so the content column narrows what it keeps
                 // clear to `AppShell.contentInsets` before its own screen
                 // (via `WindowTitleRow`) reads `WindowChromeInsets.of`.
-                content: WindowChromeInsets.scope(
-                  insets: AppShell.contentInsets(chrome),
-                  child: AppShell.contentGutter(
-                    child: Column(
-                      children: [
-                        // The banners belong beside the rail, not under it.
-                        AppShell.bannerArea(
-                          child: ShellPageInset(child: _banners(isOffline)),
-                        ),
-                        Expanded(child: widget.child),
-                      ],
+                content: AppShell._clearNativeTop(
+                  context,
+                  nativeInsets,
+                  WindowChromeInsets.scope(
+                    insets: AppShell.contentInsets(chrome),
+                    child: AppShell.contentGutter(
+                      child: Column(
+                        children: [
+                          // The banners belong beside the rail, not under it.
+                          AppShell.bannerArea(
+                            child: ShellPageInset(child: _banners(isOffline)),
+                          ),
+                          Expanded(child: widget.child),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-                railBuilder: (onExitRequested) => FloatingRail(
-                  location: location,
-                  onNavigate: _navigateTo,
-                  showBackToMydia: showBackToMydia,
-                  isOffline: isOffline,
-                  // Gated like the regions: off-tier the sidebar row falls
-                  // back to the per-row node FocusHighlight creates, which
-                  // is what keeps `region`'s "unchanged off-tier" claim
-                  // true rather than borrowing the shell-owned node.
-                  selectedRowFocusNode: InputCapabilities.directionalPrimary
-                      ? _sidebarFocusNode
-                      : null,
-                  onExitRequested: onExitRequested,
-                  // Clears the macOS traffic lights; with no window chrome
-                  // (phones, tablets, web) the top padding is the status
-                  // bar instead, which the rail must clear too.
-                  topInset: chrome.leading > 0
-                      ? chrome.height
-                      : chrome.isZero
-                          ? MediaQuery.paddingOf(context).top
-                          : 0,
-                ),
+                railBuilder: (onExitRequested) => nativeSidebar
+                    ? NativeSidebarHost(
+                        location: location,
+                        onNavigate: _navigateTo,
+                        visible: AppShell.nativeBarVisible(
+                          shellCurrent: shellCurrent,
+                          drawerOpen: false,
+                          shellPopup: shellPopup,
+                        ),
+                        isOffline: isOffline,
+                        showBackToMydia: showBackToMydia,
+                        settingsBadge: settingsTabBadge(
+                            updatePending: settingsUpdatePending(ref)),
+                      )
+                    : FloatingRail(
+                        location: location,
+                        onNavigate: _navigateTo,
+                        showBackToMydia: showBackToMydia,
+                        isOffline: isOffline,
+                        // Gated like the regions: off-tier the sidebar row falls
+                        // back to the per-row node FocusHighlight creates, which
+                        // is what keeps `region`'s "unchanged off-tier" claim
+                        // true rather than borrowing the shell-owned node.
+                        selectedRowFocusNode:
+                            InputCapabilities.directionalPrimary
+                                ? _sidebarFocusNode
+                                : null,
+                        onExitRequested: onExitRequested,
+                        // Clears the macOS traffic lights; with no window chrome
+                        // (phones, tablets, web) the top padding is the status
+                        // bar instead, which the rail must clear too.
+                        topInset: chrome.leading > 0
+                            ? chrome.height
+                            : chrome.isZero
+                                ? MediaQuery.paddingOf(context).top
+                                : 0,
+                      ),
               ),
             ),
           ],
@@ -677,14 +770,6 @@ class _AppShellState extends ConsumerState<AppShell>
 
     final navEntries = ref.watch(sourceNavEntriesProvider(location));
     final native = NativeTabBarSupport.supported;
-    final route = ModalRoute.of(context);
-    // Any route above the shell (page, dialog, sheet) hides the native bar.
-    final shellCurrent = route?.isCurrent ?? true;
-    // A dialog or sheet on the shell's own navigator hides it too. This never
-    // feeds the cast pill below: a popup must not bring the pill back.
-    final shellPopup = _popupObserver?.hasPopup ?? false;
-    // Only a page above the shell brings the floating cast pill back.
-    final coveredByPage = _coverObserver?.isCovered(route) ?? false;
 
     return ReportedNativeBar(
       shown: AppShell.nativeBarReported(

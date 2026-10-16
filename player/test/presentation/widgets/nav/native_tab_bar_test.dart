@@ -184,7 +184,7 @@ void main() {
     });
 
     test('an unknown id gets a circle', () {
-      expect(nativeTabSymbol('calendar'), 'circle');
+      expect(nativeTabSymbol('f-123'), 'circle');
     });
   });
 

@@ -364,9 +364,27 @@ final sourceLocksProvider = Provider<Map<SourceId, SourceLock>>((ref) {
 
 /// Sources that ask to authenticate before they open: every locked or
 /// hidden one while the app is locked, none once it is unlocked.
+///
+/// Notifies only when the set changes. Every source-records write (a picker
+/// switch included) rebuilds [sourceLocksProvider], and a fresh `Set` never
+/// compares equal, so the router's listener on this provider ran its
+/// redirect, which reads [activeSourceIdProvider], in the middle of that
+/// write's flush. That rebuilt the active source before this notification
+/// finished marking it dirty, and Riverpod rebuilt it a second time in the
+/// same frame ("Tried to rebuild ... multiple times in the same frame").
 final gatedSourceIdsProvider = Provider<Set<SourceId>>((ref) {
-  if (ref.watch(sourceLockProvider)) return const {};
-  return ref.watch(sourceLocksProvider).keys.toSet();
+  final key = ref.watch(_gatedSourceKeyProvider);
+  if (key.isEmpty) return const {};
+  return {for (final id in key.split('\n')) SourceId(id)};
+});
+
+/// The gated ids as one sorted string, so a write that changes none compares
+/// equal and does not notify. Ids hold no newline.
+final _gatedSourceKeyProvider = Provider<String>((ref) {
+  if (ref.watch(sourceLockProvider)) return '';
+  final ids = [for (final id in ref.watch(sourceLocksProvider).keys) id.value]
+    ..sort();
+  return ids.join('\n');
 });
 
 /// Whether the window must stay out of screenshots and the app switcher:
@@ -378,17 +396,35 @@ final windowSecureProvider = Provider<bool>((ref) =>
 /// while the app is locked. Everything that lists or counts sources reads
 /// this, so a hidden source leaves no trace, not even in the switcher's
 /// decision to appear.
+///
+/// The list compares equal when it holds equal sources in the same order, so
+/// a records write that changes none (a picker switch) does not notify. The
+/// router listens to this, and a notification mid-flush runs its redirect,
+/// which reads [activeSourceIdProvider] before that flush has finished
+/// marking it dirty, so it was rebuilt twice in one frame.
 final thirdPartySourcesProvider = Provider<List<Source>>((ref) {
   final snapshot = _snapshotOf(ref);
   if (snapshot == null) return const [];
   final unlocked = ref.watch(sourceLockProvider);
-  return [
+  return _SourceList([
     for (final record in snapshot.accounts)
       for (final source in record.sources)
         if (unlocked || record.lockOf(source.server.id) != SourceLock.hidden)
           source,
-  ];
+  ]);
 });
+
+/// An unmodifiable list whose equality is element-wise `==`.
+class _SourceList extends UnmodifiableListView<Source> {
+  _SourceList(super.source);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _SourceList && listEquals(this, other);
+
+  @override
+  int get hashCode => Object.hashAll(this);
+}
 
 /// The stored profiles of an account: a Plex account's Home users, the
 /// single owner for every other kind. Empty while loading or unknown.

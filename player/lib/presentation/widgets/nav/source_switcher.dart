@@ -98,42 +98,75 @@ class SourceSwitcher extends ConsumerWidget {
     BuildContext anchorContext,
     WidgetRef ref,
     Source current,
-  ) async {
-    final choice = await showSourcePicker(
-      anchorContext,
-      currentId: isAllServersLocation(location) ? null : current.id,
-    );
-    // The header outlives the picker in practice, but `ref` is dead once it
-    // unmounts and the analyzer cannot see that.
-    if (choice == null || !anchorContext.mounted) return;
-    switch (choice) {
-      case AddServer():
-        onNavigate('/sources/add');
-      case ManageServers():
-        onNavigate('/sources/manage');
-      case ToggleHidden():
-        if (ref.read(sourceLockProvider)) {
-          ref.read(sourceLockProvider.notifier).lock();
-        } else {
-          onNavigate(unlockLocation('/sources/manage'));
-        }
-      case PickAllServers():
-        (onSwitchSource ?? onNavigate)(allServersRoot);
-      case PickSource(:final source) when source.account.needsReauth:
-        onNavigate('/sources/add/${source.kind.name}'
-            '?account=${source.account.id}');
-      case PickSource(:final source):
-        ref.read(selectedSourceIdProvider.notifier).select(source.id);
-        (onSwitchSource ?? onNavigate)(sourceHomeLocation(source.id));
-      case SwitchUser(:final account):
-        await showPlexHomeSheet(
-          anchorContext,
-          account: account,
-          serverId: current.account.id == account.id ? current.server.id : null,
-          onSwitched: (id) =>
-              (onSwitchSource ?? onNavigate)(sourceHomeLocation(id)),
-        );
-    }
+  ) =>
+      openSourcePicker(
+        anchorContext,
+        ref,
+        location: location,
+        current: current,
+        onNavigate: onNavigate,
+        onSwitchSource: onSwitchSource,
+      );
+}
+
+/// The source the server header names for [location], or null while there
+/// are no switchable sources. Reads once: callers that must rebuild watch
+/// [switchableSourcesProvider] themselves.
+Source? currentSwitcherSource(WidgetRef ref, String location) {
+  final sources = ref.read(switchableSourcesProvider);
+  if (sources.isEmpty) return null;
+  return SourceSwitcher.currentFor(
+    sources,
+    location,
+    ref.read(activeSourceIdProvider),
+  );
+}
+
+/// Opens the server picker anchored at [anchorContext] and acts on the
+/// choice: Add, Manage, hidden-source toggle, All servers, a source or a
+/// Plex Home user. Shared by the in-app header and the native iPad sidebar.
+Future<void> openSourcePicker(
+  BuildContext anchorContext,
+  WidgetRef ref, {
+  required String location,
+  required Source current,
+  required ValueChanged<String> onNavigate,
+  ValueChanged<String>? onSwitchSource,
+}) async {
+  final choice = await showSourcePicker(
+    anchorContext,
+    currentId: isAllServersLocation(location) ? null : current.id,
+  );
+  // The header outlives the picker in practice, but `ref` is dead once it
+  // unmounts and the analyzer cannot see that.
+  if (choice == null || !anchorContext.mounted) return;
+  switch (choice) {
+    case AddServer():
+      onNavigate('/sources/add');
+    case ManageServers():
+      onNavigate('/sources/manage');
+    case ToggleHidden():
+      if (ref.read(sourceLockProvider)) {
+        ref.read(sourceLockProvider.notifier).lock();
+      } else {
+        onNavigate(unlockLocation('/sources/manage'));
+      }
+    case PickAllServers():
+      (onSwitchSource ?? onNavigate)(allServersRoot);
+    case PickSource(:final source) when source.account.needsReauth:
+      onNavigate('/sources/add/${source.kind.name}'
+          '?account=${source.account.id}');
+    case PickSource(:final source):
+      ref.read(selectedSourceIdProvider.notifier).select(source.id);
+      (onSwitchSource ?? onNavigate)(sourceHomeLocation(source.id));
+    case SwitchUser(:final account):
+      await showPlexHomeSheet(
+        anchorContext,
+        account: account,
+        serverId: current.account.id == account.id ? current.server.id : null,
+        onSwitched: (id) =>
+            (onSwitchSource ?? onNavigate)(sourceHomeLocation(id)),
+      );
   }
 }
 
