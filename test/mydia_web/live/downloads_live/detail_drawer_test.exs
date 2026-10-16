@@ -5,7 +5,9 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawerTest do
   import Mydia.AccountsFixtures
   import Mydia.DownloadsFixtures
   import Mydia.MediaFixtures
-  import Mydia.MetadataCacheHelpers
+  import Mydia.MetadataStub, only: [setup_metadata_stub: 1]
+
+  setup :setup_metadata_stub
 
   setup %{conn: conn} do
     %{conn: log_in_user(conn, admin_user_fixture())}
@@ -112,8 +114,6 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawerTest do
     conn: conn
   } do
     download = queued()
-    # The match dialog searches on open; keep that off the network.
-    warm_movie_search_cache(download.title, [], [])
     {:ok, view, _html} = live(conn, ~p"/downloads?download=#{download.id}")
 
     view |> element("#drawer-change-match-#{download.id}") |> render_click()
