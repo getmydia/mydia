@@ -6,6 +6,10 @@ class MainFlutterWindow: NSWindow, NSToolbarDelegate {
   /// is not the Flutter controller; reach it through here.
   private(set) var flutterViewController: FlutterViewController?
 
+  /// Owns `mydia/native-tab-bar`; held here because it holds its
+  /// collaborators weakly.
+  private var nativeTabBar: NativeTabBarPlugin?
+
   /// Height of the band the Flutter title row draws into.
   /// kMacTitleBarOverlap in lib/core/layout/window_chrome_inset.dart.
   private let titleBandHeight: CGFloat = 40
@@ -72,14 +76,15 @@ class MainFlutterWindow: NSWindow, NSToolbarDelegate {
     let flutterViewController = FlutterViewController()
     self.flutterViewController = flutterViewController
     let windowFrame = self.frame
-    // Placeholder until the sidebar controller lands.
-    let sidebar = NSViewController()
-    sidebar.view = NSView()
+    let sidebar = MydiaSidebarViewController()
     let split = MydiaSplitViewController(flutter: flutterViewController, sidebar: sidebar)
     self.contentViewController = split
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    nativeTabBar = NativeTabBarPlugin(
+      messenger: flutterViewController.engine.binaryMessenger,
+      split: split, sidebar: sidebar, window: self)
 
     // Make the window look more native
     self.titlebarAppearsTransparent = true
