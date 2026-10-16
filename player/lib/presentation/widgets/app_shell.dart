@@ -293,9 +293,12 @@ class AppShell extends ConsumerStatefulWidget {
     NativeInsets? insets,
     Widget child,
   ) {
+    // No MediaQuery read until there is something to clear, so platforms
+    // without a native sidebar subscribe to nothing new.
     final top = insets?.top ?? 0;
+    if (top <= 0) return child;
+    if (top <= MediaQuery.paddingOf(context).top) return child;
     final data = MediaQuery.of(context);
-    if (top <= data.padding.top) return child;
     return MediaQuery(
       data: data.copyWith(
         padding: data.padding.copyWith(top: top),
