@@ -228,8 +228,17 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
     if let selectedId { applySelection(selectedId) }
   }
 
-  /// Moves the selection without emitting `onTabSelected`.
-  func select(_ id: String) {
+  /// Moves the selection without emitting `onTabSelected`. Nil clears it
+  /// on an iPad, for a route no row matches; the iPhone's bar always has a
+  /// selection, so there it leaves the bar alone.
+  func select(_ id: String?) {
+    guard let id else {
+      guard usesSidebar else { return }
+      selectedId = nil
+      selectedTab = nil
+      reportInsets()
+      return
+    }
     selectedId = id
     applySelection(id)
   }
@@ -352,8 +361,7 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
   /// floating tab bar shown while the sidebar is hidden.
   private func reportInsets() {
     var insets: [Double] = [0, 0, 0]
-    if barVisible, let content = (selectedTab?.viewController ?? selectedViewController)?.view,
-       content.window != nil {
+    if barVisible, let content = visibleContent() {
       let safe = content.safeAreaInsets
       if usesSidebar {
         let frame = content.convert(content.bounds, to: view)
@@ -367,6 +375,26 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
     onInsetsChanged?(insets[0], insets[1], insets[2])
   }
 
+  /// The tab content UIKit has on screen. On an iPad that is not always the
+  /// selected tab's own controller: after `setSidebar` swaps in new tabs, or
+  /// with no tab selected, UIKit keeps showing another tab's content, while
+  /// the selected one's view sits outside the window with nothing to measure.
+  private func visibleContent() -> UIView? {
+    if let selected = (selectedTab?.viewController ?? selectedViewController)?.view,
+       selected.window != nil {
+      return selected
+    }
+    guard usesSidebar else { return nil }
+    func find(_ v: UIView) -> UIView? {
+      if v is PassThroughView, v.window != nil { return v }
+      for sub in v.subviews {
+        if let found = find(sub) { return found }
+      }
+      return nil
+    }
+    return find(view)
+  }
+
   private func reportLayout() {
     guard usesSidebar else { return }
     let sidebar = isSidebarLayout
@@ -378,13 +406,22 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
 
   /// A hit on the sidebar, the floating tab bar or their buttons. UIKit
   /// nests them in full-screen containers, which would claim every touch;
-  /// those and the tab content are refused.
+  /// those and the tab content are refused. While the sidebar floats over
+  /// the content (portrait), a touch beside it is UIKit's: it dismisses
+  /// the sidebar, as everywhere on iPadOS, rather than reaching a Flutter
+  /// screen dimmed underneath.
   private func sidebarHit(_ hit: UIView) -> UIView? {
-    if hit is PassThroughView { return nil }
     if hit.bounds.width >= view.bounds.width, hit.bounds.height >= view.bounds.height {
-      return nil
+      return sidebarOverlaysContent ? hit : nil
     }
+    if hit is PassThroughView { return nil }
     return hit
+  }
+
+  /// The sidebar is showing on top of the content instead of beside it.
+  private var sidebarOverlaysContent: Bool {
+    guard isSidebarLayout, !sidebar.isHidden, let content = visibleContent() else { return false }
+    return content.convert(content.bounds, to: view).minX + content.safeAreaInsets.left <= 0
   }
 
   /// The accessory's outermost private wrapper (its glass capsule) that is

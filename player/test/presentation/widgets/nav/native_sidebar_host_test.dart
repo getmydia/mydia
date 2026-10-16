@@ -113,6 +113,12 @@ void main() {
     expect(h.last('setVisible'), isTrue);
   });
 
+  testWidgets('a route with no row clears the selection', (tester) async {
+    final h = await _pump(tester, location: '/sources/manage');
+    expect(h.methods, contains('select'));
+    expect(h.last('select'), isNull);
+  });
+
   testWidgets('a destination tap navigates to its route', (tester) async {
     final h = await _pump(tester);
     await h.fromNative(tester, 'tabSelected', 'settings');

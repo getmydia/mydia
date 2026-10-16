@@ -171,8 +171,11 @@ class _NativeSidebarHostState extends ConsumerState<NativeSidebarHost> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(_channel.setSidebar(sidebar.toMap()));
+      // Like the Flutter sidebar, a route with no row highlights none.
       final selected = selectedNativeSidebarId(entries, location);
-      if (selected != null) unawaited(_channel.select(selected));
+      unawaited(selected == null
+          ? _channel.clearSelection()
+          : _channel.select(selected));
       unawaited(_channel.setVisible(visible));
     });
     // The picker's popover opens beside a narrow anchor, so this sits just

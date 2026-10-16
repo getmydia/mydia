@@ -191,6 +191,7 @@ class NativeTabBarChannel {
   List<NativeTab>? _tabs;
   Map<String, Object?>? _sidebar;
   String? _selected;
+  bool _cleared = false;
   bool? _visible;
 
   // Native starts with no accessory, which is what null means.
@@ -243,9 +244,19 @@ class NativeTabBarChannel {
   Future<void> select(String id) {
     if (id == _selected) return Future.value();
     _selected = id;
+    _cleared = false;
     return _send('select', id, () {
       if (_selected == id) _selected = null;
     });
+  }
+
+  /// Leaves no row selected, for a route the iPad sidebar has no row for.
+  /// The iPhone's bar always keeps a selection and ignores this.
+  Future<void> clearSelection() {
+    if (_cleared) return Future.value();
+    _cleared = true;
+    _selected = null;
+    return _send('select', null, () => _cleared = false);
   }
 
   Future<void> setVisible(bool visible) {

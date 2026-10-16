@@ -70,7 +70,8 @@ final class NativeTabBarPlugin: NSObject {
         tabs.setSidebar(sections)
         result(nil)
       case "select":
-        if let id = call.arguments as? String { tabs.select(id) }
+        // A nil id clears the selection: the route matches no row.
+        tabs.select(call.arguments as? String)
         result(nil)
       case "setVisible":
         tabs.setBarVisible((call.arguments as? Bool) ?? false)

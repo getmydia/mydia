@@ -187,6 +187,31 @@ void main() {
           ['setSidebar', 'setTabs', 'setSidebar', 'setTabs']);
     });
 
+    test('clearSelection sends a null select once, until a select', () async {
+      await bar.select('home');
+      await bar.clearSelection();
+      await bar.clearSelection();
+      await bar.select('home');
+      await bar.clearSelection();
+      expect(calls.map((c) => '${c.method}:${c.arguments}'), [
+        'select:home',
+        'select:null',
+        'select:home',
+        'select:null',
+      ]);
+    });
+
+    test('a failed clearSelection is sent again', () async {
+      messenger.setMockMethodCallHandler(_channel, (call) async {
+        calls.add(call);
+        throw PlatformException(code: 'boom');
+      });
+      await bar.clearSelection();
+      await bar.clearSelection();
+      expect(calls.map((c) => '${c.method}:${c.arguments}'),
+          ['select:null', 'select:null']);
+    });
+
     test('insetsChanged reads a map', () async {
       final events = <NativeTabBarEvent>[];
       bar.events.listen(events.add);
