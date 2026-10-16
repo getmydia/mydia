@@ -89,6 +89,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:client_urls, client_urls())
      |> assign(:drawer_id, nil)
      |> assign(:drawer_download, nil)
+     |> assign(:rows_by_id, %{})
      |> assign(:downloads_empty?, true)
      # Initialize all streams
      |> stream(:downloads, [])
@@ -1283,6 +1284,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
         all = Downloads.list_downloads_with_status(bounded: true)
 
         socket
+        |> assign(:rows_by_id, Map.new(all, &{&1.id, &1}))
         |> assign_overview(all)
         |> load_tab(tab, all)
         |> assign_drawer(all)
@@ -1362,8 +1364,15 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp assign_drawer(%{assigns: %{active_tab: :external}} = socket, _all),
     do: assign(socket, :drawer_download, nil)
 
-  defp assign_drawer(socket, nil),
-    do: assign_drawer(socket, Downloads.list_downloads_with_status(bounded: true))
+  # A drawer-only patch reuses the rows the last load polled, so opening the
+  # drawer never polls the clients again. Only an id that load did not see (a
+  # link to a download added since) pays for a fetch.
+  defp assign_drawer(socket, nil) do
+    case Map.fetch(socket.assigns.rows_by_id, socket.assigns.drawer_id) do
+      {:ok, download} -> assign_drawer(socket, [download])
+      :error -> assign_drawer(socket, Downloads.list_downloads_with_status(bounded: true))
+    end
+  end
 
   defp assign_drawer(socket, all) do
     case Enum.find(all, &(&1.id == socket.assigns.drawer_id)) do
