@@ -4,8 +4,9 @@
 /// send the window's `start`/`end` to the server, to decide which day
 /// section is "today", and to group and compare entries by calendar day.
 /// Kept in one file so those points cannot drift into subtly different
-/// definitions of "day" from one another. The week helpers live here for the
-/// same reason: a week is seven of those days, starting on a Monday.
+/// definitions of "day" from one another. The week and month helpers live here
+/// for the same reason: a week is seven of those days, starting on a Monday,
+/// and a month is the days sharing a first.
 library;
 
 import '../../../domain/sources/item.dart';
@@ -24,6 +25,24 @@ extension CalendarItem on ItemSummary {
   /// Playability is having a version to play and nothing else. The server
   /// sends no separate flag, so the two cannot drift apart.
   bool get isPlayable => defaultVersionId != null;
+
+  /// The show's name for an episode, the movie's own title for a movie.
+  String get calendarTitle =>
+      ref.kind == ItemKind.movie ? title : showTitle ?? '';
+
+  /// `S02E05` for an episode, `Movie` for a movie.
+  String get calendarNumbering {
+    if (ref.kind == ItemKind.movie) return 'Movie';
+    final season = (parentIndex ?? 0).toString().padLeft(2, '0');
+    final episode = (index ?? 0).toString().padLeft(2, '0');
+    return 'S${season}E$episode';
+  }
+
+  /// The numbering, then the episode title when there is one.
+  String get calendarSubtitle {
+    if (ref.kind == ItemKind.movie || title.isEmpty) return calendarNumbering;
+    return '$calendarNumbering · $title';
+  }
 }
 
 /// Short weekday names, indexed by `DateTime.weekday - 1` (Monday first).
@@ -150,6 +169,33 @@ String formatWeekLabel(DateTime weekStart) {
   }
 
   return '$startMonth ${start.day} – ${end.day}, ${end.year}';
+}
+
+/// `October` for any day in October.
+String monthName(DateTime day) => _monthNames[day.month - 1];
+
+/// The month button's label: `October`, or `January 2027` outside [today]'s
+/// year.
+String formatMonth(DateTime month, DateTime today) => month.year == today.year
+    ? monthName(month)
+    : '${monthName(month)} ${month.year}';
+
+/// The month sheet's title, which always names the year.
+String formatMonthYear(DateTime month) => '${monthName(month)} ${month.year}';
+
+/// The first of every month that touches `[start, end]`, oldest first.
+///
+/// Steps by overflowing the month field, which `DateTime` normalizes across
+/// a year boundary.
+List<DateTime> monthsInWindow(DateTime start, DateTime end) {
+  final last = DateTime(end.year, end.month);
+  final months = <DateTime>[];
+  var month = DateTime(start.year, start.month);
+  while (!month.isAfter(last)) {
+    months.add(month);
+    month = DateTime(month.year, month.month + 1);
+  }
+  return months;
 }
 
 String _shortMonthName(DateTime day) =>

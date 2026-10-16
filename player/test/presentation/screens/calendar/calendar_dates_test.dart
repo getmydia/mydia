@@ -217,4 +217,53 @@ void main() {
       );
     });
   });
+
+  group('calendar text', () {
+    test('an episode is titled by its show and numbered', () {
+      final e = calendarEntry(
+        '1',
+        DateTime(2026, 10, 16),
+        title: 'The Tide Ledger',
+        season: 2,
+        episode: 5,
+      );
+      expect(e.calendarTitle, 'A Show');
+      expect(e.calendarNumbering, 'S02E05');
+      expect(e.calendarSubtitle, 'S02E05 · The Tide Ledger');
+    });
+
+    test('a movie is titled by itself and labelled Movie', () {
+      final m = calendarEntry(
+        '2',
+        DateTime(2026, 10, 16),
+        kind: ItemKind.movie,
+        title: 'Brasswork',
+      );
+      expect(m.calendarTitle, 'Brasswork');
+      expect(m.calendarNumbering, 'Movie');
+      expect(m.calendarSubtitle, 'Movie');
+    });
+  });
+
+  group('month helpers', () {
+    test('formatMonth omits the current year and names another', () {
+      final today = DateTime(2026, 10, 16);
+      expect(formatMonth(DateTime(2026, 11), today), 'November');
+      expect(formatMonth(DateTime(2027, 1), today), 'January 2027');
+    });
+
+    test('formatMonthYear always names the year', () {
+      expect(formatMonthYear(DateTime(2026, 11)), 'November 2026');
+    });
+
+    test('monthsInWindow lists every month the window touches', () {
+      expect(monthsInWindow(DateTime(2026, 9, 16), DateTime(2027, 1, 14)), [
+        DateTime(2026, 9),
+        DateTime(2026, 10),
+        DateTime(2026, 11),
+        DateTime(2026, 12),
+        DateTime(2027, 1),
+      ]);
+    });
+  });
 }
