@@ -388,6 +388,11 @@ GoRouter appRouter(Ref ref) {
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         observers: [ref.read(shellPopupObserverProvider)],
+        // go_router forwards the shell navigator's pages to the root
+        // observers by default, and PageCoverObserver would then count every
+        // shell page (Home, Movies...) as a page covering the shell, hiding
+        // the macOS sidebar on all of them.
+        notifyRootObserver: false,
         builder: (context, state, child) => AppShell(
           location: state.matchedLocation,
           child: child,
