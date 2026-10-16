@@ -12,6 +12,7 @@ defmodule MydiaWeb.IndexerComponents do
 
   import MydiaWeb.CoreComponents, only: [button: 1, icon: 1]
 
+  alias Mydia.Indexers.CardigannSummary
   alias Mydia.Indexers.Structs.IndexerProgress
 
   @doc """
@@ -30,10 +31,14 @@ defmodule MydiaWeb.IndexerComponents do
   Pass `retest_paused_event` to render a "Retest & search again" button on rows
   Prowlarr reported paused indexers for; it sends that event with `phx-value-id`
   set to the indexer id.
+
+  Pass `cardigann` (a `%Mydia.Indexers.CardigannSummary{}`) to show which
+  Cardigann engine runs the library trackers and how many are enabled.
   """
   attr :progress, :map, required: true
   attr :retry_event, :string, default: nil
   attr :retest_paused_event, :string, default: nil
+  attr :cardigann, CardigannSummary, default: nil
 
   def indexer_search_status(assigns) do
     now = DateTime.utc_now()
@@ -82,6 +87,13 @@ defmodule MydiaWeb.IndexerComponents do
           />
           <span :if={@searching} class="sr-only">Searching indexers</span>
           <span>{@total_results} results · {@done}/{@total} indexers</span>
+          <span
+            :if={@cardigann && @cardigann.installed > 0}
+            id="indexer-search-cardigann"
+            class="badge badge-sm badge-ghost"
+          >
+            {CardigannSummary.label(@cardigann)}
+          </span>
           <span :if={@failed > 0} class="badge badge-sm badge-error">{@failed} failed</span>
           <span
             :if={@paused > 0}

@@ -125,6 +125,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:results_empty?, false)
      |> assign(:indexer_errors, [])
      |> assign(:indexer_progress, %{})
+     |> assign(:cardigann_summary, nil)
      |> assign(:search_id, 0)
      # Auto search state
      |> assign(:auto_searching, false)
