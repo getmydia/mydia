@@ -11,6 +11,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
 
   alias Mydia.Indexers.Cardigann.EngineSupport
   alias Mydia.Indexers.Cardigann.EngineSwitcher.{Status, Transition}
+  alias Mydia.Indexers.CardigannSummary
 
   @engines [
     %{
@@ -273,8 +274,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
   defp selected(%Status{transition: %Transition{target: target}}), do: target
   defp selected(%Status{active: active}), do: active
 
-  defp engine_name(:builtin), do: "Built-in"
-  defp engine_name(:prowlarr), do: "Prowlarr-based"
+  defp engine_name(engine), do: CardigannSummary.engine_label(engine)
 
   defp other_name(:builtin), do: engine_name(:prowlarr)
   defp other_name(:prowlarr), do: engine_name(:builtin)

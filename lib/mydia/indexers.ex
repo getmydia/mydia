@@ -1128,6 +1128,12 @@ defmodule Mydia.Indexers do
     }
   end
 
+  @doc "See `Mydia.Indexers.CardigannSummary.build/0`."
+  defdelegate cardigann_summary(), to: Mydia.Indexers.CardigannSummary, as: :build
+
+  @doc "See `Mydia.Indexers.CardigannSummary.status_map/0`."
+  defdelegate cardigann_status_map(), to: Mydia.Indexers.CardigannSummary, as: :status_map
+
   ## FlareSolverr Functions
 
   @doc """
