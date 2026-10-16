@@ -237,6 +237,18 @@ void invalidateSourceContainerWrites(
 /// [item] was dismissed from Continue Watching; only the rail
 /// changes.
 void invalidateSourceContinueWatchingWrites(WidgetRef ref, ItemRef item) =>
-    unawaited(ref
-        .read(invalidatorProvider)
+    _invalidateContinueWatchingRemoved(ref.read(invalidatorProvider), item);
+
+/// [invalidateSourceContinueWatchingWrites] through a container, for a
+/// removal that finishes after its row is unmounted.
+void invalidateSourceContinueWatchingContainerWrites(
+  ProviderContainer container,
+  ItemRef item,
+) =>
+    _invalidateContinueWatchingRemoved(
+        container.read(invalidatorProvider), item);
+
+void _invalidateContinueWatchingRemoved(
+        Invalidator invalidator, ItemRef item) =>
+    unawaited(invalidator
         .invalidate(SourceRules.continueWatchingRemoved(item.sourceId)));

@@ -117,6 +117,8 @@ class _HomeContinueWatchingRowState
     final continueWatching = _capability(item);
     if (continueWatching == null) return;
     final toaster = Toaster.of(context);
+    // The removal can outlive this row; a container does not.
+    final container = ProviderScope.containerOf(context, listen: false);
     final key = item.dismissRef;
     setState(() => _hidden.add(key));
     try {
@@ -129,7 +131,7 @@ class _HomeContinueWatchingRowState
       );
       return;
     }
-    if (mounted) invalidateSourceContinueWatchingWrites(ref, key);
+    invalidateSourceContinueWatchingContainerWrites(container, key);
   }
 }
 

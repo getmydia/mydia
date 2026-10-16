@@ -446,6 +446,28 @@ void main() {
           containsAll(SourceRules.continueWatchingRemoved(fakeSourceId)));
     });
 
+    testWidgets('a removal that outlives Home still invalidates the rules',
+        (t) async {
+      final gate = Completer<void>();
+      final fake = FakeResumingSource(resuming: [cw1])..removeHold = gate;
+      final invalidator = _RecordingInvalidator();
+      await pumpHome(t, [fake],
+          scope: const OneServer(fakeSourceId),
+          overrides: [invalidatorProvider.overrideWithValue(invalidator)]);
+      await t.longPress(find.byKey(sourceCard('m1')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('home-continue-remove')));
+      await t.pump();
+      homeRouter.go('/all/x');
+      await t.pumpAndSettle();
+      expect(find.byType(HomeScreen), findsNothing);
+      gate.complete();
+      await t.pumpAndSettle();
+      expect(fake.removed, [cw1.ref]);
+      expect(invalidator.targets,
+          containsAll(SourceRules.continueWatchingRemoved(fakeSourceId)));
+    });
+
     testWidgets('a failing Continue Watching hides the row, keeps the rest',
         (t) async {
       final fake = FakeResumingSource()

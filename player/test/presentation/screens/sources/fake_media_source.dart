@@ -236,6 +236,9 @@ class FakeResumingSource extends FakeMediaSource implements ContinueWatching {
   /// When set, [continueWatching] waits on it before answering.
   Completer<void>? hold;
 
+  /// When set, [removeFromContinueWatching] waits on it before answering.
+  Completer<void>? removeHold;
+
   /// Refs [canRemoveFromContinueWatching] answers false for.
   final unremovable = <ItemRef>{};
 
@@ -257,6 +260,7 @@ class FakeResumingSource extends FakeMediaSource implements ContinueWatching {
 
   @override
   Future<void> removeFromContinueWatching(ItemRef ref) async {
+    await removeHold?.future;
     if (removeError case final e?) throw e;
     removed.add(ref);
     resuming = [
