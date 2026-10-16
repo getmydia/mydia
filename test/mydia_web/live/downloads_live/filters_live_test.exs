@@ -109,7 +109,38 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
     queued("Copper Lantern")
     {:ok, view, _html} = live(conn, ~p"/downloads")
 
-    assert view |> element("#downloads-tab-queue-count") |> render() =~ "2"
+    text =
+      view
+      |> element("#downloads-tab-queue-count")
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.text()
+      |> String.trim()
+
+    assert text == "2"
+  end
+
+  test "changing the filters clears the selection", %{conn: conn} do
+    first = queued("Fictional Salt Meridian")
+    queued("Copper Lantern")
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+
+    render_click(view, "toggle_select", %{"id" => first.id})
+    assert has_element?(view, "#downloads-batch-bar")
+
+    view |> form("#downloads-filter-form", %{"q" => "salt"}) |> render_change()
+
+    refute has_element?(view, "#downloads-batch-bar")
+  end
+
+  test "a client filter survives a search change when no client select is shown", %{conn: conn} do
+    queued("Fictional Salt Meridian")
+    {:ok, view, _html} = live(conn, ~p"/downloads?q=salt&client=alpha")
+
+    assert has_element?(view, "#downloads-filter-form input[type=hidden][name=client]")
+    view |> form("#downloads-filter-form", %{"q" => "sal"}) |> render_change()
+
+    assert_patch(view, ~p"/downloads?q=sal&client=alpha")
   end
 
   test "the stats bar is hidden with an empty queue and shown with one active download", %{
@@ -164,6 +195,7 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
       client =
         download_client_config_fixture(%{
           name: "Alpha Qbit",
+          enabled: false,
           web_ui_url: "https://qbit.example.org/"
         })
 

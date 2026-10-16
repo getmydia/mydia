@@ -143,7 +143,10 @@
     <%!-- Batch action bar --%>
     <%= if MapSet.size(@selected_ids) > 0 do %>
       <%!-- Below lg the sticky #mobile-header (z-30) sits at top-0, so sit under it: max(navbar min-h 4rem, 0.5rem pad + 2.5rem btn + 0.5rem + safe-area inset) --%>
-      <div class="alert alert-soft sticky top-[max(4rem,calc(3.5rem+env(safe-area-inset-top,0px)))] lg:top-0 z-10 mb-4 shadow-lg">
+      <div
+        id="downloads-batch-bar"
+        class="alert alert-soft sticky top-[max(4rem,calc(3.5rem+env(safe-area-inset-top,0px)))] lg:top-0 z-10 mb-4 shadow-lg"
+      >
         <div class="flex-1">
           <span class="font-semibold">{MapSet.size(@selected_ids)} selected</span>
         </div>
@@ -1010,7 +1013,7 @@
     <DetailDrawer.detail_drawer
       :if={@drawer_download}
       download={@drawer_download}
-      tab={@active_tab}
+      tab={drawer_tab(@drawer_download)}
       client_url={@client_urls[@drawer_download.download_client]}
     />
   </div>

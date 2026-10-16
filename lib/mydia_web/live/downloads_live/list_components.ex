@@ -110,6 +110,12 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
         };
       </script>
 
+      <input
+        :if={length(@clients) <= 1 and @filters.client}
+        type="hidden"
+        name="client"
+        value={@filters.client}
+      />
       <select
         :if={length(@clients) > 1}
         id="downloads-client-filter"

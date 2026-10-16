@@ -177,16 +177,15 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # A new tab resets the sort: a tab-specific sort (ratio on Completed) is not
   # an option on the next tab.
   defp reset_list(socket, tab_changed?) do
-    socket = assign(socket, :page, 0)
-
-    if tab_changed? do
+    # Any list change clears the selection: a batch action must not reach rows
+    # the new tab or filters hide.
+    socket =
       socket
-      |> assign(:sort_by, @default_sort)
+      |> assign(:page, 0)
       |> assign(:selected_ids, MapSet.new())
       |> assign(:selection_mode, false)
-    else
-      socket
-    end
+
+    if tab_changed?, do: assign(socket, :sort_by, @default_sort), else: socket
   end
 
   # Drops ?download=<id> from the URL; a no-op when no drawer is open.
@@ -1419,10 +1418,18 @@ defmodule MydiaWeb.DownloadsLive.Index do
         |> put_flash(:info, "That download is no longer in this list")
 
       download ->
-        [download] = annotate_auto_reject_cap([download])
+        [download] =
+          [download]
+          |> annotate_rematch_eligibility(drawer_tab(download))
+          |> annotate_auto_reject_cap()
+
         assign(socket, :drawer_download, download)
     end
   end
+
+  # The drawer acts on the row itself, not on the page tab it was opened from.
+  defp drawer_tab(%{imported_at: nil}), do: :queue
+  defp drawer_tab(_download), do: :completed
 
   defp load_issues_downloads(socket, all_downloads) do
     # Needs Matching is derived from the clients, not from the database: these

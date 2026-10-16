@@ -1,8 +1,8 @@
 defmodule MydiaWeb.DownloadsLive.DetailDrawer do
   @moduledoc """
   The detail panel for one download, opened from a row through
-  `?download=<id>`. It shows only what the enriched row already carries, so it
-  opens with no client call.
+  `?download=<id>`. It shows only stored and already-polled data from the
+  enriched row, with no extra per-download client calls.
 
   `download_url` is never rendered: it carries indexer API keys and tracker
   passkeys.

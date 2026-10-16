@@ -38,6 +38,14 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawerTest do
     assert has_element?(view, "#download-detail-timeline")
   end
 
+  test "an imported download opened on the Queue tab gets completed actions", %{conn: conn} do
+    download = queued(%{imported_at: DateTime.utc_now() |> DateTime.truncate(:second)})
+    {:ok, view, _html} = live(conn, ~p"/downloads?download=#{download.id}")
+
+    assert has_element?(view, "#drawer-clear-#{download.id}")
+    refute has_element?(view, "#drawer-pause-#{download.id}")
+  end
+
   test "the Details row action opens it and the close button patches it away", %{conn: conn} do
     download = queued()
     {:ok, view, _html} = live(conn, ~p"/downloads")
