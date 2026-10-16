@@ -1,4 +1,4 @@
-/// What the iPad's native sidebar reports, held where the shell can watch it.
+/// What the iPad's and Mac's native sidebar reports, held where the shell can watch it.
 library;
 
 import 'dart:async';
@@ -42,7 +42,8 @@ class NativeSidebarInsets extends Notifier<NativeInsets?> {
   NativeInsets? build() {
     final events =
         ref.watch(nativeTabBarChannelProvider).events.listen((event) {
-      if (event is NativeInsetsChanged && !event.insets.isZero) {
+      if (event is NativeInsetsChanged &&
+          (!event.insets.isZero || event.insets.chromeLeading > 0)) {
         state = event.insets;
       }
     });

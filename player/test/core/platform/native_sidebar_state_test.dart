@@ -39,6 +39,15 @@ void main() {
     return container;
   }
 
+  test('insets keep a chrome-only report', () async {
+    final container = containerAnswering(null);
+    container.read(nativeSidebarInsetsProvider);
+    await fromNative('insetsChanged',
+        {'top': 0.0, 'leading': 0.0, 'bottom': 0.0, 'chromeLeading': 124.0});
+    expect(container.read(nativeSidebarInsetsProvider),
+        const NativeInsets(chromeLeading: 124));
+  });
+
   test('regular starts true and takes the queried layout', () async {
     final container = containerAnswering({'sidebar': false});
     expect(container.read(nativeSidebarRegularProvider), isTrue);
