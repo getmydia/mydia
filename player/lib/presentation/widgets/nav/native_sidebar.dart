@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/sources/source.dart';
 import '../../../domain/navigation/source_nav.dart';
+import 'bottom_nav.dart';
 import 'native_tab_bar.dart';
 
 enum NativeSidebarItemKind { destination, action }
@@ -32,6 +33,7 @@ class NativeSidebarItem {
     this.badge,
     this.enabled = true,
     this.kind = NativeSidebarItemKind.destination,
+    this.inTabBar = false,
   });
 
   final String id;
@@ -43,6 +45,10 @@ class NativeSidebarItem {
   final bool enabled;
   final NativeSidebarItemKind kind;
 
+  /// Also shown in the floating tab bar iPadOS draws while the sidebar is
+  /// hidden. Every other row is sidebar-only.
+  final bool inTabBar;
+
   Map<String, Object?> toMap() => {
         'id': id,
         'title': title,
@@ -50,6 +56,7 @@ class NativeSidebarItem {
         'badge': badge,
         'enabled': enabled,
         'kind': kind.name,
+        'inTabBar': inTabBar,
       };
 
   @override
@@ -60,10 +67,12 @@ class NativeSidebarItem {
       other.symbol == symbol &&
       other.badge == badge &&
       other.enabled == enabled &&
-      other.kind == kind;
+      other.kind == kind &&
+      other.inTabBar == inTabBar;
 
   @override
-  int get hashCode => Object.hash(id, title, symbol, badge, enabled, kind);
+  int get hashCode =>
+      Object.hash(id, title, symbol, badge, enabled, kind, inTabBar);
 }
 
 @immutable
@@ -76,7 +85,8 @@ class NativeSidebarSection {
 
   final String id;
 
-  /// Shown as the section header; null for none.
+  /// The section header. A titled section is a collapsible group below the
+  /// sidebar's rows; an untitled one adds plain rows in its place.
   final String? title;
   final List<NativeSidebarItem> items;
 
@@ -143,6 +153,16 @@ NativeSidebar nativeSidebarFor({
   required String? sourceHeader,
   String? settingsBadge,
 }) {
+  // The floating bar leads with the iPhone bar's first three rows. Past
+  // about four tabs iPadOS pages it, so the rest stay a toggle away.
+  final barIds = {
+    for (final entry in bottomNavEntries(
+      entries,
+      downloadSupported: entries.any((e) => e.id == 'downloads'),
+    ).take(3))
+      entry.id,
+  };
+
   NativeSidebarItem destination(SourceNavEntry entry) => NativeSidebarItem(
         id: entry.id,
         title: entry.label,
@@ -150,6 +170,7 @@ NativeSidebar nativeSidebarFor({
         badge: entry.id == 'settings' ? settingsBadge : null,
         // The Flutter rows' offline rule (`SidebarContent._buildRow`).
         enabled: !isOffline || entry.id == 'downloads',
+        inTabBar: entry.id == 'search' || barIds.contains(entry.id),
       );
 
   final sections = [

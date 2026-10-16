@@ -171,7 +171,17 @@ void main() {
       'badge': null,
       'enabled': true,
       'kind': 'destination',
+      'inTabBar': true,
     });
+  });
+
+  test('the floating tab bar gets Search and the iPhone bar\'s first three',
+      () {
+    final inBar = [
+      for (final item in _build(showBackToMydia: true).items)
+        if (item.inTabBar) item.id,
+    ];
+    expect(inBar, ['search', 'home', 'movies', 'shows']);
   });
 
   test('equal inputs give equal sidebars', () {

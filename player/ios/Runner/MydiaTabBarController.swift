@@ -9,6 +9,8 @@ struct NativeTabSpec: Equatable {
   let symbol: String
   let badge: String?
   let enabled: Bool
+  /// iPad only: also shown in the floating tab bar (see `placement`).
+  var inTabBar = false
 }
 
 extension NativeTabSpec {
@@ -22,7 +24,8 @@ extension NativeTabSpec {
       title: title,
       symbol: symbol,
       badge: map["badge"] as? String,
-      enabled: (map["enabled"] as? Bool) ?? true
+      enabled: (map["enabled"] as? Bool) ?? true,
+      inTabBar: (map["inTabBar"] as? Bool) ?? false
     )
   }
 }
@@ -155,12 +158,18 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
 
   func setTabs(_ newSpecs: [NativeTabSpec]) {
     if usesSidebar {
-      // Compact width: iPadOS shows a tab bar of the top-level tabs.
-      guard newSpecs != specs || !sidebarSections.isEmpty else { return }
-      specs = newSpecs
+      // Compact width: iPadOS shows a tab bar of the top-level tabs, so
+      // every phone tab belongs in it.
+      let barSpecs = newSpecs.map { spec in
+        var spec = spec
+        spec.inTabBar = true
+        return spec
+      }
+      guard barSpecs != specs || !sidebarSections.isEmpty else { return }
+      specs = barSpecs
       sidebarSections = []
       tabsById = [:]
-      setTabs(newSpecs.map(makeTab), animated: false)
+      setTabs(barSpecs.map(makeTab), animated: false)
       if let selectedId { applySelection(selectedId) }
       return
     }
@@ -188,8 +197,9 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
     if let selectedId { applySelection(selectedId) }
   }
 
-  /// Regular width on an iPad. The leading and trailing sections are
-  /// top-level tabs; every other section is a sidebar-only group.
+  /// Regular width on an iPad. An untitled section's items are top-level
+  /// tabs, which iPadOS lists above every group; a titled section is a
+  /// sidebar-only group.
   func setSidebar(_ sections: [NativeSidebarSectionSpec]) {
     guard usesSidebar else { return }
     guard sections != sidebarSections || sidebarSections.isEmpty else { return }
@@ -200,12 +210,12 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
     var built: [UITab] = []
     for section in sections {
       let children = section.items.map(makeTab)
-      if section.id == "leading" || section.id == "trailing" {
+      guard let title = section.title else {
         built.append(contentsOf: children)
         continue
       }
       let group = UITabGroup(
-        title: section.title ?? "",
+        title: title,
         image: nil,
         identifier: "section-\(section.id)",
         children: children
@@ -299,8 +309,17 @@ final class MydiaTabBarController: UITabBarController, UITabBarControllerDelegat
     tab.badgeValue = spec.badge
     tab.isEnabled = spec.enabled
     tab.allowsHiding = false
+    if usesSidebar { tab.preferredPlacement = Self.placement(spec) }
     tabsById[spec.id] = tab
     return tab
+  }
+
+  /// Where an iPad tab may appear. No placement leaves anything to
+  /// customize, so iPadOS shows no Edit button of its own: the sidebar's
+  /// rows are the app's to arrange, through its own Edit sidebar row.
+  private static func placement(_ spec: NativeTabSpec) -> UITab.Placement {
+    guard spec.inTabBar else { return .sidebarOnly }
+    return spec.id == "search" ? .pinned : .fixed
   }
 
   private func applySelection(_ id: String) {
