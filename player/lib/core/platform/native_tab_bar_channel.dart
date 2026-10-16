@@ -111,7 +111,13 @@ final class NativeTabSelected extends NativeTabBarEvent {
 /// is 0 while the chrome is hidden.
 @immutable
 class NativeInsets {
-  const NativeInsets({this.top = 0, this.leading = 0, this.bottom = 0});
+  const NativeInsets({
+    this.top = 0,
+    this.leading = 0,
+    this.bottom = 0,
+    this.chromeLeading = 0,
+    this.reportsChrome = false,
+  });
 
   final double top;
 
@@ -121,9 +127,19 @@ class NativeInsets {
   /// The bar plus the accessory plus the home indicator.
   final double bottom;
 
+  /// macOS only: how much of the content pane's title band, from its leading
+  /// edge, the window chrome covers (the traffic lights and the sidebar
+  /// toggle while the sidebar is collapsed, 0 while it shows). Not part of
+  /// [isZero]: it describes the window, not whether the sidebar is shown.
+  final double chromeLeading;
+
+  /// Whether the report carried a `chromeLeading` key (macOS does, iPhone and
+  /// iPad never). Such a report is meaningful even when every value is 0.
+  final bool reportsChrome;
+
   bool get isZero => top == 0 && leading == 0 && bottom == 0;
 
-  /// Reads the map the iPad sends, or the bare bottom the iPhone sends.
+  /// Reads the map the iPad and macOS send, or the bare bottom the iPhone sends.
   static NativeInsets? fromChannel(Object? value) => switch (value) {
         num() => NativeInsets(bottom: value.toDouble()),
         {'top': num top, 'leading': num leading, 'bottom': num bottom} =>
@@ -131,6 +147,11 @@ class NativeInsets {
             top: top.toDouble(),
             leading: leading.toDouble(),
             bottom: bottom.toDouble(),
+            reportsChrome: value.containsKey('chromeLeading'),
+            chromeLeading: switch (value['chromeLeading']) {
+              num chrome => chrome.toDouble(),
+              _ => 0,
+            },
           ),
         _ => null,
       };
@@ -140,14 +161,18 @@ class NativeInsets {
       other is NativeInsets &&
       other.top == top &&
       other.leading == leading &&
-      other.bottom == bottom;
+      other.bottom == bottom &&
+      other.chromeLeading == chromeLeading &&
+      other.reportsChrome == reportsChrome;
 
   @override
-  int get hashCode => Object.hash(top, leading, bottom);
+  int get hashCode =>
+      Object.hash(top, leading, bottom, chromeLeading, reportsChrome);
 
   @override
   String toString() =>
-      'NativeInsets(top: $top, leading: $leading, bottom: $bottom)';
+      'NativeInsets(top: $top, leading: $leading, bottom: $bottom, '
+      'chromeLeading: $chromeLeading, reportsChrome: $reportsChrome)';
 }
 
 /// The native chrome's insets changed. All zero while it is hidden.

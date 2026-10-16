@@ -30,15 +30,30 @@ void main() {
     expect(NativeTabBarSupport.supported, isFalse);
   });
 
-  testWidgets('off iOS: unsupported without touching the channel',
-      (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    answer(() async => true);
+  testWidgets('macOS answering sidebar: supported', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    answer(() async => 'sidebar');
     await NativeTabBarSupport.initialize();
-    expect(NativeTabBarSupport.supported, isFalse);
-    expect(calls, isEmpty);
+    expect(NativeTabBarSupport.mode, NativeTabBarMode.sidebar);
+    expect(calls.single.method, 'mode');
     debugDefaultTargetPlatformOverride = null;
   });
+
+  for (final platform in [
+    TargetPlatform.linux,
+    TargetPlatform.windows,
+    TargetPlatform.android,
+  ]) {
+    testWidgets('$platform: unsupported without touching the channel',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = platform;
+      answer(() async => 'sidebar');
+      await NativeTabBarSupport.initialize();
+      expect(NativeTabBarSupport.supported, isFalse);
+      expect(calls, isEmpty);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
 
   testWidgets('iOS answering bar: supported', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,8 +10,9 @@ import 'package:player/presentation/widgets/nav/sidebar_edit_sheet.dart';
 
 import '../../screens/sources/fake_media_source.dart';
 
-Future<ProviderContainer> _open(WidgetTester tester) async {
-  tester.view.physicalSize = const Size(1200, 1400);
+Future<ProviderContainer> _open(WidgetTester tester,
+    {Size size = const Size(1200, 1400)}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -56,6 +58,20 @@ Future<ProviderContainer> _open(WidgetTester tester) async {
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
   return container;
+}
+
+/// Runs [body] with the platform overridden, resetting it before the
+/// framework's invariant check (a tear-down runs too late for that).
+void _platformTest(String name, TargetPlatform platform,
+    Future<void> Function(WidgetTester) body) {
+  testWidgets(name, (tester) async {
+    debugDefaultTargetPlatformOverride = platform;
+    try {
+      await body(tester);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }
 
 void main() {
@@ -131,5 +147,41 @@ void main() {
     expect(find.byKey(const Key('sidebar-edit-sheet')), findsNothing);
     expect(container.read(sidebarEditModeProvider), isFalse);
     expect(find.text('second page'), findsOneWidget);
+  });
+
+  _platformTest('desktop opens a dialog, Done closes it, the page survives',
+      TargetPlatform.macOS, (tester) async {
+    final container = await _open(tester);
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.byKey(const Key('sidebar-edit-sheet')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    container.read(sidebarEditModeProvider.notifier).exit();
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.text('second page'), findsOneWidget);
+  });
+
+  _platformTest('desktop dialog dismissed by the barrier leaves edit mode',
+      TargetPlatform.macOS, (tester) async {
+    final container = await _open(tester);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.text('second page'), findsOneWidget);
+    expect(container.read(sidebarEditModeProvider), isFalse);
+  });
+
+  _platformTest('desktop dialog fits a small window without overflow',
+      TargetPlatform.macOS, (tester) async {
+    await _open(tester, size: const Size(800, 600));
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  _platformTest('touch platforms keep the bottom sheet', TargetPlatform.iOS,
+      (tester) async {
+    await _open(tester);
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(Dialog), findsNothing);
   });
 }

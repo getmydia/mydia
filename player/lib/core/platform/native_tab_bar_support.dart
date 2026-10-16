@@ -14,14 +14,14 @@ enum NativeTabBarMode {
   sidebar,
 }
 
-/// Which native iOS 26 chrome is installed, resolved once at startup.
+/// Which native chrome (iOS 26 or macOS) is installed, resolved once at startup.
 ///
 /// Follows `InputCapabilities`: [initialize] is awaited from `_startApp` in
 /// `main.dart`, and [mode] is read synchronously inside `build`
 /// afterwards. `flutter test` never calls [initialize], so every test sees
 /// none unless it sets [debugOverride].
 class NativeTabBarSupport {
-  /// Answered by `NativeTabBarPlugin` in the iOS Runner.
+  /// Answered by `NativeTabBarPlugin` in the iOS and macOS Runners.
   static const MethodChannel channel = MethodChannel('mydia/native-tab-bar');
 
   static NativeTabBarMode _mode = NativeTabBarMode.none;
@@ -53,7 +53,9 @@ class NativeTabBarSupport {
   /// bounded by a 2 second timeout, and a timeout, a missing plugin or any
   /// error is logged and answers none, so the Flutter dock stays.
   static Future<void> initialize() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
+    final platform = defaultTargetPlatform;
+    if (kIsWeb ||
+        (platform != TargetPlatform.iOS && platform != TargetPlatform.macOS)) {
       _mode = NativeTabBarMode.none;
       return;
     }

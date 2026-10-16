@@ -34,6 +34,7 @@ NativeSidebar _build({
   bool showBackToMydia = false,
   String? sourceHeader = 'Attic Server',
   String? settingsBadge,
+  bool grouped = false,
 }) =>
     nativeSidebarFor(
       entries: entries ?? _entries,
@@ -43,6 +44,7 @@ NativeSidebar _build({
       showBackToMydia: showBackToMydia,
       sourceHeader: sourceHeader,
       settingsBadge: settingsBadge,
+      grouped: grouped,
     );
 
 List<String> _ids(NativeSidebarSection s) => [for (final i in s.items) i.id];
@@ -63,6 +65,33 @@ void main() {
     ]);
     expect(
         _ids(sidebar.sections[2]), [kEditSidebarId, 'downloads', 'settings']);
+  });
+
+  test('grouped puts builtin pages under Library and the rest under Filters',
+      () {
+    final sidebar = _build(entries: [
+      ..._entries.take(2),
+      _entry('recently_added', '/s/aa/recently-added'),
+      ..._entries.skip(2),
+    ], grouped: true);
+    expect([for (final s in sidebar.sections) s.id],
+        ['leading', 'library', 'filters', 'trailing']);
+    expect(sidebar.sections[1].title, 'Library');
+    expect(
+        _ids(sidebar.sections[1]), ['home', 'movies', 'shows', 'library-lib9']);
+    expect(sidebar.sections[2].title, 'Filters');
+    expect(
+        _ids(sidebar.sections[2]), ['recently_added', 'f-123', kNewFilterId]);
+  });
+
+  test('grouped drops an empty Filters heading', () {
+    final sidebar = _build(
+      entries: _entries.where((e) => !e.id.startsWith('f-')).toList(),
+      canFilter: false,
+      grouped: true,
+    );
+    expect([for (final s in sidebar.sections) s.id],
+        ['leading', 'library', 'trailing']);
   });
 
   test('the header row names the server and is an action', () {

@@ -8,6 +8,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -159,6 +160,8 @@ class _NativeSidebarHostState extends ConsumerState<NativeSidebarHost> {
               ? 'All servers'
               : current.displayName,
       settingsBadge: widget.settingsBadge,
+      // The macOS pane is a source list, which reads best with headings.
+      grouped: defaultTargetPlatform == TargetPlatform.macOS,
     );
   }
 

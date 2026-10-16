@@ -172,6 +172,39 @@ void main() {
       ],
     };
 
+    test('insetsChanged reads chromeLeading when present', () async {
+      final events = <NativeTabBarEvent>[];
+      bar.events.listen(events.add);
+      await fromNative('insetsChanged',
+          {'top': 0.0, 'leading': 0.0, 'bottom': 0.0, 'chromeLeading': 124.0});
+      await Future<void>.delayed(Duration.zero);
+      expect((events.single as NativeInsetsChanged).insets,
+          const NativeInsets(chromeLeading: 124, reportsChrome: true));
+    });
+
+    test('chromeLeading defaults to 0 and does not make insets non-zero', () {
+      expect(
+          NativeInsets.fromChannel({'top': 0.0, 'leading': 0.0, 'bottom': 0.0})
+              ?.chromeLeading,
+          0);
+      expect(const NativeInsets(chromeLeading: 80).isZero, isTrue);
+    });
+
+    test('reportsChrome is set only when the key is present', () {
+      expect(
+          NativeInsets.fromChannel({'top': 0.0, 'leading': 0.0, 'bottom': 0.0})
+              ?.reportsChrome,
+          isFalse);
+      expect(
+          NativeInsets.fromChannel({
+            'top': 0.0,
+            'leading': 0.0,
+            'bottom': 0.0,
+            'chromeLeading': 0.0
+          })?.reportsChrome,
+          isTrue);
+    });
+
     test('setSidebar sends once for equal payloads', () async {
       await bar.setSidebar(payload);
       await bar.setSidebar({...payload});
