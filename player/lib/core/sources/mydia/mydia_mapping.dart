@@ -262,13 +262,18 @@ ItemSummary calendarSummary(SourceId sid, Map<String, dynamic> e) {
   final playable =
       files.where((f) => f['directPlaySupported'] == true).firstOrNull ??
           files.firstOrNull;
+  final artwork = _map(e['artwork']);
   return ItemSummary(
     ref: episode
         ? _ref(sid, ItemKind.episode, e['id'] as String)
         : _ref(sid, ItemKind.movie, e['mediaItemId'] as String),
     title: e['title'] as String? ?? '',
     showTitle: episode ? e['mediaItemTitle'] as String? : null,
-    poster: _art(_map(e['artwork'])['posterUrl']),
+    poster: _art(artwork['posterUrl']),
+    // The episode's own still where the server has one: a landscape picture
+    // of this episode, which is what the calendar card shows. Older servers
+    // send null, and the show's backdrop stands in.
+    backdrop: _art(artwork['thumbnailUrl'] ?? artwork['backdropUrl']),
     parentIndex: e['seasonNumber'] as int?,
     index: e['episodeNumber'] as int?,
     airDate: e['airDate'] as String?,
