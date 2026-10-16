@@ -269,9 +269,30 @@
                 title={dot_label}
                 aria-label={dot_label}
               ></span>
-              <span class="font-medium text-sm truncate">{get_display_title(download)}</span>
+              <% media_item_id = ListView.media_item_id(download) %>
+              <.link
+                :if={media_item_id}
+                navigate={~p"/media/#{media_item_id}"}
+                id={"download-title-link-#{download.id}"}
+                class="link link-hover font-medium text-sm truncate"
+              >
+                {get_display_title(download)}
+              </.link>
+              <span :if={is_nil(media_item_id)} class="font-medium text-sm truncate">
+                {get_display_title(download)}
+              </span>
               <%= if get_episode_details(download) do %>
-                <span class="text-xs text-base-content/50 shrink-0 truncate">
+                <.link
+                  :if={media_item_id}
+                  navigate={~p"/media/#{media_item_id}"}
+                  class="link link-hover text-xs text-base-content/50 shrink-0 truncate"
+                >
+                  {get_episode_details(download)}
+                </.link>
+                <span
+                  :if={is_nil(media_item_id)}
+                  class="text-xs text-base-content/50 shrink-0 truncate"
+                >
                   {get_episode_details(download)}
                 </span>
               <% end %>
@@ -296,7 +317,16 @@
             </div>
             <%!-- Line 2: release title (muted), only when it differs from the display title --%>
             <%= if get_display_title(download) != download.title do %>
-              <div class="text-xs text-base-content/40 truncate">{download.title}</div>
+              <div class="tooltip tooltip-bottom max-w-full block" data-tip={download.title}>
+                <button
+                  type="button"
+                  class="block max-w-full truncate text-left text-xs text-base-content/40 hover:text-base-content/70 cursor-pointer transition-colors"
+                  phx-click="open_details"
+                  phx-value-id={download.id}
+                >
+                  {download.title}
+                </button>
+              </div>
             <% end %>
             <%!-- Import problem: surfaced even when the torrent client reports the
                  download as seeding/completed, so a silently-failing import is
@@ -304,8 +334,10 @@
             <%= if import_issue do %>
               <div class="text-xs text-error flex flex-wrap items-center gap-1.5 mt-0.5">
                 <.icon name="hero-exclamation-triangle" class="size-3 shrink-0" />
-                <span class="truncate">
-                  {import_issue_label(import_issue)}: {download.import_last_error}
+                <span class="tooltip tooltip-bottom min-w-0" data-tip={download.import_last_error}>
+                  <span class="truncate block">
+                    {import_issue_label(import_issue)}: {download.import_last_error}
+                  </span>
                 </span>
                 <%= if download.import_retry_count && download.import_retry_count > 0 do %>
                   <span>•</span>
@@ -429,13 +461,12 @@
                   )}
                 </span>
               <% end %>
-              <span
+              <ListComponents.client_chip
                 :if={download.download_client}
-                class="inline-flex items-center gap-1"
-                title="Download client"
-              >
-                <.icon name="hero-server" class="size-3 opacity-70" />{download.download_client}
-              </span>
+                id={"download-client-#{download.id}"}
+                name={download.download_client}
+                url={@client_urls[download.download_client]}
+              />
             </div>
             <%!-- Line 4: thin inline progress (queue only) --%>
             <%= if @active_tab == :queue do %>
@@ -449,7 +480,13 @@
                   </span>
                 <% else %>
                   <progress
-                    class="progress progress-primary h-1.5 flex-1"
+                    class={[
+                      "progress h-1.5 flex-1",
+                      if(soft_stalled?(download),
+                        do: "progress-warning",
+                        else: "progress-primary"
+                      )
+                    ]}
                     value={format_progress(download.progress)}
                     max="100"
                   ></progress>
@@ -461,76 +498,11 @@
             <% end %>
           </div>
           <%!-- Action buttons --%>
-          <div class="flex items-center gap-1 shrink-0">
-            <%= cond do %>
-              <% removing?(download) -> %>
-              <% @active_tab == :queue -> %>
-                <button
-                  type="button"
-                  class="btn btn-square btn-ghost btn-sm"
-                  phx-click="open_match_modal"
-                  phx-value-id={download.id}
-                  phx-value-mode="inflight"
-                  title="Change match"
-                >
-                  <.icon name="hero-pencil-square" class="size-4" />
-                </button>
-                <%= if download.status == "paused" do %>
-                  <button
-                    type="button"
-                    class="btn btn-square btn-ghost btn-sm"
-                    phx-click="resume_download"
-                    phx-value-id={download.id}
-                    title="Resume download"
-                  >
-                    <.icon name="hero-play" class="size-4" />
-                  </button>
-                <% else %>
-                  <button
-                    type="button"
-                    class="btn btn-square btn-ghost btn-sm"
-                    phx-click="pause_download"
-                    phx-value-id={download.id}
-                    title="Pause download"
-                  >
-                    <.icon name="hero-pause" class="size-4" />
-                  </button>
-                <% end %>
-                <button
-                  type="button"
-                  class="btn btn-square btn-ghost btn-sm hover:btn-error"
-                  phx-click="cancel_download"
-                  phx-value-id={download.id}
-                  data-confirm="Cancel this download?"
-                  title="Cancel download"
-                >
-                  <.icon name="hero-x-mark" class="size-4" />
-                </button>
-              <% @active_tab == :completed -> %>
-                <button
-                  :if={is_nil(download.match_status) and download.rematch_eligible?}
-                  type="button"
-                  class="btn btn-square btn-ghost btn-sm"
-                  phx-click="open_match_modal"
-                  phx-value-id={download.id}
-                  phx-value-mode="postimport"
-                  title="Re-match to the correct title"
-                >
-                  <.icon name="hero-arrow-path" class="size-4" />
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-square btn-ghost btn-sm hover:btn-error"
-                  phx-click="clear_single_completed"
-                  phx-value-id={download.id}
-                  data-confirm="Remove from client and clear from history?"
-                  title="Clear completed download"
-                >
-                  <.icon name="hero-trash" class="size-4" />
-                </button>
-              <% true -> %>
-            <% end %>
-          </div>
+          <ListComponents.download_actions
+            :if={not removing?(download)}
+            download={download}
+            tab={@active_tab}
+          />
         </li>
       </ul>
 

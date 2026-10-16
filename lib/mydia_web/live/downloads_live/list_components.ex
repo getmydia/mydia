@@ -10,6 +10,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
   import MydiaWeb.Formatters
 
   alias MydiaWeb.DownloadsLive.{Filters, ListView, Summary}
+  alias Phoenix.LiveView.JS
 
   attr :summary, Summary, required: true
 
@@ -209,6 +210,106 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
         {@name}
       </span>
     <% end %>
+    """
+  end
+
+  attr :download, :map, required: true
+  attr :tab, :atom, required: true
+
+  attr :context, :string,
+    default: "row",
+    doc: "\"row\" or \"drawer\"; prefixes ids and hides Details in the drawer"
+
+  @doc """
+  The action strip for one download: a `join` of icon buttons, with rarer
+  actions in an "Actions" dropdown beside it (see
+  lib/mydia_web/components/README.md on row actions and dropdown stacking).
+  """
+  def download_actions(assigns) do
+    ~H"""
+    <div :if={@tab in [:queue, :completed]} class="flex items-center gap-2 shrink-0">
+      <.row_actions>
+        <.row_action
+          :if={@context == "row"}
+          id={"download-details-#{@download.id}"}
+          icon="hero-information-circle"
+          title="Details"
+          phx-click="open_details"
+          phx-value-id={@download.id}
+        />
+        <%= if @tab == :queue do %>
+          <.row_action
+            :if={@download.status == "paused"}
+            id={"#{@context}-resume-#{@download.id}"}
+            icon="hero-play"
+            title="Resume download"
+            phx-click="resume_download"
+            phx-value-id={@download.id}
+          />
+          <.row_action
+            :if={@download.status != "paused"}
+            id={"#{@context}-pause-#{@download.id}"}
+            icon="hero-pause"
+            title="Pause download"
+            phx-click="pause_download"
+            phx-value-id={@download.id}
+          />
+          <.row_action
+            id={"#{@context}-cancel-#{@download.id}"}
+            icon="hero-x-mark"
+            title="Cancel download"
+            destructive
+            phx-click="cancel_download"
+            phx-value-id={@download.id}
+            data-confirm="Cancel this download?"
+          />
+        <% else %>
+          <.row_action
+            :if={is_nil(@download.match_status) and @download.rematch_eligible?}
+            id={"#{@context}-rematch-#{@download.id}"}
+            icon="hero-arrow-path"
+            title="Re-match to the correct title"
+            phx-click="open_match_modal"
+            phx-value-id={@download.id}
+            phx-value-mode="postimport"
+          />
+          <.row_action
+            id={"#{@context}-clear-#{@download.id}"}
+            icon="hero-trash"
+            title="Clear completed download"
+            destructive
+            phx-click="clear_single_completed"
+            phx-value-id={@download.id}
+            data-confirm="Remove from client and clear from history?"
+          />
+        <% end %>
+      </.row_actions>
+
+      <div :if={@tab == :queue} class="dropdown dropdown-end z-20">
+        <div
+          tabindex="0"
+          role="button"
+          class="btn btn-sm btn-ghost btn-square"
+          aria-label="More actions"
+        >
+          <.icon name="hero-ellipsis-vertical" class="size-4" />
+        </div>
+        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box w-48 p-2 shadow">
+          <li>
+            <button
+              type="button"
+              id={"#{@context}-change-match-#{@download.id}"}
+              phx-click={
+                JS.push("open_match_modal", value: %{id: @download.id, mode: "inflight"})
+                |> JS.dispatch("mydia:blur")
+              }
+            >
+              <.icon name="hero-pencil-square" class="size-4" /> Change match
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
     """
   end
 end

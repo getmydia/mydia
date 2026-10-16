@@ -131,4 +131,57 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
 
     assert_patch(view, ~p"/downloads?status=queued")
   end
+
+  test "the title links to its library page", %{conn: conn} do
+    download = queued("Fictional Salt Meridian")
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+
+    assert has_element?(
+             view,
+             "#download-title-link-#{download.id}[href='/media/#{download.media_item_id}']"
+           )
+  end
+
+  test "a row without a library title has no link", %{conn: conn} do
+    download =
+      download_fixture(%{
+        media_item_id: nil,
+        imported_at: nil,
+        download_client: nil,
+        download_client_id: nil
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/downloads")
+
+    assert has_element?(view, "#downloads-#{download.id}")
+    refute has_element?(view, "#download-title-link-#{download.id}")
+  end
+
+  describe "client chip" do
+    import Mydia.SettingsFixtures
+
+    test "links to the client's web UI when one resolves", %{conn: conn} do
+      client =
+        download_client_config_fixture(%{
+          name: "Alpha Qbit",
+          web_ui_url: "https://qbit.example.org/"
+        })
+
+      download = completed("Fictional Salt Meridian", client.name)
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=completed")
+
+      assert has_element?(
+               view,
+               "a#download-client-#{download.id}[href='https://qbit.example.org/']"
+             )
+    end
+
+    test "is plain text when no client config has that name", %{conn: conn} do
+      download = completed("Fictional Salt Meridian", "gone-client")
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=completed")
+
+      assert has_element?(view, "span#download-client-#{download.id}")
+      refute has_element?(view, "a#download-client-#{download.id}")
+    end
+  end
 end
