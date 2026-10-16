@@ -15,6 +15,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias Phoenix.PubSub
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.DownloadsLive.Components
+  alias MydiaWeb.DownloadsLive.DetailDrawer
   alias MydiaWeb.DownloadsLive.Filters
   alias MydiaWeb.DownloadsLive.ListComponents
   alias MydiaWeb.DownloadsLive.ListView
@@ -22,6 +23,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias Mydia.Settings.DownloadClientConfig
   alias MydiaWeb.DownloadsLive.MatchDialog
   import MydiaWeb.DownloadsLive.Format
+  import MydiaWeb.DownloadsLive.ListView, only: [get_metadata_value: 2]
   import MydiaWeb.Formatters
 
   require Logger
@@ -1783,21 +1785,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # there reads as "stuck"; these phases get an indeterminate (animated) bar
   # plus the phase label instead of a frozen "0%".
   defp progress_indeterminate?(download), do: download.status in ["queued", "checking"]
-
-  defp get_metadata_value(download, key) do
-    metadata_map = download.metadata || %{}
-
-    case key do
-      # Keys modeled in DownloadMetadata struct
-      k when k in ~w(size seeders leechers quality season_pack season_number download_protocol) ->
-        metadata = DownloadMetadata.from_map(metadata_map)
-        if metadata, do: Map.get(metadata, String.to_existing_atom(k)), else: nil
-
-      # Raw metadata keys (parsed_info, match_suggestions, unresolved_files, etc.)
-      _ ->
-        Map.get(metadata_map, key)
-    end
-  end
 
   # Color modifier for the DaisyUI `status` dot shown at the start of each row.
   defp status_dot_class(status) do

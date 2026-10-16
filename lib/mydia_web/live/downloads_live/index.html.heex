@@ -1005,5 +1005,13 @@
       modal={@match_files_modal}
       error={@match_files_error}
     />
+
+    <%!-- Detail drawer (?download=<id>) --%>
+    <DetailDrawer.detail_drawer
+      :if={@drawer_download}
+      download={@drawer_download}
+      tab={@active_tab}
+      client_url={@client_urls[@drawer_download.download_client]}
+    />
   </div>
 </Layouts.app>

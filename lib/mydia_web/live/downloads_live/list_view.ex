@@ -9,6 +9,7 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   """
 
   alias Mydia.Downloads.StallDetector
+  alias Mydia.Downloads.Structs.DownloadMetadata
   alias MydiaWeb.DownloadsLive.{Filters, Summary}
 
   @status_options [
@@ -160,6 +161,26 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   def media_item_id(%{media_item_id: id}) when is_binary(id), do: id
   def media_item_id(%{episode: %{media_item_id: id}}) when is_binary(id), do: id
   def media_item_id(_download), do: nil
+
+  @metadata_struct_keys ~w(size seeders leechers quality season_pack season_number download_protocol)
+
+  @doc """
+  One value from a download's metadata. Keys modeled by `DownloadMetadata` are
+  read through the struct (normalised); any other key is read raw.
+  """
+  @spec get_metadata_value(map(), String.t()) :: term()
+  def get_metadata_value(download, key) do
+    metadata_map = download.metadata || %{}
+
+    if key in @metadata_struct_keys do
+      case DownloadMetadata.from_map(metadata_map) do
+        nil -> nil
+        metadata -> Map.get(metadata, String.to_existing_atom(key))
+      end
+    else
+      Map.get(metadata_map, key)
+    end
+  end
 
   @spec display_title(map()) :: String.t()
   def display_title(download) do
