@@ -21,6 +21,9 @@ Future<void> showSidebarEditSheet({
   if (!ref.read(sidebarEditModeProvider)) {
     ref.read(sidebarEditModeProvider.notifier).toggle();
   }
+  // Read before the await: the caller can unmount while the sheet is up (the
+  // iPad going compact swaps the host out), and the provider outlives it.
+  final editMode = ref.read(sidebarEditModeProvider.notifier);
   await showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
@@ -29,7 +32,7 @@ Future<void> showSidebarEditSheet({
     backgroundColor: AppColors.surfaceVariant,
     builder: (_) => _EditSheet(location: location),
   );
-  ref.read(sidebarEditModeProvider.notifier).exit();
+  editMode.exit();
 }
 
 class _EditSheet extends ConsumerWidget {

@@ -26,7 +26,8 @@ class NativeTabBarSupport {
 
   static NativeTabBarMode _mode = NativeTabBarMode.none;
 
-  /// Forces [supported] in tests: true means the bar, false means none. Reset to null in `tearDown`.
+  /// Forces [supported] in tests: true means the bar, false means none.
+  /// Reset to null in `tearDown`.
   @visibleForTesting
   static bool? debugOverride;
 

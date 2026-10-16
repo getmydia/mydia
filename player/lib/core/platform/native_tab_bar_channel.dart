@@ -206,6 +206,7 @@ class NativeTabBarChannel {
     _tabs = value;
     // Native's tabs are now the bar's, not the sidebar's.
     _sidebar = null;
+    _forgetSelection();
     return _send('setTabs', [for (final tab in tabs) tab.toMap()], () {
       if (identical(_tabs, value)) _tabs = null;
     });
@@ -219,9 +220,18 @@ class NativeTabBarChannel {
     _sidebar = payload;
     // Native now holds the sidebar's tabs, not the bar's.
     _tabs = null;
+    _forgetSelection();
     return _send('setSidebar', payload, () {
       if (identical(_sidebar, payload)) _sidebar = null;
     });
+  }
+
+  /// New tabs make UIKit select the first one on its own, so what was sent
+  /// as the selection (a row or none) no longer holds. Forgetting it lets the
+  /// host's next sync, which sends the payload first, resend it.
+  void _forgetSelection() {
+    _selected = null;
+    _cleared = false;
   }
 
   /// Asks native for the width class once: true at regular width (sidebar

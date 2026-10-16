@@ -14,7 +14,8 @@ import 'native_tab_bar.dart';
 
 enum NativeSidebarItemKind { destination, action }
 
-/// The current server's row. A tap opens the source picker.
+// Ids of the sidebar's action rows: the current server's row (a tap opens the
+// source picker), New filter, and Edit sidebar.
 const String kSourceHeaderId = 'action:source-header';
 const String kNewFilterId = 'action:new-filter';
 const String kEditSidebarId = 'action:edit-sidebar';
@@ -231,7 +232,8 @@ NativeSidebar nativeSidebarFor({
 }
 
 /// The row [location] selects: the longest matching route, as
-/// `SidebarContent.selectedFor` picks. Null leaves the selection alone.
+/// `SidebarContent.selectedFor` picks. Null means no row matches, and the
+/// host clears the native selection.
 String? selectedNativeSidebarId(List<SourceNavEntry> entries, String location) {
   SourceNavEntry? best;
   for (final entry in entries) {

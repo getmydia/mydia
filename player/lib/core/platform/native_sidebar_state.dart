@@ -14,12 +14,17 @@ class NativeSidebarRegular extends Notifier<bool> {
   @override
   bool build() {
     final channel = ref.watch(nativeTabBarChannelProvider);
+    var eventSeen = false;
     final events = channel.events.listen((event) {
-      if (event is NativeLayoutChanged) state = event.sidebar;
+      if (event is NativeLayoutChanged) {
+        eventSeen = true;
+        state = event.sidebar;
+      }
     });
     ref.onDispose(events.cancel);
     unawaited(channel.queryLayout().then((answer) {
-      if (answer != null && ref.mounted) state = answer;
+      // An event is newer than the answer to a question asked before it.
+      if (answer != null && !eventSeen && ref.mounted) state = answer;
     }));
     // A full-screen iPad is regular, so the first frame shows the sidebar.
     return true;

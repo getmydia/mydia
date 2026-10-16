@@ -81,6 +81,7 @@ void main() {
             item.id,
       ];
 
+      expect(flutterRows, isNotEmpty);
       expect(nativeRows, flutterRows);
 
       // Native opens the trailing group with Edit sidebar, ahead of Downloads

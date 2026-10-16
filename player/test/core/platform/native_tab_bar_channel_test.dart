@@ -201,6 +201,26 @@ void main() {
       ]);
     });
 
+    test('new sidebar or tabs payloads make the selection sendable again',
+        () async {
+      await bar.setSidebar(const {'a': 1});
+      await bar.clearSelection();
+      await bar.setSidebar(const {'a': 2});
+      await bar.clearSelection();
+      await bar.select('home');
+      await bar.setTabs(const [_home]);
+      await bar.select('home');
+      expect(calls.map((c) => '${c.method}:${c.arguments}'), [
+        'setSidebar:{a: 1}',
+        'select:null',
+        'setSidebar:{a: 2}',
+        'select:null',
+        'select:home',
+        'setTabs:[{id: home, title: Home, symbol: house.fill, badge: null, enabled: true}]',
+        'select:home',
+      ]);
+    });
+
     test('a failed clearSelection is sent again', () async {
       messenger.setMockMethodCallHandler(_channel, (call) async {
         calls.add(call);

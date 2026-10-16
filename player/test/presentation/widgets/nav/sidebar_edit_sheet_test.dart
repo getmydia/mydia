@@ -73,6 +73,56 @@ void main() {
     expect(find.text('second page'), findsOneWidget);
   });
 
+  testWidgets('closing the sheet after its opener unmounted still exits',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final container = ProviderContainer(overrides: [
+      sidebarLayoutStoreProvider
+          .overrideWithValue(InMemorySidebarLayoutStore()),
+      thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
+      hasMydiaProvider.overrideWithValue(true),
+      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+    ]);
+    addTearDown(container.dispose);
+    final mounted = ValueNotifier(true);
+    addTearDown(mounted.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: ValueListenableBuilder<bool>(
+          valueListenable: mounted,
+          builder: (_, show, __) => show
+              ? Consumer(
+                  builder: (context, ref, _) => TextButton(
+                    onPressed: () => showSidebarEditSheet(
+                      context: context,
+                      ref: ref,
+                      location: '/s/acc1:owner:aa11',
+                    ),
+                    child: const Text('open'),
+                  ),
+                )
+              : const SizedBox(),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('sidebar-edit-sheet')), findsOneWidget);
+
+    // The iPad going compact swaps the host out while the sheet is up.
+    mounted.value = false;
+    await tester.pump();
+    expect(find.text('open'), findsNothing);
+    container.read(sidebarEditModeProvider.notifier).exit();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(container.read(sidebarEditModeProvider), isFalse);
+  });
+
   testWidgets('dismissing the sheet leaves edit mode', (tester) async {
     final container = await _open(tester);
     // The sheet covers 80% of the height, so the top strip is the barrier.

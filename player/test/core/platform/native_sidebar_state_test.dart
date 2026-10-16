@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +53,27 @@ void main() {
     expect(container.read(nativeSidebarRegularProvider), isFalse);
     await fromNative('layoutChanged', {'sidebar': true});
     expect(container.read(nativeSidebarRegularProvider), isTrue);
+  });
+
+  test('a late layout answer does not overwrite a layoutChanged event',
+      () async {
+    final answer = Completer<Object?>();
+    messenger.setMockMethodCallHandler(
+        _channel, (call) => call.method == 'layout' ? answer.future : null);
+    addTearDown(() => messenger.setMockMethodCallHandler(_channel, null));
+    final container = ProviderContainer(overrides: [
+      nativeTabBarChannelProvider.overrideWith((ref) {
+        final channel = NativeTabBarChannel(channel: _channel);
+        ref.onDispose(channel.dispose);
+        return channel;
+      }),
+    ]);
+    addTearDown(container.dispose);
+    container.read(nativeSidebarRegularProvider);
+    await fromNative('layoutChanged', {'sidebar': false});
+    answer.complete({'sidebar': true});
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(nativeSidebarRegularProvider), isFalse);
   });
 
   test('insets keep the last non-zero report', () async {
