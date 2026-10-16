@@ -244,6 +244,21 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets(
+      'without a route season, the subtitle preference does not wait for '
+      'the season episodes', (tester) async {
+    final hold = Completer<void>();
+    final session = _DetailNamesSeasonSession(holdSeason: hold);
+    await _pumpEpisode(tester, session);
+    await pumpUntil(tester, () => session.seasonRequests.isNotEmpty);
+    await pumpUntil(tester, () => session.preferenceRequests > 0);
+    expect(hold.isCompleted, isFalse);
+
+    hold.complete();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
   testWidgets('the route season wins over the detail one', (tester) async {
     final session = _DetailNamesSeasonSession();
     await _pumpEpisode(tester, session, showId: 's1', seasonNumber: 3);
@@ -276,7 +291,7 @@ class _SeasonSession extends FakePlaybackSession {
 /// Mydia or Plex detail does for a Continue Watching launch whose route
 /// carried neither. Records what the screen asked for.
 class _DetailNamesSeasonSession extends _SeasonSession {
-  _DetailNamesSeasonSession({this.holdDetail})
+  _DetailNamesSeasonSession({this.holdDetail, this.holdSeason})
       : super(
           item: const ItemRef(
             sourceId: SourceId('fake'),
@@ -289,8 +304,18 @@ class _DetailNamesSeasonSession extends _SeasonSession {
   /// does before the detail answers.
   final Completer<void>? holdDetail;
 
+  /// When set, `seasonEpisodes()` waits on it.
+  final Completer<void>? holdSeason;
+
   final seasonRequests = <int>[];
   final locationShowIds = <String?>[];
+  int preferenceRequests = 0;
+
+  @override
+  Future<FetchedSubtitlePreference?> subtitlePreference() {
+    preferenceRequests++;
+    return super.subtitlePreference();
+  }
 
   @override
   Future<PlaybackDetail?> detail() async {
@@ -299,8 +324,9 @@ class _DetailNamesSeasonSession extends _SeasonSession {
   }
 
   @override
-  Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber) {
+  Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber) async {
     seasonRequests.add(seasonNumber);
+    await holdSeason?.future;
     return super.seasonEpisodes(seasonNumber);
   }
 
