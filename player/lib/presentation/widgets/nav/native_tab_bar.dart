@@ -14,11 +14,17 @@ const String kMydiaBackTabId = 'mydia-back';
 /// SF Symbols for each bar entry. A new entry is one line here.
 const Map<String, String> _tabSymbols = {
   kMydiaBackTabId: 'chevron.backward',
+  'search': 'magnifyingglass',
   'home': 'house.fill',
+  'continue_watching': 'play.circle.fill',
   'movies': 'film.fill',
   'shows': 'tv.fill',
-  'downloads': 'arrow.down.circle.fill',
+  'calendar': 'calendar',
+  'recently_added': 'clock.fill',
+  'unwatched': 'eye.slash.fill',
   'favorites': 'heart.fill',
+  'collections': 'square.stack.fill',
+  'downloads': 'arrow.down.circle.fill',
   'settings': 'gearshape.fill',
 };
 
