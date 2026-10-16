@@ -82,7 +82,9 @@ class AppDelegate: FlutterAppDelegate {
       userDriverDelegate: nil
     )
 
-    let controller = mainFlutterWindow?.contentViewController as! FlutterViewController
+    // The window's content is the sidebar split view; the Flutter controller
+    // is its content pane.
+    let controller = (mainFlutterWindow as! MainFlutterWindow).flutterViewController!
     let channel = FlutterMethodChannel(
       name: "dev.mydia.player/sparkle",
       binaryMessenger: controller.engine.binaryMessenger

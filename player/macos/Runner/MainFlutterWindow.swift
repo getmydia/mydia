@@ -1,7 +1,11 @@
 import Cocoa
 import FlutterMacOS
 
-class MainFlutterWindow: NSWindow {
+class MainFlutterWindow: NSWindow, NSToolbarDelegate {
+  /// The Flutter pane. The split view hosts it, so `contentViewController`
+  /// is not the Flutter controller; reach it through here.
+  private(set) var flutterViewController: FlutterViewController?
+
   /// Height of the band the Flutter title row draws into.
   /// kMacTitleBarOverlap in lib/core/layout/window_chrome_inset.dart.
   private let titleBandHeight: CGFloat = 40
@@ -66,8 +70,13 @@ class MainFlutterWindow: NSWindow {
     NSWindow.allowsAutomaticWindowTabbing = false
 
     let flutterViewController = FlutterViewController()
+    self.flutterViewController = flutterViewController
     let windowFrame = self.frame
-    self.contentViewController = flutterViewController
+    // Placeholder until the sidebar controller lands.
+    let sidebar = NSViewController()
+    sidebar.view = NSView()
+    let split = MydiaSplitViewController(flutter: flutterViewController, sidebar: sidebar)
+    self.contentViewController = split
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
@@ -89,11 +98,13 @@ class MainFlutterWindow: NSWindow {
     self.backgroundColor = appBackground
     flutterViewController.backgroundColor = appBackground
 
-    // An empty unified compact toolbar gives the title bar the taller band
-    // sidebar apps use, with the traffic lights inset from the corner.
-    // kMacTitleBarOverlap in lib/core/layout/window_chrome_inset.dart must
-    // match the band height.
+    // A unified compact toolbar gives the title bar the taller band sidebar
+    // apps use, with the traffic lights inset from the corner. Its only items
+    // are the sidebar toggle and the tracking separator that keeps the toggle
+    // over the sidebar pane. kMacTitleBarOverlap in
+    // lib/core/layout/window_chrome_inset.dart must match the band height.
     let toolbar = NSToolbar(identifier: "MainToolbar")
+    toolbar.delegate = self
     self.toolbar = toolbar
     self.toolbarStyle = .unifiedCompact
     self.titlebarSeparatorStyle = .none
@@ -121,8 +132,12 @@ class MainFlutterWindow: NSWindow {
   /// A qualifying `leftMouseDown` starts the diversion and every event up to
   /// and including its matching `leftMouseUp` follows it, regardless of
   /// where the pointer is by then -- see `routingClickToFlutter`.
+  ///
+  /// Only the Flutter pane's part of the band is diverted. Over the sidebar
+  /// pane nothing Flutter draws sits in the band, so AppKit's own title bar
+  /// handles the double-click there.
   override func sendEvent(_ event: NSEvent) {
-    guard let flutter = contentViewController else {
+    guard let flutter = flutterViewController else {
       super.sendEvent(event)
       return
     }
@@ -131,6 +146,7 @@ class MainFlutterWindow: NSWindow {
       event.clickCount >= 2,
       !styleMask.contains(.fullScreen),
       isInTitleBand(event.locationInWindow),
+      isOverFlutter(event.locationInWindow),
       !isOverTrafficLight(event.locationInWindow) {
       routingClickToFlutter = true
       divertedDoubleClickAt = event.timestamp
@@ -159,6 +175,11 @@ class MainFlutterWindow: NSWindow {
   private func isInTitleBand(_ point: NSPoint) -> Bool {
     guard let content = contentView else { return false }
     return point.y >= content.bounds.height - titleBandHeight
+  }
+
+  private func isOverFlutter(_ point: NSPoint) -> Bool {
+    guard let view = flutterViewController?.view else { return true }
+    return view.bounds.contains(view.convert(point, from: nil))
   }
 
   private func isOverTrafficLight(_ point: NSPoint) -> Bool {
@@ -220,5 +241,24 @@ class MainFlutterWindow: NSWindow {
     default:
       zoom(nil)
     }
+  }
+
+  // MARK: NSToolbarDelegate
+
+  func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+    [.toggleSidebar, .sidebarTrackingSeparator]
+  }
+
+  func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+    [.toggleSidebar, .sidebarTrackingSeparator]
+  }
+
+  func toolbar(
+    _ toolbar: NSToolbar,
+    itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+    willBeInsertedIntoToolbar flag: Bool
+  ) -> NSToolbarItem? {
+    // Both identifiers are system items AppKit builds itself.
+    nil
   }
 }
