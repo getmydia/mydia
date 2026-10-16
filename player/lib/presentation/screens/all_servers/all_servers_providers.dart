@@ -44,10 +44,6 @@ final allServersRecentlyAddedProvider =
     FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>(
         (ref) => ref.watch(allServersReaderProvider).recentlyAdded());
 
-final allServersFavoritesRowProvider =
-    FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>((ref) =>
-        ref.watch(allServersReaderProvider).favorites(perSourceCap: 20));
-
 final allServersFavoritesProvider =
     FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>(
         (ref) => ref.watch(allServersReaderProvider).favorites());

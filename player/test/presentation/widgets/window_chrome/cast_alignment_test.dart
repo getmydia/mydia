@@ -31,7 +31,7 @@ import 'package:player/domain/navigation/sidebar_layout.dart';
 import 'package:player/presentation/screens/collections/collection_detail_screen.dart';
 import 'package:player/presentation/screens/downloads/downloads_screen.dart';
 import 'package:player/presentation/screens/filter/filter_screen.dart';
-import 'package:player/presentation/screens/sources/source_home_screen.dart';
+import 'package:player/presentation/screens/home/home_screen.dart';
 import 'package:player/core/settings/settings_providers.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -253,8 +253,8 @@ void main() {
     }
   });
 
-  group('SourceHomeScreen cast alignment', () {
-    // `SourceHomeScreen.header` is the exact widget `build` puts in
+  group('HomeScreen cast alignment', () {
+    // `HomeScreen.header` is the exact widget `build` puts in
     // `Scaffold.appBar`, a `@visibleForTesting static` seam that needs no
     // providers: the cast button is `WindowTitleRow`'s own.
     for (final MapEntry(key: name, value: insets) in _cases.entries) {
@@ -263,7 +263,7 @@ void main() {
           tester,
           insets,
           width: _kWidth,
-          child: const Builder(builder: SourceHomeScreen.header),
+          child: const Builder(builder: HomeScreen.header),
         );
 
         expect(

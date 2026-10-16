@@ -55,10 +55,22 @@ class HomeLoadingSkeleton extends StatelessWidget {
       padding: EdgeInsets.only(top: topInset),
       children: [
         if (showHero) const _ShimmerHero(key: HomeLoadingSkeleton.heroKey),
-        // The first rail is Continue Watching, drawn as landscape cards.
-        const _ShimmerRail(key: HomeLoadingSkeleton.railKey, landscape: true),
-        const _ShimmerRail(key: HomeLoadingSkeleton.railKey),
-        const _ShimmerRail(key: HomeLoadingSkeleton.railKey),
+        // The first rail is Continue Watching, drawn as landscape cards. Each
+        // sits under its own key: the rails share `railKey`, and sibling
+        // duplicates break the list's child bookkeeping on a rebuild.
+        const KeyedSubtree(
+          key: ValueKey('home-skeleton-slot-0'),
+          child:
+              _ShimmerRail(key: HomeLoadingSkeleton.railKey, landscape: true),
+        ),
+        const KeyedSubtree(
+          key: ValueKey('home-skeleton-slot-1'),
+          child: _ShimmerRail(key: HomeLoadingSkeleton.railKey),
+        ),
+        const KeyedSubtree(
+          key: ValueKey('home-skeleton-slot-2'),
+          child: _ShimmerRail(key: HomeLoadingSkeleton.railKey),
+        ),
       ],
     );
   }

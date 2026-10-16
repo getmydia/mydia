@@ -13,12 +13,12 @@ import '../../domain/sources/library.dart';
 import '../../presentation/screens/sources/unlock_screen.dart';
 import '../../presentation/screens/sources/source_player_route.dart';
 import '../../presentation/screens/sources/source_search_screen.dart';
-import '../../presentation/screens/sources/source_home_screen.dart';
+import '../../presentation/screens/home/home_screen.dart';
+import '../../presentation/screens/home/home_scope.dart';
 import '../../presentation/screens/all_servers/all_servers_cards.dart';
 import '../../presentation/screens/all_servers/all_servers_collections_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_grid_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_listing_screen.dart';
-import '../../presentation/screens/all_servers/all_servers_home_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_search_screen.dart';
 import '../../presentation/screens/filter/filter_screen.dart';
 import '../../presentation/screens/sources/source_library_screen.dart';
@@ -462,7 +462,7 @@ GoRouter appRouter(Ref ref) {
               sourcesLoading: ref.read(sourcesLoadingProvider),
               included: includedCount(),
             ),
-            builder: (context, state) => const AllServersHomeScreen(),
+            builder: (context, state) => const HomeScreen(scope: AllServers()),
           ),
           GoRoute(
             path: '/all/movies',
@@ -545,8 +545,8 @@ GoRouter appRouter(Ref ref) {
               state.pathParameters['sourceId']!,
               ref.read(sourcesProvider),
             ),
-            builder: (context, state) => SourceHomeScreen(
-              sourceId: SourceId(state.pathParameters['sourceId']!),
+            builder: (context, state) => HomeScreen(
+              scope: OneServer(SourceId(state.pathParameters['sourceId']!)),
             ),
           ),
           GoRoute(

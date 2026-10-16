@@ -102,7 +102,7 @@ void main() {
 
     expect(
       screens,
-      allOf(contains('SourceHomeScreen'), contains('SettingsScreen')),
+      allOf(contains('HomeScreen'), contains('SettingsScreen')),
       reason: 'The ShellRoute in $_routerPath no longer matches the shape '
           'this test parses. Update _shellBuilder rather than deleting the '
           'test. Found: $screens',
