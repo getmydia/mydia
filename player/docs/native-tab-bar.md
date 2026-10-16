@@ -439,9 +439,33 @@ window's minimum width (720 with a 240pt sidebar). The toolbar toggle
 restores it. The width is autosaved under `MydiaSidebar`; a first launch
 starts at 240.
 
+### Layout
+
+- The current server's row (`action:source-header`) is drawn as an
+  initials avatar with an up-down chevron, since it opens the server picker
+  rather than a page.
+- `nativeSidebarFor(grouped: true)` (macOS only) puts the middle rows under
+  Library (`kLibrarySidebarIds` and `library-*`) and Filters (listings, saved
+  filters, New filter), keeping their order within each.
+- The `trailing` section leaves the scrolling list: its places (Downloads,
+  Settings) pin to a footer below it, and its commands (Edit sidebar) move to
+  the sidebar's context menu and the top of the View menu, beside Show/Hide
+  Sidebar (Ctrl-Cmd-S). Settings is also Cmd-, in the app menu.
+
 ### Editing
 
 Edit sidebar opens as a dialog on desktop rather than a sheet.
+
+### The player
+
+`setVisible(false)` also hides the toolbar, so the sidebar toggle is gone
+over the player, and leaving fullscreen there keeps it hidden. The viewer's
+collapsed choice is stored under `MydiaSidebarViewerCollapsed`, apart from
+the split view's autosave, which also records a forced collapse.
+
+The `ShellRoute` sets `notifyRootObserver: false`. Without it go_router
+forwards every shell page to `PageCoverObserver`, which then reports Home
+itself as covered and collapses the sidebar at launch.
 
 ## Embed mode
 

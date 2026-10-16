@@ -116,6 +116,10 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
 
   private static let cellId = NSUserInterfaceItemIdentifier("SidebarRow")
   private static let groupCellId = NSUserInterfaceItemIdentifier("SidebarGroup")
+  private static let serverCellId = NSUserInterfaceItemIdentifier("SidebarServer")
+  /// Dart's `kSourceHeaderId`: the current server's row, which opens the
+  /// server picker. It is drawn as an avatar rather than a page row.
+  private static let serverHeaderId = "action:source-header"
   private static let badgeTag = 1
 
   override func loadView() {
@@ -336,6 +340,11 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
       return cell
     }
     guard let spec = item.row else { return nil }
+    if spec.id == Self.serverHeaderId {
+      let cell = dequeue(Self.serverCellId, in: outlineView) { ServerHeaderCell() }
+      (cell as? ServerHeaderCell)?.show(name: spec.title, enabled: spec.enabled)
+      return cell
+    }
     let cell = dequeue(Self.cellId, in: outlineView) { Self.makeRowCell() }
     cell.textField?.stringValue = spec.title
     cell.textField?.textColor = spec.enabled ? .labelColor : .disabledControlTextColor
@@ -346,6 +355,10 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
       badge.isHidden = spec.badge == nil
     }
     return cell
+  }
+
+  func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
+    (item as? SidebarItem)?.row?.id == Self.serverHeaderId ? 44 : outlineView.rowHeight
   }
 
   private func dequeue(
@@ -410,5 +423,81 @@ final class MydiaSidebarViewController: NSViewController, NSOutlineViewDataSourc
       badge.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
     ])
     return cell
+  }
+}
+
+/// The server switcher row: an initials avatar, the server's name, and the
+/// up-down chevron macOS uses for a picker.
+private final class ServerHeaderCell: NSTableCellView {
+  private let avatar = NSView()
+  private let initials = NSTextField(labelWithString: "")
+  private let name = NSTextField(labelWithString: "")
+  private let chevron = NSImageView()
+
+  override init(frame frameRect: NSRect) {
+    super.init(frame: frameRect)
+    avatar.wantsLayer = true
+    avatar.layer?.cornerRadius = 14
+    initials.font = .systemFont(ofSize: 11, weight: .semibold)
+    initials.textColor = .white
+    initials.alignment = .center
+    name.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+    name.lineBreakMode = .byTruncatingTail
+    name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    chevron.image = NSImage(
+      systemSymbolName: "chevron.up.chevron.down", accessibilityDescription: "Switch server")
+    chevron.contentTintColor = .secondaryLabelColor
+    chevron.symbolConfiguration = .init(pointSize: 10, weight: .semibold)
+    for view in [avatar, initials, name, chevron] as [NSView] {
+      view.translatesAutoresizingMaskIntoConstraints = false
+      addSubview(view)
+    }
+    textField = name
+    NSLayoutConstraint.activate([
+      avatar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 0),
+      avatar.centerYAnchor.constraint(equalTo: centerYAnchor),
+      avatar.widthAnchor.constraint(equalToConstant: 28),
+      avatar.heightAnchor.constraint(equalToConstant: 28),
+      initials.centerXAnchor.constraint(equalTo: avatar.centerXAnchor),
+      initials.centerYAnchor.constraint(equalTo: avatar.centerYAnchor),
+      name.leadingAnchor.constraint(equalTo: avatar.trailingAnchor, constant: 8),
+      name.centerYAnchor.constraint(equalTo: centerYAnchor),
+      chevron.leadingAnchor.constraint(greaterThanOrEqualTo: name.trailingAnchor, constant: 6),
+      chevron.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+      chevron.centerYAnchor.constraint(equalTo: centerYAnchor),
+    ])
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+  func show(name title: String, enabled: Bool) {
+    name.stringValue = title
+    name.textColor = enabled ? .labelColor : .disabledControlTextColor
+    initials.stringValue = Self.initials(of: title)
+    avatar.layer?.backgroundColor = Self.color(for: title).cgColor
+    alphaValue = enabled ? 1 : 0.5
+    setAccessibilityLabel("\(title), switch server")
+  }
+
+  /// Up to two letters: the first of the first two words, or the first two
+  /// of a single word.
+  static func initials(of title: String) -> String {
+    let words = title.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+    let letters =
+      words.count >= 2
+      ? words.prefix(2).compactMap(\.first).map(String.init).joined()
+      : String(words.first?.prefix(2) ?? "?")
+    return letters.uppercased()
+  }
+
+  /// A stable colour per server name, so each server keeps its avatar.
+  static func color(for title: String) -> NSColor {
+    let palette: [NSColor] = [
+      .systemBlue, .systemPurple, .systemPink, .systemOrange, .systemTeal, .systemIndigo,
+      .systemGreen, .systemRed,
+    ]
+    let hash = title.unicodeScalars.reduce(UInt32(5381)) { ($0 &* 33) &+ $1.value }
+    return palette[Int(hash % UInt32(palette.count))]
   }
 }
