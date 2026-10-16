@@ -9,8 +9,8 @@ final windowStart = DateTime(2026, 9, 16);
 final windowEnd = DateTime(2027, 1, 14);
 
 Future<List<DateTime?>> _pump(WidgetTester tester,
-    {DateTime? initialMonth}) async {
-  tester.view.physicalSize = const Size(400, 900);
+    {DateTime? initialMonth, Size size = const Size(400, 900)}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
   final results = <DateTime?>[];
@@ -86,6 +86,21 @@ void main() {
     }
     expect(find.text('January 2027'), findsOneWidget);
     expect(find.byKey(const ValueKey('calendar-sheet-next')), findsNothing);
+  });
+
+  testWidgets('a six-week month fits a TV-sized viewport by scrolling',
+      (tester) async {
+    final results = await _pump(tester, size: const Size(960, 540));
+    expect(tester.takeException(), isNull);
+
+    final day = find.byKey(const ValueKey('calendar-sheet-day-2026-11-30'));
+    await tester.ensureVisible(day);
+    await tester.pumpAndSettle();
+    await tester.tap(day);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(results, [DateTime(2026, 11, 30)]);
   });
 
   testWidgets('the D-pad can pick a day', (tester) async {

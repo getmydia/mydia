@@ -16,6 +16,7 @@ Future<DateTime?> showCalendarMonthSheet(
     showModalBottomSheet<DateTime>(
       context: context,
       backgroundColor: AppColors.surface,
+      isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => CalendarMonthSheet(
         windowStart: windowStart,
@@ -79,79 +80,84 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
   Widget build(BuildContext context) {
     final month = _months[_index];
 
+    // Scrolls so a six-week month still fits the capped sheet height on a
+    // landscape phone or a TV.
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    formatMonthYear(month),
-                    key: const ValueKey('calendar-sheet-title'),
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-                _arrow(
-                  visible: _index > 0,
-                  key: const ValueKey('calendar-sheet-prev'),
-                  icon: Icons.chevron_left_rounded,
-                  tooltip: 'Previous month',
-                  onPressed: () => setState(() => _index--),
-                ),
-                _arrow(
-                  visible: _index < _months.length - 1,
-                  key: const ValueKey('calendar-sheet-next'),
-                  icon: Icons.chevron_right_rounded,
-                  tooltip: 'Next month',
-                  onPressed: () => setState(() => _index++),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                for (final initial in _weekdayInitials)
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
                   Expanded(
                     child: Text(
-                      initial,
-                      textAlign: TextAlign.center,
+                      formatMonthYear(month),
+                      key: const ValueKey('calendar-sheet-title'),
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 17,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textDisabled,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            for (final week in _weeks(month))
+                  _arrow(
+                    visible: _index > 0,
+                    key: const ValueKey('calendar-sheet-prev'),
+                    icon: Icons.chevron_left_rounded,
+                    tooltip: 'Previous month',
+                    onPressed: () => setState(() => _index--),
+                  ),
+                  _arrow(
+                    visible: _index < _months.length - 1,
+                    key: const ValueKey('calendar-sheet-next'),
+                    icon: Icons.chevron_right_rounded,
+                    tooltip: 'Next month',
+                    onPressed: () => setState(() => _index++),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
-                  for (final day in week)
+                  for (final initial in _weekdayInitials)
                     Expanded(
-                      child:
-                          day == null ? const SizedBox(height: 40) : _cell(day),
+                      child: Text(
+                        initial,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDisabled,
+                        ),
+                      ),
                     ),
                 ],
               ),
-            const SizedBox(height: 12),
-            const Row(
-              children: [
-                _LegendDot(color: AppColors.primary, label: 'Ready to play'),
-                SizedBox(width: 16),
-                _LegendDot(color: AppColors.textDisabled, label: 'Scheduled'),
-              ],
-            ),
-          ],
+              const SizedBox(height: 4),
+              for (final week in _weeks(month))
+                Row(
+                  children: [
+                    for (final day in week)
+                      Expanded(
+                        child: day == null
+                            ? const SizedBox(height: 40)
+                            : _cell(day),
+                      ),
+                  ],
+                ),
+              const SizedBox(height: 12),
+              const Row(
+                children: [
+                  _LegendDot(color: AppColors.primary, label: 'Ready to play'),
+                  SizedBox(width: 16),
+                  _LegendDot(color: AppColors.textDisabled, label: 'Scheduled'),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
