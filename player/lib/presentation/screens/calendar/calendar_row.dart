@@ -71,12 +71,16 @@ class CalendarRow extends StatelessWidget {
                       MediaQuery.textScalerOf(context).scale(1),
                   child: Row(
                     children: [
-                      Text(
-                        entry.calendarNumbering,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          height: TimelineLayout.subtitleLine / 11,
-                          color: AppColors.textSecondary,
+                      Flexible(
+                        child: Text(
+                          entry.calendarNumbering,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            height: TimelineLayout.subtitleLine / 11,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ),
                       if (!entry.isPlayable) ...[

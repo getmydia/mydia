@@ -29,7 +29,7 @@ Future<void> _pump(WidgetTester tester, ItemSummary entry) {
         home: Scaffold(
           body: SizedBox(
             width: 300,
-            height: 220,
+            height: 210,
             child: CalendarCard(
                 entry: entry, today: DateTime(2026, 8, 27), imageHeight: 150),
           ),
@@ -135,5 +135,67 @@ void main() {
         _entry(id: '3', airDate: DateTime(2026, 8, 20), playable: true));
     expect(tester.takeException(), isNull);
     expect(find.byType(CalendarArtwork), findsOneWidget);
+  });
+
+  /// Mounts a card, taps the target keyed [tapKey] and returns the paths
+  /// pushed to the detail or player routes.
+  Future<List<String>> tapAndCollect(
+    WidgetTester tester,
+    ItemSummary entry,
+    String tapKey,
+  ) async {
+    final pushed = <String>[];
+    await pumpDetailScreen(
+      tester,
+      Scaffold(
+        body: CalendarCard(
+            entry: entry, today: DateTime(2026, 8, 27), imageHeight: 150),
+      ),
+      [ScriptedDetailSource(detailOf: (ref) => throw StateError('offline'))],
+      size: const Size(1600, 900),
+      routes: [
+        for (final path in [
+          '/s/:sourceId/episode/:itemId',
+          '/s/:sourceId/player/:itemId',
+        ])
+          GoRoute(
+            path: path,
+            builder: (context, state) {
+              pushed.add(state.uri.path);
+              return const Scaffold(body: SizedBox.shrink());
+            },
+          ),
+      ],
+    );
+    await tester.tap(find.byKey(ValueKey(tapKey)));
+    for (var i = 0; i < 250 && pushed.isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    return pushed;
+  }
+
+  testWidgets('tapping the body opens detail, not the player', (tester) async {
+    final entry =
+        _entry(id: '9', airDate: DateTime(2026, 8, 20), playable: true);
+
+    final pushed = await tapAndCollect(tester, entry, 'calendar-card-9');
+
+    expect(pushed, hasLength(1));
+    expect(pushed.single, contains('/episode/9'));
+    expect(pushed.single, isNot(contains('/player/')));
+  });
+
+  testWidgets('tapping play opens the player, not detail', (tester) async {
+    final entry =
+        _entry(id: '10', airDate: DateTime(2026, 8, 20), playable: true);
+
+    final pushed = await tapAndCollect(tester, entry, 'calendar-play-10');
+
+    expect(pushed, hasLength(1));
+    expect(pushed.single, contains('/player/10'));
+    expect(pushed.single, isNot(contains('/episode/')));
   });
 }
