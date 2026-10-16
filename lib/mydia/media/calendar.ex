@@ -8,6 +8,7 @@ defmodule Mydia.Media.Calendar do
   alias Mydia.Accounts.Scope
   alias Mydia.Media.{Episode, MediaItem, Restrictions}
   alias Mydia.Media.Structs.CalendarEntry
+  alias Mydia.Metadata.Access, as: MetadataAccess
 
   ## Calendar
 
@@ -44,6 +45,7 @@ defmodule Mydia.Media.Calendar do
       title: e.title,
       season_number: e.season_number,
       episode_number: e.episode_number,
+      metadata: e.metadata,
       show: m,
       has_files:
         type(
@@ -77,7 +79,8 @@ defmodule Mydia.Media.Calendar do
         has_files: entry.has_files,
         has_downloads: entry.has_downloads,
         poster_path: entry.show.metadata && entry.show.metadata.poster_path,
-        backdrop_path: entry.show.metadata && entry.show.metadata.backdrop_path
+        backdrop_path: entry.show.metadata && entry.show.metadata.backdrop_path,
+        still_path: MetadataAccess.get(entry.metadata, :still_path)
       )
     end)
   end

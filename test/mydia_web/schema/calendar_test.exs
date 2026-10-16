@@ -23,6 +23,15 @@ defmodule MydiaWeb.Schema.CalendarTest do
 
   @vars %{"start" => "2026-08-01", "end" => "2026-08-31"}
 
+  @artwork_query """
+  query Calendar($start: Date!, $end: Date!) {
+    calendar(start: $start, end: $end) {
+      id
+      artwork { thumbnailUrl backdropUrl }
+    }
+  }
+  """
+
   setup do
     %{user: AccountsFixtures.user_fixture()}
   end
@@ -51,6 +60,32 @@ defmodule MydiaWeb.Schema.CalendarTest do
     assert entry["mediaItemId"] == show.id
     assert entry["mediaItemTitle"] == "A Show"
     assert length(entry["files"]) == 1
+  end
+
+  test "an episode with a still sends it as the thumbnail", ctx do
+    show = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "A Show"})
+
+    MediaFixtures.episode_fixture(%{
+      media_item_id: show.id,
+      air_date: ~D[2026-08-15],
+      metadata: %{"still_path" => "/a-still.jpg"}
+    })
+
+    assert {:ok, %{data: %{"calendar" => [entry]}}} =
+             run_query(@artwork_query, @vars, ctx.user)
+
+    assert entry["artwork"]["thumbnailUrl"] == "https://image.tmdb.org/t/p/w780/a-still.jpg"
+  end
+
+  test "an episode without a still has no thumbnail", ctx do
+    show = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "A Show"})
+
+    MediaFixtures.episode_fixture(%{media_item_id: show.id, air_date: ~D[2026-08-15]})
+
+    assert {:ok, %{data: %{"calendar" => [entry]}}} =
+             run_query(@artwork_query, @vars, ctx.user)
+
+    assert entry["artwork"]["thumbnailUrl"] == nil
   end
 
   test "an entry with no file comes back with an empty files list", ctx do

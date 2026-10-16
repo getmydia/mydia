@@ -816,7 +816,9 @@ defmodule MydiaWeb.Schema.CommonTypes do
          %{
            poster_url: Mydia.Metadata.ImageUrl.poster_url(entry.poster_path),
            backdrop_url: Mydia.Metadata.ImageUrl.backdrop_url(entry.backdrop_path),
-           thumbnail_url: nil
+           # The episode's own still, at a size the player's landscape card
+           # can fill. Movies carry no still_path, so this is nil for them.
+           thumbnail_url: Mydia.Metadata.ImageUrl.still_url(entry.still_path, "w780")
          }}
       end)
     end
