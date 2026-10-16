@@ -19,7 +19,6 @@ import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/models/media_stream.dart';
 import '../../../domain/sources/collection.dart';
-import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
@@ -211,23 +210,6 @@ final sourceMediaInfoProvider =
   retry: (_, __) => null,
 );
 
-/// Null for a source without hubs, whose home keeps one row per library.
-final sourceHubsProvider =
-    StreamProvider.autoDispose.family<List<Hub>?, SourceId>(
-  (ref, id) {
-    final hubs = requireSource(ref, id).as<HomeHubs>();
-    if (hubs == null) return Stream.value(null);
-    return createSourceWatcher<List<Hub>?>(
-      ref,
-      key: SourceKeys.hubs(id),
-      fetch: hubs.hubs,
-      encode: encodeHubs,
-      decode: decodeHubs,
-    ).stream;
-  },
-  retry: (_, __) => null,
-);
-
 /// Progress or watched state of [item] changed: every live watcher on its
 /// source that shows watch state refetches, the rest mount cold. See
 /// `SourceRules.watchedChanged`.
@@ -252,8 +234,8 @@ void invalidateSourceContainerWrites(
         .read(invalidatorProvider)
         .invalidate(SourceRules.watchedChanged(item.sourceId)));
 
-/// [item] was dismissed from Continue Watching; only the rail and the hubs
-/// change.
+/// [item] was dismissed from Continue Watching; only the rail
+/// changes.
 void invalidateSourceContinueWatchingWrites(WidgetRef ref, ItemRef item) =>
     unawaited(ref
         .read(invalidatorProvider)

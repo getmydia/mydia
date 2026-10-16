@@ -17,7 +17,6 @@ abstract final class SourceOps {
   static const String item = 'item';
   static const String children = 'children';
   static const String continueWatching = 'continueWatching';
-  static const String hubs = 'hubs';
   static const String similar = 'similar';
   static const String collections = 'collections';
   static const String collectionItems = 'collectionItems';
@@ -42,7 +41,6 @@ abstract final class SourceOps {
     item,
     children,
     continueWatching,
-    hubs,
     similar,
   };
 }
@@ -72,8 +70,6 @@ abstract final class SourceKeys {
 
   static QueryKey continueWatching(SourceId id) =>
       QueryKey(operation(id, SourceOps.continueWatching));
-
-  static QueryKey hubs(SourceId id) => QueryKey(operation(id, SourceOps.hubs));
 
   static QueryKey collections(SourceId id) =>
       QueryKey(operation(id, SourceOps.collections));

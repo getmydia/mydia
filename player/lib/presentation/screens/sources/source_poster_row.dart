@@ -1,5 +1,5 @@
-/// One titled rail of posters on a source's home: a library preview, a
-/// server hub or Continue Watching.
+/// One titled rail of posters on a source's home: a library preview or
+/// Continue Watching.
 library;
 
 import 'package:flutter/material.dart';

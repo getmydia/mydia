@@ -154,7 +154,6 @@ void main() {
     expect(s.as<WatchedState>(), isNotNull);
     expect(s.as<Favorites>(), isNotNull);
     expect(s.as<NextUp>(), isNotNull);
-    expect(s.as<HomeHubs>(), isNotNull);
   });
 
   const show = ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-1');

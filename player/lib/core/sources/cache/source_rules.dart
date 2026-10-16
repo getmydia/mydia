@@ -19,7 +19,6 @@ abstract final class SourceRules {
           SourceOps.children,
           SourceOps.browse,
           SourceOps.continueWatching,
-          SourceOps.hubs,
           SourceOps.similar,
           SourceOps.collectionItems,
           SourceOps.unwatched,
@@ -35,16 +34,14 @@ abstract final class SourceRules {
         for (final op in const [
           SourceOps.item,
           SourceOps.browse,
-          SourceOps.hubs,
           SourceOps.favorites,
         ])
           SourceKeys.family(id, op),
       };
 
-  /// The rail itself and the hubs, which some servers build from it.
+  /// The rail itself.
   static Set<InvalidationTarget> continueWatchingRemoved(SourceId id) => {
         SourceKeys.family(id, SourceOps.continueWatching),
-        SourceKeys.family(id, SourceOps.hubs),
       };
 
   /// Offline positions reached the server; the rail and every watch badge

@@ -44,19 +44,6 @@ void main() {
     expect(items.map((i) => i.ref.externalId), ['e2', 'm3']);
   });
 
-  test('hubs are null for a source without them', () async {
-    final container = containerFor(FakeResumingSource());
-    expect(
-        await firstValue(container, sourceHubsProvider(fakeSourceId)), isNull);
-  });
-
-  test('hubs come from a source that has them', () async {
-    final container = containerFor(FakeHubSource());
-    final hubs = await firstValue(container, sourceHubsProvider(fakeSourceId));
-    expect(
-        hubs?.map((h) => h.id), ['home.movies.recent', 'home.mixed.released']);
-  });
-
   test('a library location encodes the id', () {
     expect(
       sourceLibraryLocation(

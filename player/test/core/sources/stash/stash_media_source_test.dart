@@ -236,10 +236,9 @@ void main() {
     await build().source.client.checkStatus();
   });
 
-  test('declares Continue Watching and no hubs', () {
+  test('declares Continue Watching', () {
     final source = build().source;
     expect(source.capabilities, contains(SourceCapability.continueWatching));
-    expect(source.as<HomeHubs>(), isNull);
   });
 
   test('Continue Watching asks for resumable scenes, last played first',

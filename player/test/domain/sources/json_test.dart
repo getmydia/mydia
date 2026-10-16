@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/source.dart';
-import 'package:player/domain/sources/hub.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 
@@ -123,15 +122,5 @@ void main() {
     final back = Page.fromJson(_viaString(json), ItemSummary.fromJson);
     expect(back.toJson((i) => i.toJson()), json);
     expect(back.hasMore, isTrue);
-  });
-
-  test('a hub survives the codec', () {
-    const hub = Hub(
-      id: 'home.recent',
-      title: 'Recently Released',
-      items: [_episode],
-      library: LibraryRef(sourceId: _id, id: '3'),
-    );
-    expect(Hub.fromJson(_viaString(hub.toJson())).toJson(), hub.toJson());
   });
 }
