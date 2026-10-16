@@ -42,3 +42,16 @@ tracing = { version = "0.1", features = ["log"] }
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 tracing-android = "0.2"
+
+# Never strip build scripts or proc-macros. Rust 1.96's bundled objcopy writes
+# Mach-O string tables that macOS 27's dyld rejects ("mis-aligned LINKEDIT
+# string pool"), so rustc cannot load a stripped proc-macro and the build fails
+# with `E0463 can't find crate for tokio_macros` (rust-lang/rust#157750).
+# None of these artifacts ship, so this costs nothing in the app.
+#
+# This lives in the manifest, not only in the repo-root .cargo/config.toml,
+# because cargokit runs cargo from a directory under Xcode's build dir and cargo
+# looks for config files starting at the cwd. Remove both once
+# rust-toolchain.toml reaches 1.98 or later.
+[profile.release.build-override]
+strip = false

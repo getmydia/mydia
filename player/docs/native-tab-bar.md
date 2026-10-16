@@ -631,12 +631,6 @@ release build, NSLog self-test): the channel answers `mode` and `layout`;
 - macOS: while the sidebar is collapsed the toggle sits in the Flutter pane's
   title band, so a double-click on it is diverted to Flutter like any other
   band double-click.
-- macOS: building the Rust core with Xcode 27 fails with `E0463 can't find
-  crate for tokio_macros`, because Xcode 27's `strip` writes proc-macro
-  dylibs dyld rejects (`mis-aligned LINKEDIT string pool`). Build with
-  `CARGO_PROFILE_RELEASE_STRIP=false
-  CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=false ./dev player macos build`
-  until that is fixed.
 
 ## Adding a Swift file to the Runner
 

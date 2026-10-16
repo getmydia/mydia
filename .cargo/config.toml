@@ -1,0 +1,11 @@
+# Never strip build scripts or proc-macros in release builds. Rust 1.96's
+# bundled objcopy writes Mach-O string tables that macOS 27's dyld rejects
+# ("mis-aligned LINKEDIT string pool"), so rustc cannot load a stripped
+# proc-macro and the build fails with `E0463 can't find crate for ...`
+# (rust-lang/rust#157750). None of these artifacts ship.
+#
+# Cargo reads this file only when invoked from inside the repo. The player
+# crate repeats the setting in its own Cargo.toml for builds driven from Xcode.
+# Remove both once rust-toolchain.toml reaches 1.98 or later.
+[profile.release.build-override]
+strip = false
