@@ -1,3 +1,7 @@
+// copyWithPrevious is how Riverpod itself builds a provider that reloads
+// after an error; no public API produces that state.
+// ignore_for_file: invalid_use_of_internal_member
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/source.dart';
@@ -50,6 +54,41 @@ void main() {
   test('loading until every server has its first rows', () {
     final rows = buildHomeRows([feeds(a), feeds(b, loading: true)]);
     expect(rows.loading, isTrue);
+  });
+
+  test('a feed loading again after an error is not settled', () {
+    final base = feeds(a);
+    final retrying = HomeFeeds(
+      id: base.id,
+      name: base.name,
+      continueWatching: base.continueWatching,
+      recentlyAdded: base.recentlyAdded,
+      favorites: base.favorites,
+      libraries: const AsyncLoading<List<Library>>().copyWithPrevious(
+          const AsyncError<List<Library>>(_down, StackTrace.empty)),
+    );
+    expect(retrying.libraries.hasError, isTrue);
+    expect(retrying.libraries.isLoading, isTrue);
+    final rows = buildHomeRows([retrying]);
+    expect(rows.loading, isTrue);
+    expect(rows.unavailable, isEmpty);
+    expect(rows.error, isNull);
+  });
+
+  test('a feed that has a value stays settled while refreshing', () {
+    final base = feeds(a, resuming: [item(a, 'r1')]);
+    final refreshing = HomeFeeds(
+      id: base.id,
+      name: base.name,
+      continueWatching: const AsyncLoading<List<ItemSummary>>()
+          .copyWithPrevious(AsyncData([item(a, 'r1')])),
+      recentlyAdded: base.recentlyAdded,
+      favorites: base.favorites,
+      libraries: base.libraries,
+    );
+    final rows = buildHomeRows([refreshing]);
+    expect(rows.loading, isFalse);
+    expect(rows.continueWatching, hasLength(1));
   });
 
   test('hero is the first Continue Watching item', () {

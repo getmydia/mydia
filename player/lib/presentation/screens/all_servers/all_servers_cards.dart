@@ -15,6 +15,8 @@ import '../../widgets/media_context_menu.dart';
 import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
 import '../detail/detail_links.dart';
+import '../sources/source_browse_providers.dart'
+    show invalidateSourceContinueWatchingWrites;
 import 'all_servers_providers.dart';
 
 export '../../../domain/navigation/all_servers_locations.dart';
@@ -120,5 +122,8 @@ Future<void> showAllServersContinueMenu(
         return;
       }
       ref.invalidate(allServersContinueWatchingProvider);
+      // Home reads each server's cached rail and stays mounted under the
+      // listing.
+      invalidateSourceContinueWatchingWrites(ref, item.dismissRef);
   }
 }

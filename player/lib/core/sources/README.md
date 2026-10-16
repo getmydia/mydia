@@ -443,7 +443,9 @@ with a resume point, last played first; Jellyfin: `/UserItems/Resume`, then
 `/Shows/NextUp` for shows with nothing under way, 20 in all). Then come
 Recently Added and Favorites for a source that implements them, and one row
 per library, the same for every source. A failed Continue Watching hides
-its row.
+its row while Recently Added still answers; when both fail the server is left
+out as unavailable (named in the banner, or the error view when it is the
+only server).
 Removing from Continue Watching is a Plex
 `PUT /actions/removeFromContinueWatching`, a Stash `sceneSaveActivity` with
 a zero resume point (which works on every Stash the source supports;

@@ -108,7 +108,12 @@ class HomeRows {
       libraries.isEmpty;
 }
 
-bool _settled(AsyncValue<Object?> a) => a.hasValue || a.hasError;
+/// Riverpod keeps the previous error on an invalidated provider, so a retry
+/// is `isLoading` with `hasError` still true: it is neither settled nor
+/// failed until it answers again.
+bool _failed(AsyncValue<Object?> a) => a.hasError && !a.isLoading;
+
+bool _settled(AsyncValue<Object?> a) => a.hasValue || _failed(a);
 
 List<T> _valueOf<T>(AsyncValue<List<T>> a) =>
     a.hasValue ? a.requireValue : <T>[];
@@ -116,8 +121,8 @@ List<T> _valueOf<T>(AsyncValue<List<T>> a) =>
 /// A server is unavailable when it cannot list its libraries, or when it
 /// answers neither of the two rows Home opens with.
 bool _down(HomeFeeds f) =>
-    f.libraries.hasError ||
-    (f.continueWatching.hasError && f.recentlyAdded.hasError);
+    _failed(f.libraries) ||
+    (_failed(f.continueWatching) && _failed(f.recentlyAdded));
 
 HomeRows buildHomeRows(List<HomeFeeds> feeds) {
   final names = {for (final f in feeds) f.id: f.name};
@@ -140,8 +145,10 @@ HomeRows buildHomeRows(List<HomeFeeds> feeds) {
     return HomeRows(
       names: names,
       unavailable: unavailable,
-      error: first.libraries.error ??
-          first.continueWatching.error ??
+      error: (_failed(first.libraries) ? first.libraries.error : null) ??
+          (_failed(first.continueWatching)
+              ? first.continueWatching.error
+              : null) ??
           const SourceException.unreachable(),
     );
   }
