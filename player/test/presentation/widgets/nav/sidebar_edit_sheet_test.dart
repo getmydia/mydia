@@ -24,18 +24,35 @@ Future<ProviderContainer> _open(WidgetTester tester) async {
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
-      home: Consumer(
-        builder: (context, ref, _) => TextButton(
-          onPressed: () => showSidebarEditSheet(
-            context: context,
-            ref: ref,
-            location: '/s/acc1:owner:aa11',
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => Consumer(
+                builder: (context, ref, _) => Column(
+                  children: [
+                    const Text('second page'),
+                    TextButton(
+                      onPressed: () => showSidebarEditSheet(
+                        context: context,
+                        ref: ref,
+                        location: '/s/acc1:owner:aa11',
+                      ),
+                      child: const Text('open'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          child: const Text('open'),
+          child: const Text('push'),
         ),
       ),
     ),
   ));
+  // Two routes deep, so a stray pop would visibly remove the second page.
+  await tester.tap(find.text('push'));
+  await tester.pumpAndSettle();
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
   return container;
@@ -53,7 +70,7 @@ void main() {
     expect(find.byType(SidebarEditBar), findsNothing);
     expect(find.byKey(const Key('sidebar-edit-sheet')), findsNothing);
     // The underlying route survives the sheet closing.
-    expect(find.text('open'), findsOneWidget);
+    expect(find.text('second page'), findsOneWidget);
   });
 
   testWidgets('dismissing the sheet leaves edit mode', (tester) async {
@@ -63,6 +80,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('sidebar-edit-sheet')), findsNothing);
     expect(container.read(sidebarEditModeProvider), isFalse);
-    expect(find.text('open'), findsOneWidget);
+    expect(find.text('second page'), findsOneWidget);
   });
 }

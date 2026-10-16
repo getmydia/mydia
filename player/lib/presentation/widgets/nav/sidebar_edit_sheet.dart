@@ -39,10 +39,15 @@ class _EditSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Done in the edit bar ends edit mode; the sheet follows it. Once the
-    // sheet is dismissed it is unmounted, so this never pops a second time.
+    // Done in the edit bar ends edit mode; the sheet follows it. The sheet
+    // stays mounted through its exit animation after a barrier or drag
+    // dismissal, and `showSidebarEditSheet` then calls `exit()`: popping
+    // there would remove the route underneath, so pop only while this
+    // sheet's own route is still current.
     ref.listen(sidebarEditModeProvider, (_, editing) {
-      if (!editing) Navigator.of(context).maybePop();
+      if (!editing && (ModalRoute.of(context)?.isCurrent ?? false)) {
+        Navigator.of(context).pop();
+      }
     });
     return SizedBox(
       key: const Key('sidebar-edit-sheet'),
