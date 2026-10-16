@@ -263,7 +263,7 @@ defmodule Mydia.Config.Loader do
       flaresolverr: load_flaresolverr_env(),
       cardigann: Mydia.Config.Env.CardigannEnv.load(),
       remote_access: load_remote_access_env(),
-      download_clients: load_download_clients_env(),
+      download_clients: Mydia.Config.Loader.DownloadClientEnv.load(),
       indexers: load_indexers_env(),
       media_servers: load_media_servers_env(),
       storage_backends: load_storage_backends_env(),
@@ -428,72 +428,6 @@ defmodule Mydia.Config.Loader do
   # of falling back to the default, which is on.
   defp load_remote_access_env do
     load_env_table(enabled: {"ENABLE_REMOTE_ACCESS", &parse_boolean_or_invalid/1})
-  end
-
-  defp load_download_clients_env do
-    # Support environment variables for download clients in the format:
-    # DOWNLOAD_CLIENT_<N>_NAME, DOWNLOAD_CLIENT_<N>_TYPE, etc.
-    # where N is 1, 2, 3, etc.
-    env_vars = System.get_env()
-
-    # Find all download client indices by looking for *_NAME vars
-    indices =
-      env_vars
-      |> Enum.filter(fn {key, _value} ->
-        String.starts_with?(key, "DOWNLOAD_CLIENT_") and String.ends_with?(key, "_NAME")
-      end)
-      |> Enum.map(fn {key, _value} ->
-        key
-        |> String.replace_prefix("DOWNLOAD_CLIENT_", "")
-        |> String.replace_suffix("_NAME", "")
-      end)
-      |> Enum.uniq()
-
-    # Load each download client config
-    Enum.map(indices, fn index ->
-      prefix = "DOWNLOAD_CLIENT_#{index}_"
-
-      %{}
-      |> put_if_present(:name, System.get_env("#{prefix}NAME"))
-      |> put_if_present(:type, System.get_env("#{prefix}TYPE"), &parse_atom/1)
-      |> put_if_present(:enabled, System.get_env("#{prefix}ENABLED"), &parse_boolean/1)
-      |> put_if_present(:priority, System.get_env("#{prefix}PRIORITY"), &parse_integer/1)
-      |> put_if_present(:host, System.get_env("#{prefix}HOST"))
-      |> put_if_present(:port, System.get_env("#{prefix}PORT"), &parse_integer/1)
-      |> put_if_present(:use_ssl, System.get_env("#{prefix}USE_SSL"), &parse_boolean/1)
-      |> put_if_present(:url_base, System.get_env("#{prefix}URL_BASE"))
-      |> put_if_present(:username, System.get_env("#{prefix}USERNAME"))
-      |> put_if_present(:password, System.get_env("#{prefix}PASSWORD"))
-      |> put_if_present(:api_key, System.get_env("#{prefix}API_KEY"))
-      |> put_if_present(:category, System.get_env("#{prefix}CATEGORY"))
-      |> put_if_present(
-        :external_torrents,
-        System.get_env("#{prefix}EXTERNAL_TORRENTS"),
-        &parse_external_torrents/1
-      )
-      |> put_if_present(:download_directory, System.get_env("#{prefix}DOWNLOAD_DIRECTORY"))
-      |> put_download_client_connection_settings(prefix)
-    end)
-    |> Enum.reject(&(&1 == %{}))
-  end
-
-  # Assemble the `connection_settings` map from env vars. Some adapters store
-  # config here rather than in top-level columns:
-  #   * debrid clients keep their provider at `connection_settings["provider"]`
-  #     (DOWNLOAD_CLIENT_<N>_PROVIDER)
-  #   * blackhole clients keep their folder paths at
-  #     `connection_settings["watch_folder"]` / `["completed_folder"]`
-  #     (DOWNLOAD_CLIENT_<N>_WATCH_FOLDER / _COMPLETED_FOLDER)
-  # Add further keys here as adapters need them. Keys are strings to match how
-  # adapters and validations read the map.
-  defp put_download_client_connection_settings(map, prefix) do
-    settings =
-      %{}
-      |> put_if_present("provider", System.get_env("#{prefix}PROVIDER"))
-      |> put_if_present("watch_folder", System.get_env("#{prefix}WATCH_FOLDER"))
-      |> put_if_present("completed_folder", System.get_env("#{prefix}COMPLETED_FOLDER"))
-
-    if settings == %{}, do: map, else: Map.put(map, :connection_settings, settings)
   end
 
   defp load_indexers_env do
@@ -877,37 +811,42 @@ defmodule Mydia.Config.Loader do
     |> Enum.reject(&(&1 == %{}))
   end
 
-  defp put_if_present(map, _key, nil, _parser), do: map
-  defp put_if_present(map, _key, "", _parser), do: map
+  # Shared with Mydia.Config.Loader.DownloadClientEnv.
+  @doc false
+  def put_if_present(map, _key, nil, _parser), do: map
+  def put_if_present(map, _key, "", _parser), do: map
 
-  defp put_if_present(map, key, value, parser) when is_function(parser, 1) do
+  def put_if_present(map, key, value, parser) when is_function(parser, 1) do
     case parser.(value) do
       {:ok, parsed} -> Map.put(map, key, parsed)
       :error -> map
     end
   end
 
-  defp put_if_present(map, _key, nil), do: map
-  defp put_if_present(map, _key, ""), do: map
-  defp put_if_present(map, key, value), do: Map.put(map, key, value)
+  @doc false
+  def put_if_present(map, _key, nil), do: map
+  def put_if_present(map, _key, ""), do: map
+  def put_if_present(map, key, value), do: Map.put(map, key, value)
 
-  defp parse_integer(value) when is_integer(value), do: {:ok, value}
+  @doc false
+  def parse_integer(value) when is_integer(value), do: {:ok, value}
 
-  defp parse_integer(value) when is_binary(value) do
+  def parse_integer(value) when is_binary(value) do
     case Integer.parse(value) do
       {int, ""} -> {:ok, int}
       _ -> :error
     end
   end
 
-  defp parse_integer(_), do: :error
+  def parse_integer(_), do: :error
 
-  defp parse_boolean(value) when is_boolean(value), do: {:ok, value}
-  defp parse_boolean("true"), do: {:ok, true}
-  defp parse_boolean("false"), do: {:ok, false}
-  defp parse_boolean("1"), do: {:ok, true}
-  defp parse_boolean("0"), do: {:ok, false}
-  defp parse_boolean(_), do: :error
+  @doc false
+  def parse_boolean(value) when is_boolean(value), do: {:ok, value}
+  def parse_boolean("true"), do: {:ok, true}
+  def parse_boolean("false"), do: {:ok, false}
+  def parse_boolean("1"), do: {:ok, true}
+  def parse_boolean("0"), do: {:ok, false}
+  def parse_boolean(_), do: :error
 
   # Keeps a value it cannot read instead of dropping it. :invalid does not cast
   # to a boolean, so config validation rejects the field by name. The config
@@ -930,9 +869,10 @@ defmodule Mydia.Config.Loader do
 
   defp parse_json(_), do: :error
 
-  defp parse_atom(value) when is_atom(value), do: {:ok, value}
+  @doc false
+  def parse_atom(value) when is_atom(value), do: {:ok, value}
 
-  defp parse_atom(value) when is_binary(value) do
+  def parse_atom(value) when is_binary(value) do
     try do
       {:ok, String.to_existing_atom(value)}
     rescue
@@ -940,33 +880,7 @@ defmodule Mydia.Config.Loader do
     end
   end
 
-  defp parse_atom(_), do: :error
-
-  # A fixed enum rather than parse_atom/1, which falls back to
-  # String.to_atom/1 and would mint an atom from an environment variable.
-  # Atoms are never garbage collected, and the project rule is explicit: no
-  # String.to_atom/1 on user input.
-  #
-  # An unrecognised value maps to :invalid rather than returning :error.
-  # Returning :error makes put_if_present/4 drop the key, which would fall
-  # back to :auto: an operator who typed "ignor" would get the adoption they
-  # were explicitly trying to switch off, which is the exact silent behaviour
-  # this setting exists to remove. :invalid is not a member of the Ecto.Enum,
-  # so config validation rejects it by name. That matches how a bad
-  # DOWNLOAD_CLIENT_<N>_TYPE already behaves, minus the atom leak.
-  defp parse_external_torrents(value) when is_atom(value), do: {:ok, value}
-
-  defp parse_external_torrents(value) when is_binary(value) do
-    case value |> String.trim() |> String.downcase() do
-      "auto" -> {:ok, :auto}
-      "adopt" -> {:ok, :adopt}
-      "category_only" -> {:ok, :category_only}
-      "ignore" -> {:ok, :ignore}
-      _unrecognised -> {:ok, :invalid}
-    end
-  end
-
-  defp parse_external_torrents(_), do: :error
+  def parse_atom(_), do: :error
 
   # A dedicated fixed-enum parser. parse_atom/1 must not be reused here: it
   # rescues into String.to_atom/1, which mints atoms from environment input.

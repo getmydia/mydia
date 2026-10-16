@@ -161,6 +161,7 @@ Configure multiple clients using numbered variables (`<N>` = 1, 2, 3, etc.):
 | `DOWNLOAD_CLIENT_<N>_USERNAME` | Auth username | - |
 | `DOWNLOAD_CLIENT_<N>_PASSWORD` | Auth password | - |
 | `DOWNLOAD_CLIENT_<N>_API_KEY` | API key (SABnzbd, debrid, qBittorrent 5.2+) | - |
+| `DOWNLOAD_CLIENT_<N>_WEB_UI_URL` | Address your browser uses to open the client's web UI from the Downloads page. Leave blank to derive it from `HOST` and `PORT`. Set it when `HOST` is a Docker hostname (such as `qbittorrent`) that your browser cannot resolve. | `https://qbit.example.org` |
 | `DOWNLOAD_CLIENT_<N>_CATEGORY` | Default category | - |
 | `DOWNLOAD_CLIENT_<N>_EXTERNAL_TORRENTS` | What to do with torrents Mydia did not add: `auto`, `adopt`, `category_only`, `ignore`. `category_only` is not valid for rqbit. | `auto` |
 | `DOWNLOAD_CLIENT_<N>_DOWNLOAD_DIRECTORY` | Download directory | - |

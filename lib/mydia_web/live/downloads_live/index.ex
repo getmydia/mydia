@@ -15,7 +15,16 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias Phoenix.PubSub
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.DownloadsLive.Components
+  alias MydiaWeb.DownloadsLive.DetailDrawer
+  alias MydiaWeb.DownloadsLive.Filters
+  alias MydiaWeb.DownloadsLive.ListComponents
+  alias MydiaWeb.DownloadsLive.ListView
+  alias MydiaWeb.DownloadsLive.Sorting
+  alias MydiaWeb.DownloadsLive.Summary
+  alias Mydia.Settings.DownloadClientConfig
   alias MydiaWeb.DownloadsLive.MatchDialog
+  import MydiaWeb.DownloadsLive.Format
+  import MydiaWeb.DownloadsLive.ListView, only: [get_metadata_value: 2]
   import MydiaWeb.Formatters
 
   require Logger
@@ -24,6 +33,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   @default_sort "added_desc"
 
+  @allowed_tabs ~w(queue completed issues external)
+
   # While a download is in flight, its progress (debrid swarm %, local fetch %)
   # is synthesized live from the client/provider on each poll and is NOT
   # persisted to the DB. PubSub broadcasts only fire on DB row changes, so
@@ -31,53 +42,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # load. This timer re-polls + re-renders the Queue while work is active.
   @progress_refresh_interval_ms 3_000
 
-  # Sort options offered per tab. Real-time keys (progress, speeds, ETA, ratio)
-  # only exist after client-status enrichment, so sorting runs in the LiveView
-  # over the enriched list (see apply_sorting/2), not in the DB query.
-  @shared_sort_options [
-    {"added_desc", "Newest first"},
-    {"added_asc", "Oldest first"},
-    {"name_asc", "Name (A-Z)"},
-    {"name_desc", "Name (Z-A)"},
-    {"status_asc", "Status"},
-    {"size_desc", "Size (largest)"},
-    {"size_asc", "Size (smallest)"}
-  ]
-
-  @queue_sort_options [
-    {"progress_desc", "Progress (most)"},
-    {"progress_asc", "Progress (least)"},
-    {"dlspeed_desc", "Download speed"},
-    {"eta_asc", "ETA (soonest)"}
-  ]
-
-  @completed_sort_options [
-    {"ratio_desc", "Ratio (highest)"},
-    {"ratio_asc", "Ratio (lowest)"},
-    {"ulspeed_desc", "Upload speed"},
-    {"imported_desc", "Imported (newest)"},
-    {"imported_asc", "Imported (oldest)"}
-  ]
-
-  @allowed_sort_fields (@shared_sort_options ++ @queue_sort_options ++ @completed_sort_options)
-                       |> Enum.map(&elem(&1, 0))
-
-  # Rank for status sorting so states group sensibly (active work first) rather
-  # than sorting alphabetically. Unknown statuses fall to the end.
-  @status_rank %{
-    "downloading" => 0,
-    "checking" => 1,
-    "queued" => 2,
-    "paused" => 3,
-    "stalled" => 4,
-    "seeding" => 5,
-    "completed" => 6,
-    "imported" => 7,
-    "cancelled" => 8,
-    "failed" => 9,
-    "missing" => 10,
-    "unknown" => 11
-  }
+  @allowed_sort_fields Sorting.allowed_fields()
 
   @impl true
   def mount(_params, _session, socket) do
@@ -116,36 +81,149 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:match_modal, nil)
      |> assign(:stall_grace_map, Settings.download_client_grace_map())
      |> assign(:stale_status, nil)
+     |> assign(:loaded?, false)
+     |> assign(:filters, %Filters{})
+     |> assign(:summary, %Summary{})
+     |> assign(:tab_counts, %{queue: 0, completed: 0, issues: 0})
+     |> assign(:client_options, [])
+     |> assign(:client_urls, client_urls())
+     |> assign(:drawer_id, nil)
+     |> assign(:drawer_download, nil)
+     |> assign(:rows_by_id, %{})
+     |> assign(:downloads_empty?, true)
      # Initialize all streams
      |> stream(:downloads, [])
      |> stream(:needs_matching, [])
      |> stream(:external_torrents, [])
      |> stream(:unresolved_downloads, [])
-     |> stream(:other_issues, [])
-     |> load_downloads()}
+     |> stream(:other_issues, [])}
   end
 
   @impl true
-  def handle_params(_params, _url, socket) do
+  def handle_params(params, _url, socket) do
+    tab = parse_tab(params["tab"])
+    filters = ListView.parse_filters(params, tab)
+    tab_changed? = tab != socket.assigns.active_tab
+
+    list_changed? =
+      not socket.assigns.loaded? or tab_changed? or filters != socket.assigns.filters
+
+    socket =
+      socket
+      |> assign(:active_tab, tab)
+      |> assign(:filters, filters)
+      |> assign(:drawer_id, blank_to_nil(params["download"]))
+
+    socket =
+      if list_changed? do
+        socket |> reset_list(tab_changed?) |> load_downloads()
+      else
+        assign_drawer(socket, nil)
+      end
+
     {:noreply, socket}
   end
 
-  @impl true
-  @allowed_tabs ~w(queue completed issues external)
+  defp parse_tab(tab) when tab in @allowed_tabs, do: String.to_existing_atom(tab)
+  defp parse_tab(_tab), do: :queue
 
+  defp blank_to_nil(value) when value in [nil, ""], do: nil
+  defp blank_to_nil(value), do: value
+
+  # A new tab resets the sort: a tab-specific sort (ratio on Completed) is not
+  # an option on the next tab.
+  defp reset_list(socket, tab_changed?) do
+    # Any list change clears the selection: a batch action must not reach rows
+    # the new tab or filters hide.
+    socket =
+      socket
+      |> assign(:page, 0)
+      |> assign(:selected_ids, MapSet.new())
+      |> assign(:selection_mode, false)
+
+    if tab_changed?, do: assign(socket, :sort_by, @default_sort), else: socket
+  end
+
+  # Drops ?download=<id> from the URL; a no-op when no drawer is open.
+  defp close_drawer(%{assigns: %{drawer_id: nil}} = socket), do: socket
+
+  defp close_drawer(socket),
+    do: push_patch(socket, to: downloads_path(socket, download: nil))
+
+  # Builds /downloads?... from the current state with `overrides` applied.
+  # Defaults (Queue tab, nil values) are left out so links stay short.
+  defp downloads_path(socket, overrides) do
+    %{active_tab: tab, drawer_id: drawer_id, filters: filters} = socket.assigns
+
+    values =
+      Map.merge(
+        %{
+          tab: tab,
+          q: filters.q,
+          client: filters.client,
+          status: filters.status,
+          download: drawer_id
+        },
+        Map.new(overrides)
+      )
+
+    # Fixed key order, so the same state always produces the same URL.
+    params =
+      [:tab, :q, :client, :status, :download]
+      |> Enum.map(&{&1, values[&1]})
+      |> Enum.reject(fn {key, value} -> is_nil(value) or (key == :tab and value == :queue) end)
+      |> Enum.map(fn {key, value} -> {key, to_string(value)} end)
+
+    case params do
+      [] -> ~p"/downloads"
+      params -> ~p"/downloads?#{params}"
+    end
+  end
+
+  defp client_urls do
+    Settings.list_download_client_configs()
+    |> Enum.flat_map(fn config ->
+      case DownloadClientConfig.web_ui_url(config) do
+        nil -> []
+        url -> [{config.name, url}]
+      end
+    end)
+    |> Map.new()
+  end
+
+  @impl true
   def handle_event("switch_tab", %{"tab" => tab}, socket) when tab in @allowed_tabs do
-    tab_atom = String.to_existing_atom(tab)
+    tab = String.to_existing_atom(tab)
+    status = if tab == :queue, do: socket.assigns.filters.status
 
     {:noreply,
-     socket
-     |> assign(:active_tab, tab_atom)
-     # Reset to the default sort: a tab-specific sort (e.g. ratio on completed)
-     # is not a valid option on the new tab.
-     |> assign(:sort_by, @default_sort)
-     |> assign(:selected_ids, MapSet.new())
-     |> assign(:selection_mode, false)
-     |> assign(:page, 0)
-     |> load_downloads()}
+     push_patch(socket, to: downloads_path(socket, tab: tab, status: status, download: nil))}
+  end
+
+  def handle_event("filter", params, socket) do
+    filters = ListView.parse_filters(params, socket.assigns.active_tab)
+
+    {:noreply,
+     push_patch(socket,
+       to: downloads_path(socket, q: filters.q, client: filters.client, status: filters.status)
+     )}
+  end
+
+  def handle_event("clear_filters", _params, socket) do
+    {:noreply, push_patch(socket, to: downloads_path(socket, q: nil, client: nil, status: nil))}
+  end
+
+  def handle_event("remove_filter", %{"key" => key}, socket) when key in ~w(q client status) do
+    {:noreply,
+     push_patch(socket, to: downloads_path(socket, [{String.to_existing_atom(key), nil}]))}
+  end
+
+  def handle_event("open_details", %{"id" => id}, socket) do
+    {:noreply, push_patch(socket, to: downloads_path(socket, download: id))}
+  end
+
+  def handle_event("close_details", _params, socket) do
+    {:noreply, close_drawer(socket)}
   end
 
   def handle_event("sort", %{"sort_by" => sort_by}, socket)
@@ -507,6 +585,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:noreply,
      socket
      |> assign(:page, 0)
+     |> assign(:client_urls, client_urls())
      |> load_downloads()}
   end
 
@@ -601,7 +680,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
           |> MatchDialog.open(download, mode_atom(mode))
           |> then(&MatchDialog.search(&1, &1.query))
 
-        {:noreply, assign(socket, :match_modal, dialog)}
+        {:noreply, socket |> assign(:match_modal, dialog) |> close_drawer()}
       end)
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -962,7 +1041,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     schedule_progress_refresh()
 
     socket =
-      if socket.assigns.active_tab == :queue and not socket.assigns.downloads_empty? and
+      if socket.assigns.active_tab == :queue and socket.assigns.summary.active > 0 and
            not socket.assigns.selection_mode do
         load_downloads(socket)
       else
@@ -1036,7 +1115,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
     case socket.assigns.active_tab do
       :issues ->
-        load_issues_downloads(socket)
+        load_issues_downloads(socket, Downloads.list_downloads_with_status(bounded: true))
 
       :external ->
         load_external(socket)
@@ -1191,70 +1270,141 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp load_downloads(socket) do
     # The External tab count is shown from every tab, so refresh the cached scan
     # on every load. This is an ETS read, not I/O.
-    socket = assign(socket, :scan, ExternalTorrents.get())
+    socket = socket |> assign(:scan, ExternalTorrents.get()) |> assign(:loaded?, true)
 
     case socket.assigns.active_tab do
-      :issues ->
-        load_issues_downloads(socket)
-
+      # External reads only the scan cache and never polls the clients, so it
+      # keeps the last counts and summary rather than paying for a poll.
       :external ->
-        load_external(socket)
+        socket |> load_external() |> assign(:drawer_download, nil)
 
       tab ->
-        filter =
-          case tab do
-            :queue -> :active
-            :completed -> :imported
-          end
-
-        # Get all matching downloads for the current tab with real-time status from clients
-        all_downloads =
-          Downloads.list_downloads_with_status(filter: filter, bounded: true)
-          |> apply_sorting(socket.assigns.sort_by)
-
-        # Apply pagination
-        page = socket.assigns.page
-        offset = page * @items_per_page
-
-        paginated_downloads =
-          all_downloads
-          |> Enum.drop(offset)
-          |> Enum.take(@items_per_page)
-          |> annotate_rematch_eligibility(tab)
-          |> annotate_auto_reject_cap()
-
-        has_more = length(all_downloads) > offset + @items_per_page
-
-        # Determine if we need to append or reset stream
-        reset? = page == 0
+        # Every row and every client in one bounded poll; the tabs, counts and
+        # stats are all partitions of it.
+        all = Downloads.list_downloads_with_status(bounded: true)
 
         socket
-        |> assign(:stale_status, stale_status(all_downloads))
-        |> assign(:has_more, has_more)
-        |> assign(:downloads_empty?, reset? and paginated_downloads == [])
-        |> stream(:downloads, paginated_downloads, reset: reset?)
+        |> assign(:rows_by_id, Map.new(all, &{&1.id, &1}))
+        |> assign_overview(all)
+        |> load_tab(tab, all)
+        |> assign_drawer(all)
     end
   end
 
-  defp load_issues_downloads(socket) do
-    all_downloads = Downloads.list_downloads_with_status(bounded: true)
+  defp assign_overview(socket, all) do
+    active = Downloads.filter_downloads(all, :active)
+    issues = issue_lists(all)
 
+    socket
+    |> assign(:summary, ListView.summarize(active))
+    |> assign(:client_options, ListView.clients(all))
+    |> assign(:tab_counts, %{
+      queue: length(active),
+      completed: length(Downloads.filter_downloads(all, :imported)),
+      issues:
+        length(socket.assigns.scan.needs_matching) + length(issues.unresolved) +
+          length(issues.other)
+    })
+  end
+
+  defp load_tab(socket, :issues, all), do: load_issues_downloads(socket, all)
+
+  defp load_tab(socket, tab, all) do
+    filter = if tab == :queue, do: :active, else: :imported
+
+    all_downloads =
+      all
+      |> Downloads.filter_downloads(filter)
+      |> ListView.filter(socket.assigns.filters)
+      |> Sorting.sort(socket.assigns.sort_by)
+
+    # Apply pagination
+    page = socket.assigns.page
+    offset = page * @items_per_page
+
+    paginated_downloads =
+      all_downloads
+      |> Enum.drop(offset)
+      |> Enum.take(@items_per_page)
+      |> annotate_rematch_eligibility(tab)
+      |> annotate_auto_reject_cap()
+
+    has_more = length(all_downloads) > offset + @items_per_page
+
+    # Determine if we need to append or reset stream
+    reset? = page == 0
+
+    socket
+    |> assign(:stale_status, stale_status(all_downloads))
+    |> assign(:has_more, has_more)
+    |> assign(:downloads_empty?, reset? and paginated_downloads == [])
+    |> stream(:downloads, paginated_downloads, reset: reset?)
+  end
+
+  # Split out of load_issues_downloads/2 so the Issues count is available from
+  # every tab. The path-mapping enrichment is a query and only the Issues tab
+  # renders it, so it stays in load_issues_downloads/2.
+  defp issue_lists(all) do
+    %{
+      unresolved: Enum.filter(all, &(&1.match_status == "unresolved_files")),
+      other:
+        Enum.filter(all, fn d ->
+          (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at) ||
+             not is_nil(d.removal_error)) and d.match_status != "unresolved_files"
+        end)
+    }
+  end
+
+  # Finds the open drawer's download in `all` (fetching it when nil). A
+  # download that has gone (cleared, deleted, stale link) closes the drawer
+  # once, with a flash; drawer_id is cleared so a refresh tick does not repeat it.
+  defp assign_drawer(%{assigns: %{drawer_id: nil}} = socket, _all),
+    do: assign(socket, :drawer_download, nil)
+
+  defp assign_drawer(%{assigns: %{active_tab: :external}} = socket, _all),
+    do: assign(socket, :drawer_download, nil)
+
+  # A drawer-only patch reuses the rows the last load polled, so opening the
+  # drawer never polls the clients again. Only an id that load did not see (a
+  # link to a download added since) pays for a fetch.
+  defp assign_drawer(socket, nil) do
+    case Map.fetch(socket.assigns.rows_by_id, socket.assigns.drawer_id) do
+      {:ok, download} -> assign_drawer(socket, [download])
+      :error -> assign_drawer(socket, Downloads.list_downloads_with_status(bounded: true))
+    end
+  end
+
+  defp assign_drawer(socket, all) do
+    case Enum.find(all, &(&1.id == socket.assigns.drawer_id)) do
+      nil ->
+        socket
+        |> assign(drawer_id: nil, drawer_download: nil)
+        |> put_flash(:info, "That download is no longer in this list")
+
+      download ->
+        [download] =
+          [download]
+          |> annotate_rematch_eligibility(drawer_tab(download))
+          |> annotate_auto_reject_cap()
+
+        assign(socket, :drawer_download, download)
+    end
+  end
+
+  # The drawer acts on the row itself, not on the page tab it was opened from.
+  defp drawer_tab(%{imported_at: nil}), do: :queue
+  defp drawer_tab(_download), do: :completed
+
+  defp load_issues_downloads(socket, all_downloads) do
     # Needs Matching is derived from the clients, not from the database: these
     # torrents have no download row and never will unless the user matches one.
     # `:scan` was refreshed by the caller (load_downloads/1 or reload_stream/1).
     scan = socket.assigns.scan
-    needs_matching = scan.needs_matching
-
-    unresolved = Enum.filter(all_downloads, fn d -> d.match_status == "unresolved_files" end)
-
-    other =
-      all_downloads
-      |> Enum.filter(fn d ->
-        (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at) ||
-           not is_nil(d.removal_error)) and
-          d.match_status != "unresolved_files"
-      end)
-      |> enrich_path_mapping_suggestions()
+    filters = socket.assigns.filters
+    %{unresolved: unresolved, other: other} = issue_lists(all_downloads)
+    needs_matching = ListView.filter_scan(scan.needs_matching, filters)
+    unresolved = ListView.filter(unresolved, filters)
+    other = other |> ListView.filter(filters) |> enrich_path_mapping_suggestions()
 
     counts = %{
       unmatched: length(needs_matching),
@@ -1278,13 +1428,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp load_external(socket) do
     scan = socket.assigns.scan
+    external = ListView.filter_scan(scan.external, socket.assigns.filters)
 
     socket
     |> assign(:stale_status, nil)
     |> assign(:has_more, false)
-    |> assign(:downloads_empty?, scan.external == [])
+    |> assign(:downloads_empty?, external == [])
     |> assign(:scan, scan)
-    |> stream(:external_torrents, scan.external, reset: true)
+    |> stream(:external_torrents, external, reset: true)
   end
 
   # Orphan groups annotated with a DOM-safe slug. Client names come from
@@ -1296,7 +1447,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp removed_client_groups do
     Downloads.removed_client_groups()
     |> Enum.map_reduce(MapSet.new(), fn group, taken ->
-      {slug, taken} = unique_slug(slugify(group.download_client), taken)
+      {slug, taken} = unique_slug(ListView.slugify(group.download_client), taken)
       {Map.put(group, :slug, slug), taken}
     end)
     |> elem(0)
@@ -1325,17 +1476,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
       next_free_slug(base, n + 1, taken)
     else
       {candidate, MapSet.put(taken, candidate)}
-    end
-  end
-
-  defp slugify(name) do
-    name
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9]+/, "-")
-    |> String.trim("-")
-    |> case do
-      "" -> "client"
-      slug -> slug
     end
   end
 
@@ -1502,7 +1642,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
 
     Downloads.list_downloads_with_status(filter: filter, bounded: true)
-    |> apply_sorting(socket.assigns.sort_by)
+    |> ListView.filter(socket.assigns.filters)
+    |> Sorting.sort(socket.assigns.sort_by)
     |> annotate_rematch_eligibility(socket.assigns.active_tab)
     |> annotate_auto_reject_cap()
   end
@@ -1539,108 +1680,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end)
   end
 
-  # Sorts the enriched download list by the active `sort_by` selection. Runs in
-  # the LiveView (not the DB) because real-time keys (progress, speeds, ETA,
-  # ratio) only exist after client-status enrichment. Missing values are guarded
-  # so they group deterministically rather than scatter or raise.
-  defp apply_sorting(downloads, sort_by) do
-    case sort_by do
-      "added_desc" -> Enum.sort_by(downloads, & &1.inserted_at, {:desc, DateTime})
-      "added_asc" -> Enum.sort_by(downloads, & &1.inserted_at, {:asc, DateTime})
-      "name_asc" -> Enum.sort_by(downloads, &sort_name/1, :asc)
-      "name_desc" -> Enum.sort_by(downloads, &sort_name/1, :desc)
-      "status_asc" -> Enum.sort_by(downloads, &status_rank/1, :asc)
-      "size_desc" -> Enum.sort_by(downloads, &(&1.size || 0), :desc)
-      "size_asc" -> Enum.sort_by(downloads, &(&1.size || 0), :asc)
-      "progress_desc" -> Enum.sort_by(downloads, &(&1.progress || 0.0), :desc)
-      "progress_asc" -> Enum.sort_by(downloads, &(&1.progress || 0.0), :asc)
-      "dlspeed_desc" -> Enum.sort_by(downloads, &(&1.download_speed || 0), :desc)
-      "ulspeed_desc" -> Enum.sort_by(downloads, &(&1.upload_speed || 0), :desc)
-      "ratio_desc" -> Enum.sort_by(downloads, &(&1.ratio || 0.0), :desc)
-      "ratio_asc" -> Enum.sort_by(downloads, &(&1.ratio || 0.0), :asc)
-      "eta_asc" -> Enum.sort_by(downloads, &eta_sort_key/1, :asc)
-      "imported_desc" -> Enum.sort_by(downloads, &imported_sort_key/1, {:desc, DateTime})
-      "imported_asc" -> Enum.sort_by(downloads, &imported_sort_key/1, {:asc, DateTime})
-      _ -> Enum.sort_by(downloads, & &1.inserted_at, {:desc, DateTime})
-    end
-  end
-
-  defp sort_name(download), do: String.downcase(get_display_title(download) || "")
-
-  defp status_rank(download) do
-    # Stall state overrides the client status for sorting: a soft-stall groups
-    # with warnings.
-    if soft_stalled?(download) do
-      Map.fetch!(@status_rank, "stalled")
-    else
-      Map.get(@status_rank, download.status, 99)
-    end
-  end
-
-  # ETA may be nil, an integer (seconds remaining), or a DateTime. Normalize to
-  # an integer so a single comparator works; nil sorts last (soonest first).
-  defp eta_sort_key(download) do
-    case download.eta do
-      nil -> 9_999_999_999
-      %DateTime{} = dt -> DateTime.diff(dt, DateTime.utc_now(), :second)
-      seconds when is_integer(seconds) -> seconds
-      _ -> 9_999_999_999
-    end
-  end
-
-  # imported_at is always present on the completed tab, but guard nil so the
-  # comparator never raises if called on a mixed list.
-  defp imported_sort_key(download), do: download.imported_at || download.inserted_at
-
-  # Sort options available for the given tab. Shared keys apply to every tab;
-  # queue- and completed-specific keys are only meaningful there.
-  defp sort_options(:completed), do: @shared_sort_options ++ @completed_sort_options
-  defp sort_options(_tab), do: @shared_sort_options ++ @queue_sort_options
-
   # View helpers
 
   defp is_selected?(assigns, id) do
     MapSet.member?(assigns.selected_ids, id)
-  end
-
-  defp format_speed(nil), do: "—"
-
-  defp format_speed(bytes_per_second) when is_number(bytes_per_second) do
-    cond do
-      bytes_per_second >= 1_048_576 ->
-        "#{Float.round(bytes_per_second / 1_048_576, 2)} MB/s"
-
-      bytes_per_second >= 1024 ->
-        "#{Float.round(bytes_per_second / 1024, 2)} KB/s"
-
-      true ->
-        "#{bytes_per_second} B/s"
-    end
-  end
-
-  defp format_eta(nil), do: "—"
-
-  defp format_eta(%DateTime{} = dt) do
-    now = DateTime.utc_now()
-    diff = DateTime.diff(dt, now, :second)
-
-    cond do
-      diff < 0 -> "Now"
-      diff < 60 -> "#{diff}s"
-      diff < 3600 -> "#{div(diff, 60)}m"
-      diff < 86400 -> "#{div(diff, 3600)}h"
-      true -> "#{div(diff, 86400)}d"
-    end
-  end
-
-  defp format_eta(seconds) when is_integer(seconds) do
-    cond do
-      seconds < 0 -> "Now"
-      seconds < 60 -> "#{seconds}s"
-      seconds < 3600 -> "#{div(seconds, 60)}m"
-      seconds < 86400 -> "#{div(seconds, 3600)}h"
-      true -> "#{div(seconds, 86400)}d"
-    end
   end
 
   # A percentage is only meaningful when the client is reporting a real
@@ -1649,39 +1692,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # ("checking") — have no measurable percentage. Rendering a 0%-filled bar
   # there reads as "stuck"; these phases get an indeterminate (animated) bar
   # plus the phase label instead of a frozen "0%".
-  defp progress_indeterminate?(download), do: download.status in ["queued", "checking"]
-
-  defp get_metadata_value(download, key) do
-    metadata_map = download.metadata || %{}
-
-    case key do
-      # Keys modeled in DownloadMetadata struct
-      k when k in ~w(size seeders leechers quality season_pack season_number download_protocol) ->
-        metadata = DownloadMetadata.from_map(metadata_map)
-        if metadata, do: Map.get(metadata, String.to_existing_atom(k)), else: nil
-
-      # Raw metadata keys (parsed_info, match_suggestions, unresolved_files, etc.)
-      _ ->
-        Map.get(metadata_map, key)
-    end
-  end
-
-  defp status_badge_class(status) do
-    case status do
-      "completed" -> "badge-success"
-      "seeding" -> "badge-success"
-      "imported" -> "badge-success"
-      "failed" -> "badge-error"
-      "missing" -> "badge-error"
-      "cancelled" -> "badge-warning"
-      "downloading" -> "badge-primary"
-      "checking" -> "badge-info"
-      "queued" -> "badge-info"
-      "paused" -> "badge-warning"
-      "stalled" -> "badge-warning"
-      _ -> "badge-ghost"
-    end
-  end
+  defp progress_indeterminate?(download), do: ListView.progress_indeterminate?(download)
 
   # Color modifier for the DaisyUI `status` dot shown at the start of each row.
   defp status_dot_class(status) do
@@ -1691,24 +1702,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
       s when s in ["cancelled", "stalled", "paused"] -> "status-warning"
       s when s in ["checking", "queued"] -> "status-info"
       _ -> "status-neutral"
-    end
-  end
-
-  # An import problem that should be surfaced on the row even though the torrent
-  # client still reports the download as completed/seeding. The torrent finishing
-  # is only half the job — if the post-download import keeps failing (e.g. a
-  # filesystem permission error) the user otherwise sees a healthy "seeding" row
-  # with no hint that nothing landed in the library. Returns:
-  #
-  #   * `:failed`   — import failed terminally (no further automatic retries)
-  #   * `:retrying` — import failed but a retry is scheduled
-  #   * `nil`       — no import problem (not yet attempted, or already imported)
-  def import_issue(download) do
-    cond do
-      not is_nil(download.imported_at) -> nil
-      is_nil(download.import_failed_at) and is_nil(download.import_last_error) -> nil
-      not is_nil(download.import_next_retry_at) -> :retrying
-      true -> :failed
     end
   end
 
@@ -1730,39 +1723,17 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp import_issue_label(:failed), do: "Import failed"
   defp import_issue_label(:retrying), do: "Import retrying"
 
-  @doc false
-  # Returns `{class, label}` for the download's status badge. A soft-stall is a
-  # recoverable warning: progress has stopped but the download still occupies
-  # its episode and may auto-clear. There is no terminal stall badge — an
-  # escalated stall is rejected outright and the row no longer exists.
-  def status_badge(download) do
-    if soft_stalled?(download) do
-      {status_badge_class("stalled"), "Stalled"}
-    else
-      {status_badge_class(download.status), String.capitalize(download.status)}
-    end
-  end
+  # Kept on Index because existing tests call them as Index.import_issue/1 and
+  # Index.status_badge/1.
+  defdelegate import_issue(download), to: ListView
+  defdelegate status_badge(download), to: ListView
 
   # A removal is in flight for this row. Mydia.Jobs.RemoveDownload deletes the
   # row when it finishes, so until then the row only has to say so.
   defp removing?(download), do: not is_nil(download.removal_requested_at)
 
-  # A recoverable soft-stall: `stalled_since` set but not yet escalated to a
-  # terminal `import_failed_at` failure. Gated on the live "downloading" status
-  # so a download that pauses, completes, or goes client-unreachable after a
-  # soft-stall does not keep rendering a stale warning — `stalled_since` is only
-  # cleared while the download is observed downloading, so it can linger on a row
-  # that has since moved on.
-  defp soft_stalled?(download) do
-    download.status == "downloading" and StallDetector.soft_stalled?(download)
-  end
-
-  # Seconds since this download last moved a byte. Falls back to stalled_since
-  # for a row whose last_progress_at predates stall tracking.
-  defp stall_elapsed_seconds(download) do
-    reference = download.last_progress_at || download.stalled_since
-    DateTime.diff(DateTime.utc_now(), reference, :second)
-  end
+  defp soft_stalled?(download), do: ListView.soft_stalled?(download)
+  defp stall_elapsed_seconds(download), do: ListView.stall_elapsed_seconds(download)
 
   # Seconds left before DownloadMonitor gives up on this download. Derived from
   # the same StallDetector rule the monitor applies, so the number the operator
@@ -1794,23 +1765,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     if seconds < 60, do: "#{seconds}s ago", else: format_relative_time(as_of)
   end
 
-  defp format_ratio(nil), do: "0.00"
-  defp format_ratio(ratio) when is_float(ratio), do: Float.round(ratio, 2) |> to_string()
-  defp format_ratio(ratio) when is_integer(ratio), do: "#{ratio}.00"
-
-  defp format_relative_time(%DateTime{} = dt) do
-    now = DateTime.utc_now()
-    diff = DateTime.diff(now, dt, :second)
-
-    cond do
-      diff < 60 -> "just now"
-      diff < 3600 -> "#{div(diff, 60)}m ago"
-      diff < 86400 -> "#{div(diff, 3600)}h ago"
-      diff < 604_800 -> "#{div(diff, 86400)}d ago"
-      true -> Calendar.strftime(dt, "%b %d")
-    end
-  end
-
   # Whether Mydia adopted this download from a client rather than grabbing it
   # itself. Written by `UntrackedMatcher.create_download_record/3` (automatic)
   # and `Queue.adopt_external_torrent/3` (manual); "Added outside Mydia" is
@@ -1828,26 +1782,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp adopted_from_client?(_download), do: false
 
-  defp get_display_title(download) do
-    cond do
-      # Episode download - show parent show title
-      is_map(download.episode) ->
-        if is_map(download.episode.media_item) do
-          download.episode.media_item.title
-        else
-          # Fallback to direct media_item if episode.media_item is not loaded
-          if is_map(download.media_item), do: download.media_item.title, else: "Unknown Show"
-        end
-
-      # Movie or show-level download
-      is_map(download.media_item) && download.media_item.title ->
-        download.media_item.title
-
-      # Fallback to torrent title
-      true ->
-        download.title
-    end
-  end
+  defp get_display_title(download), do: ListView.display_title(download)
 
   defp get_episode_details(download) do
     cond do
@@ -1920,25 +1855,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
       "movie" -> {"🎬", "Movie", "badge-accent"}
       "tv_show" -> {"📺", "TV Show", "badge-info"}
       _ -> nil
-    end
-  end
-
-  defp format_protocol(:nzb), do: "Usenet"
-  defp format_protocol(:torrent), do: "Torrent"
-  defp format_protocol("nzb"), do: "Usenet"
-  defp format_protocol("torrent"), do: "Torrent"
-  defp format_protocol(_), do: nil
-
-  defp format_next_retry(%DateTime{} = dt) do
-    now = DateTime.utc_now()
-    diff = DateTime.diff(dt, now, :second)
-
-    cond do
-      diff < 0 -> "Retrying soon..."
-      diff < 60 -> "in #{diff}s"
-      diff < 3600 -> "in #{div(diff, 60)}m"
-      diff < 86400 -> "in #{div(diff, 3600)}h"
-      true -> "in #{div(diff, 86400)}d"
     end
   end
 end

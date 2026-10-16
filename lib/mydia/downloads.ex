@@ -109,6 +109,9 @@ defmodule Mydia.Downloads do
   @spec list_downloads_with_status(keyword()) :: [EnrichedDownload.t()]
   defdelegate list_downloads_with_status(opts \\ []), to: Mydia.Downloads.History
 
+  @spec filter_downloads([EnrichedDownload.t()], atom()) :: [EnrichedDownload.t()]
+  defdelegate filter_downloads(downloads, filter), to: Mydia.Downloads.History
+
   @doc """
   Gets a single download, or `nil` if it no longer exists.
 

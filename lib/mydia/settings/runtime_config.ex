@@ -527,6 +527,7 @@ defmodule Mydia.Settings.RuntimeConfig do
       port: Map.get(map, :port),
       use_ssl: Map.get(map, :use_ssl, false),
       url_base: Map.get(map, :url_base),
+      web_ui_url: Map.get(map, :web_ui_url),
       username: Map.get(map, :username),
       password: Map.get(map, :password),
       api_key: Map.get(map, :api_key),

@@ -564,6 +564,34 @@ defmodule Mydia.Config.LoaderTest do
       assert client.password == "envpass"
     end
 
+    test "reads DOWNLOAD_CLIENT_<N>_WEB_UI_URL" do
+      System.put_env("DOWNLOAD_CLIENT_1_NAME", "EnvClient")
+      System.put_env("DOWNLOAD_CLIENT_1_TYPE", "qbittorrent")
+      System.put_env("DOWNLOAD_CLIENT_1_HOST", "qbittorrent")
+      System.put_env("DOWNLOAD_CLIENT_1_PORT", "8080")
+      System.put_env("DOWNLOAD_CLIENT_1_WEB_UI_URL", "https://qbit.example.org/")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert %{web_ui_url: "https://qbit.example.org/"} = List.first(config.download_clients)
+    end
+
+    test "drops an invalid DOWNLOAD_CLIENT_<N>_WEB_UI_URL with a warning" do
+      System.put_env("DOWNLOAD_CLIENT_1_NAME", "EnvClient")
+      System.put_env("DOWNLOAD_CLIENT_1_TYPE", "qbittorrent")
+      System.put_env("DOWNLOAD_CLIENT_1_HOST", "qbittorrent")
+      System.put_env("DOWNLOAD_CLIENT_1_PORT", "8080")
+      System.put_env("DOWNLOAD_CLIENT_1_WEB_UI_URL", "qbit.example.org")
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+          assert %{web_ui_url: nil} = List.first(config.download_clients)
+        end)
+
+      assert log =~ "WEB_UI_URL"
+    end
+
     test "defaults external_torrents to :auto when the env var is absent" do
       System.put_env("DOWNLOAD_CLIENT_1_NAME", "EnvClient")
       System.put_env("DOWNLOAD_CLIENT_1_TYPE", "qbittorrent")

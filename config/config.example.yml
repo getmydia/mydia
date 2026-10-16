@@ -302,6 +302,8 @@ download_clients:
     use_ssl: false
     # Optional: URL base path (e.g., "/qbittorrent" if behind reverse proxy)
     url_base: ""
+    # Optional: address your browser uses to open the web UI (blank derives it from host and port)
+    # web_ui_url: "https://qbittorrent.example.org"
     username: "admin"
     # In production, use environment variable: DOWNLOAD_CLIENT_1_PASSWORD
     password: "adminpass"

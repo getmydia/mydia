@@ -418,7 +418,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       assert has_element?(
                view,
-               "button[phx-click='open_match_modal'][phx-value-id='#{download.id}'][phx-value-mode='inflight']"
+               "#row-change-match-#{download.id}"
              )
     end
 
