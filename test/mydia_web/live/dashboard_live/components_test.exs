@@ -143,6 +143,7 @@ defmodule MydiaWeb.DashboardLive.ComponentsTest do
     document = LazyHTML.from_fragment(html)
     subline = LazyHTML.query(document, "#health-tile-indexers #cardigann-engine-subline")
     assert LazyHTML.text(subline) =~ "Cardigann: Built-in · 7/10"
+    assert LazyHTML.attribute(subline, "title") == ["Cardigann: Built-in · 7/10"]
   end
 
   test "indexers tile hides the Cardigann line with no summary or an empty library" do

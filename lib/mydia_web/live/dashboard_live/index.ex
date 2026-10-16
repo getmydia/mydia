@@ -108,7 +108,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       unhealthy: 0,
       unknown: 0,
       total: 0,
-      state: :none
+      state: :checking
     })
     |> assign(:media_servers_rollup, %Rollup{
       healthy: 0,

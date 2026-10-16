@@ -44,6 +44,18 @@ defmodule MydiaWeb.DashboardLive.SystemHealthTest do
     assert has_element?(view, "#health-tile-trash")
   end
 
+  test "first paint says Checking on the indexers tile, not Not set up", %{conn: conn} do
+    admin = user_fixture(%{role: "admin"})
+
+    html = conn |> log_in_user(admin) |> get(~p"/") |> html_response(200)
+
+    tile = html |> LazyHTML.from_document() |> LazyHTML.query("#health-tile-indexers")
+
+    refute Enum.empty?(tile)
+    assert LazyHTML.text(tile) =~ "Checking"
+    refute LazyHTML.text(tile) =~ "Not set up"
+  end
+
   test "Cardigann library trackers alone keep the indexers tile and its health", %{conn: conn} do
     admin = user_fixture(%{role: "admin"})
 

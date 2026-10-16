@@ -110,6 +110,7 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
           <div
             :if={@cardigann && @cardigann.installed > 0}
             id="cardigann-engine-subline"
+            title={CardigannSummary.label(@cardigann)}
             class="text-xs text-base-content/60 mt-1.5 truncate"
           >
             {CardigannSummary.label(@cardigann)}
