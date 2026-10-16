@@ -169,6 +169,9 @@ abstract class SourcePlaybackSession implements PlaybackSession {
         // Embedded tracks come from the container through mpv; only
         // sidecars need the server.
         serverSubtitleTracks: external.isEmpty ? null : external,
+        showId: item.kind == ItemKind.episode ? detail.show?.externalId : null,
+        seasonNumber:
+            item.kind == ItemKind.episode ? detail.summary.parentIndex : null,
       );
     } catch (_) {
       return null;

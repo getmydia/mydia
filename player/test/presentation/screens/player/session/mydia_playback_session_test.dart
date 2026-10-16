@@ -14,10 +14,46 @@ import 'package:player/presentation/screens/player/session/playback_session_type
 import 'package:player/presentation/screens/player/session/source_playback_sessions.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 
+import '../../../../core/sources/mydia/mydia_fixtures.dart' as fx;
 import '../../../../test_utils/mydia_test_source.dart';
 import '../../../../test_utils/real_http.dart';
 import '../../../../test_utils/scripted_mydia_transport.dart';
 import '../player_screen_test_harness.dart';
+
+/// An `EpisodeDetail` answer's episode, with the fields its generated decoder
+/// requires that the shared fixture leaves out.
+Map<String, dynamic> _episodeDetail({required int season, int number = 1}) {
+  final base = fx.episode('ep-1', season: season, number: number);
+  return {
+    ...base,
+    '__typename': 'Episode',
+    'monitored': true,
+    'progress': {
+      ...(base['progress'] as Map<String, dynamic>),
+      '__typename': 'Progress'
+    },
+    'files': [
+      for (final f in base['files'] as List<dynamic>)
+        {
+          ...(f as Map<String, dynamic>),
+          '__typename': 'MediaFile',
+          'subtitles': [
+            for (final t in f['subtitles'] as List<dynamic>)
+              {...(t as Map<String, dynamic>), '__typename': 'SubtitleTrack'}
+          ],
+        }
+    ],
+    'show': {
+      ...(base['show'] as Map<String, dynamic>),
+      '__typename': 'Show',
+      'artwork': {
+        ...((base['show'] as Map<String, dynamic>)['artwork']
+            as Map<String, dynamic>),
+        '__typename': 'Artwork',
+      },
+    },
+  };
+}
 
 const _movie = ItemRef(
     sourceId: testMydiaSourceId, kind: ItemKind.movie, externalId: 'movie-1');
@@ -209,6 +245,21 @@ void main() {
       final server = _answering(graphqlError('boom'));
       expect(await _session(server).detail(), isNull);
     });
+
+    test('an episode reports its show and season', () async {
+      final server =
+          _answering({'episode': _episodeDetail(season: 4, number: 2)});
+      final detail = (await _session(server, item: _episode).detail())!;
+      expect(detail.showId, 's-1');
+      expect(detail.seasonNumber, 4);
+    });
+
+    test('a movie reports no show or season', () async {
+      final server = _answering(movieDetailResponse(positionSeconds: 1));
+      final detail = (await _session(server).detail())!;
+      expect(detail.showId, isNull);
+      expect(detail.seasonNumber, isNull);
+    });
   });
 
   group('segments', () {
@@ -348,6 +399,39 @@ void main() {
       final server = _answering(<String, dynamic>{});
       expect(await _session(server).seasonEpisodes(1), isNull);
       expect(server.requests, isEmpty);
+    });
+
+    test('without a route show id, uses the show its detail named', () async {
+      final server = ScriptedMydiaTransport(
+          (request, _) => request.operation == 'EpisodeDetail'
+              ? {'episode': _episodeDetail(season: 2)}
+              : {
+                  'seasonEpisodes': [episode(1, files: const [])]
+                });
+      final session = _session(server, item: _episode);
+      await session.detail();
+      await session.seasonEpisodes(2);
+      expect(
+          server.requests.last.variables, {'showId': 's-1', 'seasonNumber': 2});
+    });
+
+    test('without any show id, asks nothing and answers null', () async {
+      final server = _answering({'seasonEpisodes': <Object>[]});
+      expect(await _session(server, item: _episode).seasonEpisodes(2), isNull);
+      expect(server.requests, isEmpty);
+    });
+
+    test('the route show id wins over the detail one', () async {
+      final server = ScriptedMydiaTransport(
+          (request, _) => request.operation == 'EpisodeDetail'
+              ? {'episode': _episodeDetail(season: 2)}
+              : {
+                  'seasonEpisodes': [episode(1, files: const [])]
+                });
+      final session = _session(server, item: _episode, showId: 'route-show');
+      await session.detail();
+      await session.seasonEpisodes(2);
+      expect(server.requests.last.variables['showId'], 'route-show');
     });
   });
 

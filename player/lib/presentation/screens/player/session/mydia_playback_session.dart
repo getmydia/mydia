@@ -69,6 +69,10 @@ class MydiaPlaybackSession implements PlaybackSession {
   final int? seasonNumber;
   final MediaProxy Function() _proxy;
 
+  /// The show id the last episode [detail] answer named. [seasonEpisodes]
+  /// falls back to it when the route carried no [showId].
+  String? _detailShowId;
+
   bool get _isEpisode => item.kind == ItemKind.episode;
 
   @override
@@ -344,6 +348,8 @@ class MydiaPlaybackSession implements PlaybackSession {
         ),
       ));
       final episode = data.episode;
+      final showId = episode?.$show?.id;
+      _detailShowId = showId;
       return PlaybackDetail(
         savedPositionSeconds: episode?.progress?.positionSeconds,
         savedDurationSeconds: episode?.progress?.durationSeconds,
@@ -351,6 +357,8 @@ class MydiaPlaybackSession implements PlaybackSession {
             DateTime.tryParse(episode?.progress?.lastWatchedAt ?? ''),
         runtimeMinutes: episode?.runtime,
         serverSubtitleTracks: _subtitlesFor(episode?.files, fileId),
+        showId: showId,
+        seasonNumber: episode?.seasonNumber,
       );
     } catch (e) {
       debugPrint('Error fetching progress: $e');
@@ -475,7 +483,7 @@ class MydiaPlaybackSession implements PlaybackSession {
 
   @override
   Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber) async {
-    final showId = this.showId;
+    final showId = this.showId ?? _detailShowId;
     if (showId == null) return null;
     try {
       // Like [detail], a partial answer still carries the episodes.
