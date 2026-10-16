@@ -890,6 +890,13 @@ defmodule Mydia.Downloads.History do
     end
   end
 
+  @doc """
+  Applies one of `list_downloads_with_status/1`'s `:filter` values to a list
+  it already returned, so a caller can fetch once and partition in memory.
+  """
+  @spec filter_downloads([EnrichedDownload.t()], atom()) :: [EnrichedDownload.t()]
+  def filter_downloads(downloads, filter), do: apply_status_filters(downloads, filter)
+
   defp apply_status_filters(downloads, :all), do: downloads
 
   defp apply_status_filters(downloads, :active) do

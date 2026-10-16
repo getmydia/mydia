@@ -15,7 +15,11 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias Phoenix.PubSub
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.DownloadsLive.Components
+  alias MydiaWeb.DownloadsLive.Filters
+  alias MydiaWeb.DownloadsLive.ListComponents
   alias MydiaWeb.DownloadsLive.ListView
+  alias MydiaWeb.DownloadsLive.Summary
+  alias Mydia.Settings.DownloadClientConfig
   alias MydiaWeb.DownloadsLive.MatchDialog
   import MydiaWeb.DownloadsLive.Format
   import MydiaWeb.Formatters
@@ -25,6 +29,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
   @items_per_page 50
 
   @default_sort "added_desc"
+
+  @allowed_tabs ~w(queue completed issues external)
 
   # While a download is in flight, its progress (debrid swarm %, local fetch %)
   # is synthesized live from the client/provider on each poll and is NOT
@@ -118,36 +124,143 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:match_modal, nil)
      |> assign(:stall_grace_map, Settings.download_client_grace_map())
      |> assign(:stale_status, nil)
+     |> assign(:loaded?, false)
+     |> assign(:filters, %Filters{})
+     |> assign(:summary, %Summary{})
+     |> assign(:tab_counts, %{queue: 0, completed: 0, issues: 0})
+     |> assign(:client_options, [])
+     |> assign(:client_urls, client_urls())
+     |> assign(:drawer_id, nil)
+     |> assign(:drawer_download, nil)
+     |> assign(:downloads_empty?, true)
      # Initialize all streams
      |> stream(:downloads, [])
      |> stream(:needs_matching, [])
      |> stream(:external_torrents, [])
      |> stream(:unresolved_downloads, [])
-     |> stream(:other_issues, [])
-     |> load_downloads()}
+     |> stream(:other_issues, [])}
   end
 
   @impl true
-  def handle_params(_params, _url, socket) do
+  def handle_params(params, _url, socket) do
+    tab = parse_tab(params["tab"])
+    filters = ListView.parse_filters(params, tab)
+    tab_changed? = tab != socket.assigns.active_tab
+
+    list_changed? =
+      not socket.assigns.loaded? or tab_changed? or filters != socket.assigns.filters
+
+    socket =
+      socket
+      |> assign(:active_tab, tab)
+      |> assign(:filters, filters)
+      |> assign(:drawer_id, blank_to_nil(params["download"]))
+
+    socket =
+      if list_changed? do
+        socket |> reset_list(tab_changed?) |> load_downloads()
+      else
+        assign_drawer(socket, nil)
+      end
+
     {:noreply, socket}
   end
 
-  @impl true
-  @allowed_tabs ~w(queue completed issues external)
+  defp parse_tab(tab) when tab in @allowed_tabs, do: String.to_existing_atom(tab)
+  defp parse_tab(_tab), do: :queue
 
+  defp blank_to_nil(value) when value in [nil, ""], do: nil
+  defp blank_to_nil(value), do: value
+
+  # A new tab resets the sort: a tab-specific sort (ratio on Completed) is not
+  # an option on the next tab.
+  defp reset_list(socket, tab_changed?) do
+    socket = assign(socket, :page, 0)
+
+    if tab_changed? do
+      socket
+      |> assign(:sort_by, @default_sort)
+      |> assign(:selected_ids, MapSet.new())
+      |> assign(:selection_mode, false)
+    else
+      socket
+    end
+  end
+
+  # Builds /downloads?... from the current state with `overrides` applied.
+  # Defaults (Queue tab, nil values) are left out so links stay short.
+  defp downloads_path(socket, overrides) do
+    %{active_tab: tab, drawer_id: drawer_id, filters: filters} = socket.assigns
+
+    values =
+      Map.merge(
+        %{
+          tab: tab,
+          q: filters.q,
+          client: filters.client,
+          status: filters.status,
+          download: drawer_id
+        },
+        Map.new(overrides)
+      )
+
+    # Fixed key order, so the same state always produces the same URL.
+    params =
+      [:tab, :q, :client, :status, :download]
+      |> Enum.map(&{&1, values[&1]})
+      |> Enum.reject(fn {key, value} -> is_nil(value) or (key == :tab and value == :queue) end)
+      |> Enum.map(fn {key, value} -> {key, to_string(value)} end)
+
+    case params do
+      [] -> ~p"/downloads"
+      params -> ~p"/downloads?#{params}"
+    end
+  end
+
+  defp client_urls do
+    Settings.list_download_client_configs()
+    |> Enum.flat_map(fn config ->
+      case DownloadClientConfig.web_ui_url(config) do
+        nil -> []
+        url -> [{config.name, url}]
+      end
+    end)
+    |> Map.new()
+  end
+
+  @impl true
   def handle_event("switch_tab", %{"tab" => tab}, socket) when tab in @allowed_tabs do
-    tab_atom = String.to_existing_atom(tab)
+    tab = String.to_existing_atom(tab)
+    status = if tab == :queue, do: socket.assigns.filters.status
 
     {:noreply,
-     socket
-     |> assign(:active_tab, tab_atom)
-     # Reset to the default sort: a tab-specific sort (e.g. ratio on completed)
-     # is not a valid option on the new tab.
-     |> assign(:sort_by, @default_sort)
-     |> assign(:selected_ids, MapSet.new())
-     |> assign(:selection_mode, false)
-     |> assign(:page, 0)
-     |> load_downloads()}
+     push_patch(socket, to: downloads_path(socket, tab: tab, status: status, download: nil))}
+  end
+
+  def handle_event("filter", params, socket) do
+    filters = ListView.parse_filters(params, socket.assigns.active_tab)
+
+    {:noreply,
+     push_patch(socket,
+       to: downloads_path(socket, q: filters.q, client: filters.client, status: filters.status)
+     )}
+  end
+
+  def handle_event("clear_filters", _params, socket) do
+    {:noreply, push_patch(socket, to: downloads_path(socket, q: nil, client: nil, status: nil))}
+  end
+
+  def handle_event("remove_filter", %{"key" => key}, socket) when key in ~w(q client status) do
+    {:noreply,
+     push_patch(socket, to: downloads_path(socket, [{String.to_existing_atom(key), nil}]))}
+  end
+
+  def handle_event("open_details", %{"id" => id}, socket) do
+    {:noreply, push_patch(socket, to: downloads_path(socket, download: id))}
+  end
+
+  def handle_event("close_details", _params, socket) do
+    {:noreply, push_patch(socket, to: downloads_path(socket, download: nil))}
   end
 
   def handle_event("sort", %{"sort_by" => sort_by}, socket)
@@ -509,6 +622,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:noreply,
      socket
      |> assign(:page, 0)
+     |> assign(:client_urls, client_urls())
      |> load_downloads()}
   end
 
@@ -964,7 +1078,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     schedule_progress_refresh()
 
     socket =
-      if socket.assigns.active_tab == :queue and not socket.assigns.downloads_empty? and
+      if socket.assigns.active_tab == :queue and socket.assigns.summary.active > 0 and
            not socket.assigns.selection_mode do
         load_downloads(socket)
       else
@@ -1038,7 +1152,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
     case socket.assigns.active_tab do
       :issues ->
-        load_issues_downloads(socket)
+        load_issues_downloads(socket, Downloads.list_downloads_with_status(bounded: true))
 
       :external ->
         load_external(socket)
@@ -1193,70 +1307,125 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp load_downloads(socket) do
     # The External tab count is shown from every tab, so refresh the cached scan
     # on every load. This is an ETS read, not I/O.
-    socket = assign(socket, :scan, ExternalTorrents.get())
+    socket = socket |> assign(:scan, ExternalTorrents.get()) |> assign(:loaded?, true)
 
     case socket.assigns.active_tab do
-      :issues ->
-        load_issues_downloads(socket)
-
+      # External reads only the scan cache and never polls the clients, so it
+      # keeps the last counts and summary rather than paying for a poll.
       :external ->
-        load_external(socket)
+        socket |> load_external() |> assign(:drawer_download, nil)
 
       tab ->
-        filter =
-          case tab do
-            :queue -> :active
-            :completed -> :imported
-          end
-
-        # Get all matching downloads for the current tab with real-time status from clients
-        all_downloads =
-          Downloads.list_downloads_with_status(filter: filter, bounded: true)
-          |> apply_sorting(socket.assigns.sort_by)
-
-        # Apply pagination
-        page = socket.assigns.page
-        offset = page * @items_per_page
-
-        paginated_downloads =
-          all_downloads
-          |> Enum.drop(offset)
-          |> Enum.take(@items_per_page)
-          |> annotate_rematch_eligibility(tab)
-          |> annotate_auto_reject_cap()
-
-        has_more = length(all_downloads) > offset + @items_per_page
-
-        # Determine if we need to append or reset stream
-        reset? = page == 0
+        # Every row and every client in one bounded poll; the tabs, counts and
+        # stats are all partitions of it.
+        all = Downloads.list_downloads_with_status(bounded: true)
 
         socket
-        |> assign(:stale_status, stale_status(all_downloads))
-        |> assign(:has_more, has_more)
-        |> assign(:downloads_empty?, reset? and paginated_downloads == [])
-        |> stream(:downloads, paginated_downloads, reset: reset?)
+        |> assign_overview(all)
+        |> load_tab(tab, all)
+        |> assign_drawer(all)
     end
   end
 
-  defp load_issues_downloads(socket) do
-    all_downloads = Downloads.list_downloads_with_status(bounded: true)
+  defp assign_overview(socket, all) do
+    active = Downloads.filter_downloads(all, :active)
+    issues = issue_lists(all)
 
+    socket
+    |> assign(:summary, ListView.summarize(active))
+    |> assign(:client_options, ListView.clients(all))
+    |> assign(:tab_counts, %{
+      queue: length(active),
+      completed: length(Downloads.filter_downloads(all, :imported)),
+      issues:
+        length(socket.assigns.scan.needs_matching) + length(issues.unresolved) +
+          length(issues.other)
+    })
+  end
+
+  defp load_tab(socket, :issues, all), do: load_issues_downloads(socket, all)
+
+  defp load_tab(socket, tab, all) do
+    filter = if tab == :queue, do: :active, else: :imported
+
+    all_downloads =
+      all
+      |> Downloads.filter_downloads(filter)
+      |> ListView.filter(socket.assigns.filters)
+      |> apply_sorting(socket.assigns.sort_by)
+
+    # Apply pagination
+    page = socket.assigns.page
+    offset = page * @items_per_page
+
+    paginated_downloads =
+      all_downloads
+      |> Enum.drop(offset)
+      |> Enum.take(@items_per_page)
+      |> annotate_rematch_eligibility(tab)
+      |> annotate_auto_reject_cap()
+
+    has_more = length(all_downloads) > offset + @items_per_page
+
+    # Determine if we need to append or reset stream
+    reset? = page == 0
+
+    socket
+    |> assign(:stale_status, stale_status(all_downloads))
+    |> assign(:has_more, has_more)
+    |> assign(:downloads_empty?, reset? and paginated_downloads == [])
+    |> stream(:downloads, paginated_downloads, reset: reset?)
+  end
+
+  # Split out of load_issues_downloads/2 so the Issues count is available from
+  # every tab. The path-mapping enrichment is a query and only the Issues tab
+  # renders it, so it stays in load_issues_downloads/2.
+  defp issue_lists(all) do
+    %{
+      unresolved: Enum.filter(all, &(&1.match_status == "unresolved_files")),
+      other:
+        Enum.filter(all, fn d ->
+          (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at) ||
+             not is_nil(d.removal_error)) and d.match_status != "unresolved_files"
+        end)
+    }
+  end
+
+  # Finds the open drawer's download in `all` (fetching it when nil). A
+  # download that has gone (cleared, deleted, stale link) closes the drawer
+  # once, with a flash; drawer_id is cleared so a refresh tick does not repeat it.
+  defp assign_drawer(%{assigns: %{drawer_id: nil}} = socket, _all),
+    do: assign(socket, :drawer_download, nil)
+
+  defp assign_drawer(%{assigns: %{active_tab: :external}} = socket, _all),
+    do: assign(socket, :drawer_download, nil)
+
+  defp assign_drawer(socket, nil),
+    do: assign_drawer(socket, Downloads.list_downloads_with_status(bounded: true))
+
+  defp assign_drawer(socket, all) do
+    case Enum.find(all, &(&1.id == socket.assigns.drawer_id)) do
+      nil ->
+        socket
+        |> assign(drawer_id: nil, drawer_download: nil)
+        |> put_flash(:info, "That download is no longer in this list")
+
+      download ->
+        [download] = annotate_auto_reject_cap([download])
+        assign(socket, :drawer_download, download)
+    end
+  end
+
+  defp load_issues_downloads(socket, all_downloads) do
     # Needs Matching is derived from the clients, not from the database: these
     # torrents have no download row and never will unless the user matches one.
     # `:scan` was refreshed by the caller (load_downloads/1 or reload_stream/1).
     scan = socket.assigns.scan
-    needs_matching = scan.needs_matching
-
-    unresolved = Enum.filter(all_downloads, fn d -> d.match_status == "unresolved_files" end)
-
-    other =
-      all_downloads
-      |> Enum.filter(fn d ->
-        (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at) ||
-           not is_nil(d.removal_error)) and
-          d.match_status != "unresolved_files"
-      end)
-      |> enrich_path_mapping_suggestions()
+    filters = socket.assigns.filters
+    %{unresolved: unresolved, other: other} = issue_lists(all_downloads)
+    needs_matching = ListView.filter_scan(scan.needs_matching, filters)
+    unresolved = ListView.filter(unresolved, filters)
+    other = other |> ListView.filter(filters) |> enrich_path_mapping_suggestions()
 
     counts = %{
       unmatched: length(needs_matching),
@@ -1280,13 +1449,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp load_external(socket) do
     scan = socket.assigns.scan
+    external = ListView.filter_scan(scan.external, socket.assigns.filters)
 
     socket
     |> assign(:stale_status, nil)
     |> assign(:has_more, false)
-    |> assign(:downloads_empty?, scan.external == [])
+    |> assign(:downloads_empty?, external == [])
     |> assign(:scan, scan)
-    |> stream(:external_torrents, scan.external, reset: true)
+    |> stream(:external_torrents, external, reset: true)
   end
 
   # Orphan groups annotated with a DOM-safe slug. Client names come from
@@ -1504,6 +1674,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       end
 
     Downloads.list_downloads_with_status(filter: filter, bounded: true)
+    |> ListView.filter(socket.assigns.filters)
     |> apply_sorting(socket.assigns.sort_by)
     |> annotate_rematch_eligibility(socket.assigns.active_tab)
     |> annotate_auto_reject_cap()

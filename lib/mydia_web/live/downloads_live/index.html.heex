@@ -52,6 +52,19 @@
           phx-value-tab="queue"
         >
           <.icon name="hero-arrow-down-tray" class="w-4 h-4 mr-1" /> Queue
+          <span
+            :if={@tab_counts.queue > 0}
+            id="downloads-tab-queue-count"
+            class="badge badge-sm ml-1 tabular-nums"
+          >
+            {@tab_counts.queue}
+          </span>
+          <span
+            :if={@summary.stalled > 0}
+            id="downloads-tab-queue-stalled"
+            class="status status-warning ml-1"
+            aria-label="Some downloads are stalled"
+          ></span>
         </button>
         <button
           id="downloads-tab-completed"
@@ -61,6 +74,13 @@
           phx-value-tab="completed"
         >
           <.icon name="hero-check-circle" class="w-4 h-4 mr-1" /> Completed
+          <span
+            :if={@tab_counts.completed > 0}
+            id="downloads-tab-completed-count"
+            class="badge badge-sm ml-1 tabular-nums"
+          >
+            {@tab_counts.completed}
+          </span>
         </button>
         <button
           id="downloads-tab-issues"
@@ -70,6 +90,13 @@
           phx-value-tab="issues"
         >
           <.icon name="hero-exclamation-triangle" class="w-4 h-4 mr-1" /> Issues
+          <span
+            :if={@tab_counts.issues > 0}
+            id="downloads-tab-issues-count"
+            class="badge badge-sm badge-error ml-1 tabular-nums"
+          >
+            {@tab_counts.issues}
+          </span>
         </button>
         <button
           id="downloads-tab-external"
@@ -107,6 +134,9 @@
         </form>
       <% end %>
     </div>
+
+    <ListComponents.filter_bar filters={@filters} clients={@client_options} tab={@active_tab} />
+    <ListComponents.active_filters filters={@filters} />
 
     <%!-- Batch action bar --%>
     <%= if MapSet.size(@selected_ids) > 0 do %>
@@ -153,6 +183,18 @@
       <div class="card bg-base-100 shadow-lg">
         <div class="card-body flex flex-col items-center justify-center py-16">
           <%= cond do %>
+            <% ListView.active?(@filters) -> %>
+              <.icon name="hero-funnel" class="w-16 h-16 text-base-content/30 mb-4" />
+              <h3 class="text-xl font-semibold text-base-content/70 mb-2">No downloads match</h3>
+              <p class="text-base-content/50">Try a different search or clear the filters.</p>
+              <button
+                type="button"
+                id="downloads-empty-clear-filters"
+                class="btn btn-sm btn-primary mt-4"
+                phx-click="clear_filters"
+              >
+                Clear filters
+              </button>
             <% @active_tab == :queue -> %>
               <.icon name="hero-arrow-down-tray" class="w-16 h-16 text-base-content/30 mb-4" />
               <h3 class="text-xl font-semibold text-base-content/70 mb-2">Queue is empty</h3>
