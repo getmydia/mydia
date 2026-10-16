@@ -181,6 +181,24 @@ final sourceRecentlyAddedProvider =
   retry: (_, __) => null,
 );
 
+/// The first page of the source's favorites, for the Home row. Empty for a
+/// source without the listing. Same retry rule as Continue Watching.
+final sourceFavoritesRowProvider =
+    StreamProvider.autoDispose.family<List<ItemSummary>, SourceId>(
+  (ref, id) {
+    final favorites = requireSource(ref, id).as<FavoritesListing>();
+    if (favorites == null) return Stream.value(const []);
+    return createSourceWatcher(
+      ref,
+      key: SourceKeys.favoritesRow(id),
+      fetch: () async => (await favorites.favorites()).items,
+      encode: encodeSummaries,
+      decode: decodeSummaries,
+    ).stream;
+  },
+  retry: (_, __) => null,
+);
+
 /// The files of [item] for the Media Info panel. Not cached: it is read on
 /// demand, and a source without the capability is an error the panel shows.
 final sourceMediaInfoProvider =

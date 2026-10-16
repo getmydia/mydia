@@ -10,6 +10,7 @@ import 'package:player/domain/sources/library.dart';
 import 'package:player/presentation/screens/detail/detail_links.dart';
 import 'package:player/presentation/screens/sources/source_browse_providers.dart';
 
+import '../../../domain/merged/fake_merged_source.dart' as merged;
 import 'fake_media_source.dart';
 
 void main() {
@@ -94,5 +95,40 @@ void main() {
     expect(items.map((i) => i.ref.externalId), ['e2', 'm3'],
         reason: 'served from the cache while the fetch is held');
     source.hold!.complete();
+  });
+
+  test('the favorites row is the first page of favorites', () async {
+    final s = merged.fakeServer('a');
+    final source = merged.FakeMergedSource(s,
+        favs: [
+          merged.item(s, 'f1'),
+          merged.item(s, 'f2'),
+          merged.item(s, 'f3')
+        ],
+        favPageSize: 2);
+    final c = ProviderContainer(overrides: [
+      mediaSourceProvider(source.id).overrideWithValue(source),
+    ]);
+    addTearDown(c.dispose);
+    final items = await firstValue(c, sourceFavoritesRowProvider(source.id));
+    expect(items.map((i) => i.ref.externalId), ['f1', 'f2']);
+  });
+
+  test('the favorites row is empty for a source without the listing', () async {
+    final container = containerFor(FakeMediaSource());
+    expect(
+      await firstValue(container, sourceFavoritesRowProvider(fakeSourceId)),
+      isEmpty,
+    );
+  });
+
+  test('the favorites row key is in the favorites family, apart from pages',
+      () {
+    expect(SourceKeys.favoritesRow(fakeSourceId),
+        isNot(SourceKeys.favorites(fakeSourceId)));
+    expect(
+      SourceKeys.favoritesRow(fakeSourceId).operationName,
+      (SourceKeys.family(fakeSourceId, SourceOps.favorites)).operationName,
+    );
   });
 }

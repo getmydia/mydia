@@ -91,6 +91,12 @@ abstract final class SourceKeys {
   static QueryKey favorites(SourceId id) =>
       QueryKey(operation(id, SourceOps.favorites));
 
+  /// The Home Favorites row: the first page as a plain list. In the favorites
+  /// family, so every favorites rule refreshes it, but under its own key: the
+  /// paged listing stores pages under [favorites] with another codec.
+  static QueryKey favoritesRow(SourceId id) =>
+      QueryKey(operation(id, SourceOps.favorites), const {'row': 'home'});
+
   static QueryKey recentlyAdded(SourceId id) =>
       QueryKey(operation(id, SourceOps.recentlyAdded));
 
