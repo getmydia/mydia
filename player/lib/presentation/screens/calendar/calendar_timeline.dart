@@ -163,6 +163,10 @@ class TimelineGeometry {
 
   double extentAt(int index) => layout.heightOf(items[index]);
 
+  /// The height of every row together.
+  double get totalExtent =>
+      _offsets.isEmpty ? 0 : _offsets.last + extentAt(items.length - 1);
+
   /// The scroll offset that puts [day] at the top of the list: the first day
   /// on or after it, or the last day when nothing is.
   double offsetOf(DateTime day) {

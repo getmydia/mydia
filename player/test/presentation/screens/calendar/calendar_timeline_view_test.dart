@@ -118,6 +118,48 @@ void main() {
     expect(_top(tester, today), closeTo(12, 1));
   });
 
+  ScrollPosition position(WidgetTester tester) => tester
+      .state<ScrollableState>(find.descendant(
+        of: find.byKey(const ValueKey('calendar-timeline')),
+        matching: find.byType(Scrollable),
+      ))
+      .position;
+
+  testWidgets('a jump to the last day lands at the true end', (tester) async {
+    final (:jumps, months: _) = await _pump(tester, _window());
+
+    jumps.request(DateTime(2026, 12, 30));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const ValueKey('calendar-day-2026-12-30')), findsOneWidget);
+    expect(position(tester).pixels, position(tester).maxScrollExtent);
+  });
+
+  testWidgets('a jump back to an earlier day lands it at the top',
+      (tester) async {
+    final (:jumps, months: _) = await _pump(tester, _window());
+
+    jumps.request(DateTime(2026, 12, 15));
+    await tester.pumpAndSettle();
+    jumps.request(DateTime(2026, 10, 10));
+    await tester.pumpAndSettle();
+
+    expect(_top(tester, DateTime(2026, 10, 10)), closeTo(12, 1));
+  });
+
+  testWidgets('overlapping jumps end at the last one requested',
+      (tester) async {
+    final (:jumps, months: _) = await _pump(tester, _window());
+
+    jumps.request(DateTime(2026, 12, 30));
+    await tester.pump(const Duration(milliseconds: 50));
+    jumps.request(DateTime(2026, 10, 10));
+    await tester.pumpAndSettle();
+
+    expect(_top(tester, DateTime(2026, 10, 10)), closeTo(12, 1));
+  });
+
   testWidgets('reports the month at the top as it changes', (tester) async {
     final (jumps: _, :months) = await _pump(tester, _window());
     expect(months, [DateTime(2026, 10)]);

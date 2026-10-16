@@ -99,6 +99,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       initialMonth: month,
       today: today,
     );
+    if (!mounted) return;
     if (day != null) _jumps.request(day);
   }
 

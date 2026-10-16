@@ -46,9 +46,17 @@ class CalendarTimelineView extends StatefulWidget {
 class _CalendarTimelineViewState extends State<CalendarTimelineView> {
   static const Duration _jumpDuration = Duration(milliseconds: 250);
 
+  /// The closing line, fixed so [_maxOffset] is exact.
+  static const double _footerHeight = 44;
+
   ScrollController? _controller;
   TimelineGeometry? _geometry;
   DateTime? _month;
+
+  /// The furthest the list scrolls, computed rather than read from the
+  /// position: the lazy list only estimates its length until it has laid out
+  /// the end, so `maxScrollExtent` can be far short when a jump is requested.
+  double _maxOffset = 0;
 
   @override
   void initState() {
@@ -88,8 +96,7 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
       if (!mounted || !controller.hasClients) return;
       // A today near the end of the window cannot reach the top; settle at
       // the end rather than hang past it.
-      final max = controller.position.maxScrollExtent;
-      if (controller.offset > max) controller.jumpTo(max);
+      if (controller.offset > _maxOffset) controller.jumpTo(_maxOffset);
       _reportMonth();
     });
     return controller;
@@ -102,26 +109,11 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
     if (day == null || geometry == null || controller == null) return;
     if (!controller.hasClients) return;
 
-    _scrollTo(controller, geometry.offsetOf(day));
-  }
-
-  /// The list only estimates its length until it has laid out the end, so a
-  /// far target is clamped to a maximum that is still growing. Climb again
-  /// while the maximum keeps moving and the target is not yet reached.
-  Future<void> _scrollTo(ScrollController controller, double target) async {
-    var previous = controller.offset;
-    while (mounted && controller.hasClients) {
-      final goal = math.min(target, controller.position.maxScrollExtent);
-      if (goal <= previous) return;
-      await controller.animateTo(
-        goal,
-        duration: _jumpDuration,
-        curve: Curves.easeOut,
-      );
-      if (!mounted || !controller.hasClients) return;
-      if (controller.offset >= target - 0.5) return;
-      previous = goal;
-    }
+    controller.animateTo(
+      math.min(geometry.offsetOf(day), _maxOffset),
+      duration: _jumpDuration,
+      curve: Curves.easeOut,
+    );
   }
 
   void _reportMonth() {
@@ -152,6 +144,14 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
         final items = buildTimeline(widget.entries, widget.today);
         final geometry = TimelineGeometry(items, layout);
         _geometry = geometry;
+        _maxOffset = math.max(
+          0,
+          widget.scrollTopPadding +
+              geometry.totalExtent +
+              _footerHeight +
+              DockInsets.bottomOf(context) -
+              constraints.maxHeight,
+        );
 
         return CustomScrollView(
           key: const ValueKey('calendar-timeline'),
@@ -186,13 +186,19 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
               ),
             ),
             const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(16, 28, 16, 0),
-                child: Center(
-                  child: Text(
-                    'That is everything scheduled in the next 90 days.',
-                    style:
-                        TextStyle(fontSize: 12, color: AppColors.textDisabled),
+              child: SizedBox(
+                height: _footerHeight,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(16, 28, 16, 0),
+                  child: Center(
+                    child: Text(
+                      'That is everything scheduled in the next 90 days.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 16 / 12,
+                        color: AppColors.textDisabled,
+                      ),
+                    ),
                   ),
                 ),
               ),
