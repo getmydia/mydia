@@ -11,6 +11,7 @@ import '../../domain/models/subtitle_search_outcome.dart';
 import '../../domain/models/subtitle_track.dart';
 import 'osd_sheet.dart';
 import 'subtitle_search_results.dart';
+import 'subtitle_size_stepper.dart';
 
 export '../../domain/models/subtitle_search_outcome.dart';
 
@@ -434,6 +435,10 @@ class _SubtitleTrackSelectorSheetState
               );
             },
           ),
+          // Always shown: the size applies to whichever track is picked
+          // next, and it is a device setting, not a per-track one.
+          const Divider(color: DepthTokens.osdDivider, height: 1),
+          const SubtitleSizeStepper(),
           // Only with tracks present. With none, the empty state above is
           // already the search affordance, and two in one sheet reads as two
           // different actions.

@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:player/core/player/subtitle_language_prefs.dart';
+import 'package:player/core/settings/settings_providers.dart';
+import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/domain/models/subtitle_candidate.dart';
 import 'package:player/domain/models/subtitle_track.dart';
@@ -12,6 +15,7 @@ import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 
 import '../../test_utils/in_memory_subtitle_prefs.dart';
+import '../../test_utils/mock_auth_storage.dart';
 import '../../test_utils/osd_contrast.dart';
 
 const _existing = SubtitleTrack(
@@ -78,32 +82,40 @@ Widget _host({
   Future<void> Function(int deltaMs)? onNudgeSubtitleDelay,
   Future<void> Function()? onResetSubtitleDelay,
   Future<void> Function()? onSaveSubtitleDelay,
+  MockAuthStorage? settingsStorage,
 }) {
-  return MaterialApp(
-    home: Scaffold(
-      body: Builder(
-        builder: (context) => ElevatedButton(
-          onPressed: () async {
-            final result = await showSubtitleTrackSelector(
-              context,
-              tracks,
-              null,
-              onSearch: onSearch,
-              onDownload: onDownload,
-              // Most tests in this file don't exercise the delay row -- that
-              // has its own coverage in subtitle_track_loading_test.dart (the
-              // pure functions) and player_screen.dart (the wiring). A
-              // notifier stuck at null keeps the row hidden by default, and
-              // the callbacks are never expected to fire.
-              subtitleDelayMs: subtitleDelayMs ?? ValueNotifier<int?>(null),
-              canSaveDelay: canSaveDelay,
-              onNudgeSubtitleDelay: onNudgeSubtitleDelay ?? (_) async {},
-              onResetSubtitleDelay: onResetSubtitleDelay ?? () async {},
-              onSaveSubtitleDelay: onSaveSubtitleDelay ?? () async {},
-            );
-            capture?.call(result);
-          },
-          child: const Text('open'),
+  return ProviderScope(
+    overrides: [
+      coreSettingsServiceProvider.overrideWithValue(
+        SettingsService(storage: settingsStorage ?? MockAuthStorage()),
+      ),
+    ],
+    child: MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () async {
+              final result = await showSubtitleTrackSelector(
+                context,
+                tracks,
+                null,
+                onSearch: onSearch,
+                onDownload: onDownload,
+                // Most tests in this file don't exercise the delay row -- that
+                // has its own coverage in subtitle_track_loading_test.dart (the
+                // pure functions) and player_screen.dart (the wiring). A
+                // notifier stuck at null keeps the row hidden by default, and
+                // the callbacks are never expected to fire.
+                subtitleDelayMs: subtitleDelayMs ?? ValueNotifier<int?>(null),
+                canSaveDelay: canSaveDelay,
+                onNudgeSubtitleDelay: onNudgeSubtitleDelay ?? (_) async {},
+                onResetSubtitleDelay: onResetSubtitleDelay ?? () async {},
+                onSaveSubtitleDelay: onSaveSubtitleDelay ?? () async {},
+              );
+              capture?.call(result);
+            },
+            child: const Text('open'),
+          ),
         ),
       ),
     ),
@@ -1049,5 +1061,43 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Could not adjust'), findsNothing);
+  });
+
+  testWidgets('the sheet carries the size row even with no track selected',
+      (tester) async {
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('subtitle-size-value')), findsOneWidget);
+  });
+
+  testWidgets('stepping the size stores it and dismissing still cancels',
+      (tester) async {
+    final storage = MockAuthStorage();
+    SubtitleTrackSelection? outcome;
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+      settingsStorage: storage,
+      capture: (result) => outcome = result,
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('subtitle-size-increment')));
+    await tester.tap(find.byKey(const ValueKey('subtitle-size-increment')));
+    await tester.pumpAndSettle();
+    expect(storage.contents['subtitle_size'], 'large');
+
+    await tester.tapAt(const Offset(5, 5)); // barrier
+    await tester.pumpAndSettle();
+    expect(outcome, isA<SubtitleTrackSelectionCancelled>());
   });
 }
