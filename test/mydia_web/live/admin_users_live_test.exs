@@ -137,6 +137,41 @@ defmodule MydiaWeb.AdminUsersLiveTest do
       refute Mydia.Accounts.get_user_by_username("casey")
     end
 
+    test "a valid manual password creates the user and closes the modal", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/users")
+      view |> open_create() |> switch_create_mode("manual")
+
+      view
+      |> form("#create-user-form",
+        create: %{
+          username: "casey",
+          email: "casey@example.com",
+          role: "guest",
+          password: "correcthorse",
+          password_confirmation: "correcthorse"
+        }
+      )
+      |> render_submit()
+
+      assert Mydia.Accounts.get_user_by_username("casey")
+      refute has_element?(view, "#create-user-modal")
+    end
+
+    test "an auto password creates the user and shows the password", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/users")
+      open_create(view)
+
+      view
+      |> form("#create-user-form",
+        create: %{username: "casey", email: "casey@example.com", role: "guest"}
+      )
+      |> render_submit()
+
+      assert Mydia.Accounts.get_user_by_username("casey")
+      refute has_element?(view, "#create-user-form")
+      assert has_element?(view, "#create-user-modal", "Generated Password")
+    end
+
     test "switching to manual keeps what was typed", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/users")
       open_create(view)

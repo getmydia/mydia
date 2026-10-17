@@ -129,9 +129,12 @@ defmodule MydiaWeb.AdminUsersLive.Index do
 
       case Accounts.create_user(attrs) do
         {:ok, _user} ->
+          # A generated password keeps the modal open so the admin can copy
+          # it; a manual one leaves nothing to show.
           {:noreply,
            socket
            |> assign(:generated_password, password)
+           |> assign(:show_create_modal, password != nil)
            |> put_flash(
              :info,
              if(password,
