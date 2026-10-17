@@ -692,7 +692,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Streaming" -> :streaming
       "Crash Reporting" -> :crash_reporting
       "Feedback" -> :feedback
-      "Updates" -> :general
       "Notifications" -> :notifications
       "Library" -> :library
       _ -> :general
