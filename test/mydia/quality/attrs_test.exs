@@ -129,12 +129,22 @@ defmodule Mydia.Quality.AttrsTest do
       assert attrs.audio_channels == nil
     end
 
-    test "recovers E-AC3 that the streaming column had collapsed onto ac3" do
+    test "keeps E-AC3 distinct from AC3 in the column and in attrs" do
       file = analyzed("DD+ 5.1")
 
-      # The column really does say "ac3" - the whole reason the raw string is
-      # kept. If Attrs read the column, an E-AC3 file would score as plain AC3.
-      assert file.audio_codec == "ac3"
+      assert file.audio_codec == "eac3"
+      assert %{audio_codec: "eac3", audio_channels: "5.1"} = Attrs.from_media_file(file, :movie)
+    end
+
+    test "recovers E-AC3 from the raw string on a row the column mislabeled ac3" do
+      # Rows analyzed before the normalizer checked E-AC3 first carry "ac3" in
+      # the column. The raw string still says DD+.
+      file = %MediaFile{
+        audio_codec: "ac3",
+        size: 1024 * 1024,
+        metadata: %FileMetadata{audio_codec_raw: "DD+ 5.1"}
+      }
+
       assert Attrs.from_media_file(file, :movie).audio_codec == "eac3"
     end
   end

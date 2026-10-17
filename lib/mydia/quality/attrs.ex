@@ -22,7 +22,7 @@ defmodule Mydia.Quality.Attrs do
   `audio_codec` are written through `Mydia.Streaming.Codec`, which normalizes
   them for streaming-compatibility checks: "H.264 (High)" becomes "h264",
   "HEVC (Main 10)" becomes "hevc", and - lossily for our purposes - "DD+ 5.1"
-  becomes "ac3" and "TrueHD Atmos" becomes "truehd", discarding the channel
+  becomes "eac3" and "TrueHD Atmos" becomes "truehd", discarding the channel
   layout entirely.
 
   `hdr_format` needs no such mapping here. `Mydia.Library.MediaFile.hdr_format`
@@ -253,7 +253,7 @@ defmodule Mydia.Quality.Attrs do
   defp metadata_source(_file), do: nil
 
   # Prefer the analyzer's untouched audio string over the streaming-normalized
-  # column: the column has already lost the channel layout ("DD+ 5.1" -> "ac3")
+  # column: the column has already lost the channel layout ("DD+ 5.1" -> "eac3")
   # and the Atmos distinction ("TrueHD Atmos" -> "truehd"). Files analyzed
   # before metadata.audio_codec_raw existed fall back to the column, which
   # still yields a codec, just no channels.
