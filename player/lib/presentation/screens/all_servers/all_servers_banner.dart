@@ -5,10 +5,11 @@ library;
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../settings/dialog/open_settings.dart';
+import '../settings/dialog/settings_dialog.dart';
 
 class AllServersBanner extends ConsumerStatefulWidget {
   const AllServersBanner(
@@ -68,7 +69,8 @@ class _AllServersBannerState extends ConsumerState<AllServersBanner> {
           title: Text('${signIn.map((s) => s.displayName).join(', ')} '
               'need signing in again'),
           trailing: TextButton(
-              onPressed: () => context.push('/sources/manage'),
+              onPressed: () =>
+                  openSettings(context, initial: SettingsCategory.servers),
               child: const Text('Manage servers')),
         ),
     ]);

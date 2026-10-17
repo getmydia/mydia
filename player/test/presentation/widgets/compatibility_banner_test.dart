@@ -7,6 +7,7 @@ import 'package:player/core/compatibility/compatibility_verdict.dart';
 import 'package:player/core/update/install_environment.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/available_update.dart';
+import 'package:player/presentation/screens/settings/dialog/open_settings.dart';
 import 'package:player/presentation/widgets/compatibility_banner.dart';
 
 /// Pumps the banner over a fixed state, bypassing the provider's own fetch.
@@ -65,6 +66,8 @@ Future<void> pumpRoutedBanner(
       overrides: [
         compatibilityProvider.overrideWith(() => _FixedNotifier(state)),
         updateProvider.overrideWith(() => _FakeUpdateNotifier(updateState)),
+        // These tests cover the route fallback; the dialog has its own tests.
+        settingsDialogEnabledProvider.overrideWithValue(false),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

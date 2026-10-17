@@ -3,6 +3,7 @@ import 'dart:math' show max;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart' show HardwareKeyboard, KeyEvent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/sources/current_source_status.dart';
@@ -27,6 +28,7 @@ import '../../core/theme/depth_tokens.dart';
 import '../../core/ui/reduced_motion.dart';
 import '../../core/playback/playback_progress_providers.dart';
 import '../../core/layout/breakpoints.dart';
+import '../screens/settings/dialog/open_settings.dart';
 import 'ambient_backdrop.dart';
 import 'ambient_backdrop_provider.dart';
 import 'cast_bar/dock_extents.dart';
@@ -550,6 +552,18 @@ class _AppShellState extends ConsumerState<AppShell>
       onQueued: _showAutoSyncToast,
     );
     WidgetsBinding.instance.addObserver(this);
+    attachSettingsHost(context);
+    HardwareKeyboard.instance.addHandler(_onSettingsShortcut);
+  }
+
+  /// Ctrl+, on Linux and Windows; macOS has Cmd+, in its menu bar.
+  bool _onSettingsShortcut(KeyEvent event) {
+    if (defaultTargetPlatform == TargetPlatform.macOS) return false;
+    if (!isSettingsShortcut(event,
+        controlPressed: HardwareKeyboard.instance.isControlPressed)) {
+      return false;
+    }
+    return openSettingsForRoute(context, '/settings');
   }
 
   @override
@@ -602,6 +616,8 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onSettingsShortcut);
+    detachSettingsHost(context);
     WidgetsBinding.instance.removeObserver(this);
     _router?.routerDelegate.removeListener(_onRouteChanged);
     _coverObserver?.removeListener(_onRouteChanged);
@@ -634,6 +650,7 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   void _navigateTo(String route) {
+    if (openSettingsForRoute(context, route)) return;
     if (_isOfflineMode() && !offlineRouteAllowed(route)) {
       _showOfflineToast();
       return;

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/compatibility/compatibility_verdict.dart';
 import '../../core/theme/colors.dart';
 import '../../core/update/install_environment.dart';
 import '../../core/update/update_provider.dart';
+import '../screens/settings/dialog/open_settings.dart';
+import '../screens/settings/dialog/settings_dialog.dart';
 import 'banner_button.dart';
 import 'compatibility_details_dialog.dart';
 import 'update_action.dart';
@@ -80,7 +81,7 @@ class CompatibilityBanner extends ConsumerWidget {
                   // macOS, where Sparkle owns checking and availableUpdate
                   // stays null, and the window before the first check lands.
                   if (ref.read(updateProvider).availableUpdate == null) {
-                    context.go('/settings');
+                    openSettings(context, initial: SettingsCategory.about);
                     return;
                   }
                   startUpdate(

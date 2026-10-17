@@ -43,6 +43,8 @@ import 'core/router/navigator_keys.dart';
 import 'core/router/push_route.dart';
 import 'core/scroll/app_scroll_behavior.dart';
 import 'presentation/screens/detail/load_content_fetchers.dart';
+import 'presentation/screens/settings/dialog/open_settings.dart'
+    show openSettingsFromHost;
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/native/lib.dart';
@@ -197,7 +199,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (appMenuSupported) {
       final router = ref.read(appRouterProvider);
       _appMenu = AppMenuCommands(
-        go: router.go,
+        go: (route) {
+          if (openSettingsFromHost(route)) return;
+          router.go(route);
+        },
         back: () {
           if (router.canPop()) router.pop();
         },
