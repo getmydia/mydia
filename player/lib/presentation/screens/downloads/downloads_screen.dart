@@ -649,18 +649,18 @@ class DownloadsScreen extends ConsumerWidget {
     final manager = await ref.read(downloadManagerProvider.future);
 
     if (!context.mounted) return;
-    final palette = context.palette;
 
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: palette.surface,
+        backgroundColor: context.palette.surface,
         title: const Text('Cancel Download?'),
         content: Text('Stop downloading "${task.title}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Keep', style: TextStyle(color: palette.textSecondary)),
+            child: Text('Keep',
+                style: TextStyle(color: context.palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () {
@@ -677,12 +677,11 @@ class DownloadsScreen extends ConsumerWidget {
 
   void _showItemOptions(
       BuildContext context, WidgetRef ref, DownloadGroup group) {
-    final palette = context.palette;
     final isActive = group.activeTasks.isNotEmpty;
 
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: palette.surface,
+      backgroundColor: context.palette.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -698,7 +697,8 @@ class DownloadsScreen extends ConsumerWidget {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: palette.textSecondary.withValues(alpha: 0.3),
+                  color:
+                      sheetContext.palette.textSecondary.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -750,8 +750,8 @@ class DownloadsScreen extends ConsumerWidget {
               ] else if (group.type == GroupType.movie) ...[
                 // Completed movie: play + delete
                 ListTile(
-                  leading:
-                      Icon(Icons.play_arrow_rounded, color: palette.primary),
+                  leading: Icon(Icons.play_arrow_rounded,
+                      color: sheetContext.palette.primary),
                   title: const Text('Play'),
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -774,7 +774,8 @@ class DownloadsScreen extends ConsumerWidget {
               ] else if (group.type == GroupType.series) ...[
                 // Completed series: view episodes + delete all
                 ListTile(
-                  leading: Icon(Icons.list_rounded, color: palette.primary),
+                  leading: Icon(Icons.list_rounded,
+                      color: sheetContext.palette.primary),
                   title: const Text('View Episodes'),
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -811,19 +812,18 @@ class DownloadsScreen extends ConsumerWidget {
 
   Future<void> _showDeleteMovieDialog(
       BuildContext context, WidgetRef ref, DownloadGroup group) async {
-    final palette = context.palette;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: palette.surface,
+        backgroundColor: context.palette.surface,
         title: const Text('Delete Download'),
         content: Text(
             'Delete "${group.title}"? The downloaded file will be removed.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child:
-                Text('Cancel', style: TextStyle(color: palette.textSecondary)),
+            child: Text('Cancel',
+                style: TextStyle(color: context.palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -844,12 +844,11 @@ class DownloadsScreen extends ConsumerWidget {
 
   Future<void> _showDeleteSeriesDialog(
       BuildContext context, WidgetRef ref, DownloadGroup group) async {
-    final palette = context.palette;
     final episodeCount = group.downloads.length + group.activeTasks.length;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: palette.surface,
+        backgroundColor: context.palette.surface,
         title: const Text('Delete All Episodes'),
         content: Text(
           'Delete all $episodeCount episode${episodeCount == 1 ? '' : 's'} of "${group.title}"?',
@@ -857,8 +856,8 @@ class DownloadsScreen extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child:
-                Text('Cancel', style: TextStyle(color: palette.textSecondary)),
+            child: Text('Cancel',
+                style: TextStyle(color: context.palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -877,11 +876,10 @@ class DownloadsScreen extends ConsumerWidget {
 
   static Future<void> _showCancelAllQueuedDialog(
       BuildContext context, WidgetRef ref, int queuedCount) async {
-    final palette = context.palette;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: palette.surface,
+        backgroundColor: context.palette.surface,
         title: const Text('Cancel All Queued?'),
         content: Text(
           'Cancel $queuedCount queued download${queuedCount == 1 ? '' : 's'}?',
@@ -889,7 +887,8 @@ class DownloadsScreen extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Keep', style: TextStyle(color: palette.textSecondary)),
+            child: Text('Keep',
+                style: TextStyle(color: context.palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -1494,11 +1493,10 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
       return;
     }
 
-    final palette = context.palette;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: palette.surface,
+        backgroundColor: context.palette.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Clean Up Downloads'),
         content: Text(
@@ -1508,8 +1506,8 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child:
-                Text('Cancel', style: TextStyle(color: palette.textSecondary)),
+            child: Text('Cancel',
+                style: TextStyle(color: context.palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),

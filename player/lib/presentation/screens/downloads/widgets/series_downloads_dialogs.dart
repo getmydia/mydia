@@ -18,11 +18,10 @@ Future<void> showCancelDownloadDialog(
   WidgetRef ref,
   DownloadTask task,
 ) async {
-  final palette = context.palette;
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      backgroundColor: palette.surface,
+      backgroundColor: context.palette.surface,
       title: const Text('Cancel Download?'),
       content: Text('Stop downloading ${task.episodeCode}?'),
       actions: [
@@ -30,7 +29,7 @@ Future<void> showCancelDownloadDialog(
           onPressed: () => Navigator.pop(context, false),
           child: Text(
             'Keep',
-            style: TextStyle(color: palette.textSecondary),
+            style: TextStyle(color: context.palette.textSecondary),
           ),
         ),
         FilledButton(
@@ -54,11 +53,10 @@ Future<void> showDeleteEpisodeDialog(
   WidgetRef ref,
   DownloadedMedia media,
 ) async {
-  final palette = context.palette;
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      backgroundColor: palette.surface,
+      backgroundColor: context.palette.surface,
       title: const Text('Delete Episode'),
       content: Text('Delete ${media.episodeCode}?'),
       actions: [
@@ -91,12 +89,11 @@ Future<void> showDeleteSeasonDialog(
   required int seasonNumber,
   required int episodeCount,
 }) async {
-  final palette = context.palette;
   final label = seasonLabel(seasonNumber);
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      backgroundColor: palette.surface,
+      backgroundColor: context.palette.surface,
       title: Text('Delete $label?'),
       content: Text(
         'Delete $episodeCount episode${episodeCount == 1 ? '' : 's'} '
@@ -107,7 +104,7 @@ Future<void> showDeleteSeasonDialog(
           onPressed: () => Navigator.pop(context, false),
           child: Text(
             'Cancel',
-            style: TextStyle(color: palette.textSecondary),
+            style: TextStyle(color: context.palette.textSecondary),
           ),
         ),
         FilledButton(
@@ -142,11 +139,10 @@ Future<bool> showDeleteAllDialog(
   required String showTitle,
   required int totalCount,
 }) async {
-  final palette = context.palette;
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      backgroundColor: palette.surface,
+      backgroundColor: context.palette.surface,
       title: const Text('Delete All Episodes'),
       content: Text(
         'Delete all $totalCount episode${totalCount == 1 ? '' : 's'} '
@@ -157,7 +153,7 @@ Future<bool> showDeleteAllDialog(
           onPressed: () => Navigator.pop(context, false),
           child: Text(
             'Cancel',
-            style: TextStyle(color: palette.textSecondary),
+            style: TextStyle(color: context.palette.textSecondary),
           ),
         ),
         FilledButton(
