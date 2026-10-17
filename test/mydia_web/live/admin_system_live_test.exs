@@ -152,6 +152,57 @@ defmodule MydiaWeb.AdminSystemLiveTest do
     end
   end
 
+  describe "update badge" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+      Mydia.UpdateCheck.forget()
+      on_exit(&Mydia.UpdateCheck.forget/0)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn}
+    end
+
+    test "stays hidden until a check finds a newer release", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/status")
+
+      refute has_element?(view, "#status-update-available")
+    end
+
+    test "links to the newer release a check found", %{conn: conn} do
+      {:ok, current} = Version.parse(to_string(Application.spec(:mydia, :vsn)))
+      latest = "#{current.major + 1}.0.0"
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "POST", "/update-check", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{latest_version: latest, release_url: "https://example.test/r"})
+        )
+      end)
+
+      {:ok, _} =
+        Mydia.UpdateCheck.run(
+          relay_url: "http://localhost:#{bypass.port}",
+          getenv: fn _ -> nil end
+        )
+
+      {:ok, view, _html} = live(conn, ~p"/admin/status")
+
+      assert has_element?(
+               view,
+               ~s{#status-update-available[href="https://example.test/r"]},
+               "#{latest} available"
+             )
+    end
+  end
+
   describe "activity has moved to the dashboard" do
     setup do
       start_supervised!(Mydia.Indexers.Health)

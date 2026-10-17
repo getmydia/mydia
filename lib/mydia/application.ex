@@ -105,6 +105,9 @@ defmodule Mydia.Application do
         # invisible to every age-limited account. Unique forever on its
         # version; enqueue_once/0 never raises.
         Mydia.Jobs.ContentRatingFetch.enqueue_once()
+        # Checks for a newer Mydia release 10-60 minutes after boot.
+        # enqueue_after_boot/0 never raises.
+        Mydia.Jobs.UpdateCheck.enqueue_after_boot()
         # Clean up stale HLS session directories
         cleanup_stale_hls_sessions()
       end

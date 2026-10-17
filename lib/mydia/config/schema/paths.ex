@@ -14,11 +14,11 @@ defmodule Mydia.Config.Schema.Paths do
   `Mydia.Settings.get_config_setting_by_key/1` and never reach that merge. They
   have no schema field, so the merge has always built them into its map and
   `Mydia.Config.Schema.changeset/2` has always dropped them again by ignoring
-  the unknown key. Four of the five keys name a section the schema does not
-  have at all, spread across three such sections: `crash_reporting`,
-  `feedback`, and `library` (which contributes two keys). The fifth,
-  `media.default_quality_profile_id`, names a section that does exist but
-  bypasses the merge anyway. They are listed in `@direct_keys` with their
+  the unknown key. Six of the seven keys name a section the schema does not
+  have at all, spread across four such sections: `crash_reporting`,
+  `feedback`, `library` and `update_check` (which contribute two keys each).
+  The seventh, `media.default_quality_profile_id`, names a section that does
+  exist but bypasses the merge anyway. They are listed in `@direct_keys` with their
   reader, so the next person to add a `get_config_setting_by_key/1` call with
   a literal key finds the list.
 
@@ -46,7 +46,9 @@ defmodule Mydia.Config.Schema.Paths do
     "feedback.enabled" => "Mydia.Feedback.enabled?/0",
     "library.auto_repair_enabled" => "Mydia.Library.DatabaseHealthCheck",
     "library.auto_repair_threshold" => "Mydia.Library.DatabaseHealthCheck",
-    "media.default_quality_profile_id" => "Mydia.Settings.QualityProfiles"
+    "media.default_quality_profile_id" => "Mydia.Settings.QualityProfiles",
+    "update_check.enabled" => "Mydia.UpdateCheck.enabled?/1",
+    "update_check.install_id" => "Mydia.UpdateCheck.install_id/0"
   }
 
   # Built at compile time from the schema itself. A hand-maintained list drifts

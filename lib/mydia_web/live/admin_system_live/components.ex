@@ -55,6 +55,18 @@ defmodule MydiaWeb.AdminSystemLive.Components do
                 <span class="badge badge-warning badge-xs sm:badge-sm ml-1">dev</span>
               <% end %>
             </div>
+            <div :if={@system_info.available_update} class="stat-desc mt-1">
+              <a
+                id="status-update-available"
+                href={@system_info.available_update.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="badge badge-info badge-sm gap-1 hover:brightness-110"
+              >
+                <.icon name="hero-arrow-up-circle" class="size-3.5" />
+                {@system_info.available_update.version} available
+              </a>
+            </div>
           </div>
           <div class="stat p-3 sm:p-4 bg-base-200 rounded-lg">
             <div class="stat-title text-xs sm:text-sm">Elixir</div>
