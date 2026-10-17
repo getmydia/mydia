@@ -26,54 +26,66 @@ defmodule MydiaWeb.ProfileLiveTest do
     assert has_element?(view, "#integrations-link[href='/integrations']")
   end
 
-  test "the theme picker defaults to System with the other options unselected", %{conn: conn} do
-    {:ok, view, html} = live(conn, ~p"/profile")
-
-    assert html =~ ~s(id="theme-picker")
+  test "the mode picker defaults to System", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/profile")
 
     assert has_element?(
              view,
-             "#theme-picker button[phx-value-theme='system'][aria-pressed='true']"
+             "#theme-picker button[phx-value-mode='system'][aria-pressed='true']"
            )
 
-    assert has_element?(
-             view,
-             "#theme-picker button[phx-value-theme='light'][aria-pressed='false']"
-           )
-
-    assert has_element?(
-             view,
-             "#theme-picker button[phx-value-theme='dark'][aria-pressed='false']"
-           )
+    assert has_element?(view, "#theme-picker button[phx-value-mode='dark'][aria-pressed='false']")
   end
 
-  test "choosing Dark moves the selection, persists the preference, and pushes the client event",
+  test "choosing Dark moves the selection, persists it and pushes the client event",
        %{conn: conn, user: user} do
     {:ok, view, _html} = live(conn, ~p"/profile")
 
-    view
-    |> element("#theme-picker button[phx-value-theme='dark']")
-    |> render_click()
+    view |> element("#theme-picker button[phx-value-mode='dark']") |> render_click()
 
-    # The selection itself is server-rendered from @theme, so a wrong param
-    # name or a handle_event clause that stopped matching would leave System
-    # selected instead of moving to Dark.
-    assert has_element?(
-             view,
-             "#theme-picker button[phx-value-theme='dark'][aria-pressed='true']"
-           )
-
-    assert has_element?(
-             view,
-             "#theme-picker button[phx-value-theme='system'][aria-pressed='false']"
-           )
-
-    # Applying the theme to the page happens client-side (a JS hook flips
-    # data-theme), which a server-rendered LiveView test cannot observe
-    # directly. What IS observable end to end: the stored preference changed,
-    # and the client got told to change it.
+    # Server-rendered from @theme_selection, which the shared hook updates.
+    assert has_element?(view, "#theme-picker button[phx-value-mode='dark'][aria-pressed='true']")
+    assert has_element?(view, "#dark-theme-gallery [data-role='in-use']")
+    refute has_element?(view, "#light-theme-gallery [data-role='in-use']")
     assert user |> Accounts.get_user_preference!() |> UserPreference.theme() == "dark"
-    assert_push_event(view, "theme_changed", %{theme: "dark"})
+    assert_push_event(view, "theme_changed", %{mode: "dark"})
+  end
+
+  test "galleries list each scheme's themes with the defaults selected", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/profile")
+
+    for theme <- Mydia.Accounts.Themes.light() do
+      assert has_element?(view, "#light-theme-gallery-#{theme.id}")
+    end
+
+    for theme <- Mydia.Accounts.Themes.dark() do
+      assert has_element?(view, "#dark-theme-gallery-#{theme.id}")
+    end
+
+    assert has_element?(view, "#light-theme-gallery-mydia-light input[checked]")
+    assert has_element?(view, "#dark-theme-gallery-mydia-dark input[checked]")
+    refute has_element?(view, "#light-theme-gallery-dracula")
+  end
+
+  test "picking a gallery card saves that slot", %{conn: conn, user: user} do
+    {:ok, view, _html} = live(conn, ~p"/profile")
+
+    view |> element("#dark-theme-gallery-dracula input") |> render_click()
+
+    assert has_element?(view, "#dark-theme-gallery-dracula input[checked]")
+    selection = user |> Accounts.get_user_preference!() |> UserPreference.theme_selection()
+    assert selection.dark.id == "dracula"
+    assert_push_event(view, "theme_changed", %{dark_theme: "dracula"})
+  end
+
+  test "a theme change is not undone by a later profile save", %{conn: conn, user: user} do
+    {:ok, view, _html} = live(conn, ~p"/profile")
+
+    view |> element("#dark-theme-gallery-dracula input") |> render_click()
+    render_hook(view, "update_add_defaults", %{"add_monitored" => "true"})
+
+    selection = user |> Accounts.get_user_preference!() |> UserPreference.theme_selection()
+    assert selection.dark.id == "dracula"
   end
 
   describe "avatar upload and management" do
