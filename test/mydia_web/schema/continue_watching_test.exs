@@ -4,6 +4,8 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
   alias Mydia.AccountsFixtures
   alias Mydia.MediaFixtures
   alias Mydia.Playback
+  alias Mydia.Playback.Progress
+  alias Mydia.Repo
 
   @query """
   query ContinueWatching($first: Int) {
@@ -12,6 +14,7 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
       type
       title
       state
+      lastActivityAt
       showId
       showTitle
       seasonNumber
@@ -90,6 +93,38 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
     assert item["id"] == e1.id
     assert item["state"] == "continue"
     assert item["progress"]["positionSeconds"] == 600
+  end
+
+  test "a next item carries the show's newest watch as lastActivityAt", ctx do
+    [e1, e2, _e3] = ctx.episodes
+    :changed = Playback.ensure_watched(ctx.user.id, episode_id: e1.id)
+    watched_at = Repo.get_by!(Progress, user_id: ctx.user.id, episode_id: e1.id).last_watched_at
+
+    assert {:ok, %{data: %{"continueWatching" => [item]}}} =
+             run_query(@query, %{"first" => 10}, ctx.user)
+
+    assert item["id"] == e2.id
+    assert item["state"] == "next"
+    # The successor has no progress row, so this is the only date the
+    # player can rank the card by.
+    assert item["lastActivityAt"] == DateTime.to_iso8601(watched_at)
+  end
+
+  test "a movie's lastActivityAt is its own last watch", ctx do
+    movie = MediaFixtures.media_item_fixture(%{type: "movie", title: "Paper Lighthouse"})
+    MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+    {:ok, progress} =
+      Playback.save_progress(
+        ctx.user.id,
+        [media_item_id: movie.id],
+        %{position_seconds: 900, duration_seconds: 7200}
+      )
+
+    assert {:ok, %{data: %{"continueWatching" => [item]}}} =
+             run_query(@query, %{"first" => 10}, ctx.user)
+
+    assert item["lastActivityAt"] == DateTime.to_iso8601(progress.last_watched_at)
   end
 
   test "a never-started show returns nothing", ctx do

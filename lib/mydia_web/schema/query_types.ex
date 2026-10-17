@@ -225,6 +225,10 @@ defmodule MydiaWeb.Schema.QueryTypes do
 
     @desc "Why this item is on the rail: continue for a resume point, next for the successor of a finished episode"
     field :state, :string
+
+    @desc "When the viewer last watched this title; for an episode, the newest watch across its whole show. The rail is ordered by it."
+    field :last_activity_at, :datetime
+
     @desc "Playable files for this item, used to start playback straight from the rail"
     field :files, list_of(:media_file)
 
