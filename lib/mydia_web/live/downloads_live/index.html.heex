@@ -16,7 +16,7 @@
           <.icon name="hero-arrow-path" class="w-4 h-4" />
           <span class="hidden sm:inline ml-1">Refresh</span>
         </button>
-        <%= if not @downloads_empty? do %>
+        <%= if @active_tab == :downloads and not @downloads_empty? do %>
           <button type="button" class="btn btn-sm btn-primary" phx-click="toggle_select_all">
             <%= cond do %>
               <% @selection_mode and MapSet.size(@selected_ids) > 0 -> %>
@@ -128,15 +128,6 @@
             <span class="font-semibold">{MapSet.size(@selected_ids)} selected</span>
           </div>
           <div class="join">
-            <%= if @active_tab == :issues do %>
-              <button
-                type="button"
-                class="btn btn-sm btn-primary join-item"
-                phx-click="batch_retry"
-              >
-                <.icon name="hero-arrow-path" class="w-4 h-4" /> Retry
-              </button>
-            <% end %>
             <button
               type="button"
               class="btn btn-sm btn-error join-item"

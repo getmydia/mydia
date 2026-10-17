@@ -227,6 +227,16 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
   end
 
   describe "tabs and views" do
+    test "Select is Downloads-only; select-all off Downloads selects nothing", %{conn: conn} do
+      queued("Fictional Salt Meridian")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")
+      refute has_element?(view, "button[phx-click='toggle_select_all']")
+
+      render_click(view, "toggle_select_all", %{})
+      refute has_element?(view, "#downloads-batch-bar")
+    end
+
     test "the page has three tabs and no Queue or Completed tab", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/downloads")
 

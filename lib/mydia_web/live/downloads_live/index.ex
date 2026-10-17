@@ -300,6 +300,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:selection_mode, true)}
   end
 
+  def handle_event("toggle_select_all", _params, %{assigns: %{active_tab: tab}} = socket)
+      when tab != :downloads,
+      do: {:noreply, socket}
+
   def handle_event("toggle_select_all", _params, socket) do
     if socket.assigns.selection_mode and MapSet.size(socket.assigns.selected_ids) > 0 do
       # Exit selection mode and clear selections
