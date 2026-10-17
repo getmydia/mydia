@@ -79,7 +79,8 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   (`:completed`). Decided by the row, not the page, because the All view
   mixes both.
   """
-  @spec row_kind(%{imported_at: term()}) :: :queue | :completed
+  @spec row_kind(%{required(:imported_at) => term(), optional(atom()) => term()}) ::
+          :queue | :completed
   def row_kind(%{imported_at: nil}), do: :queue
   def row_kind(_download), do: :completed
 
