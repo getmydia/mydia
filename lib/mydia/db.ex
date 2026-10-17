@@ -549,13 +549,16 @@ defmodule Mydia.DB do
   ## Database-specific behavior
 
   - **SQLite**: Uses `AVG((julianday(end) - julianday(start)) * 86400)`
-  - **PostgreSQL**: Uses `AVG(EXTRACT(EPOCH FROM (end - start)))`
+  - **PostgreSQL**: Uses `AVG(EXTRACT(EPOCH FROM (end - start)))::float8`
+
+  Both adapters return a float. The `::float8` cast matters on PostgreSQL, where
+  `EXTRACT` and `AVG` yield `numeric` and Postgrex would return a `Decimal`.
   """
   defmacro avg_timestamp_diff_seconds(end_field, start_field) do
     if postgres_configured?() do
       quote do
         fragment(
-          "AVG(EXTRACT(EPOCH FROM (? - ?)))",
+          "AVG(EXTRACT(EPOCH FROM (? - ?)))::float8",
           unquote(end_field),
           unquote(start_field)
         )
@@ -592,12 +595,14 @@ defmodule Mydia.DB do
   ## Database-specific behavior
 
   - **SQLite**: Uses `(julianday(end) - julianday(start)) * 86400`
-  - **PostgreSQL**: Uses `EXTRACT(EPOCH FROM (end - start))`
+  - **PostgreSQL**: Uses `EXTRACT(EPOCH FROM (end - start))::float8`
+
+  Both adapters return a float (see `avg_timestamp_diff_seconds/2`).
   """
   defmacro timestamp_diff_seconds(end_field, start_field) do
     if postgres_configured?() do
       quote do
-        fragment("EXTRACT(EPOCH FROM (? - ?))", unquote(end_field), unquote(start_field))
+        fragment("EXTRACT(EPOCH FROM (? - ?))::float8", unquote(end_field), unquote(start_field))
       end
     else
       quote do

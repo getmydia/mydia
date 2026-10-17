@@ -401,8 +401,7 @@ defmodule Mydia.DBTest do
         |> Repo.one()
 
       # Allow for small timing differences (within 5 seconds)
-      # PostgreSQL returns Decimal from EXTRACT(EPOCH), convert to float
-      result = if is_struct(result, Decimal), do: Decimal.to_float(result), else: result
+      assert is_float(result)
       assert_in_delta result, 3600.0, 5.0
     end
   end
@@ -495,8 +494,7 @@ defmodule Mydia.DBTest do
 
       # Average of 3600 and 7200 seconds = 5400 seconds
       # Allow for small timing differences
-      # PostgreSQL returns Decimal from EXTRACT(EPOCH), convert to float
-      result = if is_struct(result, Decimal), do: Decimal.to_float(result), else: result
+      assert is_float(result)
       assert_in_delta result, 5400.0, 10.0
     end
   end
