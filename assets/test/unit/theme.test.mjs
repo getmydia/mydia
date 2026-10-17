@@ -64,6 +64,7 @@ test("applySelection writes attributes, background and the mirror", () => {
 
   assert.equal(root.getAttribute("data-theme"), "mocha");
   assert.equal(root.getAttribute("data-theme-mode"), "dark");
+  assert.equal(root.getAttribute("data-color-scheme"), "dark");
   assert.equal(root.getAttribute("data-light-theme"), "nord");
   assert.equal(root.getAttribute("data-dark-theme"), "mocha");
   assert.equal(root.style.backgroundColor, "#1e1e2e");
@@ -83,4 +84,15 @@ test("applySelection survives storage that throws", () => {
 
   applySelection(root, selection, true, storage);
   assert.equal(root.getAttribute("data-theme"), "mocha");
+});
+
+test("applySelection sets data-color-scheme from the resolved slot", () => {
+  const root = fakeRoot();
+  const storage = memoryStorage();
+
+  applySelection(root, { ...selection, mode: "light" }, true, storage);
+  assert.equal(root.getAttribute("data-color-scheme"), "light");
+
+  applySelection(root, { ...selection, mode: "system" }, true, storage);
+  assert.equal(root.getAttribute("data-color-scheme"), "dark");
 });

@@ -31,6 +31,10 @@ export function applySelection(root, selection, prefersDark, storage) {
 
   const id = resolveThemeId(selection, prefersDark);
   root.setAttribute("data-theme", id);
+  root.setAttribute(
+    "data-color-scheme",
+    id === selection.dark ? "dark" : "light",
+  );
   root.style.backgroundColor =
     id === selection.dark ? selection.darkBase : selection.lightBase;
 

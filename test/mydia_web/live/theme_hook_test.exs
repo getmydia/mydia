@@ -26,6 +26,7 @@ defmodule MydiaWeb.ThemeHookTest do
       html = conn |> get(~p"/") |> html_response(200)
 
       assert html_attr(html, "data-theme") == ["dracula"]
+      assert html_attr(html, "data-color-scheme") == ["dark"]
       assert html_attr(html, "data-theme-mode") == ["dark"]
       assert html_attr(html, "data-theme-source") == ["user"]
     end
@@ -36,6 +37,7 @@ defmodule MydiaWeb.ThemeHookTest do
       html = conn |> get(~p"/") |> html_response(200)
 
       assert html_attr(html, "data-theme") == []
+      assert html_attr(html, "data-color-scheme") == []
       assert html_attr(html, "data-light-theme") == ["nord"]
       assert html_attr(html, "data-dark-theme") == ["mocha"]
     end

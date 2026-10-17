@@ -1,47 +1,51 @@
 defmodule MydiaWeb.Components.DarkVariantTest do
   @moduledoc """
-  Tailwind's `dark:` variant is declared by hand in app.css. It was originally
-  written against `[data-theme=dark]`, but the application sets `mydia-dark`
-  (see `root.html.heex`), so the variant matched no element that exists and
-  every `dark:` utility silently produced nothing.
+  Tailwind's `dark:` variant is declared by hand in app.css and keys on
+  `<html data-color-scheme="dark">`, not on a theme name: nine themes are dark,
+  and a variant tied to one name silently skips the rest.
 
   Nothing errors when this regresses. An unmatched variant compiles fine and
-  emits CSS that can never apply, so only this test catches it.
+  emits CSS that can never apply, so only this test catches it. The contract
+  has two halves: the variant selector, and `theme_html_attrs/1` emitting the
+  attribute for fixed modes (system mode leaves it to the inline script and
+  `applySelection`, like `data-theme`).
   """
 
   use ExUnit.Case, async: true
 
+  alias Mydia.Accounts.Themes
+  alias MydiaWeb.Layouts
+
   @app_css Path.expand("../../../assets/css/app.css", __DIR__)
 
-  test "the dark variant targets the theme name the application actually sets" do
-    css = File.read!(@app_css)
-
-    assert css =~ ~s(@custom-variant dark),
-           "app.css no longer declares a `dark:` custom variant"
-
+  test "the dark variant keys on data-color-scheme" do
     variant_line =
-      css
+      @app_css
+      |> File.read!()
       |> String.split("\n")
       |> Enum.find(&String.contains?(&1, "@custom-variant dark"))
 
-    assert variant_line =~ "data-theme=mydia-dark",
-           """
-           The `dark:` variant must target `mydia-dark`, the value
-           root.html.heex actually writes to data-theme. Got:
-
-             #{variant_line}
-           """
-
-    refute variant_line =~ "data-theme=dark]",
-           "The variant still matches the non-existent bare `dark` theme"
+    assert variant_line, "app.css no longer declares a `dark:` custom variant"
+    assert variant_line =~ "[data-color-scheme=dark]"
+    refute variant_line =~ "data-theme", "the variant must not name a single theme"
   end
 
-  test "root.html.heex still renders the theme attributes the variant reads" do
-    root =
-      Path.expand("../../../lib/mydia_web/components/layouts/root.html.heex", __DIR__)
-      |> File.read!()
+  test "a fixed dark mode with a non-Mydia theme emits data-color-scheme=dark" do
+    attrs = Layouts.theme_html_attrs(Themes.selection("dark", nil, "dracula"))
 
-    assert root =~ "theme_html_attrs",
-           "root.html.heex no longer renders the theme attributes; the dark variant needs updating too"
+    assert attrs[:"data-theme"] == "dracula"
+    assert attrs[:"data-color-scheme"] == "dark"
+  end
+
+  test "a fixed light mode emits data-color-scheme=light" do
+    attrs = Layouts.theme_html_attrs(Themes.selection("light", "nord", nil))
+
+    assert attrs[:"data-color-scheme"] == "light"
+  end
+
+  test "system mode leaves the scheme to the browser" do
+    attrs = Layouts.theme_html_attrs(Themes.selection("system", nil, nil))
+
+    assert attrs[:"data-color-scheme"] == nil
   end
 end

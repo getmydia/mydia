@@ -31,7 +31,7 @@
         if (root.getAttribute('data-theme-source') === 'default') {
           try {
             const m = JSON.parse(localStorage.getItem('mydia-theme') || 'null');
-            if (m && m.mode && m.light && m.dark) {
+            if (m && m.mode && m.light && m.dark && m.lightBase && m.darkBase) {
               root.setAttribute('data-theme-mode', m.mode);
               root.setAttribute('data-light-theme', m.light);
               root.setAttribute('data-dark-theme', m.dark);
@@ -46,7 +46,20 @@
           const dark = mode === 'dark' || (mode !== 'light' && media.matches);
           const slot = dark ? 'dark' : 'light';
           root.setAttribute('data-theme', root.getAttribute('data-' + slot + '-theme'));
+          root.setAttribute('data-color-scheme', slot);
           root.style.backgroundColor = root.getAttribute('data-' + slot + '-base');
+        }
+
+        if (root.getAttribute('data-theme-source') === 'user') {
+          try {
+            localStorage.setItem('mydia-theme', JSON.stringify({
+              mode: root.getAttribute('data-theme-mode'),
+              light: root.getAttribute('data-light-theme'),
+              dark: root.getAttribute('data-dark-theme'),
+              lightBase: root.getAttribute('data-light-base'),
+              darkBase: root.getAttribute('data-dark-base')
+            }));
+          } catch (e) {}
         }
 
         resolve();

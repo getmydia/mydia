@@ -407,6 +407,7 @@ defmodule MydiaWeb.Layouts do
       "data-light-base": selection.light.base,
       "data-dark-base": selection.dark.base,
       "data-theme": active && active.id,
+      "data-color-scheme": active && Atom.to_string(active.scheme),
       style: "background-color: #{(active || selection.dark).base}"
     ]
   end
