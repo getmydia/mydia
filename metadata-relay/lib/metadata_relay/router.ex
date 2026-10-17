@@ -291,6 +291,11 @@ defmodule MetadataRelay.Router do
     handle_feedback(conn)
   end
 
+  # Mydia's update check. See MetadataRelay.UpdateCheck.Handler.
+  post "/update-check" do
+    MetadataRelay.UpdateCheck.Handler.call(conn)
+  end
+
   # Player log ingestion. See MetadataRelay.PlayerLogs.Handler.
   post "/player-logs" do
     MetadataRelay.PlayerLogs.Handler.call(conn)

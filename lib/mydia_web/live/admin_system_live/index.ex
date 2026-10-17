@@ -127,6 +127,7 @@ defmodule MydiaWeb.AdminSystemLive.Index do
 
     %{
       app_version: System.app_version(),
+      available_update: Mydia.UpdateCheck.available_update(),
       dev_mode: System.dev_mode?(),
       elixir_version: Elixir.System.version(),
       memory_used: format_file_size(total_memory),

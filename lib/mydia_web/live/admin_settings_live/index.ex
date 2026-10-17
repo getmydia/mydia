@@ -538,6 +538,27 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           source: feedback_source(all_db_settings)
         }
       ],
+      "Updates" => [
+        %{
+          key: "update_check.enabled",
+          label: "Check for updates",
+          description:
+            "Shortly after startup and once a week, ask the metadata relay whether a newer " <>
+              "Mydia release exists, and show it on the System page. The check sends a random " <>
+              "install ID, the Mydia version, the CPU architecture and the database type. That " <>
+              "also lets the developers count active installs and decide which versions and " <>
+              "platforms to prioritise. Nothing about your library, accounts or network is sent, " <>
+              "and the relay does not store your address.",
+          type: :boolean,
+          value: Mydia.UpdateCheck.enabled?(),
+          source:
+            Settings.config_source(
+              Mydia.UpdateCheck.env_var(),
+              "update_check.enabled",
+              all_db_settings
+            )
+        }
+      ],
       "Library" => [
         %{
           key: "library.auto_repair_enabled",

@@ -30,6 +30,9 @@ config :metadata_relay, :player_logs,
   report_budget_bytes: 268_435_456,
   sweep_interval_ms: 3_600_000
 
+# How often MetadataRelay.UpdateCheck.Releases re-reads GitHub's release list.
+config :metadata_relay, :update_check, releases_refresh_ms: 3_600_000
+
 config :swoosh, :api_client, false
 
 # Configure Phoenix endpoint for ErrorTracker dashboard

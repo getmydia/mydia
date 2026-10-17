@@ -32,3 +32,6 @@ config :metadata_relay, :player_logs,
   max_bytes: 2_147_483_648,
   report_budget_bytes: 268_435_456,
   sweep_interval_ms: nil
+
+# Tests set the release answer with Releases.put/1 rather than reach GitHub.
+config :metadata_relay, :update_check, releases_refresh_ms: nil

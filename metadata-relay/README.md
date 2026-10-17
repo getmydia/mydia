@@ -564,6 +564,27 @@ batches are kept 14 days, reports 90.
 - `./dev relay logs "Work MacBook" --since 2h --level warn` from the repo root,
   with `MYDIA_RELAY_DASHBOARD_USER` and `MYDIA_RELAY_DASHBOARD_PASSWORD` set.
 
+### Update Check
+
+Mydia installs ask for the newest release shortly after boot and weekly.
+
+```
+POST /update-check
+Content-Type: application/json
+
+{"install_id": "<64 hex chars>", "version": "0.16.0", "arch": "x86_64-pc-linux-musl", "db": "sqlite"}
+```
+
+Answers `200 {"latest_version": "0.16.1", "release_url": "..."}`, both `null`
+until the hourly read of GitHub's release list has succeeded once. A stable
+install is offered the newest stable `vX.Y.Z` release, a beta install the
+newest of any kind. Each check upserts one row per install per ISO week into
+`update_checks`; no address is stored. A malformed body is `400` and not
+recorded. There is no rate limit, for the shared-Cloudflare-edge reason above.
+
+`GET /installs` (dashboard basic auth) shows distinct installs per week and
+the latest week split by version, architecture and database.
+
 ## Project Structure
 
 ```

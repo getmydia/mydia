@@ -28,13 +28,15 @@ defmodule Mydia.Config.Schema.PathsTest do
   end
 
   describe "direct?/1 and known?/1" do
-    test "the five direct-lookup keys are known but are not overlay keys" do
+    test "the seven direct-lookup keys are known but are not overlay keys" do
       for key <- [
             "crash_reporting.enabled",
             "feedback.enabled",
             "library.auto_repair_enabled",
             "library.auto_repair_threshold",
-            "media.default_quality_profile_id"
+            "media.default_quality_profile_id",
+            "update_check.enabled",
+            "update_check.install_id"
           ] do
         assert Paths.direct?(key), "#{key} should be a direct-lookup key"
         assert Paths.known?(key), "#{key} should be known"

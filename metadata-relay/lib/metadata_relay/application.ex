@@ -34,6 +34,8 @@ defmodule MetadataRelay.Application do
         MetadataRelay.PlayerLogs.Sweeper,
         # Per-address daily byte budget for kind: "report" player log uploads
         MetadataRelay.PlayerLogs.ReportBudget,
+        # Hourly read of the newest Mydia release, for update checks
+        MetadataRelay.UpdateCheck.Releases,
         # Metrics collector
         MetadataRelay.Metrics
       ] ++

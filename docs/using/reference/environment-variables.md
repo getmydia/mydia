@@ -444,6 +444,23 @@ For PostgreSQL deployments (using `latest-pg` image):
 
 The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See [Architecture](../../contributing/architecture.md) for details.
 
+## Update Check
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `UPDATE_CHECK_ENABLED` | Ask the metadata relay whether a newer Mydia release exists | `true` |
+
+Mydia checks shortly after startup and once a week after that, and shows a newer release on **Admin → Status**. The check sends four values and nothing else:
+
+- a random install ID, generated for this check and used nowhere else
+- the Mydia version
+- the CPU architecture
+- the database type (`sqlite` or `postgres`)
+
+The relay keeps one record per install per week and does not store your IP address. That record is also how the developers count active installs and decide which versions and platforms to prioritise. Nothing about your library, accounts or network is sent.
+
+To turn it off, set `UPDATE_CHECK_ENABLED=false`, or switch off **Check for updates** under **Admin → Settings → Updates**. When the variable is set, it overrides the switch.
+
 ## Language
 
 | Variable | Description | Default |

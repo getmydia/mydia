@@ -352,6 +352,9 @@ config :mydia, Oban,
        {"*/5 * * * *", Mydia.Jobs.ExtraClassification},
        # Check installed plugins for newer versions daily at 7 AM
        {"0 7 * * *", Mydia.Jobs.PluginUpdateCheck},
+       # Ask the relay for the newest Mydia release weekly. The job spreads the
+       # actual check across the following day.
+       {"0 6 * * 1", Mydia.Jobs.UpdateCheck},
        # Prune per-invocation plugin debug logs daily at 4:30 AM (U5)
        {"30 4 * * *", Mydia.Jobs.PluginLogCleanup},
        # Look for quality upgrades to existing files daily at 1 AM. Deliberately
