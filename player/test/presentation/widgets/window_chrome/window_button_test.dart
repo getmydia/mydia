@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/core/window/decoration_layout.dart';
 import 'package:player/presentation/widgets/window_chrome/window_button.dart';
 
@@ -238,7 +239,7 @@ void main() {
         expect(decoration.color, equals(AppColors.error));
 
         final icon = tester.widget<Icon>(find.byType(Icon));
-        expect(icon.color, equals(AppColors.textPrimary));
+        expect(icon.color, equals(Palettes.projectionBooth.textPrimary));
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }

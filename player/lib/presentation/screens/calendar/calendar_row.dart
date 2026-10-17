@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/sources/item.dart';
 import '../detail/detail_links.dart';
@@ -29,6 +29,7 @@ class CalendarRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final id = entry.ref.externalId;
 
     return InkWell(
@@ -58,11 +59,11 @@ class CalendarRow extends StatelessWidget {
                   entry.calendarTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     height: TimelineLayout.titleLine / 13,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: palette.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -76,10 +77,10 @@ class CalendarRow extends StatelessWidget {
                           entry.calendarNumbering,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             height: TimelineLayout.subtitleLine / 11,
-                            color: AppColors.textSecondary,
+                            color: palette.textSecondary,
                           ),
                         ),
                       ),
@@ -111,19 +112,20 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: palette.border),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 10,
           height: 1.2,
           fontWeight: FontWeight.w600,
-          color: AppColors.textDisabled,
+          color: palette.textDisabled,
         ),
       ),
     );

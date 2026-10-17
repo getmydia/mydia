@@ -303,4 +303,55 @@ void main() {
       expect(await bar.queryLayout(), isNull);
     });
   });
+
+  group('system accent', () {
+    test('systemAccentChanged becomes an event', () async {
+      final events = <NativeTabBarEvent>[];
+      final sub = bar.events.listen(events.add);
+      addTearDown(sub.cancel);
+      await fromNative('systemAccentChanged', 0xFFBF5AF2);
+      await Future<void>.delayed(Duration.zero);
+      expect(events.single, isA<NativeSystemAccentChanged>());
+      expect((events.single as NativeSystemAccentChanged).color,
+          const Color(0xFFBF5AF2));
+    });
+
+    test('a malformed systemAccentChanged is ignored', () async {
+      final events = <NativeTabBarEvent>[];
+      final sub = bar.events.listen(events.add);
+      addTearDown(sub.cancel);
+      await fromNative('systemAccentChanged', 'blue');
+      await Future<void>.delayed(Duration.zero);
+      expect(events, isEmpty);
+    });
+
+    test('querySystemAccent decodes the ARGB answer', () async {
+      messenger.setMockMethodCallHandler(_channel, (call) async {
+        calls.add(call);
+        return call.method == 'systemAccent' ? 0xFF30D158 : null;
+      });
+      expect(await bar.querySystemAccent(), const Color(0xFF30D158));
+    });
+
+    test('querySystemAccent is null when native cannot answer', () async {
+      messenger.setMockMethodCallHandler(_channel, (call) async {
+        throw MissingPluginException();
+      });
+      expect(await bar.querySystemAccent(), isNull);
+    });
+  });
+
+  group('setWindowBackground', () {
+    test('sends ARGB once per distinct colour', () async {
+      await bar.setWindowBackground(const Color(0xFF1E1E1E));
+      await bar.setWindowBackground(const Color(0xFF1E1E1E));
+      await bar.setWindowBackground(const Color(0xFF000000));
+      expect(
+        calls
+            .where((c) => c.method == 'setWindowBackground')
+            .map((c) => c.arguments),
+        [0xFF1E1E1E, 0xFF000000],
+      );
+    });
+  });
 }

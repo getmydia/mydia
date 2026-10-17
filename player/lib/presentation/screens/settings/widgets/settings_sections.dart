@@ -11,7 +11,7 @@ import '../../../../core/remote/node_registration_providers.dart';
 import '../../../../core/remote/registration_status.dart';
 import '../../../../core/remote/remote_control_settings.dart';
 import '../../../../core/settings/stats_overlay_setting.dart';
-import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/palette.dart';
 import '../../../../core/update/update_backend.dart';
 import '../../../../core/update/update_provider.dart';
 import '../../../../domain/models/available_update.dart';
@@ -23,6 +23,7 @@ import '../settings_controller.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 import 'subtitle_size_row.dart';
+import 'theme_preset_row.dart';
 import 'track_picker_row.dart';
 import 'update_card.dart';
 
@@ -322,12 +323,23 @@ class VersionFooter extends StatelessWidget {
       child: Text(
         '${BuildChannel.current.appName} $version',
         textAlign: TextAlign.center,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11.5,
-          color: AppColors.textDisabled,
-          fontFeatures: [FontFeature.tabularFigures()],
+          color: context.palette.textDisabled,
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
     );
   }
+}
+
+/// Device-level look: the theme preset.
+class AppearanceSettingsSection extends StatelessWidget {
+  const AppearanceSettingsSection({super.key});
+
+  @override
+  Widget build(BuildContext context) => const SettingsSection(
+        label: 'Appearance',
+        children: [ThemePresetSettingsRow()],
+      );
 }

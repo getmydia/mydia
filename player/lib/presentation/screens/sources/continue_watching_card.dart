@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/focus_highlight.dart';
@@ -105,6 +105,7 @@ class ContinueWatchingCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final status = watchStatusFor(item.userState, item.durationSeconds);
     final left = _timeLeft(item);
     final art = item.backdrop ?? item.poster;
@@ -156,12 +157,12 @@ class ContinueWatchingCard extends ConsumerWidget {
                   SizedBox(
                     height: artSize.height,
                     child: art == null
-                        ? const ColoredBox(color: AppColors.surfaceVariant)
+                        ? ColoredBox(color: palette.surfaceVariant)
                         : SourceArtworkImage(
                             sourceId: item.ref.sourceId,
                             art: art,
-                            fallback: const ColoredBox(
-                              color: AppColors.surfaceVariant,
+                            fallback: ColoredBox(
+                              color: palette.surfaceVariant,
                             ),
                           ),
                   ),
@@ -191,7 +192,7 @@ class ContinueWatchingCard extends ConsumerWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: textTheme.bodySmall?.copyWith(
-                              color: AppColors.textSecondary,
+                              color: palette.textSecondary,
                             ),
                           ),
                         ],
@@ -205,7 +206,7 @@ class ContinueWatchingCard extends ConsumerWidget {
                                   key: const Key('continue-card-progress'),
                                   value: (status?.percentage ?? 0) / 100,
                                   minHeight: _barHeight,
-                                  color: AppColors.primary,
+                                  color: palette.primary,
                                   backgroundColor:
                                       Colors.white.withValues(alpha: 0.16),
                                 ),

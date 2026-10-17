@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 
 class DownloadDialog extends StatefulWidget {
@@ -40,8 +40,9 @@ class _DownloadDialogState extends State<DownloadDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: palette.surface,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -55,7 +56,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
           Text(
             widget.title,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: palette.textSecondary,
                 ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -95,9 +96,9 @@ class _DownloadDialogState extends State<DownloadDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
+          child: Text(
             'Cancel',
-            style: TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: palette.textSecondary),
           ),
         ),
         ElevatedButton(
@@ -105,8 +106,8 @@ class _DownloadDialogState extends State<DownloadDialog> {
               ? () => Navigator.of(context).pop(_selectedFile)
               : null,
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: AppColors.onPrimary,
+            backgroundColor: palette.primary,
+            foregroundColor: palette.onPrimary,
           ),
           child: const Text('Download'),
         ),
@@ -115,6 +116,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
   }
 
   Widget _buildQualityOption(MediaFile file) {
+    final palette = context.palette;
     final isSelected = _selectedFile?.id == file.id;
 
     return InkWell(
@@ -128,10 +130,10 @@ class _DownloadDialogState extends State<DownloadDialog> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withValues(alpha: 0.2)
-              : AppColors.surfaceVariant,
+              ? palette.primary.withValues(alpha: 0.2)
+              : palette.surfaceVariant,
           border: Border.all(
-            color: isSelected ? AppColors.primary : Colors.transparent,
+            color: isSelected ? palette.primary : Colors.transparent,
             width: 2,
           ),
           borderRadius: BorderRadius.circular(8),
@@ -140,7 +142,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
           children: [
             Radio<MediaFile>(
               value: file,
-              activeColor: AppColors.primary,
+              activeColor: palette.primary,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -157,16 +159,16 @@ class _DownloadDialogState extends State<DownloadDialog> {
                   Text(
                     _formatFileSize(file.size),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
+                          color: palette.textSecondary,
                         ),
                   ),
                 ],
               ),
             ),
             if (isSelected)
-              const Icon(
+              Icon(
                 Icons.check_circle,
-                color: AppColors.primary,
+                color: palette.primary,
               ),
           ],
         ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'colors.dart';
-import 'depth_tokens.dart';
+import 'palette.dart';
 
 /// Mydia Design System Theme
 ///
@@ -24,47 +24,51 @@ class AppTheme {
   /// Secondary button fill: white at 14%, over any ground.
   static const Color secondaryButtonFill = Color(0x24FFFFFF);
 
-  static ThemeData get darkTheme {
+  /// The default preset's theme, for tests and callers outside the app root.
+  static ThemeData get darkTheme => build(Palettes.projectionBooth);
+
+  static ThemeData build(MydiaPalette p) {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      extensions: [p],
 
       // Font family - matches web app
       fontFamily: 'Inter',
 
       // Color scheme - Full Material 3 surface hierarchy.
-      // The surface tones are sourced from DepthTokens so the layered depth
-      // hierarchy (R1) has a single source of truth; values are unchanged.
-      colorScheme: const ColorScheme.dark(
-        surface: DepthTokens.surfaceBase,
-        surfaceDim: DepthTokens.surfaceDim,
-        surfaceContainerLowest: DepthTokens.surfaceBase,
-        surfaceContainerLow: DepthTokens.surfaceLow,
-        surfaceContainer: DepthTokens.surfaceContainer,
-        surfaceContainerHigh: DepthTokens.surfaceHigh,
-        surfaceContainerHighest: DepthTokens.surfaceVariant,
-        surfaceBright: DepthTokens.surfaceBright,
-        primary: AppColors.primary,
-        primaryContainer: AppColors.primaryFocus,
-        secondary: AppColors.primary,
-        secondaryContainer: AppColors.primaryFocus,
-        tertiary: AppColors.primary,
-        tertiaryContainer: AppColors.primaryFocus,
+      // The surface tones come from the palette, so each preset keeps its own
+      // layered depth hierarchy.
+      colorScheme: ColorScheme.dark(
+        surface: p.background,
+        surfaceDim: p.surfaceDim,
+        surfaceContainerLowest: p.background,
+        surfaceContainerLow: p.surfaceLow,
+        surfaceContainer: p.surface,
+        surfaceContainerHigh: p.surfaceHigh,
+        surfaceContainerHighest: p.surfaceVariant,
+        surfaceBright: p.surfaceBright,
+        primary: p.primary,
+        primaryContainer: p.primaryFocus,
+        secondary: p.primary,
+        secondaryContainer: p.primaryFocus,
+        tertiary: p.primary,
+        tertiaryContainer: p.primaryFocus,
         error: AppColors.error,
-        onSurface: AppColors.textPrimary,
-        onSurfaceVariant: AppColors.textSecondary,
-        onPrimary: AppColors.onPrimary,
-        onSecondary: AppColors.onPrimary,
-        onTertiary: AppColors.onPrimary,
+        onSurface: p.textPrimary,
+        onSurfaceVariant: p.textSecondary,
+        onPrimary: p.onPrimary,
+        onSecondary: p.onPrimary,
+        onTertiary: p.onPrimary,
         onError: AppColors.onError,
-        outline: AppColors.border,
-        outlineVariant: AppColors.divider,
+        outline: p.border,
+        outlineVariant: p.divider,
       ),
 
       // AppBar - flush with page background
-      appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.background,
-        foregroundColor: AppColors.textPrimary,
+      appBarTheme: AppBarTheme(
+        backgroundColor: p.background,
+        foregroundColor: p.textPrimary,
         elevation: 0,
         centerTitle: false,
         surfaceTintColor: Colors.transparent,
@@ -72,7 +76,7 @@ class AppTheme {
 
       // Card - allow subtle Material 3 tinting
       cardTheme: CardThemeData(
-        color: AppColors.surface,
+        color: p.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusCard),
@@ -80,13 +84,13 @@ class AppTheme {
       ),
 
       // Typography - refined spacing with letterSpacing and height
-      textTheme: const TextTheme(
+      textTheme: TextTheme(
         // Page titles - text-3xl (30px)
         displayLarge: TextStyle(
           fontFamily: displayFamily,
           fontSize: 30,
           fontWeight: FontWeight.w700,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           letterSpacing: -0.75,
           height: 1.15,
         ),
@@ -95,7 +99,7 @@ class AppTheme {
           fontFamily: displayFamily,
           fontSize: 24,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           letterSpacing: -0.5,
           height: 1.2,
         ),
@@ -104,7 +108,7 @@ class AppTheme {
           fontFamily: displayFamily,
           fontSize: 20,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           letterSpacing: -0.3,
           height: 1.25,
         ),
@@ -113,7 +117,7 @@ class AppTheme {
           fontFamily: displayFamily,
           fontSize: 18,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           letterSpacing: -0.2,
           height: 1.3,
         ),
@@ -121,7 +125,7 @@ class AppTheme {
           fontFamily: displayFamily,
           fontSize: 18,
           fontWeight: FontWeight.w500,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           letterSpacing: -0.2,
           height: 1.3,
         ),
@@ -129,7 +133,7 @@ class AppTheme {
           fontFamily: displayFamily,
           fontSize: 16,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           letterSpacing: -0.15,
           height: 1.35,
         ),
@@ -138,14 +142,14 @@ class AppTheme {
           fontFamily: displayFamily,
           fontSize: 16,
           fontWeight: FontWeight.w500,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           height: 1.35,
         ),
         titleMedium: TextStyle(
           fontFamily: displayFamily,
           fontSize: 16,
           fontWeight: FontWeight.w500,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           height: 1.35,
         ),
         // Secondary text - text-sm (14px)
@@ -153,47 +157,47 @@ class AppTheme {
           fontFamily: displayFamily,
           fontSize: 14,
           fontWeight: FontWeight.w500,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           height: 1.35,
         ),
         bodyLarge: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w400,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           height: 1.5,
         ),
         bodyMedium: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w400,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           height: 1.45,
         ),
         // Meta info, captions - text-xs (12px)
         bodySmall: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w400,
-          color: AppColors.textSecondary,
+          color: p.textSecondary,
           letterSpacing: 0.1,
           height: 1.4,
         ),
         labelLarge: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           letterSpacing: 0.15,
           height: 1.3,
         ),
         labelMedium: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
           letterSpacing: 0.2,
           height: 1.3,
         ),
         labelSmall: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w500,
-          color: AppColors.textSecondary,
+          color: p.textSecondary,
           letterSpacing: 0.3,
           height: 1.3,
         ),
@@ -203,7 +207,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
-          foregroundColor: AppColors.background,
+          foregroundColor: p.background,
           elevation: 0,
           textStyle: const TextStyle(
             fontFamily: displayFamily,
@@ -220,7 +224,7 @@ class AppTheme {
       // Text Button
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.textPrimary,
+          foregroundColor: p.textPrimary,
           textStyle: const TextStyle(
             fontFamily: displayFamily,
             fontSize: 15,
@@ -236,7 +240,7 @@ class AppTheme {
       // Outlined Button
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.textPrimary,
+          foregroundColor: p.textPrimary,
           backgroundColor: secondaryButtonFill,
           side: BorderSide.none,
           textStyle: const TextStyle(
@@ -254,7 +258,7 @@ class AppTheme {
       // Icon Button
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
-          foregroundColor: AppColors.textSecondary,
+          foregroundColor: p.textSecondary,
         ),
       ),
 
@@ -262,7 +266,7 @@ class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: Colors.white,
-          foregroundColor: AppColors.background,
+          foregroundColor: p.background,
           elevation: 0,
           textStyle: const TextStyle(
             fontFamily: displayFamily,
@@ -279,18 +283,18 @@ class AppTheme {
       // Input Decoration - uses radiusInput
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surfaceVariant,
+        fillColor: p.surfaceVariant,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusInput),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: p.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusInput),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: p.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusInput),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderSide: BorderSide(color: p.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusInput),
@@ -298,16 +302,16 @@ class AppTheme {
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        hintStyle: const TextStyle(color: AppColors.textSecondary),
+        hintStyle: TextStyle(color: p.textSecondary),
       ),
 
       // Chip (for badges)
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.surfaceVariant,
-        labelStyle: const TextStyle(
+        backgroundColor: p.surfaceVariant,
+        labelStyle: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: AppColors.textPrimary,
+          color: p.textPrimary,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusBadge),
@@ -316,10 +320,10 @@ class AppTheme {
       ),
 
       // Bottom Sheet - uses radiusSheet
-      bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: AppColors.surface,
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
+        shape: const RoundedRectangleBorder(
           borderRadius:
               BorderRadius.vertical(top: Radius.circular(radiusSheet)),
         ),
@@ -327,56 +331,56 @@ class AppTheme {
 
       // Dialog - allow subtle Material 3 tinting
       dialogTheme: DialogThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: p.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusCard),
         ),
       ),
 
       // Divider
-      dividerTheme: const DividerThemeData(
-        color: AppColors.divider,
+      dividerTheme: DividerThemeData(
+        color: p.divider,
         thickness: 1,
         space: 1,
       ),
 
       // Icon
-      iconTheme: const IconThemeData(
-        color: AppColors.textSecondary,
+      iconTheme: IconThemeData(
+        color: p.textSecondary,
         size: 24,
       ),
 
       // Slider (for video controls) - refined track and thumb
       sliderTheme: SliderThemeData(
-        activeTrackColor: AppColors.primary,
-        inactiveTrackColor: AppColors.surfaceVariant,
-        thumbColor: AppColors.primary,
-        overlayColor: AppColors.primary.withValues(alpha: 0.2),
+        activeTrackColor: p.primary,
+        inactiveTrackColor: p.surfaceVariant,
+        thumbColor: p.primary,
+        overlayColor: p.primary.withValues(alpha: 0.2),
         trackHeight: 4.5,
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
       ),
 
       // Progress Indicator
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: AppColors.primary,
-        linearTrackColor: AppColors.surfaceVariant,
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: p.primary,
+        linearTrackColor: p.surfaceVariant,
       ),
 
       // Tooltip
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: AppColors.neutral,
+          color: p.surface,
           borderRadius: BorderRadius.circular(radiusButton),
         ),
-        textStyle: const TextStyle(
-          color: AppColors.textPrimary,
+        textStyle: TextStyle(
+          color: p.textPrimary,
           fontSize: 12,
         ),
       ),
 
       // Popup Menu
       popupMenuTheme: PopupMenuThemeData(
-        color: AppColors.surface,
+        color: p.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusButton),
@@ -384,25 +388,25 @@ class AppTheme {
       ),
 
       // List Tile
-      listTileTheme: const ListTileThemeData(
-        textColor: AppColors.textPrimary,
-        iconColor: AppColors.textSecondary,
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      listTileTheme: ListTileThemeData(
+        textColor: p.textPrimary,
+        iconColor: p.textSecondary,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),
 
       // Switch
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColors.primary;
+            return p.primary;
           }
-          return AppColors.textDisabled;
+          return p.textDisabled;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColors.primary.withValues(alpha: 0.5);
+            return p.primary.withValues(alpha: 0.5);
           }
-          return AppColors.surfaceVariant;
+          return p.surfaceVariant;
         }),
       ),
 
@@ -410,12 +414,12 @@ class AppTheme {
       checkboxTheme: CheckboxThemeData(
         fillColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColors.primary;
+            return p.primary;
           }
           return Colors.transparent;
         }),
-        checkColor: WidgetStateProperty.all(AppColors.onPrimary),
-        side: const BorderSide(color: AppColors.border, width: 2),
+        checkColor: WidgetStateProperty.all(p.onPrimary),
+        side: BorderSide(color: p.border, width: 2),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(4),
         ),
@@ -425,9 +429,9 @@ class AppTheme {
       radioTheme: RadioThemeData(
         fillColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColors.primary;
+            return p.primary;
           }
-          return AppColors.textSecondary;
+          return p.textSecondary;
         }),
       ),
 

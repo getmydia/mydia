@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/theme/colors.dart';
-import '../../../../core/theme/depth_tokens.dart';
+import '../../../../core/theme/palette.dart';
 import '../../../widgets/glass_surface.dart';
 
 /// A grouped container for settings rows.
@@ -18,27 +17,31 @@ class SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return GlassSurface.faux(
       borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-      fillColor: DepthTokens.surfaceVariant.withValues(alpha: 0.55),
+      fillColor: palette.surfaceVariant.withValues(alpha: 0.55),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _withDividers(children),
+        children: _withDividers(children, palette),
       ),
     );
   }
 
   /// Dividers are drawn by the card, not the rows, so a row never has to know
   /// whether it is last.
-  static List<Widget> _withDividers(List<Widget> children) {
+  static List<Widget> _withDividers(
+    List<Widget> children,
+    MydiaPalette palette,
+  ) {
     if (children.length < 2) return children;
 
     final result = <Widget>[];
     for (var i = 0; i < children.length; i++) {
       if (i > 0) {
         result.add(
-          const Divider(height: 1, thickness: 1, color: AppColors.divider),
+          Divider(height: 1, thickness: 1, color: palette.divider),
         );
       }
       result.add(children[i]);
@@ -72,11 +75,11 @@ class SettingsSection extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
               letterSpacing: 1.2,
-              color: AppColors.textDisabled,
+              color: context.palette.textDisabled,
             ),
           ),
         ),

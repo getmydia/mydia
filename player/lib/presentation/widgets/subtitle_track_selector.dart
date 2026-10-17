@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/player/subtitle_language_prefs.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/depth_tokens.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/subtitle_candidate.dart';
 import '../../domain/models/subtitle_search_outcome.dart';
 import '../../domain/models/subtitle_track.dart';
@@ -301,6 +302,7 @@ class _SubtitleTrackSelectorSheetState
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Material(
       type: MaterialType.transparency,
       child: Container(
@@ -317,7 +319,7 @@ class _SubtitleTrackSelectorSheetState
               child: Text(
                 'Subtitles',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: AppColors.textPrimary,
+                      color: palette.textPrimary,
                       fontWeight: FontWeight.bold,
                     ),
               ),
@@ -340,6 +342,7 @@ class _SubtitleTrackSelectorSheetState
   }
 
   Widget _buildTracks(BuildContext context) {
+    final palette = context.palette;
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -371,9 +374,9 @@ class _SubtitleTrackSelectorSheetState
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const Text(
+                    Text(
                       'This file has no subtitles.',
-                      style: TextStyle(color: AppColors.textSecondary),
+                      style: TextStyle(color: palette.textSecondary),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
@@ -386,8 +389,8 @@ class _SubtitleTrackSelectorSheetState
                       // sits on the dark OSD material, so a themed button
                       // would inherit the wrong contrast.
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.textPrimary,
-                        foregroundColor: AppColors.background,
+                        backgroundColor: palette.textPrimary,
+                        foregroundColor: palette.background,
                       ),
                     ),
                   ],
@@ -445,10 +448,10 @@ class _SubtitleTrackSelectorSheetState
           if (widget.tracks.isNotEmpty) ...[
             const Divider(color: DepthTokens.osdDivider, height: 1),
             ListTile(
-              leading: const Icon(Icons.search, color: AppColors.textSecondary),
-              title: const Text(
+              leading: Icon(Icons.search, color: palette.textSecondary),
+              title: Text(
                 'Search online',
-                style: TextStyle(color: AppColors.textPrimary),
+                style: TextStyle(color: palette.textPrimary),
               ),
               onTap: _search,
             ),
@@ -459,15 +462,16 @@ class _SubtitleTrackSelectorSheetState
   }
 
   Widget _buildProgress(String label) {
+    final palette = context.palette;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 40),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(color: AppColors.primary),
+            CircularProgressIndicator(color: palette.primary),
             const SizedBox(height: 16),
-            Text(label, style: const TextStyle(color: AppColors.textSecondary)),
+            Text(label, style: TextStyle(color: palette.textSecondary)),
           ],
         ),
       ),
@@ -487,8 +491,9 @@ class _SubtitleTrackSelectorSheetState
             onPressed: () => setState(() => _mode = _SheetMode.tracks),
             icon: const Icon(Icons.arrow_back, size: 18),
             label: const Text('Back to tracks'),
-            style:
-                TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
+            style: TextButton.styleFrom(
+              foregroundColor: context.palette.textSecondary,
+            ),
           ),
         ),
         _buildLanguageChips(),
@@ -553,10 +558,11 @@ class _LanguageChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final label = SubtitleCandidate.languageNames[code] ?? code.toUpperCase();
     return Material(
       color:
-          isSelected ? AppColors.primary : Colors.white.withValues(alpha: 0.06),
+          isSelected ? palette.primary : Colors.white.withValues(alpha: 0.06),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -566,7 +572,7 @@ class _LanguageChip extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected ? AppColors.onPrimary : AppColors.textPrimary,
+              color: isSelected ? palette.onPrimary : palette.textPrimary,
               fontSize: 13,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
             ),
@@ -593,22 +599,22 @@ class _TrackTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return ListTile(
       title: Text(
         title,
         style: TextStyle(
-          color: AppColors.textPrimary,
+          color: palette.textPrimary,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
       ),
       subtitle: subtitle != null
           ? Text(
               subtitle!,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: palette.textSecondary),
             )
           : null,
-      trailing:
-          isSelected ? const Icon(Icons.check, color: AppColors.primary) : null,
+      trailing: isSelected ? Icon(Icons.check, color: palette.primary) : null,
       onTap: onTap,
     );
   }
@@ -638,25 +644,26 @@ class _SubtitleDelayRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               'Subtitle delay',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: TextStyle(color: palette.textSecondary, fontSize: 13),
             ),
           ),
           Row(
             children: [
               IconButton(
                 key: const ValueKey('subtitle-delay-decrement'),
-                icon: const Icon(
+                icon: Icon(
                   Icons.remove_circle_outline,
-                  color: AppColors.textPrimary,
+                  color: palette.textPrimary,
                 ),
                 tooltip: '-100 ms',
                 onPressed: () => onNudge(-100),
@@ -665,8 +672,8 @@ class _SubtitleDelayRow extends StatelessWidget {
                 child: Center(
                   child: Text(
                     '${delayMs >= 0 ? '+' : ''}$delayMs ms',
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    style: TextStyle(
+                      color: palette.textPrimary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -674,9 +681,9 @@ class _SubtitleDelayRow extends StatelessWidget {
               ),
               IconButton(
                 key: const ValueKey('subtitle-delay-increment'),
-                icon: const Icon(
+                icon: Icon(
                   Icons.add_circle_outline,
-                  color: AppColors.textPrimary,
+                  color: palette.textPrimary,
                 ),
                 tooltip: '+100 ms',
                 onPressed: () => onNudge(100),

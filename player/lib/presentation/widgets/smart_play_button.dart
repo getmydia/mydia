@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/player/best_file.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 import '../../domain/models/show_next_up.dart';
 import 'focus_highlight.dart';
@@ -87,6 +87,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final state = widget.state;
     if (state == null) return _buildIconForm(context);
 
@@ -117,9 +118,9 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
               const SizedBox(height: 6),
               Text(
                 compact ? '${nextUpShortLabel(state)} · $cueLine' : cueLine,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: palette.textSecondary,
                 ),
               ),
             ],
@@ -132,6 +133,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
   /// The plain form: version label, white Play button, quality dropdown.
   /// [iconOnly] sheds the button's text for narrow, width-bounded layouts.
   Widget _buildIconForm(BuildContext context, {bool iconOnly = false}) {
+    final palette = context.palette;
     final hasMultiple = widget.files.length > 1;
 
     return Row(
@@ -142,9 +144,9 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
         if (_selectedFile != null) ...[
           Text(
             _selectedFile!.resolution ?? '',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
-              color: AppColors.textSecondary,
+              color: palette.textSecondary,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -176,6 +178,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
   }
 
   Widget _buildPillForm(BuildContext context) {
+    final palette = context.palette;
     final hasMultiple = widget.files.length > 1;
 
     return Row(
@@ -189,7 +192,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
           label: Text(nextUpLabel(widget.state!)),
           style: FilledButton.styleFrom(
             backgroundColor: Colors.white,
-            foregroundColor: AppColors.background,
+            foregroundColor: palette.background,
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.all(
@@ -206,7 +209,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
             // focused pill gets a gold outline.
             side: WidgetStateProperty.resolveWith(
               (states) => states.contains(WidgetState.focused)
-                  ? const BorderSide(color: AppColors.primary, width: 2)
+                  ? BorderSide(color: palette.primary, width: 2)
                   : null,
             ),
           ),
@@ -235,6 +238,7 @@ class _DropdownButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     // circular: true because this button's whole bounding box is the 28x28
     // circle it paints (unlike the action chip below, whose ring encloses an
     // icon plus a label). GestureDetector has no focus of its own, so this
@@ -247,16 +251,16 @@ class _DropdownButton extends StatelessWidget {
         child: Container(
           width: 28,
           height: 28,
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
             // Neutral surface fill (no two-hue gradient) to match the system.
-            color: AppColors.surfaceVariant,
+            color: palette.surfaceVariant,
           ),
-          child: const Center(
+          child: Center(
             child: Icon(
               Icons.keyboard_arrow_down_rounded,
               size: 18,
-              color: AppColors.textSecondary,
+              color: palette.textSecondary,
             ),
           ),
         ),

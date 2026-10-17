@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/play_button.dart';
@@ -38,12 +39,13 @@ class CalendarCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final id = entry.ref.externalId;
     final day = entry.day;
     final isToday = day != null && isSameDay(day, today);
 
     return Material(
-      color: AppColors.surface,
+      color: palette.surface,
       borderRadius: _radius,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -85,11 +87,11 @@ class CalendarCard extends ConsumerWidget {
                     entry.calendarTitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       height: TimelineLayout.titleLine / 14,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      color: palette.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -97,10 +99,10 @@ class CalendarCard extends ConsumerWidget {
                     entry.calendarSubtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       height: TimelineLayout.subtitleLine / 12,
-                      color: AppColors.textSecondary,
+                      color: palette.textSecondary,
                     ),
                   ),
                 ],
@@ -124,12 +126,12 @@ class _NewChip extends StatelessWidget {
         color: AppColors.overlayDark,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: const Text(
+      child: Text(
         'New today',
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: context.palette.textPrimary,
         ),
       ),
     );

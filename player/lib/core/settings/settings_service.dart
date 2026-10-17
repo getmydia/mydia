@@ -1,5 +1,6 @@
 import '../auth/auth_storage.dart';
 import '../player/subtitle_size.dart';
+import '../theme/theme_preset.dart';
 
 /// Service for managing user settings and preferences.
 ///
@@ -22,6 +23,7 @@ class SettingsService {
   static const _statsOverlayEnabledKey = 'stats_overlay_enabled';
   static const _subtitleSizeKey = 'subtitle_size';
   static const _updateTrackKey = 'update_track';
+  static const _themePresetKey = 'theme_preset';
 
   /// Get the default quality setting.
   Future<String> getDefaultQuality() async {
@@ -104,11 +106,23 @@ class SettingsService {
     await _storage.write(_updateTrackKey, track);
   }
 
+  /// The theme preset this device uses, as its stored name.
+  ///
+  /// A device-level choice like the subtitle size, so [clearSettings] leaves
+  /// it alone. Decoding, including the platform default, belongs to
+  /// `ThemePreset.resolve`.
+  Future<String?> getThemePreset() async => _storage.read(_themePresetKey);
+
+  /// Set the theme preset this device uses.
+  Future<void> setThemePreset(ThemePreset preset) async {
+    await _storage.write(_themePresetKey, preset.name);
+  }
+
   /// Clear all settings.
   ///
   /// Deletes an explicit list of keys, not everything in storage. Device-level
   /// choices are deliberately left out of that list: [_updateTrackKey]
-  /// survives a clear for that reason, as does the Diagnostics
+  /// and [_themePresetKey] survive a clear for that reason, as does the Diagnostics
   /// choice in `DiagnosticsSettings`.
   Future<void> clearSettings() async {
     await Future.wait([

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../../domain/models/watch_status.dart';
 import '../../widgets/episode_rail.dart';
@@ -39,6 +40,7 @@ class ShowSeasonSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final key = show.target.ref;
     final selectedSeason = ref.watch(selectedSeasonProvider(key));
     // Only show seasons that have files available
@@ -74,7 +76,7 @@ class ShowSeasonSection extends ConsumerWidget {
                 width: 4,
                 height: 20,
                 decoration: BoxDecoration(
-                  color: AppColors.primary,
+                  color: palette.primary,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -159,6 +161,7 @@ class ShowEpisodeList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final key = show.target.ref;
     final selectedSeason = ref.watch(selectedSeasonProvider(key));
 
@@ -180,13 +183,13 @@ class ShowEpisodeList extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                        color: palette.surfaceVariant.withValues(alpha: 0.5),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.tv_off_rounded,
                         size: 48,
-                        color: AppColors.textSecondary,
+                        color: palette.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -200,7 +203,7 @@ class ShowEpisodeList extends ConsumerWidget {
                     Text(
                       'This season has no episodes available',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.textSecondary,
+                            color: palette.textSecondary,
                           ),
                     ),
                   ],
@@ -294,7 +297,7 @@ class ShowEpisodeList extends ConsumerWidget {
                 Text(
                   error.toString(),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: palette.textSecondary,
                       ),
                   textAlign: TextAlign.center,
                 ),
@@ -317,10 +320,11 @@ class SeasonActionsButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     return PopupMenuButton<String>(
-      icon: const Icon(
+      icon: Icon(
         Icons.more_vert_rounded,
-        color: AppColors.textSecondary,
+        color: palette.textSecondary,
         size: 22,
       ),
       tooltip: 'Season actions',
@@ -330,7 +334,7 @@ class SeasonActionsButton extends ConsumerWidget {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
       ),
-      color: AppColors.surface,
+      color: palette.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -429,6 +433,7 @@ class _SeasonChipState extends State<_SeasonChip>
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return GestureDetector(
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) {
@@ -442,12 +447,12 @@ class _SeasonChipState extends State<_SeasonChip>
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            color: widget.isSelected ? AppColors.primary : AppColors.surface,
+            color: widget.isSelected ? palette.primary : palette.surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: widget.isSelected
-                  ? AppColors.primary
-                  : AppColors.divider.withValues(alpha: 0.3),
+                  ? palette.primary
+                  : palette.divider.withValues(alpha: 0.3),
             ),
           ),
           child: Row(
@@ -458,8 +463,7 @@ class _SeasonChipState extends State<_SeasonChip>
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color:
-                      widget.isSelected ? Colors.white : AppColors.textPrimary,
+                  color: widget.isSelected ? Colors.white : palette.textPrimary,
                 ),
               ),
               if (widget.unwatched > 0) ...[

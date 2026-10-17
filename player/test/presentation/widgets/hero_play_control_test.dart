@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/presentation/widgets/hero_play_control.dart';
 import 'package:player/core/theme/app_theme.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/primary_play_button.dart';
 
 const _files = [
@@ -57,10 +57,10 @@ void main() {
       const BorderRadius.all(Radius.circular(AppTheme.radiusButton)),
     );
     final label = tester.widget<Text>(find.text('Play'));
-    expect(label.style?.color, AppColors.background);
+    expect(label.style?.color, Palettes.projectionBooth.background);
     expect(label.style?.fontFamily, AppTheme.displayFamily);
     final icon = tester.widget<Icon>(find.byIcon(Icons.play_arrow_rounded));
-    expect(icon.color, AppColors.background);
+    expect(icon.color, Palettes.projectionBooth.background);
     // The version label stays beside the button, muted.
     expect(find.text('1080p'), findsOneWidget);
   });
@@ -99,7 +99,7 @@ void main() {
       of: find.byType(PrimaryPlayButton),
       matching: find.byType(Material),
     ));
-    expect(material.color, AppColors.surfaceVariant);
+    expect(material.color, Palettes.projectionBooth.surfaceVariant);
   });
 
   testWidgets('tapping reports the auto-selected file', (tester) async {

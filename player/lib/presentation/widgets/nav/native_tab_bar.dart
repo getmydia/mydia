@@ -145,7 +145,8 @@ class _NativeTabBarState extends ConsumerState<NativeTabBar> {
         }
       case NativeAccessoryTapped() ||
             NativeAccessoryPlayPause() ||
-            NativeLayoutChanged():
+            NativeLayoutChanged() ||
+            NativeSystemAccentChanged():
         break;
     }
   }

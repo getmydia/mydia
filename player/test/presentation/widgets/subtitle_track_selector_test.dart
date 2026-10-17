@@ -8,7 +8,7 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:player/core/player/subtitle_language_prefs.dart';
 import 'package:player/core/settings/settings_providers.dart';
 import 'package:player/core/settings/settings_service.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/models/subtitle_candidate.dart';
 import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -162,21 +162,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Exact match'), findsOneWidget);
 
-    // The selected language chip's label is AppColors.onPrimary on an
-    // AppColors.primary fill, not the OSD fill, so osdContrast would grade
+    // The selected language chip's label is Palettes.projectionBooth.onPrimary on an
+    // Palettes.projectionBooth.primary fill, not the OSD fill, so osdContrast would grade
     // it against the wrong background. It is skipped here and asserted
     // against its real fill below.
     final resultColors = osdParagraphColors(
       tester,
       find.byType(SubtitleTrackSelectorSheet),
-      skip: {AppColors.onPrimary},
+      skip: {Palettes.projectionBooth.onPrimary},
     );
     expect(resultColors, isNotEmpty);
     for (final color in resultColors) {
       expect(osdContrast(color), greaterThanOrEqualTo(4.5), reason: '$color');
     }
     expect(
-      contrastRatio(AppColors.onPrimary, AppColors.primary),
+      contrastRatio(
+          Palettes.projectionBooth.onPrimary, Palettes.projectionBooth.primary),
       greaterThanOrEqualTo(4.5),
     );
   });
@@ -194,20 +195,21 @@ void main() {
 
     expect(find.text('This file has no subtitles.'), findsOneWidget);
 
-    // The empty-state FilledButton's label and icon are AppColors.background
-    // on an AppColors.textPrimary fill, not the OSD fill, so they are
+    // The empty-state FilledButton's label and icon are Palettes.projectionBooth.background
+    // on an Palettes.projectionBooth.textPrimary fill, not the OSD fill, so they are
     // skipped here and asserted against their real fill below.
     final colors = osdParagraphColors(
       tester,
       find.byType(SubtitleTrackSelectorSheet),
-      skip: {AppColors.background},
+      skip: {Palettes.projectionBooth.background},
     );
     expect(colors, isNotEmpty);
     for (final color in colors) {
       expect(osdContrast(color), greaterThanOrEqualTo(4.5), reason: '$color');
     }
     expect(
-      contrastRatio(AppColors.background, AppColors.textPrimary),
+      contrastRatio(Palettes.projectionBooth.background,
+          Palettes.projectionBooth.textPrimary),
       greaterThanOrEqualTo(4.5),
     );
   });

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import 'focus_highlight.dart';
 
 class TvKeypad extends StatelessWidget {
@@ -55,6 +55,7 @@ class TvKeypad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       constraints: const BoxConstraints(maxWidth: 520),
       child: Column(
@@ -69,6 +70,7 @@ class TvKeypad extends StatelessWidget {
                 children: [
                   for (int col = 0; col < 7; col++)
                     _buildKey(
+                      palette,
                       char: validCharacters[row * 7 + col],
                       autofocus: row == 0 && col == 0,
                     ),
@@ -79,10 +81,11 @@ class TvKeypad extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildKey(char: '7'),
-              _buildKey(char: '8'),
-              _buildKey(char: '9'),
+              _buildKey(palette, char: '7'),
+              _buildKey(palette, char: '8'),
+              _buildKey(palette, char: '9'),
               _buildActionButton(
+                palette,
                 keyName: 'delete',
                 label: '⌫ Delete',
                 icon: Icons.backspace_outlined,
@@ -90,6 +93,7 @@ class TvKeypad extends StatelessWidget {
                 onPressed: enabled ? onDeletePressed : null,
               ),
               _buildActionButton(
+                palette,
                 keyName: 'clear',
                 label: 'Clear',
                 icon: Icons.refresh_rounded,
@@ -103,7 +107,11 @@ class TvKeypad extends StatelessWidget {
     );
   }
 
-  Widget _buildKey({required String char, bool autofocus = false}) {
+  Widget _buildKey(
+    MydiaPalette palette, {
+    required String char,
+    bool autofocus = false,
+  }) {
     return Expanded(
       flex: 1,
       child: Padding(
@@ -120,10 +128,10 @@ class TvKeypad extends StatelessWidget {
               height: 48,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppColors.surfaceVariant.withValues(alpha: 0.35),
+                color: palette.surfaceVariant.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: AppColors.border.withValues(alpha: 0.15),
+                  color: palette.border.withValues(alpha: 0.15),
                 ),
               ),
               child: Text(
@@ -131,8 +139,7 @@ class TvKeypad extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color:
-                      enabled ? AppColors.textPrimary : AppColors.textDisabled,
+                  color: enabled ? palette.textPrimary : palette.textDisabled,
                 ),
               ),
             ),
@@ -142,7 +149,8 @@ class TvKeypad extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButton({
+  Widget _buildActionButton(
+    MydiaPalette palette, {
     required String keyName,
     required String label,
     required IconData icon,
@@ -164,10 +172,10 @@ class TvKeypad extends StatelessWidget {
               height: 48,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppColors.surfaceVariant.withValues(alpha: 0.35),
+                color: palette.surfaceVariant.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: AppColors.border.withValues(alpha: 0.15),
+                  color: palette.border.withValues(alpha: 0.15),
                 ),
               ),
               child: Row(
@@ -176,9 +184,8 @@ class TvKeypad extends StatelessWidget {
                   Icon(
                     icon,
                     size: 16,
-                    color: enabled
-                        ? AppColors.textSecondary
-                        : AppColors.textDisabled,
+                    color:
+                        enabled ? palette.textSecondary : palette.textDisabled,
                   ),
                   const SizedBox(width: 4),
                   Text(
@@ -186,9 +193,8 @@ class TvKeypad extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: enabled
-                          ? AppColors.textPrimary
-                          : AppColors.textDisabled,
+                      color:
+                          enabled ? palette.textPrimary : palette.textDisabled,
                     ),
                   ),
                 ],

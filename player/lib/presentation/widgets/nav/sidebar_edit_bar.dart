@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 
 /// The bar shown below the sidebar's brand row while edit mode is active.
 ///
@@ -31,19 +31,20 @@ class SidebarEditBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
       padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.1),
+        color: palette.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.28),
+          color: palette.primary.withValues(alpha: 0.28),
         ),
       ),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Text(
               'Editing',
               overflow: TextOverflow.ellipsis,
@@ -52,7 +53,7 @@ class SidebarEditBar extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.6,
-                color: AppColors.primary,
+                color: palette.primary,
               ),
             ),
           ),
@@ -66,9 +67,9 @@ class SidebarEditBar extends StatelessWidget {
                 width: resetControlTapSize,
                 height: resetControlTapSize,
               ),
-              icon: const Icon(
+              icon: Icon(
                 Icons.settings_backup_restore_rounded,
-                color: AppColors.textSecondary,
+                color: palette.textSecondary,
               ),
             ),
             const SizedBox(width: 4),
@@ -76,8 +77,8 @@ class SidebarEditBar extends StatelessWidget {
           TextButton(
             onPressed: onDone,
             style: TextButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.onPrimary,
+              backgroundColor: palette.primary,
+              foregroundColor: palette.onPrimary,
               minimumSize: const Size(0, 40),
               padding: const EdgeInsets.symmetric(horizontal: 12),
               shape: const StadiumBorder(),

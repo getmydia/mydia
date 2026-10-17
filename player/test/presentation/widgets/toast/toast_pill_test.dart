@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/toast/toast_models.dart';
 import 'package:player/presentation/widgets/toast/toast_pill.dart';
@@ -60,7 +61,8 @@ void main() {
     expect(find.byType(Icon), findsNothing);
 
     await _pump(tester, _entry('Queued', icon: Icons.download_rounded));
-    expect(_iconColor(tester, Icons.download_rounded), AppColors.textSecondary);
+    expect(_iconColor(tester, Icons.download_rounded),
+        Palettes.projectionBooth.textSecondary);
   });
 
   testWidgets('success is a green check', (tester) async {
@@ -77,19 +79,20 @@ void main() {
     await _pump(tester, _entry('Loading...', kind: ToastKind.progress));
     final spinner = tester.widget<CircularProgressIndicator>(
         find.byType(CircularProgressIndicator));
-    expect(spinner.color, AppColors.primary);
+    expect(spinner.color, Palettes.projectionBooth.primary);
   });
 
   testWidgets('no kind recolours the pill itself', (tester) async {
     for (final kind in ToastKind.values) {
       await _pump(tester, _entry('Same glass', kind: kind));
       final glass = tester.widget<GlassSurface>(find.byType(GlassSurface));
-      expect(glass.fillColor, ToastPill.fill, reason: '$kind');
+      expect(glass.fillColor, ToastPill.fill(Palettes.projectionBooth),
+          reason: '$kind');
     }
   });
 
   test('the fill clears the legibility floor', () {
-    expect(ToastPill.fill.a,
+    expect(ToastPill.fill(Palettes.projectionBooth).a,
         greaterThanOrEqualTo(DepthTokens.glassLegibilityFloor));
   });
 
@@ -105,7 +108,7 @@ void main() {
     );
     final label = find.text('Settings');
     expect(DefaultTextStyle.of(tester.element(label)).style.color,
-        AppColors.primary);
+        Palettes.projectionBooth.primary);
     await tester.tap(find.byKey(const Key('toast-action')));
     expect(pressed, 1);
   });

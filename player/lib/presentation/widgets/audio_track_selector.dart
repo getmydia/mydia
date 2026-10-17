@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/audio_track.dart';
 import 'osd_sheet.dart';
 
@@ -34,6 +34,7 @@ class AudioTrackSelectorSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Material(
       type: MaterialType.transparency,
       child: Container(
@@ -47,18 +48,18 @@ class AudioTrackSelectorSheet extends StatelessWidget {
               child: Text(
                 'Audio Tracks',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: AppColors.textPrimary,
+                      color: palette.textPrimary,
                       fontWeight: FontWeight.bold,
                     ),
               ),
             ),
             const SizedBox(height: 16),
             if (tracks.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(20),
+              Padding(
+                padding: const EdgeInsets.all(20),
                 child: Text(
                   'No audio tracks available',
-                  style: TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(color: palette.textSecondary),
                 ),
               )
             else
@@ -93,22 +94,22 @@ class _TrackTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return ListTile(
       title: Text(
         title,
         style: TextStyle(
-          color: AppColors.textPrimary,
+          color: palette.textPrimary,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
       ),
       subtitle: isDefault
-          ? const Text(
+          ? Text(
               'Default',
-              style: TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: palette.textSecondary),
             )
           : null,
-      trailing:
-          isSelected ? const Icon(Icons.check, color: AppColors.primary) : null,
+      trailing: isSelected ? Icon(Icons.check, color: palette.primary) : null,
       onTap: onTap,
     );
   }

@@ -3,7 +3,7 @@ import 'package:shimmer/shimmer.dart';
 
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../sources/continue_watching_card.dart';
 import '../sources/source_home_hero.dart';
 import '../sources/source_poster_row.dart';
@@ -81,6 +81,7 @@ class _ShimmerHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final wide = Breakpoints.isDesktop(context);
     final padding = Breakpoints.getHorizontalPadding(context);
     // The same offsets as the loaded hero, so nothing moves on the swap.
@@ -91,8 +92,12 @@ class _ShimmerHero extends StatelessWidget {
       32,
     );
 
-    Widget bar(double width, double height, double radius) =>
-        _ShimmerRail._bar(width: width, height: height, radius: radius);
+    Widget bar(double width, double height, double radius) => _ShimmerRail._bar(
+          color: palette.shimmerBase,
+          width: width,
+          height: height,
+          radius: radius,
+        );
 
     // A bar as tall as [lines] lines of [style], so the placeholder follows
     // the loaded text's metrics: invisible text inside a filled box.
@@ -103,7 +108,7 @@ class _ShimmerHero extends StatelessWidget {
         width: width,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: AppColors.shimmerBase,
+            color: palette.shimmerBase,
             borderRadius: BorderRadius.circular(radius),
           ),
           child: Padding(
@@ -162,8 +167,8 @@ class _ShimmerHero extends StatelessWidget {
     );
 
     return Shimmer.fromColors(
-      baseColor: AppColors.shimmerBase,
-      highlightColor: AppColors.shimmerHighlight,
+      baseColor: palette.shimmerBase,
+      highlightColor: palette.shimmerHighlight,
       child: Padding(
         padding: inset,
         child: wide
@@ -221,6 +226,7 @@ class _ShimmerRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
     final itemWidth = landscape
@@ -240,14 +246,19 @@ class _ShimmerRail extends StatelessWidget {
             1;
 
     return Shimmer.fromColors(
-      baseColor: AppColors.shimmerBase,
-      highlightColor: AppColors.shimmerHighlight,
+      baseColor: palette.shimmerBase,
+      highlightColor: palette.shimmerHighlight,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: _bar(width: 150, height: 24, radius: 6),
+            child: _bar(
+              color: palette.shimmerBase,
+              width: 150,
+              height: 24,
+              radius: 6,
+            ),
           ),
           SizedBox(
             height: railHeight,
@@ -263,7 +274,7 @@ class _ShimmerRail extends StatelessWidget {
                 ),
                 child: SizedBox(
                   width: itemWidth,
-                  child: _bar(radius: radius),
+                  child: _bar(color: palette.shimmerBase, radius: radius),
                 ),
               ),
             ),
@@ -273,12 +284,17 @@ class _ShimmerRail extends StatelessWidget {
     );
   }
 
-  static Widget _bar({double? width, double? height, required double radius}) {
+  static Widget _bar({
+    required Color color,
+    double? width,
+    double? height,
+    required double radius,
+  }) {
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: AppColors.shimmerBase,
+        color: color,
         borderRadius: BorderRadius.circular(radius),
       ),
     );

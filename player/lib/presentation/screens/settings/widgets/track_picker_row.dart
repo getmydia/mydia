@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/palette.dart';
 import '../../../../core/update/update_provider.dart';
 import '../../../../core/update/update_track.dart';
 
@@ -55,6 +55,7 @@ class TrackPickerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final tracks = UpdateTrack.values.where(availableTracks.contains).toList();
     final notice = _downgradeNotice();
     final instructions = deferredInstructions;
@@ -64,13 +65,13 @@ class TrackPickerRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Release track',
             style: TextStyle(
               fontSize: 14.5,
               fontWeight: FontWeight.w500,
               letterSpacing: -0.1,
-              color: AppColors.textPrimary,
+              color: palette.textPrimary,
             ),
           ),
           const SizedBox(height: 10),
@@ -84,10 +85,10 @@ class TrackPickerRow extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               notice,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 height: 1.4,
-                color: AppColors.textSecondary,
+                color: palette.textSecondary,
               ),
             ),
           ],
@@ -152,6 +153,7 @@ class _TrackOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Semantics(
       key: Key('update-track-option-${track.wireName}'),
       selected: selected,
@@ -172,7 +174,7 @@ class _TrackOption extends StatelessWidget {
                 Icon(
                   selected ? Icons.check_circle : Icons.circle_outlined,
                   size: 18,
-                  color: selected ? AppColors.primary : AppColors.textDisabled,
+                  color: selected ? palette.primary : palette.textDisabled,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -185,17 +187,17 @@ class _TrackOption extends StatelessWidget {
                           fontSize: 13.5,
                           fontWeight: FontWeight.w500,
                           color: selected
-                              ? AppColors.textPrimary
-                              : AppColors.textSecondary,
+                              ? palette.textPrimary
+                              : palette.textSecondary,
                         ),
                       ),
                       const SizedBox(height: 1),
                       Text(
                         track.description,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           height: 1.35,
-                          color: AppColors.textDisabled,
+                          color: palette.textDisabled,
                         ),
                       ),
                     ],
@@ -221,6 +223,7 @@ class _DeferredInstructions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final scheme = Theme.of(context).colorScheme;
     final link = url;
 
@@ -229,18 +232,18 @@ class _DeferredInstructions extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: palette.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SelectableText(
             instructions,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
               height: 1.5,
-              color: AppColors.textSecondary,
-              fontFeatures: [FontFeature.tabularFigures()],
+              color: palette.textSecondary,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
           if (link != null) ...[

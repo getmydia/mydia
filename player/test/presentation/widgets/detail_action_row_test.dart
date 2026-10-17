@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 
 Widget _host(Widget child) => ProviderScope(
@@ -108,7 +109,7 @@ void main() {
 
     expect(find.byIcon(Icons.download_done_rounded), findsNothing);
     final icon = tester.widget<Icon>(find.byIcon(Icons.download_rounded));
-    expect(icon.color, AppColors.textPrimary);
+    expect(icon.color, Palettes.projectionBooth.textPrimary);
   });
 
   testWidgets('download button shows the done icon in success when downloaded',

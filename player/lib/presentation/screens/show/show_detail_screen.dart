@@ -22,6 +22,7 @@ import '../../widgets/detail_hero_app_bar.dart';
 import '../../widgets/shell_rail_inset.dart';
 import '../../../core/player/resume_plan.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../widgets/cast_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/hero_play_control.dart';
@@ -117,6 +118,7 @@ class ShowDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildContent(BuildContext context, WidgetRef ref, ShowView show) {
+    final palette = context.palette;
     final key = target.ref;
     final selectedEpisodeId = ref.watch(selectedEpisodeProvider(key));
 
@@ -178,7 +180,7 @@ class ShowDetailScreen extends ConsumerWidget {
                     DetailMetadataChip(
                       label: status,
                       color: status == 'Ended'
-                          ? AppColors.textSecondary
+                          ? palette.textSecondary
                           : AppColors.success,
                     ),
                 ]),
@@ -220,7 +222,7 @@ class ShowDetailScreen extends ConsumerWidget {
               : DetailArtImage(art: show.poster, slot: ArtSlot.poster),
           below: selectedEpisode == null
               ? null
-              : _buildEpisodeContextPill(show, selectedEpisode),
+              : _buildEpisodeContextPill(context, show, selectedEpisode),
           action: selectedEpisode == null
               ? null
               : _buildHeroPlayControl(context, ref, show, selectedEpisode),
@@ -229,7 +231,12 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildEpisodeContextPill(ShowView show, EpisodeView episode) {
+  Widget _buildEpisodeContextPill(
+    BuildContext context,
+    ShowView show,
+    EpisodeView episode,
+  ) {
+    final palette = context.palette;
     final isNextUp = show.nextUpEpisodeId == episode.id;
     final label = isNextUp
         ? 'Next Up · S${episode.seasonNumber} E${episode.episodeNumber}'
@@ -238,16 +245,16 @@ class ShowDetailScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        border: Border.all(color: AppColors.border),
+        color: palette.surfaceVariant,
+        border: Border.all(color: palette.border),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12.5,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: palette.textPrimary,
         ),
       ),
     );

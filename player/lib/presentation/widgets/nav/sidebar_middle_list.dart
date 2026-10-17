@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/sidebar_layout.dart';
 
 /// The sidebar's scrolling middle region, in one of two renderings.
@@ -83,6 +83,7 @@ class SidebarMiddleList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     if (!editing) {
       final visible = rows.where((row) => !row.hidden).toList();
 
@@ -120,17 +121,17 @@ class SidebarMiddleList extends StatelessWidget {
                 constraints: const BoxConstraints.tightFor(
                   height: _restoreControlTapHeight,
                 ),
-                icon: const Icon(
+                icon: Icon(
                   Icons.add_circle_outline_rounded,
-                  color: AppColors.primary,
+                  color: palette.primary,
                 ),
               )
             : ReorderableDragStartListener(
                 index: index,
-                child: const Icon(
+                child: Icon(
                   Icons.drag_indicator,
                   size: 20,
-                  color: AppColors.textSecondary,
+                  color: palette.textSecondary,
                 ),
               );
 

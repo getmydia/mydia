@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import 'focus_highlight.dart';
 
 /// The detail pages' Play / Resume control: the design system's white primary
 /// button, a play icon and a label on a white pill.
 ///
 /// Gold stays reserved for progress, selection, focus rings and badges, so
-/// this never paints [AppColors.primary]. A null [onPressed] renders the
+/// this never paints the palette's primary. A null [onPressed] renders the
 /// disabled surface and takes no focus, the same as the control it replaced.
 class PrimaryPlayButton extends StatefulWidget {
   const PrimaryPlayButton({
@@ -64,7 +64,8 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
 
   @override
   Widget build(BuildContext context) {
-    final foreground = _enabled ? AppColors.background : AppColors.textDisabled;
+    final palette = context.palette;
+    final foreground = _enabled ? palette.background : palette.textDisabled;
     return ScaleTransition(
       scale: _scale,
       child: FocusHighlight(
@@ -72,13 +73,13 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
         // A gold ring in the gap around the pill: the default white ring would
         // vanish against the white fill if it were drawn on the pill itself.
         borderRadius: _ringRadius,
-        ringColor: AppColors.primary,
+        ringColor: palette.primary,
         ringOpacity: 1,
         child: Padding(
           padding: const EdgeInsets.all(PrimaryPlayButton.ringGap),
           child: Material(
             key: PrimaryPlayButton.pillKey,
-            color: _enabled ? Colors.white : AppColors.surfaceVariant,
+            color: _enabled ? Colors.white : palette.surfaceVariant,
             borderRadius: _radius,
             child: InkWell(
               borderRadius: _radius,

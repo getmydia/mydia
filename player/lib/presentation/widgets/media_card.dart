@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/layout/breakpoints.dart';
-import '../../core/theme/colors.dart';
 import '../../core/theme/depth_tokens.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 import '../../domain/models/watch_status.dart';
 import 'focus_highlight.dart';
@@ -90,14 +90,14 @@ class MediaCard extends StatelessWidget {
   /// rather than on whichever glyph happens to be inside it.
   static const playBadgeKey = ValueKey('media-card-play-badge');
 
-  Widget _buildPlaceholder() {
+  Widget _buildPlaceholder(MydiaPalette palette) {
     return ColoredBox(
-      color: AppColors.surfaceVariant,
+      color: palette.surfaceVariant,
       child: Center(
         child: Icon(
           Icons.movie_rounded,
           size: 40,
-          color: AppColors.textSecondary.withValues(alpha: 0.5),
+          color: palette.textSecondary.withValues(alpha: 0.5),
         ),
       ),
     );
@@ -105,6 +105,7 @@ class MediaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final cardFiles = files;
     final quality = cardFiles != null && cardFiles.isNotEmpty
         ? getBestQuality(cardFiles)
@@ -161,7 +162,7 @@ class MediaCard extends StatelessWidget {
                   height: cardHeight,
                   child: PosterFrame(
                     imageUrl: posterUrl,
-                    placeholder: _buildPlaceholder(),
+                    placeholder: _buildPlaceholder(palette),
                     overlays: [
                       // `watchStatus` supersedes `progressPercentage` when
                       // both arrive. See the same guard in `MediaPoster` for
@@ -209,7 +210,7 @@ class MediaCard extends StatelessWidget {
                   Text(
                     subtitle!,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
+                          color: palette.textSecondary,
                         ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -235,15 +236,15 @@ class _PlayBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Positioned(
+    return Positioned(
       left: 8,
       bottom: 10,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.primary,
+          color: context.palette.primary,
           shape: BoxShape.circle,
         ),
-        child: Padding(
+        child: const Padding(
           padding: EdgeInsets.all(4),
           child: Icon(
             Icons.play_arrow_rounded,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/config/web_config.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/source_nav.dart';
 import '../focus_highlight.dart';
 import '../glass_surface.dart';
@@ -96,7 +96,7 @@ class BottomNav extends StatelessWidget {
             child: GlassSurface.chrome(
               opacity: DockGlass.fillOpacity,
               borderRadius: BorderRadius.circular(AppTheme.radiusBottomBar),
-              border: DockGlass.border,
+              border: DockGlass.border(context.palette),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 // Every item takes an equal share of the bar, so the row can
@@ -230,11 +230,12 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final effectiveColor = widget.isDisabled
-        ? AppColors.textDisabled
+        ? palette.textDisabled
         : widget.isSelected
-            ? AppColors.primary
-            : AppColors.textSecondary;
+            ? palette.primary
+            : palette.textSecondary;
 
     final item = FocusHighlight(
       onActivate: widget.onTap,
@@ -258,7 +259,7 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
             ),
             decoration: BoxDecoration(
               color: widget.isSelected && !widget.isDisabled
-                  ? AppColors.primary.withValues(alpha: 0.12)
+                  ? palette.primary.withValues(alpha: 0.12)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),

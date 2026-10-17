@@ -15,7 +15,7 @@ import '../../../core/sources/mydia/mydia_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../settings/devices_screen.dart';
@@ -108,7 +108,7 @@ class MydiaInstanceScreen extends StatelessWidget {
                 ),
                 decorate: (row) => ColoredBox(
                   color: Theme.of(context).appBarTheme.backgroundColor ??
-                      AppColors.background,
+                      context.palette.background,
                   child: row,
                 ),
               ),

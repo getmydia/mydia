@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/models/quality_delivery_subtitle.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/presentation/widgets/hls_quality_selector.dart';
@@ -292,7 +292,7 @@ void main() {
         matching: find.byType(Icon),
       ),
     );
-    expect(selected.color, AppColors.primary);
+    expect(selected.color, Palettes.projectionBooth.primary);
 
     final colors = osdParagraphColors(tester, find.byType(OsdDialog));
     expect(colors, isNotEmpty);

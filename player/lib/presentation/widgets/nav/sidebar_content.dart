@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/navigation/sidebar_layout_providers.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/navigation/nav_destination.dart';
 import '../../../domain/navigation/sidebar_layout.dart';
@@ -131,6 +131,7 @@ class SidebarContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final editing = ref.watch(sidebarEditModeProvider);
     final railLayout = rail && !editing;
 
@@ -212,8 +213,7 @@ class SidebarContent extends ConsumerWidget {
                   icon: Icon(
                     Icons.edit_outlined,
                     size: 20,
-                    color:
-                        editing ? AppColors.primary : AppColors.textSecondary,
+                    color: editing ? palette.primary : palette.textSecondary,
                   ),
                 ),
               ],
@@ -285,7 +285,7 @@ class SidebarContent extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Divider(
                       height: 1,
-                      color: AppColors.divider.withValues(alpha: 0.15),
+                      color: palette.divider.withValues(alpha: 0.15),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -320,6 +320,7 @@ class SidebarContent extends ConsumerWidget {
     required List<NavDestination> destinations,
     required bool railLayout,
   }) {
+    final palette = context.palette;
     final entries = ref.watch(sourceNavEntriesProvider(location));
     final source = ref.watch(currentSourceIdProvider(location));
     final allServers = isAllServersLocation(location);
@@ -423,7 +424,7 @@ class SidebarContent extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Divider(
               height: 1,
-              color: AppColors.divider.withValues(alpha: 0.15),
+              color: palette.divider.withValues(alpha: 0.15),
             ),
           ),
           const SizedBox(height: 8),
@@ -462,7 +463,7 @@ class SidebarContent extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surfaceVariant,
+        backgroundColor: context.palette.surfaceVariant,
         title: const Text('Reset sidebar?'),
         content: const Text(
           'Restores the default order and shows every hidden row. Saved '
@@ -517,10 +518,10 @@ class SidebarContent extends ConsumerWidget {
     // Anchors read as locked while editing so they do not look draggable.
     // They cannot move, and saying so is more honest than leaving them bare.
     final Widget? trailing = isEditing && !canCustomise
-        ? const Icon(
+        ? Icon(
             Icons.lock_outline_rounded,
             size: 17,
-            color: AppColors.textDisabled,
+            color: context.palette.textDisabled,
           )
         : editingTrailing;
 

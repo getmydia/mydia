@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/cache/artwork_decode.dart';
 import '../../core/cache/poster_cache_manager.dart';
 import '../../core/theme/ambient_tint/ambient_tint.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../core/ui/reduced_motion.dart';
 import 'artwork_image.dart';
 
@@ -237,7 +237,7 @@ class AmbientBackdropScrim extends StatelessWidget {
   /// hardcoded navy survived the move to the neutral palette precisely because
   /// nothing tied it to a token, and it tinted every Home backdrop blue. Same
   /// arrangement as `DepthTokens.osdTint`, for the same reason.
-  static const Color baseColor = AppColors.background;
+  static Color baseColor(MydiaPalette palette) => palette.background;
 
   /// Top-of-scrim dim alpha applied over the blurred artwork. Tuned in U8 so
   /// primary text clears WCAG AAA (7:1) and secondary text clears AA (4.5:1)
@@ -254,14 +254,15 @@ class AmbientBackdropScrim extends StatelessWidget {
     // decoration is built here rather than inlined as const colour literals.
     // The widget itself is still const-constructed by its caller, so this runs
     // once per mount rather than per frame.
+    final base = baseColor(context.palette);
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            baseColor.withValues(alpha: baseDim),
-            baseColor.withValues(alpha: bottomDim),
+            base.withValues(alpha: baseDim),
+            base.withValues(alpha: bottomDim),
           ],
           stops: const [0.0, 1.0],
         ),

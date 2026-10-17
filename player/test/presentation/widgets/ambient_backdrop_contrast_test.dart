@@ -25,8 +25,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/ambient_backdrop.dart';
 
 /// WCAG relative luminance of an opaque [color].
@@ -71,16 +71,18 @@ void main() {
 
   // Both the base colour and the alpha are read off the widget, so this can no
   // longer drift from what AmbientBackdropScrim actually paints. The previous
-  // version named AppColors.background here while the widget painted a navy
+  // version named Palettes.projectionBooth.background here while the widget painted a navy
   // literal, and stayed green throughout.
-  final scrim = AmbientBackdropScrim.baseColor.withValues(
+  final scrim =
+      AmbientBackdropScrim.baseColor(Palettes.projectionBooth).withValues(
     alpha: AmbientBackdropScrim.baseDim,
   );
   final effectiveBackground = _composite(scrim, brightArtwork);
 
   group('AmbientBackdrop scrim contrast over bright artwork', () {
     test('primary text holds a high contrast ratio (~15:1 target)', () {
-      final ratio = _contrastRatio(AppColors.textPrimary, effectiveBackground);
+      final ratio = _contrastRatio(
+          Palettes.projectionBooth.textPrimary, effectiveBackground);
       // Over worst-case white artwork the scrim must keep primary text strongly
       // legible. We require a comfortably-AAA ratio; the theme targets ~15:1 on
       // the flat background, and the dim keeps it well above the 7:1 AAA bar.
@@ -89,8 +91,8 @@ void main() {
     });
 
     test('secondary text holds an AA-large / body-legible ratio', () {
-      final ratio =
-          _contrastRatio(AppColors.textSecondary, effectiveBackground);
+      final ratio = _contrastRatio(
+          Palettes.projectionBooth.textSecondary, effectiveBackground);
       // Secondary text targets ~7:1 on the flat theme; over worst-case bright
       // artwork it must still clear the WCAG AA 4.5:1 body-text bar.
       expect(ratio, greaterThanOrEqualTo(4.5),
@@ -113,25 +115,27 @@ void main() {
     // Sidebar/control chrome: surface tint at the chrome fill opacity, over the
     // scrimmed white backdrop.
     final sidebarBg = _composite(
-      AppColors.surface.withValues(alpha: DepthTokens.chromeFillOpacity),
+      Palettes.projectionBooth.surface
+          .withValues(alpha: DepthTokens.chromeFillOpacity),
       effectiveBackground,
     );
     // App-bar/video chrome: background tint at the chrome fill opacity.
     final barBg = _composite(
-      AppColors.background.withValues(alpha: DepthTokens.chromeFillOpacity),
+      Palettes.projectionBooth.background
+          .withValues(alpha: DepthTokens.chromeFillOpacity),
       effectiveBackground,
     );
 
     test('sidebar chrome keeps primary text comfortably AAA', () {
       expect(
-        _contrastRatio(AppColors.textPrimary, sidebarBg),
+        _contrastRatio(Palettes.projectionBooth.textPrimary, sidebarBg),
         greaterThanOrEqualTo(7.0),
       );
     });
 
     test('sidebar chrome keeps secondary text above the AA body floor', () {
       expect(
-        _contrastRatio(AppColors.textSecondary, sidebarBg),
+        _contrastRatio(Palettes.projectionBooth.textSecondary, sidebarBg),
         greaterThanOrEqualTo(4.5),
       );
     });
@@ -158,7 +162,7 @@ void main() {
   // artwork's own colour through.
   group('AmbientBackdrop scrim base colour', () {
     test('is hueless so it does not drain colour from the artwork', () {
-      final c = AmbientBackdropScrim.baseColor;
+      final c = AmbientBackdropScrim.baseColor(Palettes.projectionBooth);
       const tolerance = 2 / 255;
       expect((c.b - c.r).abs(), lessThanOrEqualTo(tolerance),
           reason: 'blue cast of ${(c.b - c.r).abs()}');

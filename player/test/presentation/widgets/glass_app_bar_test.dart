@@ -10,7 +10,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
@@ -59,7 +59,7 @@ void main() {
       expect(fill.a, lessThan(1.0));
       expect(
           fill,
-          AppColors.background
+          Palettes.projectionBooth.background
               .withValues(alpha: DepthTokens.chromeFillOpacity));
     });
 
@@ -71,7 +71,7 @@ void main() {
 
       final fill = _fillOf(tester).color!;
       expect(fill.a, greaterThanOrEqualTo(DepthTokens.glassLegibilityFloor));
-      expect(fill, AppColors.background.withValues(alpha: 0.85));
+      expect(fill, Palettes.projectionBooth.background.withValues(alpha: 0.85));
     });
   });
 }

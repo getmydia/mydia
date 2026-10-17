@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/layout/breakpoints.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/models/media_stream.dart';
 import '../../../domain/sources/item.dart';
 import '../../screens/sources/source_browse_providers.dart';
@@ -103,10 +103,11 @@ class _PanelSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final isWide = Breakpoints.isDesktop(context);
 
     return Material(
-      color: AppColors.surface,
+      color: palette.surface,
       borderRadius:
           isWide ? null : const BorderRadius.vertical(top: Radius.circular(16)),
       // Only the bottom sheet has corners to clip. The side panel is a plain
@@ -121,8 +122,8 @@ class _PanelSurface extends StatelessWidget {
                 maxHeight: MediaQuery.sizeOf(context).height * 0.78,
               ),
         decoration: isWide
-            ? const BoxDecoration(
-                border: Border(left: BorderSide(color: AppColors.border)),
+            ? BoxDecoration(
+                border: Border(left: BorderSide(color: palette.border)),
               )
             : null,
         child: child,
@@ -141,7 +142,7 @@ class _Grabber extends StatelessWidget {
       height: 4,
       margin: const EdgeInsets.only(top: 10, bottom: 4),
       decoration: BoxDecoration(
-        color: AppColors.border,
+        color: context.palette.border,
         borderRadius: BorderRadius.circular(2),
       ),
     );
@@ -153,15 +154,16 @@ class _PanelHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 6, 10, 6),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Text(
               'Media Info',
               style: TextStyle(
-                color: AppColors.textPrimary,
+                color: palette.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
@@ -169,8 +171,7 @@ class _PanelHeader extends StatelessWidget {
           ),
           IconButton(
             key: const Key('media-info-close'),
-            icon:
-                const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+            icon: Icon(Icons.close_rounded, color: palette.textSecondary),
             onPressed: () => Navigator.of(context).maybePop(),
             tooltip: 'Close',
           ),
@@ -246,10 +247,12 @@ class _ErrorBody extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Media info could not be loaded. Check your connection to the server.',
             style: TextStyle(
-                color: AppColors.textSecondary, fontSize: 13, height: 1.5),
+                color: context.palette.textSecondary,
+                fontSize: 13,
+                height: 1.5),
           ),
           const SizedBox(height: 14),
           TextButton(

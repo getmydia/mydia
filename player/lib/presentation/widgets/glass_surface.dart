@@ -2,8 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../../core/theme/ambient_tint/ambient_tint.dart';
-import '../../core/theme/colors.dart';
 import '../../core/theme/depth_tokens.dart';
+import '../../core/theme/palette.dart';
 
 /// Which ambient tint colour a glass surface fills with.
 enum GlassTint { ground, surface }
@@ -57,6 +57,11 @@ class GlassSurface extends StatelessWidget {
   /// Optional border drawn on the fill.
   final BoxBorder? border;
 
+  /// When set and [border] is null, a one-pixel border in the theme palette's
+  /// border colour at this alpha. Resolved in [build] so it follows the
+  /// active preset.
+  final double? paletteBorderAlpha;
+
   /// Whether to participate in an enclosing [BackdropGroup] for a shared
   /// rendering pass. Requires a [BackdropGroup] ancestor. No-op when [live] is
   /// false.
@@ -82,6 +87,7 @@ class GlassSurface extends StatelessWidget {
     this.gradient,
     this.borderRadius = BorderRadius.zero,
     this.border,
+    this.paletteBorderAlpha,
     this.grouped = false,
     this.shadows = const <BoxShadow>[],
     this.tint,
@@ -107,8 +113,8 @@ class GlassSurface extends StatelessWidget {
           child: child,
         );
 
-  /// Modal / sheet glass: modal blur sigma, [AppColors.surface] at the modal
-  /// fill opacity, [AppColors.border] @0.2 border, radius 20.
+  /// Modal / sheet glass: modal blur sigma, the ambient surface at the modal
+  /// fill opacity, the palette border @0.2 border, radius 20.
   GlassSurface.modal({
     Key? key,
     bool grouped = false,
@@ -119,9 +125,7 @@ class GlassSurface extends StatelessWidget {
           tint: GlassTint.surface,
           tintOpacity: DepthTokens.modalFillOpacity,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: AppColors.border.withValues(alpha: 0.2),
-          ),
+          paletteBorderAlpha: 0.2,
           grouped: grouped,
           child: child,
         );
@@ -252,7 +256,14 @@ class GlassSurface extends StatelessWidget {
                 GlassTint.surface => AmbientTint.of(context).surface,
               }
                 .withValues(alpha: tintOpacity));
-    return _withShadow(_surface(fill));
+    final alpha = paletteBorderAlpha;
+    final resolvedBorder = border ??
+        (alpha == null
+            ? null
+            : Border.all(
+                color: context.palette.border.withValues(alpha: alpha),
+              ));
+    return _withShadow(_surface(fill, resolvedBorder));
   }
 
   Widget _withShadow(Widget surface) {
@@ -263,25 +274,26 @@ class GlassSurface extends StatelessWidget {
     );
   }
 
-  Widget _surface(Color? fill) {
+  Widget _surface(Color? fill, BoxBorder? border) {
     // Faux-glass: no BackdropFilter at all (R8).
     if (!live) {
       return RepaintBoundary(
-        child: ClipRRect(borderRadius: borderRadius, child: _fill(fill)),
+        child:
+            ClipRRect(borderRadius: borderRadius, child: _fill(fill, border)),
       );
     }
 
     final filter = ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma);
     final backdrop = grouped
-        ? BackdropFilter.grouped(filter: filter, child: _fill(fill))
-        : BackdropFilter(filter: filter, child: _fill(fill));
+        ? BackdropFilter.grouped(filter: filter, child: _fill(fill, border))
+        : BackdropFilter(filter: filter, child: _fill(fill, border));
 
     return RepaintBoundary(
       child: ClipRRect(borderRadius: borderRadius, child: backdrop),
     );
   }
 
-  Widget _fill(Color? fill) {
+  Widget _fill(Color? fill, BoxBorder? border) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: gradient == null ? fill : null,

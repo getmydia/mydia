@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/downloads/download_providers.dart';
 import '../../../../core/sources/source.dart';
 import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/palette.dart';
 import '../../../../domain/models/download.dart';
 
 /// "Specials" for season 0, "Season N" otherwise. Season 0 is the conventional
@@ -20,15 +21,15 @@ Future<void> showCancelDownloadDialog(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.palette.surface,
       title: const Text('Cancel Download?'),
       content: Text('Stop downloading ${task.episodeCode}?'),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text(
+          child: Text(
             'Keep',
-            style: TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: context.palette.textSecondary),
           ),
         ),
         FilledButton(
@@ -55,7 +56,7 @@ Future<void> showDeleteEpisodeDialog(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.palette.surface,
       title: const Text('Delete Episode'),
       content: Text('Delete ${media.episodeCode}?'),
       actions: [
@@ -92,7 +93,7 @@ Future<void> showDeleteSeasonDialog(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.palette.surface,
       title: Text('Delete $label?'),
       content: Text(
         'Delete $episodeCount episode${episodeCount == 1 ? '' : 's'} '
@@ -101,9 +102,9 @@ Future<void> showDeleteSeasonDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text(
+          child: Text(
             'Cancel',
-            style: TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: context.palette.textSecondary),
           ),
         ),
         FilledButton(
@@ -141,7 +142,7 @@ Future<bool> showDeleteAllDialog(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.palette.surface,
       title: const Text('Delete All Episodes'),
       content: Text(
         'Delete all $totalCount episode${totalCount == 1 ? '' : 's'} '
@@ -150,9 +151,9 @@ Future<bool> showDeleteAllDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text(
+          child: Text(
             'Cancel',
-            style: TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: context.palette.textSecondary),
           ),
         ),
         FilledButton(

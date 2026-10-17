@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/colors.dart';
 import '../../../../core/theme/depth_tokens.dart';
+import '../../../../core/theme/palette.dart';
 
 /// Who you are and which server you are on.
 ///
@@ -28,6 +28,7 @@ class SettingsIdentity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 22),
       child: Row(
@@ -41,11 +42,11 @@ class SettingsIdentity extends StatelessWidget {
               children: [
                 Text(
                   username.isEmpty ? 'Signed in' : username,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.24,
-                    color: AppColors.textPrimary,
+                    color: palette.textPrimary,
                   ),
                 ),
                 if (serverUrl.isNotEmpty) ...[
@@ -54,9 +55,9 @@ class SettingsIdentity extends StatelessWidget {
                     serverUrl,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
-                      color: AppColors.textSecondary,
+                      color: palette.textSecondary,
                     ),
                   ),
                 ],
@@ -81,6 +82,7 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       width: 38,
       height: 38,
@@ -94,13 +96,13 @@ class _Avatar extends StatelessWidget {
         ),
       ),
       child: username.isEmpty
-          ? const Icon(Icons.person, size: 18, color: AppColors.textSecondary)
+          ? Icon(Icons.person, size: 18, color: palette.textSecondary)
           : Text(
               username.substring(0, 1).toUpperCase(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                color: palette.textPrimary,
               ),
             ),
     );

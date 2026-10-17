@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/detail/detail_target.dart';
 import '../../domain/sources/item.dart';
 import '../screens/detail/detail_links.dart';
@@ -167,6 +167,7 @@ Future<void> showMediaContextMenu(
   final position = popupPositionBelow(context);
   if (position == null) return;
 
+  final palette = context.palette;
   final selected = await showMenu<MediaContextAction>(
     context: context,
     position: position,
@@ -180,7 +181,7 @@ Future<void> showMediaContextMenu(
               Icon(
                 mediaContextIcon(action),
                 size: 18,
-                color: AppColors.textSecondary,
+                color: palette.textSecondary,
               ),
               const SizedBox(width: 12),
               // Flexible because the labels are no longer all short. "Remove

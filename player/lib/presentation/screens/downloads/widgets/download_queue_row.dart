@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/downloads/download_providers.dart';
-import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/palette.dart';
 import '../../../../domain/models/download.dart';
 import 'download_recovery_banner.dart';
 import 'series_downloads_dialogs.dart';
@@ -20,6 +20,7 @@ class DownloadQueueRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final progress = task.isProgressive ? task.combinedProgress : task.progress;
     final recovering = downloadStateLabel(task).isNotEmpty;
 
@@ -34,15 +35,15 @@ class DownloadQueueRow extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
+                  color: palette.primary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(5),
                 ),
                 child: Text(
                   task.episodeCode,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
+                    color: palette.primary,
                   ),
                 ),
               ),
@@ -63,7 +64,7 @@ class DownloadQueueRow extends ConsumerWidget {
                 key: const ValueKey('download-queue-row-cancel'),
                 onPressed: () => showCancelDownloadDialog(context, ref, task),
                 icon: const Icon(Icons.close_rounded),
-                color: AppColors.textSecondary,
+                color: palette.textSecondary,
                 iconSize: 20,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -88,9 +89,8 @@ class DownloadQueueRow extends ConsumerWidget {
               key: const ValueKey('download-queue-row-bar'),
               value: progress.clamp(0.0, 1.0),
               minHeight: 4,
-              backgroundColor: AppColors.surfaceVariant,
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(AppColors.primary),
+              backgroundColor: palette.surfaceVariant,
+              valueColor: AlwaysStoppedAnimation<Color>(palette.primary),
             ),
           ),
           const SizedBox(height: 6),
@@ -121,9 +121,9 @@ class DownloadQueueRow extends ConsumerWidget {
           key: const ValueKey('download-queue-row-metrics'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
-            color: AppColors.textSecondary,
+            color: context.palette.textSecondary,
           ),
         );
       },

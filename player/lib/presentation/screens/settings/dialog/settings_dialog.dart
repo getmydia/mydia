@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/palette.dart';
 import 'settings_dialog_sidebar.dart';
 
 enum SettingsCategory {
@@ -81,6 +81,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final window = MediaQuery.sizeOf(context);
     final compact = window.width < kSettingsDialogCompactBelow.width ||
         window.height < kSettingsDialogCompactBelow.height;
@@ -97,7 +98,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       paneNavigator: (c) => _navigators[c]!.currentState!,
       child: Dialog(
         insetPadding: EdgeInsets.all(inset),
-        backgroundColor: AppColors.background,
+        backgroundColor: palette.background,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius:
@@ -120,8 +121,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     compact: compact,
                     onSelect: (c) => widget.controller.value = c,
                   ),
-                  const VerticalDivider(
-                      width: 1, thickness: 1, color: AppColors.divider),
+                  VerticalDivider(
+                      width: 1, thickness: 1, color: palette.divider),
                   Expanded(
                     child: IndexedStack(
                       index: selected.index,

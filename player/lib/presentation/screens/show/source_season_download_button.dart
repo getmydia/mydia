@@ -7,7 +7,7 @@ import '../../../core/sources/media_source.dart';
 import '../../../core/sources/original_download.dart';
 import '../../../core/sources/source_season_download.dart';
 import '../../../core/sources/sources_providers.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../../domain/models/download.dart';
 import '../../../domain/models/download_request.dart';
@@ -38,9 +38,10 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final seasonTarget = season.target;
     if (seasonTarget == null) return const SizedBox.shrink();
-    const icon = Icon(
+    final palette = context.palette;
+    final icon = Icon(
       Icons.download_for_offline_outlined,
-      color: AppColors.textSecondary,
+      color: palette.textSecondary,
       size: 22,
     );
     final all = [
@@ -65,7 +66,7 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
       ),
-      color: AppColors.surface,
+      color: palette.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: (value) =>
           _download(context, ref, value == 'all' ? all : [season]),

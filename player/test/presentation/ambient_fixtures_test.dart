@@ -9,6 +9,7 @@ import 'package:player/core/sources/media_source.dart' show ArtworkRequest;
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_providers.dart';
 import 'package:player/core/theme/ambient_tint/tint_extraction.dart';
 import 'package:player/domain/detail/detail_target.dart';
@@ -44,9 +45,10 @@ Future<MemoryImage> _png(Color color) async {
 TintExtractor _extractorFor(Map<String, MemoryImage> fixtures, String key) =>
     (source) => extractTint(fixtures[key]!);
 
-AmbientTintColors _expected(Color color) => color == _grey
-    ? AmbientTintColors.neutral
-    : AmbientTintColors.fromSeed(color);
+AmbientTintColors _expected(Color color) => resolveAmbientTint(
+      color == _grey ? null : AmbientTintColors.fromSeed(color),
+      Palettes.projectionBooth,
+    );
 
 /// Lets the real image decode finish (it needs the real event loop), then
 /// runs the debounce and the tint tween out.

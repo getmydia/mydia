@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/cache/query_key.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/layout/window_chrome_inset.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import 'ambient_backdrop_provider.dart';
 import 'app_shell.dart';
 import 'freshness_header.dart';
@@ -146,6 +146,7 @@ class BrowseScaffold extends ConsumerWidget {
     BuildContext context,
     double barHeight,
   ) {
+    final palette = context.palette;
     // The hamburger opens the phone drawer, which only exists below the
     // rail breakpoint.
     final isDesktop = Breakpoints.showsRail(context);
@@ -197,7 +198,7 @@ class BrowseScaffold extends ConsumerWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, color: AppColors.primary, size: 22),
+                    Icon(icon, color: palette.primary, size: 22),
                     const SizedBox(width: 10),
                     Flexible(
                       child: Text(

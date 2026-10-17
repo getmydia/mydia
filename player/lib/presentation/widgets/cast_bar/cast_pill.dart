@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 import '../nav/dock_glass.dart';
 
@@ -27,7 +28,7 @@ class CastPill extends StatelessWidget {
         child: GlassSurface.chrome(
           opacity: DockGlass.fillOpacity,
           borderRadius: radius,
-          border: DockGlass.border,
+          border: DockGlass.border(context.palette),
           // Transparent Material so IconButton ink and tooltips still work
           // on glass.
           child: Material(

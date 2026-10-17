@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../core/window/decoration_layout.dart';
 
 /// A single window-manager button, drawn by Flutter.
@@ -70,7 +71,9 @@ class _WindowButtonWidgetState extends State<WindowButtonWidget> {
     if (widget.button == WindowButton.close) {
       return _isWindows ? const Color(0xFFE81123) : AppColors.error;
     }
-    return _isWindows ? const Color(0x1AFFFFFF) : AppColors.surfaceVariant;
+    return _isWindows
+        ? const Color(0x1AFFFFFF)
+        : context.palette.surfaceVariant;
   }
 
   double get _iconSize =>
@@ -78,9 +81,9 @@ class _WindowButtonWidgetState extends State<WindowButtonWidget> {
 
   Color get _iconColor {
     if (_hovered && widget.button == WindowButton.close) {
-      return _isWindows ? Colors.white : AppColors.textPrimary;
+      return _isWindows ? Colors.white : context.palette.textPrimary;
     }
-    return AppColors.textSecondary;
+    return context.palette.textSecondary;
   }
 
   String get _tooltip => switch (widget.button) {

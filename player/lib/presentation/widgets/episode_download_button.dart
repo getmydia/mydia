@@ -5,6 +5,7 @@ import '../../domain/sources/item.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/downloads/download_providers.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../screens/detail/download_metadata.dart';
 import '../screens/detail/start_download.dart';
 
@@ -32,7 +33,7 @@ class EpisodeDownloadButton extends ConsumerWidget {
 
     return _ActionButton(
       icon: isDownloaded ? Icons.download_done_rounded : Icons.download_rounded,
-      color: isDownloaded ? AppColors.success : AppColors.textSecondary,
+      color: isDownloaded ? AppColors.success : context.palette.textSecondary,
       onTap: () => _handleDownload(context, ref, item),
       tooltip: isDownloaded ? 'Downloaded' : 'Download',
     );

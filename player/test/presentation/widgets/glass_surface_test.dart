@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
@@ -46,7 +46,7 @@ void main() {
       final decoration = _decoratedBoxOf(tester).decoration as BoxDecoration;
       expect(
         decoration.color,
-        AppColors.background.withValues(alpha: 0.8),
+        Palettes.projectionBooth.background.withValues(alpha: 0.8),
       );
     });
 
@@ -57,7 +57,7 @@ void main() {
       final decoration = _decoratedBoxOf(tester).decoration as BoxDecoration;
       expect(
         decoration.color,
-        AppColors.background.withValues(alpha: 0.85),
+        Palettes.projectionBooth.background.withValues(alpha: 0.85),
       );
     });
   });
@@ -72,7 +72,8 @@ void main() {
       expect(_hasBlurSigma(_backdropOf(tester), 8), isTrue);
 
       final decoration = _decoratedBoxOf(tester).decoration as BoxDecoration;
-      expect(decoration.color, AppColors.surface.withValues(alpha: 0.6));
+      expect(decoration.color,
+          Palettes.projectionBooth.surface.withValues(alpha: 0.6));
       expect(decoration.border, isNotNull);
       expect(decoration.borderRadius, BorderRadius.circular(20));
     });
@@ -112,7 +113,7 @@ void main() {
       await tester.pumpWidget(
         _host(
           GlassSurface.faux(
-            fillColor: AppColors.surface.withValues(alpha: 0.5),
+            fillColor: Palettes.projectionBooth.surface.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(12),
             child: const SizedBox(width: 50, height: 50),
           ),
@@ -129,7 +130,8 @@ void main() {
         ),
       );
       final decoration = decorated.decoration as BoxDecoration;
-      expect(decoration.color, AppColors.surface.withValues(alpha: 0.5));
+      expect(decoration.color,
+          Palettes.projectionBooth.surface.withValues(alpha: 0.5));
       // Rim is applied by default.
       expect(decoration.border, isNotNull);
     });

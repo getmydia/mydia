@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/layout/breakpoints.dart';
 import '../../core/layout/dock_insets.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/sources/collection.dart';
 import '../screens/detail/detail_links.dart';
 import 'source_artwork.dart';
@@ -31,6 +31,7 @@ class _CollectionCardState extends State<CollectionCard> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final caption = widget.caption;
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -45,17 +46,17 @@ class _CollectionCardState extends State<CollectionCard> {
               ? (Matrix4.identity()..scaleByDouble(1.02, 1.02, 1.0, 1.0))
               : Matrix4.identity(),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: palette.surface,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: _isHovered
-                  ? AppColors.primary.withValues(alpha: 0.4)
-                  : AppColors.border.withValues(alpha: 0.15),
+                  ? palette.primary.withValues(alpha: 0.4)
+                  : palette.border.withValues(alpha: 0.15),
             ),
             boxShadow: _isHovered
                 ? [
                     BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.1),
+                      color: palette.primary.withValues(alpha: 0.1),
                       blurRadius: 16,
                       spreadRadius: 2,
                     ),
@@ -101,14 +102,14 @@ class _CollectionCardState extends State<CollectionCard> {
                               ? Icons.auto_awesome_rounded
                               : Icons.list_rounded,
                           size: 14,
-                          color: AppColors.textSecondary,
+                          color: palette.textSecondary,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${widget.collection.itemCount} item${widget.collection.itemCount == 1 ? '' : 's'}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.textSecondary,
+                            color: palette.textSecondary,
                           ),
                         ),
                       ],
@@ -126,15 +127,16 @@ class _CollectionCardState extends State<CollectionCard> {
   Widget _buildPosterCollage() {
     final posters = widget.collection.posters;
     final sourceId = widget.collection.sourceId;
+    final palette = context.palette;
 
     if (posters.isEmpty) {
       return Container(
-        color: AppColors.surfaceVariant,
-        child: const Center(
+        color: palette.surfaceVariant,
+        child: Center(
           child: Icon(
             Icons.collections_bookmark_outlined,
             size: 40,
-            color: AppColors.textSecondary,
+            color: palette.textSecondary,
           ),
         ),
       );
@@ -168,13 +170,14 @@ class _CollectionCardState extends State<CollectionCard> {
   }
 
   Widget _placeholderTile() {
+    final palette = context.palette;
     return Container(
-      color: AppColors.surfaceVariant,
-      child: const Center(
+      color: palette.surfaceVariant,
+      child: Center(
         child: Icon(
           Icons.movie_outlined,
           size: 24,
-          color: AppColors.textSecondary,
+          color: palette.textSecondary,
         ),
       ),
     );

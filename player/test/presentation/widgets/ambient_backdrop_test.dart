@@ -6,7 +6,7 @@ import 'package:player/core/cache/artwork_decode.dart';
 import 'package:player/core/cache/poster_cache_manager.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/ambient_backdrop.dart';
 import 'package:player/presentation/widgets/artwork_image.dart';
 
@@ -387,7 +387,7 @@ void main() {
       await tester.pumpWidget(
         _host(const AmbientBackdrop(imageUrl: null, id: 'a')),
       );
-      expect(firstBase(tester).color, AppColors.background);
+      expect(firstBase(tester).color, Palettes.projectionBooth.background);
     });
   });
 }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../widgets/focus_highlight.dart';
 import 'calendar_dates.dart';
 
@@ -15,7 +15,7 @@ Future<DateTime?> showCalendarMonthSheet(
 }) =>
     showModalBottomSheet<DateTime>(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.palette.surface,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => CalendarMonthSheet(
@@ -78,6 +78,7 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final month = _months[_index];
 
     // Scrolls so a six-week month still fits the capped sheet height on a
@@ -96,10 +97,10 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
                     child: Text(
                       formatMonthYear(month),
                       key: const ValueKey('calendar-sheet-title'),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                        color: palette.textPrimary,
                       ),
                     ),
                   ),
@@ -127,10 +128,10 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
                       child: Text(
                         initial,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textDisabled,
+                          color: palette.textDisabled,
                         ),
                       ),
                     ),
@@ -149,11 +150,11 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
                   ],
                 ),
               const SizedBox(height: 12),
-              const Row(
+              Row(
                 children: [
-                  _LegendDot(color: AppColors.primary, label: 'Ready to play'),
-                  SizedBox(width: 16),
-                  _LegendDot(color: AppColors.textDisabled, label: 'Scheduled'),
+                  _LegendDot(color: palette.primary, label: 'Ready to play'),
+                  const SizedBox(width: 16),
+                  _LegendDot(color: palette.textDisabled, label: 'Scheduled'),
                 ],
               ),
             ],
@@ -201,14 +202,15 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
     final isToday = isSameDay(day, widget.today);
     final onSelect = inWindow ? () => Navigator.of(context).pop(day) : null;
     const radius = BorderRadius.all(Radius.circular(10));
+    final palette = context.palette;
 
     final Color numberColor;
     if (!inWindow) {
-      numberColor = AppColors.textDisabled;
+      numberColor = palette.textDisabled;
     } else if (isToday) {
-      numberColor = AppColors.primary;
+      numberColor = palette.primary;
     } else {
-      numberColor = AppColors.textPrimary;
+      numberColor = palette.textPrimary;
     }
 
     return FocusHighlight(
@@ -246,6 +248,7 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
     final playable = widget.daySummaries[day];
     if (playable == null) return const SizedBox(width: 5, height: 5);
     final state = playable ? 'playable' : 'scheduled';
+    final palette = context.palette;
 
     return Container(
       key: ValueKey('calendar-sheet-dot-$state-${isoDate(day)}'),
@@ -253,7 +256,7 @@ class _CalendarMonthSheetState extends State<CalendarMonthSheet> {
       height: 5,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: playable ? AppColors.primary : AppColors.textDisabled,
+        color: playable ? palette.primary : palette.textDisabled,
       ),
     );
   }
@@ -278,7 +281,7 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 6),
         Text(label,
             style:
-                const TextStyle(fontSize: 11, color: AppColors.textDisabled)),
+                TextStyle(fontSize: 11, color: context.palette.textDisabled)),
       ],
     );
   }

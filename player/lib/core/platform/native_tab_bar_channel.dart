@@ -199,6 +199,13 @@ final class NativeAccessoryPlayPause extends NativeTabBarEvent {
   const NativeAccessoryPlayPause();
 }
 
+/// macOS: the viewer changed the system accent colour (System Settings,
+/// Appearance). [color] is sRGB under the dark appearance.
+final class NativeSystemAccentChanged extends NativeTabBarEvent {
+  const NativeSystemAccentChanged(this.color);
+  final Color color;
+}
+
 /// The Dart end of `mydia/native-tab-bar`.
 ///
 /// Every setter drops a value equal to the last one sent, so widgets can call
@@ -218,6 +225,7 @@ class NativeTabBarChannel {
   String? _selected;
   bool _cleared = false;
   bool? _visible;
+  Color? _windowBackground;
 
   // Native starts with no accessory, which is what null means.
   NativeAccessory? _accessory;
@@ -274,6 +282,28 @@ class NativeTabBarChannel {
       debugPrint('[NativeTabBar] layout failed: $e');
     }
     return null;
+  }
+
+  /// macOS: the system accent colour, or null when native cannot answer.
+  Future<Color?> querySystemAccent() async {
+    try {
+      final answer = await _channel.invokeMethod<Object?>('systemAccent');
+      return answer is int ? Color(answer) : null;
+    } on MissingPluginException catch (e) {
+      debugPrint('[NativeTabBar] systemAccent: plugin missing: $e');
+    } on PlatformException catch (e) {
+      debugPrint('[NativeTabBar] systemAccent failed: $e');
+    }
+    return null;
+  }
+
+  /// macOS: paints the window behind the Flutter view, seen during resizes.
+  Future<void> setWindowBackground(Color color) {
+    if (_windowBackground == color) return Future.value();
+    _windowBackground = color;
+    return _send('setWindowBackground', color.toARGB32(), () {
+      if (_windowBackground == color) _windowBackground = null;
+    });
   }
 
   Future<void> select(String id) {
@@ -356,6 +386,8 @@ class NativeTabBarChannel {
         },
       'accessoryTapped' => const NativeAccessoryTapped(),
       'accessoryPlayPause' => const NativeAccessoryPlayPause(),
+      'systemAccentChanged' when arguments is int =>
+        NativeSystemAccentChanged(Color(arguments)),
       _ => null,
     };
     if (event == null) {

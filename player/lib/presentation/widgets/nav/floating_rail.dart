@@ -7,8 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/navigation/sidebar_layout_providers.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../../../core/theme/palette.dart';
 import '../../../core/ui/reduced_motion.dart';
 import '../glass_surface.dart';
 import '../toast/toast_obstruction.dart';
@@ -258,6 +258,7 @@ class _RailFooter extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final editing = ref.watch(sidebarEditModeProvider);
     return SizedBox(
       height: RailScope.rowHeight,
@@ -275,7 +276,7 @@ class _RailFooter extends ConsumerWidget {
                 key: const Key('rail-toggle'),
                 tooltip: expanded ? 'Collapse sidebar' : 'Expand sidebar',
                 onPressed: onToggle,
-                color: AppColors.textSecondary,
+                color: palette.textSecondary,
                 visualDensity: VisualDensity.standard,
                 icon: Icon(
                   expanded
@@ -314,9 +315,8 @@ class _RailFooter extends ConsumerWidget {
                             ref.read(sidebarEditModeProvider.notifier).toggle(),
                         icon: Icon(
                           Icons.edit_outlined,
-                          color: editing
-                              ? AppColors.primary
-                              : AppColors.textSecondary,
+                          color:
+                              editing ? palette.primary : palette.textSecondary,
                         ),
                       ),
                     ],

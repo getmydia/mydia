@@ -14,6 +14,7 @@ import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../screens/detail/detail_links.dart';
 import '../../screens/sources/plex_home_sheet.dart';
 import '../focus_highlight.dart';
@@ -192,6 +193,7 @@ class _RailSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     void open() => onOpen(context);
+    final palette = context.palette;
     final initial = name.isEmpty ? '?' : name.characters.first.toUpperCase();
     const radius = BorderRadius.all(Radius.circular(14));
     final theme = Theme.of(context).textTheme;
@@ -216,11 +218,11 @@ class _RailSwitcher extends StatelessWidget {
               child: Center(
                 child: Text(
                   initial,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: AppTheme.displayFamily,
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
-                    color: AppColors.textPrimary,
+                    color: palette.textPrimary,
                   ),
                 ),
               ),
@@ -250,16 +252,16 @@ class _RailSwitcher extends StatelessWidget {
                       style: theme.labelSmall?.copyWith(
                         color: needsReauth
                             ? AppColors.warningText
-                            : AppColors.textSecondary,
+                            : palette.textSecondary,
                       ),
                     ),
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               Icons.unfold_more_rounded,
               size: 20,
-              color: AppColors.textSecondary,
+              color: palette.textSecondary,
             ),
           ],
         ),
@@ -304,6 +306,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     void open() => onOpen(context);
+    final palette = context.palette;
     final theme = Theme.of(context).textTheme;
     final needsReauth = !allServers && source.account.needsReauth;
     final caption = allServers ? null : _caption(source, homeUser);
@@ -325,10 +328,10 @@ class _Header extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant.withValues(alpha: 0.35),
+                  color: palette.surfaceVariant.withValues(alpha: 0.35),
                   borderRadius: const BorderRadius.all(Radius.circular(12)),
-                  border: Border.all(
-                      color: AppColors.border.withValues(alpha: 0.6)),
+                  border:
+                      Border.all(color: palette.border.withValues(alpha: 0.6)),
                 ),
                 child: Row(
                   children: [
@@ -344,7 +347,7 @@ class _Header extends StatelessWidget {
                                   ? Icons.layers_rounded
                                   : sourceKindIcon(source.kind),
                               size: 22,
-                              color: AppColors.primary,
+                              color: palette.primary,
                             ),
                             if (needsReauth)
                               const Positioned(
@@ -388,16 +391,16 @@ class _Header extends StatelessWidget {
                               style: theme.labelSmall?.copyWith(
                                 color: needsReauth
                                     ? AppColors.warningText
-                                    : AppColors.textSecondary,
+                                    : palette.textSecondary,
                               ),
                             ),
                         ],
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.unfold_more_rounded,
                       size: 20,
-                      color: AppColors.textSecondary,
+                      color: palette.textSecondary,
                     ),
                   ],
                 ),

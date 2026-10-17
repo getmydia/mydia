@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/connection/connection_summary.dart';
 import '../../core/p2p/p2p_service.dart';
 import '../../core/sources/mydia/source_link.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import 'connection_tone_color.dart';
 import 'nav/current_source.dart';
 
@@ -72,6 +72,7 @@ class _Dot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Tooltip(
       message: tooltip,
       child: Container(
@@ -81,7 +82,7 @@ class _Dot extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: color,
-          border: Border.all(color: AppColors.surface, width: 1.5),
+          border: Border.all(color: palette.surface, width: 1.5),
           boxShadow: [
             BoxShadow(
               color: color.withValues(alpha: 0.4),
@@ -91,7 +92,7 @@ class _Dot extends StatelessWidget {
           ],
         ),
         child: updatePending
-            ? const Icon(Icons.arrow_upward, size: 9, color: AppColors.surface)
+            ? Icon(Icons.arrow_upward, size: 9, color: palette.surface)
             : null,
       ),
     );
@@ -143,6 +144,7 @@ class _PulsingDotState extends State<_PulsingDot>
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Tooltip(
       message: widget.tooltip,
       child: AnimatedBuilder(
@@ -159,7 +161,7 @@ class _PulsingDotState extends State<_PulsingDot>
                 shape: BoxShape.circle,
                 color: widget.color,
                 border: Border.all(
-                  color: AppColors.surface,
+                  color: palette.surface,
                   width: 1.5,
                 ),
                 boxShadow: [
@@ -171,10 +173,10 @@ class _PulsingDotState extends State<_PulsingDot>
                 ],
               ),
               child: widget.updatePending
-                  ? const Icon(
+                  ? Icon(
                       Icons.arrow_upward,
                       size: 9,
-                      color: AppColors.surface,
+                      color: palette.surface,
                     )
                   : null,
             ),

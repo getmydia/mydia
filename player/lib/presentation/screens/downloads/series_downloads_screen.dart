@@ -8,6 +8,7 @@ import '../../../core/downloads/download_providers.dart';
 import '../../../core/sources/source.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../widgets/quality_badge.dart';
 import 'widgets/download_queue_row.dart';
 import 'widgets/downloaded_episode_rail.dart';
@@ -31,6 +32,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final downloadedMediaAsync = ref.watch(downloadedMediaProvider);
     final downloadQueueAsync = ref.watch(downloadQueueProvider);
 
@@ -66,7 +68,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: palette.background,
       body: CustomScrollView(
         slivers: [
           _buildHeroSection(context, ref, showDownloads, showQueue),
@@ -101,11 +103,12 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   Widget _buildHeroSection(BuildContext context, WidgetRef ref,
       List<DownloadedMedia> showDownloads, List<DownloadTask> showQueue) {
+    final palette = context.palette;
     return SliverAppBar(
       expandedHeight: 280,
       pinned: true,
       stretch: true,
-      backgroundColor: AppColors.background,
+      backgroundColor: palette.background,
       actions: [
         if (showDownloads.isNotEmpty || showQueue.isNotEmpty)
           Padding(
@@ -175,7 +178,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                   .firstOrNull,
               fallbackUrl: backdropUrl,
               cacheManager: BackdropCacheManager(),
-              placeholder: (context) => Container(color: AppColors.surface),
+              placeholder: (context) => Container(color: palette.surface),
             ),
 
             // Multi-stop gradient overlay
@@ -186,9 +189,9 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.transparent,
-                    AppColors.background.withValues(alpha: 0.5),
-                    AppColors.background.withValues(alpha: 0.95),
-                    AppColors.background,
+                    palette.background.withValues(alpha: 0.5),
+                    palette.background.withValues(alpha: 0.95),
+                    palette.background,
                   ],
                   stops: const [0.0, 0.5, 0.8, 1.0],
                 ),
@@ -204,7 +207,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   // Poster
-                  _buildPoster(showDownloads),
+                  _buildPoster(palette, showDownloads),
                   const SizedBox(width: 16),
                   // Title and stats
                   Expanded(
@@ -243,7 +246,8 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPoster(List<DownloadedMedia> showDownloads) {
+  Widget _buildPoster(
+      MydiaPalette palette, List<DownloadedMedia> showDownloads) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
@@ -268,9 +272,8 @@ class SeriesDownloadsScreen extends ConsumerWidget {
             fallbackUrl: showPosterUrl,
             cacheManager: PosterCacheManager(),
             placeholder: (context) => Container(
-              color: AppColors.surfaceVariant,
-              child:
-                  const Icon(Icons.tv_rounded, color: AppColors.textSecondary),
+              color: palette.surfaceVariant,
+              child: Icon(Icons.tv_rounded, color: palette.textSecondary),
             ),
           ),
         ),
@@ -280,6 +283,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   Widget _buildHeroStats(BuildContext context, List<DownloadedMedia> downloads,
       List<DownloadTask> queue) {
+    final palette = context.palette;
     final totalEpisodes = downloads.length + queue.length;
     final seasons = <int>{
       ...downloads.map((d) => d.seasonNumber ?? 0),
@@ -291,15 +295,18 @@ class SeriesDownloadsScreen extends ConsumerWidget {
       runSpacing: 6,
       children: [
         _buildStatBadge(
+          palette,
           Icons.movie_rounded,
           '$totalEpisodes Ep${totalEpisodes != 1 ? 's' : ''}',
         ),
         if (seasons.length > 1)
           _buildStatBadge(
+            palette,
             Icons.folder_rounded,
             '${seasons.length} Seasons',
           ),
         _buildStatBadge(
+          palette,
           Icons.storage_rounded,
           _totalSizeDisplay(downloads),
         ),
@@ -307,7 +314,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatBadge(IconData icon, String label) {
+  Widget _buildStatBadge(MydiaPalette palette, IconData icon, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -317,7 +324,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppColors.textSecondary),
+          Icon(icon, size: 14, color: palette.textSecondary),
           const SizedBox(width: 4),
           Text(
             label,
@@ -405,15 +412,16 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   Widget _buildSeasonHeader(
       BuildContext context, WidgetRef ref, int seasonNumber, int episodeCount) {
+    final palette = context.palette;
     final label = seasonLabel(seasonNumber);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Container(
         padding: const EdgeInsets.only(bottom: 8),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: AppColors.divider,
+              color: palette.divider,
               width: 0.5,
             ),
           ),
@@ -424,21 +432,21 @@ class SeriesDownloadsScreen extends ConsumerWidget {
               label,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: palette.textSecondary,
                   ),
             ),
             const SizedBox(width: 8),
             Text(
               '($episodeCount episode${episodeCount != 1 ? 's' : ''})',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary.withValues(alpha: 0.7),
+                    color: palette.textSecondary.withValues(alpha: 0.7),
                   ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Container(
                 height: 1,
-                color: AppColors.divider.withValues(alpha: 0.3),
+                color: palette.divider.withValues(alpha: 0.3),
               ),
             ),
             const SizedBox(width: 4),
@@ -473,13 +481,14 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   List<Widget> _buildQueueSection(
       BuildContext context, WidgetRef ref, List<DownloadTask> queue) {
+    final palette = context.palette;
     final widgets = <Widget>[
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Text(
           'Downloading',
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: AppColors.primary,
+                color: palette.primary,
                 fontWeight: FontWeight.bold,
               ),
         ),
@@ -523,15 +532,16 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   Widget _buildQueueSeasonHeader(
       BuildContext context, int seasonNumber, int taskCount) {
+    final palette = context.palette;
     final label = seasonLabel(seasonNumber);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Container(
         padding: const EdgeInsets.only(bottom: 8),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: AppColors.divider,
+              color: palette.divider,
               width: 0.5,
             ),
           ),
@@ -542,21 +552,21 @@ class SeriesDownloadsScreen extends ConsumerWidget {
               label,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: palette.textSecondary,
                   ),
             ),
             const SizedBox(width: 8),
             Text(
               '($taskCount downloading)',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary.withValues(alpha: 0.7),
+                    color: palette.textSecondary.withValues(alpha: 0.7),
                   ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Container(
                 height: 1,
-                color: AppColors.divider.withValues(alpha: 0.3),
+                color: palette.divider.withValues(alpha: 0.3),
               ),
             ),
           ],

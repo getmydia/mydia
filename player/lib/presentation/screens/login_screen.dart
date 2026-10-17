@@ -12,6 +12,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/layout/window_chrome_inset.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../widgets/focus_highlight.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/pin_code_display.dart';
@@ -335,6 +336,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     // A challenge that goes from set to cleared without the Back button
     // (e.g. "Sign-in expired" during submitTotpCode) drops the user back on
     // the password step. Without this, the stale code stays in the field
@@ -399,14 +401,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           body: Container(
             width: size.width,
             height: size.height,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  AppColors.background,
-                  Color(0xFF0F172A),
-                  Color(0xFF0A0F1D),
+                  palette.background,
+                  const Color(0xFF0F172A),
+                  const Color(0xFF0A0F1D),
                 ],
               ),
             ),
@@ -516,6 +518,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildBackgroundDecoration() {
+    final palette = context.palette;
     return Stack(
       children: [
         Positioned(
@@ -528,8 +531,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               shape: BoxShape.circle,
               gradient: RadialGradient(
                 colors: [
-                  AppColors.primary.withValues(alpha: 0.12),
-                  AppColors.primary.withValues(alpha: 0.0),
+                  palette.primary.withValues(alpha: 0.12),
+                  palette.primary.withValues(alpha: 0.0),
                 ],
               ),
             ),
@@ -545,8 +548,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               shape: BoxShape.circle,
               gradient: RadialGradient(
                 colors: [
-                  AppColors.primary.withValues(alpha: 0.08),
-                  AppColors.primary.withValues(alpha: 0.0),
+                  palette.primary.withValues(alpha: 0.08),
+                  palette.primary.withValues(alpha: 0.0),
                 ],
               ),
             ),
@@ -557,6 +560,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildQrScannerOverlay() {
+    final palette = context.palette;
     return Positioned.fill(
       child: Container(
         color: Colors.black.withValues(alpha: 0.9),
@@ -598,7 +602,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: AppColors.primary,
+                        color: palette.primary,
                         width: 2,
                       ),
                     ),
@@ -637,6 +641,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final logoSize = isCompact ? 56.0 : 64.0;
     final iconSize = isCompact ? 32.0 : 36.0;
     final titleSize = isCompact ? 28.0 : 32.0;
+    final palette = context.palette;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -646,14 +651,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           height: logoSize,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [AppColors.primary, AppColors.primaryFocus],
+              colors: [palette.primary, palette.primaryFocus],
             ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.25),
+                color: palette.primary.withValues(alpha: 0.25),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               ),
@@ -679,7 +684,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 style: TextStyle(
                   fontSize: titleSize,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+                  color: palette.textPrimary,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -693,7 +698,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           'Stream your media library',
           style: TextStyle(
             fontSize: 13,
-            color: AppColors.textSecondary.withValues(alpha: 0.7),
+            color: palette.textSecondary.withValues(alpha: 0.7),
           ),
         ),
       ],
@@ -793,6 +798,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildTvHeader() {
+    final palette = context.palette;
     return Row(
       children: [
         Container(
@@ -800,14 +806,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           height: 44,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [AppColors.primary, AppColors.primaryFocus],
+              colors: [palette.primary, palette.primaryFocus],
             ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.25),
+                color: palette.primary.withValues(alpha: 0.25),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -831,10 +837,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       _isAdding ? 'Add a Mydia server' : 'Mydia Player',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+                        color: palette.textPrimary,
                         letterSpacing: -0.5,
                       ),
                     ),
@@ -850,7 +856,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     : 'Pair with your server using claim code',
                 style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary.withValues(alpha: 0.7),
+                  color: palette.textSecondary.withValues(alpha: 0.7),
                 ),
               ),
             ],
@@ -863,10 +869,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           child: IconButton(
             onPressed: _openAdvancedSettings,
             icon: const Icon(Icons.settings_outlined, size: 20),
-            color: AppColors.textSecondary,
+            color: palette.textSecondary,
             tooltip: 'Relay & Network Settings',
             style: IconButton.styleFrom(
-              backgroundColor: AppColors.surfaceVariant.withValues(alpha: 0.3),
+              backgroundColor: palette.surfaceVariant.withValues(alpha: 0.3),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -878,13 +884,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildTvInstructions() {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceVariant.withValues(alpha: 0.25),
+        color: palette.surfaceVariant.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: AppColors.border.withValues(alpha: 0.1),
+          color: palette.border.withValues(alpha: 0.1),
         ),
       ),
       child: Column(
@@ -902,6 +909,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildInstructionStep(int number, String text) {
+    final palette = context.palette;
     return Row(
       children: [
         Container(
@@ -909,15 +917,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           height: 18,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.2),
+            color: palette.primary.withValues(alpha: 0.2),
             shape: BoxShape.circle,
           ),
           child: Text(
             '$number',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
-              color: AppColors.primary,
+              color: palette.primary,
             ),
           ),
         ),
@@ -927,7 +935,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             text,
             style: TextStyle(
               fontSize: 12,
-              color: AppColors.textSecondary.withValues(alpha: 0.85),
+              color: palette.textSecondary.withValues(alpha: 0.85),
             ),
           ),
         ),
@@ -936,23 +944,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildTvLoadingIndicator(LoginState loginState) {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.1),
+        color: palette.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+        border: Border.all(color: palette.primary.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (loginState.isLoading) ...[
-            const SizedBox(
+            SizedBox(
               width: 14,
               height: 14,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: AppColors.primary,
+                color: palette.primary,
               ),
             ),
             const SizedBox(width: 8),
@@ -960,8 +969,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           Flexible(
             child: Text(
               loginState.claimCodeMessage ?? '',
-              style: const TextStyle(
-                color: AppColors.primary,
+              style: TextStyle(
+                color: palette.primary,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -973,6 +982,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildTvConnectButton(LoginState loginState) {
+    final palette = context.palette;
     final canConnect =
         _claimCodeController.text.length == 6 && !loginState.isLoading;
     return FocusHighlight(
@@ -981,9 +991,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       child: ElevatedButton(
         onPressed: canConnect ? _handleClaimCodeSubmit : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: palette.primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
+          disabledBackgroundColor: palette.primary.withValues(alpha: 0.4),
           disabledForegroundColor: Colors.white.withValues(alpha: 0.4),
           elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1016,6 +1026,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildTvClearButton(LoginState loginState) {
+    final palette = context.palette;
     final canClear =
         _claimCodeController.text.isNotEmpty && !loginState.isLoading;
     return FocusHighlight(
@@ -1024,10 +1035,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       child: OutlinedButton(
         onPressed: canClear ? _handleTvClearPressed : null,
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.textSecondary,
-          disabledForegroundColor: AppColors.textDisabled,
+          foregroundColor: palette.textSecondary,
+          disabledForegroundColor: palette.textDisabled,
           side: BorderSide(
-            color: AppColors.border.withValues(alpha: 0.3),
+            color: palette.border.withValues(alpha: 0.3),
           ),
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(
@@ -1076,6 +1087,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildCardHeader(bool isCompact) {
+    final palette = context.palette;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1088,7 +1100,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 style: TextStyle(
                   fontSize: isCompact ? 18 : 20,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  color: palette.textPrimary,
                 ),
               ),
               const SizedBox(height: 2),
@@ -1098,7 +1110,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     : 'Pair with your server using QR code or claim code',
                 style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary.withValues(alpha: 0.7),
+                  color: palette.textSecondary.withValues(alpha: 0.7),
                 ),
               ),
             ],
@@ -1108,10 +1120,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         IconButton(
           onPressed: _openAdvancedSettings,
           icon: const Icon(Icons.settings_outlined, size: 20),
-          color: AppColors.textSecondary,
+          color: palette.textSecondary,
           tooltip: 'Relay & Network Settings',
           style: IconButton.styleFrom(
-            backgroundColor: AppColors.surfaceVariant.withValues(alpha: 0.3),
+            backgroundColor: palette.surfaceVariant.withValues(alpha: 0.3),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
@@ -1122,14 +1134,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildSegmentedControl(LoginState loginState) {
+    final palette = context.palette;
     return Container(
       height: 40,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: AppColors.surfaceVariant.withValues(alpha: 0.4),
+        color: palette.surfaceVariant.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: AppColors.border.withValues(alpha: 0.15),
+          color: palette.border.withValues(alpha: 0.15),
         ),
       ),
       child: Row(
@@ -1175,6 +1188,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     required bool isSelected,
     required VoidCallback? onTap,
   }) {
+    final palette = context.palette;
     return FocusHighlight(
       onActivate: onTap,
       borderRadius: const BorderRadius.all(Radius.circular(7)),
@@ -1187,12 +1201,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           alignment: Alignment.center,
           height: double.infinity,
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.primary : Colors.transparent,
+            color: isSelected ? palette.primary : Colors.transparent,
             borderRadius: BorderRadius.circular(7),
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.3),
+                      color: palette.primary.withValues(alpha: 0.3),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
@@ -1205,7 +1219,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               Icon(
                 icon,
                 size: 15,
-                color: isSelected ? Colors.white : AppColors.textSecondary,
+                color: isSelected ? Colors.white : palette.textSecondary,
               ),
               const SizedBox(width: 4),
               Flexible(
@@ -1216,7 +1230,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    color: isSelected ? Colors.white : AppColors.textSecondary,
+                    color: isSelected ? Colors.white : palette.textSecondary,
                   ),
                 ),
               ),
@@ -1228,6 +1242,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildClaimCodeContent(LoginState loginState, bool isCompact) {
+    final palette = context.palette;
     final isMobile = defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
     final offersQr = LoginScreen.offersQrScan(
@@ -1252,9 +1267,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
+                foregroundColor: palette.primary,
                 side: BorderSide(
-                  color: AppColors.primary.withValues(alpha: 0.4),
+                  color: palette.primary.withValues(alpha: 0.4),
                   width: 1.5,
                 ),
                 shape: RoundedRectangleBorder(
@@ -1285,6 +1300,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildDirectConnectionForm(LoginState loginState, bool isCompact) {
+    final palette = context.palette;
     if (loginState.totpChallenge != null) {
       return _buildTotpForm(loginState, isCompact);
     }
@@ -1345,7 +1361,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 _obscurePassword
                     ? Icons.visibility_outlined
                     : Icons.visibility_off_outlined,
-                color: AppColors.textSecondary,
+                color: palette.textSecondary,
                 size: 18,
               ),
               onPressed: () {
@@ -1372,21 +1388,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildTotpForm(LoginState loginState, bool isCompact) {
+    final palette = context.palette;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Two-factor authentication',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+            color: palette.textPrimary,
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Enter the 6-digit code from your authenticator app, or one of your recovery codes.',
-          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 13, color: palette.textSecondary),
         ),
         const SizedBox(height: 14),
         TextFormField(
@@ -1402,16 +1419,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           textAlign: TextAlign.center,
           textInputAction: TextInputAction.done,
           onFieldSubmitted: (_) => _handleTotpSubmit(),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+            color: palette.textPrimary,
             letterSpacing: 3,
           ),
           decoration: InputDecoration(
             labelText: 'Authentication code',
             filled: true,
-            fillColor: AppColors.surfaceVariant.withValues(alpha: 0.4),
+            fillColor: palette.surfaceVariant.withValues(alpha: 0.4),
           ),
         ),
         if (loginState.error != null) ...[
@@ -1425,7 +1442,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             key: const Key('totp-verify-button'),
             onPressed: loginState.isLoading ? null : _handleTotpSubmit,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
+              backgroundColor: palette.primary,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -1470,6 +1487,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildClaimCodeInput(LoginState loginState) {
+    final palette = context.palette;
     return TextFormField(
       controller: _claimCodeController,
       focusNode: _claimCodeFocus,
@@ -1484,27 +1502,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         UpperCaseTextFormatter(),
       ],
       onFieldSubmitted: (_) => _handleClaimCodeSubmit(),
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 22,
         fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
+        color: palette.textPrimary,
         letterSpacing: 4,
       ),
       decoration: InputDecoration(
         hintText: 'ABC123',
         hintStyle: TextStyle(
-          color: AppColors.textDisabled.withValues(alpha: 0.4),
+          color: palette.textDisabled.withValues(alpha: 0.4),
           fontSize: 22,
           fontWeight: FontWeight.w600,
           letterSpacing: 4,
         ),
         filled: true,
-        fillColor: AppColors.surfaceVariant.withValues(alpha: 0.4),
+        fillColor: palette.surfaceVariant.withValues(alpha: 0.4),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         suffixIcon: IconButton(
           icon: const Icon(Icons.content_paste_rounded, size: 18),
-          color: AppColors.textSecondary,
+          color: palette.textSecondary,
           tooltip: 'Paste claim code',
           onPressed: loginState.isLoading
               ? null
@@ -1528,29 +1546,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(
-            color: AppColors.border.withValues(alpha: 0.15),
+            color: palette.border.withValues(alpha: 0.15),
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          borderSide: BorderSide(color: palette.primary, width: 1.5),
         ),
       ),
     );
   }
 
   Widget _buildProgressIndicator(LoginState loginState) {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.1),
+        color: palette.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+        border: Border.all(color: palette.primary.withValues(alpha: 0.2)),
       ),
       child: Text(
         loginState.claimCodeMessage ?? '',
-        style: const TextStyle(
-          color: AppColors.primary,
+        style: TextStyle(
+          color: palette.primary,
           fontSize: 12,
           fontWeight: FontWeight.w500,
         ),
@@ -1559,14 +1578,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildClaimCodeButton(LoginState loginState) {
+    final palette = context.palette;
     return SizedBox(
       height: 44,
       child: ElevatedButton(
         onPressed: loginState.isLoading ? null : _handleClaimCodeSubmit,
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: palette.primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.5),
+          disabledBackgroundColor: palette.primary.withValues(alpha: 0.5),
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
@@ -1613,6 +1633,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     Widget? suffixIcon,
     void Function(String)? onFieldSubmitted,
   }) {
+    final palette = context.palette;
     return TextFormField(
       controller: controller,
       focusNode: focusNode,
@@ -1622,22 +1643,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       textInputAction: textInputAction,
       onFieldSubmitted: onFieldSubmitted,
       validator: validator,
-      style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+      style: TextStyle(fontSize: 14, color: palette.textPrimary),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
         labelStyle: TextStyle(
           fontSize: 13,
-          color: AppColors.textSecondary.withValues(alpha: 0.8),
+          color: palette.textSecondary.withValues(alpha: 0.8),
         ),
         hintStyle: TextStyle(
-          color: AppColors.textDisabled.withValues(alpha: 0.5),
+          color: palette.textDisabled.withValues(alpha: 0.5),
           fontSize: 13,
         ),
-        prefixIcon: Icon(icon, color: AppColors.textSecondary, size: 18),
+        prefixIcon: Icon(icon, color: palette.textSecondary, size: 18),
         suffixIcon: suffixIcon,
         filled: true,
-        fillColor: AppColors.surfaceVariant.withValues(alpha: 0.4),
+        fillColor: palette.surfaceVariant.withValues(alpha: 0.4),
         isDense: true,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -1648,12 +1669,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(
-            color: AppColors.border.withValues(alpha: 0.15),
+            color: palette.border.withValues(alpha: 0.15),
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          borderSide: BorderSide(color: palette.primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -1697,14 +1718,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildLoginButton(LoginState loginState) {
+    final palette = context.palette;
     return SizedBox(
       height: 44,
       child: ElevatedButton(
         onPressed: loginState.isLoading ? null : _handleLogin,
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: palette.primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.5),
+          disabledBackgroundColor: palette.primary.withValues(alpha: 0.5),
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
@@ -1738,6 +1760,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildFooter(LoginState loginState) {
+    final palette = context.palette;
     final p2pStatus = ref.watch(p2pStatusNotifierProvider);
 
     return Row(
@@ -1760,28 +1783,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             p2pStatus.isRelayConnected ? 'P2P Ready' : 'Connecting...',
             style: TextStyle(
               fontSize: 11,
-              color: AppColors.textSecondary.withValues(alpha: 0.5),
+              color: palette.textSecondary.withValues(alpha: 0.5),
             ),
           ),
           Text(
             '  •  ',
             style: TextStyle(
               fontSize: 11,
-              color: AppColors.textSecondary.withValues(alpha: 0.3),
+              color: palette.textSecondary.withValues(alpha: 0.3),
             ),
           ),
         ],
         Icon(
           Icons.lock_rounded,
           size: 11,
-          color: AppColors.textSecondary.withValues(alpha: 0.4),
+          color: palette.textSecondary.withValues(alpha: 0.4),
         ),
         const SizedBox(width: 4),
         Text(
           'End-to-end encrypted',
           style: TextStyle(
             fontSize: 11,
-            color: AppColors.textSecondary.withValues(alpha: 0.4),
+            color: palette.textSecondary.withValues(alpha: 0.4),
           ),
         ),
       ],
@@ -1789,6 +1812,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildAdvancedSettingsOverlay() {
+    final palette = context.palette;
     return Positioned.fill(
       child: FocusScope(
         node: _settingsOverlayScopeNode,
@@ -1803,10 +1827,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   margin: const EdgeInsets.all(24),
                   constraints: const BoxConstraints(maxWidth: 400),
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
+                    color: palette.surface,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: AppColors.border.withValues(alpha: 0.2),
+                      color: palette.border.withValues(alpha: 0.2),
                     ),
                   ),
                   child: Column(
@@ -1818,19 +1842,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         padding: const EdgeInsets.all(16),
                         child: Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.settings_outlined,
-                              color: AppColors.textSecondary,
+                              color: palette.textSecondary,
                               size: 20,
                             ),
                             const SizedBox(width: 12),
-                            const Expanded(
+                            Expanded(
                               child: Text(
                                 'Advanced Settings',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
+                                  color: palette.textPrimary,
                                 ),
                               ),
                             ),
@@ -1841,9 +1865,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               child: IconButton(
                                 onPressed: _closeAdvancedSettings,
                                 tooltip: 'Close advanced settings',
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.close,
-                                  color: AppColors.textSecondary,
+                                  color: palette.textSecondary,
                                   size: 20,
                                 ),
                                 padding: EdgeInsets.zero,
@@ -1855,7 +1879,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       ),
                       Container(
                         height: 1,
-                        color: AppColors.border.withValues(alpha: 0.15),
+                        color: palette.border.withValues(alpha: 0.15),
                       ),
                       // Content
                       Padding(
@@ -1863,24 +1887,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
+                            Text(
                               'Relay URL',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
+                                color: palette.textSecondary,
                               ),
                             ),
                             const SizedBox(height: 8),
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: AppColors.surfaceVariant
+                                color: palette.surfaceVariant
                                     .withValues(alpha: 0.25),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color:
-                                      AppColors.border.withValues(alpha: 0.1),
+                                  color: palette.border.withValues(alpha: 0.1),
                                 ),
                               ),
                               child: Row(
@@ -1889,7 +1912,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   Icon(
                                     Icons.info_outline_rounded,
                                     size: 14,
-                                    color: AppColors.textSecondary
+                                    color: palette.textSecondary
                                         .withValues(alpha: 0.7),
                                   ),
                                   const SizedBox(width: 8),
@@ -1899,7 +1922,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       style: TextStyle(
                                         fontSize: 11,
                                         height: 1.35,
-                                        color: AppColors.textSecondary
+                                        color: palette.textSecondary
                                             .withValues(alpha: 0.75),
                                       ),
                                     ),
@@ -1911,19 +1934,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             TextFormField(
                               controller: _relayUrlController,
                               focusNode: _relayUrlFocus,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
-                                color: AppColors.textPrimary,
+                                color: palette.textPrimary,
                               ),
                               decoration: InputDecoration(
                                 hintText: defaultRelayUrl,
                                 hintStyle: TextStyle(
-                                  color: AppColors.textDisabled
+                                  color: palette.textDisabled
                                       .withValues(alpha: 0.5),
                                   fontSize: 13,
                                 ),
                                 filled: true,
-                                fillColor: AppColors.surfaceVariant
+                                fillColor: palette.surfaceVariant
                                     .withValues(alpha: 0.4),
                                 isDense: true,
                                 contentPadding: const EdgeInsets.symmetric(
@@ -1937,14 +1960,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                   borderSide: BorderSide(
-                                    color: AppColors.border
-                                        .withValues(alpha: 0.15),
+                                    color:
+                                        palette.border.withValues(alpha: 0.15),
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
-                                  borderSide: const BorderSide(
-                                    color: AppColors.primary,
+                                  borderSide: BorderSide(
+                                    color: palette.primary,
                                     width: 1.5,
                                   ),
                                 ),
@@ -1952,10 +1975,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     _relayUrlController.text != defaultRelayUrl
                                         ? IconButton(
                                             onPressed: _resetRelayUrlToDefault,
-                                            icon: const Icon(
+                                            icon: Icon(
                                               Icons.refresh,
                                               size: 18,
-                                              color: AppColors.textSecondary,
+                                              color: palette.textSecondary,
                                             ),
                                             tooltip: 'Reset to default',
                                           )
@@ -1970,8 +1993,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   Icon(
                                     Icons.info_outline,
                                     size: 12,
-                                    color: AppColors.primary
-                                        .withValues(alpha: 0.7),
+                                    color:
+                                        palette.primary.withValues(alpha: 0.7),
                                   ),
                                   const SizedBox(width: 6),
                                   Expanded(
@@ -1979,7 +2002,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       'Using custom relay URL',
                                       style: TextStyle(
                                         fontSize: 11,
-                                        color: AppColors.primary
+                                        color: palette.primary
                                             .withValues(alpha: 0.7),
                                       ),
                                     ),
@@ -1992,7 +2015,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       ),
                       Container(
                         height: 1,
-                        color: AppColors.border.withValues(alpha: 0.15),
+                        color: palette.border.withValues(alpha: 0.15),
                       ),
                       // Actions
                       Padding(
@@ -2011,7 +2034,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 _closeAdvancedSettings();
                               },
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
+                                backgroundColor: palette.primary,
                                 foregroundColor: Colors.white,
                                 elevation: 0,
                                 padding: const EdgeInsets.symmetric(

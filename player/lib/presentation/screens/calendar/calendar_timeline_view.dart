@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/layout/dock_insets.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import 'calendar_day_group.dart';
 import 'calendar_jump_requests.dart';
@@ -133,6 +133,7 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final textScale = MediaQuery.textScalerOf(context).scale(1);
 
     return LayoutBuilder(
@@ -185,11 +186,11 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
                 ),
               ),
             ),
-            const SliverToBoxAdapter(
+            SliverToBoxAdapter(
               child: SizedBox(
                 height: _footerHeight,
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(16, 28, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 28, 16, 0),
                   child: Center(
                     child: Text(
                       'That is everything scheduled in the next 90 days.',
@@ -198,7 +199,7 @@ class _CalendarTimelineViewState extends State<CalendarTimelineView> {
                       style: TextStyle(
                         fontSize: 12,
                         height: 16 / 12,
-                        color: AppColors.textDisabled,
+                        color: palette.textDisabled,
                       ),
                     ),
                   ),

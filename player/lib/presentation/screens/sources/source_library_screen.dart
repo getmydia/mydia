@@ -15,7 +15,7 @@ import '../../../domain/navigation/media_filter.dart';
 import '../filter/filter_editor_sheet.dart';
 import '../library/library_sort.dart';
 import '../../../core/sources/sources_providers.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/browse_grid.dart';
@@ -222,6 +222,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final library = widget.library;
     final libraries = ref.watch(sourceLibrariesProvider(library.sourceId));
     final info = switch (libraries) {
@@ -263,7 +264,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
             icon: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                color: palette.surfaceVariant.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
@@ -281,7 +282,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+              color: palette.surfaceVariant.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
@@ -296,14 +297,14 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
         if (canSaveFilter)
           PopupMenuButton<String>(
             key: const Key('source-library-menu'),
-            icon: const Icon(
+            icon: Icon(
               Icons.more_vert_rounded,
-              color: AppColors.textSecondary,
+              color: palette.textSecondary,
               size: 22,
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-            color: AppColors.surface,
+            color: palette.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -448,17 +449,18 @@ class _ListRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final caption = item.subtitle ?? item.year?.toString();
     final fallback = Container(
-      color: AppColors.surfaceVariant,
-      child: const Icon(Icons.movie_outlined, color: AppColors.textSecondary),
+      color: palette.surfaceVariant,
+      child: Icon(Icons.movie_outlined, color: palette.textSecondary),
     );
     final poster = item.poster;
     return Padding(
       key: ValueKey('source-list-${item.ref.externalId}'),
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: AppColors.surface,
+        color: palette.surface,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -501,7 +503,7 @@ class _ListRow extends StatelessWidget {
                           caption,
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.textSecondary,
+                                    color: palette.textSecondary,
                                   ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -511,19 +513,19 @@ class _ListRow extends StatelessWidget {
                   ),
                 ),
                 if (item.userState.watched)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 12),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
                     child: Icon(
                       Icons.check_circle_rounded,
-                      color: AppColors.textSecondary,
+                      color: palette.textSecondary,
                       size: 20,
                     ),
                   ),
-                const Padding(
-                  padding: EdgeInsets.only(left: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
                   child: Icon(
                     Icons.chevron_right_rounded,
-                    color: AppColors.textSecondary,
+                    color: palette.textSecondary,
                     size: 24,
                   ),
                 ),
@@ -544,6 +546,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -553,10 +556,10 @@ class _EmptyState extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: palette.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 56, color: AppColors.primary),
+              child: Icon(icon, size: 56, color: palette.primary),
             ),
             const SizedBox(height: 24),
             Text(
@@ -570,7 +573,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               'Add content to your library to see it here',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: palette.textSecondary,
                   ),
               textAlign: TextAlign.center,
             ),

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../../core/theme/ambient_tint/ambient_tint_colors.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_art.dart';
 import '../../widgets/detail_art_image.dart';
 import '../../widgets/shell_rail_inset.dart';
@@ -34,6 +34,7 @@ class DetailHeroBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     final overlay = this.overlay;
     final bottom = this.bottom;
+    final palette = context.palette;
     final tint = AmbientTint.of(context);
     final ground = tint.ground;
     return Stack(
@@ -44,10 +45,10 @@ class DetailHeroBackground extends StatelessWidget {
             art: art,
             slot: slot,
             placeholder: (_) => Container(color: tint.surface),
-            errorWidget: (_) => _empty(tint),
+            errorWidget: (_) => _empty(tint, palette),
           )
         else
-          _empty(tint),
+          _empty(tint, palette),
         DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -77,13 +78,13 @@ class DetailHeroBackground extends StatelessWidget {
     );
   }
 
-  Widget _empty(AmbientTintColors tint) {
+  Widget _empty(AmbientTintColors tint, MydiaPalette palette) {
     final icon = fallbackIcon;
     return Container(
       color: tint.surface,
       child: icon == null
           ? null
-          : Icon(icon, size: 64, color: AppColors.textSecondary),
+          : Icon(icon, size: 64, color: palette.textSecondary),
     );
   }
 }
@@ -155,7 +156,7 @@ class DetailHeroTitle extends StatelessWidget {
                 Text(
                   subtitle,
                   style: textTheme.bodyMedium
-                      ?.copyWith(color: AppColors.textSecondary),
+                      ?.copyWith(color: context.palette.textSecondary),
                 ),
               ],
               if (below != null) ...[

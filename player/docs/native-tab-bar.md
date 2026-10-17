@@ -141,6 +141,8 @@ Channel `mydia/native-tab-bar`. Dart calls native:
 | `select` | tab id, or null | move the selection without emitting `tabSelected`; an unknown id logs `select: unknown tab id`. Null clears it on an iPad (the iPhone ignores it) |
 | `setVisible` | bool | show or hide the bar (and with it the accessory), animated |
 | `setAccessory` | `{title, subtitle?, artwork?, symbol?, playing?}` or null | set or remove the accessory; `playing` null hides the play/pause button |
+| `systemAccent` | none | macOS only: the system accent colour as an sRGB ARGB int, resolved under the dark appearance. iOS never receives it (Dart asks only on macOS); `querySystemAccent` turns any non-int answer or missing plugin into null |
+| `setWindowBackground` | int ARGB | macOS only: paints the window and the Flutter view behind the content, seen during resizes, so it follows the palette |
 
 Native calls Dart:
 
@@ -151,6 +153,7 @@ Native calls Dart:
 | `layoutChanged` | `{sidebar: bool}` | iPad: the width class changed |
 | `accessoryTapped` | none | the summary area was tapped |
 | `accessoryPlayPause` | none | the play/pause button was tapped |
+| `systemAccentChanged` | int ARGB | macOS only: the viewer changed the system accent colour. Sent on `NSColor.systemColorsDidChangeNotification` and on the distributed `AppleColorPreferencesChangedNotification` |
 
 Rules both sides keep:
 

@@ -9,7 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/browse_scaffold.dart';
@@ -161,7 +161,7 @@ class _SourceSearchScreenState extends ConsumerState<SourceSearchScreen> {
           decoration: InputDecoration(
             hintText: 'Search this server',
             hintStyle: TextStyle(
-              color: AppColors.textSecondary.withValues(alpha: 0.6),
+              color: context.palette.textSecondary.withValues(alpha: 0.6),
               fontSize: 18,
             ),
             // The app theme sets `filled: true`; the bar already draws the

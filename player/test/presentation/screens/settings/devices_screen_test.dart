@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/colors.dart';
-import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/models/remote_device.dart';
 import 'package:player/presentation/screens/settings/devices_screen.dart';
 
@@ -41,7 +41,7 @@ void main() {
           .first,
     );
 
-    expect(material.color, DepthTokens.surfaceVariant);
+    expect(material.color, Palettes.projectionBooth.surfaceVariant);
   });
 
   testWidgets('the device name renders', (tester) async {

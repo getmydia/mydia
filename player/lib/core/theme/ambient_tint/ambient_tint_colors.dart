@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter/painting.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 
-import '../colors.dart';
+import '../palette.dart';
 
 /// The two colours the ambient tint drives: the ground behind content and the
 /// surface glass chrome is filled with.
@@ -15,13 +15,13 @@ import '../colors.dart';
 class AmbientTintColors {
   const AmbientTintColors({required this.ground, required this.surface});
 
-  static const AmbientTintColors neutral = AmbientTintColors(
-    ground: AppColors.background,
-    surface: AppColors.surface,
-  );
+  /// No tint: the palette's own ground and surface, so a screen without
+  /// artwork renders exactly as the preset defines it.
+  factory AmbientTintColors.neutralFor(MydiaPalette p) =>
+      AmbientTintColors(ground: p.background, surface: p.surface);
 
-  /// Tone bounds for a tinted ground. The ceiling is what keeps
-  /// `AppColors.textSecondary` at 4.5:1 (ambient_tint_colors_test.dart).
+  /// Tone bounds for a tinted ground. The ceiling keeps each
+  /// tinting preset's `textSecondary` and `primary` at 4.5:1 (ambient_tint_colors_test.dart).
   static const double minTone = 14;
   static const double maxTone = 20;
 
@@ -65,3 +65,8 @@ class AmbientTintColors {
   @override
   int get hashCode => Object.hash(ground, surface);
 }
+
+/// What a scope shows: [tint], unless there is none or the preset turns the
+/// ambient tint off, in which case the palette's neutral colours.
+AmbientTintColors resolveAmbientTint(AmbientTintColors? tint, MydiaPalette p) =>
+    tint == null || !p.ambientTint ? AmbientTintColors.neutralFor(p) : tint;

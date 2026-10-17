@@ -20,6 +20,7 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/models/download_option.dart';
 import '../../../domain/sources/item.dart';
@@ -95,7 +96,7 @@ class CollectionDetailScreen extends ConsumerWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: ColoredBox(
-            color: AppColors.background.withValues(alpha: 0.8),
+            color: context.palette.background.withValues(alpha: 0.8),
             child: row,
           ),
         ),
@@ -202,6 +203,7 @@ class CollectionDetailScreen extends ConsumerWidget {
 
   Widget _buildErrorView(
       BuildContext context, Object error, VoidCallback onRetry) {
+    final palette = context.palette;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -232,7 +234,7 @@ class CollectionDetailScreen extends ConsumerWidget {
             Text(
               error.toString(),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: palette.textSecondary,
                   ),
               textAlign: TextAlign.center,
             ),
@@ -253,6 +255,7 @@ class CollectionDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final palette = context.palette;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -262,13 +265,13 @@ class CollectionDetailScreen extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: palette.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.collections_bookmark_outlined,
                 size: 56,
-                color: AppColors.primary,
+                color: palette.primary,
               ),
             ),
             const SizedBox(height: 24),
@@ -283,7 +286,7 @@ class CollectionDetailScreen extends ConsumerWidget {
             Text(
               'Add items to this collection in Mydia',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: palette.textSecondary,
                   ),
               textAlign: TextAlign.center,
             ),
@@ -496,6 +499,7 @@ class _CollectionDownloadButtonState
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final isSyncedAsync = ref.watch(
         isCollectionSyncedProvider(widget.sourceId.value, widget.collectionId));
 
@@ -517,9 +521,9 @@ class _CollectionDownloadButtonState
 
     if (isSynced) {
       return PopupMenuButton<String>(
-        icon: const Icon(
+        icon: Icon(
           Icons.sync_rounded,
-          color: AppColors.primary,
+          color: palette.primary,
           size: 22,
         ),
         padding: EdgeInsets.zero,
@@ -528,7 +532,7 @@ class _CollectionDownloadButtonState
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           visualDensity: VisualDensity.compact,
         ),
-        color: AppColors.surface,
+        color: palette.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -565,9 +569,9 @@ class _CollectionDownloadButtonState
     }
 
     return IconButton(
-      icon: const Icon(
+      icon: Icon(
         Icons.download_rounded,
-        color: AppColors.textSecondary,
+        color: palette.textSecondary,
         size: 22,
       ),
       padding: EdgeInsets.zero,

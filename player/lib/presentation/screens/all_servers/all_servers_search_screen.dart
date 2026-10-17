@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/merged/merged_search.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../sources/source_error_view.dart';
@@ -28,6 +28,7 @@ class AllServersSearchScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final results = ref.watch(allServersSearchProvider);
     final notifier = ref.read(allServersSearchProvider.notifier);
     final count = ref
@@ -46,7 +47,7 @@ class AllServersSearchScreen extends ConsumerWidget {
           decoration: InputDecoration(
             hintText: 'Search $count servers',
             hintStyle: TextStyle(
-              color: AppColors.textSecondary.withValues(alpha: 0.6),
+              color: palette.textSecondary.withValues(alpha: 0.6),
               fontSize: 18,
             ),
             // The app theme sets `filled: true`; the bar already draws the

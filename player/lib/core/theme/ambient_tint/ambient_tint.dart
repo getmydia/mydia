@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../ui/reduced_motion.dart';
 import '../depth_tokens.dart';
+import '../palette.dart';
 import 'ambient_tint_colors.dart';
 import 'ambient_tint_providers.dart';
 
@@ -13,10 +14,10 @@ class AmbientTint extends InheritedWidget {
 
   final AmbientTintColors colors;
 
-  /// The nearest tint, or neutral outside any scope.
+  /// The nearest tint, or the palette's neutral outside any scope.
   static AmbientTintColors of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AmbientTint>()?.colors ??
-      AmbientTintColors.neutral;
+      AmbientTintColors.neutralFor(context.palette);
 
   @override
   bool updateShouldNotify(AmbientTint oldWidget) => oldWidget.colors != colors;
@@ -62,8 +63,16 @@ class ShellAmbientTint extends ConsumerWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => AmbientTintScope(
-        colors: ref.watch(ambientTintControllerProvider),
-        child: child,
-      );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
+    return AmbientTintScope(
+      // A preset without the tint never builds the controller, so focus
+      // changes extract nothing.
+      colors: palette.ambientTint
+          ? resolveAmbientTint(
+              ref.watch(ambientTintControllerProvider), palette)
+          : AmbientTintColors.neutralFor(palette),
+      child: child,
+    );
+  }
 }

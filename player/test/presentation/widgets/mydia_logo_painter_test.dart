@@ -1,12 +1,12 @@
 // The sidebar mark is painted in code, so it silently follows whatever
-// AppColors.primary happens to be. That is wrong: the app icon and the
+// the theme's primary colour happens to be. That is wrong: the app icon and the
 // Phoenix logo it mirrors are a fixed blue that the player's palette does not
 // control, so a mark that tracks the accent drifts away from them on every
 // repalette. It renders neutral instead, clashing with neither.
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/mydia_logo.dart';
 
 /// Records the colour of each paint operation so tests can assert on what
@@ -31,14 +31,20 @@ class _RecordingCanvas implements Canvas {
 }
 
 void main() {
+  const palette = Palettes.projectionBooth;
+  final painter = MydiaLogoPainter(
+    markColor: palette.textPrimary,
+    cutoutColor: palette.background,
+  );
+
   group('MydiaLogoPainter', () {
     test('does not follow the accent', () {
-      expect(MydiaLogoPainter.markColor, isNot(AppColors.primary));
-      expect(MydiaLogoPainter.markColor, isNot(AppColors.primaryFocus));
+      expect(painter.markColor, isNot(palette.primary));
+      expect(painter.markColor, isNot(palette.primaryFocus));
     });
 
     test('is neutral — no colour cast in any direction', () {
-      final c = MydiaLogoPainter.markColor;
+      final c = painter.markColor;
       const tolerance = 6 / 255;
       expect((c.r - c.g).abs(), lessThanOrEqualTo(tolerance));
       expect((c.g - c.b).abs(), lessThanOrEqualTo(tolerance));
@@ -46,7 +52,7 @@ void main() {
     });
 
     test('cuts out against the app background', () {
-      expect(MydiaLogoPainter.cutoutColor, AppColors.background);
+      expect(painter.cutoutColor, palette.background);
     });
 
     test('paints only neutral colours, never the accent', () {
@@ -58,18 +64,18 @@ void main() {
       // channel values our palette is actually defined in, which survives
       // that round trip losslessly and is what the eye perceives as equal.
       final canvas = _RecordingCanvas();
-      const MydiaLogoPainter().paint(canvas, const Size(48, 48));
+      painter.paint(canvas, const Size(48, 48));
 
       expect(canvas.colors, isNotEmpty,
           reason: 'paint() drew nothing, so this test proves nothing');
       final drawnArgb = canvas.colors.map((c) => c.toARGB32()).toSet();
-      expect(drawnArgb, isNot(contains(AppColors.primary.toARGB32())));
-      expect(drawnArgb, isNot(contains(AppColors.primaryFocus.toARGB32())));
+      expect(drawnArgb, isNot(contains(palette.primary.toARGB32())));
+      expect(drawnArgb, isNot(contains(palette.primaryFocus.toARGB32())));
       expect(
         drawnArgb,
         <int>{
-          MydiaLogoPainter.markColor.toARGB32(),
-          MydiaLogoPainter.cutoutColor.toARGB32(),
+          painter.markColor.toARGB32(),
+          painter.cutoutColor.toARGB32(),
         },
         reason: 'paint() must draw only the declared mark and cutout colours',
       );

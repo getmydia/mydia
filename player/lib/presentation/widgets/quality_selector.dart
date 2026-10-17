@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 
 Future<MediaFile?> showQualitySelector(
@@ -11,7 +11,7 @@ Future<MediaFile?> showQualitySelector(
 
   return showModalBottomSheet<MediaFile>(
     context: context,
-    backgroundColor: AppColors.surface,
+    backgroundColor: context.palette.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -29,6 +29,7 @@ class QualitySelectorSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -55,7 +56,7 @@ class QualitySelectorSheet extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                subtitle: _buildFileDetails(file),
+                subtitle: _buildFileDetails(file, palette),
                 trailing: const Icon(Icons.chevron_right),
               ),
             ),
@@ -66,7 +67,7 @@ class QualitySelectorSheet extends StatelessWidget {
     );
   }
 
-  Widget? _buildFileDetails(MediaFile file) {
+  Widget? _buildFileDetails(MediaFile file, MydiaPalette palette) {
     final details = <String>[];
 
     if (file.bitrate != null) {
@@ -87,8 +88,8 @@ class QualitySelectorSheet extends StatelessWidget {
 
     return Text(
       details.join(' • '),
-      style: const TextStyle(
-        color: AppColors.textSecondary,
+      style: TextStyle(
+        color: palette.textSecondary,
         fontSize: 12,
       ),
     );

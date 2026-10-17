@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'colors.dart';
-
 /// Mydia Depth / Material Tokens
 ///
 /// The single source of truth for the player's liquid-glass depth model
@@ -10,58 +8,12 @@ import 'colors.dart';
 /// from the `static const` values here instead of one-off literals. A later
 /// surface picks up the look simply by reading the same module.
 ///
-/// This mirrors the existing colors-only [AppColors] and the
-/// `AppTheme.radius*` doubles: a flat `static const` module, *not* a
-/// `ThemeExtension`. The theme is Material 3 and dark-only (R3) and never
-/// switches, so `ThemeExtension`'s `lerp`/`copyWith` interpolation buys nothing.
-///
-/// All values reference [AppColors] or neutral black/white alphas — no new hues
-/// are introduced, so the cinematic dark palette is preserved (R3).
+/// A flat `static const` module for the values that do not change between
+/// theme presets (blur, shadow, rim, motion, OSD). Surface tones, which do
+/// change, live in `MydiaPalette` (palette.dart).
 abstract final class DepthTokens {
-  // ---------------------------------------------------------------------------
-  // Surface tones (R1)
-  //
-  // A layered step hierarchy analogous to the web app's base-100/200/300, but
-  // expressed in the player's cinematic dark palette. Steps are seeded from
-  // [AppColors.background]/[AppColors.surface]/[AppColors.surfaceVariant] plus
-  // the inline `surfaceContainer*` literals previously hard-coded in
-  // `app_theme.dart`. Luminance increases monotonically from [surfaceBase] up
-  // to [surfaceBright] so the hierarchy reads as real depth, not three
-  // near-identical greys (asserted in depth_tokens_test).
-  // ---------------------------------------------------------------------------
-
-  /// Deepest layer — the shell background and ambient-backdrop base.
-  static const Color surfaceBase = AppColors.background; // 0xFF0B0B0C
-
-  /// One step above base; M3 `surfaceDim`.
-  static const Color surfaceDim = Color(0xFF0E0E10);
-
-  /// Low container tone; M3 `surfaceContainerLow`.
-  static const Color surfaceLow = Color(0xFF111113);
-
-  /// Default container tone; M3 `surfaceContainer`.
-  static const Color surfaceContainer = AppColors.surface; // 0xFF141416
-
-  /// High container tone; M3 `surfaceContainerHigh`.
-  static const Color surfaceHigh = Color(0xFF191A1D);
-
-  /// Elevated surface tone; M3 `surfaceContainerHighest`.
-  static const Color surfaceVariant = AppColors.surfaceVariant; // 0xFF1E1E21
-
-  /// Brightest surface tone; M3 `surfaceBright`.
-  static const Color surfaceBright = Color(0xFF26272B);
-
-  /// The surface tones in increasing-luminance order. Lets callers pick a
-  /// layer by index and lets tests assert the hierarchy is monotonic.
-  static const List<Color> surfaceTones = <Color>[
-    surfaceBase,
-    surfaceDim,
-    surfaceLow,
-    surfaceContainer,
-    surfaceHigh,
-    surfaceVariant,
-    surfaceBright,
-  ];
+  // Surface tones moved to `MydiaPalette` (palette.dart): they change with
+  // the theme preset. `palette.surfaceTones` keeps the rising order.
 
   // ---------------------------------------------------------------------------
   // Blur sigmas (R8)
@@ -215,8 +167,9 @@ abstract final class DepthTokens {
   // ~3.8:1). `osd_legibility_test.dart` computes this from these tokens.
   // ---------------------------------------------------------------------------
 
-  /// Tint of the OSD fill.
-  static const Color osdTint = AppColors.background;
+  /// Fixed for every theme preset: the OSD sits over video, not the app
+  /// ground, and osd_legibility_test measures against this value.
+  static const Color osdTint = Color(0xFF0B0B0C);
 
   /// Opacity of the OSD fill.
   static const double osdFillOpacity = 0.85;

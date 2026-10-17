@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/detail/detail_views.dart';
 import 'detail_art_image.dart';
 import 'horizontal_wheel_scroll.dart';
@@ -27,7 +27,7 @@ class CastRail extends StatelessWidget {
                 width: 4,
                 height: 20,
                 decoration: BoxDecoration(
-                  color: AppColors.primary,
+                  color: context.palette.primary,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -73,6 +73,7 @@ class _CastCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return SizedBox(
       width: 84,
       child: Column(
@@ -85,19 +86,19 @@ class _CastCard extends StatelessWidget {
                 art: member.photo,
                 slot: ArtSlot.person,
                 placeholder: (context) =>
-                    Container(color: AppColors.surfaceVariant),
-                fallback: (context) => _fallbackAvatar(),
-                errorWidget: (context) => _fallbackAvatar(),
+                    Container(color: palette.surfaceVariant),
+                fallback: (context) => _fallbackAvatar(palette),
+                errorWidget: (context) => _fallbackAvatar(palette),
               ),
             ),
           ),
           const SizedBox(height: 8),
           Text(
             member.name,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              color: palette.textPrimary,
             ),
             textAlign: TextAlign.center,
             maxLines: 1,
@@ -106,9 +107,9 @@ class _CastCard extends StatelessWidget {
           if (member.character != null)
             Text(
               member.character!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10.5,
-                color: AppColors.textSecondary,
+                color: palette.textSecondary,
               ),
               textAlign: TextAlign.center,
               maxLines: 1,
@@ -119,10 +120,10 @@ class _CastCard extends StatelessWidget {
     );
   }
 
-  Widget _fallbackAvatar() {
+  Widget _fallbackAvatar(MydiaPalette palette) {
     return Container(
-      color: AppColors.surfaceVariant,
-      child: const Icon(Icons.person_rounded, color: AppColors.textSecondary),
+      color: palette.surfaceVariant,
+      child: Icon(Icons.person_rounded, color: palette.textSecondary),
     );
   }
 }

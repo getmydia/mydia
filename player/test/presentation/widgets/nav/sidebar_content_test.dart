@@ -5,7 +5,7 @@ import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
 import 'package:player/presentation/widgets/nav/sidebar_content.dart';
 import 'package:player/presentation/widgets/nav/sidebar_row.dart';
@@ -440,7 +440,7 @@ void main() {
       );
       final decoration = box.decoration! as BoxDecoration;
       final border = decoration.border! as Border;
-      expect(border.top.color, AppColors.primary);
+      expect(border.top.color, Palettes.projectionBooth.primary);
       expect(border.top.width, 2);
       expect(decoration.color, Colors.white.withValues(alpha: 0.18));
     });

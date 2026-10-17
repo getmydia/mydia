@@ -54,6 +54,8 @@ class _PlaybackPage extends ConsumerWidget {
             failed: settings.hasError,
             includeRemoteControl: true,
           ),
+          const SizedBox(height: 18),
+          const AppearanceSettingsSection(),
         ],
       ),
     );

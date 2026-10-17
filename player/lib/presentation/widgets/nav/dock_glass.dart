@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 
 /// The bottom dock's frosted-glass recipe. The cast bar floats directly
 /// above the dock and must read as the same material, so both use these.
@@ -11,8 +11,8 @@ abstract final class DockGlass {
   /// `GlassSurface.chrome`.
   static const double fillOpacity = 0.7;
 
-  static Border get border =>
-      Border.all(color: AppColors.border.withValues(alpha: 0.2));
+  static Border border(MydiaPalette palette) =>
+      Border.all(color: palette.border.withValues(alpha: 0.2));
 
   static List<BoxShadow> get shadow => [
         BoxShadow(

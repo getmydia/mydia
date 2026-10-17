@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 
 class ProgressOverlay extends StatelessWidget {
   final double percentage;
@@ -13,21 +13,22 @@ class ProgressOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
       child: Container(
         height: height,
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceVariant,
+        decoration: BoxDecoration(
+          color: palette.surfaceVariant,
         ),
         child: FractionallySizedBox(
           alignment: Alignment.centerLeft,
           widthFactor: percentage / 100.0,
           child: Container(
-            decoration: const BoxDecoration(
-              color: AppColors.primary,
+            decoration: BoxDecoration(
+              color: palette.primary,
             ),
           ),
         ),

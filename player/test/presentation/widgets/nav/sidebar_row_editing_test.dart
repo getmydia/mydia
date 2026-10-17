@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/nav/sidebar_row.dart';
 
 Future<void> _pumpRow(
@@ -90,7 +90,7 @@ void main() {
 
     final text = tester.widget<Text>(find.text('Movies'));
     expect(text.style?.decoration, TextDecoration.lineThrough);
-    expect(text.style?.color, AppColors.textDisabled);
+    expect(text.style?.color, Palettes.projectionBooth.textDisabled);
   });
 
   testWidgets('editing does not long-press into the menu', (tester) async {
@@ -142,8 +142,8 @@ void main() {
     final text = tester.widget<Text>(find.text('Movies'));
     final icon = tester.widget<Icon>(find.byIcon(Icons.movie_outlined));
 
-    expect(text.style?.color, AppColors.textDisabled);
-    expect(icon.color, AppColors.textDisabled);
+    expect(text.style?.color, Palettes.projectionBooth.textDisabled);
+    expect(icon.color, Palettes.projectionBooth.textDisabled);
     // Unlike a hidden row, an anchor is never struck through — it is locked,
     // not removed.
     expect(text.style?.decoration, isNot(TextDecoration.lineThrough));
@@ -153,6 +153,6 @@ void main() {
     await _pumpRow(tester, isEditing: false, canCustomise: false);
 
     final text = tester.widget<Text>(find.text('Movies'));
-    expect(text.style?.color, isNot(AppColors.textDisabled));
+    expect(text.style?.color, isNot(Palettes.projectionBooth.textDisabled));
   });
 }

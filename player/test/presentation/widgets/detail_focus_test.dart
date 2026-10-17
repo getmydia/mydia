@@ -1,7 +1,7 @@
 // PlayButton is an InkWell, so it was already a focus stop and Enter already
 // worked. What it had no way to show is *that* it was focused: InkWell's
 // default focusColor is a faint overlay, and this button paints a solid
-// AppColors.primary circle underneath it. Reachable but invisible is worse
+// primary-coloured circle underneath it. Reachable but invisible is worse
 // than unreachable, because the viewer cannot tell the remote did anything.
 //
 // Wrapping FocusHighlight around an already-focusable InkWell (or any other
@@ -14,7 +14,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/play_button.dart';
@@ -112,7 +112,7 @@ void main() {
       );
       final border = (decorated.decoration as BoxDecoration).border! as Border;
       // Gold and opaque: a white ring would vanish against the white pill.
-      expect(border.top.color, AppColors.primary);
+      expect(border.top.color, Palettes.projectionBooth.primary);
       expect(border.top.color.a, 1.0);
 
       // Drawn outside the pill, in the gap around it.

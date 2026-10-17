@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 
 /// Explains a version mismatch between this player and the connected server.
 ///
@@ -15,6 +16,7 @@ class CompatibilityDetailsDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final requiredVersion = state.requiredVersion;
 
     return AlertDialog(
@@ -37,9 +39,9 @@ class CompatibilityDetailsDialog extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
+              color: palette.surfaceVariant,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.border, width: 1),
+              border: Border.all(color: palette.border, width: 1),
             ),
             child: Column(
               children: [
@@ -101,7 +103,7 @@ class _VersionRow extends StatelessWidget {
         children: [
           Text(
             label,
-            style: theme?.copyWith(color: AppColors.textSecondary),
+            style: theme?.copyWith(color: context.palette.textSecondary),
           ),
           Text(
             value,

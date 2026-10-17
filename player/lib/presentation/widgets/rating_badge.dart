@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 
 /// The TMDB rating pill drawn over poster artwork.
 ///
@@ -12,7 +12,7 @@ import '../../core/theme/colors.dart';
 /// differently, as a plain unscrimmed row (`_buildRatingLine`), since it has a
 /// solid background to sit on.
 ///
-/// The star takes `AppColors.primary` rather than a literal amber so it
+/// The star takes the palette's `primary` rather than a literal amber so it
 /// matches the rating star on the movie detail screen (`_buildRatingLine`).
 ///
 /// Takes a non-nullable [rating] on purpose. TMDB reports `0.0` for a title
@@ -44,7 +44,7 @@ class RatingBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.star_rounded, size: 14, color: AppColors.primary),
+          Icon(Icons.star_rounded, size: 14, color: context.palette.primary),
           const SizedBox(width: 4),
           Text(
             rating.toStringAsFixed(1),

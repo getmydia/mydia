@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import '../../core/layout/breakpoints.dart';
 import '../../core/player/input_capabilities.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import 'horizontal_wheel_scroll.dart';
 import 'rail_focus_scroller.dart';
 
@@ -148,6 +148,7 @@ class _HorizontalRailState extends State<HorizontalRail> {
   }
 
   Widget _buildFade(Key key, {required bool atStart}) {
+    final palette = context.palette;
     return Positioned(
       left: atStart ? 0 : null,
       right: atStart ? null : 0,
@@ -162,8 +163,8 @@ class _HorizontalRailState extends State<HorizontalRail> {
               begin: atStart ? Alignment.centerLeft : Alignment.centerRight,
               end: atStart ? Alignment.centerRight : Alignment.centerLeft,
               colors: [
-                AppColors.background,
-                AppColors.background.withValues(alpha: 0),
+                palette.background,
+                palette.background.withValues(alpha: 0),
               ],
             ),
           ),

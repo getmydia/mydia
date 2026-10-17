@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/palette.dart';
 import '../../../../core/update/update_provider.dart';
 import '../../../../domain/models/available_update.dart';
 import 'settings_section.dart';
@@ -18,6 +18,7 @@ class UpdateCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final state = ref.watch(updateProvider);
     final update = state.availableUpdate;
 
@@ -50,7 +51,7 @@ class UpdateCard extends ConsumerWidget {
                   fontSize: 13,
                   color: state.error != null
                       ? Theme.of(context).colorScheme.error
-                      : AppColors.textSecondary,
+                      : palette.textSecondary,
                 ),
               ),
             ),
@@ -74,19 +75,19 @@ class UpdateCard extends ConsumerWidget {
               children: [
                 Text(
                   _heading(update: update, awaitingRestart: awaitingRestart),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: palette.textPrimary,
                   ),
                 ),
                 if (update is AppUpdate) ...[
                   const SizedBox(height: 2),
                   Text(
                     update.releaseTitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
-                      color: AppColors.textSecondary,
+                      color: palette.textSecondary,
                     ),
                   ),
                 ],
@@ -209,9 +210,9 @@ class _Progress extends StatelessWidget {
           progress > 0
               ? 'Downloading ${(progress * 100).toInt()}%'
               : 'Downloading',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: AppColors.textSecondary,
+            color: context.palette.textSecondary,
           ),
         ),
       ],
