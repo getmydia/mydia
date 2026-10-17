@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/dock_insets.dart';
+import 'package:player/core/platform/native_tab_bar_support.dart';
 
 /// A mobile width: below Breakpoints.tablet (900).
 const Size kMobileSize = Size(400, 800);
@@ -73,6 +74,17 @@ void main() {
       expect(
         await readBottomOf(tester, size: const Size(599, 800), inset: 34),
         34 + DockInsets.dockGap,
+      );
+    });
+
+    testWidgets(
+        'an iPhone with the native bar keeps the phone arm in landscape',
+        (tester) async {
+      NativeTabBarSupport.debugOverrideMode = NativeTabBarMode.bar;
+      addTearDown(() => NativeTabBarSupport.debugOverrideMode = null);
+      expect(
+        await readBottomOf(tester, size: const Size(932, 430), inset: 21),
+        21 + DockInsets.dockGap,
       );
     });
 
