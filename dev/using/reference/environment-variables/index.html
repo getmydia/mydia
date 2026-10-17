@@ -1884,6 +1884,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#update-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Update Check
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#language" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3920,6 +3931,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#update-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Update Check
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#language" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4816,6 +4838,32 @@ before raising it. Also settable under <strong>Admin &gt; System &gt; Settings &
 </tbody>
 </table>
 <p>The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See <a href="../../../contributing/architecture/">Architecture</a> for details.</p>
+<h2 id="update-check">Update Check</h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>UPDATE_CHECK_ENABLED</code></td>
+<td>Ask the metadata relay whether a newer Mydia release exists</td>
+<td><code>true</code></td>
+</tr>
+</tbody>
+</table>
+<p>Mydia checks shortly after startup and once a week after that, and shows a newer release on <strong>Admin → Status</strong>. The check sends four values and nothing else:</p>
+<ul>
+<li>a random install ID, generated for this check and used nowhere else</li>
+<li>the Mydia version</li>
+<li>the CPU architecture</li>
+<li>the database type (<code>sqlite</code> or <code>postgres</code>)</li>
+</ul>
+<p>The relay keeps one record per install per week and does not store your IP address. That record is also how the developers count active installs and decide which versions and platforms to prioritise. Nothing about your library, accounts or network is sent.</p>
+<p>To turn it off, set <code>UPDATE_CHECK_ENABLED=false</code>, or switch off <strong>Check for updates</strong> under <strong>Admin → Settings → Updates</strong>. When the variable is set, it overrides the switch.</p>
 <h2 id="language">Language</h2>
 <table>
 <thead>
