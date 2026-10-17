@@ -30,63 +30,73 @@ Widget _host(MockAuthStorage storage) => ProviderScope(
 
 void main() {
   testWidgets('shows the current preset', (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    await tester.pumpWidget(_host(MockAuthStorage()));
-    await tester.pumpAndSettle();
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('theme-preset-row')),
-        matching: find.text('Projection Booth'),
-      ),
-      findsOneWidget,
-    );
-    debugDefaultTargetPlatformOverride = null;
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await tester.pumpWidget(_host(MockAuthStorage()));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('theme-preset-row')),
+          matching: find.text('Projection Booth'),
+        ),
+        findsOneWidget,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('offers macOS only on macOS', (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    await tester.pumpWidget(_host(MockAuthStorage()));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('theme-preset-row')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('theme-preset-option-macos')), findsNothing);
-    expect(
-      find.byKey(const Key('theme-preset-option-oledBlack')),
-      findsOneWidget,
-    );
-    await tester.tap(find.byKey(const Key('theme-preset-option-oledBlack')));
-    await tester.pumpAndSettle();
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await tester.pumpWidget(_host(MockAuthStorage()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('theme-preset-row')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('theme-preset-option-macos')), findsNothing);
+      expect(
+        find.byKey(const Key('theme-preset-option-oledBlack')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('theme-preset-option-oledBlack')));
+      await tester.pumpAndSettle();
 
-    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-    await tester.pumpWidget(_host(MockAuthStorage()));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('theme-preset-row')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('theme-preset-option-macos')), findsOneWidget);
-    debugDefaultTargetPlatformOverride = null;
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      await tester.pumpWidget(_host(MockAuthStorage()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('theme-preset-row')));
+      await tester.pumpAndSettle();
+      expect(
+          find.byKey(const Key('theme-preset-option-macos')), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('picking a preset stores it and re-themes the app',
       (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    final storage = MockAuthStorage();
-    await tester.pumpWidget(_host(storage));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('theme-preset-row')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('theme-preset-option-oledBlack')));
-    await tester.pumpAndSettle();
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final storage = MockAuthStorage();
+      await tester.pumpWidget(_host(storage));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('theme-preset-row')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('theme-preset-option-oledBlack')));
+      await tester.pumpAndSettle();
 
-    expect(storage.contents['theme_preset'], 'oledBlack');
-    final context = tester.element(find.byKey(const Key('theme-preset-row')));
-    expect(Theme.of(context).extension<MydiaPalette>(), Palettes.oledBlack);
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('theme-preset-row')),
-        matching: find.text('OLED Black'),
-      ),
-      findsOneWidget,
-    );
-    debugDefaultTargetPlatformOverride = null;
+      expect(storage.contents['theme_preset'], 'oledBlack');
+      final context = tester.element(find.byKey(const Key('theme-preset-row')));
+      expect(Theme.of(context).extension<MydiaPalette>(), Palettes.oledBlack);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('theme-preset-row')),
+          matching: find.text('OLED Black'),
+        ),
+        findsOneWidget,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }
