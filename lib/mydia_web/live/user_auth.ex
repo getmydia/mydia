@@ -155,8 +155,7 @@ defmodule MydiaWeb.Live.UserAuth do
       |> assign(:show_feedback_modal, false)
       |> assign(:feedback_form, build_feedback_form(%{}))
       |> assign_changelog_notice()
-      |> assign_player_ui()
-      |> assign_theme_selection()
+      |> assign_preference_state()
       |> attach_hook(:changelog_hook, :handle_event, &handle_changelog_event/3)
       |> attach_hook(:theme_hook, :handle_event, &handle_theme_event/3)
       |> attach_hook(:jobs_status_hook, :handle_info, &handle_jobs_status/2)
@@ -268,6 +267,20 @@ defmodule MydiaWeb.Live.UserAuth do
     end
   end
 
+  # The preference row is loaded once per mount for the signed-in user and
+  # shared by everything that reads it.
+  defp assign_preference_state(socket) do
+    pref =
+      case socket.assigns do
+        %{current_user: %Mydia.Accounts.User{} = user} -> Accounts.get_user_preference!(user)
+        _ -> nil
+      end
+
+    socket
+    |> assign_player_ui(pref)
+    |> assign_theme_selection(pref)
+  end
+
   # Player entry-point visibility, read once per mount.
   #
   # No connected?/1 gate: unlike assign_changelog_notice/1 this only reads, so
@@ -278,13 +291,11 @@ defmodule MydiaWeb.Live.UserAuth do
   # point is hidden for every user, so templates that already test @hide_player
   # need nothing else. :player_enabled is for the surfaces the per-user
   # preference leaves alone on purpose, such as Play buttons and admin tabs.
-  defp assign_player_ui(socket) do
+  defp assign_player_ui(socket, pref) do
     player_enabled = Mydia.Player.enabled?()
 
-    case socket.assigns do
-      %{current_user: %Mydia.Accounts.User{} = user} ->
-        pref = Mydia.Accounts.get_user_preference!(user)
-
+    case pref do
+      %Mydia.Accounts.UserPreference{} ->
         socket
         |> assign(:player_enabled, player_enabled)
         |> assign(
@@ -341,14 +352,11 @@ defmodule MydiaWeb.Live.UserAuth do
 
   defp handle_changelog_event(_event, _params, socket), do: {:cont, socket}
 
-  defp assign_theme_selection(socket) do
+  defp assign_theme_selection(socket, pref) do
     selection =
-      case socket.assigns do
-        %{current_user: %Mydia.Accounts.User{} = user} ->
-          user |> Accounts.get_user_preference!() |> Accounts.UserPreference.theme_selection()
-
-        _ ->
-          Mydia.Accounts.Themes.default_selection()
+      case pref do
+        %Accounts.UserPreference{} -> Accounts.UserPreference.theme_selection(pref)
+        _ -> Mydia.Accounts.Themes.default_selection()
       end
 
     assign(socket, :theme_selection, selection)
