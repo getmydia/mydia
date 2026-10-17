@@ -66,6 +66,17 @@ defmodule MydiaWeb.ThemeHookTest do
       })
     end
 
+    test "the header toggle sets the mode", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#theme-toggle button[phx-value-mode='dark']")
+      |> render_click()
+
+      assert user |> Accounts.get_user_preference!() |> UserPreference.theme() == "dark"
+      assert_push_event(view, "theme_changed", %{mode: "dark"})
+    end
+
     test "update_theme_slot stores the theme for that slot", %{conn: conn, user: user} do
       {:ok, view, _html} = live(conn, ~p"/movies")
 

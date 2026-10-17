@@ -429,9 +429,7 @@ defmodule MydiaWeb.Layouts do
   end
 
   @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
-
-  See <head> in root.html.heex which applies the theme before page load.
+  System, light or dark mode switch. Saved per user by the theme hook in MydiaWeb.Live.UserAuth.
   """
   attr :id, :string, default: "theme-toggle"
 
@@ -449,7 +447,9 @@ defmodule MydiaWeb.Layouts do
 
       <button
         class="relative flex p-2 cursor-pointer w-1/3 justify-center z-10"
-        onclick="window.mydiaTheme.setTheme(window.mydiaTheme.THEMES.SYSTEM)"
+        type="button"
+        phx-click="set_theme_mode"
+        phx-value-mode="system"
         title="System theme"
       >
         <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
@@ -457,7 +457,9 @@ defmodule MydiaWeb.Layouts do
 
       <button
         class="relative flex p-2 cursor-pointer w-1/3 justify-center z-10"
-        onclick="window.mydiaTheme.setTheme(window.mydiaTheme.THEMES.LIGHT)"
+        type="button"
+        phx-click="set_theme_mode"
+        phx-value-mode="light"
         title="Light theme"
       >
         <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
@@ -465,7 +467,9 @@ defmodule MydiaWeb.Layouts do
 
       <button
         class="relative flex p-2 cursor-pointer w-1/3 justify-center z-10"
-        onclick="window.mydiaTheme.setTheme(window.mydiaTheme.THEMES.DARK)"
+        type="button"
+        phx-click="set_theme_mode"
+        phx-value-mode="dark"
         title="Dark theme"
       >
         <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
