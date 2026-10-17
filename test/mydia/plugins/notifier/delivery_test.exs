@@ -160,6 +160,17 @@ defmodule Mydia.Plugins.Notifier.DeliveryTest do
     assert {:error, _} = Delivery.perform(job(added_payload(item)))
   end
 
+  # An enabled instance with no URL is a configuration state, not a delivery
+  # failure: retrying cannot fix it, so the job is cancelled on the first try.
+  for blank <- [nil, "", "   "] do
+    test "cancels without retrying when webhook_url is #{inspect(blank)}", %{bypass: bypass} do
+      start_notifier!(bypass, settings: %{"webhook_url" => unquote(blank)})
+      item = media_item_fixture()
+
+      assert {:cancel, "no webhook_url configured"} = Delivery.perform(job(added_payload(item)))
+    end
+  end
+
   test "AE2: a webhook host that is not on the grant is blocked by the gate", %{bypass: bypass} do
     # Granted discord.com, but the configured webhook points at webhook.test.
     start_notifier!(bypass, granted_host: "discord.com", webhook_host: "webhook.test")

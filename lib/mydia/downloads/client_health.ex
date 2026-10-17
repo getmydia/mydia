@@ -130,11 +130,10 @@ defmodule Mydia.Downloads.ClientHealth do
     # Register as health check provider
     Health.register_provider(:download_client, __MODULE__)
 
-    # Schedule periodic health checks
+    # Schedule periodic health checks. The first check is not run here: init
+    # happens before Mydia.Application registers the client adapters.
+    # Mydia.Application calls refresh_all_clients/0 once they are registered.
     schedule_health_check()
-
-    # Perform initial health check
-    perform_all_health_checks()
 
     {:ok, %{}}
   end

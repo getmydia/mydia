@@ -672,6 +672,9 @@ defmodule MydiaWeb.DashboardLive.Index do
   def handle_info({:grab_failed, _payload}, socket), do: {:noreply, socket}
   def handle_info({:grab_duplicate, _payload}, socket), do: {:noreply, socket}
 
+  # External client scans also land on "downloads"; only DownloadsLive renders them.
+  def handle_info(:external_scan_updated, socket), do: {:noreply, socket}
+
   @impl true
   def handle_info(:refresh_health, socket) do
     user = socket.assigns[:current_user]
