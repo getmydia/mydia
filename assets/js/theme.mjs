@@ -22,7 +22,34 @@ export function fromPayload(detail) {
   };
 }
 
-export function applySelection(root, selection, prefersDark, storage) {
+// Mirrors MydiaWeb.Layouts.theme_color_meta/1: one meta with the active base
+// for fixed modes, a light/dark media pair for system mode.
+export function updateThemeColorMetas(doc, selection) {
+  for (const meta of doc.querySelectorAll('meta[name="theme-color"]')) {
+    meta.remove();
+  }
+  const specs =
+    selection.mode === "system"
+      ? [
+          ["(prefers-color-scheme: light)", selection.lightBase],
+          ["(prefers-color-scheme: dark)", selection.darkBase],
+        ]
+      : [
+          [
+            null,
+            selection.mode === "dark" ? selection.darkBase : selection.lightBase,
+          ],
+        ];
+  for (const [media, content] of specs) {
+    const meta = doc.createElement("meta");
+    meta.setAttribute("name", "theme-color");
+    if (media) meta.setAttribute("media", media);
+    meta.setAttribute("content", content);
+    doc.head.append(meta);
+  }
+}
+
+export function applySelection(root, selection, prefersDark, storage, doc) {
   root.setAttribute("data-theme-mode", selection.mode);
   root.setAttribute("data-light-theme", selection.light);
   root.setAttribute("data-dark-theme", selection.dark);
@@ -37,6 +64,8 @@ export function applySelection(root, selection, prefersDark, storage) {
   );
   root.style.backgroundColor =
     id === selection.dark ? selection.darkBase : selection.lightBase;
+
+  if (doc) updateThemeColorMetas(doc, selection);
 
   // The mirror only serves pages with no signed-in user (login, setup).
   try {

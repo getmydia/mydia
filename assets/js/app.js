@@ -476,6 +476,7 @@ window.addEventListener("phx:theme_changed", (e) => {
     fromPayload(e.detail),
     window.matchMedia("(prefers-color-scheme: dark)").matches,
     window.localStorage,
+    document,
   );
 });
 

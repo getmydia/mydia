@@ -96,3 +96,51 @@ test("applySelection sets data-color-scheme from the resolved slot", () => {
   applySelection(root, { ...selection, mode: "system" }, true, storage);
   assert.equal(root.getAttribute("data-color-scheme"), "dark");
 });
+
+function fakeDoc(initial = []) {
+  const metas = initial.map((attrs) => fakeMeta(attrs));
+  const doc = {
+    metas,
+    head: { append: (m) => metas.push(m) },
+    querySelectorAll: () => [...metas],
+    createElement: () => fakeMeta({}),
+  };
+  function fakeMeta(attrs) {
+    const m = {
+      attrs: { ...attrs },
+      setAttribute: (k, v) => (m.attrs[k] = v),
+      remove: () => metas.splice(metas.indexOf(m), 1),
+    };
+    return m;
+  }
+  return doc;
+}
+
+test("applySelection keeps one theme-color meta for a fixed mode", () => {
+  const doc = fakeDoc([
+    { name: "theme-color", media: "(prefers-color-scheme: light)", content: "#fff" },
+    { name: "theme-color", media: "(prefers-color-scheme: dark)", content: "#000" },
+  ]);
+  applySelection(fakeRoot(), { ...selection, mode: "dark" }, false, memoryStorage(), doc);
+  assert.deepEqual(
+    doc.metas.map((m) => m.attrs),
+    [{ name: "theme-color", content: "#1e1e2e" }],
+  );
+  applySelection(fakeRoot(), { ...selection, mode: "light" }, true, memoryStorage(), doc);
+  assert.deepEqual(
+    doc.metas.map((m) => m.attrs),
+    [{ name: "theme-color", content: "#eceff4" }],
+  );
+});
+
+test("applySelection renders the light/dark media pair for system mode", () => {
+  const doc = fakeDoc([{ name: "theme-color", content: "#1e1e2e" }]);
+  applySelection(fakeRoot(), selection, false, memoryStorage(), doc);
+  assert.deepEqual(
+    doc.metas.map((m) => m.attrs),
+    [
+      { name: "theme-color", media: "(prefers-color-scheme: light)", content: "#eceff4" },
+      { name: "theme-color", media: "(prefers-color-scheme: dark)", content: "#1e1e2e" },
+    ],
+  );
+});
