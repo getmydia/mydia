@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/navigation/sidebar_layout_providers.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/navigation/nav_destination.dart';
 import '../library/library_sort.dart';
@@ -146,13 +146,14 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final categories = MediaCategoryFilter.forKind(_filter.kind);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: Material(
-        color: AppColors.surface,
+        color: palette.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         child: SafeArea(
           top: false,
@@ -168,7 +169,7 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: AppColors.textSecondary.withValues(alpha: 0.3),
+                      color: palette.textSecondary.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),

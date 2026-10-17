@@ -9,6 +9,7 @@ import '../../../../core/layout/breakpoints.dart';
 import '../../../../core/playback/local_playback_progress.dart';
 import '../../../../core/playback/playback_progress_providers.dart';
 import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/palette.dart';
 import '../../../../domain/models/download.dart';
 import '../../../widgets/quality_badge.dart';
 import 'series_downloads_dialogs.dart';
@@ -36,6 +37,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final cardSize = Breakpoints.getEpisodeCardSize(context);
 
     return SizedBox(
@@ -51,10 +53,10 @@ class DownloadedEpisodeCard extends ConsumerWidget {
           const SizedBox(height: 8),
           Text(
             media.episodeCode,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: AppColors.primary,
+              color: palette.primary,
             ),
           ),
           const SizedBox(height: 2),
@@ -70,9 +72,9 @@ class DownloadedEpisodeCard extends ConsumerWidget {
           const SizedBox(height: 2),
           Text(
             media.fileSizeDisplay,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
-              color: AppColors.textSecondary,
+              color: palette.textSecondary,
             ),
           ),
         ],
@@ -99,7 +101,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
                 localPath: media.thumbnailPath,
                 fallbackUrl: thumbnailUrl,
                 cacheManager: EpisodeThumbnailCacheManager(),
-                placeholder: (context) => _buildPlaceholder(),
+                placeholder: (context) => _buildPlaceholder(context),
               ),
             ),
             if (media.quality.isNotEmpty)
@@ -108,7 +110,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
                 bottom: 10,
                 child: QualityBadge.resolution(media.quality),
               ),
-            _buildResumeBar(ref),
+            _buildResumeBar(context, ref),
             Positioned(
               top: 4,
               right: 4,
@@ -123,7 +125,8 @@ class DownloadedEpisodeCard extends ConsumerWidget {
   /// Reads the offline Hive store synchronously once it has opened. While the
   /// provider is still loading the bar is simply absent, which is correct: an
   /// unwatched episode shows nothing either.
-  Widget _buildResumeBar(WidgetRef ref) {
+  Widget _buildResumeBar(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final store = ref.watch(playbackProgressStoreProvider).value;
     if (store == null) return const SizedBox.shrink();
 
@@ -142,14 +145,14 @@ class DownloadedEpisodeCard extends ConsumerWidget {
       right: 0,
       child: Container(
         height: 4,
-        decoration: const BoxDecoration(color: AppColors.surfaceVariant),
+        decoration: BoxDecoration(color: palette.surfaceVariant),
         child: FractionallySizedBox(
           alignment: Alignment.centerLeft,
           widthFactor: fraction,
-          child: const DecoratedBox(
+          child: DecoratedBox(
             decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.only(
+              color: palette.primary,
+              borderRadius: const BorderRadius.only(
                 topRight: Radius.circular(2),
                 bottomRight: Radius.circular(2),
               ),
@@ -180,7 +183,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           visualDensity: VisualDensity.compact,
         ),
-        color: AppColors.surface,
+        color: context.palette.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -224,14 +227,15 @@ class DownloadedEpisodeCard extends ConsumerWidget {
     );
   }
 
-  Widget _buildPlaceholder() {
+  Widget _buildPlaceholder(BuildContext context) {
+    final palette = context.palette;
     return Container(
-      color: AppColors.surfaceVariant,
-      child: const Center(
+      color: palette.surfaceVariant,
+      child: Center(
         child: Icon(
           Icons.tv_rounded,
           size: 32,
-          color: AppColors.textSecondary,
+          color: palette.textSecondary,
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../widgets/detail_hero_app_bar.dart';
 import '../../widgets/shell_rail_inset.dart';
 
@@ -17,6 +18,7 @@ class DetailLoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return CustomScrollView(
       slivers: [
         detailHeroAppBar(
@@ -25,7 +27,7 @@ class DetailLoadingState extends StatelessWidget {
           back: const DetailHeroBackButton(),
           topScrim: false,
           background: Container(
-            color: AppColors.surface,
+            color: palette.surface,
             child: const Center(child: CircularProgressIndicator()),
           ),
         ),
@@ -36,11 +38,11 @@ class DetailLoadingState extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _shimmer(height: 48, radius: 12),
+                  _shimmer(palette, height: 48, radius: 12),
                   const SizedBox(height: 24),
-                  _shimmer(height: 24, width: 200),
+                  _shimmer(palette, height: 24, width: 200),
                   const SizedBox(height: 16),
-                  _shimmer(height: 100),
+                  _shimmer(palette, height: 100),
                 ],
               ),
             ),
@@ -50,12 +52,17 @@ class DetailLoadingState extends StatelessWidget {
     );
   }
 
-  Widget _shimmer({required double height, double? width, double radius = 8}) {
+  Widget _shimmer(
+    MydiaPalette palette, {
+    required double height,
+    double? width,
+    double radius = 8,
+  }) {
     return Container(
       height: height,
       width: width,
       decoration: BoxDecoration(
-        color: AppColors.shimmerBase,
+        color: palette.shimmerBase,
         borderRadius: BorderRadius.circular(radius),
       ),
     );
@@ -80,6 +87,7 @@ class DetailErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
     return CustomScrollView(
       slivers: [
@@ -88,7 +96,7 @@ class DetailErrorState extends StatelessWidget {
           expandedHeight: 200,
           back: const DetailHeroBackButton(),
           topScrim: false,
-          background: Container(color: AppColors.background),
+          background: Container(color: palette.background),
         ),
         SliverRailInset(
           sliver: SliverFillRemaining(
@@ -120,7 +128,7 @@ class DetailErrorState extends StatelessWidget {
                     Text(
                       error.toString(),
                       style: textTheme.bodyMedium
-                          ?.copyWith(color: AppColors.textSecondary),
+                          ?.copyWith(color: palette.textSecondary),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 32),

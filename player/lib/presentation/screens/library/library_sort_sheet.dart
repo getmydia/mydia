@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import 'library_sort.dart';
 
 /// Bottom sheet for picking a library sort field and direction.
@@ -11,12 +11,13 @@ class LibrarySortSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final directionEnabled = currentSort.field.supportsDirection;
 
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -26,7 +27,7 @@ class LibrarySortSheet extends StatelessWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: AppColors.textSecondary.withValues(alpha: 0.3),
+              color: palette.textSecondary.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -70,13 +71,13 @@ class LibrarySortSheet extends StatelessWidget {
               key: Key('sort-field-${field.wireName}'),
               leading: Icon(
                 isSelected ? Icons.check_circle_rounded : Icons.circle_outlined,
-                color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                color: isSelected ? palette.primary : palette.textSecondary,
               ),
               title: Text(
                 field.displayName,
                 style: TextStyle(
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                  color: isSelected ? palette.primary : palette.textPrimary,
                 ),
               ),
               onTap: () =>

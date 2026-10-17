@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/downloads/download_recovery.dart';
-import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/palette.dart';
 import '../../../../domain/models/download.dart';
 
 /// A short line describing a task that is recovering, or empty when the task is
@@ -41,18 +41,20 @@ class DownloadRecoveryBanner extends StatelessWidget {
     final label = downloadStateLabel(task);
     if (label.isEmpty) return const SizedBox.shrink();
 
+    final palette = context.palette;
+
     return Row(
       children: [
-        const Icon(Icons.pause_circle_outline_rounded,
-            color: AppColors.textSecondary, size: 14),
+        Icon(Icons.pause_circle_outline_rounded,
+            color: palette.textSecondary, size: 14),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
+            style: TextStyle(
+              color: palette.textSecondary,
               fontSize: 10,
             ),
           ),

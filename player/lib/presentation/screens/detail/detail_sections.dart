@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 
 /// Below this width the hero body's action column and tag column stack
 /// instead of sitting side by side.
@@ -72,6 +72,7 @@ class DetailTagColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final leading = this.leading;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,7 +93,7 @@ class DetailTagColumn extends StatelessWidget {
           Text(
             overview,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: palette.textSecondary,
                   height: 1.6,
                 ),
           ),
@@ -119,10 +120,10 @@ class _TagChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12.5,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: context.palette.textPrimary,
         ),
       ),
     );
@@ -137,21 +138,22 @@ class DetailRatingLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Row(
       children: [
-        const Icon(Icons.star_rounded, size: 16, color: AppColors.primary),
+        Icon(Icons.star_rounded, size: 16, color: palette.primary),
         const SizedBox(width: 6),
         Text(
           rating,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
+            color: palette.textPrimary,
           ),
         ),
         const SizedBox(width: 6),
-        const Text(
+        Text(
           'TMDB',
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 12, color: palette.textSecondary),
         ),
       ],
     );
@@ -187,12 +189,12 @@ class DetailMetadataChip extends StatelessWidget {
   final String label;
   final IconData? icon;
 
-  /// Defaults to [AppColors.textSecondary].
+  /// Defaults to the palette's `textSecondary`.
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final chipColor = color ?? AppColors.textSecondary;
+    final chipColor = color ?? context.palette.textSecondary;
     final icon = this.icon;
     final text = Text(
       label,
@@ -231,6 +233,7 @@ class DetailOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -243,7 +246,7 @@ class DetailOverview extends StatelessWidget {
                 width: 4,
                 height: 20,
                 decoration: BoxDecoration(
-                  color: AppColors.primary,
+                  color: palette.primary,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -259,7 +262,7 @@ class DetailOverview extends StatelessWidget {
           Text(
             overview,
             style: textTheme.bodyMedium?.copyWith(
-              color: AppColors.textSecondary,
+              color: palette.textSecondary,
               height: 1.6,
             ),
           ),

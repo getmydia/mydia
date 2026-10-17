@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import 'calendar_card.dart';
 import 'calendar_dates.dart';
 import 'calendar_row.dart';
@@ -26,6 +26,7 @@ class CalendarDayGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final isToday = isSameDay(item.day, today);
 
     return Padding(
@@ -48,7 +49,7 @@ class CalendarDayGroup extends StatelessWidget {
               decoration: BoxDecoration(
                 border: Border(
                   left: BorderSide(
-                    color: isToday ? AppColors.primary : AppColors.divider,
+                    color: isToday ? palette.primary : palette.divider,
                   ),
                 ),
               ),
@@ -58,7 +59,7 @@ class CalendarDayGroup extends StatelessWidget {
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: _entries(),
+                  children: _entries(palette),
                 ),
               ),
             ),
@@ -68,17 +69,17 @@ class CalendarDayGroup extends StatelessWidget {
     );
   }
 
-  List<Widget> _entries() {
+  List<Widget> _entries(MydiaPalette palette) {
     if (item.entries.isEmpty) {
       return [
         SizedBox(
           height: layout.rowHeight,
-          child: const Align(
+          child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
               'Nothing new today',
-              key: ValueKey('calendar-today-empty'),
-              style: TextStyle(fontSize: 13, color: AppColors.textDisabled),
+              key: const ValueKey('calendar-today-empty'),
+              style: TextStyle(fontSize: 13, color: palette.textDisabled),
             ),
           ),
         ),
@@ -112,10 +113,11 @@ class _Gutter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final isToday = isSameDay(day, today);
     final isPast = day.isBefore(truncateToDay(today));
-    final weekdayColor = isToday ? AppColors.primary : AppColors.textDisabled;
-    final numberColor = isToday ? AppColors.primary : AppColors.textPrimary;
+    final weekdayColor = isToday ? palette.primary : palette.textDisabled;
+    final numberColor = isToday ? palette.primary : palette.textPrimary;
 
     return Opacity(
       key: ValueKey('calendar-day-${isoDate(day)}'),
@@ -160,6 +162,7 @@ class CalendarMonthRule extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       key: ValueKey('calendar-month-${isoDate(month)}'),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
@@ -167,16 +170,16 @@ class CalendarMonthRule extends StatelessWidget {
         children: [
           Text(
             monthName(month).toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               height: TimelineLayout.monthLine / 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.1,
-              color: AppColors.textDisabled,
+              color: palette.textDisabled,
             ),
           ),
           const SizedBox(width: 10),
-          const Expanded(child: Divider(height: 1, color: AppColors.divider)),
+          Expanded(child: Divider(height: 1, color: palette.divider)),
         ],
       ),
     );

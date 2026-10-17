@@ -19,6 +19,7 @@ import '../../../domain/models/download.dart';
 import '../../../domain/models/download_settings.dart';
 import '../../../domain/models/storage_settings.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import 'download_locations.dart';
 import 'series_downloads_screen.dart';
 import 'widgets/download_artwork.dart';
@@ -41,6 +42,7 @@ Widget activeDownloadSheetActions({
 }) {
   const resumable = {'paused', 'interrupted', 'stalled'};
   final canResume = resumable.contains(status);
+  final palette = context.palette;
 
   return Column(
     mainAxisSize: MainAxisSize.min,
@@ -48,21 +50,20 @@ Widget activeDownloadSheetActions({
       if (canResume)
         ListTile(
           key: const Key('downloads-sheet-resume'),
-          leading:
-              const Icon(Icons.play_arrow_rounded, color: AppColors.primary),
+          leading: Icon(Icons.play_arrow_rounded, color: palette.primary),
           title: const Text('Resume Download'),
           onTap: onResume,
         )
       else
         ListTile(
           key: const Key('downloads-sheet-pause'),
-          leading: const Icon(Icons.pause_rounded, color: AppColors.primary),
+          leading: Icon(Icons.pause_rounded, color: palette.primary),
           title: const Text('Pause Download'),
           onTap: onPause,
         ),
       ListTile(
         key: const Key('downloads-sheet-restart'),
-        leading: const Icon(Icons.refresh_rounded, color: AppColors.primary),
+        leading: Icon(Icons.refresh_rounded, color: palette.primary),
         title: const Text('Restart Download'),
         subtitle: const Text('Discards progress and starts over'),
         onTap: onRestart,
@@ -264,6 +265,7 @@ class DownloadsScreen extends ConsumerWidget {
 
   Widget _buildFailedSection(
       BuildContext context, WidgetRef ref, List<DownloadTask> failed) {
+    final palette = context.palette;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -290,7 +292,7 @@ class DownloadsScreen extends ConsumerWidget {
                 icon: const Icon(Icons.refresh_rounded, size: 16),
                 label: const Text('Retry All', style: TextStyle(fontSize: 12)),
                 style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primary,
+                  foregroundColor: palette.primary,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   minimumSize: const Size(0, 32),
@@ -306,7 +308,7 @@ class DownloadsScreen extends ConsumerWidget {
                 label:
                     const Text('Dismiss All', style: TextStyle(fontSize: 12)),
                 style: TextButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary,
+                  foregroundColor: palette.textSecondary,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   minimumSize: const Size(0, 32),
@@ -342,6 +344,7 @@ class DownloadsScreen extends ConsumerWidget {
   Widget _buildGridItem(
       BuildContext context, WidgetRef ref, DownloadGroup group,
       {String? serverLabel}) {
+    final palette = context.palette;
     final isActive = group.activeTasks.isNotEmpty;
     final DownloadTask? activeTask = isActive ? group.activeTasks.first : null;
 
@@ -400,9 +403,8 @@ class DownloadsScreen extends ConsumerWidget {
                     fallbackUrl: group.posterUrl,
                     cacheManager: PosterCacheManager(),
                     placeholder: (_) => Container(
-                      color: AppColors.surfaceVariant,
-                      child: const Icon(Icons.movie,
-                          color: AppColors.textSecondary),
+                      color: palette.surfaceVariant,
+                      child: Icon(Icons.movie, color: palette.textSecondary),
                     ),
                   ),
                 ),
@@ -424,7 +426,7 @@ class DownloadsScreen extends ConsumerWidget {
                           height: 48,
                           child: CircularProgressIndicator(
                             value: progress,
-                            color: AppColors.primary,
+                            color: palette.primary,
                             backgroundColor:
                                 Colors.white.withValues(alpha: 0.15),
                             strokeWidth: 4,
@@ -491,7 +493,7 @@ class DownloadsScreen extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
+                        color: palette.primary,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
@@ -542,8 +544,8 @@ class DownloadsScreen extends ConsumerWidget {
                     key: Key('download-group-source-${group.sourceId.value}'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
+                    style: TextStyle(
+                      color: palette.textSecondary,
                       fontSize: 10,
                     ),
                   ),
@@ -554,8 +556,8 @@ class DownloadsScreen extends ConsumerWidget {
                     activeTask.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
+                    style: TextStyle(
+                      color: palette.textSecondary,
                       fontSize: 10,
                     ),
                   ),
@@ -612,8 +614,8 @@ class DownloadsScreen extends ConsumerWidget {
                             parts.join(' \u00B7 '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
+                            style: TextStyle(
+                              color: palette.textSecondary,
                               fontSize: 10,
                             ),
                           );
@@ -629,8 +631,8 @@ class DownloadsScreen extends ConsumerWidget {
                         ? '${group.downloads.length} episode${group.downloads.length == 1 ? '' : 's'}'
                         : group.downloads.first.fileSizeDisplay,
                     maxLines: 1,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
+                    style: TextStyle(
+                      color: palette.textSecondary,
                       fontSize: 10,
                     ),
                   ),
@@ -647,18 +649,18 @@ class DownloadsScreen extends ConsumerWidget {
     final manager = await ref.read(downloadManagerProvider.future);
 
     if (!context.mounted) return;
+    final palette = context.palette;
 
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: palette.surface,
         title: const Text('Cancel Download?'),
         content: Text('Stop downloading "${task.title}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Keep',
-                style: TextStyle(color: AppColors.textSecondary)),
+            child: Text('Keep', style: TextStyle(color: palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () {
@@ -675,11 +677,12 @@ class DownloadsScreen extends ConsumerWidget {
 
   void _showItemOptions(
       BuildContext context, WidgetRef ref, DownloadGroup group) {
+    final palette = context.palette;
     final isActive = group.activeTasks.isNotEmpty;
 
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: palette.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -695,7 +698,7 @@ class DownloadsScreen extends ConsumerWidget {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: AppColors.textSecondary.withValues(alpha: 0.3),
+                  color: palette.textSecondary.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -747,8 +750,8 @@ class DownloadsScreen extends ConsumerWidget {
               ] else if (group.type == GroupType.movie) ...[
                 // Completed movie: play + delete
                 ListTile(
-                  leading: const Icon(Icons.play_arrow_rounded,
-                      color: AppColors.primary),
+                  leading:
+                      Icon(Icons.play_arrow_rounded, color: palette.primary),
                   title: const Text('Play'),
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -771,8 +774,7 @@ class DownloadsScreen extends ConsumerWidget {
               ] else if (group.type == GroupType.series) ...[
                 // Completed series: view episodes + delete all
                 ListTile(
-                  leading:
-                      const Icon(Icons.list_rounded, color: AppColors.primary),
+                  leading: Icon(Icons.list_rounded, color: palette.primary),
                   title: const Text('View Episodes'),
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -809,18 +811,19 @@ class DownloadsScreen extends ConsumerWidget {
 
   Future<void> _showDeleteMovieDialog(
       BuildContext context, WidgetRef ref, DownloadGroup group) async {
+    final palette = context.palette;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: palette.surface,
         title: const Text('Delete Download'),
         content: Text(
             'Delete "${group.title}"? The downloaded file will be removed.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textSecondary)),
+            child:
+                Text('Cancel', style: TextStyle(color: palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -841,11 +844,12 @@ class DownloadsScreen extends ConsumerWidget {
 
   Future<void> _showDeleteSeriesDialog(
       BuildContext context, WidgetRef ref, DownloadGroup group) async {
+    final palette = context.palette;
     final episodeCount = group.downloads.length + group.activeTasks.length;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: palette.surface,
         title: const Text('Delete All Episodes'),
         content: Text(
           'Delete all $episodeCount episode${episodeCount == 1 ? '' : 's'} of "${group.title}"?',
@@ -853,8 +857,8 @@ class DownloadsScreen extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textSecondary)),
+            child:
+                Text('Cancel', style: TextStyle(color: palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -873,10 +877,11 @@ class DownloadsScreen extends ConsumerWidget {
 
   static Future<void> _showCancelAllQueuedDialog(
       BuildContext context, WidgetRef ref, int queuedCount) async {
+    final palette = context.palette;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: palette.surface,
         title: const Text('Cancel All Queued?'),
         content: Text(
           'Cancel $queuedCount queued download${queuedCount == 1 ? '' : 's'}?',
@@ -884,8 +889,7 @@ class DownloadsScreen extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep',
-                style: TextStyle(color: AppColors.textSecondary)),
+            child: Text('Keep', style: TextStyle(color: palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -947,6 +951,7 @@ class DownloadsScreen extends ConsumerWidget {
   /// uses rather than a mirror of it.
   @visibleForTesting
   static PreferredSizeWidget header(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final queueAsync = ref.watch(downloadQueueProvider);
     final queuedCount = queueAsync.whenOrNull(
           data: (tasks) => tasks
@@ -963,9 +968,9 @@ class DownloadsScreen extends ConsumerWidget {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.download_rounded,
-                color: AppColors.primary,
+                color: palette.primary,
                 size: 24,
               ),
               const SizedBox(width: 10),
@@ -984,9 +989,9 @@ class DownloadsScreen extends ConsumerWidget {
                 onPressed: () =>
                     _showCancelAllQueuedDialog(context, ref, queuedCount),
                 tooltip: 'Cancel all queued',
-                icon: const Icon(
+                icon: Icon(
                   Icons.clear_all_rounded,
-                  color: AppColors.textSecondary,
+                  color: palette.textSecondary,
                 ),
               ),
               const SizedBox(width: 4),
@@ -999,15 +1004,16 @@ class DownloadsScreen extends ConsumerWidget {
 
   Widget _buildStorageHeader(
       BuildContext context, WidgetRef ref, StorageQuotaStatus status) {
+    final palette = context.palette;
     // Determine colors based on status
     final isWarning = status.isWarningExceeded;
     final isFull = status.isFull;
     final iconColor = isFull
         ? AppColors.error
-        : (isWarning ? AppColors.warning : AppColors.primary);
+        : (isWarning ? AppColors.warning : palette.primary);
     final progressColor = isFull
         ? AppColors.error
-        : (isWarning ? AppColors.warning : AppColors.primary);
+        : (isWarning ? AppColors.warning : palette.primary);
 
     final hasActiveDownloads =
         status.inProgressBytes > 0 || status.queuedBytes > 0;
@@ -1020,15 +1026,15 @@ class DownloadsScreen extends ConsumerWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColors.surface,
-            AppColors.surfaceVariant.withValues(alpha: 0.5),
+            palette.surface,
+            palette.surfaceVariant.withValues(alpha: 0.5),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isWarning
               ? iconColor.withValues(alpha: 0.5)
-              : AppColors.divider.withValues(alpha: 0.3),
+              : palette.divider.withValues(alpha: 0.3),
         ),
       ),
       child: Column(
@@ -1060,7 +1066,7 @@ class DownloadsScreen extends ConsumerWidget {
                     Text(
                       'Storage Used',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textSecondary,
+                            color: palette.textSecondary,
                           ),
                     ),
                     const SizedBox(height: 4),
@@ -1078,17 +1084,17 @@ class DownloadsScreen extends ConsumerWidget {
               ),
               // Settings button
               Material(
-                color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                color: palette.surfaceVariant.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(8),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(8),
                   onTap: () => _showStorageSettings(context, ref, status),
-                  child: const Padding(
-                    padding: EdgeInsets.all(8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
                     child: Icon(
                       Icons.settings_rounded,
                       size: 20,
-                      color: AppColors.textSecondary,
+                      color: palette.textSecondary,
                     ),
                   ),
                 ),
@@ -1101,6 +1107,7 @@ class DownloadsScreen extends ConsumerWidget {
             _buildSegmentedProgressBar(
               status: status,
               completedColor: progressColor,
+              remainingColor: palette.surfaceVariant,
             ),
           ],
           // Breakdown of in-progress and queued downloads
@@ -1116,6 +1123,7 @@ class DownloadsScreen extends ConsumerWidget {
   Widget _buildSegmentedProgressBar({
     required StorageQuotaStatus status,
     required Color completedColor,
+    required Color remainingColor,
   }) {
     final maxBytes = status.maxBytes ?? 1;
     final completedFrac = (status.usedBytes / maxBytes).clamp(0.0, 1.0);
@@ -1154,7 +1162,7 @@ class DownloadsScreen extends ConsumerWidget {
             if (remainingFrac > 0)
               Flexible(
                 flex: (remainingFrac * 1000).round(),
-                child: Container(color: AppColors.surfaceVariant),
+                child: Container(color: remainingColor),
               ),
           ],
         ),
@@ -1204,7 +1212,7 @@ class DownloadsScreen extends ConsumerWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
+                color: context.palette.textSecondary,
                 fontSize: 11,
               ),
         ),
@@ -1217,7 +1225,7 @@ class DownloadsScreen extends ConsumerWidget {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.palette.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1239,6 +1247,7 @@ class DownloadsScreen extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final palette = context.palette;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -1248,13 +1257,13 @@ class DownloadsScreen extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: palette.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.cloud_download_rounded,
                 size: 56,
-                color: AppColors.primary,
+                color: palette.primary,
               ),
             ),
             const SizedBox(height: 24),
@@ -1269,7 +1278,7 @@ class DownloadsScreen extends ConsumerWidget {
             Text(
               'Download movies and shows to watch offline',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: palette.textSecondary,
                   ),
               textAlign: TextAlign.center,
             ),
@@ -1284,6 +1293,7 @@ class DownloadsScreen extends ConsumerWidget {
     WidgetRef ref,
     DownloadTask task,
   ) {
+    final palette = context.palette;
     final posterUrl = task.mediaType == 'episode'
         ? (task.showPosterUrl ?? task.posterUrl)
         : task.posterUrl;
@@ -1291,7 +1301,7 @@ class DownloadsScreen extends ConsumerWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: palette.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: AppColors.error.withValues(alpha: 0.3),
@@ -1308,8 +1318,8 @@ class DownloadsScreen extends ConsumerWidget {
               fallbackUrl: posterUrl,
               cacheManager: PosterCacheManager(),
               placeholder: (_) => Container(
-                color: AppColors.surfaceVariant,
-                child: const Icon(Icons.movie, color: AppColors.textSecondary),
+                color: palette.surfaceVariant,
+                child: Icon(Icons.movie, color: palette.textSecondary),
               ),
             ),
           ),
@@ -1371,7 +1381,7 @@ class DownloadsScreen extends ConsumerWidget {
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 0),
-                          backgroundColor: AppColors.primary,
+                          backgroundColor: palette.primary,
                           minimumSize: const Size(0, 32),
                         ),
                         child:
@@ -1484,10 +1494,11 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
       return;
     }
 
+    final palette = context.palette;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: palette.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Clean Up Downloads'),
         content: Text(
@@ -1497,8 +1508,8 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textSecondary)),
+            child:
+                Text('Cancel', style: TextStyle(color: palette.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -1527,6 +1538,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       padding: EdgeInsets.only(
         left: 20,
@@ -1544,11 +1556,11 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
+                  color: palette.primary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.settings_rounded,
-                    color: AppColors.primary, size: 20),
+                child: Icon(Icons.settings_rounded,
+                    color: palette.primary, size: 20),
               ),
               const SizedBox(width: 12),
               Text(
@@ -1574,7 +1586,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+              color: palette.surfaceVariant.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(12),
             ),
             child: DropdownButtonHideUnderline(
@@ -1625,7 +1637,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+              color: palette.surfaceVariant.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(12),
             ),
             child: DropdownButtonHideUnderline(
@@ -1663,7 +1675,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
               Switch(
                 value: _autoStartQueued,
                 onChanged: (value) => setState(() => _autoStartQueued = value),
-                activeThumbColor: AppColors.primary,
+                activeThumbColor: palette.primary,
               ),
             ],
           ),
@@ -1685,7 +1697,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                 value: _autoCleanupEnabled,
                 onChanged: (value) =>
                     setState(() => _autoCleanupEnabled = value),
-                activeThumbColor: AppColors.primary,
+                activeThumbColor: palette.primary,
               ),
             ],
           ),
@@ -1703,7 +1715,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                color: palette.surfaceVariant.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: DropdownButtonHideUnderline(
@@ -1748,7 +1760,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                   onPressed: _saveSettings,
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: AppColors.primary,
+                    backgroundColor: palette.primary,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),

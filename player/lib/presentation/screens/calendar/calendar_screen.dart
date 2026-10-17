@@ -6,6 +6,7 @@ import '../../../core/cache/watcher_registry.dart';
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../widgets/browse_scaffold.dart';
@@ -120,23 +121,24 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   }
 
   Widget _empty(double scrollTopPadding) {
+    final palette = context.palette;
     return Padding(
       key: const ValueKey('calendar-empty'),
       padding: EdgeInsets.only(top: scrollTopPadding + 80, left: 32, right: 32),
-      child: const Column(
+      child: Column(
         children: [
           Icon(Icons.calendar_month_outlined,
-              size: 48, color: AppColors.textDisabled),
-          SizedBox(height: 16),
+              size: 48, color: palette.textDisabled),
+          const SizedBox(height: 16),
           Text(
             'Nothing scheduled',
-            style: TextStyle(fontSize: 17, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 17, color: palette.textSecondary),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'The calendar covers 30 days back and 90 days ahead.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: AppColors.textDisabled),
+            style: TextStyle(fontSize: 13, color: palette.textDisabled),
           ),
         ],
       ),
@@ -144,25 +146,26 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   }
 
   Widget _error(Object error, double scrollTopPadding) {
+    final palette = context.palette;
     if (isCalendarUnsupported(error)) {
       return Padding(
         key: const ValueKey('calendar-unsupported'),
         padding:
             EdgeInsets.only(top: scrollTopPadding + 80, left: 32, right: 32),
-        child: const Column(
+        child: Column(
           children: [
-            Icon(Icons.update, size: 48, color: AppColors.textDisabled),
-            SizedBox(height: 16),
+            Icon(Icons.update, size: 48, color: palette.textDisabled),
+            const SizedBox(height: 16),
             Text(
               'This server does not have the calendar yet',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 17, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 17, color: palette.textSecondary),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               'Update the server and the calendar will appear here.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: AppColors.textDisabled),
+              style: TextStyle(fontSize: 13, color: palette.textDisabled),
             ),
           ],
         ),
@@ -175,9 +178,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         children: [
           const Icon(Icons.error_outline, size: 48, color: AppColors.error),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'The calendar could not be loaded',
-            style: TextStyle(fontSize: 17, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 17, color: palette.textSecondary),
           ),
           const SizedBox(height: 8),
           TextButton(

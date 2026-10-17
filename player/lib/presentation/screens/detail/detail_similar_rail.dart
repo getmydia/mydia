@@ -9,7 +9,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../sources/source_poster_row.dart';
 import 'source_detail_controllers.dart';
@@ -77,10 +77,10 @@ class _DetailSimilarRailState extends ConsumerState<DetailSimilarRail> {
                     turns: _expanded ? 0.5 : 0,
                     duration: _disclosureDuration,
                     curve: Curves.easeOutCubic,
-                    child: const Icon(
+                    child: Icon(
                       Icons.expand_more_rounded,
                       size: 26,
-                      color: AppColors.textSecondary,
+                      color: context.palette.textSecondary,
                     ),
                   ),
                 ],

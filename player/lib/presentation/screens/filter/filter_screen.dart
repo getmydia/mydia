@@ -6,7 +6,7 @@ import '../../../core/navigation/sidebar_layout_providers.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../filter/filter_editor_sheet.dart';
 import '../sources/source_library_screen.dart';
 
@@ -24,6 +24,7 @@ class FilterScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final layoutAsync = ref.watch(sidebarLayoutProvider);
 
     return layoutAsync.when(
@@ -58,14 +59,14 @@ class FilterScreen extends ConsumerWidget {
           canSaveAsFilter: false,
           actions: [
             PopupMenuButton<String>(
-              icon: const Icon(
+              icon: Icon(
                 Icons.more_vert_rounded,
-                color: AppColors.textSecondary,
+                color: palette.textSecondary,
                 size: 22,
               ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              color: AppColors.surface,
+              color: palette.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

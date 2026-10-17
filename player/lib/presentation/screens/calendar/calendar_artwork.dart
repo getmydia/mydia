@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/source_artwork.dart';
 
@@ -14,7 +14,7 @@ class CalendarArtwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const plain = ColoredBox(color: AppColors.surfaceVariant);
+    final plain = ColoredBox(color: context.palette.surfaceVariant);
     final sourceId = entry.ref.sourceId;
     final poster = entry.poster;
     final backdrop = entry.backdrop;

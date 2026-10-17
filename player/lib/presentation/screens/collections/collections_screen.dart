@@ -6,6 +6,7 @@ import '../../../core/cache/watcher_registry.dart';
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../../widgets/collection_card.dart';
 import '../sources/source_browse_providers.dart';
@@ -47,6 +48,7 @@ class CollectionsScreen extends ConsumerWidget {
 
   Widget _buildErrorView(
       BuildContext context, Object error, VoidCallback onRetry) {
+    final palette = context.palette;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -77,7 +79,7 @@ class CollectionsScreen extends ConsumerWidget {
             Text(
               error.toString(),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: palette.textSecondary,
                   ),
               textAlign: TextAlign.center,
             ),
@@ -98,6 +100,7 @@ class CollectionsScreen extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final palette = context.palette;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -107,13 +110,13 @@ class CollectionsScreen extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: palette.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.collections_bookmark_outlined,
                 size: 56,
-                color: AppColors.primary,
+                color: palette.primary,
               ),
             ),
             const SizedBox(height: 24),
@@ -128,7 +131,7 @@ class CollectionsScreen extends ConsumerWidget {
             Text(
               'Create collections in Mydia to organize your media',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: palette.textSecondary,
                   ),
               textAlign: TextAlign.center,
             ),
