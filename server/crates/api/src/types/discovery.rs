@@ -6,6 +6,7 @@
 //! RemoteAccessStatus, ServerCompatibility, CalendarEntry, CalendarEntryKind.
 
 use async_graphql::{Enum, SimpleObject, ID};
+use chrono::{DateTime, Utc};
 
 use crate::types::{
     common::{MediaType, SearchResultType},
@@ -28,6 +29,9 @@ pub struct ContinueWatchingItem {
     /// Why this item is on the rail: continue for a resume point, next for the
     /// successor of a finished episode.
     pub state: Option<String>,
+    /// When the viewer last watched this title; for an episode, the newest
+    /// watch across its whole show. The rail is ordered by it.
+    pub last_activity_at: Option<DateTime<Utc>>,
     /// TMDB id of the movie or show. Null for episodes and collections.
     pub tmdb_id: Option<i32>,
     /// TVDB id of the movie or show. Null for episodes and collections.
