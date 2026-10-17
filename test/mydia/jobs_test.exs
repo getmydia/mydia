@@ -125,6 +125,33 @@ defmodule Mydia.JobsTest do
     end
   end
 
+  describe "get_job_stats/1" do
+    test "returns an integer avg_duration_ms for completed jobs" do
+      now = DateTime.utc_now()
+
+      for seconds <- [2, 4] do
+        %{}
+        |> Mydia.Jobs.BlacklistCleanup.new()
+        |> Ecto.Changeset.change(%{
+          state: "completed",
+          attempted_at: DateTime.add(now, -seconds, :second),
+          completed_at: now
+        })
+        |> Repo.insert!()
+      end
+
+      stats = Jobs.get_job_stats(Mydia.Jobs.BlacklistCleanup)
+
+      assert stats.completed_count == 2
+      assert is_integer(stats.avg_duration_ms)
+      assert_in_delta stats.avg_duration_ms, 3000, 50
+    end
+
+    test "returns zero avg_duration_ms when no job completed" do
+      assert Jobs.get_job_stats(Mydia.Jobs.BlacklistCleanup).avg_duration_ms == 0
+    end
+  end
+
   # Both callers read the crontab out of the *running* Oban's normalized
   # config, so the fixture declares the legacy `Oban.Plugins.Cron` module name
   # exactly as config/config.exs does. Oban rewrites it to `Oban.Cron` on
