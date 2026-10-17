@@ -59,6 +59,19 @@ bool openSettingsFromHost(String route) {
   return host != null && openSettingsForRoute(host, route);
 }
 
+/// The macOS menu's navigate command. On desktop the dialog owns the
+/// settings routes: one the shell cannot open right now (a full-window flow
+/// is in front) is dropped rather than routed, so it never replaces that flow.
+void routeMenuNavigation(
+  String route, {
+  required bool dialogEnabled,
+  required void Function(String route) go,
+}) {
+  if (openSettingsFromHost(route)) return;
+  if (dialogEnabled && _categoryFor(route) != null) return;
+  go(route);
+}
+
 /// Ctrl+, on desktop: opens settings, and leaves an open dialog alone.
 bool openSettingsFromShortcut() =>
     !isSettingsDialogOpen && openSettingsFromHost('/settings');

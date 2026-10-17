@@ -240,6 +240,32 @@ void main() {
     expect(find.byKey(const Key('manage-add')), findsOneWidget);
   });
 
+  group('routeMenuNavigation', () {
+    List<String> run(String route, {required bool dialogEnabled}) {
+      final went = <String>[];
+      routeMenuNavigation(route, dialogEnabled: dialogEnabled, go: went.add);
+      return went;
+    }
+
+    test('drops settings routes the shell cannot open on desktop', () {
+      for (final route in [
+        '/settings',
+        '/sources/manage',
+        '/settings/diagnostics',
+      ]) {
+        expect(run(route, dialogEnabled: true), isEmpty, reason: route);
+      }
+    });
+
+    test('routes other destinations on desktop', () {
+      expect(run('/downloads', dialogEnabled: true), ['/downloads']);
+    });
+
+    test('routes settings plainly when the dialog is off', () {
+      expect(run('/settings', dialogEnabled: false), ['/settings']);
+    });
+  });
+
   test('isSettingsShortcut matches Ctrl+, key-down only', () {
     const down = KeyDownEvent(
       physicalKey: PhysicalKeyboardKey.comma,
