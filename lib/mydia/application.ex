@@ -66,6 +66,9 @@ defmodule Mydia.Application do
       Mydia.Plugins.register_plugins()
       # Ensure default quality profiles exist (skip in test environment)
       if Application.get_env(:mydia, :start_health_monitors, true) do
+        # First health checks, deferred until the adapters above exist.
+        Mydia.Downloads.ClientHealth.refresh_all_clients()
+        Mydia.Indexers.Health.refresh_all_indexers()
         ensure_default_quality_profiles()
         validate_library_paths()
         # Sync library paths and populate relative paths for media files

@@ -163,11 +163,11 @@ defmodule Mydia.Indexers.Health do
     # Register as health check provider
     Health.register_provider(:indexer, __MODULE__)
 
-    # Schedule periodic health checks
+    # Schedule periodic health checks. The first check is not run here: init
+    # happens inside the supervisor's start, before Mydia.Application registers
+    # the indexer adapters, so every indexer would fail as an unknown type.
+    # Mydia.Application calls refresh_all_indexers/0 once they are registered.
     schedule_health_check()
-
-    # Perform initial health check
-    perform_all_health_checks()
 
     Logger.info("Indexer health monitoring started")
     {:ok, %{}}

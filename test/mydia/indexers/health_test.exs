@@ -53,6 +53,46 @@ defmodule Mydia.Indexers.HealthTest do
     end
   end
 
+  describe "startup" do
+    # init/1 runs before Mydia.Application registers the indexer adapters, so a
+    # probe from there fails every indexer as an unknown type on every boot.
+    test "starting the monitor does not probe; refresh_all_indexers/0 does" do
+      bypass = Bypass.open()
+      test_pid = self()
+
+      Bypass.stub(bypass, "GET", "/api/v1/system/status", fn conn ->
+        send(test_pid, :probed)
+        Plug.Conn.resp(conn, 500, "")
+      end)
+
+      {:ok, indexer} =
+        Settings.create_indexer_config(%{
+          name: "Startup Prowlarr",
+          type: :prowlarr,
+          base_url: "http://localhost:#{bypass.port}",
+          api_key: "key",
+          enabled: true
+        })
+
+      start_supervised!(Health)
+      refute_receive :probed, 300
+
+      Health.refresh_all_indexers()
+      assert_receive :probed, 2_000
+
+      # Let the probe task finish before the monitor (and its ETS tables) stops.
+      assert wait_until(fn -> Health.status_map([indexer])[indexer.id].status != :unknown end)
+    end
+
+    defp wait_until(fun, attempts \\ 40) do
+      cond do
+        fun.() -> true
+        attempts == 0 -> false
+        true -> Process.sleep(50) && wait_until(fun, attempts - 1)
+      end
+    end
+  end
+
   describe "paused Prowlarr indexers" do
     test "a healthy Prowlarr check carries the paused list in details" do
       start_supervised!(Health)

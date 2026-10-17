@@ -61,8 +61,23 @@ defmodule Mydia.Plugins.Notifier.Delivery do
   end
 
   defp deliver(slug, instance, payload) do
-    full_payload = Map.put(payload, "config", Instances.config_for(instance))
+    config = Instances.config_for(instance)
 
+    if webhook_configured?(config) do
+      call_guest(slug, instance, Map.put(payload, "config", config))
+    else
+      # An enabled instance nobody has pointed anywhere yet. Retrying cannot
+      # change that, so cancel instead of failing every event five times.
+      {:cancel, "no webhook_url configured"}
+    end
+  end
+
+  defp webhook_configured?(%{"webhook_url" => url}) when is_binary(url),
+    do: String.trim(url) != ""
+
+  defp webhook_configured?(_config), do: false
+
+  defp call_guest(slug, instance, full_payload) do
     case Host.call(slug, "handle", full_payload, instance_id: instance.id) do
       {:ok, %{"delivered" => true}} ->
         :ok

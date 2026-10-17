@@ -665,12 +665,12 @@ defmodule MydiaWeb.DashboardLive.Index do
     end
   end
 
-  # Grab outcomes are broadcast on the "downloads" topic and handled by
-  # MediaLive.Show, which owns the manual-search UI. Ignore them quietly here
-  # so the catch-all below keeps meaning "genuinely unexpected message".
-  def handle_info({:grab_completed, _payload}, socket), do: {:noreply, socket}
-  def handle_info({:grab_failed, _payload}, socket), do: {:noreply, socket}
-  def handle_info({:grab_duplicate, _payload}, socket), do: {:noreply, socket}
+  # "downloads" events other LiveViews own; ignored so the catch-all means "unexpected".
+  def handle_info({event, _payload}, socket)
+      when event in [:grab_completed, :grab_failed, :grab_duplicate],
+      do: {:noreply, socket}
+
+  def handle_info(:external_scan_updated, socket), do: {:noreply, socket}
 
   @impl true
   def handle_info(:refresh_health, socket) do
