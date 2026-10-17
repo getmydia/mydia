@@ -158,6 +158,48 @@ void main() {
     expect(d.showBackdrop, isNotNull);
   });
 
+  test('continue watching dates a card by its activity, not its episode', () {
+    Map<String, dynamic> card({Object? activity, Object? watchedAt}) => {
+          'id': 'e-22',
+          'type': 'EPISODE',
+          'title': 'High Water',
+          'showId': 's-1',
+          'showTitle': 'Lantern Street',
+          'seasonNumber': 2,
+          'episodeNumber': 2,
+          if (activity != null) 'lastActivityAt': activity,
+          'progress': {
+            'positionSeconds': 0,
+            'durationSeconds': 1440,
+            'percentage': 0.0,
+            'watched': false,
+            'lastWatchedAt': watchedAt,
+          },
+          'files': <Object>[],
+        };
+
+    // A next card: its own episode was never started, the show was watched.
+    expect(
+        continueWatchingSummary(s, card(activity: '2026-10-17T12:38:36Z'))!
+            .lastPlayedAt,
+        DateTime.utc(2026, 10, 17, 12, 38, 36));
+    // The activity wins over the episode's own date.
+    expect(
+        continueWatchingSummary(
+                s,
+                card(
+                    activity: '2026-10-17T12:38:36Z',
+                    watchedAt: '2026-10-01T09:00:00Z'))!
+            .lastPlayedAt,
+        DateTime.utc(2026, 10, 17, 12, 38, 36));
+    // A server without the field: the episode's own date, as before.
+    expect(
+        continueWatchingSummary(s, card(watchedAt: '2026-10-01T09:00:00Z'))!
+            .lastPlayedAt,
+        DateTime.utc(2026, 10, 1, 9));
+    expect(continueWatchingSummary(s, card())!.lastPlayedAt, isNull);
+  });
+
   test('continue watching maps movies and episodes, skips unknown types', () {
     final movie = continueWatchingSummary(s, {
       'id': 'm-1',

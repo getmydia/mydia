@@ -4,6 +4,7 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/mydia/mydia_mapping.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
@@ -201,6 +202,42 @@ void main() {
     expect(rows.loading, isFalse);
     expect(rows.error, isNull);
     expect(rows.isEmpty, isTrue);
+  });
+
+  test('a next card for a show watched today outranks a stale resume', () {
+    Map<String, dynamic> card(String id, String type,
+            {String? activity, String? watchedAt, int position = 0}) =>
+        {
+          'id': id,
+          'type': type,
+          'title': id,
+          if (type == 'EPISODE') 'showId': 'show-$id',
+          if (activity != null) 'lastActivityAt': activity,
+          'progress': {
+            'positionSeconds': position,
+            'durationSeconds': 1440,
+            'percentage': 0.0,
+            'watched': false,
+            'lastWatchedAt': watchedAt,
+          },
+          'files': <Object>[],
+        };
+
+    final stale = continueWatchingSummary(
+        a.id,
+        card('half-watched', 'MOVIE',
+            activity: '2026-10-02T20:46:44Z',
+            watchedAt: '2026-10-02T20:46:44Z',
+            position: 672))!;
+    final binge = continueWatchingSummary(
+        a.id, card('next-up', 'EPISODE', activity: '2026-10-17T12:38:36Z'))!;
+
+    // The server's order, which the merge must not undo.
+    final rows = buildHomeRows([
+      feeds(a, resuming: [binge, stale])
+    ]);
+    expect(rows.continueWatching.map((i) => i.ref.externalId),
+        ['next-up', 'half-watched']);
   });
 
   test('copies on two servers are one card with a count', () {

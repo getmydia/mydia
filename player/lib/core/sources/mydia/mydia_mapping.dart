@@ -194,7 +194,10 @@ ItemSummary? continueWatchingSummary(SourceId sid, Map<String, dynamic> c) {
     index: c['episodeNumber'] as int?,
     parentIndex: c['seasonNumber'] as int?,
     defaultVersionId: _firstFileId(c['files']),
-    lastPlayedAt: _instant(_map(c['progress'])['lastWatchedAt']),
+    // The show's newest watch, which the server ranks the rail by. A next
+    // card's own episode was never played, so its progress has no date.
+    lastPlayedAt: _instant(c['lastActivityAt']) ??
+        _instant(_map(c['progress'])['lastWatchedAt']),
     externalIds: kind == ItemKind.movie ? _ids(c) : ExternalIds.none,
     showRef: kind == ItemKind.episode && c['showId'] != null
         ? _ref(sid, ItemKind.show, c['showId'].toString())
