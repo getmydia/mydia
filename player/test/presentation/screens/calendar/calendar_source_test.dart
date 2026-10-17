@@ -69,6 +69,13 @@ void main() {
                 'f$i', DateTime(today.year, today.month, today.day + i),
                 playable: true),
           calendarEntry('later', later),
+          // Content below `later` so it can scroll to the top of the
+          // viewport. Without it, a `later` that is the 1st of a month stays
+          // clamped at the end of the list and the previous month is topmost.
+          for (var i = 1; i <= 20; i++)
+            calendarEntry(
+                'a$i', DateTime(later.year, later.month, later.day + i),
+                playable: true),
         ])
       ],
     );
