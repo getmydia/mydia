@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/connection/connection_summary.dart';
 import '../../../core/layout/dock_insets.dart';
@@ -12,6 +11,7 @@ import '../../widgets/connection_tone_color.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../sources/manage_sources_screen.dart';
 import 'settings_controller.dart';
+import 'settings_nav.dart';
 import '../../../core/sources/mydia/source_link.dart';
 import '../../../core/sources/sources_providers.dart'
     show activeSourceIdProvider, mydiaAccountCountProvider;
@@ -145,7 +145,7 @@ class _ManageSection extends ConsumerWidget {
           title: 'Diagnostics',
           subtitle: connection.label,
           subtitleDotColor: connectionToneColor(connection.tone),
-          onTap: () => context.push('/settings/diagnostics'),
+          onTap: () => SettingsNavScope.of(context).openDiagnostics(),
         ),
         ...remoteControlRows(context, ref),
         ...updateRows(context, ref),
