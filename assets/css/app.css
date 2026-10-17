@@ -40,7 +40,6 @@
 @plugin "./mydiaTheme.ts";
 
 /* Catppuccin, one plugin per flavour */
-@plugin "./catppuccinTheme.latte.ts";
 @plugin "./catppuccinTheme.frappe.ts";
 @plugin "./catppuccinTheme.macchiato.ts";
 @plugin "./catppuccinTheme.mocha.ts";

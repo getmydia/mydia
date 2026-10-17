@@ -6,7 +6,7 @@ import daisyTheme from "daisyui/theme";
 // flavour changes between theme files.
 import { flavors } from "../node_modules/@catppuccin/palette/script/mod.js";
 
-type Flavor = "latte" | "frappe" | "macchiato" | "mocha";
+type Flavor = "frappe" | "macchiato" | "mocha";
 
 const colors: Record<string, string> = {
   primary: "lavender",

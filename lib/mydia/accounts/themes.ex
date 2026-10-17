@@ -19,7 +19,6 @@ defmodule Mydia.Accounts.Themes do
     %Theme{id: "mydia-light", label: "Mydia Light", scheme: :light, base: "#f8fafc"},
     %Theme{id: "nord", label: "Nord", scheme: :light, base: "#eceff4"},
     %Theme{id: "emerald", label: "Emerald", scheme: :light, base: "#ffffff"},
-    %Theme{id: "latte", label: "Catppuccin Latte", scheme: :light, base: "#eff1f5"},
     %Theme{id: "mydia-dark", label: "Mydia Dark", scheme: :dark, base: "#0f172a"},
     %Theme{id: "mydia-oled", label: "Mydia OLED", scheme: :dark, base: "#000000"},
     %Theme{id: "dim", label: "Dim", scheme: :dark, base: "#2a303c"},
