@@ -4,7 +4,6 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/compatibility/compatibility_provider.dart';
 import '../../../core/compatibility/compatibility_verdict.dart';
@@ -20,6 +19,7 @@ import '../../../core/theme/colors.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../settings/devices_screen.dart';
+import '../settings/settings_nav.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
 import 'confirm_remove_account.dart';
@@ -52,7 +52,8 @@ final serverCompatibilityProvider = FutureProvider.autoDispose
 /// Where the instance is reached: its address, or p2p for a paired server.
 final mydiaInstanceAddressProvider =
     FutureProvider.autoDispose.family<String?, SourceId>((ref, sourceId) async {
-  final account = _accountOf(ref.watch(sourceRecordsProvider).value, sourceId);
+  final account =
+      mydiaAccountFor(ref.watch(sourceRecordsProvider).value, sourceId);
   if (account == null) return null;
   final credentials =
       await readMydiaCredentials(ref.watch(sourceSecretsProvider), account);
@@ -60,7 +61,7 @@ final mydiaInstanceAddressProvider =
       (credentials?.isP2p == true ? 'Paired over p2p' : null);
 });
 
-ProviderAccount? _accountOf(SourceSnapshot? snapshot, SourceId sourceId) {
+ProviderAccount? mydiaAccountFor(SourceSnapshot? snapshot, SourceId sourceId) {
   for (final r in snapshot?.accounts ?? const <SourceAccountRecord>[]) {
     if (r.account.kind == SourceKind.mydia && mydiaSourceIdOf(r) == sourceId) {
       return r.account;
@@ -82,17 +83,62 @@ String _verdictLabel(CompatibilityVerdict v) => switch (v) {
       CompatibilityVerdict.unknown => 'Compatibility unknown',
     };
 
-class MydiaInstanceScreen extends ConsumerWidget {
+class MydiaInstanceScreen extends StatelessWidget {
   const MydiaInstanceScreen({super.key, required this.sourceId});
 
   final SourceId sourceId;
+
+  @override
+  Widget build(BuildContext context) {
+    // A full-window route outside the shell, so it owns the title-bar band
+    // and sits under `removeBand` itself.
+    return WindowChromeInsets.removeBand(
+      child: Builder(
+        builder: (context) => Consumer(
+          builder: (context, ref, _) {
+            final account = mydiaAccountFor(
+                ref.watch(sourceRecordsProvider).value, sourceId);
+            return Scaffold(
+              appBar: WindowTitleBar(
+                height: WindowTitleRow.heightOf(context),
+                leading: const BackButton(),
+                title: Text(
+                  account?.displayName ?? 'Server',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                decorate: (row) => ColoredBox(
+                  color: Theme.of(context).appBarTheme.backgroundColor ??
+                      AppColors.background,
+                  child: row,
+                ),
+              ),
+              body: MydiaInstanceBody(sourceId: sourceId),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// One instance's settings without a `Scaffold`: the mobile screen and the
+/// desktop settings dialog both host it.
+class MydiaInstanceBody extends ConsumerWidget {
+  const MydiaInstanceBody({
+    super.key,
+    required this.sourceId,
+    this.padding = const EdgeInsets.all(16),
+  });
+
+  final SourceId sourceId;
+  final EdgeInsets padding;
 
   Future<void> _remove(
     BuildContext context,
     WidgetRef ref,
     ProviderAccount account,
   ) async {
-    final router = GoRouter.of(context);
+    final nav = SettingsNavScope.of(context);
     final toaster = Toaster.of(context);
     try {
       final confirmed = await confirmRemoveAccount(
@@ -104,12 +150,7 @@ class MydiaInstanceScreen extends ConsumerWidget {
       );
       if (!confirmed) return;
       await removeMydiaInstance(ref, account);
-      // Removing the last or current source can already have sent the router
-      // elsewhere (add-a-server); only step back if still on this route.
-      final path = router.routerDelegate.currentConfiguration.uri.path;
-      if (context.mounted && path.startsWith('/sources/manage/')) {
-        router.go('/sources/manage');
-      }
+      nav.instanceRemoved();
     } catch (_) {
       toaster.show('Could not remove this server.', kind: ToastKind.error);
     }
@@ -118,75 +159,53 @@ class MydiaInstanceScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final account =
-        _accountOf(ref.watch(sourceRecordsProvider).value, sourceId);
-
-    // A full-window route outside the shell, so it owns the title-bar band
-    // and sits under `removeBand` itself.
-    return WindowChromeInsets.removeBand(
-      child: Builder(
-        builder: (context) => Scaffold(
-          appBar: WindowTitleBar(
-            height: WindowTitleRow.heightOf(context),
-            leading: const BackButton(),
-            title: Text(
-              account?.displayName ?? 'Server',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            decorate: (row) => ColoredBox(
-              color: Theme.of(context).appBarTheme.backgroundColor ??
-                  AppColors.background,
-              child: row,
-            ),
-          ),
-          body: account == null
-              ? const Center(child: Text('This server is no longer saved.'))
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 660),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            KeyedSubtree(
-                              key: const Key('mydia-instance-server'),
-                              child: _ServerSection(
-                                  sourceId: sourceId, account: account),
-                            ),
-                            const SizedBox(height: 18),
-                            KeyedSubtree(
-                              key: const Key('mydia-instance-registration'),
-                              child: _RegistrationSection(sourceId: sourceId),
-                            ),
-                            const SizedBox(height: 18),
-                            KeyedSubtree(
-                              key: const Key('mydia-instance-devices'),
-                              child: DevicesSection(sourceId: sourceId),
-                            ),
-                            const SizedBox(height: 18),
-                            SettingsSection(
-                              label: 'Remove',
-                              children: [
-                                SettingsRow.action(
-                                  key: const Key('mydia-instance-remove'),
-                                  icon: Icons.logout,
-                                  title: 'Remove this server',
-                                  subtitle: 'Signs out on this device only',
-                                  danger: true,
-                                  onTap: () => _remove(context, ref, account),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+        mydiaAccountFor(ref.watch(sourceRecordsProvider).value, sourceId);
+    return account == null
+        ? const Center(child: Text('This server is no longer saved.'))
+        : ListView(
+            padding: padding,
+            children: [
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 660),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      KeyedSubtree(
+                        key: const Key('mydia-instance-server'),
+                        child: _ServerSection(
+                            sourceId: sourceId, account: account),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 18),
+                      KeyedSubtree(
+                        key: const Key('mydia-instance-registration'),
+                        child: _RegistrationSection(sourceId: sourceId),
+                      ),
+                      const SizedBox(height: 18),
+                      KeyedSubtree(
+                        key: const Key('mydia-instance-devices'),
+                        child: DevicesSection(sourceId: sourceId),
+                      ),
+                      const SizedBox(height: 18),
+                      SettingsSection(
+                        label: 'Remove',
+                        children: [
+                          SettingsRow.action(
+                            key: const Key('mydia-instance-remove'),
+                            icon: Icons.logout,
+                            title: 'Remove this server',
+                            subtitle: 'Signs out on this device only',
+                            danger: true,
+                            onTap: () => _remove(context, ref, account),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-        ),
-      ),
-    );
+              ),
+            ],
+          );
   }
 }
 

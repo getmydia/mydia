@@ -14,7 +14,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../widgets/toast/toaster.dart';
-import '../detail/detail_links.dart';
+import '../settings/settings_nav.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
 import 'confirm_remove_account.dart';
@@ -46,8 +46,52 @@ Future<void> removeMydiaInstance(WidgetRef ref, ProviderAccount account) async {
   await ref.read(sourceRecordsProvider.notifier).removeAccount(account.id);
 }
 
-class ManageSourcesScreen extends ConsumerWidget {
+class ManageSourcesScreen extends StatelessWidget {
   const ManageSourcesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: const Text('Other servers'),
+          actions: [
+            AddServerButton(
+                onPressed: () => SettingsNavScope.of(context).addServer()),
+          ],
+        ),
+        body: const ManageSourcesBody(showAddButton: false),
+      );
+}
+
+/// The `manage-add` button, in the mobile app bar or at the top of the
+/// dialog's Servers pane.
+class AddServerButton extends StatelessWidget {
+  const AddServerButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+        key: const Key('manage-add'),
+        onPressed: onPressed,
+        icon: const Icon(Icons.add),
+        label: const Text('Add server'),
+      );
+}
+
+/// The saved servers, without a `Scaffold`: the mobile screen and the desktop
+/// settings dialog both host it.
+class ManageSourcesBody extends ConsumerWidget {
+  const ManageSourcesBody({
+    super.key,
+    this.padding = const EdgeInsets.all(16),
+    this.showAddButton = true,
+  });
+
+  final EdgeInsets padding;
+
+  /// False where the host already shows [AddServerButton], as the mobile app
+  /// bar does.
+  final bool showAddButton;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -60,45 +104,41 @@ class ManageSourcesScreen extends ConsumerWidget {
                 r.servers.any((sv) => r.lockOf(sv.id) != SourceLock.hidden))
               r,
         ];
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Other servers'),
-        actions: [
-          TextButton.icon(
-            key: const Key('manage-add'),
-            onPressed: () => context.push('/sources/add'),
-            icon: const Icon(Icons.add),
-            label: const Text('Add server'),
-          ),
-        ],
-      ),
-      body: switch (records) {
-        AsyncData(:final value) when visible(value).isEmpty => ListView(
-            padding: const EdgeInsets.all(16),
-            children: const [
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: Text('No servers yet.')),
-              ),
-              ShowHiddenSourcesRow(),
-            ],
-          ),
-        AsyncData(:final value) => ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              for (final record in visible(value))
-                _AccountCard(
-                    key: ValueKey(record.account.id),
-                    record: record,
-                    unlocked: unlocked),
-              const ShowHiddenSourcesRow(),
-            ],
-          ),
-        AsyncError() =>
-          const Center(child: Text('Could not read the saved servers.')),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
-    );
+    final addButton = showAddButton
+        ? Align(
+            alignment: Alignment.centerRight,
+            child: AddServerButton(
+                onPressed: () => SettingsNavScope.of(context).addServer()),
+          )
+        : null;
+    return switch (records) {
+      AsyncData(:final value) when visible(value).isEmpty => ListView(
+          padding: padding,
+          children: [
+            if (addButton != null) addButton,
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: Text('No servers yet.')),
+            ),
+            const ShowHiddenSourcesRow(),
+          ],
+        ),
+      AsyncData(:final value) => ListView(
+          padding: padding,
+          children: [
+            if (addButton != null) addButton,
+            for (final record in visible(value))
+              _AccountCard(
+                  key: ValueKey(record.account.id),
+                  record: record,
+                  unlocked: unlocked),
+            const ShowHiddenSourcesRow(),
+          ],
+        ),
+      AsyncError() =>
+        const Center(child: Text('Could not read the saved servers.')),
+      _ => const Center(child: CircularProgressIndicator()),
+    };
   }
 }
 
@@ -198,8 +238,8 @@ class _AccountCard extends ConsumerWidget {
                     key: Key('manage-settings-${account.id}'),
                     tooltip: 'Settings',
                     icon: const Icon(Icons.settings_rounded),
-                    onPressed: () => context.push(
-                        '/sources/manage/${mydiaSourceIdOf(record).value}'),
+                    onPressed: () => SettingsNavScope.of(context)
+                        .openInstance(mydiaSourceIdOf(record)),
                   ),
                 if (account.kind == SourceKind.plex &&
                     record.profiles.length > 1)
@@ -208,14 +248,15 @@ class _AccountCard extends ConsumerWidget {
                     onPressed: () => showPlexHomeSheet(
                       context,
                       account: account,
-                      onSwitched: (id) => context.go(sourceHomeLocation(id)),
+                      onSwitched: (id) =>
+                          SettingsNavScope.of(context).switchedTo(id),
                     ),
                     child: const Text('Switch user'),
                   ),
                 OutlinedButton(
                   key: Key('manage-reauth-${account.id}'),
-                  onPressed: () => context.push(
-                      '/sources/add/${account.kind.name}?account=${account.id}'),
+                  onPressed: () => SettingsNavScope.of(context)
+                      .reauth(account.kind, account.id),
                   child: Text(account.needsReauth
                       ? 'Sign in again'
                       : switch (account.kind) {

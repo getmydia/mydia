@@ -32,23 +32,11 @@ import 'widgets/settings_section.dart';
 /// device itself cannot otherwise be asked: on iOS Safari the fullscreen button
 /// can be present and do nothing, and every explanation for that used to be a
 /// `debugPrint` reachable only from a Mac with Web Inspector attached.
-class DiagnosticsScreen extends ConsumerWidget {
+class DiagnosticsScreen extends StatelessWidget {
   const DiagnosticsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final activeId = ref.watch(activeSourceIdProvider);
-    final isP2P = activeId != null &&
-        (ref.watch(sourceViaP2pProvider(activeId)).value ?? false);
-    final status = ref.watch(p2pStatusNotifierProvider);
-    final version = ref.watch(updateProvider).currentVersion;
-
-    final summary = ConnectionSummary.from(
-      isP2P: isP2P,
-      type: status.peerConnectionType,
-      isInitialized: status.isInitialized,
-    );
-
+  Widget build(BuildContext context) {
     // A full-window route (pushed outside the shell), and so the sole owner
     // of the title-bar band here: the body has to sit under `removeBand`, or
     // the ambient `MediaQuery.padding.top` still carries the band on top of
@@ -74,84 +62,111 @@ class DiagnosticsScreen extends ConsumerWidget {
               child: row,
             ),
           ),
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          body: const DiagnosticsBody(),
+        ),
+      ),
+    );
+  }
+}
+
+/// The diagnostics sections without a `Scaffold`: the mobile screen and the
+/// desktop settings dialog both host it.
+class DiagnosticsBody extends ConsumerWidget {
+  const DiagnosticsBody({
+    super.key,
+    this.padding = const EdgeInsets.fromLTRB(16, 16, 16, 32),
+  });
+
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeId = ref.watch(activeSourceIdProvider);
+    final isP2P = activeId != null &&
+        (ref.watch(sourceViaP2pProvider(activeId)).value ?? false);
+    final status = ref.watch(p2pStatusNotifierProvider);
+    final version = ref.watch(updateProvider).currentVersion;
+
+    final summary = ConnectionSummary.from(
+      isP2P: isP2P,
+      type: status.peerConnectionType,
+      isInitialized: status.isInitialized,
+    );
+
+    return ListView(
+      padding: padding,
+      children: [
+        // Hidden where nothing would be sent: web builds, and the inert
+        // reporter whole-app tests run with. See CrashReporter.isAvailable.
+        if (ref.watch(crashReporterProvider).isAvailable) ...[
+          const DiagnosticsSharingSection(),
+          const SizedBox(height: 18),
+        ],
+        SettingsSection(
+          label: 'Transport',
+          children: [
+            SettingsRow.action(
+              icon: Icons.lan_outlined,
+              title: summary.label,
+              subtitle: summary.detail,
+              trailing: _Dot(color: connectionToneColor(summary.tone)),
+            ),
+            SettingsRow.action(
+              icon: Icons.dns_outlined,
+              title: 'Relay',
+              trailing: _Value(
+                status.isRelayConnected ? 'Connected' : 'Not connected',
+              ),
+            ),
+            if (status.relayUrl != null)
+              SettingsRow.action(
+                icon: Icons.link,
+                title: 'Relay server',
+                subtitle: status.relayUrl,
+              ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        SettingsSection(
+          label: 'Peers',
+          children: [
+            SettingsRow.action(
+              icon: Icons.hub_outlined,
+              title: 'Connected peers',
+              trailing: _Value(
+                status.connectedPeersCount == 0
+                    ? 'None connected'
+                    : '${status.connectedPeersCount}',
+              ),
+            ),
+          ],
+        ),
+        if (status.nodeAddr != null) ...[
+          const SizedBox(height: 18),
+          SettingsSection(
+            label: 'Identity',
             children: [
-              // Hidden where nothing would be sent: web builds, and the inert
-              // reporter whole-app tests run with. See CrashReporter.isAvailable.
-              if (ref.watch(crashReporterProvider).isAvailable) ...[
-                const DiagnosticsSharingSection(),
-                const SizedBox(height: 18),
-              ],
-              SettingsSection(
-                label: 'Transport',
-                children: [
-                  SettingsRow.action(
-                    icon: Icons.lan_outlined,
-                    title: summary.label,
-                    subtitle: summary.detail,
-                    trailing: _Dot(color: connectionToneColor(summary.tone)),
-                  ),
-                  SettingsRow.action(
-                    icon: Icons.dns_outlined,
-                    title: 'Relay',
-                    trailing: _Value(
-                      status.isRelayConnected ? 'Connected' : 'Not connected',
-                    ),
-                  ),
-                  if (status.relayUrl != null)
-                    SettingsRow.action(
-                      icon: Icons.link,
-                      title: 'Relay server',
-                      subtitle: status.relayUrl,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              SettingsSection(
-                label: 'Peers',
-                children: [
-                  SettingsRow.action(
-                    icon: Icons.hub_outlined,
-                    title: 'Connected peers',
-                    trailing: _Value(
-                      status.connectedPeersCount == 0
-                          ? 'None connected'
-                          : '${status.connectedPeersCount}',
-                    ),
-                  ),
-                ],
-              ),
-              if (status.nodeAddr != null) ...[
-                const SizedBox(height: 18),
-                SettingsSection(
-                  label: 'Identity',
-                  children: [
-                    SettingsRow.action(
-                      icon: Icons.fingerprint,
-                      title: 'Node address',
-                      subtitle: status.nodeAddr,
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 18),
-              ValueListenableBuilder<FullscreenReport?>(
-                valueListenable: fullscreenReport,
-                builder: (context, report, _) =>
-                    _PlaybackSection(report: report),
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                key: const Key('copy-diagnostics'),
-                onPressed: () => _copy(context, summary, status, version),
-                icon: const Icon(Icons.copy, size: 18),
-                label: const Text('Copy diagnostics'),
+              SettingsRow.action(
+                icon: Icons.fingerprint,
+                title: 'Node address',
+                subtitle: status.nodeAddr,
               ),
             ],
           ),
+        ],
+        const SizedBox(height: 18),
+        ValueListenableBuilder<FullscreenReport?>(
+          valueListenable: fullscreenReport,
+          builder: (context, report, _) => _PlaybackSection(report: report),
         ),
-      ),
+        const SizedBox(height: 24),
+        FilledButton.icon(
+          key: const Key('copy-diagnostics'),
+          onPressed: () => _copy(context, summary, status, version),
+          icon: const Icon(Icons.copy, size: 18),
+          label: const Text('Copy diagnostics'),
+        ),
+      ],
     );
   }
 
