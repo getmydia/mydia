@@ -6,7 +6,7 @@ import '../../widgets/detail_hero_app_bar.dart';
 import '../../widgets/shell_rail_inset.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../detail/detail_links.dart';
@@ -147,6 +147,7 @@ class MovieDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildProgressBar(BuildContext context, MovieView movie) {
+    final palette = context.palette;
     final progress = movie.progress!;
     final percentage = progress.percentage / 100;
     final remaining = progress.durationSeconds != null
@@ -172,8 +173,8 @@ class MovieDetailScreen extends ConsumerWidget {
           child: LinearProgressIndicator(
             value: percentage.clamp(0.0, 1.0),
             minHeight: 4,
-            backgroundColor: AppColors.surfaceVariant,
-            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+            backgroundColor: palette.surfaceVariant,
+            valueColor: AlwaysStoppedAnimation<Color>(palette.primary),
           ),
         ),
         if (remainingText.isNotEmpty) ...[
@@ -181,7 +182,7 @@ class MovieDetailScreen extends ConsumerWidget {
           Text(
             remainingText,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: palette.textSecondary,
                 ),
           ),
         ],

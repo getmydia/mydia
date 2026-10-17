@@ -13,6 +13,7 @@ import '../../../core/cache/watcher_registry.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/browse_grid.dart';
@@ -33,7 +34,7 @@ List<Widget> sourceSearchActions(BuildContext context, SourceId sourceId) => [
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+              color: context.palette.surfaceVariant.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.search_rounded, size: 20),
@@ -149,6 +150,7 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -179,7 +181,7 @@ class _ErrorView extends StatelessWidget {
             Text(
               error.toString(),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: palette.textSecondary,
                   ),
               textAlign: TextAlign.center,
             ),
@@ -212,6 +214,7 @@ class SourceEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final icon = this.icon;
     final subtitle = this.subtitle;
     return Center(
@@ -224,10 +227,10 @@ class SourceEmptyState extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
+                  color: palette.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 56, color: AppColors.primary),
+                child: Icon(icon, size: 56, color: palette.primary),
               ),
               const SizedBox(height: 24),
             ],
@@ -243,7 +246,7 @@ class SourceEmptyState extends StatelessWidget {
               Text(
                 subtitle,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: palette.textSecondary,
                     ),
                 textAlign: TextAlign.center,
               ),

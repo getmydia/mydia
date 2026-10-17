@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/palette.dart';
 
 enum _RowKind { navigation, toggle, action }
 
@@ -90,6 +90,7 @@ class SettingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final scheme = Theme.of(context).colorScheme;
     final isToggle = _kind == _RowKind.toggle;
     final dimmed = (_kind == _RowKind.navigation && onTap == null) ||
@@ -116,7 +117,7 @@ class SettingsRow extends StatelessWidget {
                       fontSize: 14.5,
                       fontWeight: FontWeight.w500,
                       letterSpacing: -0.1,
-                      color: danger ? scheme.error : AppColors.textPrimary,
+                      color: danger ? scheme.error : palette.textPrimary,
                     ),
                   ),
                   if (subtitleText != null) ...[
@@ -140,10 +141,10 @@ class SettingsRow extends StatelessWidget {
             ],
             if (_kind == _RowKind.navigation) ...[
               const SizedBox(width: 4),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
                 size: 20,
-                color: AppColors.textDisabled,
+                color: palette.textDisabled,
               ),
             ],
           ],
@@ -168,6 +169,7 @@ class _IconTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final scheme = Theme.of(context).colorScheme;
     return Container(
       width: 30,
@@ -181,7 +183,7 @@ class _IconTile extends StatelessWidget {
       child: Icon(
         icon,
         size: 16,
-        color: danger ? scheme.error : AppColors.textSecondary,
+        color: danger ? scheme.error : palette.textSecondary,
       ),
     );
   }
@@ -196,7 +198,7 @@ class _ValueText extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       value,
-      style: const TextStyle(fontSize: 13.5, color: AppColors.textSecondary),
+      style: TextStyle(fontSize: 13.5, color: context.palette.textSecondary),
     );
   }
 }
@@ -207,16 +209,17 @@ class _Subtitle extends StatelessWidget {
   final String text;
   final Color? dotColor;
 
-  static const _style = TextStyle(
-    fontSize: 12.5,
-    height: 1.4,
-    color: AppColors.textSecondary,
-  );
+  static TextStyle _style(MydiaPalette p) => TextStyle(
+        fontSize: 12.5,
+        height: 1.4,
+        color: p.textSecondary,
+      );
 
   @override
   Widget build(BuildContext context) {
+    final style = _style(context.palette);
     final color = dotColor;
-    if (color == null) return Text(text, style: _style);
+    if (color == null) return Text(text, style: style);
 
     return Row(
       children: [
@@ -227,7 +230,7 @@ class _Subtitle extends StatelessWidget {
           decoration: BoxDecoration(shape: BoxShape.circle, color: color),
         ),
         const SizedBox(width: 7),
-        Flexible(child: Text(text, style: _style)),
+        Flexible(child: Text(text, style: style)),
       ],
     );
   }

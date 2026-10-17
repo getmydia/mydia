@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/palette.dart';
 import 'settings_dialog.dart';
 
 class SettingsDialogSidebar extends StatelessWidget {
@@ -17,6 +17,7 @@ class SettingsDialogSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       width: compact ? 64 : 200,
@@ -30,8 +31,8 @@ class SettingsDialogSidebar extends StatelessWidget {
                 key: Key('settings-category-${c.name}'),
                 selected: c == selected,
                 selectedTileColor: scheme.primary.withValues(alpha: 0.14),
-                selectedColor: AppColors.textPrimary,
-                iconColor: AppColors.textSecondary,
+                selectedColor: palette.textPrimary,
+                iconColor: palette.textSecondary,
                 dense: true,
                 // Icon-only: centre the 20px icon in the 48px tile. The icon
                 // must stay narrower than the tile minus padding, or ListTile

@@ -11,7 +11,7 @@ import '../../../core/player/fullscreen/fullscreen_report_signal.dart';
 import '../../../core/sources/mydia/source_link.dart';
 import '../../../core/sources/sources_providers.dart'
     show activeSourceIdProvider;
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../core/update/update_provider.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/toast/toaster.dart';
@@ -58,7 +58,7 @@ class DiagnosticsScreen extends StatelessWidget {
             showCast: false,
             decorate: (row) => ColoredBox(
               color: Theme.of(context).appBarTheme.backgroundColor ??
-                  AppColors.background,
+                  context.palette.background,
               child: row,
             ),
           ),
@@ -261,7 +261,7 @@ class _Value extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       value,
-      style: const TextStyle(fontSize: 13.5, color: AppColors.textSecondary),
+      style: TextStyle(fontSize: 13.5, color: context.palette.textSecondary),
     );
   }
 }

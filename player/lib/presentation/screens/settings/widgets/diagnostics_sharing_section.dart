@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/diagnostics/diagnostics_provider.dart';
-import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/palette.dart';
 import '../../../widgets/toast/toaster.dart';
 import 'send_logs_dialog.dart';
 import 'settings_row.dart';
@@ -25,6 +25,7 @@ class DiagnosticsSharingSection extends ConsumerWidget {
     // Read once: while this is null the switches have not loaded yet, and
     // this screen's whole job is telling the user what they are sharing, so
     // nothing here may show or accept a guess in the meantime.
+    final palette = context.palette;
     final state = ref.watch(diagnosticsProvider).value;
     final canShareLogs = ref.watch(logUploaderProvider) != null;
 
@@ -52,14 +53,14 @@ class DiagnosticsSharingSection extends ConsumerWidget {
                 : (on) => _save(context,
                     () => ref.read(diagnosticsProvider.notifier).setLogs(on)),
           ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           child: Text(
             disclosure,
             style: TextStyle(
               fontSize: 12.5,
               height: 1.4,
-              color: AppColors.textSecondary,
+              color: palette.textSecondary,
             ),
           ),
         ),

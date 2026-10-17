@@ -10,7 +10,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/layout/breakpoints.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../widgets/channel_badge.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/mydia_logo.dart';
@@ -25,6 +25,7 @@ PreferredSizeWidget homeHeader(
   Widget? desktopTitle,
   VoidCallback? onSearch,
 }) {
+  final palette = context.palette;
   final height = WindowTitleRow.heightOf(context);
   if (Breakpoints.showsRail(context)) {
     return WindowTitleBar(height: height, title: desktopTitle);
@@ -40,7 +41,7 @@ PreferredSizeWidget homeHeader(
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+              color: palette.surfaceVariant.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.search_rounded, size: 20),
@@ -70,7 +71,7 @@ class HomeDesktopTitle extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: AppColors.primary, size: 22),
+            Icon(icon, color: context.palette.primary, size: 22),
             const SizedBox(width: 10),
             Flexible(
               child: Text(

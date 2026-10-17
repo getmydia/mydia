@@ -12,7 +12,7 @@ import '../../../core/layout/breakpoints.dart';
 import '../../../core/sources/media_source.dart' show ArtworkRequest;
 import '../../../core/sources/source.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/shell_rail_inset.dart';
@@ -53,6 +53,7 @@ class SourceHomeHero extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final art = item.backdrop ?? item.poster;
     final request = art == null
         ? null
@@ -131,7 +132,7 @@ class SourceHomeHero extends ConsumerWidget {
             overflow: TextOverflow.ellipsis,
             textAlign: wide ? TextAlign.start : TextAlign.center,
             style: textTheme.bodyLarge?.copyWith(
-              color: AppColors.textPrimary.withValues(alpha: 0.78),
+              color: palette.textPrimary.withValues(alpha: 0.78),
             ),
           ),
         ],
@@ -358,12 +359,15 @@ class _HeroFallback extends StatelessWidget {
   const _HeroFallback();
 
   @override
-  Widget build(BuildContext context) => Container(
-        color: AppColors.surface,
-        child: const Icon(
-          Icons.movie_rounded,
-          size: 64,
-          color: AppColors.textSecondary,
-        ),
-      );
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Container(
+      color: palette.surface,
+      child: Icon(
+        Icons.movie_rounded,
+        size: 64,
+        color: palette.textSecondary,
+      ),
+    );
+  }
 }
