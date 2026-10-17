@@ -21,7 +21,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.DownloadsLive.ListView
   alias MydiaWeb.DownloadsLive.Sorting
   alias MydiaWeb.DownloadsLive.Summary
-  alias MydiaWeb.DownloadsLive.Tab
+  alias MydiaWeb.DownloadsLive.Paths
   alias Mydia.Settings.DownloadClientConfig
   alias MydiaWeb.DownloadsLive.MatchDialog
   import MydiaWeb.DownloadsLive.Format
@@ -151,77 +151,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp close_drawer(socket),
     do: push_patch(socket, to: downloads_path(socket, download: nil))
 
-  # Builds /downloads?... from the current state with `overrides` applied.
-  # Defaults (Downloads tab, Active view, nil values) are left out so links
-  # stay short. Takes the socket or its assigns.
   defp downloads_path(%Phoenix.LiveView.Socket{assigns: assigns}, overrides),
-    do: downloads_path(assigns, overrides)
+    do: Paths.downloads_path(assigns, overrides)
 
-  defp downloads_path(assigns, overrides) do
-    %{active_tab: tab, view: view, drawer_id: drawer_id, filters: filters} = assigns
-
-    values =
-      Map.merge(
-        %{
-          tab: tab,
-          view: view,
-          q: filters.q,
-          client: filters.client,
-          status: filters.status,
-          download: drawer_id
-        },
-        Map.new(overrides)
-      )
-
-    # Fixed key order, so the same state always produces the same URL.
-    params =
-      [:tab, :view, :q, :client, :status, :download]
-      |> Enum.map(&{&1, values[&1]})
-      |> Enum.reject(fn {key, value} ->
-        is_nil(value) or {key, value} in [{:tab, :downloads}, {:view, :active}]
-      end)
-      |> Enum.map(fn {key, value} -> {key, to_string(value)} end)
-
-    case params do
-      [] -> ~p"/downloads"
-      params -> ~p"/downloads?#{params}"
-    end
-  end
-
-  defp assign_tabs(socket), do: assign(socket, :tabs, tabs(socket.assigns))
-
-  # Tab links keep the search and client, and drop the view, the status and
-  # the open drawer: none of them carries over to another tab.
-  defp tabs(assigns) do
-    href = &downloads_path(assigns, tab: &1, view: nil, status: nil, download: nil)
-
-    [
-      %Tab{
-        key: :downloads,
-        label: "Downloads",
-        icon: "hero-arrow-down-tray",
-        href: href.(:downloads),
-        count: assigns.tab_counts.downloads,
-        dot?: assigns.summary.stalled > 0
-      },
-      %Tab{
-        key: :issues,
-        label: "Issues",
-        icon: "hero-exclamation-triangle",
-        href: href.(:issues),
-        count: assigns.tab_counts.issues,
-        tone: :error
-      },
-      # Neutral on purpose: unmanaged torrents are not problems.
-      %Tab{
-        key: :external,
-        label: "External",
-        icon: "hero-inbox-stack",
-        href: href.(:external),
-        count: length(assigns.scan.external)
-      }
-    ]
-  end
+  defp assign_tabs(socket), do: assign(socket, :tabs, Paths.tabs(socket.assigns))
 
   defp client_urls do
     Settings.list_download_client_configs()
