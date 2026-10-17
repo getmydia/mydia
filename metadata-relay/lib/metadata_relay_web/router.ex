@@ -31,6 +31,7 @@ defmodule MetadataRelayWeb.Router do
     pipe_through([:browser, :authed_dashboard])
     error_tracker_dashboard("/errors")
     live("/feedback", MetadataRelayWeb.FeedbackLive.Index, :index)
+    live("/installs", MetadataRelayWeb.InstallsLive.Index, :index)
     live("/logs", MetadataRelayWeb.LogsLive.Index, :index)
     live("/logs/devices/:device_id", MetadataRelayWeb.LogsLive.Device, :show)
   end
