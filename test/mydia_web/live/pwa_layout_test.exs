@@ -24,10 +24,10 @@ defmodule MydiaWeb.PwaLayoutTest do
   test "root layout paints the theme background before the stylesheet loads", %{conn: conn} do
     doc = conn |> get(~p"/calendar") |> html_response(200) |> LazyHTML.from_document()
 
-    style = doc |> LazyHTML.query("head style#launch-background") |> LazyHTML.text()
-    assert style =~ "#0f172a"
-    assert style =~ ~s|[data-theme="mydia-light"]|
-    assert style =~ "#f8fafc"
+    html = LazyHTML.query(doc, "html")
+    assert LazyHTML.attribute(html, "style") == ["background-color: #0f172a"]
+    assert LazyHTML.attribute(html, "data-light-base") == ["#f8fafc"]
+    assert LazyHTML.attribute(html, "data-dark-base") == ["#0f172a"]
   end
 
   test "mobile header and drawer clear the iOS status bar", %{conn: conn} do

@@ -36,12 +36,12 @@ defmodule MydiaWeb.Components.DarkVariantTest do
            "The variant still matches the non-existent bare `dark` theme"
   end
 
-  test "root.html.heex still sets the theme name the variant expects" do
+  test "root.html.heex still renders the theme attributes the variant reads" do
     root =
       Path.expand("../../../lib/mydia_web/components/layouts/root.html.heex", __DIR__)
       |> File.read!()
 
-    assert root =~ "'mydia-dark'",
-           "root.html.heex no longer sets mydia-dark; the dark variant needs updating too"
+    assert root =~ "theme_html_attrs",
+           "root.html.heex no longer renders the theme attributes; the dark variant needs updating too"
   end
 end
