@@ -37,9 +37,9 @@ defmodule Mydia.Library.Structs.FileMetadata do
 
     # The analyzer's full audio description, e.g. "DD+ 5.1" or "TrueHD Atmos",
     # kept verbatim. The `media_files.audio_codec` column holds
-    # `Mydia.Streaming.Codec.normalize_audio_codec/1`'s output, which collapses
-    # both of those to a bare codec ("ac3", "truehd"), dropping the channel
-    # layout and the Atmos/E-AC3 distinction. That is the right shape for
+    # `Mydia.Streaming.Codec.normalize_audio_codec/1`'s output, which reduces
+    # both of those to a bare codec ("eac3", "truehd"), dropping the channel
+    # layout and the Atmos distinction. That is the right shape for
     # streaming-compatibility checks and the wrong shape for quality scoring,
     # so the lossless string is preserved here for `Mydia.Quality.Attrs`.
     :audio_codec_raw,

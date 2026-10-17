@@ -63,6 +63,18 @@ defmodule Mydia.Streaming.CodecTest do
       assert Codec.normalize_audio_codec("AC-3") == "ac3"
       assert Codec.normalize_audio_codec("ac-3") == "ac3"
       assert Codec.normalize_audio_codec("Dolby Digital") == "ac3"
+      assert Codec.normalize_audio_codec("AC3 5.1") == "ac3"
+      assert Codec.normalize_audio_codec("DD5.1") == "ac3"
+    end
+
+    test "normalizes E-AC3/Dolby Digital Plus variants" do
+      # "DD+ 5.1" is what FileAnalyzer writes for an eac3 stream.
+      assert Codec.normalize_audio_codec("DD+ 5.1") == "eac3"
+      assert Codec.normalize_audio_codec("DD+") == "eac3"
+      assert Codec.normalize_audio_codec("eac3") == "eac3"
+      assert Codec.normalize_audio_codec("E-AC-3") == "eac3"
+      assert Codec.normalize_audio_codec("DDP5.1") == "eac3"
+      assert Codec.normalize_audio_codec("Dolby Digital Plus") == "eac3"
     end
 
     test "normalizes DTS variants" do

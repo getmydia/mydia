@@ -117,8 +117,10 @@ defmodule Mydia.Streaming.Codec do
       {~r/\b(?:truehd|mlp)\b/i, "truehd"},
       {~r/\bdts[- ]?(?:hd|ma|x|hdma)\b/i, "dts-hd"},
       {~r/\bdts\b/i, "dts"},
+      # E-AC3 before AC3: the analyzer labels E-AC3 "DD+", and the AC3
+      # pattern's `\bdd` matches the "DD" in front of the "+".
+      {~r/(?:\be-?ac-?3\b|\bddp|\bdd\+|\bdolby\s*digital\s*plus\b)/i, "eac3"},
       {~r/\b(?:ac-?3|dolby\s*digital|dd5?\.?1?)\b/i, "ac3"},
-      {~r/\be-?ac-?3\b/i, "eac3"},
       {~r/\baac\b/i, "aac"},
       {~r/\bmp3\b/i, "mp3"},
       {~r/\bopus\b/i, "opus"},
