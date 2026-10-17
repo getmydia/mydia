@@ -1,4 +1,5 @@
 import '../auth/auth_storage.dart';
+import '../player/subtitle_size.dart';
 
 /// Service for managing user settings and preferences.
 ///
@@ -19,6 +20,7 @@ class SettingsService {
   static const _autoSkipSegmentsKey = 'auto_skip_segments';
   static const _librarySortKeyPrefix = 'library_sort_';
   static const _statsOverlayEnabledKey = 'stats_overlay_enabled';
+  static const _subtitleSizeKey = 'subtitle_size';
   static const _updateTrackKey = 'update_track';
 
   /// Get the default quality setting.
@@ -59,6 +61,19 @@ class SettingsService {
   /// Set whether the playback stats panel is drawn over the video.
   Future<void> setStatsOverlayEnabled(bool enabled) async {
     await _storage.write(_statsOverlayEnabledKey, enabled.toString());
+  }
+
+  /// How large text subtitles are drawn on this device.
+  ///
+  /// Medium by default. A device-level choice, like the stats overlay, so
+  /// [clearSettings] leaves it alone: the right size for a phone is wrong
+  /// for a TV, and signing out of a server is not a reason to lose it.
+  Future<SubtitleSize> getSubtitleSize() async =>
+      SubtitleSize.fromStorageKey(await _storage.read(_subtitleSizeKey));
+
+  /// Set how large text subtitles are drawn on this device.
+  Future<void> setSubtitleSize(SubtitleSize size) async {
+    await _storage.write(_subtitleSizeKey, size.name);
   }
 
   /// Get the remembered sort for a library, as its encoded string.

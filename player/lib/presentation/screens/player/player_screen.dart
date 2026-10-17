@@ -19,6 +19,7 @@ import '../../../core/player/codec_support.dart';
 import '../../../core/player/hls_engine.dart';
 import '../../../core/player/media_start.dart';
 import '../../../core/player/subtitle_cues.dart';
+import '../../../core/player/subtitle_size.dart';
 import '../../../core/player/player_presentation_lease_controller.dart';
 import '../../../core/player/progress_reporter.dart';
 import '../../../core/player/progress_service.dart';
@@ -107,6 +108,7 @@ import '../../../core/playback/stats/playback_stats.dart';
 import '../../../core/playback/stats/playback_stats_collector.dart';
 import '../../../core/playback/stats/stats_report.dart';
 import '../../../core/settings/stats_overlay_setting.dart';
+import '../../../core/settings/subtitle_size_setting.dart';
 import '../../../core/update/update_provider.dart';
 import '../settings/settings_controller.dart';
 import 'session/mydia_playback_session.dart';
@@ -5436,59 +5438,66 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // Video widget fills available space with black background
     // Using SizedBox.expand ensures proper sizing on all platforms
+    final subtitleSize =
+        ref.watch(subtitleSizeSettingProvider).value ?? SubtitleSize.medium;
     Widget videoPlayer = SizedBox.expand(
-      child: Video(
-        controller: _videoController!,
-        controls: customVideoControlsBuilderWithCallback(
-          timeline: _timeline,
-          onSeekToReal: seekToReal,
-          title: widget.title,
-          chromeVisibility: _chromeVisibility,
-          playPauseFocusNode: _osdPlayPauseFocus,
-          chromeFocusNode: _chromeFocusNode,
-          // Remote tier only. Elsewhere the bar is pointer-driven and a
-          // cursor controller would only be something else to keep in sync.
-          scrub: InputCapabilities.directionalPrimary ? _scrub : null,
-          scrubberFocusNode: _scrubberFocus,
-          scrubThumbnails: _scrubThumbnails,
-          onBack: () => popOrGoHome(context),
-          // The chrome's own cast pill. Null on a build that cannot cast at
-          // all, which drops the pill rather than drawing an empty one.
-          castAction: _castSupported ? castChromeActionFor(ref) : null,
-          onCastTap: _showCastDevicePicker,
-          onAudioTap: _showAudioSelector,
-          onSubtitleTap: _showSubtitleSelector,
-          // Hidden when Auto and Original could never differ for this file
-          // (a local file, no plan yet, or a lossy source with no adaptive
-          // ladder), matching how audio disables itself at zero tracks
-          // rather than opening a one-item menu.
-          onQualityTap: qualityControlAvailable(
-                  localFile: _isDownloadedSource,
-                  plan: _plan,
-                  sourceHeight: _planInputs?.sourceHeight)
-              ? _showQualitySelector
-              : null,
-          // Null where no fullscreen route exists, which hides the button
-          // rather than leaving a dead one — matching how `onQualityTap`
-          // above hides itself at a single quality rung.
-          onFullscreenTap:
-              _fullscreen.available.value ? _fullscreen.toggle : null,
-          onAlwaysOnTopTap: _toggleAlwaysOnTop,
-          onScalingTap: _toggleScaling,
-          scaling: _scaling,
-          onPreviousEpisode: _upNext.hasPrevious ? _upNext.playPrevious : null,
-          onNextEpisode: _upNext.hasNext ? _upNext.playNext : null,
-          onActivity: _upNext.noteInput,
-          isFullscreen: _fullscreen.isFullscreen.value,
-          isAlwaysOnTop: _isAlwaysOnTop,
-          audioTrackCount: _audioTracks.length,
-          selectedAudioLabel: _selectedAudioTrack?.displayName,
-          selectedSubtitleLabel: _selectedSubtitleTrack?.displayName,
-          selectedQualityLabel: qualityControlLabel(
-              selected: _selectedQuality, effective: _effectiveQuality),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Video(
+          subtitleViewConfiguration:
+              subtitleViewConfigurationFor(constraints.biggest, subtitleSize),
+          controller: _videoController!,
+          controls: customVideoControlsBuilderWithCallback(
+            timeline: _timeline,
+            onSeekToReal: seekToReal,
+            title: widget.title,
+            chromeVisibility: _chromeVisibility,
+            playPauseFocusNode: _osdPlayPauseFocus,
+            chromeFocusNode: _chromeFocusNode,
+            // Remote tier only. Elsewhere the bar is pointer-driven and a
+            // cursor controller would only be something else to keep in sync.
+            scrub: InputCapabilities.directionalPrimary ? _scrub : null,
+            scrubberFocusNode: _scrubberFocus,
+            scrubThumbnails: _scrubThumbnails,
+            onBack: () => popOrGoHome(context),
+            // The chrome's own cast pill. Null on a build that cannot cast at
+            // all, which drops the pill rather than drawing an empty one.
+            castAction: _castSupported ? castChromeActionFor(ref) : null,
+            onCastTap: _showCastDevicePicker,
+            onAudioTap: _showAudioSelector,
+            onSubtitleTap: _showSubtitleSelector,
+            // Hidden when Auto and Original could never differ for this file
+            // (a local file, no plan yet, or a lossy source with no adaptive
+            // ladder), matching how audio disables itself at zero tracks
+            // rather than opening a one-item menu.
+            onQualityTap: qualityControlAvailable(
+                    localFile: _isDownloadedSource,
+                    plan: _plan,
+                    sourceHeight: _planInputs?.sourceHeight)
+                ? _showQualitySelector
+                : null,
+            // Null where no fullscreen route exists, which hides the button
+            // rather than leaving a dead one — matching how `onQualityTap`
+            // above hides itself at a single quality rung.
+            onFullscreenTap:
+                _fullscreen.available.value ? _fullscreen.toggle : null,
+            onAlwaysOnTopTap: _toggleAlwaysOnTop,
+            onScalingTap: _toggleScaling,
+            scaling: _scaling,
+            onPreviousEpisode:
+                _upNext.hasPrevious ? _upNext.playPrevious : null,
+            onNextEpisode: _upNext.hasNext ? _upNext.playNext : null,
+            onActivity: _upNext.noteInput,
+            isFullscreen: _fullscreen.isFullscreen.value,
+            isAlwaysOnTop: _isAlwaysOnTop,
+            audioTrackCount: _audioTracks.length,
+            selectedAudioLabel: _selectedAudioTrack?.displayName,
+            selectedSubtitleLabel: _selectedSubtitleTrack?.displayName,
+            selectedQualityLabel: qualityControlLabel(
+                selected: _selectedQuality, effective: _effectiveQuality),
+          ),
+          fill: Colors.black,
+          fit: _scaling.boxFit,
         ),
-        fill: Colors.black,
-        fit: _scaling.boxFit,
       ),
     );
 

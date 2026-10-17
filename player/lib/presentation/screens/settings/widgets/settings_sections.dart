@@ -22,6 +22,7 @@ import '../../../widgets/hls_quality_selector.dart';
 import '../settings_controller.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
+import 'subtitle_size_row.dart';
 import 'track_picker_row.dart';
 import 'update_card.dart';
 
@@ -77,6 +78,7 @@ class PlaybackSettingsSection extends ConsumerWidget {
                   .read(settingsControllerProvider.notifier)
                   .setAutoSkipSegments(value),
         ),
+        const SubtitleSizeSettingsRow(),
         Consumer(
           builder: (context, ref, _) {
             final enabled =
