@@ -2,7 +2,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/ambient_tint/ambient_tint.dart';
+import '../../../core/theme/ambient_tint/ambient_tint_colors.dart';
 import '../../../core/theme/ambient_tint/ambient_tint_providers.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_art.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/source_artwork.dart';
@@ -19,11 +21,21 @@ class DetailTintScope extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
+    if (!palette.ambientTint) {
+      return AmbientTintScope(
+        colors: AmbientTintColors.neutralFor(palette),
+        child: child,
+      );
+    }
     final source = _sourceFor(ref, art);
-    final colors =
-        source == null ? null : ref.watch(tintForSourceProvider(source)).value;
+    final resolved =
+        source == null ? null : ref.watch(tintForSourceProvider(source));
     return AmbientTintScope(
-      colors: colors ?? AmbientTint.of(context),
+      // Until this screen's own tint resolves, carry the one already showing.
+      colors: resolved != null && resolved.hasValue
+          ? resolveAmbientTint(resolved.value, palette)
+          : AmbientTint.of(context),
       child: child,
     );
   }

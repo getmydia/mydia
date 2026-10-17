@@ -9,6 +9,7 @@ import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/presentation/widgets/nav/floating_rail.dart';
 import 'package:player/presentation/widgets/nav/sidebar_content.dart';
@@ -732,7 +733,9 @@ void main() {
 
   test('expanded fill keeps textSecondary at 4.5:1 over a white backdrop', () {
     final fill = Color.alphaBlend(
-      AmbientTintColors.neutral.surface.withValues(alpha: 0.92),
+      AmbientTintColors.neutralFor(Palettes.projectionBooth)
+          .surface
+          .withValues(alpha: 0.92),
       Colors.white,
     );
     expect(_contrast(AppColors.textSecondary, fill), greaterThanOrEqualTo(4.5));

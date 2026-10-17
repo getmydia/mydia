@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_providers.dart';
 import 'package:player/domain/detail/detail_art.dart';
 import 'package:player/domain/sources/item.dart';
@@ -62,7 +63,7 @@ void main() {
     final seen = <AmbientTintColors>[];
     await _pump(tester, null, seen);
     await tester.pumpAndSettle();
-    expect(seen.last, AmbientTintColors.neutral);
+    expect(seen.last, AmbientTintColors.neutralFor(Palettes.projectionBooth));
   });
 
   testWidgets('while pending the ambient tint above shows', (tester) async {

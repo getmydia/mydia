@@ -35,18 +35,17 @@ TintExtractor tintExtractor(Ref ref) => (source) {
 TintCache tintCache(Ref ref) => TintCache();
 
 /// The tint for one artwork, from the cache when it has been seen before.
-/// Failures and grey art resolve to the neutral tint and are cached too, so
+/// Failures and grey art resolve to null (no tint) and are cached too, so
 /// a broken image is not retried on every focus.
 @riverpod
-Future<AmbientTintColors> tintForSource(Ref ref, BackdropSource source) async {
+Future<AmbientTintColors?> tintForSource(Ref ref, BackdropSource source) async {
   final url = source.imageUrl;
-  if (url == null || url.isEmpty) return AmbientTintColors.neutral;
+  if (url == null || url.isEmpty) return null;
   // Not `source.id`: item ids are only unique within one server, so two
   // servers with small ids would share a cache slot.
   final key = source.cacheKey ?? url;
   final cache = ref.read(tintCacheProvider);
-  final hit = cache.get(key);
-  if (hit != null) return hit;
+  if (cache.contains(key)) return cache.get(key);
 
   final extract = ref.read(tintExtractorProvider);
   Color? seed;
@@ -55,9 +54,7 @@ Future<AmbientTintColors> tintForSource(Ref ref, BackdropSource source) async {
   } catch (e) {
     debugPrint('[AmbientTint] $key: $e');
   }
-  final colors = seed == null
-      ? AmbientTintColors.neutral
-      : AmbientTintColors.fromSeed(seed);
+  final colors = seed == null ? null : AmbientTintColors.fromSeed(seed);
   cache.put(key, colors);
   return colors;
 }
@@ -76,7 +73,7 @@ class AmbientTintController extends _$AmbientTintController {
   int _generation = 0;
 
   @override
-  AmbientTintColors build() {
+  AmbientTintColors? build() {
     ref.onDispose(() => _timer?.cancel());
     _built = false;
     ref.listen(
@@ -85,11 +82,11 @@ class AmbientTintController extends _$AmbientTintController {
       fireImmediately: true,
     );
     _built = true;
-    return AmbientTintColors.neutral;
+    return null;
   }
 
   // False while build runs: state cannot be written until build returns, and
-  // build already returns neutral.
+  // build already returns null.
   bool _built = false;
 
   void _schedule(BackdropSource source) {
@@ -97,9 +94,9 @@ class AmbientTintController extends _$AmbientTintController {
     final generation = ++_generation;
     final url = source.imageUrl;
     if (url == null || url.isEmpty) {
-      // No artwork needs no debounce: settle on neutral at once.
+      // No artwork needs no debounce: settle on no tint at once.
       _timer = null;
-      if (_built) state = AmbientTintColors.neutral;
+      if (_built) state = null;
       return;
     }
     _timer = Timer(debounce, () => _resolve(source, generation));

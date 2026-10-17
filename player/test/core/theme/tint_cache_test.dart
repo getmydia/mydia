@@ -21,6 +21,14 @@ void main() {
     expect(cache.length, 2);
   });
 
+  test('caches a miss as null, distinct from absent', () {
+    final cache = TintCache();
+    expect(cache.contains('a'), isFalse);
+    cache.put('a', null);
+    expect(cache.contains('a'), isTrue);
+    expect(cache.get('a'), isNull);
+  });
+
   test('defaults to 200 entries', () {
     final cache = TintCache();
     for (var i = 0; i < 250; i++) {

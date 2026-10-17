@@ -2,7 +2,6 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_providers.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
 
@@ -26,14 +25,13 @@ void main() {
     final calls = <BackdropSource>[];
     final c = _container(calls, seed: const Color(0xFF2F4A9F));
     expect(await c.read(tintForSourceProvider(BackdropSource.none).future),
-        AmbientTintColors.neutral);
+        isNull);
     expect(calls, isEmpty);
   });
 
   test('a null seed resolves neutral', () async {
     final c = _container([]);
-    expect(await c.read(tintForSourceProvider(_night).future),
-        AmbientTintColors.neutral);
+    expect(await c.read(tintForSourceProvider(_night).future), isNull);
   });
 
   test('a second request for the same id is a cache hit', () async {
@@ -74,8 +72,7 @@ void main() {
           .overrideWithValue((_) async => throw Exception('x')),
     ]);
     addTearDown(container.dispose);
-    expect(await container.read(tintForSourceProvider(_night).future),
-        AmbientTintColors.neutral);
+    expect(await container.read(tintForSourceProvider(_night).future), isNull);
   });
 
   test('the controller debounces source changes', () {
@@ -92,8 +89,7 @@ void main() {
       async.elapse(AmbientTintController.debounce);
       async.flushMicrotasks();
       expect(calls, [_salt]);
-      expect(c.read(ambientTintControllerProvider),
-          isNot(AmbientTintColors.neutral));
+      expect(c.read(ambientTintControllerProvider), isNotNull);
     });
   });
 
@@ -105,18 +101,17 @@ void main() {
       backdrop.setDefault(_night);
       async.elapse(AmbientTintController.debounce);
       async.flushMicrotasks();
-      expect(c.read(ambientTintControllerProvider),
-          isNot(AmbientTintColors.neutral));
+      expect(c.read(ambientTintControllerProvider), isNotNull);
 
       backdrop.setDefault(BackdropSource.none);
-      expect(c.read(ambientTintControllerProvider), AmbientTintColors.neutral);
+      expect(c.read(ambientTintControllerProvider), isNull);
       expect(async.nonPeriodicTimerCount, 0);
 
       backdrop.setHover(_salt);
       async.elapse(AmbientTintController.debounce);
       async.flushMicrotasks();
       backdrop.clearHover();
-      expect(c.read(ambientTintControllerProvider), AmbientTintColors.neutral);
+      expect(c.read(ambientTintControllerProvider), isNull);
       expect(async.nonPeriodicTimerCount, 0);
     });
   });
