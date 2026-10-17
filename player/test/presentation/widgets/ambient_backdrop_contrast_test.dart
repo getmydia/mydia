@@ -27,6 +27,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/ambient_backdrop.dart';
 
 /// WCAG relative luminance of an opaque [color].
@@ -73,7 +74,8 @@ void main() {
   // longer drift from what AmbientBackdropScrim actually paints. The previous
   // version named AppColors.background here while the widget painted a navy
   // literal, and stayed green throughout.
-  final scrim = AmbientBackdropScrim.baseColor.withValues(
+  final scrim =
+      AmbientBackdropScrim.baseColor(Palettes.projectionBooth).withValues(
     alpha: AmbientBackdropScrim.baseDim,
   );
   final effectiveBackground = _composite(scrim, brightArtwork);
@@ -158,7 +160,7 @@ void main() {
   // artwork's own colour through.
   group('AmbientBackdrop scrim base colour', () {
     test('is hueless so it does not drain colour from the artwork', () {
-      final c = AmbientBackdropScrim.baseColor;
+      final c = AmbientBackdropScrim.baseColor(Palettes.projectionBooth);
       const tolerance = 2 / 255;
       expect((c.b - c.r).abs(), lessThanOrEqualTo(tolerance),
           reason: 'blue cast of ${(c.b - c.r).abs()}');

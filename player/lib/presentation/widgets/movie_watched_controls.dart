@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 
 /// App bar toggle reporting and changing a movie's watched state.
 ///
@@ -72,7 +73,7 @@ class MovieWatchedLine extends StatelessWidget {
         Text(
           dateLabel.isEmpty ? 'Watched' : 'Watched · $dateLabel',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
+                color: context.palette.textSecondary,
               ),
         ),
       ],

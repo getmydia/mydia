@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/detail/detail_views.dart';
 import '../../domain/models/watch_status.dart';
 import '../screens/detail/detail_actions.dart';
@@ -87,6 +88,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
   }
 
   Widget _buildContent(BuildContext context, CardSize cardSize) {
+    final palette = context.palette;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -95,10 +97,10 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
         const SizedBox(height: 8),
         Text(
           _episode.episodeCode,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
-            color: AppColors.primary,
+            color: palette.primary,
           ),
         ),
         const SizedBox(height: 2),
@@ -123,6 +125,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
     // an unplayable episode "unwatched" here would contradict the number on
     // the poster one screen up: a show reading "3 unwatched" would sit above a
     // season list showing ten dots.
+    final palette = context.palette;
     final watchStatus = !_episode.hasFile
         ? null
         : _episode.progress == null
@@ -134,7 +137,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: widget.selected ? AppColors.primary : Colors.transparent,
+          color: widget.selected ? palette.primary : Colors.transparent,
           width: 2,
         ),
       ),
@@ -150,8 +153,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
                 child: DetailArtImage(
                   art: _episode.still,
                   slot: ArtSlot.still,
-                  placeholder: (_) =>
-                      Container(color: AppColors.surfaceVariant),
+                  placeholder: (_) => Container(color: palette.surfaceVariant),
                   fallback: (_) => _buildPlaceholder(),
                   errorWidget: (_) => _buildPlaceholder(),
                 ),
@@ -172,7 +174,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: AppColors.primary.withValues(alpha: 0.6),
+                            color: palette.primary.withValues(alpha: 0.6),
                             width: 2,
                           ),
                         ),
@@ -183,12 +185,12 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
 
               // "Unavailable" badge for episodes with no playable file.
               if (!_episode.hasFile)
-                const Positioned.fill(
+                Positioned.fill(
                   child: Center(
                     child: Icon(
                       Icons.cloud_off_rounded,
                       size: 28,
-                      color: AppColors.textSecondary,
+                      color: palette.textSecondary,
                     ),
                   ),
                 ),
@@ -201,17 +203,17 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
                   right: 0,
                   child: Container(
                     height: 4,
-                    decoration: const BoxDecoration(
-                      color: AppColors.surfaceVariant,
+                    decoration: BoxDecoration(
+                      color: palette.surfaceVariant,
                     ),
                     child: FractionallySizedBox(
                       alignment: Alignment.centerLeft,
                       widthFactor:
                           (_episode.progress!.percentage / 100).clamp(0.0, 1.0),
                       child: Container(
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.only(
+                        decoration: BoxDecoration(
+                          color: palette.primary,
+                          borderRadius: const BorderRadius.only(
                             topRight: Radius.circular(2),
                             bottomRight: Radius.circular(2),
                           ),
@@ -305,7 +307,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
       ),
-      color: AppColors.surface,
+      color: context.palette.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -363,13 +365,14 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
   }
 
   Widget _buildPlaceholder() {
+    final palette = context.palette;
     return Container(
-      color: AppColors.surfaceVariant,
-      child: const Center(
+      color: palette.surfaceVariant,
+      child: Center(
         child: Icon(
           Icons.tv_rounded,
           size: 32,
-          color: AppColors.textSecondary,
+          color: palette.textSecondary,
         ),
       ),
     );

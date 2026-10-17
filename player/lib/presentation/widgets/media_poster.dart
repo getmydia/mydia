@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/watch_status.dart';
 import 'poster_badge_corner.dart';
 import 'poster_frame.dart';
@@ -60,22 +60,23 @@ class MediaPoster extends StatelessWidget {
     this.showMenuButton = false,
   });
 
-  static const Widget _placeholder = ColoredBox(
-    color: AppColors.surfaceVariant,
-    child: Icon(
-      Icons.movie,
-      size: 48,
-      color: AppColors.textSecondary,
-    ),
-  );
+  static Widget _placeholder(MydiaPalette p) => ColoredBox(
+        color: p.surfaceVariant,
+        child: Icon(
+          Icons.movie,
+          size: 48,
+          color: p.textSecondary,
+        ),
+      );
 
-  static const Widget _loadingPlaceholder = ColoredBox(
-    color: AppColors.surfaceVariant,
-    child: Center(child: CircularProgressIndicator()),
-  );
+  static Widget _loadingPlaceholder(MydiaPalette p) => ColoredBox(
+        color: p.surfaceVariant,
+        child: const Center(child: CircularProgressIndicator()),
+      );
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final progress = progressPercentage;
     final rating = this.rating;
 
@@ -104,8 +105,8 @@ class MediaPoster extends StatelessWidget {
                 imageUrl: posterUrl,
                 imageHeaders: posterHeaders,
                 imageCacheKey: posterCacheKey,
-                placeholder: _placeholder,
-                loadingPlaceholder: _loadingPlaceholder,
+                placeholder: _placeholder(palette),
+                loadingPlaceholder: _loadingPlaceholder(palette),
                 overlays: [
                   // `watchStatus` supersedes `progressPercentage` when both
                   // arrive. They coexisted during the rollout, and rendering
@@ -163,7 +164,7 @@ class MediaPoster extends StatelessWidget {
                 Text(
                   subtitle!,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: palette.textSecondary,
                       ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import 'focus_highlight.dart';
 import 'glass_surface.dart';
 import 'toast/toaster.dart';
@@ -69,6 +70,7 @@ class DetailActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final trailerUrl = this.trailerUrl;
     final actions = <Widget>[
       if (showWatched)
@@ -106,7 +108,7 @@ class DetailActionRow extends StatelessWidget {
           icon: Icons.smart_display_rounded,
           label: 'Trailer',
           highlighted: false,
-          highlightColor: AppColors.primary,
+          highlightColor: palette.primary,
           onTap: () => _openTrailer(context, trailerUrl),
         ),
       if (onShowMediaInfo != null)
@@ -114,7 +116,7 @@ class DetailActionRow extends StatelessWidget {
           icon: Icons.info_outline_rounded,
           label: 'Info',
           highlighted: false,
-          highlightColor: AppColors.textPrimary,
+          highlightColor: palette.textPrimary,
           onTap: onShowMediaInfo!,
         ),
     ];
@@ -158,7 +160,8 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = highlighted ? highlightColor : AppColors.textPrimary;
+    final palette = context.palette;
+    final color = highlighted ? highlightColor : palette.textPrimary;
 
     return FocusHighlight(
       onActivate: onTap,
@@ -191,8 +194,7 @@ class _ActionButton extends StatelessWidget {
               softWrap: false,
               overflow: TextOverflow.fade,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontSize: 10.5, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 10.5, color: palette.textSecondary),
             ),
           ],
         ),

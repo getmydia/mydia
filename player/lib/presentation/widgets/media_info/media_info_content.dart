@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../../../domain/models/media_stream.dart';
 import '../../../domain/models/subtitle_format.dart';
 import '../../../domain/models/subtitle_track.dart';
@@ -42,12 +42,13 @@ class MediaInfoContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     if (files.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
+      return Padding(
+        padding: const EdgeInsets.all(24),
         child: Text(
           'No files for this title.',
-          style: TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: palette.textSecondary),
         ),
       );
     }
@@ -68,13 +69,13 @@ class MediaInfoContent extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
             sliver: SliverToBoxAdapter(child: _versionSwitcher(index)),
           ),
-        _header('File', 1),
+        _header('File', 1, palette),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 18),
-          sliver: SliverToBoxAdapter(child: _fileBlock(file)),
+          sliver: SliverToBoxAdapter(child: _fileBlock(file, palette)),
         ),
         if (video.isNotEmpty) ...[
-          _header('Video', video.length),
+          _header('Video', video.length, palette),
           _streams(
             video.length,
             (i) => _VideoStreamTile(
@@ -84,11 +85,11 @@ class MediaInfoContent extends StatelessWidget {
           ),
         ],
         if (audio.isNotEmpty) ...[
-          _header('Audio', audio.length),
+          _header('Audio', audio.length, palette),
           _streams(audio.length, (i) => _audioRow(audio[i])),
         ],
         if (subtitle.isNotEmpty || external.isNotEmpty) ...[
-          _header('Subtitles', subtitle.length + external.length),
+          _header('Subtitles', subtitle.length + external.length, palette),
           _streams(
             subtitle.length + external.length,
             (i) => i < subtitle.length
@@ -99,16 +100,22 @@ class MediaInfoContent extends StatelessWidget {
         if (!file.hasDetailedStreams)
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
-            sliver: SliverToBoxAdapter(child: _pendingNote()),
+            sliver: SliverToBoxAdapter(child: _pendingNote(palette)),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );
   }
 
-  Widget _header(String label, int count) => SliverPersistentHeader(
+  Widget _header(String label, int count, MydiaPalette palette) =>
+      SliverPersistentHeader(
         pinned: true,
-        delegate: _SectionHeaderDelegate(label: label, count: count),
+        delegate: _SectionHeaderDelegate(
+          label: label,
+          count: count,
+          background: palette.surface,
+          labelColor: palette.textDisabled,
+        ),
       );
 
   Widget _streams(int count, Widget Function(int index) builder) {
@@ -146,7 +153,7 @@ class MediaInfoContent extends StatelessWidget {
     return size == null ? file.versionLabel : '${file.versionLabel} · $size';
   }
 
-  Widget _fileBlock(MediaFileInfo file) {
+  Widget _fileBlock(MediaFileInfo file, MydiaPalette palette) {
     final size = formatBytes(file.sizeBytes);
     final duration = formatDuration(file.durationSeconds);
     final bitrate = formatBitrate(file.bitrate);
@@ -163,8 +170,8 @@ class MediaInfoContent extends StatelessWidget {
         if (file.fileName != null)
           Text(
             file.fileName!,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
+            style: TextStyle(
+              color: palette.textPrimary,
               fontSize: 13,
               fontFamily: 'monospace',
             ),
@@ -172,8 +179,8 @@ class MediaInfoContent extends StatelessWidget {
         if (file.directory != null)
           Text(
             file.directory!,
-            style: const TextStyle(
-              color: AppColors.textDisabled,
+            style: TextStyle(
+              color: palette.textDisabled,
               fontSize: 12,
               fontFamily: 'monospace',
             ),
@@ -183,13 +190,13 @@ class MediaInfoContent extends StatelessWidget {
     );
   }
 
-  Widget _pendingNote() {
-    return const Padding(
-      padding: EdgeInsets.only(top: 16),
+  Widget _pendingNote(MydiaPalette palette) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
       child: Text(
         kStreamsPendingMessage,
         style:
-            TextStyle(color: AppColors.textDisabled, fontSize: 12, height: 1.5),
+            TextStyle(color: palette.textDisabled, fontSize: 12, height: 1.5),
       ),
     );
   }
@@ -206,6 +213,7 @@ class _VideoStreamTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -219,8 +227,8 @@ class _VideoStreamTile extends StatelessWidget {
               if (stream.index != null) _IndexChip(index: stream.index!),
               Text(
                 (stream.codec ?? 'Unknown').toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
+                style: TextStyle(
+                  color: palette.textPrimary,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -300,30 +308,34 @@ class _StreamRow extends StatelessWidget {
   static const double _languageWidth = 88;
   static const double _gap = 8;
 
-  static const TextStyle _codecStyle = TextStyle(
-    color: AppColors.textPrimary,
-    fontSize: 11,
-    height: 1.5,
-    fontWeight: FontWeight.w600,
-    fontFamily: 'monospace',
-  );
+  static TextStyle _codecStyle(MydiaPalette p) => TextStyle(
+        color: p.textPrimary,
+        fontSize: 11,
+        height: 1.5,
+        fontWeight: FontWeight.w600,
+        fontFamily: 'monospace',
+      );
 
-  static const TextStyle _valueStyle = TextStyle(
-    color: AppColors.textSecondary,
-    fontSize: 11,
-    height: 1.5,
-    fontFamily: 'monospace',
-  );
+  static TextStyle _valueStyle(MydiaPalette p) => TextStyle(
+        color: p.textSecondary,
+        fontSize: 11,
+        height: 1.5,
+        fontFamily: 'monospace',
+      );
 
-  static const TextStyle _mutedStyle = TextStyle(
-    color: AppColors.textDisabled,
-    fontSize: 11,
-    height: 1.5,
-    fontFamily: 'monospace',
-  );
+  static TextStyle _mutedStyle(MydiaPalette p) => TextStyle(
+        color: p.textDisabled,
+        fontSize: 11,
+        height: 1.5,
+        fontFamily: 'monospace',
+      );
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
+    final codecStyle = _codecStyle(palette);
+    final valueStyle = _valueStyle(palette);
+    final mutedStyle = _mutedStyle(palette);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Column(
@@ -336,7 +348,7 @@ class _StreamRow extends StatelessWidget {
                 child: Text(
                   index ?? '',
                   textAlign: TextAlign.right,
-                  style: _mutedStyle,
+                  style: mutedStyle,
                 ),
               ),
               const SizedBox(width: _gap),
@@ -345,7 +357,7 @@ class _StreamRow extends StatelessWidget {
                 child: Text(
                   codec.toUpperCase(),
                   overflow: TextOverflow.ellipsis,
-                  style: _codecStyle,
+                  style: codecStyle,
                 ),
               ),
               const SizedBox(width: _gap),
@@ -354,7 +366,7 @@ class _StreamRow extends StatelessWidget {
                 child: Text(
                   language ?? '',
                   overflow: TextOverflow.ellipsis,
-                  style: _valueStyle,
+                  style: valueStyle,
                 ),
               ),
               const SizedBox(width: _gap),
@@ -362,12 +374,12 @@ class _StreamRow extends StatelessWidget {
                 child: Text(
                   detail,
                   overflow: TextOverflow.ellipsis,
-                  style: _valueStyle,
+                  style: valueStyle,
                 ),
               ),
               if (flags.isNotEmpty) ...[
                 const SizedBox(width: _gap),
-                Text(flags.join(' · '), style: _mutedStyle),
+                Text(flags.join(' · '), style: mutedStyle),
               ],
             ],
           ),
@@ -379,7 +391,7 @@ class _StreamRow extends StatelessWidget {
               child: Text(
                 extra.join(' · '),
                 overflow: TextOverflow.ellipsis,
-                style: _mutedStyle,
+                style: mutedStyle,
               ),
             ),
         ],
@@ -453,8 +465,8 @@ class _DetailLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
-        color: AppColors.textSecondary,
+      style: TextStyle(
+        color: context.palette.textSecondary,
         fontSize: 12,
         height: 1.6,
         fontFamily: 'monospace',
@@ -470,15 +482,16 @@ class _IndexChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
+        color: palette.surfaceVariant,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         '$index',
-        style: const TextStyle(color: AppColors.textDisabled, fontSize: 10),
+        style: TextStyle(color: palette.textDisabled, fontSize: 10),
       ),
     );
   }
@@ -491,15 +504,16 @@ class _FlagChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: palette.border),
         borderRadius: BorderRadius.circular(3),
       ),
       child: Text(
         label,
-        style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+        style: TextStyle(color: palette.textSecondary, fontSize: 10),
       ),
     );
   }
@@ -519,22 +533,23 @@ class _VersionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppTheme.radiusBadge),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : Colors.transparent,
+          color: selected ? palette.primary : Colors.transparent,
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.border,
+            color: selected ? palette.primary : palette.border,
           ),
           borderRadius: BorderRadius.circular(AppTheme.radiusBadge),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? AppColors.onPrimary : AppColors.textSecondary,
+            color: selected ? palette.onPrimary : palette.textSecondary,
             fontSize: 11,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
           ),
@@ -546,13 +561,21 @@ class _VersionChip extends StatelessWidget {
 
 /// A section label that stays put while its rows scroll under it.
 ///
-/// It paints [AppColors.surface] rather than sitting transparent so rows do not
-/// show through it once pinned.
+/// It paints the palette's surface ([background]) rather than sitting
+/// transparent so rows do not show through it once pinned. The colours are
+/// fields so a preset change rebuilds the pinned header.
 class _SectionHeaderDelegate extends SliverPersistentHeaderDelegate {
   final String label;
   final int count;
+  final Color background;
+  final Color labelColor;
 
-  const _SectionHeaderDelegate({required this.label, required this.count});
+  const _SectionHeaderDelegate({
+    required this.label,
+    required this.count,
+    required this.background,
+    required this.labelColor,
+  });
 
   static const double _height = 30;
 
@@ -573,13 +596,13 @@ class _SectionHeaderDelegate extends SliverPersistentHeaderDelegate {
     return Container(
       key: Key('media-info-header-${label.toLowerCase()}'),
       height: _height,
-      color: AppColors.surface,
+      color: background,
       alignment: Alignment.bottomLeft,
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.textDisabled,
+        style: TextStyle(
+          color: labelColor,
           fontSize: 10,
           letterSpacing: 1.6,
           fontWeight: FontWeight.w600,
@@ -590,5 +613,8 @@ class _SectionHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(_SectionHeaderDelegate oldDelegate) =>
-      oldDelegate.label != label || oldDelegate.count != count;
+      oldDelegate.label != label ||
+      oldDelegate.count != count ||
+      oldDelegate.background != background ||
+      oldDelegate.labelColor != labelColor;
 }

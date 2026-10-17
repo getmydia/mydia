@@ -10,6 +10,7 @@ import '../../core/cast/mydia_cast_backend.dart' show sourceIdsOfCastDevice;
 import '../../core/sources/source.dart' show SourceKind;
 import '../../core/sources/sources_providers.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/cast_device.dart';
 import 'local_network_settings_button.dart';
 import 'osd_dialog.dart';
@@ -158,6 +159,7 @@ class _DeviceListState extends State<_DeviceList> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final devices = widget.devices;
     final capabilities = widget.capabilities;
     final currentDeviceId = widget.currentDeviceId;
@@ -169,7 +171,7 @@ class _DeviceListState extends State<_DeviceList> {
           key: const Key('cast-picker-empty'),
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.tv_off, size: 48, color: AppColors.textSecondary),
+            Icon(Icons.tv_off, size: 48, color: palette.textSecondary),
             const SizedBox(height: 16),
             Text(
               'No cast devices found',
@@ -177,28 +179,28 @@ class _DeviceListState extends State<_DeviceList> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Make sure the device is powered on and on the same Wi-Fi '
               'network as this one.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: palette.textSecondary),
             ),
           ],
         );
       }
 
-      return const Column(
-        key: Key('cast-picker-searching'),
+      return Column(
+        key: const Key('cast-picker-searching'),
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.search, size: 48, color: AppColors.textSecondary),
-          SizedBox(height: 16),
+          Icon(Icons.search, size: 48, color: palette.textSecondary),
+          const SizedBox(height: 16),
           Text(
             'Searching for devices...',
-            style: TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: palette.textSecondary),
           ),
-          SizedBox(height: 16),
-          CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          const CircularProgressIndicator(),
         ],
       );
     }
@@ -263,6 +265,7 @@ class _ProtocolGroup extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.palette;
     final sources = ref.watch(sourcesProvider);
     final manyMydia =
         sources.where((s) => s.account.kind == SourceKind.mydia).length > 1;
@@ -275,7 +278,7 @@ class _ProtocolGroup extends ConsumerWidget {
           child: Text(
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: palette.textSecondary,
                 ),
           ),
         ),
@@ -314,7 +317,7 @@ class _ProtocolGroup extends ConsumerWidget {
             key: Key('cast-device-${device.id}'),
             leading: Icon(
               isConnected ? Icons.cast_connected : Icons.cast,
-              color: isChosen ? AppColors.primary : AppColors.textSecondary,
+              color: isChosen ? palette.primary : palette.textSecondary,
             ),
             title: Text(device.name),
             subtitle: servers.isEmpty
@@ -326,9 +329,8 @@ class _ProtocolGroup extends ConsumerWidget {
                       Text(servers.join(', ')),
                     ],
                   ),
-            trailing: isConnected
-                ? const Icon(Icons.check, color: AppColors.primary)
-                : null,
+            trailing:
+                isConnected ? Icon(Icons.check, color: palette.primary) : null,
             onTap: () => Navigator.of(context).pop(device),
           );
         }),
@@ -346,6 +348,7 @@ class _DiscoveryError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final denied = error is CastBackendException &&
         (error as CastBackendException).kind == CastFailureKind.discoveryDenied;
 
@@ -362,11 +365,11 @@ class _DiscoveryError extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Mydia cannot see cast devices until local network access is '
             'enabled.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: palette.textSecondary),
           ),
           const SizedBox(height: 8),
           LocalNetworkSettingsButton(available: settingsAvailable),

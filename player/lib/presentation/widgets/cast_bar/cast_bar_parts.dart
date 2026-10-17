@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../artwork_image.dart';
 
 /// The status dot's meaning, not its color.
@@ -26,6 +27,7 @@ class CastBarRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final text = Theme.of(context).textTheme;
     final status = this.status;
     final dot = this.dot;
@@ -42,7 +44,7 @@ class CastBarRow extends StatelessWidget {
                 title,
                 style: text.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  color: palette.textPrimary,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -60,7 +62,7 @@ class CastBarRow extends StatelessWidget {
                         child: Text(
                           status,
                           style: text.bodySmall
-                              ?.copyWith(color: AppColors.textSecondary),
+                              ?.copyWith(color: palette.textSecondary),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -87,9 +89,10 @@ class _StatusDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final color = switch (dot) {
-      CastDot.live => AppColors.primary,
-      CastDot.idle => AppColors.textDisabled,
+      CastDot.live => palette.primary,
+      CastDot.idle => palette.textDisabled,
       CastDot.lost => AppColors.error,
     };
     return Container(
@@ -115,18 +118,19 @@ class CastIconTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       width: 34,
       height: 34,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: AppColors.textPrimary.withValues(alpha: 0.06),
+        color: palette.textPrimary.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(10),
       ),
       child: IconTheme(
         data: IconThemeData(
           size: 18,
-          color: accent ? AppColors.primary : AppColors.textSecondary,
+          color: accent ? palette.primary : palette.textSecondary,
         ),
         child: child,
       ),
@@ -150,6 +154,7 @@ class CastThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final url = imageUrl;
     final fallback = CastIconTile(accent: true, child: Icon(fallbackIcon));
     if (url == null || url.isEmpty) {
@@ -166,8 +171,8 @@ class CastThumb extends StatelessWidget {
             imageUrl: url,
             fit: BoxFit.cover,
             cacheManager: PosterCacheManager(),
-            placeholder: (_) => ColoredBox(
-                color: AppColors.textPrimary.withValues(alpha: 0.06)),
+            placeholder: (_) =>
+                ColoredBox(color: palette.textPrimary.withValues(alpha: 0.06)),
             errorWidget: (_) => fallback,
           ),
         ),
@@ -189,11 +194,12 @@ class CastPrimaryAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return FilledButton(
       onPressed: onPressed,
       style: FilledButton.styleFrom(
-        backgroundColor: AppColors.primary.withValues(alpha: 0.14),
-        foregroundColor: AppColors.primary,
+        backgroundColor: palette.primary.withValues(alpha: 0.14),
+        foregroundColor: palette.primary,
         shape: const StadiumBorder(),
         visualDensity: VisualDensity.compact,
         textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
@@ -219,7 +225,7 @@ class CastGhostAction extends StatelessWidget {
     return TextButton(
       onPressed: onPressed,
       style: TextButton.styleFrom(
-        foregroundColor: AppColors.textSecondary,
+        foregroundColor: context.palette.textSecondary,
         visualDensity: VisualDensity.compact,
       ),
       child: Text(label),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import 'toast/toaster.dart';
 
 /// Dialog that asks the user to trust a certificate on first connection.
@@ -22,6 +23,7 @@ class CertTrustDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return AlertDialog(
       title: const Row(
         children: [
@@ -37,7 +39,7 @@ class CertTrustDialog extends StatelessWidget {
           Text(
             'First-time connection to:',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: palette.textSecondary,
                 ),
           ),
           const SizedBox(height: 8),
@@ -57,10 +59,10 @@ class CertTrustDialog extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
+              color: palette.surfaceVariant,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: AppColors.border,
+                color: palette.border,
                 width: 1,
               ),
             ),

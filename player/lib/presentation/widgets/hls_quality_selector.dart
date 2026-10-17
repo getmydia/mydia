@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/colors.dart';
 import '../../core/theme/depth_tokens.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/quality_delivery_subtitle.dart';
 import '../../domain/models/quality_rung.dart';
 import 'osd_dialog.dart';
@@ -43,78 +44,81 @@ Future<QualityRung?> showQualityPicker(
   var statsValue = statsEnabled ?? false;
   return showDialog<QualityRung>(
     context: context,
-    builder: (context) => OsdDialog(
-      title: const Text('Video Quality'),
-      contentPadding: const EdgeInsets.symmetric(vertical: 12),
-      content: Material(
-        type: MaterialType.transparency,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (clampNote != null)
-                Padding(
-                  key: const Key('quality-clamp-note'),
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                  child: Text(
-                    clampNote,
-                    style: const TextStyle(
-                      color: AppColors.warningText,
-                      fontSize: 12,
+    builder: (context) {
+      final palette = context.palette;
+      return OsdDialog(
+        title: const Text('Video Quality'),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        content: Material(
+          type: MaterialType.transparency,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (clampNote != null)
+                  Padding(
+                    key: const Key('quality-clamp-note'),
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                    child: Text(
+                      clampNote,
+                      style: const TextStyle(
+                        color: AppColors.warningText,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
-                ),
-              for (final rung in rungs)
-                _rungTile(
-                    context, rung, current, autoSubtitle, originalSubtitle),
-              if (statsEnabled != null && onStatsChanged != null) ...[
-                const Divider(height: 17, color: DepthTokens.osdDivider),
-                StatefulBuilder(
-                  builder: (context, setState) {
-                    return SwitchListTile(
-                      key: statsToggleKey,
-                      value: statsValue,
-                      title: const Text(
-                        'Stats for nerds',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 14.5,
+                for (final rung in rungs)
+                  _rungTile(
+                      context, rung, current, autoSubtitle, originalSubtitle),
+                if (statsEnabled != null && onStatsChanged != null) ...[
+                  const Divider(height: 17, color: DepthTokens.osdDivider),
+                  StatefulBuilder(
+                    builder: (context, setState) {
+                      return SwitchListTile(
+                        key: statsToggleKey,
+                        value: statsValue,
+                        title: Text(
+                          'Stats for nerds',
+                          style: TextStyle(
+                            color: palette.textPrimary,
+                            fontSize: 14.5,
+                          ),
                         ),
-                      ),
-                      subtitle: const Text(
-                        'Also in Settings. Stays on after the controls fade.',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 11.5,
+                        subtitle: Text(
+                          'Also in Settings. Stays on after the controls fade.',
+                          style: TextStyle(
+                            color: palette.textSecondary,
+                            fontSize: 11.5,
+                          ),
                         ),
-                      ),
-                      secondary: const Icon(
-                        Icons.speed,
-                        color: AppColors.textSecondary,
-                      ),
-                      onChanged: (next) {
-                        setState(() => statsValue = next);
-                        onStatsChanged(next);
-                      },
-                    );
-                  },
-                ),
+                        secondary: Icon(
+                          Icons.speed,
+                          color: palette.textSecondary,
+                        ),
+                        onChanged: (next) {
+                          setState(() => statsValue = next);
+                          onStatsChanged(next);
+                        },
+                      );
+                    },
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
-            'Cancel',
-            style: TextStyle(color: AppColors.textSecondary),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: palette.textSecondary),
+            ),
           ),
-        ),
-      ],
-    ),
+        ],
+      );
+    },
   );
 }
 
@@ -125,6 +129,7 @@ Widget _rungTile(
   String autoSubtitle,
   String originalSubtitle,
 ) {
+  final palette = context.palette;
   final isSelected = rung == current;
   final subtitle = rung.isAuto
       ? autoSubtitle
@@ -137,18 +142,18 @@ Widget _rungTile(
         : Key('quality-rung-${rung.label}'),
     leading: Icon(
       isSelected ? Icons.check_circle : Icons.circle_outlined,
-      color: isSelected ? AppColors.primary : AppColors.textSecondary,
+      color: isSelected ? palette.primary : palette.textSecondary,
     ),
     title: Text(
       rung.label,
       style: TextStyle(
-        color: AppColors.textPrimary,
+        color: palette.textPrimary,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
     ),
     subtitle: Text(
       subtitle,
-      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+      style: TextStyle(color: palette.textSecondary, fontSize: 12),
     ),
     onTap: () => Navigator.of(context).pop(rung),
   );

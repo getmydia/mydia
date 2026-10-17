@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 
 /// Mydia squircle logo painted via CustomPainter.
 class MydiaLogo extends StatelessWidget {
@@ -10,24 +10,30 @@ class MydiaLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return CustomPaint(
       size: Size(size, size),
-      painter: const MydiaLogoPainter(),
+      painter: MydiaLogoPainter(
+        markColor: palette.textPrimary,
+        cutoutColor: palette.background,
+      ),
     );
   }
 }
 
 class MydiaLogoPainter extends CustomPainter {
-  const MydiaLogoPainter();
+  const MydiaLogoPainter({required this.markColor, required this.cutoutColor});
 
-  /// The mark's fill. Deliberately neutral rather than [AppColors.primary]:
+  /// The mark's fill. Deliberately neutral rather than the palette's primary:
   /// the app icon and the Phoenix logo this mirrors are a fixed blue that the
   /// player's palette does not own, so a mark that tracked the accent would
-  /// drift away from them on every repalette.
-  static const Color markColor = AppColors.textPrimary;
+  /// drift away from them on every repalette. Callers pass the palette's
+  /// `textPrimary`.
+  final Color markColor;
 
   /// The inner cut-out, which reads as a hole through to the shell behind it.
-  static const Color cutoutColor = AppColors.background;
+  /// Callers pass the palette's `background`.
+  final Color cutoutColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -74,5 +80,7 @@ class MydiaLogoPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant MydiaLogoPainter oldDelegate) =>
+      oldDelegate.markColor != markColor ||
+      oldDelegate.cutoutColor != cutoutColor;
 }

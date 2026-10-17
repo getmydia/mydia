@@ -14,7 +14,7 @@ import '../../core/remote/load_content_navigation.dart';
 import '../../core/remote/remote_control_intent.dart';
 import '../../core/router/navigator_keys.dart';
 import '../../core/router/push_route.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/cast_device.dart';
 import '../screens/detail/load_content_fetchers.dart';
 import 'cast_actions.dart';
@@ -240,7 +240,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     return IconButton(
       key: key,
       icon: const Icon(Icons.close, size: 18),
-      color: AppColors.textSecondary,
+      color: context.palette.textSecondary,
       // This bar is the only cast surface in the app, so an unlabelled icon
       // here would leave a screen-reader user with no route to the control
       // at all: there is no longer a full-screen remote to fall back to.
@@ -286,12 +286,12 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
 
   Widget _buildConnecting(CastDevice device) => CastPill(
         child: CastBarRow(
-          leading: const CastIconTile(
+          leading: CastIconTile(
             child: SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.primary),
+                  strokeWidth: 2, color: context.palette.primary),
             ),
           ),
           title: CastBarText.connectingTitle(device.name),
@@ -450,6 +450,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     final info = session.mediaInfo;
     if (info == null) return const SizedBox.shrink();
 
+    final palette = context.palette;
     final durationKnown = hasKnownDuration(info.duration);
 
     // Everything below that sends a command is held back while the session
@@ -502,10 +503,10 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           ),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              activeTrackColor: AppColors.primary,
-              inactiveTrackColor: AppColors.textPrimary.withValues(alpha: 0.1),
-              thumbColor: AppColors.primary,
-              overlayColor: AppColors.primary.withValues(alpha: 0.12),
+              activeTrackColor: palette.primary,
+              inactiveTrackColor: palette.textPrimary.withValues(alpha: 0.1),
+              thumbColor: palette.primary,
+              overlayColor: palette.primary.withValues(alpha: 0.12),
               trackHeight: 4,
             ),
             child: Padding(
@@ -517,7 +518,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
-                        ?.copyWith(color: AppColors.textSecondary),
+                        ?.copyWith(color: palette.textSecondary),
                   ),
                   Expanded(
                     child: Slider(
@@ -548,7 +549,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
-                        ?.copyWith(color: AppColors.textSecondary),
+                        ?.copyWith(color: palette.textSecondary),
                   ),
                 ],
               ),
@@ -565,7 +566,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     : IconButton(
                         key: const Key('cast-bar-subtitles'),
                         tooltip: 'Subtitles',
-                        color: AppColors.textPrimary,
+                        color: palette.textPrimary,
                         icon: Icon(
                           session.selectedSubtitle == null
                               ? Icons.closed_caption_off
@@ -581,14 +582,14 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                   _slot(IconButton(
                     key: const Key('cast-bar-stop'),
                     icon: const Icon(Icons.stop),
-                    color: AppColors.textPrimary,
+                    color: palette.textPrimary,
                     tooltip: 'Stop playback on ${session.device.name}',
                     onPressed: () => _confirmStop(session.device),
                   )),
                 _slot(IconButton(
                   key: const Key('cast-bar-rewind'),
                   icon: const Icon(Icons.replay_10),
-                  color: AppColors.textPrimary,
+                  color: palette.textPrimary,
                   tooltip: 'Back 10 seconds',
                   onPressed: syncing
                       ? null
@@ -608,8 +609,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     size: 28,
                   ),
                   style: IconButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.onPrimary,
+                    backgroundColor: palette.primary,
+                    foregroundColor: palette.onPrimary,
                   ),
                   tooltip: isPlaying ? 'Pause' : 'Play',
                   onPressed: syncing
@@ -622,7 +623,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                 _slot(IconButton(
                   key: const Key('cast-bar-forward'),
                   icon: const Icon(Icons.forward_10),
-                  color: AppColors.textPrimary,
+                  color: palette.textPrimary,
                   tooltip: 'Forward 10 seconds',
                   onPressed: syncing
                       ? null
@@ -644,7 +645,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     ? IconButton(
                         key: const Key('cast-bar-pull'),
                         icon: const Icon(Icons.phone_iphone),
-                        color: AppColors.textPrimary,
+                        color: palette.textPrimary,
                         tooltip: 'Play on this device',
                         onPressed: syncing ? null : _pullToLocal,
                       )
