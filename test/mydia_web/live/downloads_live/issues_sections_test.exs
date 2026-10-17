@@ -8,6 +8,8 @@ defmodule MydiaWeb.DownloadsLive.IssuesSectionsTest do
   import Mydia.MediaFixtures
 
   setup %{conn: conn} do
+    # The scan cache is global and other tests seed it without clearing.
+    :ok = Mydia.Downloads.ExternalTorrents.put(Mydia.Downloads.Structs.ExternalScan.empty())
     %{conn: log_in_user(conn, admin_user_fixture())}
   end
 

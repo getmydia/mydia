@@ -911,12 +911,6 @@
             phx-update="stream"
             class="list"
           >
-            <li
-              id="no-external-torrents"
-              class="hidden only:block p-6 text-center text-base-content/50"
-            >
-              Nothing unmanaged in your download clients
-            </li>
             <li :for={{id, torrent} <- @streams.external_torrents} id={id} class="list-row py-3">
               <div class="list-col-grow">
                 <div class="font-medium text-sm truncate">{torrent.title}</div>
