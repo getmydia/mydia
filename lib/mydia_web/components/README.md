@@ -117,18 +117,33 @@ Segmented controls override it with `dark:hover:bg-base-300` (`65,74,84`, a
 The rest of the app still darkens on hover. Fixing that everywhere needs its
 own visual pass.
 
-## The dark: variant targets mydia-dark
+## The dark: variant keys on the color scheme
 
-`app.css` declares Tailwind's `dark:` variant by hand. It originally read
+`app.css` declares Tailwind's `dark:` variant by hand, keyed on the scheme and
+not on a theme name:
 
 ```css
-@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+@custom-variant dark (&:where([data-color-scheme=dark], [data-color-scheme=dark] *));
 ```
 
-but `root.html.heex` only ever sets `mydia-dark` or `mydia-light`, so the
-variant matched no element that exists and every `dark:` utility silently
-produced nothing. Nothing errors when this regresses, which is why
+`<html>` carries `data-color-scheme="dark"` for every dark theme (Mydia Dark,
+Dracula, Mocha, OLED and the rest), so `dark:` utilities apply to all of them.
+Keying on a name such as `mydia-dark` would silently skip the others, and a
+wrong selector produces no error, which is why
 `test/mydia_web/components/dark_variant_test.exs` guards it.
+
+## Themes
+
+- The catalogue is `Mydia.Accounts.Themes`. Every id in it needs CSS, which
+  `test/mydia_web/themes_css_parity_test.exs` enforces.
+- Each theme's `base` (used for `theme-color` and the login mirror) must match
+  the theme's compiled base-100.
+- Resolving the active theme lives in three places that must stay in step:
+  `MydiaWeb.Layouts.theme_html_attrs/1` (server render), the inline script in
+  `layouts/root.html.heex` (applies the localStorage mirror before paint) and
+  `assets/js/theme.mjs` (live changes).
+- Plugin frames are told only `mydia-dark` or `mydia-light`, chosen from
+  `data-color-scheme` (`assets/js/hooks/plugin_frame_theme.mjs`).
 
 Tailwind utilities beat daisyUI's component rules, so `dark:hover:bg-base-300`
 overrides `background-color: var(--btn-bg)`. Tailwind emits utilities directly
