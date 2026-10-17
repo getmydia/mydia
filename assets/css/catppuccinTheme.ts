@@ -1,9 +1,9 @@
 import daisyTheme from "daisyui/theme";
 // The palette is imported by path: the Tailwind standalone binary that builds
 // this CSS cannot load the package's ESM entry (jiti needs babel, which the
-// binary does not bundle), and @catppuccin/daisyui reaches the palette that
-// way. The colour mapping below is that package's default (v2.1.1); only the
-// flavour changes between theme files.
+// binary does not bundle). The colour mapping below is the default of the
+// former @catppuccin/daisyui package (v2.1.1); only the flavour changes between
+// theme files.
 import { flavors } from "../node_modules/@catppuccin/palette/script/mod.js";
 
 type Flavor = "frappe" | "macchiato" | "mocha";

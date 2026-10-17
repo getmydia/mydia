@@ -19,7 +19,7 @@
     "phoenix_live_view": "file:../deps/phoenix_live_view"
   },
   "devDependencies": {
-    "@catppuccin/daisyui": "^2.1.1",
+    "@catppuccin/palette": "^1.8.0",
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.2",
     "autoprefixer": "^10.6.1",
