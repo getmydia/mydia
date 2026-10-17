@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import '../platform/native_tab_bar_support.dart';
+
 /// Responsive breakpoint utilities for adaptive layouts.
 ///
 /// Breakpoints are inspired by common device sizes:
@@ -39,8 +41,10 @@ abstract class Breakpoints {
       railInset + (pinned ? railExpandedWidth : railCollapsedWidth) + railGap;
 
   /// Whether the shell shows the floating rail (tablets and up) rather than
-  /// the phone bottom bar.
+  /// the phone bottom bar. An iOS 26 iPhone never shows it: its native tab
+  /// bar stays in landscape, as in Apple's own apps.
   static bool showsRail(BuildContext context) =>
+      NativeTabBarSupport.mode != NativeTabBarMode.bar &&
       MediaQuery.sizeOf(context).width >= mobile;
 
   /// Check if current screen is mobile size

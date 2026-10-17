@@ -52,6 +52,13 @@ answered for older callers.
 `none` unless they set `NativeTabBarSupport.debugOverride` (the bar) or
 `debugOverrideMode` (any mode); reset both in `tearDown`.
 
+On an iPhone (`mode == bar`) the bar stays in landscape too.
+`Breakpoints.showsRail` answers false in `bar` mode whatever the width, so
+`AppShell` keeps its mobile branch and every screen that reads the same
+predicate (`DockInsets.bottomOf`, the title bars, the source picker) keeps its
+phone layout with it. Width-based content density (`Breakpoints.isMobile`,
+`getHorizontalPadding`) is unaffected, so landscape grids still use the width.
+
 ## Root swap ordering
 
 The app uses the UIScene lifecycle. Built against the iOS 27 SDK, an app
