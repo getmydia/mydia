@@ -7,6 +7,8 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   import MydiaWeb.Formatters, only: [format_file_size: 1]
   import MydiaWeb.MediaLive.Show.Helpers
 
+  import MydiaWeb.MediaLive.Show.AudioTrackComponents, only: [audio_tracks: 1, shorten_codec: 1]
+
   alias MydiaWeb.MediaLive.Show.LibraryComponents
   alias MydiaWeb.MediaLive.Show.SegmentComponents
   alias MydiaWeb.MediaLive.Show.SeasonComponents
@@ -614,11 +616,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               {shorten_codec(@file.codec)}
             </span>
           <% end %>
-          <%= if @file.audio_codec do %>
-            <span class="text-base-content/60" title={@file.audio_codec}>
-              {shorten_codec(@file.audio_codec)}
-            </span>
-          <% end %>
+          <.audio_tracks file={@file} id={"episode-#{@file.id}"} class="text-base-content/60" />
           <span class="text-base-content/60">
             {format_file_size(@file.size)}
           </span>
@@ -655,18 +653,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       </div>
     <% end %>
     """
-  end
-
-  # Shorten long codec names for display
-  defp shorten_codec(nil), do: nil
-
-  defp shorten_codec(codec) do
-    codec
-    |> String.replace(~r/\s*\([^)]*\)/, "")
-    |> String.replace("Dolby Digital Plus", "DD+")
-    |> String.replace("Dolby Digital", "DD")
-    |> String.replace("DTS-HD MA", "DTS-MA")
-    |> String.replace("TrueHD", "TrueHD")
   end
 
   @doc """
@@ -995,9 +981,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       </div>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-speaker-wave" class="w-3.5 h-3.5" />
-                        <span title={file.audio_codec}>
-                          {shorten_codec(file.audio_codec) || "Unknown"}
-                        </span>
+                        <.audio_tracks file={file} id={"version-#{file.id}"} fallback="Unknown" />
                       </div>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-circle-stack" class="w-3.5 h-3.5" />

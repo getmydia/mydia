@@ -542,83 +542,12 @@ defmodule Mydia.Library.FileAnalyzer do
 
   defp extract_audio_codec(nil), do: nil
 
+  # e.g. "TrueHD Atmos 7.1". The file rows label every audio stream with the
+  # same function, so the primary track reads identically in both places.
   defp extract_audio_codec(audio_stream) do
-    codec_name = audio_stream["codec_name"]
-    channels = audio_stream["channels"]
-    profile = audio_stream["profile"]
-
-    # Format channel count (e.g., 6 channels = 5.1)
-    channel_str =
-      case channels do
-        1 -> "Mono"
-        2 -> "Stereo"
-        6 -> "5.1"
-        8 -> "7.1"
-        n when is_integer(n) -> "#{n}ch"
-        _ -> nil
-      end
-
-    codec_str =
-      case codec_name do
-        "aac" ->
-          if profile && profile != "LC", do: "AAC #{profile}", else: "AAC"
-
-        "ac3" ->
-          "AC3"
-
-        "eac3" ->
-          "DD+"
-
-        "dts" ->
-          # Check for DTS variants
-          if profile do
-            cond do
-              String.contains?(profile, "MA") -> "DTS-HD MA"
-              String.contains?(profile, "HR") -> "DTS-HD HR"
-              String.contains?(profile, "X") -> "DTS:X"
-              true -> "DTS"
-            end
-          else
-            "DTS"
-          end
-
-        "truehd" ->
-          # Check for Atmos
-          if profile && String.contains?(profile, "Atmos") do
-            "TrueHD Atmos"
-          else
-            "TrueHD"
-          end
-
-        "flac" ->
-          "FLAC"
-
-        "opus" ->
-          "Opus"
-
-        "vorbis" ->
-          "Vorbis"
-
-        "mp3" ->
-          "MP3"
-
-        "pcm_s16le" ->
-          "PCM"
-
-        name when is_binary(name) ->
-          String.upcase(name)
-
-        _ ->
-          nil
-      end
-
-    # Combine codec and channel info
-    case {codec_str, channel_str} do
-      {nil, nil} -> nil
-      {codec, nil} -> codec
-      {nil, channels} -> channels
-      {codec, channels} -> "#{codec} #{channels}"
-    end
+    audio_stream
+    |> StreamInfo.from_ffprobe_stream()
+    |> StreamInfo.audio_label()
   end
 
   defp extract_bitrate(video_stream, format) do

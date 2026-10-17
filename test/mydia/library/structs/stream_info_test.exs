@@ -189,4 +189,40 @@ defmodule Mydia.Library.Structs.StreamInfoTest do
       assert StreamInfo.from_map(StreamInfo.to_map(original)).dolby_vision_bl_compat_id == 4
     end
   end
+
+  describe "commentary?/1" do
+    test "reads the disposition flag or a commentary title" do
+      assert StreamInfo.commentary?(%StreamInfo{is_commentary: true})
+      assert StreamInfo.commentary?(%StreamInfo{title: "Director's Commentary"})
+      assert StreamInfo.commentary?(%StreamInfo{title: "commentary with cast"})
+      refute StreamInfo.commentary?(%StreamInfo{title: "Surround 5.1"})
+      refute StreamInfo.commentary?(%StreamInfo{is_commentary: false, title: nil})
+    end
+  end
+
+  describe "audio_label/1" do
+    defp audio(codec, profile, channels),
+      do: %StreamInfo{type: :audio, codec: codec, profile: profile, channels: channels}
+
+    test "names the codec and the channel layout" do
+      assert StreamInfo.audio_label(audio("truehd", "Dolby TrueHD + Dolby Atmos", 8)) ==
+               "TrueHD Atmos 7.1"
+
+      assert StreamInfo.audio_label(audio("truehd", nil, 8)) == "TrueHD 7.1"
+      assert StreamInfo.audio_label(audio("ac3", nil, 6)) == "AC3 5.1"
+      assert StreamInfo.audio_label(audio("eac3", nil, 6)) == "DD+ 5.1"
+      assert StreamInfo.audio_label(audio("dts", "DTS-HD MA", 8)) == "DTS-HD MA 7.1"
+      assert StreamInfo.audio_label(audio("dts", nil, 6)) == "DTS 5.1"
+      assert StreamInfo.audio_label(audio("aac", "LC", 2)) == "AAC Stereo"
+      assert StreamInfo.audio_label(audio("aac", "HE-AAC", 2)) == "AAC HE-AAC Stereo"
+      assert StreamInfo.audio_label(audio("opus", nil, 1)) == "Opus Mono"
+      assert StreamInfo.audio_label(audio("wmapro", nil, 3)) == "WMAPRO 3ch"
+    end
+
+    test "falls back to whichever half is known" do
+      assert StreamInfo.audio_label(audio("flac", nil, nil)) == "FLAC"
+      assert StreamInfo.audio_label(audio(nil, nil, 6)) == "5.1"
+      assert StreamInfo.audio_label(audio(nil, nil, nil)) == nil
+    end
+  end
 end
