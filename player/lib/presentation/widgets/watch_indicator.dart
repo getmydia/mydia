@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/watch_status.dart';
 import 'progress_overlay.dart';
 
@@ -55,8 +55,8 @@ class WatchIndicator extends StatelessWidget {
         key: dotKey,
         width: _dotDiameter,
         height: _dotDiameter,
-        decoration: const BoxDecoration(
-          color: AppColors.primary,
+        decoration: BoxDecoration(
+          color: context.palette.primary,
           shape: BoxShape.circle,
         ),
       );
@@ -73,18 +73,19 @@ class _CountPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        color: palette.primary,
         borderRadius: BorderRadius.circular(10),
       ),
       // No cap. A show with 137 unwatched episodes says 137, because "99+"
       // would hide exactly the case the badge is most useful for.
       child: Text(
         '$count',
-        style: const TextStyle(
-          color: AppColors.surfaceVariant,
+        style: TextStyle(
+          color: palette.surfaceVariant,
           fontSize: 11,
           fontWeight: FontWeight.w700,
           height: 1.2,

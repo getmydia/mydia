@@ -56,7 +56,8 @@ class ToastPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final leading = _leading();
+    final palette = context.palette;
+    final leading = _leading(palette);
     final action = entry.action;
     return Semantics(
       container: true,
@@ -73,7 +74,7 @@ class ToastPill extends StatelessWidget {
           ),
           child: GlassSurface(
             blurSigma: DepthTokens.blurChrome,
-            fillColor: fill(context.palette),
+            fillColor: fill(palette),
             borderRadius: _radius,
             border: Border.all(
               color: DepthTokens.rimColor,
@@ -98,8 +99,8 @@ class ToastPill extends StatelessWidget {
                         entry.message,
                         maxLines: ToastMetrics.maxLines,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
+                        style: TextStyle(
+                          color: palette.textPrimary,
                           fontSize: 14,
                         ),
                       ),
@@ -113,7 +114,7 @@ class ToastPill extends StatelessWidget {
                           key: const Key('toast-action'),
                           onPressed: onAction,
                           style: TextButton.styleFrom(
-                            foregroundColor: AppColors.primary,
+                            foregroundColor: palette.primary,
                             minimumSize: const Size(0, 32),
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -136,12 +137,12 @@ class ToastPill extends StatelessWidget {
     );
   }
 
-  Widget? _leading() {
+  Widget? _leading(MydiaPalette palette) {
     switch (entry.kind) {
       case ToastKind.info:
         final icon = entry.icon;
         if (icon == null) return null;
-        return Icon(icon, size: 18, color: AppColors.textSecondary);
+        return Icon(icon, size: 18, color: palette.textSecondary);
       case ToastKind.success:
         return const Icon(Icons.check_circle_rounded,
             size: 18, color: AppColors.success);
@@ -149,12 +150,12 @@ class ToastPill extends StatelessWidget {
         return const Icon(Icons.error_rounded,
             size: 18, color: AppColors.error);
       case ToastKind.progress:
-        return const SizedBox(
+        return SizedBox(
           width: 16,
           height: 16,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            color: AppColors.primary,
+            color: palette.primary,
           ),
         );
     }

@@ -13,6 +13,7 @@ import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import 'sidebar_row.dart';
 
 /// What the viewer chose in the picker. The header turns it into navigation,
@@ -68,7 +69,7 @@ Future<PickerChoice?> showSourcePicker(
   if (!Breakpoints.showsRail(anchorContext)) {
     return showModalBottomSheet<PickerChoice>(
       context: anchorContext,
-      backgroundColor: AppColors.surfaceVariant,
+      backgroundColor: anchorContext.palette.surfaceVariant,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => SafeArea(child: list),
@@ -133,7 +134,7 @@ class _Popover extends StatelessWidget {
                   math.max(0, MediaQuery.sizeOf(context).height - top - 16),
             ),
             child: Material(
-              color: AppColors.surfaceVariant,
+              color: context.palette.surfaceVariant,
               elevation: 8,
               borderRadius: const BorderRadius.all(Radius.circular(12)),
               clipBehavior: Clip.antiAlias,
@@ -299,7 +300,7 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 child: Divider(
                   height: 1,
-                  color: AppColors.divider.withValues(alpha: 0.4),
+                  color: context.palette.divider.withValues(alpha: 0.4),
                 ),
               ),
               SidebarRow(
@@ -350,7 +351,7 @@ class _AccountCaption extends StatelessWidget {
         style: Theme.of(context)
             .textTheme
             .labelSmall
-            ?.copyWith(color: AppColors.textSecondary),
+            ?.copyWith(color: context.palette.textSecondary),
       ),
     );
   }

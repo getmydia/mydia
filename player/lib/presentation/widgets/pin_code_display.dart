@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 
 class PinCodeDisplay extends StatelessWidget {
   final String code;
@@ -17,6 +18,7 @@ class PinCodeDisplay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Row(
       key: hasError ? const ValueKey('pin-code-error-state') : null,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -29,13 +31,13 @@ class PinCodeDisplay extends StatelessWidget {
         if (hasError) {
           borderColor = AppColors.error;
         } else if (isLoading) {
-          borderColor = AppColors.primary.withValues(alpha: 0.8);
+          borderColor = palette.primary.withValues(alpha: 0.8);
         } else if (isActive) {
-          borderColor = AppColors.primary;
+          borderColor = palette.primary;
         } else if (isFilled) {
-          borderColor = AppColors.border.withValues(alpha: 0.6);
+          borderColor = palette.border.withValues(alpha: 0.6);
         } else {
-          borderColor = AppColors.border.withValues(alpha: 0.25);
+          borderColor = palette.border.withValues(alpha: 0.25);
         }
 
         return Container(
@@ -47,7 +49,7 @@ class PinCodeDisplay extends StatelessWidget {
           decoration: BoxDecoration(
             color: hasError
                 ? AppColors.error.withValues(alpha: 0.08)
-                : AppColors.surfaceVariant.withValues(alpha: 0.35),
+                : palette.surfaceVariant.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: borderColor,
@@ -56,7 +58,7 @@ class PinCodeDisplay extends StatelessWidget {
             boxShadow: isActive
                 ? [
                     BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.25),
+                      color: palette.primary.withValues(alpha: 0.25),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -68,7 +70,7 @@ class PinCodeDisplay extends StatelessWidget {
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
-              color: hasError ? AppColors.error : AppColors.textPrimary,
+              color: hasError ? AppColors.error : palette.textPrimary,
               fontFamily: 'monospace',
             ),
           ),

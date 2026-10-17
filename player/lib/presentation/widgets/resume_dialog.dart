@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 
 /// Dialog that asks the user if they want to resume playback from a saved position.
 ///
@@ -16,6 +16,7 @@ class ResumeDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final positionText = _formatDuration(savedPositionSeconds);
     // Guard against division by zero
     final percentage = totalDurationSeconds > 0
@@ -44,9 +45,9 @@ class ResumeDialog extends StatelessWidget {
           const SizedBox(height: 8),
           LinearProgressIndicator(
             value: progressValue,
-            backgroundColor: AppColors.surfaceVariant,
-            valueColor: const AlwaysStoppedAnimation<Color>(
-              AppColors.primary,
+            backgroundColor: palette.surfaceVariant,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              palette.primary,
             ),
           ),
           const SizedBox(height: 4),
@@ -56,13 +57,13 @@ class ResumeDialog extends StatelessWidget {
               Text(
                 _formatDuration(savedPositionSeconds),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: palette.textSecondary,
                     ),
               ),
               Text(
                 _formatDuration(totalDurationSeconds),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: palette.textSecondary,
                     ),
               ),
             ],

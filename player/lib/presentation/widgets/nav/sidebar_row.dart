@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import '../focus_highlight.dart';
 import 'rail_scope.dart';
 
@@ -87,6 +87,7 @@ class _SidebarRowState extends State<SidebarRow> {
   /// selection fill and ring wrap the icon box, which is the part that stays
   /// on screen while the rail is collapsed.
   Widget _buildRail(RailScope rail) {
+    final palette = context.palette;
     final isSelected = widget.isSelected && !widget.isDisabled;
     return RailEntry(
       tooltip: widget.label,
@@ -104,7 +105,7 @@ class _SidebarRowState extends State<SidebarRow> {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(AppTheme.radiusNavItem),
             border: isSelected
-                ? Border.all(color: AppColors.primary, width: 2)
+                ? Border.all(color: palette.primary, width: 2)
                 : null,
           ),
           child: Stack(
@@ -115,10 +116,10 @@ class _SidebarRowState extends State<SidebarRow> {
                 isSelected ? widget.selectedIcon : widget.icon,
                 size: 22,
                 color: widget.isDisabled
-                    ? AppColors.textDisabled
+                    ? palette.textDisabled
                     : isSelected
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
+                        ? palette.textPrimary
+                        : palette.textSecondary,
               ),
               if (widget.badge != null)
                 Positioned(top: 8, right: 8, child: widget.badge!),
@@ -134,10 +135,10 @@ class _SidebarRowState extends State<SidebarRow> {
           fontSize: 15,
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
           color: widget.isDisabled
-              ? AppColors.textDisabled
+              ? palette.textDisabled
               : isSelected
-                  ? AppColors.textPrimary
-                  : AppColors.textSecondary,
+                  ? palette.textPrimary
+                  : palette.textSecondary,
         ),
       ),
     );
@@ -145,6 +146,7 @@ class _SidebarRowState extends State<SidebarRow> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final rail = RailScope.maybeOf(context);
     if (rail != null && !widget.isEditing) return _buildRail(rail);
     final isSelected = widget.isSelected && !widget.isDisabled;
@@ -157,19 +159,19 @@ class _SidebarRowState extends State<SidebarRow> {
     final isDimmed =
         widget.isDisabled || widget.isHidden || isLockedWhileEditing;
     final iconColor = isDimmed
-        ? AppColors.textDisabled
+        ? palette.textDisabled
         : isSelected
-            ? AppColors.primary
+            ? palette.primary
             : _isHovered
-                ? AppColors.textPrimary
-                : AppColors.textSecondary;
+                ? palette.textPrimary
+                : palette.textSecondary;
     final textColor = isDimmed
-        ? AppColors.textDisabled
+        ? palette.textDisabled
         : isSelected
-            ? AppColors.textPrimary
+            ? palette.textPrimary
             : _isHovered
-                ? AppColors.textPrimary
-                : AppColors.textSecondary;
+                ? palette.textPrimary
+                : palette.textSecondary;
 
     final showMenu = widget.canCustomise &&
         !widget.isEditing &&
@@ -216,9 +218,9 @@ class _SidebarRowState extends State<SidebarRow> {
               color: widget.isDisabled
                   ? Colors.transparent
                   : isSelected
-                      ? AppColors.primary.withValues(alpha: 0.12)
+                      ? palette.primary.withValues(alpha: 0.12)
                       : _isHovered
-                          ? AppColors.surfaceVariant.withValues(alpha: 0.3)
+                          ? palette.surfaceVariant.withValues(alpha: 0.3)
                           : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),
@@ -253,7 +255,7 @@ class _SidebarRowState extends State<SidebarRow> {
                       color: textColor,
                       decoration:
                           widget.isHidden ? TextDecoration.lineThrough : null,
-                      decorationColor: AppColors.textDisabled,
+                      decorationColor: palette.textDisabled,
                     ),
                   ),
                 ),
@@ -289,10 +291,10 @@ class _SidebarRowState extends State<SidebarRow> {
           ignoring: !showMenu,
           child: PopupMenuButton<String>(
             padding: EdgeInsets.zero,
-            icon: const Icon(
+            icon: Icon(
               Icons.more_vert,
               size: 20,
-              color: AppColors.textSecondary,
+              color: context.palette.textSecondary,
             ),
             onSelected: (value) {
               setState(() => _isLongPressed = false);

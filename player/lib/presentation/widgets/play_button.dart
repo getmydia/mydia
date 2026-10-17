@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import 'focus_highlight.dart';
 
 class PlayButton extends StatefulWidget {
@@ -43,6 +43,7 @@ class _PlayButtonState extends State<PlayButton>
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return ScaleTransition(
       scale: _scaleAnimation,
       child: SizedBox(
@@ -57,11 +58,11 @@ class _PlayButtonState extends State<PlayButton>
               // Solid primary fill to match the system's flat primary actions
               // (FilledButton, hero Play, card play overlay) — no two-hue
               // gradient.
-              color: _enabled ? AppColors.primary : AppColors.surfaceVariant,
+              color: _enabled ? palette.primary : palette.surfaceVariant,
               boxShadow: _enabled
                   ? [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.4),
+                        color: palette.primary.withValues(alpha: 0.4),
                         blurRadius: 16,
                         offset: const Offset(0, 4),
                       ),
@@ -91,7 +92,7 @@ class _PlayButtonState extends State<PlayButton>
                     child: Icon(
                       Icons.play_arrow_rounded,
                       size: 28,
-                      color: _enabled ? Colors.white : AppColors.textDisabled,
+                      color: _enabled ? Colors.white : palette.textDisabled,
                     ),
                   ),
                 ),

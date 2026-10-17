@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/colors.dart';
 import '../../core/theme/depth_tokens.dart';
+import '../../core/theme/palette.dart';
 import 'glass_surface.dart';
 
 /// An [AlertDialog]-shaped dialog on the OSD material.
@@ -27,6 +27,7 @@ class OsdDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final textTheme = Theme.of(context).textTheme;
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -45,10 +46,10 @@ class OsdDialog extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
                 child: IconTheme.merge(
-                  data: const IconThemeData(color: AppColors.textPrimary),
+                  data: IconThemeData(color: palette.textPrimary),
                   child: DefaultTextStyle.merge(
                     style: (textTheme.headlineSmall ?? const TextStyle())
-                        .copyWith(color: AppColors.textPrimary),
+                        .copyWith(color: palette.textPrimary),
                     child: title,
                   ),
                 ),
@@ -58,7 +59,7 @@ class OsdDialog extends StatelessWidget {
                   padding: contentPadding,
                   child: DefaultTextStyle.merge(
                     style: (textTheme.bodyMedium ?? const TextStyle())
-                        .copyWith(color: AppColors.textSecondary),
+                        .copyWith(color: palette.textSecondary),
                     child: content,
                   ),
                 ),

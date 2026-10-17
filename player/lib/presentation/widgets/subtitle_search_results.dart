@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/subtitle_candidate.dart';
 
 /// The results list for an online subtitle search.
@@ -24,6 +25,7 @@ class SubtitleSearchResults extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final failures = providers.where((p) => p.failed).toList();
 
     return Column(
@@ -37,8 +39,7 @@ class SubtitleSearchResults extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
               child: Text(
                 '${provider.name}: ${provider.quotaLabel}',
-                style: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 12),
+                style: TextStyle(color: palette.textSecondary, fontSize: 12),
               ),
             ),
         for (final provider in failures)
@@ -57,7 +58,7 @@ class SubtitleSearchResults extends StatelessWidget {
             child: Text(
               'No subtitles found for ${languages.join(', ')}. '
               'Try adding another language.',
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: palette.textSecondary),
             ),
           )
         else
@@ -88,10 +89,11 @@ class _ResultTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return ListTile(
       title: Text(
         candidate.releaseName ?? candidate.displayLanguage,
-        style: const TextStyle(color: AppColors.textPrimary),
+        style: TextStyle(color: palette.textPrimary),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
@@ -101,7 +103,7 @@ class _ResultTile extends StatelessWidget {
         children: [
           Text(
             candidate.displayLanguage,
-            style: const TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: palette.textSecondary),
           ),
           if (candidate.hashMatch)
             const Text(
@@ -112,25 +114,22 @@ class _ResultTile extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.star,
-                    size: 12, color: AppColors.textSecondary),
+                Icon(Icons.star, size: 12, color: palette.textSecondary),
                 const SizedBox(width: 2),
                 Text(
                   candidate.rating!.toStringAsFixed(1),
-                  style: const TextStyle(
-                      color: AppColors.textSecondary, fontSize: 12),
+                  style: TextStyle(color: palette.textSecondary, fontSize: 12),
                 ),
               ],
             ),
           Text(
             candidate.providerName,
-            style:
-                const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            style: TextStyle(color: palette.textSecondary, fontSize: 12),
           ),
         ],
       ),
       trailing: candidate.hearingImpaired
-          ? const Icon(Icons.hearing, color: AppColors.textSecondary, size: 18)
+          ? Icon(Icons.hearing, color: palette.textSecondary, size: 18)
           : null,
       onTap: onTap,
     );

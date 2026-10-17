@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 
 /// Badge type for displaying quality information
@@ -36,16 +36,13 @@ class QualityBadge extends StatelessWidget {
   // is reserved for actions and state (play, active nav, scrubber, focus);
   // badges are information, so they read as neutral chips. The enum stays
   // because callers use it and it may carry non-colour differences later.
-  Color get _backgroundColor => AppColors.surfaceVariant;
-
-  Color get _textColor => AppColors.textPrimary;
-
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: _backgroundColor,
+        color: palette.surfaceVariant,
         borderRadius: BorderRadius.circular(AppTheme.radiusBadge),
       ),
       child: Text(
@@ -53,7 +50,7 @@ class QualityBadge extends StatelessWidget {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: _textColor,
+          color: palette.textPrimary,
           height: 1.0,
         ),
       ),

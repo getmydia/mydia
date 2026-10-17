@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/player/subtitle_size.dart';
-import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import 'osd_dialog.dart';
 
 /// Shows the subtitle size choices and returns the one picked, or null if
@@ -13,42 +13,46 @@ Future<SubtitleSize?> showSubtitleSizePicker(
 ) {
   return showDialog<SubtitleSize>(
     context: context,
-    builder: (context) => OsdDialog(
-      title: const Text('Subtitle size'),
-      contentPadding: const EdgeInsets.symmetric(vertical: 12),
-      content: Material(
-        type: MaterialType.transparency,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final size in SubtitleSize.values)
-                ListTile(
-                  key: Key('subtitle-size-option-${size.name}'),
-                  autofocus: size == current,
-                  leading: Icon(
-                    size == current
-                        ? Icons.check_circle
-                        : Icons.circle_outlined,
-                    color: size == current
-                        ? AppColors.primary
-                        : AppColors.textSecondary,
-                  ),
-                  title: Text(
-                    size.label,
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight:
-                          size == current ? FontWeight.bold : FontWeight.normal,
+    builder: (context) {
+      final palette = context.palette;
+      return OsdDialog(
+        title: const Text('Subtitle size'),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        content: Material(
+          type: MaterialType.transparency,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final size in SubtitleSize.values)
+                  ListTile(
+                    key: Key('subtitle-size-option-${size.name}'),
+                    autofocus: size == current,
+                    leading: Icon(
+                      size == current
+                          ? Icons.check_circle
+                          : Icons.circle_outlined,
+                      color: size == current
+                          ? palette.primary
+                          : palette.textSecondary,
                     ),
+                    title: Text(
+                      size.label,
+                      style: TextStyle(
+                        color: palette.textPrimary,
+                        fontWeight: size == current
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    onTap: () => Navigator.of(context).pop(size),
                   ),
-                  onTap: () => Navigator.of(context).pop(size),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    ),
+      );
+    },
   );
 }

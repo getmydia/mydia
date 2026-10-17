@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/navigation/sidebar_layout_providers.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/theme/palette.dart';
 import 'sidebar_content.dart';
 
 /// Opens on the root navigator, so the iPad native sidebar hides while it is
@@ -40,7 +40,7 @@ Future<void> showSidebarEditSheet({
       context: context,
       useRootNavigator: true,
       builder: (_) => Dialog(
-        backgroundColor: AppColors.surfaceVariant,
+        backgroundColor: context.palette.surfaceVariant,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420, maxHeight: 640),
           child: _EditSheet(location: location, inDialog: true),
@@ -53,7 +53,7 @@ Future<void> showSidebarEditSheet({
       useRootNavigator: true,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: AppColors.surfaceVariant,
+      backgroundColor: context.palette.surfaceVariant,
       builder: (_) => _EditSheet(location: location),
     );
   }

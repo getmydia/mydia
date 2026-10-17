@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/colors.dart';
+import '../../core/theme/palette.dart';
 import '../../domain/models/download_option.dart';
 
 /// Dialog for choosing what to download before a download starts.
@@ -41,8 +42,9 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
     BuildContext context,
     AsyncSnapshot<List<DownloadOption>> snapshot,
   ) {
+    final palette = context.palette;
     return AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: palette.surface,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -56,7 +58,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
           Text(
             widget.title,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: palette.textSecondary,
                 ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -79,6 +81,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
 
   Widget _buildOptionsContent(
       BuildContext context, List<DownloadOption> options) {
+    final palette = context.palette;
     if (options.isEmpty) {
       return Column(
         mainAxisSize: MainAxisSize.min,
@@ -92,7 +95,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
           Text(
             'No download options available',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: palette.textSecondary,
                 ),
             textAlign: TextAlign.center,
           ),
@@ -152,6 +155,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
   }
 
   Widget _buildQualityOption(DownloadOption option) {
+    final palette = context.palette;
     final isSelected = _selectedResolution == option.resolution;
 
     return InkWell(
@@ -168,10 +172,10 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withValues(alpha: 0.2)
-              : AppColors.surfaceVariant,
+              ? palette.primary.withValues(alpha: 0.2)
+              : palette.surfaceVariant,
           border: Border.all(
-            color: isSelected ? AppColors.primary : Colors.transparent,
+            color: isSelected ? palette.primary : Colors.transparent,
             width: 2,
           ),
           borderRadius: BorderRadius.circular(8),
@@ -182,7 +186,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
               isSelected
                   ? Icons.radio_button_checked
                   : Icons.radio_button_unchecked,
-              color: isSelected ? AppColors.primary : AppColors.textSecondary,
+              color: isSelected ? palette.primary : palette.textSecondary,
               size: 24,
             ),
             const SizedBox(width: 8),
@@ -212,7 +216,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
                             ? option.formattedDisplaySize
                             : '~${option.formattedSize}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.textSecondary,
+                              color: palette.textSecondary,
                             ),
                       ),
                       if (option.isTranscoding) ...[
@@ -225,9 +229,9 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
               ),
             ),
             if (isSelected)
-              const Icon(
+              Icon(
                 Icons.check_circle,
-                color: AppColors.primary,
+                color: palette.primary,
               ),
           ],
         ),
@@ -283,6 +287,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
   }
 
   Widget _buildErrorContent(BuildContext context, Object error) {
+    final palette = context.palette;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -302,7 +307,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
         Text(
           error.toString(),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
+                color: palette.textSecondary,
               ),
           textAlign: TextAlign.center,
           maxLines: 3,
@@ -316,6 +321,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
     BuildContext context,
     List<DownloadOption>? options,
   ) {
+    final palette = context.palette;
     final hasOptions = options != null && options.isNotEmpty;
     final canDownload = hasOptions &&
         (_isLoneOriginal(options) || _selectedResolution != null) &&
@@ -329,18 +335,18 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
           'Cancel',
           style: TextStyle(
             color: _isStartingDownload
-                ? AppColors.textDisabled
-                : AppColors.textSecondary,
+                ? palette.textDisabled
+                : palette.textSecondary,
           ),
         ),
       ),
       ElevatedButton(
         onPressed: canDownload ? () => _startDownload(options) : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.onPrimary,
-          disabledBackgroundColor: AppColors.surfaceVariant,
-          disabledForegroundColor: AppColors.textDisabled,
+          backgroundColor: palette.primary,
+          foregroundColor: palette.onPrimary,
+          disabledBackgroundColor: palette.surfaceVariant,
+          disabledForegroundColor: palette.textDisabled,
         ),
         child: _isStartingDownload
             ? const SizedBox(
