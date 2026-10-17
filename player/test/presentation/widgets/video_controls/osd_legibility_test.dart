@@ -11,6 +11,7 @@ import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/theme_preset.dart';
 import 'package:player/presentation/widgets/video_controls/center_play_button.dart';
 
+import '../../../test_utils/mac_accents.dart';
 import '../../../test_utils/osd_contrast.dart';
 
 void main() {
@@ -44,6 +45,21 @@ void main() {
       test('${preset.name}: textPrimary and textSecondary clear 4.5:1', () {
         expect(osdContrast(palette.textPrimary), greaterThanOrEqualTo(4.5));
         expect(osdContrast(palette.textSecondary), greaterThanOrEqualTo(4.5));
+      });
+
+      // The accent is drawn as text and icon colour on the OSD (toast actions,
+      // selected-state checks). The macOS accent is the viewer's, so check
+      // every accent System Settings offers.
+      final primaries = preset == ThemePreset.macos
+          ? {
+              for (final a in macAccents.entries)
+                'macos/${a.key}': preset.palette(systemAccent: a.value).primary,
+            }
+          : {preset.name: palette.primary};
+      primaries.forEach((name, primary) {
+        test('$name: primary clears 4.5:1 on the OSD fill', () {
+          expect(osdContrast(primary), greaterThanOrEqualTo(4.5));
+        });
       });
 
       test('${preset.name}: textDisabled is not OSD text', () {

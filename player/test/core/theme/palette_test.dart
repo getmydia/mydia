@@ -1,8 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:player/core/theme/contrast.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/theme_preset.dart';
+
+import '../../test_utils/mac_accents.dart';
 
 void main() {
   group('Projection Booth', () {
@@ -36,17 +41,39 @@ void main() {
   });
 
   group('macOS', () {
-    test('takes the accent it is given', () {
-      final p = Palettes.macos(const Color(0xFFBF5AF2));
-      expect(p.primary, const Color(0xFFBF5AF2));
-      expect(p.ambientTint, isFalse);
+    test('has no ambient tint', () {
+      expect(Palettes.macos(const Color(0xFFBF5AF2)).ambientTint, isFalse);
     });
 
-    test('on-primary is whichever of black or white contrasts more', () {
-      expect(onColorFor(const Color(0xFFFFD60A)), const Color(0xFF000000));
-      expect(onColorFor(const Color(0xFF1A1A6A)), const Color(0xFFFFFFFF));
+    test('accents that are already legible come through unchanged', () {
+      for (final name in ['yellow', 'green']) {
+        final accent = macAccents[name]!;
+        expect(Palettes.macos(accent).primary, accent, reason: name);
+      }
+    });
+
+    test('a failing accent is lifted and keeps its hue', () {
+      final blue = macAccents['blue']!;
+      final lifted = Palettes.macos(blue).primary;
+      expect(lifted, isNot(blue));
+      expect(
+        contrastRatio(lifted, Palettes.macos(blue).background),
+        greaterThanOrEqualTo(4.5),
+      );
+      final before = Hct.fromInt(blue.toARGB32());
+      final after = Hct.fromInt(lifted.toARGB32());
+      expect(after.tone, greaterThan(before.tone));
+      final drift = (after.hue - before.hue).abs();
+      expect(math.min(drift, 360 - drift), lessThan(1.0));
+    });
+
+    test('on-primary and focus derive from the lifted accent', () {
       final p = Palettes.macos(Palettes.macosDefaultAccent);
-      expect(p.onPrimary, onColorFor(Palettes.macosDefaultAccent));
+      expect(p.onPrimary, onColorFor(p.primary));
+      expect(
+        p.primaryFocus,
+        Color.lerp(p.primary, const Color(0xFF000000), 0.15),
+      );
     });
   });
 

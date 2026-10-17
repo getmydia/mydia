@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:material_color_utilities/material_color_utilities.dart';
 
 import 'contrast.dart';
+import 'depth_tokens.dart';
 
 /// Every colour that changes between theme presets. Colours that never
 /// change (semantic error/warning/info/success, OSD tones, overlays) stay
@@ -214,9 +216,52 @@ abstract final class Palettes {
   /// runner answers and off macOS.
   static const Color macosDefaultAccent = Color(0xFF0A84FF);
 
-  /// The macOS dark window greys, with the viewer's system accent.
-  static MydiaPalette macos(Color accent) => MydiaPalette(
-        background: const Color(0xFF1E1E1E),
+  /// The OSD fill over a pure-white frame, the worst case its text sits on.
+  static final Color _osdWorstCase = Color.alphaBlend(
+    DepthTokens.osdTint.withValues(alpha: DepthTokens.osdFillOpacity),
+    const Color(0xFFFFFFFF),
+  );
+
+  static const Color _macosBackground = Color(0xFF1E1E1E);
+
+  /// A hair above the 4.5:1 floor, so 8-bit rounding of the lifted colour
+  /// cannot land under it.
+  static const double _accentTarget = 4.55;
+
+  /// [accent] with its tone raised, in steps of one, until it clears the text
+  /// floor on both the macOS window and the OSD fill. Hue and chroma are
+  /// kept, so the colour stays the viewer's accent; only its lightness moves.
+  /// Accents that already clear it come through unchanged.
+  ///
+  /// The system's own accent is tuned for controls on the window, and a few
+  /// (system blue is the common one) measure about 3.7:1 on the playback
+  /// controls, which sit on the OSD fill. The player draws the accent as text
+  /// and icon colour there, so it is lifted slightly rather than left
+  /// unreadable.
+  @visibleForTesting
+  static Color legibleAccent(Color accent) {
+    bool clears(Color c) =>
+        contrastRatio(c, _macosBackground) >= _accentTarget &&
+        contrastRatio(c, _osdWorstCase) >= _accentTarget;
+    if (clears(accent)) return accent;
+    final hct = Hct.fromInt(accent.toARGB32());
+    for (var tone = hct.tone.ceilToDouble() + 1; tone <= 100; tone++) {
+      final lifted = Color(Hct.from(hct.hue, hct.chroma, tone).toInt());
+      if (clears(lifted)) return lifted;
+    }
+    return accent;
+  }
+
+  /// The macOS dark window greys, with the viewer's system accent, lifted
+  /// when needed so it stays legible on the playback controls (see
+  /// [legibleAccent]).
+  static MydiaPalette macos(Color systemAccent) {
+    final accent = legibleAccent(systemAccent);
+    return _macos(accent);
+  }
+
+  static MydiaPalette _macos(Color accent) => MydiaPalette(
+        background: _macosBackground,
         surfaceDim: const Color(0xFF212121),
         surfaceLow: const Color(0xFF242424),
         surface: const Color(0xFF282828),

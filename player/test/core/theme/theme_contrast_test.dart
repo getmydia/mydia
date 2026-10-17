@@ -20,27 +20,15 @@ import 'package:player/core/theme/contrast.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/theme_preset.dart';
 
+import '../../test_utils/mac_accents.dart';
+
 /// SC 1.4.3 Contrast (Minimum), normal-size text.
 const double _textFloor = 4.5;
-
-/// The accents System Settings offers, as `controlAccentColor` resolves them
-/// under the dark appearance. "Multicolour" is blue for apps without their
-/// own accent.
-const _macAccents = <String, Color>{
-  'blue': Color(0xFF0A84FF),
-  'purple': Color(0xFFBF5AF2),
-  'pink': Color(0xFFFF375F),
-  'red': Color(0xFFFF453A),
-  'orange': Color(0xFFFF9F0A),
-  'yellow': Color(0xFFFFD60A),
-  'green': Color(0xFF30D158),
-  'graphite': Color(0xFF8C8C8C),
-};
 
 Map<String, MydiaPalette> _palettes() => {
       for (final preset in ThemePreset.values)
         if (preset != ThemePreset.macos) preset.name: preset.palette(),
-      for (final accent in _macAccents.entries)
+      for (final accent in macAccents.entries)
         'macos/${accent.key}':
             ThemePreset.macos.palette(systemAccent: accent.value),
     };
