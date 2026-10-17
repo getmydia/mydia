@@ -190,6 +190,16 @@ defmodule Mydia.Library.Structs.StreamInfoTest do
     end
   end
 
+  describe "commentary?/1" do
+    test "reads the disposition flag or a commentary title" do
+      assert StreamInfo.commentary?(%StreamInfo{is_commentary: true})
+      assert StreamInfo.commentary?(%StreamInfo{title: "Director's Commentary"})
+      assert StreamInfo.commentary?(%StreamInfo{title: "commentary with cast"})
+      refute StreamInfo.commentary?(%StreamInfo{title: "Surround 5.1"})
+      refute StreamInfo.commentary?(%StreamInfo{is_commentary: false, title: nil})
+    end
+  end
+
   describe "audio_label/1" do
     defp audio(codec, profile, channels),
       do: %StreamInfo{type: :audio, codec: codec, profile: profile, channels: channels}

@@ -11,7 +11,7 @@ defmodule MydiaWeb.MediaLive.Show.AudioTracksTest do
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Library.Structs.StreamInfo
-  alias MydiaWeb.MediaLive.Show.Components
+  alias MydiaWeb.MediaLive.Show.AudioTrackComponents
 
   defp track(index, codec, attrs) do
     struct!(%StreamInfo{index: index, type: :audio, codec: codec, language: "eng"}, attrs)
@@ -26,7 +26,7 @@ defmodule MydiaWeb.MediaLive.Show.AudioTracksTest do
   end
 
   defp render_tracks(file, opts \\ []) do
-    render_component(&Components.audio_tracks/1, [file: file, id: "f"] ++ opts)
+    render_component(&AudioTrackComponents.audio_tracks/1, [file: file, id: "f"] ++ opts)
   end
 
   defp texts(html, selector) do
@@ -48,6 +48,16 @@ defmodule MydiaWeb.MediaLive.Show.AudioTracksTest do
 
     assert texts(html, "[id^='audio-track-f-']") ==
              ["TrueHD Atmos 7.1", "AC3 5.1", "AC3 5.1 commentary"]
+  end
+
+  test "treats a track titled as commentary as commentary without the disposition flag" do
+    streams = [
+      track(1, "ac3", channels: 2, title: "Director's Commentary"),
+      track(2, "dts", channels: 6)
+    ]
+
+    assert texts(render_tracks(file(streams)), "[id^='audio-track-f-']") ==
+             ["DTS 5.1", "AC3 Stereo commentary"]
   end
 
   test "shows the language only when tracks differ in language" do

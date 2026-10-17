@@ -145,6 +145,19 @@ defmodule Mydia.Library.Structs.StreamInfo do
   end
 
   @doc """
+  True for a commentary track: flagged by the container's `comment`
+  disposition, or titled as one. Many remuxes title a commentary track
+  ("Director's Commentary") without ever setting the disposition flag.
+  """
+  @spec commentary?(t()) :: boolean()
+  def commentary?(%__MODULE__{is_commentary: true}), do: true
+
+  def commentary?(%__MODULE__{title: title}) when is_binary(title),
+    do: String.match?(title, ~r/commentary/i)
+
+  def commentary?(%__MODULE__{}), do: false
+
+  @doc """
   A short human label for an audio stream, such as "TrueHD Atmos 7.1" or
   "AC3 5.1". Returns `nil` when neither the codec nor the channel count is
   known.
