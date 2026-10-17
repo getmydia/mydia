@@ -88,6 +88,13 @@ defmodule MydiaWeb.DownloadsLive.ExternalTest do
     assert has_element?(view, "#external_torrents-ext1")
   end
 
+  test "the intro is an info alert holding Rescan", %{conn: conn} do
+    seed_scan()
+    {:ok, view, _html} = live(conn, ~p"/downloads?tab=external")
+
+    assert has_element?(view, "#external-intro.alert.alert-info #external-rescan")
+  end
+
   test "the external count is visible from another tab", %{conn: conn} do
     # The badge reads from the cached scan, so it must be populated on every
     # tab's load path, not only the External tab's.

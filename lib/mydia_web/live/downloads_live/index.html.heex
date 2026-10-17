@@ -31,14 +31,42 @@
             <% end %>
           </button>
         <% end %>
+        <%!-- Rare, destructive actions. daisyUI's popover dropdown: the native
+              popover API puts the menu in the top layer (no z-index or
+              stacking-context fights) and CSS anchor positioning places it;
+              browsers without anchor positioning get daisyUI's centred
+              fallback. phx-update="ignore" keeps refresh ticks from replacing
+              an open menu. --%>
         <button
+          id="downloads-more"
           type="button"
-          class="btn btn-sm btn-ghost"
-          phx-click="open_clear_completed_modal"
+          class="btn btn-sm btn-ghost btn-square"
+          popovertarget="downloads-more-menu"
+          style="anchor-name:--downloads-more"
+          aria-label="More actions"
+          title="More actions"
         >
-          <.icon name="hero-trash" class="w-4 h-4" />
-          <span class="hidden sm:inline ml-1">Clear Completed</span>
+          <.icon name="hero-ellipsis-horizontal" class="size-4" />
         </button>
+        <ul
+          id="downloads-more-menu"
+          popover
+          phx-update="ignore"
+          class="dropdown dropdown-end menu w-56 rounded-box bg-base-100 border border-base-300 p-2 shadow-lg"
+          style="position-anchor:--downloads-more"
+        >
+          <li>
+            <button
+              id="downloads-clear-completed"
+              type="button"
+              popovertarget="downloads-more-menu"
+              popovertargetaction="hide"
+              phx-click="open_clear_completed_modal"
+            >
+              <.icon name="hero-trash" class="size-4" /> Clear completed…
+            </button>
+          </li>
+        </ul>
       </div>
     </div>
 
@@ -861,11 +889,12 @@
       <%!-- External tab: torrents in the clients that Mydia does not manage --%>
       <%= if @active_tab == :external do %>
         <div class="flex flex-col gap-4">
-          <div class="flex items-center justify-between gap-4">
-            <p class="text-sm text-base-content/60">
+          <div id="external-intro" role="note" class="alert alert-info alert-soft">
+            <.icon name="hero-information-circle" class="size-5 shrink-0" />
+            <span class="text-sm">
               Torrents in your download clients that Mydia does not manage. They are not
               tracked and nothing is imported from them.
-            </p>
+            </span>
             <button
               id="external-rescan"
               type="button"
@@ -889,7 +918,7 @@
           <ul
             id="external-torrents"
             phx-update="stream"
-            class="list bg-base-100 rounded-box shadow-lg"
+            class="list"
           >
             <li
               id="no-external-torrents"

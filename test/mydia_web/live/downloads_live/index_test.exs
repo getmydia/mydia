@@ -152,6 +152,16 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
   end
 
   describe "clear completed modal" do
+    test "lives in the header's popover menu, not as a top-level button", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      assert has_element?(view, "#downloads-more[popovertarget='downloads-more-menu']")
+      assert has_element?(view, "#downloads-more-menu[popover] #downloads-clear-completed")
+
+      html = view |> element("#downloads-clear-completed") |> render_click()
+      assert html =~ "Clear completed downloads"
+    end
+
     test "opens with the delete-files checkbox off and a scope-accurate count", %{conn: conn} do
       completed_download("Alpha Movie")
       completed_download("Beta Movie")
