@@ -1,8 +1,10 @@
 // A plugin frame runs in an opaque origin and cannot read the host's stored
-// theme, so the host tells it. Only the host's own themes are ever sent.
-export const FRAME_THEMES = ["mydia-dark", "mydia-light"]
+// theme, so the host tells it. Plugins only understand the two Mydia names, so
+// every host theme (Dracula, Nord, ...) is reduced to its light or dark scheme.
+const SCHEME_THEMES = { dark: "mydia-dark", light: "mydia-light" }
 
 export function themeMessage(root) {
-  const theme = root?.getAttribute?.("data-theme")
-  return FRAME_THEMES.includes(theme) ? { mydia: "theme", theme } : null
+  const scheme = root?.getAttribute?.("data-color-scheme")
+  const theme = Object.hasOwn(SCHEME_THEMES, scheme) ? SCHEME_THEMES[scheme] : null
+  return theme ? { mydia: "theme", theme } : null
 }

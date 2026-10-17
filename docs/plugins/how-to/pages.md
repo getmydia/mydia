@@ -213,7 +213,8 @@ Details worth knowing:
   surface return `Done` directly and no modal appears.
 - Whatever the outcome, nothing reaches the page until the user has decided.
 - The host posts `{mydia: "theme", theme}` when your page loads and whenever
-  the user changes theme. Set it on your `<html>` so daisyUI's theme variables
+  the user changes theme. Whatever theme the user picked, you get the one of
+  those two names that matches its light or dark scheme. Set it on your `<html>` so daisyUI's theme variables
   match the host. Without it your page follows the operating system theme.
 
 ## Know the limits
