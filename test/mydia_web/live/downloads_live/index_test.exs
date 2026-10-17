@@ -67,7 +67,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       completed_download("Alpha Movie")
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
 
       assert has_element?(view, "#downloads-sort")
       assert has_element?(view, "#downloads-sort option[value='added_desc'][selected]")
@@ -79,7 +79,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       refute has_element?(view, "#downloads-sort")
     end
 
-    test "offers tab-appropriate options", %{conn: conn} do
+    test "offers view-appropriate options", %{conn: conn} do
       # An active row so the Queue-tab half of this test has something to render
       # the sort control against; a completed one for the Completed-tab half.
       grabbing = media_item_fixture(%{title: "Grabbing Movie"})
@@ -94,13 +94,13 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
 
-      # Queue tab: ETA is meaningful, ratio is not.
+      # Active view: ETA is meaningful, ratio is not.
       assert has_element?(view, "#downloads-sort option[value='eta_asc']")
       refute has_element?(view, "#downloads-sort option[value='ratio_desc']")
 
-      html = view |> element("button[phx-value-tab='completed']") |> render_click()
+      html = view |> element("#downloads-view-imported") |> render_click()
 
-      # Completed tab: ratio/imported are meaningful, ETA is not.
+      # Imported view: ratio/imported are meaningful, ETA is not.
       assert html =~ "ratio_desc"
       assert has_element?(view, "#downloads-sort option[value='ratio_desc']")
       refute has_element?(view, "#downloads-sort option[value='eta_asc']")
@@ -117,7 +117,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
     test "sorts by name ascending and descending", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
       titles = ["Alpha Movie", "Beta Movie", "Gamma Movie"]
 
       html = view |> element("#downloads-sort-form") |> render_change(%{"sort_by" => "name_asc"})
@@ -130,7 +130,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
     test "sorts by size descending (largest first)", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
 
       html = view |> element("#downloads-sort-form") |> render_change(%{"sort_by" => "size_desc"})
 
@@ -142,7 +142,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
     test "an unknown sort value leaves the current sort unchanged", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
 
       # No crash, default remains selected.
       html = view |> element("#downloads-sort-form") |> render_change(%{"sort_by" => "bogus"})
@@ -314,7 +314,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       download = imported_movie_with_file("Wrong Title")
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
 
       assert has_element?(
                view,
@@ -333,7 +333,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
         })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
 
       refute has_element?(
                view,
@@ -367,7 +367,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       end
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
 
       refute has_element?(
                view,
@@ -380,7 +380,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       new_movie = media_item_fixture(%{type: "movie", title: "Corrected Title"})
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
       render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
 
       assert has_element?(view, "#match-modal")
@@ -728,7 +728,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       download = completed_download("Fictional Quiet Orchard")
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      view |> element("#downloads-tab-completed") |> render_click()
+      view |> element("#downloads-view-imported") |> render_click()
 
       render_click(view, "clear_single_completed", %{"id" => download.id})
 
@@ -972,7 +972,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
       render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
       render_change(view, "match_modal_search", %{"q" => "New Show"})
       render_click(view, "match_modal_pick_item", %{"media_item_id" => new_show.id})
@@ -1005,7 +1005,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
       render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
       render_change(view, "match_modal_search", %{"q" => "Imported"})
 
@@ -1035,7 +1035,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
       render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
       render_change(view, "match_modal_search", %{"q" => "Stub"})
 
@@ -1085,7 +1085,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_patch(view, ~p"/downloads?view=imported")
       render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
       render_change(view, "match_modal_search", %{"q" => "New Show"})
       render_click(view, "match_modal_pick_item", %{"media_item_id" => new_show.id})

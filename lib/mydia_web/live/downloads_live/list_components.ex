@@ -135,7 +135,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
 
   attr :filters, Filters, required: true
   attr :clients, :list, required: true
-  attr :tab, :atom, required: true
+  attr :show_status?, :boolean, required: true
 
   def filter_bar(assigns) do
     assigns = assign(assigns, :status_options, ListView.status_options())
@@ -145,7 +145,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
       id="downloads-filter-form"
       phx-change="filter"
       phx-submit="filter"
-      class="flex flex-wrap items-center gap-2 mb-3"
+      class="flex flex-wrap items-center gap-2"
     >
       <label class="input input-sm w-full sm:w-72">
         <.icon name="hero-magnifying-glass" class="size-4 opacity-50" />
@@ -199,7 +199,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
         </option>
       </select>
 
-      <div :if={@tab == :queue} id="downloads-status-filter" class="filter">
+      <div :if={@show_status?} id="downloads-status-filter" class="filter">
         <input
           class="btn btn-sm filter-reset"
           type="radio"

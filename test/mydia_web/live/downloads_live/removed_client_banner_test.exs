@@ -41,7 +41,7 @@ defmodule MydiaWeb.DownloadsLive.RemovedClientBannerTest do
     orphan(media_item, "qbit-old")
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     assert has_element?(view, "#removed-client-qbit-old")
     assert has_element?(view, "#removed-client-qbit-old-2")
@@ -63,7 +63,7 @@ defmodule MydiaWeb.DownloadsLive.RemovedClientBannerTest do
     orphan(media_item, "sab-old")
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     assert has_element?(view, "#removed-client-qbit-old")
     assert has_element?(view, "#removed-client-sab-old")
@@ -89,7 +89,7 @@ defmodule MydiaWeb.DownloadsLive.RemovedClientBannerTest do
     })
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     assert has_element?(view, "#removed-client-paused")
     refute has_element?(view, "#removed-client-paused", "removed client")
@@ -101,7 +101,7 @@ defmodule MydiaWeb.DownloadsLive.RemovedClientBannerTest do
     survivor = orphan(media_item, "sab-old")
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     view
     |> element("#clear-removed-client-qbit-old")
@@ -119,7 +119,7 @@ defmodule MydiaWeb.DownloadsLive.RemovedClientBannerTest do
     download_fixture(%{media_item_id: media_item.id, download_client: "qbit"})
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     refute has_element?(view, "[id^='removed-client-']")
   end
