@@ -23,6 +23,7 @@ import '../settings_controller.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 import 'subtitle_size_row.dart';
+import 'theme_preset_row.dart';
 import 'track_picker_row.dart';
 import 'update_card.dart';
 
@@ -330,4 +331,15 @@ class VersionFooter extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Device-level look: the theme preset.
+class AppearanceSettingsSection extends StatelessWidget {
+  const AppearanceSettingsSection({super.key});
+
+  @override
+  Widget build(BuildContext context) => const SettingsSection(
+        label: 'Appearance',
+        children: [ThemePresetSettingsRow()],
+      );
 }

@@ -114,6 +114,8 @@ class SettingsScreen extends ConsumerWidget {
                         failed: settingsAsync.hasError,
                       ),
                       const SizedBox(height: 18),
+                      const AppearanceSettingsSection(),
+                      const SizedBox(height: 18),
                       _ManageSection(connection: summary),
                       const SizedBox(height: 18),
                       const SourcesSettingsSection(),
