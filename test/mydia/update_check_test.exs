@@ -70,6 +70,17 @@ defmodule Mydia.UpdateCheckTest do
       assert %{version: ^latest, url: "https://example.test/r"} = UpdateCheck.available_update()
     end
 
+    test "drops a release URL that is not https" do
+      bypass = Bypass.open()
+
+      expect_check(bypass, %{
+        latest_version: newer_version(),
+        release_url: "javascript:alert(document.cookie)"
+      })
+
+      assert {:ok, %{url: nil}} = UpdateCheck.run(relay_url: relay_url(bypass), getenv: env(%{}))
+    end
+
     test "reports nothing when the relay's release is not newer" do
       bypass = Bypass.open()
       current = to_string(Application.spec(:mydia, :vsn))

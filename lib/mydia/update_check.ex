@@ -82,7 +82,7 @@ defmodule Mydia.UpdateCheck do
            retry: false
          ) do
       {:ok, %Req.Response{status: 200, body: %{"latest_version" => version} = body}} ->
-        latest = if is_binary(version), do: %{version: version, url: body["release_url"]}
+        latest = if is_binary(version), do: %{version: version, url: https_url(body)}
         :persistent_term.put(@latest_key, latest)
         {:ok, latest}
 
@@ -99,6 +99,11 @@ defmodule Mydia.UpdateCheck do
       Logger.debug("Update check failed: " <> Exception.message(error))
       {:error, error}
   end
+
+  # The URL ends up in an admin-facing href, so anything but https (a
+  # `javascript:` URL from a hostile METADATA_RELAY_URL) is dropped.
+  defp https_url(%{"release_url" => "https://" <> _ = url}), do: url
+  defp https_url(_body), do: nil
 
   @doc "Exactly what the check sends."
   @spec payload() :: %{String.t() => String.t()}
@@ -136,11 +141,13 @@ defmodule Mydia.UpdateCheck do
   """
   @spec available_update() :: release() | nil
   def available_update do
-    with true <- enabled?(),
-         %{version: latest} = release <- :persistent_term.get(@latest_key, nil),
+    # The settings read comes last: the Status page calls this on every
+    # refresh, and almost always there is no answer to show.
+    with %{version: latest} = release <- :persistent_term.get(@latest_key, nil),
          {:ok, latest} <- Version.parse(latest),
          {:ok, current} <- Version.parse(current_version()),
-         :gt <- Version.compare(latest, current) do
+         :gt <- Version.compare(latest, current),
+         true <- enabled?() do
       release
     else
       _ -> nil
