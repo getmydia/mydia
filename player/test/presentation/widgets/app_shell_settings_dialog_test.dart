@@ -33,6 +33,8 @@ import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/dialog/open_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
+import 'package:player/presentation/screens/settings/dialog/settings_dialog.dart'
+    show SettingsCategory;
 import 'package:player/presentation/screens/sources/mydia_instance_screen.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 
@@ -114,7 +116,13 @@ void main() {
   });
   tearDown(() async => box.close());
 
-  Future<void> pumpShell(WidgetTester tester, {required bool dialog}) async {
+  late GoRouter shellRouter;
+
+  Future<void> pumpShell(
+    WidgetTester tester, {
+    required bool dialog,
+    ValueNotifier<bool>? noServers,
+  }) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -135,6 +143,12 @@ void main() {
     final shellKey = GlobalKey<NavigatorState>();
     final router = GoRouter(
       navigatorKey: rootKey,
+      refreshListenable: noServers,
+      // Stands in for the app's "no sources -> add-a-server" redirect.
+      redirect: (_, state) =>
+          (noServers?.value ?? false) && state.matchedLocation != '/sources/add'
+              ? '/sources/add'
+              : null,
       routes: [
         ShellRoute(
           navigatorKey: shellKey,
@@ -156,9 +170,15 @@ void main() {
           parentNavigatorKey: rootKey,
           builder: (_, __) => const Scaffold(body: Text('at /unlock')),
         ),
+        GoRoute(
+          path: '/sources/add',
+          parentNavigatorKey: rootKey,
+          builder: (_, __) => const Scaffold(body: Text('at /sources/add')),
+        ),
       ],
     );
     addTearDown(router.dispose);
+    shellRouter = router;
 
     await tester.pumpWidget(ProviderScope(
       overrides: [
@@ -247,5 +267,76 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('at /unlock'), findsNothing);
     expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
+  });
+
+  SettingsCategory selectedCategory(WidgetTester tester) =>
+      SettingsCategory.values.singleWhere((c) => tester
+          .widget<ListTile>(find.byKey(Key('settings-category-${c.name}')))
+          .selected);
+
+  Future<void> pressCtrlComma(WidgetTester tester) async {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.comma);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('the dialog closes when the shell is replaced by add-a-server',
+      (tester) async {
+    final noServers = ValueNotifier<bool>(false);
+    addTearDown(noServers.dispose);
+    await pumpShell(tester, dialog: true, noServers: noServers);
+    expect(openSettingsFromHost('/sources/manage'), isTrue);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
+
+    noServers.value = true;
+    await tester.pumpAndSettle();
+    expect(find.text('at /sources/add'), findsOneWidget);
+    expect(find.byKey(const Key('settings-dialog')), findsNothing);
+  });
+
+  testWidgets('settings does not open over a root route', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      await pumpShell(tester, dialog: true);
+      unawaited(shellRouter.push<void>('/unlock'));
+      await tester.pumpAndSettle();
+      expect(find.text('at /unlock'), findsOneWidget);
+
+      expect(openSettingsFromHost('/settings'), isFalse);
+      await pressCtrlComma(tester);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('settings-dialog')), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('the menu path retargets an open dialog', (tester) async {
+    await pumpShell(tester, dialog: true);
+    expect(openSettingsFromHost('/settings'), isTrue);
+    await tester.pumpAndSettle();
+    expect(selectedCategory(tester), SettingsCategory.playback);
+
+    expect(openSettingsFromHost('/sources/manage'), isTrue);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
+    expect(selectedCategory(tester), SettingsCategory.servers);
+  });
+
+  testWidgets('Ctrl+, leaves an open dialog where the user is', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      await pumpShell(tester, dialog: true);
+      expect(openSettingsFromHost('/sources/manage'), isTrue);
+      await tester.pumpAndSettle();
+      expect(selectedCategory(tester), SettingsCategory.servers);
+
+      await pressCtrlComma(tester);
+      expect(selectedCategory(tester), SettingsCategory.servers);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

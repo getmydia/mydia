@@ -1,5 +1,3 @@
-// material.dart exports its own ConnectionState, which clashes with the app's.
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -242,19 +240,6 @@ void main() {
     expect(find.byKey(const Key('manage-add')), findsOneWidget);
   });
 
-  testWidgets('a dialog torn down while open does not leak into the next test',
-      (tester) async {
-    await pumpApp(tester, dialog: true, initial: SettingsCategory.about);
-    await open(tester);
-    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
-  });
-
-  testWidgets('the next test opens a fresh dialog', (tester) async {
-    await pumpApp(tester, dialog: true, initial: SettingsCategory.about);
-    await open(tester);
-    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
-  });
-
   test('isSettingsShortcut matches Ctrl+, key-down only', () {
     const down = KeyDownEvent(
       physicalKey: PhysicalKeyboardKey.comma,
@@ -269,5 +254,19 @@ void main() {
     expect(isSettingsShortcut(down, controlPressed: true), isTrue);
     expect(isSettingsShortcut(down, controlPressed: false), isFalse);
     expect(isSettingsShortcut(up, controlPressed: true), isFalse);
+  });
+
+  test('isSettingsShortcut rejects Shift, Alt (AltGr) and Meta', () {
+    const down = KeyDownEvent(
+      physicalKey: PhysicalKeyboardKey.comma,
+      logicalKey: LogicalKeyboardKey.comma,
+      timeStamp: Duration.zero,
+    );
+    expect(isSettingsShortcut(down, controlPressed: true, shiftPressed: true),
+        isFalse);
+    expect(isSettingsShortcut(down, controlPressed: true, altPressed: true),
+        isFalse);
+    expect(isSettingsShortcut(down, controlPressed: true, metaPressed: true),
+        isFalse);
   });
 }

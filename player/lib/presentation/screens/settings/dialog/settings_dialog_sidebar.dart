@@ -43,10 +43,12 @@ class SettingsDialogSidebar extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8)),
                 leading: SizedBox(
                   width: 20,
-                  child: Tooltip(
-                    message: compact ? c.label : '',
-                    child: Icon(c.icon, size: 20),
-                  ),
+                  child: compact
+                      ? Tooltip(
+                          message: c.label,
+                          child: Icon(c.icon, size: 20),
+                        )
+                      : Icon(c.icon, size: 20),
                 ),
                 title: compact
                     ? null

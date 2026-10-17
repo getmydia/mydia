@@ -37,13 +37,31 @@ void detachSettingsHost(BuildContext context) {
   if (identical(_host, context)) _host = null;
 }
 
-/// For callers with no widget context of their own: the macOS menu and the
-/// Ctrl+, shortcut. False when the shell is not up or the dialog is off.
-bool openSettingsFromHost(String route) {
+/// Whether a settings dialog is up.
+bool get isSettingsDialogOpen => _open != null;
+
+/// The host the menu or shortcut may open settings from: the shell, while its
+/// route is the top one (root routes such as add-a-server, unlock and the
+/// player are pushed over a shell that stays mounted), or while the dialog
+/// itself is the top thing, so the menu can retarget it.
+BuildContext? _openableHost() {
   final host = _host;
-  if (host == null || !host.mounted) return false;
-  return openSettingsForRoute(host, route);
+  if (host == null || !host.mounted) return null;
+  if (_open != null || ModalRoute.of(host)?.isCurrent == true) return host;
+  return null;
 }
+
+/// For callers with no widget context of their own: the macOS menu and the
+/// Ctrl+, shortcut. False when the shell is not the top route, or not up, or
+/// the dialog is off.
+bool openSettingsFromHost(String route) {
+  final host = _openableHost();
+  return host != null && openSettingsForRoute(host, route);
+}
+
+/// Ctrl+, on desktop: opens settings, and leaves an open dialog alone.
+bool openSettingsFromShortcut() =>
+    !isSettingsDialogOpen && openSettingsFromHost('/settings');
 
 SettingsCategory? _categoryFor(String route) => switch (route) {
       '/settings' => SettingsCategory.playback,
@@ -115,7 +133,16 @@ Future<void> openSettings(
 }
 
 /// Ctrl+, on Linux and Windows. macOS gets Cmd+, from its menu bar.
-bool isSettingsShortcut(KeyEvent event, {required bool controlPressed}) =>
+bool isSettingsShortcut(
+  KeyEvent event, {
+  required bool controlPressed,
+  bool altPressed = false,
+  bool shiftPressed = false,
+  bool metaPressed = false,
+}) =>
     event is KeyDownEvent &&
     event.logicalKey == LogicalKeyboardKey.comma &&
-    controlPressed;
+    controlPressed &&
+    !altPressed &&
+    !shiftPressed &&
+    !metaPressed;

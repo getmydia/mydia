@@ -559,11 +559,15 @@ class _AppShellState extends ConsumerState<AppShell>
   /// Ctrl+, on Linux and Windows; macOS has Cmd+, in its menu bar.
   bool _onSettingsShortcut(KeyEvent event) {
     if (defaultTargetPlatform == TargetPlatform.macOS) return false;
+    final keyboard = HardwareKeyboard.instance;
     if (!isSettingsShortcut(event,
-        controlPressed: HardwareKeyboard.instance.isControlPressed)) {
+        controlPressed: keyboard.isControlPressed,
+        altPressed: keyboard.isAltPressed,
+        shiftPressed: keyboard.isShiftPressed,
+        metaPressed: keyboard.isMetaPressed)) {
       return false;
     }
-    return openSettingsForRoute(context, '/settings');
+    return openSettingsFromShortcut();
   }
 
   @override
