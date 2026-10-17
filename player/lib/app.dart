@@ -1,5 +1,6 @@
 import 'dart:async' show StreamSubscription, unawaited;
 
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,6 +17,8 @@ import 'core/layout/window_chrome_inset.dart';
 import 'core/media_session/media_session_bridge.dart';
 import 'core/theme/ambient_tint/ambient_tint.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_providers.dart';
+import 'core/platform/native_tab_bar_channel.dart';
 import 'core/window/decoration_layout_source.dart';
 import 'core/window/window_frame_state_source.dart';
 import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
@@ -183,6 +186,17 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // macOS paints the window behind the Flutter view during resizes; keep
+    // it on the theme's ground so a resize never flashes the old colour.
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
+      ref.listenManual(
+        paletteProvider,
+        (_, palette) => unawaited(ref
+            .read(nativeTabBarChannelProvider)
+            .setWindowBackground(palette.background)),
+        fireImmediately: true,
+      );
+    }
     // Network changes make every third-party connection look again.
     ref.read(networkChangeRefreshProvider);
     _remoteIntentsSubscription = ref
@@ -504,6 +518,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final theme = AppTheme.build(ref.watch(paletteProvider));
     // Show loading screen while the stored sources are loading
     if (ref.watch(sourcesLoadingProvider)) {
       debugPrint('[MyApp] Showing loading screen');
@@ -511,7 +526,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         title: BuildChannel.current.appName,
         debugShowCheckedModeBanner: false,
         scrollBehavior: const AppScrollBehavior(),
-        theme: AppTheme.darkTheme,
+        theme: theme,
         home: const Scaffold(
           body: Center(
             child: Column(
@@ -535,7 +550,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       title: BuildChannel.current.appName,
       debugShowCheckedModeBanner: false,
       scrollBehavior: const AppScrollBehavior(),
-      theme: AppTheme.darkTheme,
+      theme: theme,
       routerConfig: router,
       // Float the cast mini controller above every route. `CastBarLayer`
       // documents what mounting it out here costs the bar.
