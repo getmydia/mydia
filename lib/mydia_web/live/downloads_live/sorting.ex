@@ -9,7 +9,7 @@ defmodule MydiaWeb.DownloadsLive.Sorting do
 
   alias MydiaWeb.DownloadsLive.ListView
 
-  # Sort options offered per tab.
+  # Sort options offered per Downloads view.
   @shared_sort_options [
     {"added_desc", "Newest first"},
     {"added_asc", "Oldest first"},
@@ -55,16 +55,21 @@ defmodule MydiaWeb.DownloadsLive.Sorting do
     "unknown" => 11
   }
 
-  @doc "Every `sort_by` value any tab offers."
+  @doc "Every `sort_by` value any view offers."
   @spec allowed_fields() :: [String.t()]
   def allowed_fields, do: @allowed_sort_fields
 
-  # Sort options available for the given tab. Shared keys apply to every tab;
-  # queue- and completed-specific keys are only meaningful there.
-  @doc "The `{value, label}` sort options offered on the given tab."
-  @spec options(atom()) :: [{String.t(), String.t()}]
-  def options(:completed), do: @shared_sort_options ++ @completed_sort_options
-  def options(_tab), do: @shared_sort_options ++ @queue_sort_options
+  # Shared keys apply to every view. Progress, speed and ETA only mean
+  # something in flight; ratio and import date only once imported. All mixes
+  # both kinds of row, so it offers both sets.
+  @doc "The `{value, label}` sort options offered in the given Downloads view."
+  @spec options(:active | :imported | :all) :: [{String.t(), String.t()}]
+  def options(:imported), do: @shared_sort_options ++ @completed_sort_options
+
+  def options(:all),
+    do: @shared_sort_options ++ @queue_sort_options ++ @completed_sort_options
+
+  def options(_view), do: @shared_sort_options ++ @queue_sort_options
 
   # Sorts the enriched download list by the active `sort_by` selection. Runs in
   # the LiveView (not the DB) because real-time keys (progress, speeds, ETA,
@@ -118,7 +123,7 @@ defmodule MydiaWeb.DownloadsLive.Sorting do
     end
   end
 
-  # imported_at is always present on the completed tab, but guard nil so the
-  # comparator never raises if called on a mixed list.
+  # imported_at is present on imported rows; the All view also sorts in-flight
+  # rows, which fall back to inserted_at.
   defp imported_sort_key(download), do: download.imported_at || download.inserted_at
 end

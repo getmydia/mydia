@@ -9,6 +9,7 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   """
 
   alias Mydia.Downloads.StallDetector
+  alias Mydia.Downloads.StatusFilter
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias MydiaWeb.DownloadsLive.{Filters, Summary}
 
@@ -24,16 +25,63 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   @spec status_options() :: [{String.t(), String.t()}]
   def status_options, do: @status_options
 
-  @spec parse_filters(map(), atom()) :: Filters.t()
-  def parse_filters(params, tab) do
+  @doc """
+  The search and filter state from URL params. `scope` is `{tab, view}`: the
+  status chips only exist in the Active view of the Downloads tab, so `status`
+  is dropped everywhere else.
+  """
+  @spec parse_filters(map(), {atom(), atom() | nil}) :: Filters.t()
+  def parse_filters(params, scope) do
     status = Map.get(params, "status")
 
     %Filters{
       q: blank_to_nil(Map.get(params, "q")),
       client: blank_to_nil(Map.get(params, "client")),
-      status: if(tab == :queue and status in @statuses, do: status)
+      status: if(scope == {:downloads, :active} and status in @statuses, do: status)
     }
   end
+
+  @doc """
+  Maps the URLs from before Queue and Completed merged onto the Downloads tab:
+  `?tab=queue` is the Active view, `?tab=completed` the Imported view.
+  """
+  @spec normalize_legacy(map()) :: map()
+  def normalize_legacy(%{"tab" => "queue"} = params), do: Map.delete(params, "tab")
+
+  def normalize_legacy(%{"tab" => "completed"} = params) do
+    params |> Map.drop(["tab", "status"]) |> Map.put("view", "imported")
+  end
+
+  def normalize_legacy(params), do: params
+
+  @spec parse_tab(String.t() | nil) :: :downloads | :issues | :external
+  def parse_tab("issues"), do: :issues
+  def parse_tab("external"), do: :external
+  def parse_tab(_tab), do: :downloads
+
+  @spec parse_view(String.t() | nil) :: :active | :imported | :all
+  def parse_view("imported"), do: :imported
+  def parse_view("all"), do: :all
+  def parse_view(_view), do: :active
+
+  @doc """
+  The rows a Downloads-tab view lists. Active (not yet imported) and Imported
+  are disjoint, so All is their concatenation.
+  """
+  @spec rows_for_view(list(), :active | :imported | :all) :: list()
+  def rows_for_view(downloads, :all),
+    do: rows_for_view(downloads, :active) ++ rows_for_view(downloads, :imported)
+
+  def rows_for_view(downloads, view), do: StatusFilter.filter(downloads, view)
+
+  @doc """
+  Which actions and metrics a row gets: in flight (`:queue`) or imported
+  (`:completed`). Decided by the row, not the page, because the All view
+  mixes both.
+  """
+  @spec row_kind(map()) :: :queue | :completed
+  def row_kind(%{imported_at: nil}), do: :queue
+  def row_kind(_download), do: :completed
 
   defp blank_to_nil(value) when is_binary(value) do
     case String.trim(value) do
