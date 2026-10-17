@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/screens/detail/detail_sections.dart';
 
 Future<void> _pump(WidgetTester tester, Widget child, {double width = 1000}) {
@@ -95,7 +96,8 @@ void main() {
 
       final box = tester.widget<Container>(find.byType(Container));
       final decoration = box.decoration! as BoxDecoration;
-      expect(decoration.color, AppColors.textSecondary.withValues(alpha: 0.15));
+      expect(decoration.color,
+          Palettes.projectionBooth.textSecondary.withValues(alpha: 0.15));
       expect(
           box.padding, const EdgeInsets.symmetric(horizontal: 12, vertical: 6));
       expect(find.byType(Icon), findsNothing);

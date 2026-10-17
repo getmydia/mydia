@@ -1,5 +1,5 @@
 // The sidebar mark is painted in code, so it silently follows whatever
-// AppColors.primary happens to be. That is wrong: the app icon and the
+// the theme's primary colour happens to be. That is wrong: the app icon and the
 // Phoenix logo it mirrors are a fixed blue that the player's palette does not
 // control, so a mark that tracks the accent drifts away from them on every
 // repalette. It renders neutral instead, clashing with neither.

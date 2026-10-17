@@ -1,15 +1,13 @@
 // U1 — depth/material token module (plan R1, R2, R3).
 //
 // Verifies the token groups expose the documented constants with the expected
-// types, that the surface-tone hierarchy is monotonic (real layered depth, not
-// near-identical greys), and that wiring the tones into the theme keeps it
-// dark-only, with a monotonic neutral surface ramp and a single accent hue
-// mapped across every Material 3 accent slot (R3).
+// types, and that wiring the default palette into the theme keeps it
+// dark-only, drives the surface hierarchy from the palette, and maps a single
+// accent hue across every Material 3 accent slot (R3).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
-import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/palette.dart';
 
@@ -60,7 +58,7 @@ void main() {
 
   group('OSD material', () {
     test('fill is the neutral background tint at 0.85', () {
-      expect(DepthTokens.osdTint, AppColors.background);
+      expect(DepthTokens.osdTint, Palettes.projectionBooth.background);
       expect(DepthTokens.osdFillOpacity, 0.85);
       expect(
         DepthTokens.osdFillOpacity,
@@ -127,9 +125,9 @@ void main() {
       // The palette collapsed from three accents to one. Material 3 still
       // requires secondary and tertiary slots, so they carry the same hue
       // rather than reintroducing the violet and cyan this removed.
-      expect(scheme.primary, AppColors.primary);
-      expect(scheme.secondary, AppColors.primary);
-      expect(scheme.tertiary, AppColors.primary);
+      expect(scheme.primary, Palettes.projectionBooth.primary);
+      expect(scheme.secondary, Palettes.projectionBooth.primary);
+      expect(scheme.tertiary, Palettes.projectionBooth.primary);
     });
 
     test('surface hierarchy is driven by the palette', () {

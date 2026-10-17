@@ -10,7 +10,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/breakpoints.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/screens/sources/source_home_hero.dart';
 import 'package:player/presentation/screens/sources/source_home_hero_backdrop.dart';
 
@@ -77,15 +77,16 @@ void main() {
         final alpha = _alphaAt(gradient, textRight / backdropWidth);
         final bg = compositeOver(Colors.black.withValues(alpha: alpha), _white);
 
-        final title = contrastRatio(AppColors.textPrimary, bg);
+        final title = contrastRatio(Palettes.projectionBooth.textPrimary, bg);
         final pureWhite = contrastRatio(_white, bg);
         final overviewColor = compositeOver(
-          AppColors.textPrimary.withValues(alpha: 0.78),
+          Palettes.projectionBooth.textPrimary.withValues(alpha: 0.78),
           bg,
         );
         final overview = contrastRatio(overviewColor, bg);
         final chipBg = compositeOver(_white.withValues(alpha: 0.12), bg);
-        final chip = contrastRatio(AppColors.textPrimary, chipBg);
+        final chip =
+            contrastRatio(Palettes.projectionBooth.textPrimary, chipBg);
 
         final where = 'window $window, pinned $pinned';
         expect(title, greaterThanOrEqualTo(_aa), reason: 'title, $where');

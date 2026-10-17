@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/domain/models/progress.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
@@ -164,7 +164,7 @@ void main() {
     );
     final decoration = container.decoration as BoxDecoration;
     final border = decoration.border as Border;
-    expect(border.top.color, AppColors.primary);
+    expect(border.top.color, Palettes.projectionBooth.primary);
     expect(border.top.width, 2);
 
     await _pump(tester, _episode());

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/theme_preset.dart';
 import 'package:player/presentation/widgets/video_controls/center_play_button.dart';
 
 import '../../../test_utils/osd_contrast.dart';
@@ -32,20 +33,44 @@ void main() {
       });
     }
 
-    test('textDisabled and warning miss 4.5:1, so neither is OSD text', () {
-      expect(osdContrast(AppColors.textDisabled), lessThan(4.5));
+    test('warning misses 4.5:1, so it is not OSD text', () {
       expect(osdContrast(AppColors.warning), lessThan(4.5));
-      expect(osdTextColors, isNot(contains(AppColors.textDisabled)));
       expect(osdTextColors, isNot(contains(AppColors.warning)));
     });
 
-    test('at the stats panel\'s old 0.80 fill, textSecondary would fail', () {
-      final bg = compositeOver(
-        DepthTokens.osdTint.withValues(alpha: 0.80),
-        Colors.white,
-      );
-      expect(contrastRatio(AppColors.textSecondary, bg), lessThan(4.5));
-    });
+    for (final preset in ThemePreset.values) {
+      final palette = preset.palette();
+
+      test('${preset.name}: textPrimary and textSecondary clear 4.5:1', () {
+        expect(osdContrast(palette.textPrimary), greaterThanOrEqualTo(4.5));
+        expect(osdContrast(palette.textSecondary), greaterThanOrEqualTo(4.5));
+      });
+
+      test('${preset.name}: textDisabled is not OSD text', () {
+        expect(osdContrast(palette.textDisabled), lessThan(4.5));
+        expect(osdTextColors, isNot(contains(palette.textDisabled)));
+      });
+
+      // The stats panel's old 0.80 fill was too translucent for the default
+      // textSecondary. A preset with a lighter textSecondary may clear 4.5:1
+      // even there, so the invariant is that the real fill is the more
+      // legible one, and that it is the default theme that needed it.
+      test(
+          '${preset.name}: the OSD fill beats the old 0.80 fill for '
+          'textSecondary', () {
+        final oldBg = compositeOver(
+          DepthTokens.osdTint.withValues(alpha: 0.80),
+          Colors.white,
+        );
+        expect(
+          osdContrast(palette.textSecondary),
+          greaterThan(contrastRatio(palette.textSecondary, oldBg)),
+        );
+        if (preset == ThemePreset.projectionBooth) {
+          expect(contrastRatio(palette.textSecondary, oldBg), lessThan(4.5));
+        }
+      });
+    }
   });
 
   // CenterPlayButton paints straight onto video with no surface behind it,

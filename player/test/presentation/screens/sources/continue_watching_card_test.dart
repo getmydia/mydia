@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/sources/continue_watching_card.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
@@ -56,7 +56,7 @@ void main() {
       find.byKey(const Key('continue-card-progress')),
     );
     expect(bar.value, closeTo(0.633, 0.001));
-    expect(bar.color, AppColors.primary);
+    expect(bar.color, Palettes.projectionBooth.primary);
     expect(
       tester.getSize(find.byType(ContinueWatchingCard)).width,
       ContinueWatchingCard.artSize.width,

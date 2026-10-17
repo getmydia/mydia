@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/osd_dialog.dart';
@@ -72,11 +72,11 @@ void main() {
 
     expect(
       DefaultTextStyle.of(tester.element(find.text('Title'))).style.color,
-      AppColors.textPrimary,
+      Palettes.projectionBooth.textPrimary,
     );
     expect(
       DefaultTextStyle.of(tester.element(find.text('Body'))).style.color,
-      AppColors.textSecondary,
+      Palettes.projectionBooth.textSecondary,
     );
   });
 

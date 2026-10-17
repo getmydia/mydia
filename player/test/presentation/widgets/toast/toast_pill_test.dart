@@ -61,7 +61,8 @@ void main() {
     expect(find.byType(Icon), findsNothing);
 
     await _pump(tester, _entry('Queued', icon: Icons.download_rounded));
-    expect(_iconColor(tester, Icons.download_rounded), AppColors.textSecondary);
+    expect(_iconColor(tester, Icons.download_rounded),
+        Palettes.projectionBooth.textSecondary);
   });
 
   testWidgets('success is a green check', (tester) async {
@@ -78,7 +79,7 @@ void main() {
     await _pump(tester, _entry('Loading...', kind: ToastKind.progress));
     final spinner = tester.widget<CircularProgressIndicator>(
         find.byType(CircularProgressIndicator));
-    expect(spinner.color, AppColors.primary);
+    expect(spinner.color, Palettes.projectionBooth.primary);
   });
 
   testWidgets('no kind recolours the pill itself', (tester) async {
@@ -107,7 +108,7 @@ void main() {
     );
     final label = find.text('Settings');
     expect(DefaultTextStyle.of(tester.element(label)).style.color,
-        AppColors.primary);
+        Palettes.projectionBooth.primary);
     await tester.tap(find.byKey(const Key('toast-action')));
     expect(pressed, 1);
   });

@@ -7,7 +7,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:yaml/yaml.dart';
 
 void main() {
@@ -64,7 +64,8 @@ void main() {
       theme.elevatedButtonTheme.style!,
     ]) {
       expect(style.backgroundColor!.resolve({}), const Color(0xFFFFFFFF));
-      expect(style.foregroundColor!.resolve({}), AppColors.background);
+      expect(style.foregroundColor!.resolve({}),
+          Palettes.projectionBooth.background);
       expect(style.textStyle!.resolve({})!.fontFamily, 'Outfit');
     }
   });

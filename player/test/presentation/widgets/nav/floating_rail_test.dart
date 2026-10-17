@@ -10,7 +10,6 @@ import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
 import 'package:player/core/theme/palette.dart';
-import 'package:player/core/theme/colors.dart';
 import 'package:player/presentation/widgets/nav/floating_rail.dart';
 import 'package:player/presentation/widgets/nav/sidebar_content.dart';
 
@@ -738,6 +737,7 @@ void main() {
           .withValues(alpha: 0.92),
       Colors.white,
     );
-    expect(_contrast(AppColors.textSecondary, fill), greaterThanOrEqualTo(4.5));
+    expect(_contrast(Palettes.projectionBooth.textSecondary, fill),
+        greaterThanOrEqualTo(4.5));
   });
 }

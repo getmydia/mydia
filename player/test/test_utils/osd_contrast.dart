@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 
 /// WCAG relative luminance of an opaque colour.
@@ -61,15 +62,16 @@ double osdContrast(Color foreground) {
 }
 
 /// Every colour OSD text may use. Each must clear WCAG SC 1.4.3 (4.5:1).
-/// [AppColors.textDisabled] and [AppColors.warning] are deliberately absent.
+/// The palette's `textDisabled` and [AppColors.warning] are deliberately
+/// absent. The palette tones are the default theme's.
 ///
 /// Unmodifiable: this set is the legibility contract, so no test may
 /// weaken it by adding or removing a colour at runtime. It cannot be a
 /// const set because it holds `withValues` results.
 final Set<Color> osdTextColors = Set.unmodifiable({
-  AppColors.textPrimary,
-  AppColors.textSecondary,
-  AppColors.primary,
+  Palettes.projectionBooth.textPrimary,
+  Palettes.projectionBooth.textSecondary,
+  Palettes.projectionBooth.primary,
   AppColors.successText,
   AppColors.warningText,
   Colors.white,
@@ -88,8 +90,8 @@ final Set<Color> osdIconOnlyColors = {AppColors.error};
 /// can go straight to [osdContrast]. Spans on a different background break
 /// that assumption: pass their colours in [skip] to exclude them, and
 /// assert each skipped colour against its actual fill instead (a button
-/// label's pair is the app theme's button pair, e.g. `AppColors.background`
-/// on `AppColors.textPrimary`, which the caller verifies with
+/// label's pair is the app theme's button pair, e.g. the palette's `background`
+/// on its `textPrimary`, which the caller verifies with
 /// [contrastRatio]). Nothing is skipped by default; an unlisted span is
 /// always collected.
 List<Color> osdParagraphColors(

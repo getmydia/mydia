@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/rating_badge.dart';
 
 Widget _host(Widget child) =>
@@ -26,7 +26,7 @@ void main() {
     await tester.pumpWidget(_host(const RatingBadge(rating: 6.1)));
 
     final icon = tester.widget<Icon>(find.byIcon(Icons.star_rounded));
-    expect(icon.color, AppColors.primary);
+    expect(icon.color, Palettes.projectionBooth.primary);
   });
 
   testWidgets('sits on a dark scrim rather than a palette surface',

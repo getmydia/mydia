@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/colors.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/models/audio_track.dart';
 import 'package:player/presentation/widgets/audio_track_selector.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -53,7 +53,7 @@ void main() {
     await _open(tester);
 
     final check = tester.widget<Icon>(find.byIcon(Icons.check));
-    expect(check.color, AppColors.primary);
+    expect(check.color, Palettes.projectionBooth.primary);
   });
 
   testWidgets('every glyph holds 4.5:1 on the OSD material', (tester) async {
