@@ -1086,9 +1086,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   # Periodic live-progress refresh. Reschedules unconditionally so it resumes
-  # when the operator switches back to the Downloads tab or a new download starts, but
-  # only re-polls clients when the Downloads tab actually has active work — idle
-  # tabs cost nothing.
+  # when the operator switches back to the Downloads tab or a new download
+  # starts, but only re-polls clients when the Downloads tab actually has
+  # active work. Idle tabs cost nothing.
   def handle_info(:refresh_progress, socket) do
     schedule_progress_refresh()
 

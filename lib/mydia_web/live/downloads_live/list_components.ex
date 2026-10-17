@@ -100,6 +100,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
             :if={tab.dot?}
             id={"downloads-tab-#{tab.key}-stalled"}
             class="status status-warning"
+            role="img"
             aria-label="Some downloads are stalled"
           ></span>
         </.link>
