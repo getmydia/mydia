@@ -31,7 +31,11 @@
         if (root.getAttribute('data-theme-source') === 'default') {
           try {
             const m = JSON.parse(localStorage.getItem('mydia-theme') || 'null');
-            if (m && m.mode && m.light && m.dark && m.lightBase && m.darkBase) {
+            const id = /^[a-z0-9-]+$/;
+            const hex = /^#[0-9a-fA-F]{6}$/;
+            if (m && ['system', 'light', 'dark'].includes(m.mode) &&
+                id.test(m.light) && id.test(m.dark) &&
+                hex.test(m.lightBase) && hex.test(m.darkBase)) {
               root.setAttribute('data-theme-mode', m.mode);
               root.setAttribute('data-light-theme', m.light);
               root.setAttribute('data-dark-theme', m.dark);
