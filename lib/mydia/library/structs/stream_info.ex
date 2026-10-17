@@ -145,6 +145,63 @@ defmodule Mydia.Library.Structs.StreamInfo do
   end
 
   @doc """
+  A short human label for an audio stream, such as "TrueHD Atmos 7.1" or
+  "AC3 5.1". Returns `nil` when neither the codec nor the channel count is
+  known.
+
+  `Mydia.Library.FileAnalyzer` writes this label for the primary audio stream
+  (it is what `metadata.audio_codec_raw` holds), and the file rows render it
+  for every audio stream, so both read the same.
+  """
+  @spec audio_label(t()) :: String.t() | nil
+  def audio_label(%__MODULE__{codec: codec, profile: profile, channels: channels}) do
+    case {audio_codec_label(codec, profile), channel_label(channels)} do
+      {nil, nil} -> nil
+      {codec, nil} -> codec
+      {nil, channels} -> channels
+      {codec, channels} -> "#{codec} #{channels}"
+    end
+  end
+
+  defp channel_label(1), do: "Mono"
+  defp channel_label(2), do: "Stereo"
+  defp channel_label(6), do: "5.1"
+  defp channel_label(8), do: "7.1"
+  defp channel_label(n) when is_integer(n), do: "#{n}ch"
+  defp channel_label(_channels), do: nil
+
+  defp audio_codec_label("aac", profile) when is_binary(profile) and profile != "LC",
+    do: "AAC #{profile}"
+
+  defp audio_codec_label("aac", _profile), do: "AAC"
+  defp audio_codec_label("ac3", _profile), do: "AC3"
+  defp audio_codec_label("eac3", _profile), do: "DD+"
+
+  defp audio_codec_label("dts", profile) when is_binary(profile) do
+    cond do
+      String.contains?(profile, "MA") -> "DTS-HD MA"
+      String.contains?(profile, "HR") -> "DTS-HD HR"
+      String.contains?(profile, "X") -> "DTS:X"
+      true -> "DTS"
+    end
+  end
+
+  defp audio_codec_label("dts", _profile), do: "DTS"
+
+  defp audio_codec_label("truehd", profile) when is_binary(profile) do
+    if String.contains?(profile, "Atmos"), do: "TrueHD Atmos", else: "TrueHD"
+  end
+
+  defp audio_codec_label("truehd", _profile), do: "TrueHD"
+  defp audio_codec_label("flac", _profile), do: "FLAC"
+  defp audio_codec_label("opus", _profile), do: "Opus"
+  defp audio_codec_label("vorbis", _profile), do: "Vorbis"
+  defp audio_codec_label("mp3", _profile), do: "MP3"
+  defp audio_codec_label("pcm_s16le", _profile), do: "PCM"
+  defp audio_codec_label(name, _profile) when is_binary(name), do: String.upcase(name)
+  defp audio_codec_label(_name, _profile), do: nil
+
+  @doc """
   Converts to a plain string-keyed map for JSON storage.
 
   Nil fields are dropped so a subtitle stream does not serialise twenty null
