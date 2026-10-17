@@ -486,361 +486,375 @@
         <% end %>
       <% end %>
 
-      <%!-- Issues tab - Three sectioned layout --%>
+      <%!-- Issues tab: one card per non-empty section --%>
       <%= if @active_tab == :issues do %>
-        <div class="flex flex-col gap-6">
+        <div class="flex flex-col gap-4">
           <%!-- Section 1: Needs Matching (derived from the clients, not the DB) --%>
-          <div>
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="text-lg font-semibold flex items-center gap-2">
-                <.icon name="hero-question-mark-circle" class="w-5 h-5 text-warning" />
+          <section
+            :if={@issues_counts.unmatched > 0}
+            id="issues-needs-matching"
+            class="card card-border card-sm bg-base-100"
+          >
+            <div class="card-body gap-3">
+              <h3 class="card-title text-base">
+                <.icon name="hero-question-mark-circle" class="size-5 text-warning" />
                 Needs Matching
-                <%= if @issues_counts.unmatched > 0 do %>
-                  <span class="badge badge-warning badge-sm">{@issues_counts.unmatched}</span>
-                <% end %>
+                <span class="badge badge-warning badge-sm">{@issues_counts.unmatched}</span>
               </h3>
-            </div>
-            <ul
-              id="needs-matching"
-              phx-update="stream"
-              class="list bg-base-100 rounded-box shadow-lg"
-            >
-              <li
-                id="no-needs-matching"
-                class="hidden only:block p-6 text-center text-base-content/50"
+              <ul
+                id="needs-matching"
+                phx-update="stream"
+                class="list"
               >
-                No downloads need matching
-              </li>
-              <li :for={{id, torrent} <- @streams.needs_matching} id={id} class="list-row py-3">
-                <div class="list-col-grow">
-                  <div class="font-medium text-sm truncate">{torrent.title}</div>
-                  <%= if torrent.parsed do %>
-                    <div class="text-xs text-base-content/50 flex flex-wrap gap-1.5 mt-0.5">
-                      <%= if torrent.parsed.title do %>
-                        <span>Parsed: {torrent.parsed.title}</span>
-                      <% end %>
-                      <%= if torrent.parsed.season do %>
-                        <span>S{String.pad_leading("#{torrent.parsed.season}", 2, "0")}</span>
-                      <% end %>
-                    </div>
-                  <% end %>
-                  <div class="text-xs opacity-60 flex items-center gap-1.5 mt-0.5">
-                    <span class="badge badge-xs badge-ghost">{torrent.status}</span>
-                    <span>{torrent.client_name}</span>
-                    <%= if torrent.status in [:downloading, :seeding] do %>
-                      <span>•</span>
-                      <span>{format_progress(torrent.progress)}%</span>
-                    <% end %>
-                  </div>
-                  <%= if torrent.suggestions != [] do %>
-                    <div class="mt-2">
-                      <span class="text-xs text-base-content/60 mb-1 block">Suggestions:</span>
-                      <div class="flex flex-wrap gap-2">
-                        <%= for suggestion <- torrent.suggestions do %>
-                          <button
-                            id={"adopt-#{torrent.id}-#{suggestion.media_item_id}"}
-                            type="button"
-                            class="btn btn-xs btn-outline btn-primary"
-                            phx-click="adopt_suggestion"
-                            phx-value-torrent_id={torrent.id}
-                            phx-value-media_item_id={suggestion.media_item_id}
-                            title={suggestion.match_reason}
-                          >
-                            {suggestion.title}
-                            <span class="badge badge-xs ml-1">
-                              {Float.round(suggestion.confidence * 100, 0)}%
-                            </span>
-                          </button>
+                <li
+                  id="no-needs-matching"
+                  class="hidden only:block p-6 text-center text-base-content/50"
+                >
+                  No downloads need matching
+                </li>
+                <li :for={{id, torrent} <- @streams.needs_matching} id={id} class="list-row py-3">
+                  <div class="list-col-grow">
+                    <div class="font-medium text-sm truncate">{torrent.title}</div>
+                    <%= if torrent.parsed do %>
+                      <div class="text-xs text-base-content/50 flex flex-wrap gap-1.5 mt-0.5">
+                        <%= if torrent.parsed.title do %>
+                          <span>Parsed: {torrent.parsed.title}</span>
+                        <% end %>
+                        <%= if torrent.parsed.season do %>
+                          <span>S{String.pad_leading("#{torrent.parsed.season}", 2, "0")}</span>
                         <% end %>
                       </div>
+                    <% end %>
+                    <div class="text-xs opacity-60 flex items-center gap-1.5 mt-0.5">
+                      <span class="badge badge-xs badge-ghost">{torrent.status}</span>
+                      <span>{torrent.client_name}</span>
+                      <%= if torrent.status in [:downloading, :seeding] do %>
+                        <span>•</span>
+                        <span>{format_progress(torrent.progress)}%</span>
+                      <% end %>
                     </div>
-                  <% end %>
-                  <%= if @search_open_for == torrent.id do %>
-                    <MydiaWeb.Live.Components.LibrarySearchForm.library_search_form
-                      search_value={@library_search_value}
-                      search_results={@library_search_results}
-                      on_search="library_search"
-                      on_select="adopt_library_match"
-                      download_id={torrent.id}
-                    />
-                  <% end %>
-                </div>
-                <div class="flex gap-1">
-                  <button
-                    type="button"
-                    class="btn btn-square btn-ghost btn-sm"
-                    phx-click="toggle_search"
-                    phx-value-id={torrent.id}
-                    title="Search library to match"
-                  >
-                    <.icon name="hero-magnifying-glass" class="size-4" />
-                  </button>
-                </div>
-              </li>
-            </ul>
-          </div>
+                    <%= if torrent.suggestions != [] do %>
+                      <div class="mt-2">
+                        <span class="text-xs text-base-content/60 mb-1 block">Suggestions:</span>
+                        <div class="flex flex-wrap gap-2">
+                          <%= for suggestion <- torrent.suggestions do %>
+                            <button
+                              id={"adopt-#{torrent.id}-#{suggestion.media_item_id}"}
+                              type="button"
+                              class="btn btn-xs btn-outline btn-primary"
+                              phx-click="adopt_suggestion"
+                              phx-value-torrent_id={torrent.id}
+                              phx-value-media_item_id={suggestion.media_item_id}
+                              title={suggestion.match_reason}
+                            >
+                              {suggestion.title}
+                              <span class="badge badge-xs ml-1">
+                                {Float.round(suggestion.confidence * 100, 0)}%
+                              </span>
+                            </button>
+                          <% end %>
+                        </div>
+                      </div>
+                    <% end %>
+                    <%= if @search_open_for == torrent.id do %>
+                      <MydiaWeb.Live.Components.LibrarySearchForm.library_search_form
+                        search_value={@library_search_value}
+                        search_results={@library_search_results}
+                        on_search="library_search"
+                        on_select="adopt_library_match"
+                        download_id={torrent.id}
+                      />
+                    <% end %>
+                  </div>
+                  <div class="flex gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-square btn-ghost btn-sm"
+                      phx-click="toggle_search"
+                      phx-value-id={torrent.id}
+                      title="Search library to match"
+                    >
+                      <.icon name="hero-magnifying-glass" class="size-4" />
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </section>
 
           <%!-- Section 2: Unresolved Files --%>
-          <div>
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="text-lg font-semibold flex items-center gap-2">
-                <.icon name="hero-document-magnifying-glass" class="w-5 h-5 text-primary" />
+          <section
+            :if={@issues_counts.unresolved > 0}
+            id="issues-unresolved"
+            class="card card-border card-sm bg-base-100"
+          >
+            <div class="card-body gap-3">
+              <h3 class="card-title text-base">
+                <.icon name="hero-document-magnifying-glass" class="size-5 text-primary" />
                 Unresolved Files
-                <%= if @issues_counts.unresolved > 0 do %>
-                  <span class="badge badge-info badge-sm">{@issues_counts.unresolved}</span>
-                <% end %>
+                <span class="badge badge-info badge-sm">{@issues_counts.unresolved}</span>
               </h3>
-            </div>
-            <ul
-              id="unresolved-downloads"
-              phx-update="stream"
-              class="list bg-base-100 rounded-box shadow-lg"
-            >
-              <li
-                id="no-unresolved-files"
-                class="hidden only:block p-6 text-center text-base-content/50"
+              <ul
+                id="unresolved-downloads"
+                phx-update="stream"
+                class="list"
               >
-                No unresolved files
-              </li>
-              <li
-                :for={{id, download} <- @streams.unresolved_downloads}
-                id={id}
-                class="list-row py-3"
-              >
-                <div class="list-col-grow">
-                  <div class="font-medium text-sm truncate">
-                    {get_display_title(download)}
+                <li
+                  id="no-unresolved-files"
+                  class="hidden only:block p-6 text-center text-base-content/50"
+                >
+                  No unresolved files
+                </li>
+                <li
+                  :for={{id, download} <- @streams.unresolved_downloads}
+                  id={id}
+                  class="list-row py-3"
+                >
+                  <div class="list-col-grow">
+                    <div class="font-medium text-sm truncate">
+                      {get_display_title(download)}
+                    </div>
+                    <div class="text-xs text-base-content/50">{download.title}</div>
                   </div>
-                  <div class="text-xs text-base-content/50">{download.title}</div>
-                </div>
-                <div class="flex gap-1">
-                  <button
-                    type="button"
-                    id={"match-files-#{download.id}"}
-                    class="btn btn-sm btn-outline"
-                    phx-click="open_match_files"
-                    phx-value-id={download.id}
-                    title="See what this download contains and match files by hand"
-                  >
-                    <.icon name="hero-document-magnifying-glass" class="size-4" />
-                    <span class="hidden sm:inline">Match files…</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-square btn-ghost btn-sm"
-                    phx-click="dismiss_download"
-                    phx-value-id={download.id}
-                    data-confirm="Dismiss this download and its unresolved files?"
-                    title="Dismiss"
-                  >
-                    <.icon name="hero-x-mark" class="size-4" />
-                  </button>
-                </div>
-              </li>
-            </ul>
-          </div>
+                  <div class="flex gap-1">
+                    <button
+                      type="button"
+                      id={"match-files-#{download.id}"}
+                      class="btn btn-sm btn-outline"
+                      phx-click="open_match_files"
+                      phx-value-id={download.id}
+                      title="See what this download contains and match files by hand"
+                    >
+                      <.icon name="hero-document-magnifying-glass" class="size-4" />
+                      <span class="hidden sm:inline">Match files…</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-square btn-ghost btn-sm"
+                      phx-click="dismiss_download"
+                      phx-value-id={download.id}
+                      data-confirm="Dismiss this download and its unresolved files?"
+                      title="Dismiss"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </section>
 
           <%!-- Section 3: Other Issues --%>
-          <div>
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="text-lg font-semibold flex items-center gap-2">
-                <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-error" /> Other Issues
-                <%= if @issues_counts.other > 0 do %>
-                  <span class="badge badge-error badge-sm">{@issues_counts.other}</span>
-                <% end %>
-              </h3>
-              <%= if @issues_counts.other > 0 do %>
-                <button
-                  type="button"
-                  class="btn btn-xs btn-ghost"
-                  phx-click="dismiss_all_cancelled"
-                  data-confirm="Clear all cancelled/missing downloads?"
-                >
-                  Clear All Cancelled
-                </button>
-              <% end %>
-            </div>
-            <div
-              :for={group <- @removed_client_groups}
-              id={"removed-client-#{group.slug}"}
-              class="alert alert-warning mb-4"
-            >
-              <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
-              <div class="flex-1">
-                <%!--
+          <section
+            :if={@issues_counts.other > 0 or @removed_client_groups != []}
+            id="issues-other"
+            class="card card-border card-sm bg-base-100"
+          >
+            <div class="card-body gap-3">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="card-title text-base">
+                  <.icon name="hero-exclamation-triangle" class="size-5 text-error" />
+                  Other Issues
+                  <span :if={@issues_counts.other > 0} class="badge badge-error badge-sm">
+                    {@issues_counts.other}
+                  </span>
+                </h3>
+                <div :if={@issues_counts.other > 0} class="card-actions">
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-ghost"
+                    phx-click="dismiss_all_cancelled"
+                    data-confirm="Clear all cancelled/missing downloads?"
+                  >
+                    Clear All Cancelled
+                  </button>
+                </div>
+              </div>
+              <div
+                :for={group <- @removed_client_groups}
+                id={"removed-client-#{group.slug}"}
+                class="alert alert-warning mb-4"
+              >
+                <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+                <div class="flex-1">
+                  <%!--
                 Deliberately neutral about *why* the client is gone. The group
                 covers both a deleted client and one that is merely disabled,
                 and calling a disabled client "removed" steers the operator
                 toward clearing records whose actual fix is to switch the
                 client back on.
               --%>
-                <div class="font-semibold">
-                  {group.count} download(s) reference '{group.download_client}', which Mydia is no longer tracking
+                  <div class="font-semibold">
+                    {group.count} download(s) reference '{group.download_client}', which Mydia is no longer tracking
+                  </div>
+                  <div class="text-sm opacity-80">
+                    Re-enabling or re-adding a client that holds these same torrents will restore them automatically.
+                  </div>
                 </div>
-                <div class="text-sm opacity-80">
-                  Re-enabling or re-adding a client that holds these same torrents will restore them automatically.
-                </div>
+                <button
+                  id={"clear-removed-client-#{group.slug}"}
+                  class="btn btn-sm btn-warning"
+                  phx-click="clear_removed_client"
+                  phx-value-client={group.download_client}
+                  data-confirm={"Clear #{group.count} download(s) from '#{group.download_client}'? This removes the records from Mydia only."}
+                >
+                  Clear them
+                </button>
               </div>
-              <button
-                id={"clear-removed-client-#{group.slug}"}
-                class="btn btn-sm btn-warning"
-                phx-click="clear_removed_client"
-                phx-value-client={group.download_client}
-                data-confirm={"Clear #{group.count} download(s) from '#{group.download_client}'? This removes the records from Mydia only."}
+              <ul
+                id="other-issues"
+                phx-update="stream"
+                class="list"
               >
-                Clear them
-              </button>
-            </div>
-            <ul
-              id="other-issues"
-              phx-update="stream"
-              class="list bg-base-100 rounded-box shadow-lg"
-            >
-              <li
-                id="no-other-issues"
-                class="hidden only:block p-6 text-center text-base-content/50"
-              >
-                No other issues
-              </li>
-              <li :for={{id, download} <- @streams.other_issues} id={id} class="list-row py-2">
-                <div class="list-col-grow">
-                  <div class="font-medium text-sm truncate">
-                    <%= if media_type_badge(download) do %>
-                      <% {icon, _label, _badge_class} = media_type_badge(download) %>
-                      <span class="text-xs opacity-50 mr-1">{icon}</span>
-                    <% end %>
-                    {download.title}
-                  </div>
-                  <%= if get_display_title(download) != download.title do %>
-                    <div class="text-xs text-base-content/50 truncate">
-                      {get_display_title(download)}
+                <li
+                  id="no-other-issues"
+                  class="hidden only:block p-6 text-center text-base-content/50"
+                >
+                  No other issues
+                </li>
+                <li :for={{id, download} <- @streams.other_issues} id={id} class="list-row py-2">
+                  <div class="list-col-grow">
+                    <div class="font-medium text-sm truncate">
+                      <%= if media_type_badge(download) do %>
+                        <% {icon, _label, _badge_class} = media_type_badge(download) %>
+                        <span class="text-xs opacity-50 mr-1">{icon}</span>
+                      <% end %>
+                      {download.title}
                     </div>
-                  <% end %>
-                  <div class="text-xs opacity-60 flex flex-wrap items-center gap-1.5">
-                    <% {badge_class, badge_label} = status_badge(download) %>
-                    <span class={"badge badge-xs #{badge_class}"}>
-                      {badge_label}
-                    </span>
-                    <%= cond do %>
-                      <% download.removal_error -> %>
-                        <span class="text-error">
-                          Couldn't remove from {download.download_client}: {download.removal_error}
-                        </span>
-                      <% download.import_last_error -> %>
-                        <span class="text-error">
-                          Import failed: {download.import_last_error}
-                        </span>
-                        <span>•</span>
-                        <span>Attempt #{download.import_retry_count}</span>
-                        <%= if download.import_next_retry_at do %>
-                          <span>•</span>
-                          <span>
-                            Next retry: {format_next_retry(download.import_next_retry_at)}
-                          </span>
-                        <% end %>
-                      <% download.error_message -> %>
-                        <span class="text-error">Download failed: {download.error_message}</span>
-                      <% true -> %>
-                        <span class="text-error">Removed from client</span>
-                    <% end %>
-                  </div>
-                  <%= if download.import_failure_reason == "path_mapping_mismatch" do %>
-                    <div class="mt-2 rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs">
-                      <div class="opacity-70">
-                        Mydia can't see the download client's path. This usually means its
-                        volume isn't mounted into the Mydia container at the same path.
+                    <%= if get_display_title(download) != download.title do %>
+                      <div class="text-xs text-base-content/50 truncate">
+                        {get_display_title(download)}
                       </div>
-                      <%= if download.path_mapping_suggestion do %>
-                        <div class="mt-1 font-mono text-[11px] break-all">
-                          {download.path_mapping_suggestion.remote_prefix}
-                          <span class="opacity-50">→</span>
-                          {download.path_mapping_suggestion.local_prefix}
-                        </div>
-                        <div class="mt-2 flex items-center gap-2">
-                          <button
-                            type="button"
-                            id={"apply-mapping-#{download.id}"}
-                            class="btn btn-warning btn-xs"
-                            phx-click="apply_mapping_and_retry"
-                            phx-value-remote_prefix={
-                              download.path_mapping_suggestion.remote_prefix
-                            }
-                            phx-value-local_prefix={download.path_mapping_suggestion.local_prefix}
-                            phx-disable-with="Applying…"
-                            aria-label={"Apply mapping #{download.path_mapping_suggestion.remote_prefix} to #{download.path_mapping_suggestion.local_prefix} and retry"}
-                          >
-                            Apply mapping &amp; retry
-                          </button>
-                          <%= if download.path_mapping_affected_count do %>
-                            <span class="opacity-60">
-                              Retries {download.path_mapping_affected_count} download{if download.path_mapping_affected_count ==
-                                                                                           1,
-                                                                                         do: "",
-                                                                                         else: "s"}
+                    <% end %>
+                    <div class="text-xs opacity-60 flex flex-wrap items-center gap-1.5">
+                      <% {badge_class, badge_label} = status_badge(download) %>
+                      <span class={"badge badge-xs #{badge_class}"}>
+                        {badge_label}
+                      </span>
+                      <%= cond do %>
+                        <% download.removal_error -> %>
+                          <span class="text-error">
+                            Couldn't remove from {download.download_client}: {download.removal_error}
+                          </span>
+                        <% download.import_last_error -> %>
+                          <span class="text-error">
+                            Import failed: {download.import_last_error}
+                          </span>
+                          <span>•</span>
+                          <span>Attempt #{download.import_retry_count}</span>
+                          <%= if download.import_next_retry_at do %>
+                            <span>•</span>
+                            <span>
+                              Next retry: {format_next_retry(download.import_next_retry_at)}
                             </span>
                           <% end %>
-                        </div>
-                      <% else %>
-                        <div class="mt-2">
-                          <.link
-                            navigate={~p"/admin/path-mappings"}
-                            class="link link-warning"
-                          >
-                            Add a path mapping
-                          </.link>
-                        </div>
+                        <% download.error_message -> %>
+                          <span class="text-error">Download failed: {download.error_message}</span>
+                        <% true -> %>
+                          <span class="text-error">Removed from client</span>
                       <% end %>
                     </div>
-                  <% end %>
-                </div>
-                <div class="flex gap-1">
-                  <%= if download.import_last_error do %>
+                    <%= if download.import_failure_reason == "path_mapping_mismatch" do %>
+                      <div class="mt-2 rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs">
+                        <div class="opacity-70">
+                          Mydia can't see the download client's path. This usually means its
+                          volume isn't mounted into the Mydia container at the same path.
+                        </div>
+                        <%= if download.path_mapping_suggestion do %>
+                          <div class="mt-1 font-mono text-[11px] break-all">
+                            {download.path_mapping_suggestion.remote_prefix}
+                            <span class="opacity-50">→</span>
+                            {download.path_mapping_suggestion.local_prefix}
+                          </div>
+                          <div class="mt-2 flex items-center gap-2">
+                            <button
+                              type="button"
+                              id={"apply-mapping-#{download.id}"}
+                              class="btn btn-warning btn-xs"
+                              phx-click="apply_mapping_and_retry"
+                              phx-value-remote_prefix={
+                                download.path_mapping_suggestion.remote_prefix
+                              }
+                              phx-value-local_prefix={
+                                download.path_mapping_suggestion.local_prefix
+                              }
+                              phx-disable-with="Applying…"
+                              aria-label={"Apply mapping #{download.path_mapping_suggestion.remote_prefix} to #{download.path_mapping_suggestion.local_prefix} and retry"}
+                            >
+                              Apply mapping &amp; retry
+                            </button>
+                            <%= if download.path_mapping_affected_count do %>
+                              <span class="opacity-60">
+                                Retries {download.path_mapping_affected_count} download{if download.path_mapping_affected_count ==
+                                                                                             1,
+                                                                                           do: "",
+                                                                                           else:
+                                                                                             "s"}
+                              </span>
+                            <% end %>
+                          </div>
+                        <% else %>
+                          <div class="mt-2">
+                            <.link
+                              navigate={~p"/admin/path-mappings"}
+                              class="link link-warning"
+                            >
+                              Add a path mapping
+                            </.link>
+                          </div>
+                        <% end %>
+                      </div>
+                    <% end %>
+                  </div>
+                  <div class="flex gap-1">
+                    <%= if download.import_last_error do %>
+                      <button
+                        type="button"
+                        class="btn btn-square btn-ghost btn-sm"
+                        phx-click="retry_import"
+                        phx-value-id={download.id}
+                        title="Retry import now"
+                      >
+                        <.icon name="hero-arrow-path" class="size-4" />
+                      </button>
+                    <% end %>
                     <button
+                      :if={download.removal_error}
                       type="button"
+                      id={"retry-removal-#{download.id}"}
                       class="btn btn-square btn-ghost btn-sm"
-                      phx-click="retry_import"
+                      phx-click="retry_removal"
                       phx-value-id={download.id}
-                      title="Retry import now"
+                      title="Try removing it again"
                     >
                       <.icon name="hero-arrow-path" class="size-4" />
                     </button>
-                  <% end %>
-                  <button
-                    :if={download.removal_error}
-                    type="button"
-                    id={"retry-removal-#{download.id}"}
-                    class="btn btn-square btn-ghost btn-sm"
-                    phx-click="retry_removal"
-                    phx-value-id={download.id}
-                    title="Try removing it again"
-                  >
-                    <.icon name="hero-arrow-path" class="size-4" />
-                  </button>
-                  <button
-                    type="button"
-                    id={"match-files-#{download.id}"}
-                    class="btn btn-sm btn-outline"
-                    phx-click="open_match_files"
-                    phx-value-id={download.id}
-                    title="See what this download contains and match files by hand"
-                  >
-                    <.icon name="hero-document-magnifying-glass" class="size-4" />
-                    <span class="hidden sm:inline">Match files…</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-square btn-ghost btn-sm"
-                    phx-click="dismiss_download"
-                    phx-value-id={download.id}
-                    data-confirm="Dismiss this issue?"
-                    title="Dismiss"
-                  >
-                    <.icon name="hero-x-mark" class="size-4" />
-                  </button>
-                </div>
-              </li>
-            </ul>
-          </div>
+                    <button
+                      type="button"
+                      id={"match-files-#{download.id}"}
+                      class="btn btn-sm btn-outline"
+                      phx-click="open_match_files"
+                      phx-value-id={download.id}
+                      title="See what this download contains and match files by hand"
+                    >
+                      <.icon name="hero-document-magnifying-glass" class="size-4" />
+                      <span class="hidden sm:inline">Match files…</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-square btn-ghost btn-sm"
+                      phx-click="dismiss_download"
+                      phx-value-id={download.id}
+                      data-confirm="Dismiss this issue?"
+                      title="Dismiss"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </section>
         </div>
       <% end %>
 
