@@ -8,7 +8,7 @@ defmodule Mydia.Downloads.StatusFilter do
     * `:active` - not yet imported and downloading, seeding, checking, paused,
       queued or grabbing
     * `:completed` - the client reports the download as completed
-    * `:imported` - successfully imported to the library (the Completed tab)
+    * `:imported` - successfully imported to the library (the Downloads tab's Imported view)
     * `:failed` - failed in the client or failed to import, excluding
       unresolved files
     * `:unresolved_files` - files that could not be matched
@@ -33,7 +33,7 @@ defmodule Mydia.Downloads.StatusFilter do
     Enum.filter(downloads, &(&1.status == "completed"))
   end
 
-  # Filter for imported downloads (shown in Completed tab)
+  # Filter for imported downloads (shown in the Downloads tab's Imported view)
   # These are downloads that have been successfully imported to the library
   # but may still be seeding in the download client
   def filter(downloads, :imported) do

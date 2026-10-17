@@ -41,7 +41,7 @@ defmodule MydiaWeb.DownloadsLive.AdoptedBadgeTest do
     })
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "completed"})
+    render_patch(view, ~p"/downloads?view=imported")
 
     assert has_element?(view, "[data-test=adopted-badge]")
   end

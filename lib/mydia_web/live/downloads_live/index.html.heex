@@ -16,7 +16,7 @@
           <.icon name="hero-arrow-path" class="w-4 h-4" />
           <span class="hidden sm:inline ml-1">Refresh</span>
         </button>
-        <%= if not @downloads_empty? do %>
+        <%= if @active_tab == :downloads and not @downloads_empty? do %>
           <button type="button" class="btn btn-sm btn-primary" phx-click="toggle_select_all">
             <%= cond do %>
               <% @selection_mode and MapSet.size(@selected_ids) > 0 -> %>
@@ -31,103 +31,81 @@
             <% end %>
           </button>
         <% end %>
+        <%!-- Rare, destructive actions. daisyUI's popover dropdown: the native
+              popover API puts the menu in the top layer (no z-index or
+              stacking-context fights) and CSS anchor positioning places it;
+              browsers without anchor positioning get daisyUI's centred
+              fallback. phx-update="ignore" keeps refresh ticks from replacing
+              an open menu. --%>
         <button
+          id="downloads-more"
           type="button"
-          class="btn btn-sm btn-ghost"
-          phx-click="open_clear_completed_modal"
+          class="btn btn-sm btn-ghost btn-square"
+          popovertarget="downloads-more-menu"
+          style="anchor-name:--downloads-more"
+          aria-label="More actions"
+          title="More actions"
         >
-          <.icon name="hero-trash" class="w-4 h-4" />
-          <span class="hidden sm:inline ml-1">Clear Completed</span>
+          <.icon name="hero-ellipsis-horizontal" class="size-4" />
         </button>
+        <ul
+          id="downloads-more-menu"
+          popover
+          phx-update="ignore"
+          class="dropdown dropdown-end menu w-56 rounded-box bg-base-100 border border-base-300 p-2 shadow-lg"
+          style="position-anchor:--downloads-more"
+        >
+          <li>
+            <button
+              id="downloads-clear-completed"
+              type="button"
+              popovertarget="downloads-more-menu"
+              popovertargetaction="hide"
+              phx-click="open_clear_completed_modal"
+            >
+              <.icon name="hero-trash" class="size-4" /> Clear completed…
+            </button>
+          </li>
+        </ul>
       </div>
     </div>
 
     <ListComponents.stats_bar summary={@summary} />
 
-    <%!-- Toolbar: tabs + sort on one row --%>
-    <div class="flex items-end justify-between gap-4 flex-wrap mb-4 border-b border-base-300">
-      <div role="tablist" class="tabs tabs-border -mb-px">
-        <button
-          id="downloads-tab-queue"
-          role="tab"
-          class={["tab", @active_tab == :queue && "tab-active"]}
-          phx-click="switch_tab"
-          phx-value-tab="queue"
+    <ListComponents.tab_bar tabs={@tabs} active={@active_tab}>
+      <div id="downloads-toolbar" class="flex flex-wrap items-center gap-2 mb-3">
+        <.segmented_control
+          :if={@active_tab == :downloads}
+          id="downloads-view"
+          value={@view}
+          event="set_view"
+          param="view"
+          label="Which downloads to show"
         >
-          <.icon name="hero-arrow-down-tray" class="w-4 h-4 mr-1" /> Queue
-          <span
-            :if={@tab_counts.queue > 0}
-            id="downloads-tab-queue-count"
-            class="badge badge-sm ml-1 tabular-nums"
-          >
-            {@tab_counts.queue}
-          </span>
-          <span
-            :if={@summary.stalled > 0}
-            id="downloads-tab-queue-stalled"
-            class="status status-warning ml-1"
-            aria-label="Some downloads are stalled"
-          ></span>
-        </button>
-        <button
-          id="downloads-tab-completed"
-          role="tab"
-          class={["tab", @active_tab == :completed && "tab-active"]}
-          phx-click="switch_tab"
-          phx-value-tab="completed"
+          <:option value={:active} label="Active" id="downloads-view-active" />
+          <:option value={:imported} label="Imported" id="downloads-view-imported" />
+          <:option value={:all} label="All" id="downloads-view-all" />
+        </.segmented_control>
+        <ListComponents.filter_bar
+          filters={@filters}
+          clients={@client_options}
+          show_status?={@active_tab == :downloads and @view == :active}
+        />
+        <form
+          :if={@active_tab == :downloads and not @downloads_empty?}
+          phx-change="sort"
+          id="downloads-sort-form"
+          class="sm:ml-auto"
         >
-          <.icon name="hero-check-circle" class="w-4 h-4 mr-1" /> Completed
-          <span
-            :if={@tab_counts.completed > 0}
-            id="downloads-tab-completed-count"
-            class="badge badge-sm ml-1 tabular-nums"
-          >
-            {@tab_counts.completed}
-          </span>
-        </button>
-        <button
-          id="downloads-tab-issues"
-          role="tab"
-          class={["tab", @active_tab == :issues && "tab-active"]}
-          phx-click="switch_tab"
-          phx-value-tab="issues"
-        >
-          <.icon name="hero-exclamation-triangle" class="w-4 h-4 mr-1" /> Issues
-          <span
-            :if={@tab_counts.issues > 0}
-            id="downloads-tab-issues-count"
-            class="badge badge-sm badge-error ml-1 tabular-nums"
-          >
-            {@tab_counts.issues}
-          </span>
-        </button>
-        <button
-          id="downloads-tab-external"
-          role="tab"
-          class={["tab", @active_tab == :external && "tab-active"]}
-          phx-click="switch_tab"
-          phx-value-tab="external"
-        >
-          <.icon name="hero-inbox-stack" class="w-4 h-4 mr-1" /> External
-          <%!-- Neutral styling on purpose: these are not problems. --%>
-          <%= if @scan.external != [] do %>
-            <span class="badge badge-ghost badge-sm ml-1">{length(@scan.external)}</span>
-          <% end %>
-        </button>
-      </div>
-
-      <%!-- Sort control (Queue/Completed tabs, non-empty only) --%>
-      <%= if @active_tab not in [:issues, :external] and not @downloads_empty? do %>
-        <form phx-change="sort" id="downloads-sort-form" class="pb-2">
           <label class="sr-only" for="downloads-sort">Sort downloads</label>
           <select
             id="downloads-sort"
             name="sort_by"
-            class="select select-bordered select-sm w-full sm:w-auto"
+            class="select select-sm w-full sm:w-auto"
             title="Sort downloads"
           >
             <option
-              :for={{value, label} <- Sorting.options(@active_tab)}
+              :for={{value, label} <- Sorting.options(@view)}
               value={value}
               selected={@sort_by == value}
             >
@@ -135,427 +113,807 @@
             </option>
           </select>
         </form>
-      <% end %>
-    </div>
-
-    <ListComponents.filter_bar filters={@filters} clients={@client_options} tab={@active_tab} />
-    <ListComponents.active_filters filters={@filters} />
-
-    <%!-- Batch action bar --%>
-    <%= if MapSet.size(@selected_ids) > 0 do %>
-      <%!-- Below lg the sticky #mobile-header (z-30) sits at top-0, so sit under it: max(navbar min-h 4rem, 0.5rem pad + 2.5rem btn + 0.5rem + safe-area inset) --%>
-      <div
-        id="downloads-batch-bar"
-        class="alert alert-soft sticky top-[max(4rem,calc(3.5rem+env(safe-area-inset-top,0px)))] lg:top-0 z-10 mb-4 shadow-lg"
-      >
-        <div class="flex-1">
-          <span class="font-semibold">{MapSet.size(@selected_ids)} selected</span>
-        </div>
-        <div class="join">
-          <%= if @active_tab == :issues do %>
-            <button type="button" class="btn btn-sm btn-primary join-item" phx-click="batch_retry">
-              <.icon name="hero-arrow-path" class="w-4 h-4" /> Retry
-            </button>
-          <% end %>
-          <button
-            type="button"
-            class="btn btn-sm btn-error join-item"
-            phx-click="batch_delete"
-            data-confirm="Delete selected downloads?"
-          >
-            <.icon name="hero-trash" class="w-4 h-4" /> Delete
-          </button>
-          <button type="button" class="btn btn-sm join-item" phx-click="toggle_select_all">
-            Clear
-          </button>
-        </div>
       </div>
-    <% end %>
 
-    <%!-- A client too busy to answer in time: rows show its last known status --%>
-    <div
-      :if={@stale_status}
-      id="client-busy-notice"
-      role="status"
-      class="alert alert-info alert-soft mb-4 text-sm"
-    >
-      <.icon name="hero-clock" class="size-4 shrink-0" />
-      <span>
-        {@stale_status.client} is busy, showing status from {status_age(@stale_status.as_of)}.
-      </span>
-    </div>
+      <ListComponents.active_filters filters={@filters} />
 
-    <%!-- Empty state --%>
-    <%= if @downloads_empty? do %>
-      <div class="card bg-base-100 shadow-lg">
-        <div class="card-body flex flex-col items-center justify-center py-16">
-          <%= cond do %>
-            <% ListView.active?(@filters) -> %>
-              <.icon name="hero-funnel" class="w-16 h-16 text-base-content/30 mb-4" />
-              <h3 class="text-xl font-semibold text-base-content/70 mb-2">No downloads match</h3>
-              <p class="text-base-content/50">Try a different search or clear the filters.</p>
-              <button
-                type="button"
-                id="downloads-empty-clear-filters"
-                class="btn btn-sm btn-primary mt-4"
-                phx-click="clear_filters"
-              >
-                Clear filters
-              </button>
-            <% @active_tab == :queue -> %>
-              <.icon name="hero-arrow-down-tray" class="w-16 h-16 text-base-content/30 mb-4" />
-              <h3 class="text-xl font-semibold text-base-content/70 mb-2">Queue is empty</h3>
-              <p class="text-base-content/50">No downloads currently in progress</p>
-            <% @active_tab == :completed -> %>
-              <.icon name="hero-check-circle" class="w-16 h-16 text-base-content/30 mb-4" />
-              <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-                No completed downloads
-              </h3>
-              <p class="text-base-content/50">
-                Imported downloads that are still seeding will appear here
-              </p>
-            <% @active_tab == :issues -> %>
-              <.icon name="hero-check-circle" class="w-16 h-16 text-base-content/30 mb-4" />
-              <h3 class="text-xl font-semibold text-base-content/70 mb-2">No issues</h3>
-              <p class="text-base-content/50">All downloads completed successfully</p>
-            <% @active_tab == :external -> %>
-              <.icon name="hero-inbox-stack" class="w-16 h-16 text-base-content/30 mb-4" />
-              <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-                Nothing unmanaged
-              </h3>
-              <p class="text-base-content/50">
-                Torrents in your clients that Mydia does not manage will appear here
-              </p>
-          <% end %>
-        </div>
-      </div>
-    <% end %>
-    <%!-- Downloads list (Queue/Completed tabs) --%>
-    <%= if @active_tab not in [:issues, :external] do %>
-      <ul
-        id="downloads-list"
-        phx-update="stream"
-        phx-viewport-bottom="load_more"
-        class="list bg-base-100 rounded-box shadow-lg"
-      >
-        <li
-          :for={{id, download} <- @streams.downloads}
-          id={id}
-          class={[
-            "list-row items-center gap-3 py-2.5 hover:bg-base-300/40 transition-colors",
-            removing?(download) && "opacity-60"
-          ]}
+      <%!-- Batch action bar --%>
+      <%= if MapSet.size(@selected_ids) > 0 do %>
+        <%!-- Below lg the sticky #mobile-header (z-30) sits at top-0, so sit under it: max(navbar min-h 4rem, 0.5rem pad + 2.5rem btn + 0.5rem + safe-area inset) --%>
+        <div
+          id="downloads-batch-bar"
+          class="alert alert-soft sticky top-[max(4rem,calc(3.5rem+env(safe-area-inset-top,0px)))] lg:top-0 z-10 mb-4 shadow-lg"
         >
-          <%!-- Checkbox (only shown in selection mode) --%>
-          <div class={[
-            "transition-all",
-            (@selection_mode && "w-auto opacity-100") || "w-0 opacity-0 overflow-hidden"
-          ]}>
-            <input
-              type="checkbox"
-              class="checkbox checkbox-primary checkbox-sm"
-              checked={is_selected?(assigns, download.id)}
-              phx-click="toggle_select"
-              phx-value-id={download.id}
-              disabled={not @selection_mode}
-            />
+          <div class="flex-1">
+            <span class="font-semibold">{MapSet.size(@selected_ids)} selected</span>
           </div>
-          <%!-- Content --%>
-          <div class="list-col-grow min-w-0">
-            <% import_issue = import_issue(download) %>
-            <%!-- Line 1: status dot + title + episode --%>
-            <div class="flex items-center gap-2 min-w-0">
-              <% {_badge_class, status_label} = status_badge(download) %>
-              <% dot_label =
-                if(import_issue, do: import_issue_label(import_issue), else: status_label) %>
-              <span
-                class={["status status-md shrink-0", row_status_dot_class(download, import_issue)]}
-                title={dot_label}
-                aria-label={dot_label}
-              ></span>
-              <% media_item_id = ListView.media_item_id(download) %>
-              <.link
-                :if={media_item_id}
-                navigate={~p"/media/#{media_item_id}"}
-                id={"download-title-link-#{download.id}"}
-                class="link link-hover font-medium text-sm truncate"
-              >
-                {get_display_title(download)}
-              </.link>
-              <span :if={is_nil(media_item_id)} class="font-medium text-sm truncate">
-                {get_display_title(download)}
-              </span>
-              <%= if get_episode_details(download) do %>
+          <div class="join">
+            <button
+              type="button"
+              class="btn btn-sm btn-error join-item"
+              phx-click="batch_delete"
+              data-confirm="Delete selected downloads?"
+            >
+              <.icon name="hero-trash" class="w-4 h-4" /> Delete
+            </button>
+            <button type="button" class="btn btn-sm join-item" phx-click="toggle_select_all">
+              Clear
+            </button>
+          </div>
+        </div>
+      <% end %>
+
+      <%!-- A client too busy to answer in time: rows show its last known status --%>
+      <div
+        :if={@stale_status}
+        id="client-busy-notice"
+        role="status"
+        class="alert alert-info alert-soft mb-4 text-sm"
+      >
+        <.icon name="hero-clock" class="size-4 shrink-0" />
+        <span>
+          {@stale_status.client} is busy, showing status from {status_age(@stale_status.as_of)}.
+        </span>
+      </div>
+
+      <%!-- Empty state --%>
+      <%= if @downloads_empty? do %>
+        <%= cond do %>
+          <% ListView.active?(@filters) -> %>
+            <ListComponents.empty_state
+              icon="hero-funnel"
+              title="No downloads match"
+              description="Try a different search or clear the filters."
+            >
+              <:action>
+                <button
+                  type="button"
+                  id="downloads-empty-clear-filters"
+                  class="btn btn-sm btn-primary"
+                  phx-click="clear_filters"
+                >
+                  Clear filters
+                </button>
+              </:action>
+            </ListComponents.empty_state>
+          <% @active_tab == :issues -> %>
+            <ListComponents.empty_state
+              :if={@removed_client_groups == []}
+              icon="hero-check-circle"
+              title="No issues"
+              description="All downloads completed successfully"
+            />
+          <% @active_tab == :external -> %>
+            <ListComponents.empty_state
+              icon="hero-inbox-stack"
+              title="Nothing unmanaged"
+              description="Torrents in your clients that Mydia does not manage will appear here"
+            />
+          <% @view == :imported -> %>
+            <ListComponents.empty_state
+              icon="hero-check-circle"
+              title="No imported downloads"
+              description="Imported downloads that are still seeding will appear here"
+            />
+          <% @view == :all -> %>
+            <ListComponents.empty_state
+              icon="hero-arrow-down-tray"
+              title="No downloads"
+              description="Nothing is downloading and nothing imported is still in your clients"
+            />
+          <% true -> %>
+            <ListComponents.empty_state
+              icon="hero-arrow-down-tray"
+              title="Queue is empty"
+              description="No downloads currently in progress"
+            />
+        <% end %>
+      <% end %>
+
+      <%!-- Downloads list --%>
+      <%= if @active_tab == :downloads do %>
+        <ul
+          id="downloads-list"
+          phx-update="stream"
+          phx-viewport-bottom="load_more"
+          class="list"
+        >
+          <li
+            :for={{id, download} <- @streams.downloads}
+            id={id}
+            class={[
+              "list-row items-center gap-3 py-2.5 hover:bg-base-300/40 transition-colors",
+              removing?(download) && "opacity-60"
+            ]}
+          >
+            <%!-- Checkbox (only shown in selection mode) --%>
+            <div class={[
+              "transition-all",
+              (@selection_mode && "w-auto opacity-100") || "w-0 opacity-0 overflow-hidden"
+            ]}>
+              <input
+                type="checkbox"
+                class="checkbox checkbox-primary checkbox-sm"
+                checked={is_selected?(assigns, download.id)}
+                phx-click="toggle_select"
+                phx-value-id={download.id}
+                disabled={not @selection_mode}
+              />
+            </div>
+            <%!-- Content --%>
+            <div class="list-col-grow min-w-0">
+              <% import_issue = import_issue(download) %>
+              <% kind = ListView.row_kind(download) %>
+              <%!-- Line 1: status dot + title + episode --%>
+              <div class="flex items-center gap-2 min-w-0">
+                <% {_badge_class, status_label} = status_badge(download) %>
+                <% dot_label =
+                  if(import_issue, do: import_issue_label(import_issue), else: status_label) %>
+                <span
+                  class={[
+                    "status status-md shrink-0",
+                    row_status_dot_class(download, import_issue)
+                  ]}
+                  title={dot_label}
+                  aria-label={dot_label}
+                ></span>
+                <% media_item_id = ListView.media_item_id(download) %>
                 <.link
                   :if={media_item_id}
                   navigate={~p"/media/#{media_item_id}"}
-                  class="link link-hover text-xs text-base-content/50 shrink-0 truncate"
+                  id={"download-title-link-#{download.id}"}
+                  class="link link-hover font-medium text-sm truncate"
                 >
-                  {get_episode_details(download)}
+                  {get_display_title(download)}
                 </.link>
-                <span
-                  :if={is_nil(media_item_id)}
-                  class="text-xs text-base-content/50 shrink-0 truncate"
-                >
-                  {get_episode_details(download)}
+                <span :if={is_nil(media_item_id)} class="font-medium text-sm truncate">
+                  {get_display_title(download)}
                 </span>
-              <% end %>
-              <%!-- Mydia did not add this one. Neutral styling on purpose:
+                <%= if get_episode_details(download) do %>
+                  <.link
+                    :if={media_item_id}
+                    navigate={~p"/media/#{media_item_id}"}
+                    class="link link-hover text-xs text-base-content/50 shrink-0 truncate"
+                  >
+                    {get_episode_details(download)}
+                  </.link>
+                  <span
+                    :if={is_nil(media_item_id)}
+                    class="text-xs text-base-content/50 shrink-0 truncate"
+                  >
+                    {get_episode_details(download)}
+                  </span>
+                <% end %>
+                <%!-- Mydia did not add this one. Neutral styling on purpose:
                     adoption is intended behaviour, not a problem. --%>
-              <%= if adopted_from_client?(download) do %>
+                <%= if adopted_from_client?(download) do %>
+                  <span
+                    class="badge badge-ghost badge-xs shrink-0"
+                    data-test="adopted-badge"
+                    title="Mydia did not add this torrent. It was already in the download client and matched to your library."
+                  >
+                    Added outside Mydia
+                  </span>
+                <% end %>
                 <span
-                  class="badge badge-ghost badge-xs shrink-0"
-                  data-test="adopted-badge"
-                  title="Mydia did not add this torrent. It was already in the download client and matched to your library."
+                  :if={removing?(download)}
+                  id={"removing-#{download.id}"}
+                  class="badge badge-ghost badge-xs shrink-0 gap-1"
                 >
-                  Added outside Mydia
+                  <span class="loading loading-spinner loading-xs"></span> Removing…
                 </span>
-              <% end %>
-              <span
-                :if={removing?(download)}
-                id={"removing-#{download.id}"}
-                class="badge badge-ghost badge-xs shrink-0 gap-1"
-              >
-                <span class="loading loading-spinner loading-xs"></span> Removing…
-              </span>
-            </div>
-            <%!-- Line 2: release title (muted), only when it differs from the display title --%>
-            <%= if get_display_title(download) != download.title do %>
-              <div class="tooltip tooltip-bottom max-w-full block" data-tip={download.title}>
-                <button
-                  type="button"
-                  class="block max-w-full truncate text-left text-xs text-base-content/40 hover:text-base-content/70 cursor-pointer transition-colors"
-                  phx-click="open_details"
-                  phx-value-id={download.id}
-                >
-                  {download.title}
-                </button>
               </div>
-            <% end %>
-            <%!-- Import problem: surfaced even when the torrent client reports the
+              <%!-- Line 2: release title (muted), only when it differs from the display title --%>
+              <%= if get_display_title(download) != download.title do %>
+                <div class="tooltip tooltip-bottom max-w-full block" data-tip={download.title}>
+                  <button
+                    type="button"
+                    class="block max-w-full truncate text-left text-xs text-base-content/40 hover:text-base-content/70 cursor-pointer transition-colors"
+                    phx-click="open_details"
+                    phx-value-id={download.id}
+                  >
+                    {download.title}
+                  </button>
+                </div>
+              <% end %>
+              <%!-- Import problem: surfaced even when the torrent client reports the
                  download as seeding/completed, so a silently-failing import is
                  visible without digging into the Issues tab. --%>
-            <%= if import_issue do %>
-              <div class="text-xs text-error flex flex-wrap items-center gap-1.5 mt-0.5">
-                <.icon name="hero-exclamation-triangle" class="size-3 shrink-0" />
-                <span class="tooltip tooltip-bottom min-w-0" data-tip={download.import_last_error}>
-                  <span class="truncate block">
-                    {import_issue_label(import_issue)}: {download.import_last_error}
+              <%= if import_issue do %>
+                <div class="text-xs text-error flex flex-wrap items-center gap-1.5 mt-0.5">
+                  <.icon name="hero-exclamation-triangle" class="size-3 shrink-0" />
+                  <span
+                    class="tooltip tooltip-bottom min-w-0"
+                    data-tip={download.import_last_error}
+                  >
+                    <span class="truncate block">
+                      {import_issue_label(import_issue)}: {download.import_last_error}
+                    </span>
                   </span>
-                </span>
-                <%= if download.import_retry_count && download.import_retry_count > 0 do %>
-                  <span>•</span>
-                  <span class="shrink-0">Attempt #{download.import_retry_count}</span>
-                <% end %>
-                <%= if download.import_next_retry_at do %>
-                  <span>•</span>
-                  <span class="shrink-0">
-                    Next retry: {format_next_retry(download.import_next_retry_at)}
+                  <%= if download.import_retry_count && download.import_retry_count > 0 do %>
+                    <span>•</span>
+                    <span class="shrink-0">Attempt #{download.import_retry_count}</span>
+                  <% end %>
+                  <%= if download.import_next_retry_at do %>
+                    <span>•</span>
+                    <span class="shrink-0">
+                      Next retry: {format_next_retry(download.import_next_retry_at)}
+                    </span>
+                  <% end %>
+                </div>
+              <% end %>
+              <%= if download.removal_error do %>
+                <div
+                  id={"removal-error-#{download.id}"}
+                  class="text-xs text-error flex items-center gap-1.5 mt-0.5"
+                >
+                  <.icon name="hero-exclamation-triangle" class="size-3 shrink-0" />
+                  <span class="truncate">
+                    Couldn't remove from {download.download_client}: {download.removal_error}
                   </span>
-                <% end %>
-              </div>
-            <% end %>
-            <%= if download.removal_error do %>
-              <div
-                id={"removal-error-#{download.id}"}
-                class="text-xs text-error flex items-center gap-1.5 mt-0.5"
-              >
-                <.icon name="hero-exclamation-triangle" class="size-3 shrink-0" />
-                <span class="truncate">
-                  Couldn't remove from {download.download_client}: {download.removal_error}
-                </span>
-              </div>
-            <% end %>
-            <%!-- Soft-stall: a recoverable warning. import_issue is nil here
+                </div>
+              <% end %>
+              <%!-- Soft-stall: a recoverable warning. import_issue is nil here
                  (a soft-stall never sets import_failed_at), so this is a
                  sibling of the block above, not an alternative to it. This is
                  the only place the give-up rule is visible while the operator
                  can still change the outcome. --%>
-            <%= if soft_stalled?(download) and not removing?(download) do %>
-              <div class="text-xs text-warning flex flex-wrap items-center gap-1.5 mt-0.5">
-                <.icon name="hero-clock" class="size-3 shrink-0" />
-                <%= if download.auto_reject_capped? do %>
-                  <span id={"stall-capped-#{download.id}"}>
-                    No progress for {format_duration(stall_elapsed_seconds(download))}. Mydia has stopped replacing stalled releases for this title. Cancelling will block this release.
+              <%= if soft_stalled?(download) and not removing?(download) do %>
+                <div class="text-xs text-warning flex flex-wrap items-center gap-1.5 mt-0.5">
+                  <.icon name="hero-clock" class="size-3 shrink-0" />
+                  <%= if download.auto_reject_capped? do %>
+                    <span id={"stall-capped-#{download.id}"}>
+                      No progress for {format_duration(stall_elapsed_seconds(download))}. Mydia has stopped replacing stalled releases for this title. Cancelling will block this release.
+                    </span>
+                  <% else %>
+                    <span>
+                      No progress for {format_duration(stall_elapsed_seconds(download))}. If nothing changes in the next {format_duration(
+                        stall_remaining_seconds(download, @stall_grace_map)
+                      )}, Mydia will remove it and search for a different release.
+                    </span>
+                  <% end %>
+                  <button
+                    type="button"
+                    id={"stall-reject-#{download.id}"}
+                    class="btn btn-xs btn-warning btn-outline shrink-0"
+                    phx-click="reject_release"
+                    phx-value-id={download.id}
+                  >
+                    Remove and find another
+                  </button>
+                  <button
+                    type="button"
+                    id={"stall-keep-waiting-#{download.id}"}
+                    class="btn btn-xs btn-ghost shrink-0"
+                    phx-click="keep_waiting"
+                    phx-value-id={download.id}
+                  >
+                    Keep waiting
+                  </button>
+                </div>
+              <% end %>
+              <%!-- Line 3: compact metadata cluster (every metric carries an icon) --%>
+              <div class="flex items-center gap-x-3 gap-y-1 flex-wrap mt-1 text-xs text-base-content/60">
+                <% quality_str = Quality.format(get_metadata_value(download, "quality")) %>
+                <span :if={quality_str && quality_str != ""} class="badge badge-ghost badge-sm">
+                  {quality_str}
+                </span>
+                <% protocol = format_protocol(get_metadata_value(download, "download_protocol")) %>
+                <span :if={protocol} class="badge badge-ghost badge-sm">{protocol}</span>
+
+                <%= if kind == :queue do %>
+                  <span class="inline-flex items-center gap-1" title="Download speed">
+                    <.icon name="hero-arrow-down-tray" class="size-3 opacity-70" />{format_speed(
+                      download.download_speed
+                    )}
                   </span>
-                <% else %>
-                  <span>
-                    No progress for {format_duration(stall_elapsed_seconds(download))}. If nothing changes in the next {format_duration(
-                      stall_remaining_seconds(download, @stall_grace_map)
-                    )}, Mydia will remove it and search for a different release.
+                  <span class="inline-flex items-center gap-1 tabular-nums" title="Size">
+                    <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_file_size(
+                      download.size
+                    )}
+                  </span>
+                  <span class="inline-flex items-center gap-1" title="Time remaining">
+                    <.icon name="hero-clock" class="size-3 opacity-70" />{format_eta(download.eta)}
+                  </span>
+                  <span
+                    :if={get_metadata_value(download, "seeders")}
+                    class="inline-flex items-center gap-1"
+                    title="Seeders"
+                  >
+                    <.icon name="hero-users" class="size-3 opacity-70" />{get_metadata_value(
+                      download,
+                      "seeders"
+                    )}
                   </span>
                 <% end %>
-                <button
-                  type="button"
-                  id={"stall-reject-#{download.id}"}
-                  class="btn btn-xs btn-warning btn-outline shrink-0"
-                  phx-click="reject_release"
-                  phx-value-id={download.id}
-                >
-                  Remove and find another
-                </button>
-                <button
-                  type="button"
-                  id={"stall-keep-waiting-#{download.id}"}
-                  class="btn btn-xs btn-ghost shrink-0"
-                  phx-click="keep_waiting"
-                  phx-value-id={download.id}
-                >
-                  Keep waiting
-                </button>
+                <%= if kind == :completed do %>
+                  <span class="inline-flex items-center gap-1" title="Upload speed">
+                    <.icon name="hero-arrow-up-tray" class="size-3 opacity-70" />{format_speed(
+                      download.upload_speed
+                    )}
+                  </span>
+                  <span class="inline-flex items-center gap-1" title="Share ratio">
+                    <.icon name="hero-scale" class="size-3 opacity-70" />{format_ratio(
+                      download.ratio
+                    )}
+                  </span>
+                  <span class="inline-flex items-center gap-1 tabular-nums" title="Size">
+                    <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_file_size(
+                      download.size
+                    )}
+                  </span>
+                  <span
+                    :if={download.imported_at}
+                    class="inline-flex items-center gap-1 text-success/80"
+                    title="Imported"
+                  >
+                    <.icon name="hero-check-circle" class="size-3" />{format_relative_time(
+                      download.imported_at
+                    )}
+                  </span>
+                <% end %>
+                <ListComponents.client_chip
+                  :if={download.download_client}
+                  id={"download-client-#{download.id}"}
+                  name={download.download_client}
+                  url={@client_urls[download.download_client]}
+                />
               </div>
-            <% end %>
-            <%!-- Line 3: compact metadata cluster (every metric carries an icon) --%>
-            <div class="flex items-center gap-x-3 gap-y-1 flex-wrap mt-1 text-xs text-base-content/60">
-              <% quality_str = Quality.format(get_metadata_value(download, "quality")) %>
-              <span :if={quality_str && quality_str != ""} class="badge badge-ghost badge-sm">
-                {quality_str}
-              </span>
-              <% protocol = format_protocol(get_metadata_value(download, "download_protocol")) %>
-              <span :if={protocol} class="badge badge-ghost badge-sm">{protocol}</span>
-
-              <%= if @active_tab == :queue do %>
-                <span class="inline-flex items-center gap-1" title="Download speed">
-                  <.icon name="hero-arrow-down-tray" class="size-3 opacity-70" />{format_speed(
-                    download.download_speed
-                  )}
-                </span>
-                <span class="inline-flex items-center gap-1 tabular-nums" title="Size">
-                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_file_size(
-                    download.size
-                  )}
-                </span>
-                <span class="inline-flex items-center gap-1" title="Time remaining">
-                  <.icon name="hero-clock" class="size-3 opacity-70" />{format_eta(download.eta)}
-                </span>
-                <span
-                  :if={get_metadata_value(download, "seeders")}
-                  class="inline-flex items-center gap-1"
-                  title="Seeders"
-                >
-                  <.icon name="hero-users" class="size-3 opacity-70" />{get_metadata_value(
-                    download,
-                    "seeders"
-                  )}
-                </span>
+              <%!-- Line 4: thin inline progress (in-flight rows only) --%>
+              <%= if kind == :queue do %>
+                <div class="flex items-center gap-2 mt-1.5">
+                  <%= if progress_indeterminate?(download) do %>
+                    <%!-- No measurable %: animated bar + phase label, not a frozen 0% --%>
+                    <% {_class, phase_label} = status_badge(download) %>
+                    <progress class="progress h-1.5 flex-1"></progress>
+                    <span class="text-xs text-base-content/60 shrink-0 whitespace-nowrap w-16 text-right">
+                      {phase_label}
+                    </span>
+                  <% else %>
+                    <progress
+                      class={[
+                        "progress h-1.5 flex-1",
+                        if(soft_stalled?(download),
+                          do: "progress-warning",
+                          else: "progress-primary"
+                        )
+                      ]}
+                      value={format_progress(download.progress)}
+                      max="100"
+                    ></progress>
+                    <span class="text-xs tabular-nums text-base-content/70 shrink-0 whitespace-nowrap w-12 text-right">
+                      {format_progress(download.progress)}%
+                    </span>
+                  <% end %>
+                </div>
               <% end %>
-              <%= if @active_tab == :completed do %>
-                <span class="inline-flex items-center gap-1" title="Upload speed">
-                  <.icon name="hero-arrow-up-tray" class="size-3 opacity-70" />{format_speed(
-                    download.upload_speed
-                  )}
-                </span>
-                <span class="inline-flex items-center gap-1" title="Share ratio">
-                  <.icon name="hero-scale" class="size-3 opacity-70" />{format_ratio(
-                    download.ratio
-                  )}
-                </span>
-                <span class="inline-flex items-center gap-1 tabular-nums" title="Size">
-                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_file_size(
-                    download.size
-                  )}
-                </span>
-                <span
-                  :if={download.imported_at}
-                  class="inline-flex items-center gap-1 text-success/80"
-                  title="Imported"
-                >
-                  <.icon name="hero-check-circle" class="size-3" />{format_relative_time(
-                    download.imported_at
-                  )}
-                </span>
-              <% end %>
-              <ListComponents.client_chip
-                :if={download.download_client}
-                id={"download-client-#{download.id}"}
-                name={download.download_client}
-                url={@client_urls[download.download_client]}
-              />
             </div>
-            <%!-- Line 4: thin inline progress (queue only) --%>
-            <%= if @active_tab == :queue do %>
-              <div class="flex items-center gap-2 mt-1.5">
-                <%= if progress_indeterminate?(download) do %>
-                  <%!-- No measurable %: animated bar + phase label, not a frozen 0% --%>
-                  <% {_class, phase_label} = status_badge(download) %>
-                  <progress class="progress h-1.5 flex-1"></progress>
-                  <span class="text-xs text-base-content/60 shrink-0 whitespace-nowrap w-16 text-right">
-                    {phase_label}
-                  </span>
-                <% else %>
-                  <progress
-                    class={[
-                      "progress h-1.5 flex-1",
-                      if(soft_stalled?(download),
-                        do: "progress-warning",
-                        else: "progress-primary"
-                      )
-                    ]}
-                    value={format_progress(download.progress)}
-                    max="100"
-                  ></progress>
-                  <span class="text-xs tabular-nums text-base-content/70 shrink-0 whitespace-nowrap w-12 text-right">
-                    {format_progress(download.progress)}%
-                  </span>
-                <% end %>
-              </div>
-            <% end %>
-          </div>
-          <%!-- Action buttons --%>
-          <ListComponents.download_actions
-            :if={not removing?(download)}
-            download={download}
-            tab={@active_tab}
-          />
-        </li>
-      </ul>
+            <%!-- Action buttons --%>
+            <ListComponents.download_actions
+              :if={not removing?(download)}
+              download={download}
+              tab={ListView.row_kind(download)}
+            />
+          </li>
+        </ul>
 
-      <%!-- Loading indicator for infinite scroll --%>
-      <%= if @has_more do %>
-        <div class="flex justify-center py-4">
-          <span class="loading loading-dots loading-md text-primary"></span>
-        </div>
+        <%!-- Loading indicator for infinite scroll --%>
+        <%= if @has_more do %>
+          <div class="flex justify-center py-4">
+            <span class="loading loading-dots loading-md text-primary"></span>
+          </div>
+        <% end %>
       <% end %>
-    <% end %>
 
-    <%!-- Issues tab - Three sectioned layout --%>
-    <%= if @active_tab == :issues do %>
-      <div class="flex flex-col gap-6">
-        <%!-- Section 1: Needs Matching (derived from the clients, not the DB) --%>
-        <div>
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="text-lg font-semibold flex items-center gap-2">
-              <.icon name="hero-question-mark-circle" class="w-5 h-5 text-warning" />
-              Needs Matching
-              <%= if @issues_counts.unmatched > 0 do %>
-                <span class="badge badge-warning badge-sm">{@issues_counts.unmatched}</span>
-              <% end %>
-            </h3>
-          </div>
-          <ul
-            id="needs-matching"
-            phx-update="stream"
-            class="list bg-base-100 rounded-box shadow-lg"
+      <%!-- Issues tab: one card per non-empty section --%>
+      <%= if @active_tab == :issues do %>
+        <div class="flex flex-col gap-4">
+          <%!-- Section 1: Needs Matching (derived from the clients, not the DB) --%>
+          <section
+            :if={@issues_counts.unmatched > 0}
+            id="issues-needs-matching"
+            class="card card-border card-sm bg-base-100"
           >
-            <li
-              id="no-needs-matching"
-              class="hidden only:block p-6 text-center text-base-content/50"
-            >
-              No downloads need matching
-            </li>
-            <li :for={{id, torrent} <- @streams.needs_matching} id={id} class="list-row py-3">
-              <div class="list-col-grow">
-                <div class="font-medium text-sm truncate">{torrent.title}</div>
-                <%= if torrent.parsed do %>
-                  <div class="text-xs text-base-content/50 flex flex-wrap gap-1.5 mt-0.5">
-                    <%= if torrent.parsed.title do %>
-                      <span>Parsed: {torrent.parsed.title}</span>
+            <div class="card-body gap-3">
+              <h3 class="card-title text-base">
+                <.icon name="hero-question-mark-circle" class="size-5 text-warning" />
+                Needs Matching
+                <span class="badge badge-warning badge-sm">{@issues_counts.unmatched}</span>
+              </h3>
+              <ul
+                id="needs-matching"
+                phx-update="stream"
+                class="list"
+              >
+                <li
+                  id="no-needs-matching"
+                  class="hidden only:block p-6 text-center text-base-content/50"
+                >
+                  No downloads need matching
+                </li>
+                <li :for={{id, torrent} <- @streams.needs_matching} id={id} class="list-row py-3">
+                  <div class="list-col-grow">
+                    <div class="font-medium text-sm truncate">{torrent.title}</div>
+                    <%= if torrent.parsed do %>
+                      <div class="text-xs text-base-content/50 flex flex-wrap gap-1.5 mt-0.5">
+                        <%= if torrent.parsed.title do %>
+                          <span>Parsed: {torrent.parsed.title}</span>
+                        <% end %>
+                        <%= if torrent.parsed.season do %>
+                          <span>S{String.pad_leading("#{torrent.parsed.season}", 2, "0")}</span>
+                        <% end %>
+                      </div>
                     <% end %>
-                    <%= if torrent.parsed.season do %>
-                      <span>S{String.pad_leading("#{torrent.parsed.season}", 2, "0")}</span>
+                    <div class="text-xs opacity-60 flex items-center gap-1.5 mt-0.5">
+                      <span class="badge badge-xs badge-ghost">{torrent.status}</span>
+                      <span>{torrent.client_name}</span>
+                      <%= if torrent.status in [:downloading, :seeding] do %>
+                        <span>•</span>
+                        <span>{format_progress(torrent.progress)}%</span>
+                      <% end %>
+                    </div>
+                    <%= if torrent.suggestions != [] do %>
+                      <div class="mt-2">
+                        <span class="text-xs text-base-content/60 mb-1 block">Suggestions:</span>
+                        <div class="flex flex-wrap gap-2">
+                          <%= for suggestion <- torrent.suggestions do %>
+                            <button
+                              id={"adopt-#{torrent.id}-#{suggestion.media_item_id}"}
+                              type="button"
+                              class="btn btn-xs btn-outline btn-primary"
+                              phx-click="adopt_suggestion"
+                              phx-value-torrent_id={torrent.id}
+                              phx-value-media_item_id={suggestion.media_item_id}
+                              title={suggestion.match_reason}
+                            >
+                              {suggestion.title}
+                              <span class="badge badge-xs ml-1">
+                                {Float.round(suggestion.confidence * 100, 0)}%
+                              </span>
+                            </button>
+                          <% end %>
+                        </div>
+                      </div>
+                    <% end %>
+                    <%= if @search_open_for == torrent.id do %>
+                      <MydiaWeb.Live.Components.LibrarySearchForm.library_search_form
+                        search_value={@library_search_value}
+                        search_results={@library_search_results}
+                        on_search="library_search"
+                        on_select="adopt_library_match"
+                        download_id={torrent.id}
+                      />
                     <% end %>
                   </div>
-                <% end %>
+                  <div class="flex gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-square btn-ghost btn-sm"
+                      phx-click="toggle_search"
+                      phx-value-id={torrent.id}
+                      title="Search library to match"
+                    >
+                      <.icon name="hero-magnifying-glass" class="size-4" />
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <%!-- Section 2: Unresolved Files --%>
+          <section
+            :if={@issues_counts.unresolved > 0}
+            id="issues-unresolved"
+            class="card card-border card-sm bg-base-100"
+          >
+            <div class="card-body gap-3">
+              <h3 class="card-title text-base">
+                <.icon name="hero-document-magnifying-glass" class="size-5 text-primary" />
+                Unresolved Files
+                <span class="badge badge-info badge-sm">{@issues_counts.unresolved}</span>
+              </h3>
+              <ul
+                id="unresolved-downloads"
+                phx-update="stream"
+                class="list"
+              >
+                <li
+                  id="no-unresolved-files"
+                  class="hidden only:block p-6 text-center text-base-content/50"
+                >
+                  No unresolved files
+                </li>
+                <li
+                  :for={{id, download} <- @streams.unresolved_downloads}
+                  id={id}
+                  class="list-row py-3"
+                >
+                  <div class="list-col-grow">
+                    <div class="font-medium text-sm truncate">
+                      {get_display_title(download)}
+                    </div>
+                    <div class="text-xs text-base-content/50">{download.title}</div>
+                  </div>
+                  <div class="flex gap-1">
+                    <button
+                      type="button"
+                      id={"match-files-#{download.id}"}
+                      class="btn btn-sm btn-outline"
+                      phx-click="open_match_files"
+                      phx-value-id={download.id}
+                      title="See what this download contains and match files by hand"
+                    >
+                      <.icon name="hero-document-magnifying-glass" class="size-4" />
+                      <span class="hidden sm:inline">Match files…</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-square btn-ghost btn-sm"
+                      phx-click="dismiss_download"
+                      phx-value-id={download.id}
+                      data-confirm="Dismiss this download and its unresolved files?"
+                      title="Dismiss"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <%!-- Section 3: Other Issues --%>
+          <section
+            :if={@issues_counts.other > 0 or @removed_client_groups != []}
+            id="issues-other"
+            class="card card-border card-sm bg-base-100"
+          >
+            <div class="card-body gap-3">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="card-title text-base">
+                  <.icon name="hero-exclamation-triangle" class="size-5 text-error" />
+                  Other Issues
+                  <span :if={@issues_counts.other > 0} class="badge badge-error badge-sm">
+                    {@issues_counts.other}
+                  </span>
+                </h3>
+                <div :if={@issues_counts.other > 0} class="card-actions">
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-ghost"
+                    phx-click="dismiss_all_cancelled"
+                    data-confirm="Clear all cancelled/missing downloads?"
+                  >
+                    Clear All Cancelled
+                  </button>
+                </div>
+              </div>
+              <div
+                :for={group <- @removed_client_groups}
+                id={"removed-client-#{group.slug}"}
+                class="alert alert-warning"
+              >
+                <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+                <div class="flex-1">
+                  <%!--
+                Deliberately neutral about *why* the client is gone. The group
+                covers both a deleted client and one that is merely disabled,
+                and calling a disabled client "removed" steers the operator
+                toward clearing records whose actual fix is to switch the
+                client back on.
+              --%>
+                  <div class="font-semibold">
+                    {group.count} download(s) reference '{group.download_client}', which Mydia is no longer tracking
+                  </div>
+                  <div class="text-sm opacity-80">
+                    Re-enabling or re-adding a client that holds these same torrents will restore them automatically.
+                  </div>
+                </div>
+                <button
+                  id={"clear-removed-client-#{group.slug}"}
+                  class="btn btn-sm btn-warning"
+                  phx-click="clear_removed_client"
+                  phx-value-client={group.download_client}
+                  data-confirm={"Clear #{group.count} download(s) from '#{group.download_client}'? This removes the records from Mydia only."}
+                >
+                  Clear them
+                </button>
+              </div>
+              <ul
+                id="other-issues"
+                phx-update="stream"
+                class="list"
+              >
+                <li
+                  id="no-other-issues"
+                  class="hidden only:block p-6 text-center text-base-content/50"
+                >
+                  No other issues
+                </li>
+                <li :for={{id, download} <- @streams.other_issues} id={id} class="list-row py-2">
+                  <div class="list-col-grow">
+                    <div class="font-medium text-sm truncate">
+                      <%= if media_type_badge(download) do %>
+                        <% {icon, _label, _badge_class} = media_type_badge(download) %>
+                        <span class="text-xs opacity-50 mr-1">{icon}</span>
+                      <% end %>
+                      {download.title}
+                    </div>
+                    <%= if get_display_title(download) != download.title do %>
+                      <div class="text-xs text-base-content/50 truncate">
+                        {get_display_title(download)}
+                      </div>
+                    <% end %>
+                    <div class="text-xs opacity-60 flex flex-wrap items-center gap-1.5">
+                      <% {badge_class, badge_label} = status_badge(download) %>
+                      <span class={"badge badge-xs #{badge_class}"}>
+                        {badge_label}
+                      </span>
+                      <%= cond do %>
+                        <% download.removal_error -> %>
+                          <span class="text-error">
+                            Couldn't remove from {download.download_client}: {download.removal_error}
+                          </span>
+                        <% download.import_last_error -> %>
+                          <span class="text-error">
+                            Import failed: {download.import_last_error}
+                          </span>
+                          <span>•</span>
+                          <span>Attempt #{download.import_retry_count}</span>
+                          <%= if download.import_next_retry_at do %>
+                            <span>•</span>
+                            <span>
+                              Next retry: {format_next_retry(download.import_next_retry_at)}
+                            </span>
+                          <% end %>
+                        <% download.error_message -> %>
+                          <span class="text-error">Download failed: {download.error_message}</span>
+                        <% true -> %>
+                          <span class="text-error">Removed from client</span>
+                      <% end %>
+                    </div>
+                    <%= if download.import_failure_reason == "path_mapping_mismatch" do %>
+                      <div class="mt-2 rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs">
+                        <div class="opacity-70">
+                          Mydia can't see the download client's path. This usually means its
+                          volume isn't mounted into the Mydia container at the same path.
+                        </div>
+                        <%= if download.path_mapping_suggestion do %>
+                          <div class="mt-1 font-mono text-[11px] break-all">
+                            {download.path_mapping_suggestion.remote_prefix}
+                            <span class="opacity-50">→</span>
+                            {download.path_mapping_suggestion.local_prefix}
+                          </div>
+                          <div class="mt-2 flex items-center gap-2">
+                            <button
+                              type="button"
+                              id={"apply-mapping-#{download.id}"}
+                              class="btn btn-warning btn-xs"
+                              phx-click="apply_mapping_and_retry"
+                              phx-value-remote_prefix={
+                                download.path_mapping_suggestion.remote_prefix
+                              }
+                              phx-value-local_prefix={
+                                download.path_mapping_suggestion.local_prefix
+                              }
+                              phx-disable-with="Applying…"
+                              aria-label={"Apply mapping #{download.path_mapping_suggestion.remote_prefix} to #{download.path_mapping_suggestion.local_prefix} and retry"}
+                            >
+                              Apply mapping &amp; retry
+                            </button>
+                            <%= if download.path_mapping_affected_count do %>
+                              <span class="opacity-60">
+                                Retries {download.path_mapping_affected_count} download{if download.path_mapping_affected_count ==
+                                                                                             1,
+                                                                                           do: "",
+                                                                                           else:
+                                                                                             "s"}
+                              </span>
+                            <% end %>
+                          </div>
+                        <% else %>
+                          <div class="mt-2">
+                            <.link
+                              navigate={~p"/admin/path-mappings"}
+                              class="link link-warning"
+                            >
+                              Add a path mapping
+                            </.link>
+                          </div>
+                        <% end %>
+                      </div>
+                    <% end %>
+                  </div>
+                  <div class="flex gap-1">
+                    <%= if download.import_last_error do %>
+                      <button
+                        type="button"
+                        class="btn btn-square btn-ghost btn-sm"
+                        phx-click="retry_import"
+                        phx-value-id={download.id}
+                        title="Retry import now"
+                      >
+                        <.icon name="hero-arrow-path" class="size-4" />
+                      </button>
+                    <% end %>
+                    <button
+                      :if={download.removal_error}
+                      type="button"
+                      id={"retry-removal-#{download.id}"}
+                      class="btn btn-square btn-ghost btn-sm"
+                      phx-click="retry_removal"
+                      phx-value-id={download.id}
+                      title="Try removing it again"
+                    >
+                      <.icon name="hero-arrow-path" class="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      id={"match-files-#{download.id}"}
+                      class="btn btn-sm btn-outline"
+                      phx-click="open_match_files"
+                      phx-value-id={download.id}
+                      title="See what this download contains and match files by hand"
+                    >
+                      <.icon name="hero-document-magnifying-glass" class="size-4" />
+                      <span class="hidden sm:inline">Match files…</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-square btn-ghost btn-sm"
+                      phx-click="dismiss_download"
+                      phx-value-id={download.id}
+                      data-confirm="Dismiss this issue?"
+                      title="Dismiss"
+                    >
+                      <.icon name="hero-x-mark" class="size-4" />
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      <% end %>
+
+      <%!-- External tab: torrents in the clients that Mydia does not manage --%>
+      <%= if @active_tab == :external do %>
+        <div class="flex flex-col gap-4">
+          <div id="external-intro" role="note" class="alert alert-info alert-soft">
+            <.icon name="hero-information-circle" class="size-5 shrink-0" />
+            <span class="text-sm">
+              Torrents in your download clients that Mydia does not manage. They are not
+              tracked and nothing is imported from them.
+            </span>
+            <button
+              id="external-rescan"
+              type="button"
+              class="btn btn-sm btn-ghost shrink-0"
+              phx-click="rescan_external"
+            >
+              <.icon name="hero-arrow-path" class="size-4" /> Rescan
+            </button>
+          </div>
+
+          <%= if @scan.failed_clients != [] do %>
+            <div id="external-failed-clients" class="alert alert-warning">
+              <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+              <span>
+                Could not read {Enum.join(@scan.failed_clients, ", ")}. This list may be
+                incomplete.
+              </span>
+            </div>
+          <% end %>
+
+          <ul
+            id="external-torrents"
+            phx-update="stream"
+            class="list"
+          >
+            <li :for={{id, torrent} <- @streams.external_torrents} id={id} class="list-row py-3">
+              <div class="list-col-grow">
+                <div class="font-medium text-sm truncate">{torrent.title}</div>
                 <div class="text-xs opacity-60 flex items-center gap-1.5 mt-0.5">
                   <span class="badge badge-xs badge-ghost">{torrent.status}</span>
                   <span>{torrent.client_name}</span>
@@ -563,30 +921,16 @@
                     <span>•</span>
                     <span>{format_progress(torrent.progress)}%</span>
                   <% end %>
+                  <%!-- Without this, a plainly matchable release sitting here
+                      untouched gives no clue whether Mydia skipped it on
+                      purpose or failed at something. --%>
+                  <%= if torrent.excluded_by_policy do %>
+                    <span>•</span>
+                    <span title="This client's External torrents setting tells Mydia not to adopt it">
+                      Not adopted by client setting
+                    </span>
+                  <% end %>
                 </div>
-                <%= if torrent.suggestions != [] do %>
-                  <div class="mt-2">
-                    <span class="text-xs text-base-content/60 mb-1 block">Suggestions:</span>
-                    <div class="flex flex-wrap gap-2">
-                      <%= for suggestion <- torrent.suggestions do %>
-                        <button
-                          id={"adopt-#{torrent.id}-#{suggestion.media_item_id}"}
-                          type="button"
-                          class="btn btn-xs btn-outline btn-primary"
-                          phx-click="adopt_suggestion"
-                          phx-value-torrent_id={torrent.id}
-                          phx-value-media_item_id={suggestion.media_item_id}
-                          title={suggestion.match_reason}
-                        >
-                          {suggestion.title}
-                          <span class="badge badge-xs ml-1">
-                            {Float.round(suggestion.confidence * 100, 0)}%
-                          </span>
-                        </button>
-                      <% end %>
-                    </div>
-                  </div>
-                <% end %>
                 <%= if @search_open_for == torrent.id do %>
                   <MydiaWeb.Live.Components.LibrarySearchForm.library_search_form
                     search_value={@library_search_value}
@@ -611,349 +955,8 @@
             </li>
           </ul>
         </div>
-
-        <%!-- Section 2: Unresolved Files --%>
-        <div>
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="text-lg font-semibold flex items-center gap-2">
-              <.icon name="hero-document-magnifying-glass" class="w-5 h-5 text-primary" />
-              Unresolved Files
-              <%= if @issues_counts.unresolved > 0 do %>
-                <span class="badge badge-info badge-sm">{@issues_counts.unresolved}</span>
-              <% end %>
-            </h3>
-          </div>
-          <ul
-            id="unresolved-downloads"
-            phx-update="stream"
-            class="list bg-base-100 rounded-box shadow-lg"
-          >
-            <li
-              id="no-unresolved-files"
-              class="hidden only:block p-6 text-center text-base-content/50"
-            >
-              No unresolved files
-            </li>
-            <li
-              :for={{id, download} <- @streams.unresolved_downloads}
-              id={id}
-              class="list-row py-3"
-            >
-              <div class="list-col-grow">
-                <div class="font-medium text-sm truncate">
-                  {get_display_title(download)}
-                </div>
-                <div class="text-xs text-base-content/50">{download.title}</div>
-              </div>
-              <div class="flex gap-1">
-                <button
-                  type="button"
-                  id={"match-files-#{download.id}"}
-                  class="btn btn-sm btn-outline"
-                  phx-click="open_match_files"
-                  phx-value-id={download.id}
-                  title="See what this download contains and match files by hand"
-                >
-                  <.icon name="hero-document-magnifying-glass" class="size-4" />
-                  <span class="hidden sm:inline">Match files…</span>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-square btn-ghost btn-sm"
-                  phx-click="dismiss_download"
-                  phx-value-id={download.id}
-                  data-confirm="Dismiss this download and its unresolved files?"
-                  title="Dismiss"
-                >
-                  <.icon name="hero-x-mark" class="size-4" />
-                </button>
-              </div>
-            </li>
-          </ul>
-        </div>
-
-        <%!-- Section 3: Other Issues --%>
-        <div>
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="text-lg font-semibold flex items-center gap-2">
-              <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-error" /> Other Issues
-              <%= if @issues_counts.other > 0 do %>
-                <span class="badge badge-error badge-sm">{@issues_counts.other}</span>
-              <% end %>
-            </h3>
-            <%= if @issues_counts.other > 0 do %>
-              <button
-                type="button"
-                class="btn btn-xs btn-ghost"
-                phx-click="dismiss_all_cancelled"
-                data-confirm="Clear all cancelled/missing downloads?"
-              >
-                Clear All Cancelled
-              </button>
-            <% end %>
-          </div>
-          <div
-            :for={group <- @removed_client_groups}
-            id={"removed-client-#{group.slug}"}
-            class="alert alert-warning mb-4"
-          >
-            <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
-            <div class="flex-1">
-              <%!--
-                Deliberately neutral about *why* the client is gone. The group
-                covers both a deleted client and one that is merely disabled,
-                and calling a disabled client "removed" steers the operator
-                toward clearing records whose actual fix is to switch the
-                client back on.
-              --%>
-              <div class="font-semibold">
-                {group.count} download(s) reference '{group.download_client}', which Mydia is no longer tracking
-              </div>
-              <div class="text-sm opacity-80">
-                Re-enabling or re-adding a client that holds these same torrents will restore them automatically.
-              </div>
-            </div>
-            <button
-              id={"clear-removed-client-#{group.slug}"}
-              class="btn btn-sm btn-warning"
-              phx-click="clear_removed_client"
-              phx-value-client={group.download_client}
-              data-confirm={"Clear #{group.count} download(s) from '#{group.download_client}'? This removes the records from Mydia only."}
-            >
-              Clear them
-            </button>
-          </div>
-          <ul id="other-issues" phx-update="stream" class="list bg-base-100 rounded-box shadow-lg">
-            <li
-              id="no-other-issues"
-              class="hidden only:block p-6 text-center text-base-content/50"
-            >
-              No other issues
-            </li>
-            <li :for={{id, download} <- @streams.other_issues} id={id} class="list-row py-2">
-              <div class="list-col-grow">
-                <div class="font-medium text-sm truncate">
-                  <%= if media_type_badge(download) do %>
-                    <% {icon, _label, _badge_class} = media_type_badge(download) %>
-                    <span class="text-xs opacity-50 mr-1">{icon}</span>
-                  <% end %>
-                  {download.title}
-                </div>
-                <%= if get_display_title(download) != download.title do %>
-                  <div class="text-xs text-base-content/50 truncate">
-                    {get_display_title(download)}
-                  </div>
-                <% end %>
-                <div class="text-xs opacity-60 flex flex-wrap items-center gap-1.5">
-                  <% {badge_class, badge_label} = status_badge(download) %>
-                  <span class={"badge badge-xs #{badge_class}"}>
-                    {badge_label}
-                  </span>
-                  <%= cond do %>
-                    <% download.removal_error -> %>
-                      <span class="text-error">
-                        Couldn't remove from {download.download_client}: {download.removal_error}
-                      </span>
-                    <% download.import_last_error -> %>
-                      <span class="text-error">
-                        Import failed: {download.import_last_error}
-                      </span>
-                      <span>•</span>
-                      <span>Attempt #{download.import_retry_count}</span>
-                      <%= if download.import_next_retry_at do %>
-                        <span>•</span>
-                        <span>
-                          Next retry: {format_next_retry(download.import_next_retry_at)}
-                        </span>
-                      <% end %>
-                    <% download.error_message -> %>
-                      <span class="text-error">Download failed: {download.error_message}</span>
-                    <% true -> %>
-                      <span class="text-error">Removed from client</span>
-                  <% end %>
-                </div>
-                <%= if download.import_failure_reason == "path_mapping_mismatch" do %>
-                  <div class="mt-2 rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs">
-                    <div class="opacity-70">
-                      Mydia can't see the download client's path. This usually means its
-                      volume isn't mounted into the Mydia container at the same path.
-                    </div>
-                    <%= if download.path_mapping_suggestion do %>
-                      <div class="mt-1 font-mono text-[11px] break-all">
-                        {download.path_mapping_suggestion.remote_prefix}
-                        <span class="opacity-50">→</span>
-                        {download.path_mapping_suggestion.local_prefix}
-                      </div>
-                      <div class="mt-2 flex items-center gap-2">
-                        <button
-                          type="button"
-                          id={"apply-mapping-#{download.id}"}
-                          class="btn btn-warning btn-xs"
-                          phx-click="apply_mapping_and_retry"
-                          phx-value-remote_prefix={download.path_mapping_suggestion.remote_prefix}
-                          phx-value-local_prefix={download.path_mapping_suggestion.local_prefix}
-                          phx-disable-with="Applying…"
-                          aria-label={"Apply mapping #{download.path_mapping_suggestion.remote_prefix} to #{download.path_mapping_suggestion.local_prefix} and retry"}
-                        >
-                          Apply mapping &amp; retry
-                        </button>
-                        <%= if download.path_mapping_affected_count do %>
-                          <span class="opacity-60">
-                            Retries {download.path_mapping_affected_count} download{if download.path_mapping_affected_count ==
-                                                                                         1,
-                                                                                       do: "",
-                                                                                       else: "s"}
-                          </span>
-                        <% end %>
-                      </div>
-                    <% else %>
-                      <div class="mt-2">
-                        <.link
-                          navigate={~p"/admin/path-mappings"}
-                          class="link link-warning"
-                        >
-                          Add a path mapping
-                        </.link>
-                      </div>
-                    <% end %>
-                  </div>
-                <% end %>
-              </div>
-              <div class="flex gap-1">
-                <%= if download.import_last_error do %>
-                  <button
-                    type="button"
-                    class="btn btn-square btn-ghost btn-sm"
-                    phx-click="retry_import"
-                    phx-value-id={download.id}
-                    title="Retry import now"
-                  >
-                    <.icon name="hero-arrow-path" class="size-4" />
-                  </button>
-                <% end %>
-                <button
-                  :if={download.removal_error}
-                  type="button"
-                  id={"retry-removal-#{download.id}"}
-                  class="btn btn-square btn-ghost btn-sm"
-                  phx-click="retry_removal"
-                  phx-value-id={download.id}
-                  title="Try removing it again"
-                >
-                  <.icon name="hero-arrow-path" class="size-4" />
-                </button>
-                <button
-                  type="button"
-                  id={"match-files-#{download.id}"}
-                  class="btn btn-sm btn-outline"
-                  phx-click="open_match_files"
-                  phx-value-id={download.id}
-                  title="See what this download contains and match files by hand"
-                >
-                  <.icon name="hero-document-magnifying-glass" class="size-4" />
-                  <span class="hidden sm:inline">Match files…</span>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-square btn-ghost btn-sm"
-                  phx-click="dismiss_download"
-                  phx-value-id={download.id}
-                  data-confirm="Dismiss this issue?"
-                  title="Dismiss"
-                >
-                  <.icon name="hero-x-mark" class="size-4" />
-                </button>
-              </div>
-            </li>
-          </ul>
-        </div>
-      </div>
-    <% end %>
-
-    <%!-- External tab: torrents in the clients that Mydia does not manage --%>
-    <%= if @active_tab == :external do %>
-      <div class="flex flex-col gap-4">
-        <div class="flex items-center justify-between gap-4">
-          <p class="text-sm text-base-content/60">
-            Torrents in your download clients that Mydia does not manage. They are not
-            tracked and nothing is imported from them.
-          </p>
-          <button
-            id="external-rescan"
-            type="button"
-            class="btn btn-sm btn-ghost shrink-0"
-            phx-click="rescan_external"
-          >
-            <.icon name="hero-arrow-path" class="size-4" /> Rescan
-          </button>
-        </div>
-
-        <%= if @scan.failed_clients != [] do %>
-          <div id="external-failed-clients" class="alert alert-warning">
-            <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-            <span>
-              Could not read {Enum.join(@scan.failed_clients, ", ")}. This list may be
-              incomplete.
-            </span>
-          </div>
-        <% end %>
-
-        <ul
-          id="external-torrents"
-          phx-update="stream"
-          class="list bg-base-100 rounded-box shadow-lg"
-        >
-          <li
-            id="no-external-torrents"
-            class="hidden only:block p-6 text-center text-base-content/50"
-          >
-            Nothing unmanaged in your download clients
-          </li>
-          <li :for={{id, torrent} <- @streams.external_torrents} id={id} class="list-row py-3">
-            <div class="list-col-grow">
-              <div class="font-medium text-sm truncate">{torrent.title}</div>
-              <div class="text-xs opacity-60 flex items-center gap-1.5 mt-0.5">
-                <span class="badge badge-xs badge-ghost">{torrent.status}</span>
-                <span>{torrent.client_name}</span>
-                <%= if torrent.status in [:downloading, :seeding] do %>
-                  <span>•</span>
-                  <span>{format_progress(torrent.progress)}%</span>
-                <% end %>
-                <%!-- Without this, a plainly matchable release sitting here
-                      untouched gives no clue whether Mydia skipped it on
-                      purpose or failed at something. --%>
-                <%= if torrent.excluded_by_policy do %>
-                  <span>•</span>
-                  <span title="This client's External torrents setting tells Mydia not to adopt it">
-                    Not adopted by client setting
-                  </span>
-                <% end %>
-              </div>
-              <%= if @search_open_for == torrent.id do %>
-                <MydiaWeb.Live.Components.LibrarySearchForm.library_search_form
-                  search_value={@library_search_value}
-                  search_results={@library_search_results}
-                  on_search="library_search"
-                  on_select="adopt_library_match"
-                  download_id={torrent.id}
-                />
-              <% end %>
-            </div>
-            <div class="flex gap-1">
-              <button
-                type="button"
-                class="btn btn-square btn-ghost btn-sm"
-                phx-click="toggle_search"
-                phx-value-id={torrent.id}
-                title="Search library to match"
-              >
-                <.icon name="hero-magnifying-glass" class="size-4" />
-              </button>
-            </div>
-          </li>
-        </ul>
-      </div>
-    <% end %>
+      <% end %>
+    </ListComponents.tab_bar>
 
     <%!-- Clear Completed modal (with opt-in delete-from-disk) --%>
     <.modal
@@ -1014,7 +1017,7 @@
     <DetailDrawer.detail_drawer
       :if={@drawer_download}
       download={@drawer_download}
-      tab={drawer_tab(@drawer_download)}
+      tab={ListView.row_kind(@drawer_download)}
       client_url={@client_urls[@drawer_download.download_client]}
     />
   </div>

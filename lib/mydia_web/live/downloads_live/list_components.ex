@@ -1,15 +1,16 @@
 defmodule MydiaWeb.DownloadsLive.ListComponents do
   @moduledoc """
-  Downloads page chrome: the stats bar, the search and filter bar, the active
-  filter chips, the client chip that opens a client's web UI, and the row
-  action strip shared by the list and the detail drawer.
+  Downloads page chrome: the tab bar, the stats bar, the search and filter bar,
+  the active filter chips, the empty state, the client chip that opens a
+  client's web UI, and the row action strip shared by the list and the detail
+  drawer.
   """
   use MydiaWeb, :html
 
   import MydiaWeb.DownloadsLive.Format
   import MydiaWeb.Formatters
 
-  alias MydiaWeb.DownloadsLive.{Filters, ListView, Summary}
+  alias MydiaWeb.DownloadsLive.{Filters, ListView, Summary, Tab}
   alias Phoenix.LiveView.JS
 
   attr :summary, Summary, required: true
@@ -63,9 +64,79 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
     """
   end
 
+  attr :tabs, :list, required: true, doc: "a list of `MydiaWeb.DownloadsLive.Tab` structs"
+  attr :active, :atom, required: true
+  slot :inner_block, required: true
+
+  @doc """
+  The page's tabs as `tabs-lift` patch links, with the page body in a
+  `tab-content` panel right after the active link.
+
+  daisyUI 5.7.44 treats `[aria-current=page]` as active and shows a
+  `.tab-content` that directly follows an active tab, so no `tab-active`
+  class is needed. Links, not `role="tab"`: they navigate, and a `tablist`
+  would promise arrow-key handling this does not provide.
+  """
+  def tab_bar(assigns) do
+    ~H"""
+    <div id="downloads-tabs" class="tabs tabs-lift">
+      <%= for %Tab{} = tab <- @tabs do %>
+        <.link
+          id={"downloads-tab-#{tab.key}"}
+          patch={tab.href}
+          class="tab gap-1.5"
+          aria-current={tab.key == @active && "page"}
+        >
+          <.icon name={tab.icon} class="size-4" />
+          {tab.label}
+          <span
+            :if={tab.count > 0}
+            id={"downloads-tab-#{tab.key}-count"}
+            class={["badge badge-sm tabular-nums", tab.tone == :error && "badge-error"]}
+          >
+            {tab.count}
+          </span>
+          <span
+            :if={tab.dot?}
+            id={"downloads-tab-#{tab.key}-stalled"}
+            class="status status-warning"
+            role="img"
+            aria-label="Some downloads are stalled"
+          ></span>
+        </.link>
+        <div
+          :if={tab.key == @active}
+          id="downloads-tab-panel"
+          class="tab-content bg-base-100 border-base-300 p-3 sm:p-4"
+        >
+          {render_slot(@inner_block)}
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  attr :id, :string, default: "downloads-empty-state"
+  attr :icon, :string, required: true
+  attr :title, :string, required: true
+  attr :description, :string, required: true
+  slot :action
+
+  @doc "The centred icon, title and hint shown when a tab or view has no rows."
+  def empty_state(assigns) do
+    ~H"""
+    <div id={@id} class="flex flex-col items-center justify-center py-16 text-center">
+      <.icon name={@icon} class="size-16 text-base-content/30 mb-4" />
+      <h3 class="text-xl font-semibold text-base-content/70 mb-2">{@title}</h3>
+      <p class="text-base-content/50">{@description}</p>
+      <div :if={@action != []} class="mt-4">{render_slot(@action)}</div>
+    </div>
+    """
+  end
+
   attr :filters, Filters, required: true
   attr :clients, :list, required: true
-  attr :tab, :atom, required: true
+  attr :show_status?, :boolean, required: true
 
   def filter_bar(assigns) do
     assigns = assign(assigns, :status_options, ListView.status_options())
@@ -75,7 +146,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
       id="downloads-filter-form"
       phx-change="filter"
       phx-submit="filter"
-      class="flex flex-wrap items-center gap-2 mb-3"
+      class="flex flex-wrap items-center gap-2"
     >
       <label class="input input-sm w-full sm:w-72">
         <.icon name="hero-magnifying-glass" class="size-4 opacity-50" />
@@ -129,7 +200,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
         </option>
       </select>
 
-      <div :if={@tab == :queue} id="downloads-status-filter" class="filter">
+      <div :if={@show_status?} id="downloads-status-filter" class="filter">
         <input
           class="btn btn-sm filter-reset"
           type="radio"

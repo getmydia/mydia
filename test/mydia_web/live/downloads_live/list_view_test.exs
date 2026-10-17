@@ -36,17 +36,80 @@ defmodule MydiaWeb.DownloadsLive.ListViewTest do
   describe "parse_filters/2" do
     test "trims the query and turns blanks into nil" do
       assert %Filters{q: "salt", client: nil, status: nil} =
-               ListView.parse_filters(%{"q" => "  salt ", "client" => ""}, :queue)
+               ListView.parse_filters(%{"q" => "  salt ", "client" => ""}, {:downloads, :active})
 
-      assert %Filters{q: nil} = ListView.parse_filters(%{"q" => "   "}, :queue)
+      assert %Filters{q: nil} = ListView.parse_filters(%{"q" => "   "}, {:downloads, :active})
     end
 
-    test "keeps a valid status on the Queue tab only" do
+    test "keeps a valid status in the Active view of the Downloads tab only" do
       assert %Filters{status: "stalled"} =
-               ListView.parse_filters(%{"status" => "stalled"}, :queue)
+               ListView.parse_filters(%{"status" => "stalled"}, {:downloads, :active})
 
-      assert %Filters{status: nil} = ListView.parse_filters(%{"status" => "stalled"}, :completed)
-      assert %Filters{status: nil} = ListView.parse_filters(%{"status" => "bogus"}, :queue)
+      assert %Filters{status: nil} =
+               ListView.parse_filters(%{"status" => "stalled"}, {:downloads, :imported})
+
+      assert %Filters{status: nil} =
+               ListView.parse_filters(%{"status" => "stalled"}, {:issues, nil})
+
+      assert %Filters{status: nil} =
+               ListView.parse_filters(%{"status" => "bogus"}, {:downloads, :active})
+    end
+  end
+
+  describe "normalize_legacy/1" do
+    test "?tab=queue becomes the Downloads tab and keeps the status" do
+      assert ListView.normalize_legacy(%{"tab" => "queue", "status" => "paused"}) ==
+               %{"status" => "paused"}
+    end
+
+    test "?tab=completed becomes the Imported view and drops the status" do
+      assert ListView.normalize_legacy(%{"tab" => "completed", "status" => "paused", "q" => "x"}) ==
+               %{"view" => "imported", "q" => "x"}
+    end
+
+    test "leaves current URLs alone" do
+      params = %{"tab" => "issues", "q" => "x"}
+      assert ListView.normalize_legacy(params) == params
+    end
+  end
+
+  describe "parse_tab/1 and parse_view/1" do
+    test "unknown or missing values fall back to the defaults" do
+      assert ListView.parse_tab("issues") == :issues
+      assert ListView.parse_tab("external") == :external
+      assert ListView.parse_tab("downloads") == :downloads
+      assert ListView.parse_tab("bogus") == :downloads
+      assert ListView.parse_tab(nil) == :downloads
+
+      assert ListView.parse_view("imported") == :imported
+      assert ListView.parse_view("all") == :all
+      assert ListView.parse_view("bogus") == :active
+      assert ListView.parse_view(nil) == :active
+    end
+  end
+
+  describe "rows_for_view/2 and row_kind/1" do
+    setup do
+      now = DateTime.utc_now()
+
+      %{
+        active: download(%{title: "Active.Row", status: "downloading"}),
+        imported: download(%{title: "Imported.Row", status: "seeding", imported_at: now}),
+        failed: download(%{title: "Failed.Row", status: "failed"})
+      }
+    end
+
+    test "Active is the in-flight rows, Imported the imported ones, All both", rows do
+      all = [rows.active, rows.imported, rows.failed]
+
+      assert ListView.rows_for_view(all, :active) == [rows.active]
+      assert ListView.rows_for_view(all, :imported) == [rows.imported]
+      assert ListView.rows_for_view(all, :all) == [rows.active, rows.imported]
+    end
+
+    test "row_kind follows imported_at, not the page", rows do
+      assert ListView.row_kind(rows.active) == :queue
+      assert ListView.row_kind(rows.imported) == :completed
     end
   end
 

@@ -21,6 +21,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.DownloadsLive.ListView
   alias MydiaWeb.DownloadsLive.Sorting
   alias MydiaWeb.DownloadsLive.Summary
+  alias MydiaWeb.DownloadsLive.Paths
   alias Mydia.Settings.DownloadClientConfig
   alias MydiaWeb.DownloadsLive.MatchDialog
   import MydiaWeb.DownloadsLive.Format
@@ -33,13 +34,11 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   @default_sort "added_desc"
 
-  @allowed_tabs ~w(queue completed issues external)
-
   # While a download is in flight, its progress (debrid swarm %, local fetch %)
   # is synthesized live from the client/provider on each poll and is NOT
   # persisted to the DB. PubSub broadcasts only fire on DB row changes, so
   # without a periodic re-render the bar freezes at whatever it showed at page
-  # load. This timer re-polls + re-renders the Queue while work is active.
+  # load. This timer re-polls + re-renders the Downloads tab while work is active.
   @progress_refresh_interval_ms 3_000
 
   @allowed_sort_fields Sorting.allowed_fields()
@@ -55,7 +54,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Downloads")
-     |> assign(:active_tab, :queue)
+     |> assign(:active_tab, :downloads)
+     |> assign(:view, :active)
      |> assign(:sort_by, @default_sort)
      |> assign(:selected_ids, MapSet.new())
      |> assign(:selection_mode, false)
@@ -84,7 +84,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:loaded?, false)
      |> assign(:filters, %Filters{})
      |> assign(:summary, %Summary{})
-     |> assign(:tab_counts, %{queue: 0, completed: 0, issues: 0})
+     |> assign(:tab_counts, %{downloads: 0, issues: 0})
+     |> assign(:tabs, [])
      |> assign(:client_options, [])
      |> assign(:client_urls, client_urls())
      |> assign(:drawer_id, nil)
@@ -101,22 +102,25 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   @impl true
   def handle_params(params, _url, socket) do
-    tab = parse_tab(params["tab"])
-    filters = ListView.parse_filters(params, tab)
-    tab_changed? = tab != socket.assigns.active_tab
+    params = ListView.normalize_legacy(params)
+    tab = ListView.parse_tab(params["tab"])
+    view = ListView.parse_view(params["view"])
+    filters = ListView.parse_filters(params, {tab, view})
+    scope_changed? = {tab, view} != {socket.assigns.active_tab, socket.assigns.view}
 
     list_changed? =
-      not socket.assigns.loaded? or tab_changed? or filters != socket.assigns.filters
+      not socket.assigns.loaded? or scope_changed? or filters != socket.assigns.filters
 
     socket =
       socket
       |> assign(:active_tab, tab)
+      |> assign(:view, view)
       |> assign(:filters, filters)
       |> assign(:drawer_id, blank_to_nil(params["download"]))
 
     socket =
       if list_changed? do
-        socket |> reset_list(tab_changed?) |> load_downloads()
+        socket |> reset_list(scope_changed?) |> load_downloads()
       else
         assign_drawer(socket, nil)
       end
@@ -124,24 +128,21 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:noreply, socket}
   end
 
-  defp parse_tab(tab) when tab in @allowed_tabs, do: String.to_existing_atom(tab)
-  defp parse_tab(_tab), do: :queue
-
   defp blank_to_nil(value) when value in [nil, ""], do: nil
   defp blank_to_nil(value), do: value
 
-  # A new tab resets the sort: a tab-specific sort (ratio on Completed) is not
-  # an option on the next tab.
-  defp reset_list(socket, tab_changed?) do
+  # A new tab or view resets the sort: a view-specific sort (ratio on
+  # Imported) is not an option in the next view.
+  defp reset_list(socket, scope_changed?) do
     # Any list change clears the selection: a batch action must not reach rows
-    # the new tab or filters hide.
+    # the new tab, view or filters hide.
     socket =
       socket
       |> assign(:page, 0)
       |> assign(:selected_ids, MapSet.new())
       |> assign(:selection_mode, false)
 
-    if tab_changed?, do: assign(socket, :sort_by, @default_sort), else: socket
+    if scope_changed?, do: assign(socket, :sort_by, @default_sort), else: socket
   end
 
   # Drops ?download=<id> from the URL; a no-op when no drawer is open.
@@ -150,35 +151,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp close_drawer(socket),
     do: push_patch(socket, to: downloads_path(socket, download: nil))
 
-  # Builds /downloads?... from the current state with `overrides` applied.
-  # Defaults (Queue tab, nil values) are left out so links stay short.
-  defp downloads_path(socket, overrides) do
-    %{active_tab: tab, drawer_id: drawer_id, filters: filters} = socket.assigns
+  defp downloads_path(%Phoenix.LiveView.Socket{assigns: assigns}, overrides),
+    do: Paths.downloads_path(assigns, overrides)
 
-    values =
-      Map.merge(
-        %{
-          tab: tab,
-          q: filters.q,
-          client: filters.client,
-          status: filters.status,
-          download: drawer_id
-        },
-        Map.new(overrides)
-      )
-
-    # Fixed key order, so the same state always produces the same URL.
-    params =
-      [:tab, :q, :client, :status, :download]
-      |> Enum.map(&{&1, values[&1]})
-      |> Enum.reject(fn {key, value} -> is_nil(value) or (key == :tab and value == :queue) end)
-      |> Enum.map(fn {key, value} -> {key, to_string(value)} end)
-
-    case params do
-      [] -> ~p"/downloads"
-      params -> ~p"/downloads?#{params}"
-    end
-  end
+  defp assign_tabs(socket), do: assign(socket, :tabs, Paths.tabs(socket.assigns))
 
   defp client_urls do
     Settings.list_download_client_configs()
@@ -192,16 +168,21 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   @impl true
-  def handle_event("switch_tab", %{"tab" => tab}, socket) when tab in @allowed_tabs do
-    tab = String.to_existing_atom(tab)
-    status = if tab == :queue, do: socket.assigns.filters.status
-
+  def handle_event("set_view", %{"view" => view}, socket) do
     {:noreply,
-     push_patch(socket, to: downloads_path(socket, tab: tab, status: status, download: nil))}
+     push_patch(socket,
+       to:
+         downloads_path(socket,
+           view: ListView.parse_view(view),
+           status: nil,
+           download: nil
+         )
+     )}
   end
 
   def handle_event("filter", params, socket) do
-    filters = ListView.parse_filters(params, socket.assigns.active_tab)
+    filters =
+      ListView.parse_filters(params, {socket.assigns.active_tab, socket.assigns.view})
 
     {:noreply,
      push_patch(socket,
@@ -251,6 +232,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:selected_ids, selected_ids)
      |> assign(:selection_mode, true)}
   end
+
+  def handle_event("toggle_select_all", _params, %{assigns: %{active_tab: tab}} = socket)
+      when tab != :downloads,
+      do: {:noreply, socket}
 
   def handle_event("toggle_select_all", _params, socket) do
     if socket.assigns.selection_mode and MapSet.size(socket.assigns.selected_ids) > 0 do
@@ -1029,20 +1014,20 @@ defmodule MydiaWeb.DownloadsLive.Index do
     if socket.assigns.active_tab in [:issues, :external] do
       {:noreply, load_downloads(socket)}
     else
-      {:noreply, assign(socket, :scan, ExternalTorrents.get())}
+      {:noreply, socket |> assign(:scan, ExternalTorrents.get()) |> assign_tabs()}
     end
   end
 
   # Periodic live-progress refresh. Reschedules unconditionally so it resumes
-  # when the operator switches back to the Queue or a new download starts, but
-  # only re-polls clients when the Queue tab actually has active work — idle
-  # tabs cost nothing.
+  # when the operator switches back to the Downloads tab or a new download
+  # starts, but only re-polls clients when the Downloads tab actually has
+  # active work. Idle tabs cost nothing.
   def handle_info(:refresh_progress, socket) do
     schedule_progress_refresh()
 
     socket =
-      if socket.assigns.active_tab == :queue and socket.assigns.summary.active > 0 and
-           not socket.assigns.selection_mode do
+      if socket.assigns.active_tab == :downloads and socket.assigns.view != :imported and
+           socket.assigns.summary.active > 0 and not socket.assigns.selection_mode do
         load_downloads(socket)
       else
         socket
@@ -1276,7 +1261,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       # External reads only the scan cache and never polls the clients, so it
       # keeps the last counts and summary rather than paying for a poll.
       :external ->
-        socket |> load_external() |> assign(:drawer_download, nil)
+        socket |> load_external() |> assign(:drawer_download, nil) |> assign_tabs()
 
       tab ->
         # Every row and every client in one bounded poll; the tabs, counts and
@@ -1288,6 +1273,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
         |> assign_overview(all)
         |> load_tab(tab, all)
         |> assign_drawer(all)
+        |> assign_tabs()
     end
   end
 
@@ -1299,8 +1285,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:summary, ListView.summarize(active))
     |> assign(:client_options, ListView.clients(all))
     |> assign(:tab_counts, %{
-      queue: length(active),
-      completed: length(Downloads.filter_downloads(all, :imported)),
+      downloads: length(active),
       issues:
         length(socket.assigns.scan.needs_matching) + length(issues.unresolved) +
           length(issues.other)
@@ -1309,12 +1294,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp load_tab(socket, :issues, all), do: load_issues_downloads(socket, all)
 
-  defp load_tab(socket, tab, all) do
-    filter = if tab == :queue, do: :active, else: :imported
-
+  defp load_tab(socket, :downloads, all) do
     all_downloads =
       all
-      |> Downloads.filter_downloads(filter)
+      |> ListView.rows_for_view(socket.assigns.view)
       |> ListView.filter(socket.assigns.filters)
       |> Sorting.sort(socket.assigns.sort_by)
 
@@ -1326,7 +1309,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       all_downloads
       |> Enum.drop(offset)
       |> Enum.take(@items_per_page)
-      |> annotate_rematch_eligibility(tab)
+      |> annotate_rematch_eligibility()
       |> annotate_auto_reject_cap()
 
     has_more = length(all_downloads) > offset + @items_per_page
@@ -1384,16 +1367,12 @@ defmodule MydiaWeb.DownloadsLive.Index do
       download ->
         [download] =
           [download]
-          |> annotate_rematch_eligibility(drawer_tab(download))
+          |> annotate_rematch_eligibility()
           |> annotate_auto_reject_cap()
 
         assign(socket, :drawer_download, download)
     end
   end
-
-  # The drawer acts on the row itself, not on the page tab it was opened from.
-  defp drawer_tab(%{imported_at: nil}), do: :queue
-  defp drawer_tab(_download), do: :completed
 
   defp load_issues_downloads(socket, all_downloads) do
     # Needs Matching is derived from the clients, not from the database: these
@@ -1634,37 +1613,32 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp friendly_rematch_error(_), do: "Re-match failed."
 
   defp get_current_downloads(socket) do
-    filter =
-      case socket.assigns.active_tab do
-        :queue -> :active
-        :completed -> :imported
-        :issues -> :all
-      end
-
-    Downloads.list_downloads_with_status(filter: filter, bounded: true)
+    Downloads.list_downloads_with_status(bounded: true)
+    |> ListView.rows_for_view(socket.assigns.view)
     |> ListView.filter(socket.assigns.filters)
     |> Sorting.sort(socket.assigns.sort_by)
-    |> annotate_rematch_eligibility(socket.assigns.active_tab)
+    |> annotate_rematch_eligibility()
     |> annotate_auto_reject_cap()
   end
 
-  # Stamps `rematch_eligible?` on completed-tab rows: a row is eligible only when
-  # it resolves to exactly one non-trashed imported file. Packs resolve to several
-  # files and can't be re-matched as a unit, so the Completed-tab action must stay
-  # hidden for them even though their `match_status` is nil. Other tabs don't offer
-  # the action, so the flag is left nil to avoid a needless query.
-  defp annotate_rematch_eligibility(downloads, :completed) do
-    counts =
-      downloads
-      |> Enum.map(& &1.id)
-      |> Library.count_imported_files_by_download()
+  # Stamps `rematch_eligible?` on imported rows: a row is eligible only when it
+  # resolves to exactly one non-trashed imported file. Packs resolve to several
+  # files and can't be re-matched as a unit, so the action stays hidden for them
+  # even though their `match_status` is nil. In-flight rows don't offer the
+  # action, so they are left nil and cost no query.
+  defp annotate_rematch_eligibility(downloads) do
+    imported_ids = for %{imported_at: at, id: id} <- downloads, not is_nil(at), do: id
 
-    Enum.map(downloads, fn download ->
-      %{download | rematch_eligible?: Map.get(counts, download.id, 0) == 1}
+    counts =
+      if imported_ids == [],
+        do: %{},
+        else: Library.count_imported_files_by_download(imported_ids)
+
+    Enum.map(downloads, fn
+      %{imported_at: nil} = download -> download
+      download -> %{download | rematch_eligible?: Map.get(counts, download.id, 0) == 1}
     end)
   end
-
-  defp annotate_rematch_eligibility(downloads, _tab), do: downloads
 
   # Stamps `auto_reject_capped?` so a stalled row whose title has used up its
   # automatic rejections says so, instead of counting down to a removal that

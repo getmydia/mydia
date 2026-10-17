@@ -51,7 +51,7 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
       mismatch_download("/downloads/complete/Severance.S02E10")
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      html = view |> render_click("switch_tab", %{"tab" => "issues"})
+      html = render_patch(view, ~p"/downloads?tab=issues")
 
       assert html =~ "Mydia can&#39;t see the download client&#39;s path"
     end
@@ -67,7 +67,7 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
         })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "issues"})
+      render_patch(view, ~p"/downloads?tab=issues")
 
       render_click(view, "apply_mapping_and_retry", %{
         "remote_prefix" => "/downloads/complete",
@@ -97,7 +97,7 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
         })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "issues"})
+      render_patch(view, ~p"/downloads?tab=issues")
 
       html =
         render_click(view, "apply_mapping_and_retry", %{
@@ -116,7 +116,7 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
       conn = log_in_user(conn, user_fixture(%{role: "user"}))
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      render_click(view, "switch_tab", %{"tab" => "issues"})
+      render_patch(view, ~p"/downloads?tab=issues")
 
       html =
         render_click(view, "apply_mapping_and_retry", %{

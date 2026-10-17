@@ -138,7 +138,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     %{download: download} = failed_download(tmp_dir)
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     html =
       view
@@ -153,7 +153,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     %{download: download, episode: episode, exe: exe} = failed_download(tmp_dir)
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     view |> element("#match-files-#{download.id}") |> render_click()
 
@@ -177,7 +177,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     %{download: download} = failed_download(tmp_dir)
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     view |> element("#match-files-#{download.id}") |> render_click()
 
@@ -198,7 +198,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     %{download: download, episode: episode, mkv: mkv} = failed_download(tmp_dir)
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     view |> element("#match-files-#{download.id}") |> render_click()
 
@@ -222,7 +222,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
       failed_download_with_missing_candidate(tmp_dir)
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     view |> element("#match-files-#{download.id}") |> render_click()
 
@@ -245,7 +245,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     %{download: download} = download_without_episodes(tmp_dir)
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     html =
       view
@@ -264,7 +264,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     %{download: download} = download_without_episodes(tmp_dir)
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     view |> element("#match-files-#{download.id}") |> render_click()
 
@@ -320,7 +320,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
       })
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     # Opened while the download is bound to show A — the (now-stale)
     # in-memory modal assign offers show A's episode as a target.
@@ -369,7 +369,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     %{download: download} = failed_download(tmp_dir)
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     view |> element("#match-files-#{download.id}") |> render_click()
     view |> element("#match-files-reject") |> render_click()
@@ -419,7 +419,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
       })
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     view |> element("#match-files-#{download.id}") |> render_click()
     refute has_element?(view, "#match-files-reject[disabled]")
@@ -450,7 +450,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
       })
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     html =
       view
@@ -515,7 +515,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
       failed_download_with_bracket_path(tmp_dir)
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     view |> element("#match-files-#{download.id}") |> render_click()
 
@@ -566,7 +566,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
       })
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
-    render_click(view, "switch_tab", %{"tab" => "issues"})
+    render_patch(view, ~p"/downloads?tab=issues")
 
     view |> element("#match-files-#{download.id}") |> render_click()
 

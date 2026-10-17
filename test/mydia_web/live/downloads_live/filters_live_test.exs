@@ -58,7 +58,7 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
     alpha = completed("Fictional Salt Meridian", "alpha")
     beta = completed("Copper Lantern", "beta")
 
-    {:ok, view, _html} = live(conn, ~p"/downloads?tab=completed&client=beta")
+    {:ok, view, _html} = live(conn, ~p"/downloads?view=imported&client=beta")
 
     assert has_element?(view, "#downloads-client-filter")
     assert has_element?(view, "#downloads-#{beta.id}")
@@ -99,9 +99,18 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
     queued("Fictional Salt Meridian")
     {:ok, view, _html} = live(conn, ~p"/downloads?q=salt&status=queued")
 
-    view |> element("#downloads-tab-completed") |> render_click()
+    view |> element("#downloads-tab-issues") |> render_click()
 
-    assert_patch(view, ~p"/downloads?tab=completed&q=salt")
+    assert_patch(view, ~p"/downloads?tab=issues&q=salt")
+  end
+
+  test "switching view keeps the query and drops the status", %{conn: conn} do
+    queued("Fictional Salt Meridian")
+    {:ok, view, _html} = live(conn, ~p"/downloads?q=salt&status=queued")
+
+    view |> element("#downloads-view-imported") |> render_click()
+
+    assert_patch(view, ~p"/downloads?view=imported&q=salt")
   end
 
   test "tabs carry counts", %{conn: conn} do
@@ -111,7 +120,7 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
 
     text =
       view
-      |> element("#downloads-tab-queue-count")
+      |> element("#downloads-tab-downloads-count")
       |> render()
       |> LazyHTML.from_fragment()
       |> LazyHTML.text()
@@ -200,7 +209,7 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
         })
 
       download = completed("Fictional Salt Meridian", client.name)
-      {:ok, view, _html} = live(conn, ~p"/downloads?tab=completed")
+      {:ok, view, _html} = live(conn, ~p"/downloads?view=imported")
 
       assert has_element?(
                view,
@@ -210,10 +219,81 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
 
     test "is plain text when no client config has that name", %{conn: conn} do
       download = completed("Fictional Salt Meridian", "gone-client")
-      {:ok, view, _html} = live(conn, ~p"/downloads?tab=completed")
+      {:ok, view, _html} = live(conn, ~p"/downloads?view=imported")
 
       assert has_element?(view, "span#download-client-#{download.id}")
       refute has_element?(view, "a#download-client-#{download.id}")
+    end
+  end
+
+  describe "tabs and views" do
+    test "Select is Downloads-only; select-all off Downloads selects nothing", %{conn: conn} do
+      queued("Fictional Salt Meridian")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")
+      refute has_element?(view, "button[phx-click='toggle_select_all']")
+
+      render_click(view, "toggle_select_all", %{})
+      refute has_element?(view, "#downloads-batch-bar")
+    end
+
+    test "the page has three tabs and no Queue or Completed tab", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      assert has_element?(view, "#downloads-tab-downloads[aria-current='page']")
+      assert has_element?(view, "#downloads-tab-issues")
+      assert has_element?(view, "#downloads-tab-external")
+      refute has_element?(view, "#downloads-tab-queue")
+      refute has_element?(view, "#downloads-tab-completed")
+    end
+
+    test "Active is the default view and lists only in-flight rows", %{conn: conn} do
+      salt = queued("Fictional Salt Meridian")
+      lantern = completed("Copper Lantern", "alpha")
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      assert has_element?(view, "#downloads-view-active.btn-primary")
+      assert has_element?(view, "#downloads-#{salt.id}")
+      refute has_element?(view, "#downloads-#{lantern.id}")
+    end
+
+    test "Imported and All change the rows; status chips are Active-only", %{conn: conn} do
+      salt = queued("Fictional Salt Meridian")
+      lantern = completed("Copper Lantern", "alpha")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?view=imported")
+      refute has_element?(view, "#downloads-#{salt.id}")
+      assert has_element?(view, "#downloads-#{lantern.id}")
+      refute has_element?(view, "#downloads-status-filter")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?view=all")
+      assert has_element?(view, "#downloads-#{salt.id}")
+      assert has_element?(view, "#downloads-#{lantern.id}")
+      refute has_element?(view, "#downloads-status-filter")
+    end
+
+    test "rows in the All view keep their own actions", %{conn: conn} do
+      salt = queued("Fictional Salt Meridian")
+      lantern = completed("Copper Lantern", "alpha")
+      {:ok, view, _html} = live(conn, ~p"/downloads?view=all")
+
+      assert has_element?(view, "#row-cancel-#{salt.id}")
+      refute has_element?(view, "#row-clear-#{salt.id}")
+      assert has_element?(view, "#row-clear-#{lantern.id}")
+      refute has_element?(view, "#row-cancel-#{lantern.id}")
+    end
+
+    test "legacy ?tab=queue and ?tab=completed land on the merged tab", %{conn: conn} do
+      salt = queued("Fictional Salt Meridian")
+      lantern = completed("Copper Lantern", "alpha")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=queue")
+      assert has_element?(view, "#downloads-tab-downloads[aria-current='page']")
+      assert has_element?(view, "#downloads-#{salt.id}")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=completed")
+      assert has_element?(view, "#downloads-view-imported.btn-primary")
+      assert has_element?(view, "#downloads-#{lantern.id}")
     end
   end
 
