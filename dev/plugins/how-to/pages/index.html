@@ -3673,7 +3673,8 @@ modal (the plugin cannot draw or answer it), then replies with one message:</p>
   surface return <code>Done</code> directly and no modal appears.</li>
 <li>Whatever the outcome, nothing reaches the page until the user has decided.</li>
 <li>The host posts <code>{mydia: "theme", theme}</code> when your page loads and whenever
-  the user changes theme. Set it on your <code>&lt;html&gt;</code> so daisyUI's theme variables
+  the user changes theme. Whatever theme the user picked, you get the one of
+  those two names that matches its light or dark scheme. Set it on your <code>&lt;html&gt;</code> so daisyUI's theme variables
   match the host. Without it your page follows the operating system theme.</li>
 </ul>
 <h2 id="know-the-limits">Know the limits</h2>
