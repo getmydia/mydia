@@ -14,6 +14,8 @@ final class NativeTabBarPlugin: NSObject {
   private var loggedIgnored: Set<String> = []
   private var lastChrome: Double?
   private var observers: [NSObjectProtocol] = []
+  /// Registered with the distributed center, so removed from that one.
+  private var accentObserver: NSObjectProtocol?
   /// The View menu items `installCommands` added, removed on the next call.
   private var viewMenuItems: [NSMenuItem] = []
 
@@ -50,10 +52,27 @@ final class NativeTabBarPlugin: NSObject {
           self?.reportInsets()
         })
     }
+
+    // The accent the sidebar's selection uses, so Flutter's macOS theme can
+    // match it. Accent changes post the system-colours notification; the
+    // distributed one is the documented fallback on releases that skip it.
+    let reportAccent: (Notification) -> Void = { [weak self] _ in
+      self?.channel.invokeMethod("systemAccentChanged", arguments: Self.accentARGB())
+    }
+    observers.append(
+      center.addObserver(
+        forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main,
+        using: reportAccent))
+    accentObserver = DistributedNotificationCenter.default().addObserver(
+      forName: NSNotification.Name("AppleColorPreferencesChangedNotification"),
+      object: nil, queue: .main, using: reportAccent)
   }
 
   deinit {
     observers.forEach(NotificationCenter.default.removeObserver)
+    if let accentObserver {
+      DistributedNotificationCenter.default().removeObserver(accentObserver)
+    }
   }
 
   private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -78,6 +97,15 @@ final class NativeTabBarPlugin: NSObject {
       result(nil)
     case "setVisible":
       split?.setChromeVisible((call.arguments as? Bool) ?? true)
+      result(nil)
+    case "systemAccent":
+      result(Self.accentARGB())
+    case "setWindowBackground":
+      if let argb = call.arguments as? Int {
+        let color = Self.color(argb: argb)
+        window?.backgroundColor = color
+        split?.flutter.backgroundColor = color
+      }
       result(nil)
     case "setTabs", "setAccessory":
       if loggedIgnored.insert(call.method).inserted {
@@ -159,6 +187,29 @@ final class NativeTabBarPlugin: NSObject {
     guard let titlebar = window.standardWindowButton(.closeButton)?.superview?.superview
     else { return nil }
     return findToggle(in: titlebar).map { $0.convert($0.bounds, to: nil).maxX }
+  }
+
+  /// `controlAccentColor` as sRGB ARGB, resolved under the dark appearance
+  /// the app forces (MainFlutterWindow).
+  private static func accentARGB() -> Int {
+    var argb = 0xFF0A_84FF
+    (NSAppearance(named: .darkAqua) ?? NSAppearance.currentDrawing())
+      .performAsCurrentDrawingAppearance {
+        guard let c = NSColor.controlAccentColor.usingColorSpace(.sRGB) else { return }
+        func byte(_ v: CGFloat) -> Int { Int((min(max(v, 0), 1) * 255).rounded()) }
+        argb =
+          (0xFF << 24) | (byte(c.redComponent) << 16)
+          | (byte(c.greenComponent) << 8) | byte(c.blueComponent)
+      }
+    return argb
+  }
+
+  private static func color(argb: Int) -> NSColor {
+    NSColor(
+      srgbRed: CGFloat((argb >> 16) & 0xFF) / 255,
+      green: CGFloat((argb >> 8) & 0xFF) / 255,
+      blue: CGFloat(argb & 0xFF) / 255,
+      alpha: CGFloat((argb >> 24) & 0xFF) / 255)
   }
 
   private func findToggle(in view: NSView) -> NSView? {
