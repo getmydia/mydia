@@ -11,41 +11,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
-
-/// WCAG relative luminance of an opaque [color] (channels already 0..1).
-double _luminance(Color color) {
-  return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
-}
+import 'package:player/core/theme/palette.dart';
 
 void main() {
-  group('surface tones (R1)', () {
-    test('exposes the layered tone hierarchy as Colors', () {
-      expect(DepthTokens.surfaceTones, everyElement(isA<Color>()));
-      expect(DepthTokens.surfaceTones.length, 7);
-      // First and last are the base and brightest surface.
-      expect(DepthTokens.surfaceTones.first, DepthTokens.surfaceBase);
-      expect(DepthTokens.surfaceTones.last, DepthTokens.surfaceBright);
-    });
-
-    test('steps increase monotonically in luminance (distinguishable layers)',
-        () {
-      final tones = DepthTokens.surfaceTones;
-      for (var i = 1; i < tones.length; i++) {
-        expect(
-          _luminance(tones[i]),
-          greaterThan(_luminance(tones[i - 1])),
-          reason: 'tone $i should be lighter than tone ${i - 1}',
-        );
-      }
-    });
-
-    test('base tone is the cinematic background, not a new hue (R3)', () {
-      expect(DepthTokens.surfaceBase, AppColors.background);
-      expect(DepthTokens.surfaceContainer, AppColors.surface);
-      expect(DepthTokens.surfaceVariant, AppColors.surfaceVariant);
-    });
-  });
-
   group('blur sigmas (R8)', () {
     test('are doubles seeded from the established 0/2/8/10/40 values', () {
       expect(DepthTokens.blurNone, 0.0);
@@ -164,12 +132,13 @@ void main() {
       expect(scheme.tertiary, AppColors.primary);
     });
 
-    test('surface hierarchy is driven by the depth tokens', () {
+    test('surface hierarchy is driven by the palette', () {
       final scheme = AppTheme.darkTheme.colorScheme;
-      expect(scheme.surface, DepthTokens.surfaceBase);
-      expect(scheme.surfaceContainer, DepthTokens.surfaceContainer);
-      expect(scheme.surfaceContainerHighest, DepthTokens.surfaceVariant);
-      expect(scheme.surfaceBright, DepthTokens.surfaceBright);
+      expect(scheme.surface, Palettes.projectionBooth.background);
+      expect(scheme.surfaceContainer, Palettes.projectionBooth.surface);
+      expect(scheme.surfaceContainerHighest,
+          Palettes.projectionBooth.surfaceVariant);
+      expect(scheme.surfaceBright, Palettes.projectionBooth.surfaceBright);
     });
   });
 

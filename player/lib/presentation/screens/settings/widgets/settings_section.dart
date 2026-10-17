@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/colors.dart';
-import '../../../../core/theme/depth_tokens.dart';
+import '../../../../core/theme/palette.dart';
 import '../../../widgets/glass_surface.dart';
 
 /// A grouped container for settings rows.
@@ -20,7 +20,7 @@ class SettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GlassSurface.faux(
       borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-      fillColor: DepthTokens.surfaceVariant.withValues(alpha: 0.55),
+      fillColor: context.palette.surfaceVariant.withValues(alpha: 0.55),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,

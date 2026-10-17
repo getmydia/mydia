@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 import 'toast_models.dart';
 
@@ -23,8 +24,8 @@ class ToastPill extends StatelessWidget {
   /// Browse-chrome density: at or above
   /// [DepthTokens.glassLegibilityFloor], so text stays legible over bright
   /// artwork behind the blur.
-  static final Color fill =
-      DepthTokens.surfaceHigh.withValues(alpha: DepthTokens.chromeFillOpacity);
+  static Color fill(MydiaPalette p) =>
+      p.surfaceHigh.withValues(alpha: DepthTokens.chromeFillOpacity);
 
   static const BorderRadius _radius =
       BorderRadius.all(Radius.circular(ToastMetrics.radius));
@@ -72,7 +73,7 @@ class ToastPill extends StatelessWidget {
           ),
           child: GlassSurface(
             blurSigma: DepthTokens.blurChrome,
-            fillColor: fill,
+            fillColor: fill(context.palette),
             borderRadius: _radius,
             border: Border.all(
               color: DepthTokens.rimColor,

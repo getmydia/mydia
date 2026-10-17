@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/toast/toast_models.dart';
 import 'package:player/presentation/widgets/toast/toast_pill.dart';
@@ -84,12 +85,13 @@ void main() {
     for (final kind in ToastKind.values) {
       await _pump(tester, _entry('Same glass', kind: kind));
       final glass = tester.widget<GlassSurface>(find.byType(GlassSurface));
-      expect(glass.fillColor, ToastPill.fill, reason: '$kind');
+      expect(glass.fillColor, ToastPill.fill(Palettes.projectionBooth),
+          reason: '$kind');
     }
   });
 
   test('the fill clears the legibility floor', () {
-    expect(ToastPill.fill.a,
+    expect(ToastPill.fill(Palettes.projectionBooth).a,
         greaterThanOrEqualTo(DepthTokens.glassLegibilityFloor));
   });
 

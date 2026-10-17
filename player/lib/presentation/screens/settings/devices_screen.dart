@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/format/relative_time.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
-import '../../../core/theme/depth_tokens.dart';
+import '../../../core/theme/palette.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../../domain/models/remote_device.dart';
 import 'devices_controller.dart';
@@ -136,7 +136,7 @@ class DeviceCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Material(
-      color: DepthTokens.surfaceVariant,
+      color: context.palette.surfaceVariant,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -154,7 +154,7 @@ class DeviceCard extends StatelessWidget {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: device.isRevoked
-                          ? DepthTokens.surfaceHigh.withValues(alpha: 0.5)
+                          ? context.palette.surfaceHigh.withValues(alpha: 0.5)
                           : scheme.primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
