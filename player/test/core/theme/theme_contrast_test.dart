@@ -12,102 +12,93 @@
 // Everything here is computed from the tokens rather than hardcoded, so the
 // floors keep holding as the palette moves.
 
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/colors.dart';
-
-/// WCAG 2.1 relative luminance. Flutter's `Color.r/g/b` are already 0..1
-/// gamma-encoded sRGB, so they are linearised here before weighting.
-double _luminance(Color color) {
-  double channel(double s) =>
-      s <= 0.03928 ? s / 12.92 : math.pow((s + 0.055) / 1.055, 2.4).toDouble();
-  return 0.2126 * channel(color.r) +
-      0.7152 * channel(color.g) +
-      0.0722 * channel(color.b);
-}
-
-/// WCAG 2.1 contrast ratio, order-independent.
-double _contrast(Color a, Color b) {
-  final la = _luminance(a);
-  final lb = _luminance(b);
-  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
-}
+import 'package:player/core/theme/contrast.dart';
+import 'package:player/core/theme/palette.dart';
+import 'package:player/core/theme/theme_preset.dart';
 
 /// SC 1.4.3 Contrast (Minimum), normal-size text.
 const double _textFloor = 4.5;
 
-void main() {
-  group('WCAG text contrast floors', () {
-    const onBackground = <String, Color>{
-      'primary': AppColors.primary,
-      'textPrimary': AppColors.textPrimary,
-      'textSecondary': AppColors.textSecondary,
-      'textDisabled': AppColors.textDisabled,
-      'error': AppColors.error,
-      'warning': AppColors.warning,
-      'success': AppColors.success,
-      'info': AppColors.info,
+/// The accents System Settings offers, as `controlAccentColor` resolves them
+/// under the dark appearance. "Multicolour" is blue for apps without their
+/// own accent.
+const _macAccents = <String, Color>{
+  'blue': Color(0xFF0A84FF),
+  'purple': Color(0xFFBF5AF2),
+  'pink': Color(0xFFFF375F),
+  'red': Color(0xFFFF453A),
+  'orange': Color(0xFFFF9F0A),
+  'yellow': Color(0xFFFFD60A),
+  'green': Color(0xFF30D158),
+  'graphite': Color(0xFF8C8C8C),
+};
+
+Map<String, MydiaPalette> _palettes() => {
+      for (final preset in ThemePreset.values)
+        if (preset != ThemePreset.macos) preset.name: preset.palette(),
+      for (final accent in _macAccents.entries)
+        'macos/${accent.key}':
+            ThemePreset.macos.palette(systemAccent: accent.value),
     };
 
-    onBackground.forEach((name, color) {
-      test('$name clears $_textFloor:1 on the app background', () {
-        final ratio = _contrast(color, AppColors.background);
-        expect(
-          ratio,
-          greaterThanOrEqualTo(_textFloor),
-          reason: 'AppColors.$name measured '
-              '${ratio.toStringAsFixed(2)}:1 against AppColors.background. '
-              'Adjust the token, never this floor.',
-        );
+void _floor(Color fg, Color bg, String what) {
+  final ratio = contrastRatio(fg, bg);
+  expect(
+    ratio,
+    greaterThanOrEqualTo(_textFloor),
+    reason: '$what measured ${ratio.toStringAsFixed(2)}:1. '
+        'Adjust the token, never this floor.',
+  );
+}
+
+void main() {
+  _palettes().forEach((name, p) {
+    group('$name: WCAG text contrast floors', () {
+      final onBackground = <String, Color>{
+        'primary': p.primary,
+        'textPrimary': p.textPrimary,
+        'textSecondary': p.textSecondary,
+        'textDisabled': p.textDisabled,
+        'error': AppColors.error,
+        'warning': AppColors.warning,
+        'success': AppColors.success,
+        'info': AppColors.info,
+      };
+      onBackground.forEach((token, color) {
+        test('$token clears $_textFloor:1 on the background', () {
+          _floor(color, p.background, '$token on background');
+        });
       });
-    });
 
-    test('filled primary buttons clear $_textFloor:1 for their own label', () {
-      final ratio = _contrast(AppColors.onPrimary, AppColors.primary);
-      expect(
-        ratio,
-        greaterThanOrEqualTo(_textFloor),
-        reason: 'AppColors.onPrimary on AppColors.primary measured '
-            '${ratio.toStringAsFixed(2)}:1. This is the defect the Projection '
-            'Booth palette fixed; it must not come back.',
-      );
-    });
+      test('filled primary buttons clear $_textFloor:1 for their label', () {
+        _floor(p.onPrimary, p.primary, 'onPrimary on primary');
+      });
 
-    test('white primary buttons clear $_textFloor:1 for their label', () {
-      final ratio = _contrast(AppColors.background, const Color(0xFFFFFFFF));
-      expect(ratio, greaterThanOrEqualTo(_textFloor));
-    });
+      test('white primary buttons clear $_textFloor:1 for their label', () {
+        _floor(p.background, const Color(0xFFFFFFFF), 'background on white');
+      });
 
-    test('secondary button label clears $_textFloor:1 on its fill', () {
-      final fill = Color.alphaBlend(
-        AppTheme.secondaryButtonFill,
-        AppColors.background,
-      );
-      final ratio = _contrast(AppColors.textPrimary, fill);
-      expect(ratio, greaterThanOrEqualTo(_textFloor));
-    });
+      test('secondary button label clears $_textFloor:1 on its fill', () {
+        final fill =
+            Color.alphaBlend(AppTheme.secondaryButtonFill, p.background);
+        _floor(p.textPrimary, fill, 'textPrimary on secondary fill');
+      });
 
-    test('input placeholder text clears $_textFloor:1 on the field fill', () {
-      final ratio =
-          _contrast(AppColors.textSecondary, AppColors.surfaceVariant);
-      expect(
-        ratio,
-        greaterThanOrEqualTo(_textFloor),
-        reason: 'InputDecorationTheme.hintStyle renders on a surfaceVariant '
-            'fill. Placeholder text is not a disabled control, so SC 1.4.3 '
-            'applies at ${ratio.toStringAsFixed(2)}:1. hintStyle used to sit '
-            'on AppColors.textDisabled, which only measured 3.82:1 there.',
-      );
-    });
+      test('input placeholder text clears $_textFloor:1 on the field fill', () {
+        _floor(p.textSecondary, p.surfaceVariant,
+            'hintStyle (textSecondary) on surfaceVariant');
+      });
 
-    // Known gap this suite deliberately does not close: AppColors.onError
-    // (#FFFFFF) on AppColors.error (#F04D4D) measures 3.58:1, under the
-    // 4.5:1 floor, and is live via the Material 3 ColorScheme (every error
-    // button and snackbar). It predates the Projection Booth repalette, and
-    // fixing it changes how those surfaces look everywhere, so it is left as
-    // a palette decision for the maintainer rather than asserted here.
+      // Known gap this suite deliberately does not close: AppColors.onError
+      // (#FFFFFF) on AppColors.error (#F04D4D) measures 3.58:1, under the
+      // 4.5:1 floor, and is live via the Material 3 ColorScheme (every error
+      // button and snackbar). It predates the Projection Booth repalette, and
+      // fixing it changes how those surfaces look everywhere, so it is left as
+      // a palette decision for the maintainer rather than asserted here.
+    });
   });
 }
