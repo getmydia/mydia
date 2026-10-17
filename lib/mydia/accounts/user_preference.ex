@@ -10,6 +10,7 @@ defmodule Mydia.Accounts.UserPreference do
   import Ecto.Changeset
 
   alias Mydia.Accounts.PosterFields
+  alias Mydia.Accounts.Themes
   alias Mydia.Metadata.Countries
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -28,7 +29,6 @@ defmodule Mydia.Accounts.UserPreference do
   }
 
   # Valid values for each preference
-  @valid_themes ~w(system light dark)
   @valid_languages ~w(en es fr de it pt ja zh ko ru)
 
   @type t :: %__MODULE__{
@@ -71,6 +71,23 @@ defmodule Mydia.Accounts.UserPreference do
   """
   def theme(%__MODULE__{preferences: prefs}) do
     Map.get(prefs, "theme", @defaults["theme"])
+  end
+
+  @doc """
+  The resolved theme choice: mode plus a light and a dark theme.
+
+  The slots are deliberately not in `@defaults`: an unset slot reads as
+  `Themes.default/1`, so changing a default later reaches every user who
+  never picked one.
+  """
+  def theme_selection(%__MODULE__{preferences: prefs}) do
+    prefs = prefs || %{}
+
+    Themes.selection(
+      Map.get(prefs, "theme"),
+      Map.get(prefs, "light_theme"),
+      Map.get(prefs, "dark_theme")
+    )
   end
 
   @doc """
@@ -236,7 +253,9 @@ defmodule Mydia.Accounts.UserPreference do
   # Validate individual preference values
   defp validate_preferences(changeset) do
     changeset
-    |> validate_preference_value("theme", @valid_themes)
+    |> validate_preference_value("theme", Themes.modes())
+    |> validate_theme_slot("light_theme", :light)
+    |> validate_theme_slot("dark_theme", :dark)
     |> validate_preference_value("metadata_language", @valid_languages)
     |> validate_preference_value("interface_language", @valid_languages)
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
@@ -290,6 +309,20 @@ defmodule Mydia.Accounts.UserPreference do
        do: String.trim(name) != ""
 
   defp valid_service?(_), do: false
+
+  # Same stale-value rule as validate_poster_fields/1: a theme a later release
+  # drops from Themes must not fail every unrelated save. Only a new or
+  # changed value is checked, and it must belong to the slot's scheme.
+  defp validate_theme_slot(changeset, key, scheme) do
+    with prefs when is_map(prefs) <- get_change(changeset, :preferences),
+         value when not is_nil(value) <- Map.get(prefs, key),
+         false <- value == Map.get(changeset.data.preferences || %{}, key),
+         false <- Themes.valid_id?(value, scheme) do
+      add_error(changeset, :preferences, "invalid value for #{key}: #{inspect(value)}")
+    else
+      _ -> changeset
+    end
+  end
 
   defp validate_discover_home_country(changeset) do
     with prefs when is_map(prefs) <- get_change(changeset, :preferences),

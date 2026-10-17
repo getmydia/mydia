@@ -175,17 +175,17 @@
             </h2>
 
             <div class="form-control w-full">
-              <label class="label" for="theme-select">
+              <label class="label" for="theme-picker">
                 <span class="label-text font-medium">Theme</span>
               </label>
               <p class="text-sm text-base-content/60 mb-3">
-                Choose how Mydia looks. System will match your device's theme.
+                Choose how Mydia looks. System follows your device, using your light theme by day and your dark theme by night.
               </p>
               <.segmented_control
                 id="theme-picker"
-                value={@theme}
-                event="update_theme"
-                param="theme"
+                value={@theme_selection.mode}
+                event="set_theme_mode"
+                param="mode"
                 label="Theme"
                 size="md"
               >
@@ -196,6 +196,22 @@
                   icon={icon}
                 />
               </.segmented_control>
+              <.theme_gallery
+                id="light-theme-gallery"
+                slot="light"
+                title="Light theme"
+                themes={@light_themes}
+                selected={@theme_selection.light.id}
+                in_use={@theme_selection.mode == "light"}
+              />
+              <.theme_gallery
+                id="dark-theme-gallery"
+                slot="dark"
+                title="Dark theme"
+                themes={@dark_themes}
+                selected={@theme_selection.dark.id}
+                in_use={@theme_selection.mode == "dark"}
+              />
             </div>
 
             <%= if @player_enabled do %>

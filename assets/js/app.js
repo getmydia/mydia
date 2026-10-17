@@ -45,6 +45,7 @@ import {
   setItemSelected,
   toggleAllSelected,
 } from "./hooks/media_selection.mjs";
+import { applySelection, fromPayload } from "./theme.mjs";
 // Alpine.js for reactive UI components
 import Alpine from "alpinejs";
 import { videoPlayer } from "./alpine_components/video_player";
@@ -54,20 +55,13 @@ const ThemeToggle = {
   mounted() {
     // Update indicator position based on current theme
     const updateIndicator = () => {
-      const preference = window.mydiaTheme.getTheme();
+      const mode = document.documentElement.getAttribute("data-theme-mode");
       const indicator = this.el.querySelector(".theme-indicator");
 
       if (!indicator) return;
 
-      // Calculate position based on preference
-      let position = "0%"; // system (left)
-      if (preference === window.mydiaTheme.THEMES.LIGHT) {
-        position = "33.333%"; // light (middle)
-      } else if (preference === window.mydiaTheme.THEMES.DARK) {
-        position = "66.666%"; // dark (right)
-      }
-
-      indicator.style.left = position;
+      const positions = { system: "0%", light: "33.333%", dark: "66.666%" };
+      indicator.style.left = positions[mode] || "0%";
     };
 
     // Update on mount
@@ -77,7 +71,7 @@ const ThemeToggle = {
     const observer = new MutationObserver(updateIndicator);
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["data-theme"],
+      attributeFilter: ["data-theme-mode"],
     });
 
     // Store observer to disconnect on unmount
@@ -475,20 +469,15 @@ topbar.config({ barColors: { 0: "#29d" }, shadowColor: "rgba(0, 0, 0, .3)" });
 window.addEventListener("phx:page-loading-start", (_info) => topbar.show(300));
 window.addEventListener("phx:page-loading-stop", (_info) => topbar.hide());
 
-// Handle theme changes from preferences page
+// A LiveView saved a theme change (header toggle or profile gallery).
 window.addEventListener("phx:theme_changed", (e) => {
-  if (!window.mydiaTheme) return;
-
-  const theme = e.detail.theme;
-  // Map preferences values to theme system values
-  const themeMap = {
-    system: window.mydiaTheme.THEMES.SYSTEM,
-    light: window.mydiaTheme.THEMES.LIGHT,
-    dark: window.mydiaTheme.THEMES.DARK,
-  };
-
-  const mappedTheme = themeMap[theme] || window.mydiaTheme.THEMES.SYSTEM;
-  window.mydiaTheme.setTheme(mappedTheme);
+  applySelection(
+    document.documentElement,
+    fromPayload(e.detail),
+    window.matchMedia("(prefers-color-scheme: dark)").matches,
+    window.localStorage,
+    document,
+  );
 });
 
 // Handle download exports

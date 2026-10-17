@@ -33,4 +33,71 @@ defmodule MydiaWeb.ProfileLive.Components do
     </div>
     """
   end
+
+  @doc """
+  A radio group of theme cards for one slot (light or dark).
+
+  Each preview carries `data-theme`, so daisyUI scopes that theme's colours to
+  the card and it renders as the real theme, not a swatch approximation.
+  """
+  attr :id, :string, required: true
+  attr :slot, :string, required: true, values: ~w(light dark)
+  attr :title, :string, required: true
+  attr :themes, :list, required: true
+  attr :selected, :string, required: true, doc: "id of the theme in this slot"
+  attr :in_use, :boolean, default: false
+
+  def theme_gallery(assigns) do
+    ~H"""
+    <fieldset id={@id} class="mt-6">
+      <legend class="mb-3 flex items-center gap-2 text-sm font-medium">
+        {@title}
+        <span :if={@in_use} data-role="in-use" class="badge badge-primary badge-sm">In use</span>
+      </legend>
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <label :for={theme <- @themes} id={"#{@id}-#{theme.id}"} class="group cursor-pointer">
+          <input
+            type="radio"
+            name={"#{@slot}_theme"}
+            value={theme.id}
+            checked={theme.id == @selected}
+            phx-click="update_theme_slot"
+            phx-value-slot={@slot}
+            phx-value-theme={theme.id}
+            class="peer sr-only"
+          />
+          <div class="rounded-box ring-offset-2 ring-offset-base-100 transition duration-150 group-hover:-translate-y-0.5 peer-checked:ring-2 peer-checked:ring-primary peer-focus-visible:ring-2 peer-focus-visible:ring-base-content/40">
+            <div
+              data-theme={theme.id}
+              class="rounded-box border border-base-300 bg-base-200 p-2 text-base-content"
+            >
+              <div class="flex gap-2">
+                <div class="aspect-[2/3] w-8 shrink-0 rounded bg-base-300"></div>
+                <div class="flex-1 space-y-1.5">
+                  <div class="h-2 w-3/4 rounded bg-base-content/70"></div>
+                  <div class="h-2 w-1/2 rounded bg-base-content/30"></div>
+                  <div class="flex gap-1 pt-0.5">
+                    <span class="h-2 w-3 rounded-full bg-info"></span>
+                    <span class="h-2 w-3 rounded-full bg-success"></span>
+                    <span class="h-2 w-3 rounded-full bg-warning"></span>
+                    <span class="h-2 w-3 rounded-full bg-error"></span>
+                  </div>
+                  <div class="h-3 w-10 rounded bg-primary"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <span class="mt-2 flex items-center gap-1 text-sm">
+            <.icon
+              :if={theme.id == @selected}
+              name="hero-check-circle-mini"
+              class="size-4 text-primary"
+            />
+            {theme.label}
+          </span>
+        </label>
+      </div>
+    </fieldset>
+    """
+  end
 end

@@ -28,7 +28,7 @@ const PluginFrame = {
       this.frame()?.contentWindow?.postMessage(message, "*")
     })
     // The frame follows the host theme. It is told on every load (the iframe
-    // is replaced on reconnect) and whenever the theme toggle changes it.
+    // is replaced on reconnect) and whenever the theme or colour scheme changes.
     this.postTheme = () => {
       const message = themeMessage(document.documentElement)
       if (message) this.frame()?.contentWindow?.postMessage(message, "*")
@@ -38,7 +38,7 @@ const PluginFrame = {
     this.themeObserver = new MutationObserver(this.postTheme)
     this.themeObserver.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["data-theme"],
+      attributeFilter: ["data-theme", "data-color-scheme"],
     })
   },
   destroyed() {

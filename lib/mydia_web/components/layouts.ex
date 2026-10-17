@@ -8,6 +8,7 @@ defmodule MydiaWeb.Layouts do
   import MydiaWeb.SidebarComponents
 
   alias Mydia.Accounts.Authorization
+  alias Mydia.Accounts.Themes
   alias MydiaWeb.FeedbackComponents
 
   # Embed all files in layouts/* within this module.
@@ -380,9 +381,56 @@ defmodule MydiaWeb.Layouts do
   end
 
   @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
+  Theme attributes for the root `<html>` tag.
 
-  See <head> in root.html.heex which applies the theme before page load.
+  A fixed mode gets `data-theme` and its background on the server, so the
+  first paint is right. In system mode only the browser knows the OS scheme,
+  so the inline script in root.html.heex picks a slot before paint. The
+  background defaults to the dark slot there, matching the old launch colour.
+  `data-theme-source="default"` tells that script no user was resolved, so
+  it may use the browser's last-known choice instead.
+  """
+  def theme_html_attrs(selection) do
+    {source, selection} =
+      case selection do
+        %Themes.Selection{} -> {"user", selection}
+        nil -> {"default", Themes.default_selection()}
+      end
+
+    active = Themes.active(selection)
+
+    [
+      "data-theme-source": source,
+      "data-theme-mode": selection.mode,
+      "data-light-theme": selection.light.id,
+      "data-dark-theme": selection.dark.id,
+      "data-light-base": selection.light.base,
+      "data-dark-base": selection.dark.base,
+      "data-theme": active && active.id,
+      "data-color-scheme": active && Atom.to_string(active.scheme),
+      style: "background-color: #{(active || selection.dark).base}"
+    ]
+  end
+
+  @doc "The browser chrome colour: one per OS scheme in system mode, else the active theme's."
+  attr :selection, :any, default: nil
+
+  def theme_color_meta(assigns) do
+    selection = assigns.selection || Themes.default_selection()
+    assigns = assign(assigns, selection: selection, active: Themes.active(selection))
+
+    ~H"""
+    <%= if @active do %>
+      <meta name="theme-color" content={@active.base} />
+    <% else %>
+      <meta name="theme-color" media="(prefers-color-scheme: light)" content={@selection.light.base} />
+      <meta name="theme-color" media="(prefers-color-scheme: dark)" content={@selection.dark.base} />
+    <% end %>
+    """
+  end
+
+  @doc """
+  System, light or dark mode switch. Saved per user by the theme hook in MydiaWeb.Live.UserAuth.
   """
   attr :id, :string, default: "theme-toggle"
 
@@ -400,7 +448,9 @@ defmodule MydiaWeb.Layouts do
 
       <button
         class="relative flex p-2 cursor-pointer w-1/3 justify-center z-10"
-        onclick="window.mydiaTheme.setTheme(window.mydiaTheme.THEMES.SYSTEM)"
+        type="button"
+        phx-click="set_theme_mode"
+        phx-value-mode="system"
         title="System theme"
       >
         <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
@@ -408,7 +458,9 @@ defmodule MydiaWeb.Layouts do
 
       <button
         class="relative flex p-2 cursor-pointer w-1/3 justify-center z-10"
-        onclick="window.mydiaTheme.setTheme(window.mydiaTheme.THEMES.LIGHT)"
+        type="button"
+        phx-click="set_theme_mode"
+        phx-value-mode="light"
         title="Light theme"
       >
         <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
@@ -416,7 +468,9 @@ defmodule MydiaWeb.Layouts do
 
       <button
         class="relative flex p-2 cursor-pointer w-1/3 justify-center z-10"
-        onclick="window.mydiaTheme.setTheme(window.mydiaTheme.THEMES.DARK)"
+        type="button"
+        phx-click="set_theme_mode"
+        phx-value-mode="dark"
         title="Dark theme"
       >
         <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />

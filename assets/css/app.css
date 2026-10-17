@@ -29,23 +29,32 @@
 @plugin "../vendor/heroicons";
 
 /* DaisyUI is loaded from assets/node_modules via the dependency in package.json.
-   package-lock.json pins the exact version used by this plugin. */
-@plugin "daisyui";
+   package-lock.json pins the exact version used by this plugin.
+   Only the built-in themes in Mydia.Accounts.Themes ship; the list is checked
+   by test/mydia_web/themes_css_parity_test.exs. */
+@plugin "daisyui" {
+  themes: nord, emerald, dim, dracula, night, sunset;
+}
 
-/* Mydia custom theme */
+/* Mydia's own themes */
 @plugin "./mydiaTheme.ts";
+
+/* Catppuccin, one plugin per flavour */
+@plugin "./catppuccinTheme.frappe.ts";
+@plugin "./catppuccinTheme.macchiato.ts";
+@plugin "./catppuccinTheme.mocha.ts";
 
 /* Add variants based on LiveView classes */
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
 @custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
 
-/* Use the data attribute for dark mode.
-   The theme names are `mydia-dark` / `mydia-light` (see root.html.heex), not
-   the bare `dark` this variant originally targeted. Against `[data-theme=dark]`
-   the variant matched no element that exists, so every `dark:` utility silently
-   produced nothing. Guarded by test/mydia_web/components/dark_variant_test.exs. */
-@custom-variant dark (&:where([data-theme=mydia-dark], [data-theme=mydia-dark] *));
+/* `dark:` follows the scheme of whichever theme is active, not a theme name:
+   there are nine dark themes. <html data-color-scheme> is set beside
+   data-theme by theme_html_attrs/1, the inline script in root.html.heex and
+   applySelection in theme.mjs. Guarded by
+   test/mydia_web/components/dark_variant_test.exs. */
+@custom-variant dark (&:where([data-color-scheme=dark], [data-color-scheme=dark] *));
 
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session],

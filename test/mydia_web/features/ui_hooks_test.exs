@@ -24,11 +24,10 @@ defmodule MydiaWeb.Features.UiHooksTest do
     #
     # The hook itself (`phx-hook="ThemeToggle"`) only tracks the indicator
     # position via a MutationObserver; it does not receive clicks. The three
-    # theme buttons inside it call `window.mydiaTheme.setTheme(...)` directly
-    # via a plain `onclick`, so `click(Query.css(~s([phx-hook="ThemeToggle"])))`
-    # would click the wrapper div rather than a button. Clicking a specific
-    # button (by its `title` attribute, layouts.ex theme_toggle/1) is both
-    # correct and unambiguous about which theme gets applied.
+    # theme buttons send `set_theme_mode` to the server, which saves the mode
+    # and pushes `theme_changed`. Clicking the wrapper div would hit no
+    # button, so clicking a specific button (by its `title` attribute,
+    # layouts.ex theme_toggle/1) is still the unambiguous target.
     @tag :feature
     test "toggling changes the document theme and it survives navigation",
          %{session: session} do

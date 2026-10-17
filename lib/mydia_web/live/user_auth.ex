@@ -155,8 +155,9 @@ defmodule MydiaWeb.Live.UserAuth do
       |> assign(:show_feedback_modal, false)
       |> assign(:feedback_form, build_feedback_form(%{}))
       |> assign_changelog_notice()
-      |> assign_player_ui()
+      |> assign_preference_state()
       |> attach_hook(:changelog_hook, :handle_event, &handle_changelog_event/3)
+      |> attach_hook(:theme_hook, :handle_event, &handle_theme_event/3)
       |> attach_hook(:jobs_status_hook, :handle_info, &handle_jobs_status/2)
       |> attach_hook(:feedback_hook, :handle_event, &handle_feedback_event/3)
 
@@ -266,6 +267,20 @@ defmodule MydiaWeb.Live.UserAuth do
     end
   end
 
+  # The preference row is loaded once per mount for the signed-in user and
+  # shared by everything that reads it.
+  defp assign_preference_state(socket) do
+    pref =
+      case socket.assigns do
+        %{current_user: %Mydia.Accounts.User{} = user} -> Accounts.get_user_preference!(user)
+        _ -> nil
+      end
+
+    socket
+    |> assign_player_ui(pref)
+    |> assign_theme_selection(pref)
+  end
+
   # Player entry-point visibility, read once per mount.
   #
   # No connected?/1 gate: unlike assign_changelog_notice/1 this only reads, so
@@ -276,13 +291,11 @@ defmodule MydiaWeb.Live.UserAuth do
   # point is hidden for every user, so templates that already test @hide_player
   # need nothing else. :player_enabled is for the surfaces the per-user
   # preference leaves alone on purpose, such as Play buttons and admin tabs.
-  defp assign_player_ui(socket) do
+  defp assign_player_ui(socket, pref) do
     player_enabled = Mydia.Player.enabled?()
 
-    case socket.assigns do
-      %{current_user: %Mydia.Accounts.User{} = user} ->
-        pref = Mydia.Accounts.get_user_preference!(user)
-
+    case pref do
+      %Mydia.Accounts.UserPreference{} ->
         socket
         |> assign(:player_enabled, player_enabled)
         |> assign(
@@ -338,6 +351,52 @@ defmodule MydiaWeb.Live.UserAuth do
   end
 
   defp handle_changelog_event(_event, _params, socket), do: {:cont, socket}
+
+  defp assign_theme_selection(socket, pref) do
+    selection =
+      case pref do
+        %Accounts.UserPreference{} -> Accounts.UserPreference.theme_selection(pref)
+        _ -> Mydia.Accounts.Themes.default_selection()
+      end
+
+    assign(socket, :theme_selection, selection)
+  end
+
+  # The header toggle is on every page and the profile gallery sends the same
+  # events, so the theme is saved here once rather than in each LiveView.
+  defp handle_theme_event("set_theme_mode", %{"mode" => mode}, socket),
+    do: save_theme(socket, %{"theme" => mode})
+
+  defp handle_theme_event("update_theme_slot", %{"slot" => slot, "theme" => id}, socket)
+       when slot in ["light", "dark"],
+       do: save_theme(socket, %{"#{slot}_theme" => id})
+
+  defp handle_theme_event(_event, _params, socket), do: {:cont, socket}
+
+  defp save_theme(%{assigns: %{current_user: %Mydia.Accounts.User{} = user}} = socket, delta) do
+    case user |> Accounts.get_user_preference!() |> Accounts.update_preference(delta) do
+      {:ok, pref} ->
+        selection = Accounts.UserPreference.theme_selection(pref)
+
+        {:halt,
+         socket
+         |> assign(:theme_selection, selection)
+         |> refresh_preference(pref)
+         |> push_event("theme_changed", Mydia.Accounts.Themes.to_client(selection))}
+
+      {:error, _changeset} ->
+        {:halt, put_flash(socket, :error, "Could not save your theme")}
+    end
+  end
+
+  defp save_theme(socket, _delta), do: {:halt, socket}
+
+  # The profile page keeps its own copy of the preference row and merges later
+  # saves into it. Left stale, its next save would write the old theme back.
+  defp refresh_preference(%{assigns: %{preference: %Accounts.UserPreference{}}} = socket, pref),
+    do: assign(socket, :preference, pref)
+
+  defp refresh_preference(socket, _pref), do: socket
 
   defp build_feedback_form(params, action \\ nil) do
     params

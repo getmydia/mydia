@@ -5,6 +5,7 @@ defmodule MydiaWeb.ProfileLive.Index do
 
   alias Mydia.Accounts
   alias Mydia.Accounts.Avatar
+  alias Mydia.Accounts.Themes
   alias Mydia.Accounts.UserPreference
   alias Mydia.Settings
   alias Mydia.Settings.LibraryPath
@@ -49,7 +50,8 @@ defmodule MydiaWeb.ProfileLive.Index do
       # Preferences
       |> assign(:preference, preference)
       |> assign(:themes, @themes)
-      |> assign(:theme, UserPreference.theme(preference))
+      |> assign(:light_themes, Themes.light())
+      |> assign(:dark_themes, Themes.dark())
       # Add defaults
       |> assign(
         :movie_library_options,
@@ -230,22 +232,6 @@ defmodule MydiaWeb.ProfileLive.Index do
   end
 
   ## Preferences Events
-
-  @impl true
-  def handle_event("update_theme", %{"theme" => theme}, socket) do
-    case Accounts.update_preference(socket.assigns.preference, %{"theme" => theme}) do
-      {:ok, preference} ->
-        {:noreply,
-         socket
-         |> assign(:preference, preference)
-         |> assign(:theme, theme)
-         |> push_event("theme_changed", %{theme: theme})
-         |> put_flash(:info, "Theme updated")}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update theme")}
-    end
-  end
 
   @impl true
   def handle_event("update_add_defaults", params, socket) do
