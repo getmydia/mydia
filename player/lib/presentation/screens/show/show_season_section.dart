@@ -484,6 +484,7 @@ class _SeasonChipState extends State<_SeasonChip>
       chip = Padding(padding: padding, child: content);
     }
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) {
         _controller.reverse();

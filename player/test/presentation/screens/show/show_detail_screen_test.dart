@@ -160,6 +160,30 @@ void main() {
     );
   });
 
+  testWidgets('on Apple an unselected season is tappable in its padding',
+      (tester) async {
+    LiquidGlassSupport.debugPlatformOverride = true;
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      episodes: {
+        1: [_episode(1, watched: true), _episode(2), _episode(3)],
+        2: [_episode(1, season: 2), _episode(2, season: 2)],
+      },
+    );
+    final text = tester.getRect(find.text('Season 2'));
+    // 8px left of the glyphs: inside the chip's 16px horizontal padding.
+    await tester.tapAt(Offset(text.left - 8, text.center.dy));
+    await tester.pumpAndSettle();
+    expect(
+      find.ancestor(
+        of: find.text('Season 2'),
+        matching: find.byType(GlassSurface),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('on Apple only the selected season sits on glass',
       (tester) async {
     LiquidGlassSupport.debugPlatformOverride = true;
