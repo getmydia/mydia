@@ -46,6 +46,11 @@ class FloatingRail extends ConsumerStatefulWidget {
 
   static const Duration hoverDelay = Duration(milliseconds: 200);
 
+  /// The dim behind the expanded rail, shared with the floating phone drawer
+  /// so the two overlays match.
+  static Color scrimColor(BuildContext context) => Colors.black
+      .withValues(alpha: MediaQuery.highContrastOf(context) ? 0.7 : 0.55);
+
   @override
   ConsumerState<FloatingRail> createState() => _FloatingRailState();
 }
@@ -155,8 +160,7 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
                 child: ColoredBox(
                   // Findable only while the scrim is meant to be showing.
                   key: showScrim ? const Key('rail-scrim') : null,
-                  color:
-                      Colors.black.withValues(alpha: highContrast ? 0.7 : 0.55),
+                  color: FloatingRail.scrimColor(context),
                 ),
               ),
             ),

@@ -25,6 +25,7 @@ import '../../core/router/page_cover_observer.dart';
 import '../../core/router/root_routes.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/depth_tokens.dart';
+import '../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../core/ui/reduced_motion.dart';
 import '../../core/playback/playback_progress_providers.dart';
 import '../../core/layout/breakpoints.dart';
@@ -174,6 +175,15 @@ class AppShell extends ConsumerStatefulWidget {
           ),
         ),
       );
+
+  /// The scrim behind the phone drawer: the floating rail's on Liquid Glass,
+  /// where the drawer floats like the rail, and Material's default (null)
+  /// elsewhere.
+  ///
+  /// Public and `@visibleForTesting` for the reason [dockChrome] is.
+  @visibleForTesting
+  static Color? drawerScrimColor(BuildContext context) =>
+      LiquidGlassSupport.available ? FloatingRail.scrimColor(context) : null;
 
   /// The desktop branch's layers: the rail footprint reporter, the content
   /// column (full width, publishing [contentLeft] plus the safe area as
@@ -870,6 +880,7 @@ class _AppShellState extends ConsumerState<AppShell>
           key: AppShell.scaffoldKey,
           backgroundColor: Colors.transparent,
           extendBody: true,
+          drawerScrimColor: AppShell.drawerScrimColor(context),
           onDrawerChanged: (isOpen) {
             if (!mounted) return;
             setState(() => _drawerOpen = isOpen);
