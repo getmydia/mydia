@@ -82,6 +82,9 @@ Future<PickerChoice?> showSourcePicker(
   }
   final box = anchorContext.findRenderObject()! as RenderBox;
   final anchor = box.localToGlobal(Offset.zero) & box.size;
+  // Once, here: the transition runs through the exit animation too, when
+  // the anchor may already be inactive.
+  final emergenceAlignment = glassEmergenceAlignment(anchorContext);
   return showGeneralDialog<PickerChoice>(
     context: anchorContext,
     barrierDismissible: true,
@@ -92,7 +95,7 @@ Future<PickerChoice?> showSourcePicker(
     pageBuilder: (_, __, ___) => _Popover(anchor: anchor, child: list),
     transitionBuilder: (context, animation, __, child) => glassEmergence(
       animation: animation,
-      alignment: glassEmergenceAlignment(anchorContext),
+      alignment: emergenceAlignment,
       reduceMotion: ReducedMotion.of(context),
       child: child,
     ),

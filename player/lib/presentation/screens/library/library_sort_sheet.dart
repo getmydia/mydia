@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../../core/theme/palette.dart';
 import 'library_sort.dart';
 
@@ -14,11 +15,17 @@ class LibrarySortSheet extends StatelessWidget {
     final palette = context.palette;
     final directionEnabled = currentSort.field.supportsDirection;
 
+    // On Apple the sheet sits on glass from showGlassSheet; an opaque fill
+    // here would hide it.
+    final onGlass = LiquidGlassSupport.platformEligible;
     return Container(
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      decoration: onGlass
+          ? null
+          : BoxDecoration(
+              color: palette.surface,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
