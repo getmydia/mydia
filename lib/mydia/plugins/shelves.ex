@@ -104,7 +104,14 @@ defmodule Mydia.Plugins.Shelves do
   def list_for(%User{} = user, placement, now \\ DateTime.utc_now()) do
     for %Declared{} = declared <- declared(placement) do
       shelf = ensure_shelf(declared, user)
-      %View{declared: declared, shelf: shelf, items: items(shelf), stale?: stale?(shelf, now)}
+
+      %View{
+        declared: declared,
+        shelf: shelf,
+        items: items(shelf),
+        stale?: stale?(shelf, now),
+        added: added_item_keys(shelf)
+      }
     end
   end
 

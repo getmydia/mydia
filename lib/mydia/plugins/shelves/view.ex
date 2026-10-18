@@ -6,12 +6,13 @@ defmodule Mydia.Plugins.Shelves.View do
   alias Mydia.Plugins.Shelves.Declared
 
   @enforce_keys [:declared, :shelf, :items, :stale?]
-  defstruct [:declared, :shelf, :items, :stale?]
+  defstruct [:declared, :shelf, :items, :stale?, added: MapSet.new()]
 
   @type t :: %__MODULE__{
           declared: Declared.t(),
           shelf: Shelf.t(),
           items: [ShelfItem.t()],
-          stale?: boolean()
+          stale?: boolean(),
+          added: MapSet.t()
         }
 end

@@ -183,6 +183,17 @@
           entries={@recently_added}
         />
       <% :shelves -> %>
+        <div :if={@undo_shelf_item} id="shelf-undo-bar" role="status" class="alert mb-3 w-fit">
+          <span>{@undo_shelf_message}</span>
+          <button
+            id="shelf-undo"
+            type="button"
+            phx-click="undo_shelf_rating"
+            class="btn btn-sm btn-ghost"
+          >
+            Undo
+          </button>
+        </div>
         <ShelfComponents.shelf_rail
           :for={rail <- @shelves}
           rail={rail}

@@ -5,7 +5,7 @@ defmodule MydiaWeb.DashboardLive.ShelfRail do
   Cards are `Mydia.Metadata.Structs.SearchResult`s, the shape every other rail
   on the page uses, so they work with `trending_card/1`, the detail modal and
   the add and request flows unchanged. Each also carries `:reason` and
-  `:shelf_item_id`.
+  `:shelf_item_id` and `:shelf_added?` (the user added the title from this shelf).
   """
 
   alias Mydia.Metadata.Structs.SearchResult
@@ -22,11 +22,12 @@ defmodule MydiaWeb.DashboardLive.ShelfRail do
   @doc "Builds one rail per shelf that has items. A shelf with none yields no rail."
   @spec build([View.t()], map(), map()) :: [t()]
   def build(views, library_status_map, request_status_map) do
-    for %View{declared: declared, items: [_ | _] = items} <- views do
+    for %View{declared: declared, items: [_ | _] = items, added: added} <- views do
       %__MODULE__{
         id: "shelf-#{declared.slug}-#{declared.key}",
         title: declared.title,
-        items: items |> Enum.map(&card/1) |> enrich(library_status_map, request_status_map)
+        items:
+          items |> Enum.map(&card(&1, added)) |> enrich(library_status_map, request_status_map)
       }
     end
   end
@@ -43,7 +44,7 @@ defmodule MydiaWeb.DashboardLive.ShelfRail do
   @spec items([t()]) :: [map()]
   def items(rails), do: Enum.flat_map(rails, & &1.items)
 
-  defp card(%ShelfItem{} = item) do
+  defp card(%ShelfItem{} = item, added) do
     Map.merge(
       %SearchResult{
         provider_id: to_string(item.provider_id),
@@ -53,7 +54,11 @@ defmodule MydiaWeb.DashboardLive.ShelfRail do
         year: item.year,
         poster_path: item.poster_path
       },
-      %{reason: item.reason, shelf_item_id: item.id}
+      %{
+        reason: item.reason,
+        shelf_item_id: item.id,
+        shelf_added?: MapSet.member?(added, {item.media_type, item.provider, item.provider_id})
+      }
     )
   end
 

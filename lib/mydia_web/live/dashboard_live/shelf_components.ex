@@ -1,5 +1,5 @@
 defmodule MydiaWeb.DashboardLive.ShelfComponents do
-  @moduledoc "The Home rail for a plugin shelf: cards with a reason and a dismiss control."
+  @moduledoc "The Home rail for a plugin shelf: cards with a reason and thumbs."
   use MydiaWeb, :html
 
   import MydiaWeb.DiscoverComponents, only: [trending_card: 1]
@@ -38,19 +38,43 @@ defmodule MydiaWeb.DashboardLive.ShelfComponents do
             poster_size="w342"
           />
           <%!-- Three lines are always reserved (3 x 1.375 x 0.75rem) so the
-                buttons line up whatever the reason length, or without one. --%>
+                thumbs line up whatever the reason length, or without one. --%>
           <p class="mt-2 h-[3.0938rem] overflow-hidden text-xs leading-snug text-base-content/70 line-clamp-3">
             {item.reason}
           </p>
-          <button
-            type="button"
-            id={"shelf-dismiss-#{item.shelf_item_id}"}
-            phx-click="dismiss_shelf_item"
-            phx-value-id={item.shelf_item_id}
-            class="btn btn-ghost btn-xs mt-1 w-full text-base-content/60 transition-colors hover:text-base-content"
+          <p
+            :if={item.shelf_added?}
+            id={"shelf-noted-#{item.shelf_item_id}"}
+            class="mt-1 h-6 flex items-center justify-center gap-1 text-xs text-success"
           >
-            Not interested
-          </button>
+            <.icon name="hero-hand-thumb-up-mini" class="w-4 h-4" /> Good pick, noted
+          </p>
+          <div :if={!item.shelf_added?} class="join w-full mt-1">
+            <button
+              type="button"
+              id={"shelf-up-#{item.shelf_item_id}"}
+              phx-click="rate_shelf_item"
+              phx-value-id={item.shelf_item_id}
+              phx-value-rating="up"
+              title="Seen it, liked it"
+              aria-label="Seen it, liked it"
+              class="btn btn-ghost btn-xs join-item flex-1 text-base-content/60 transition-colors hover:text-success"
+            >
+              <.icon name="hero-hand-thumb-up" class="w-4 h-4" /> Seen it
+            </button>
+            <button
+              type="button"
+              id={"shelf-down-#{item.shelf_item_id}"}
+              phx-click="rate_shelf_item"
+              phx-value-id={item.shelf_item_id}
+              phx-value-rating="down"
+              title="Not for me"
+              aria-label="Not for me"
+              class="btn btn-ghost btn-xs join-item flex-1 text-base-content/60 transition-colors hover:text-error"
+            >
+              <.icon name="hero-hand-thumb-down" class="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </.poster_rail>
     </div>
