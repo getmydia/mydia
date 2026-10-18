@@ -101,3 +101,40 @@ pixels: set `LiquidGlassSupport.debugOverride = true` to select the recipe
 `LiquidGlassSupport.debugPlatformOverride` to choose glass or Material
 controls. Reset both in `tearDown`. `liquid_glass_legibility_test.dart`
 computes text and icon contrast from the tokens.
+
+## Controls
+
+The control layer is a small set of helpers under
+`lib/presentation/widgets/glass/` (plus `PrimaryPlayButton`). Each one
+renders glass on iOS and macOS, gated on `LiquidGlassSupport.platformEligible`,
+and falls back to the widget the call site used before everywhere else.
+
+| Control | Use | Off iOS and macOS |
+| --- | --- | --- |
+| `GlassIconButton` | Floating back and cast buttons over the detail hero | `IconButton` |
+| `PrimaryPlayButton` | Play and Resume: a white glass capsule | Solid white pill |
+| `GlassChip` | Sort and filter chips; `chipKey` keys the inner chip so tests can read it | `ChoiceChip`, or `FilterChip` with `multiSelect` |
+| `GlassDialog` | Every in-app dialog | `AlertDialog` |
+| `showGlassSheet` | Every in-app bottom sheet | `showModalBottomSheet` with the caller's arguments |
+| `GlassPopoverSurface` | The source picker popover | Elevated Material card |
+
+Glass controls wrap `GlassInteraction`, which supplies the press swell and
+the macOS hover highlight. Dialogs, sheets and popovers grow from the control
+that opened them through `glassEmergence`: a scale from 0.9 plus a fade, or
+the fade alone when Reduce Motion is on.
+
+Content buttons (`FilledButton`, `OutlinedButton` and the like) are capsules
+with no ripple on Apple platforms. `AppTheme.build` sets that, so call sites
+do nothing.
+
+A widget shown inside a sheet must not paint its own opaque root surface on
+Apple, or it hides the glass behind it. `FilterEditorSheet` and
+`LibrarySortSheet` switch on `LiquidGlassSupport.platformEligible` and drop
+their background there.
+
+Two guard tests keep new code on the helpers.
+`glass_dialog_call_sites_test.dart` fails on any `AlertDialog(` outside
+`GlassDialog`, and `glass_sheet_call_sites_test.dart` fails on any
+`showModalBottomSheet<` outside `showGlassSheet`. Each has an allowlist for
+the exceptions: the player-screen dialog (`resume_dialog.dart`), and the OSD
+and player-opened sheets (`osd_sheet.dart`, `quality_selector.dart`).
