@@ -84,23 +84,6 @@ void main() {
         expect(
             contrastRatio(palette.textPrimary, bg), greaterThanOrEqualTo(4.5));
       });
-
-      test('accent Play label clears 4.5:1 over white and black', () {
-        final accent = accentGlassTint(palette.primary);
-        final overWhite = _over(
-            accent,
-            liquidAdaptiveAlpha(
-                base: DepthTokens.liquidAccentTintOpacity,
-                max: DepthTokens.liquidAccentAdaptiveMax,
-                backdropLuma: 1.0));
-        final overBlack = Color.alphaBlend(
-            accent.withValues(alpha: DepthTokens.liquidAccentTintOpacity),
-            const Color(0xFF000000));
-        expect(
-            contrastRatio(Colors.white, overWhite), greaterThanOrEqualTo(4.5));
-        expect(
-            contrastRatio(Colors.white, overBlack), greaterThanOrEqualTo(4.5));
-      });
     });
   }
 
@@ -154,19 +137,6 @@ void main() {
               max: DepthTokens.liquidControlAdaptiveMax,
               backdropLuma: v);
           final bg = _overGrey(tint.surface, alpha, v);
-          expect(contrastRatio(Colors.white, bg), greaterThanOrEqualTo(4.5),
-              reason: 'label at grey $v');
-        }
-      });
-
-      test('accent Play label clears 4.5:1 at every grey', () {
-        final accent = accentGlassTint(palette.primary);
-        for (final v in greys) {
-          final alpha = liquidAdaptiveAlpha(
-              base: DepthTokens.liquidAccentTintOpacity,
-              max: DepthTokens.liquidAccentAdaptiveMax,
-              backdropLuma: v);
-          final bg = _overGrey(accent, alpha, v);
           expect(contrastRatio(Colors.white, bg), greaterThanOrEqualTo(4.5),
               reason: 'label at grey $v');
         }

@@ -294,10 +294,6 @@ abstract final class DepthTokens {
   static const double liquidModalAdaptiveMax = 0.85;
   static const double liquidControlAdaptiveMax = 0.65;
 
-  /// The primary Play button's accent glass.
-  static const double liquidAccentTintOpacity = 0.55;
-  static const double liquidAccentAdaptiveMax = 0.9;
-
   /// The toolbar's scroll edge band: a plain blur under a ground gradient,
   /// opaque enough for the title at the top, clearer where the chips sit.
   static const double liquidScrollEdgeBlurSigma = 20.0;

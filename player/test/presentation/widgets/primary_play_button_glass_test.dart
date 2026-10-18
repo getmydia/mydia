@@ -16,7 +16,7 @@ Widget _host(VoidCallback? onPressed) => MaterialApp(
 void main() {
   tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
 
-  testWidgets('iOS and macOS: an accent glass capsule that plays',
+  testWidgets('iOS and macOS: a neutral glass capsule that plays',
       (tester) async {
     LiquidGlassSupport.debugPlatformOverride = true;
     var taps = 0;
@@ -26,7 +26,8 @@ void main() {
     expect(find.byKey(PrimaryPlayButton.pillKey), findsOneWidget);
     final glass =
         tester.widget<GlassSurface>(find.byKey(PrimaryPlayButton.pillKey));
-    expect(glass.liquidAdaptiveMax, DepthTokens.liquidAccentAdaptiveMax);
+    expect(glass.liquidAdaptiveMax, DepthTokens.liquidControlAdaptiveMax);
+    expect(glass.liquidTintOpacity, DepthTokens.liquidControlTintOpacity);
     expect(tester.widget<Icon>(find.byIcon(Icons.play_arrow_rounded)).color,
         Colors.white);
     expect(tester.widget<Text>(find.text('Play')).style?.color, Colors.white);

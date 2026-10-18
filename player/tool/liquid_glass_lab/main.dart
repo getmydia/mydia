@@ -27,7 +27,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:player/core/theme/depth_tokens.dart';
-import 'package:player/core/theme/liquid_glass/liquid_glass_adaptive.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 
@@ -172,9 +171,9 @@ class _LabState extends State<_Lab> {
                 left: 190,
                 width: 140,
                 height: 48,
-                child: _glass(24, accentGlassTint(const Color(0xFF0A84FF)),
-                    DepthTokens.liquidAccentTintOpacity,
-                    adaptiveMax: DepthTokens.liquidAccentAdaptiveMax,
+                child: _glass(24, const Color(0xFF101014),
+                    DepthTokens.liquidControlTintOpacity,
+                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax,
                     child: _label(Icons.play_arrow_rounded, 'Play')),
               ),
               // The app bar's scroll edge band, as `GlassSurface._scrollEdge`

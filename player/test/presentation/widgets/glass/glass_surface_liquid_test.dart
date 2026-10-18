@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/liquid_glass/glass_accessibility.dart';
-import 'package:player/core/theme/liquid_glass/liquid_glass_adaptive.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -103,21 +102,6 @@ void main() {
         child: _box,
       )));
       expect(filterOf(tester).adaptiveTintMax, isNull);
-    });
-
-    testWidgets('accent control uses the accent glass tint', (tester) async {
-      const accent = Color(0xFF0A84FF);
-      await tester.pumpWidget(_host(GlassSurface.control(
-        borderRadius: BorderRadius.circular(24),
-        accentColor: accent,
-        child: _box,
-      )));
-      final f = filterOf(tester);
-      expect(
-          f.tint,
-          accentGlassTint(accent)
-              .withValues(alpha: DepthTokens.liquidAccentTintOpacity));
-      expect(f.adaptiveTintMax, DepthTokens.liquidAccentAdaptiveMax);
     });
 
     testWidgets('control paints the control shadow', (tester) async {
@@ -249,25 +233,6 @@ void main() {
       await tester.pumpWidget(_host(const GlassSurface.appBar(child: _box)));
       expect(find.byType(LiquidGlassFilter), findsNothing);
       expect(find.byType(BackdropFilter), findsOneWidget);
-    });
-
-    testWidgets('accent control fills at the alpha its label is rated at',
-        (tester) async {
-      LiquidGlassSupport.debugOverride = false;
-      const accent = Color(0xFF0A84FF);
-      await tester.pumpWidget(_host(GlassSurface.control(
-        borderRadius: BorderRadius.circular(24),
-        accentColor: accent,
-        child: _box,
-      )));
-      final box = tester.widget<DecoratedBox>(find.descendant(
-        of: find.byType(BackdropFilter),
-        matching: find.byType(DecoratedBox),
-      ));
-      expect(
-          (box.decoration as BoxDecoration).color,
-          accentGlassTint(accent)
-              .withValues(alpha: DepthTokens.liquidAccentAdaptiveMax));
     });
 
     liquidVariants.forEach((name, surface) {

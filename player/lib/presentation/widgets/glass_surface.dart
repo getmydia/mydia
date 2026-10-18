@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../core/theme/depth_tokens.dart';
 import '../../core/theme/liquid_glass/glass_accessibility.dart';
-import '../../core/theme/liquid_glass/liquid_glass_adaptive.dart';
 import '../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../core/theme/palette.dart';
 import 'glass/liquid_glass_filter.dart';
@@ -192,53 +191,33 @@ class GlassSurface extends StatelessWidget {
         );
 
   /// A floating control: a circle or capsule over content (back, close,
-  /// cast; the primary Play pill with [prominentColor], or tinted by
-  /// [accentColor]). Casts [DepthTokens.liquidControlShadow]. Only used on
-  /// iOS and macOS; the control widgets render Material elsewhere.
+  /// cast, Play; the white prominent pill with [prominentColor]). Casts
+  /// [DepthTokens.liquidControlShadow]. Only used on iOS and macOS; the
+  /// control widgets render Material elsewhere.
   GlassSurface.control({
     Key? key,
     required BorderRadius borderRadius,
     Color? prominentColor,
-    Color? accentColor,
     bool grouped = false,
     Widget? child,
   }) : this(
           key: key,
-          blurSigma: _controlBlurSigma(prominentColor, accentColor),
-          // Only the frosted fallback reads this alpha, and it cannot adapt,
-          // so it uses the alpha the white label is rated at.
-          fillColor: accentColor != null
-              ? accentGlassTint(accentColor)
-                  .withValues(alpha: DepthTokens.liquidAccentAdaptiveMax)
-              : prominentColor?.withValues(
-                  alpha: DepthTokens.liquidProminentTintOpacity),
-          tint: prominentColor == null && accentColor == null
-              ? GlassTint.surface
-              : null,
+          blurSigma: DepthTokens.blurChrome,
+          fillColor: prominentColor?.withValues(
+              alpha: DepthTokens.liquidProminentTintOpacity),
+          tint: prominentColor == null ? GlassTint.surface : null,
           tintOpacity: DepthTokens.liquidControlTintOpacity,
-          liquidTintOpacity: accentColor != null
-              ? DepthTokens.liquidAccentTintOpacity
-              : prominentColor != null
-                  ? DepthTokens.liquidProminentTintOpacity
-                  : DepthTokens.liquidControlTintOpacity,
-          liquidAdaptiveMax: accentColor != null
-              ? DepthTokens.liquidAccentAdaptiveMax
-              : prominentColor != null
-                  ? null
-                  : DepthTokens.liquidControlAdaptiveMax,
+          liquidTintOpacity: prominentColor != null
+              ? DepthTokens.liquidProminentTintOpacity
+              : DepthTokens.liquidControlTintOpacity,
+          liquidAdaptiveMax: prominentColor != null
+              ? null
+              : DepthTokens.liquidControlAdaptiveMax,
           shadows: DepthTokens.liquidControlShadow,
           borderRadius: borderRadius,
           grouped: grouped,
           child: child,
         );
-
-  /// The control blur sigma; also where the control's exclusive colour
-  /// arguments are asserted, since a redirecting constructor cannot assert.
-  static double _controlBlurSigma(Color? prominentColor, Color? accentColor) {
-    assert(prominentColor == null || accentColor == null,
-        'pass prominentColor or accentColor, not both');
-    return DepthTokens.blurChrome;
-  }
 
   /// Media-card hover overlay glass: hover blur sigma, vertical black gradient
   /// (0.3 -> 0.6), radius 12.
