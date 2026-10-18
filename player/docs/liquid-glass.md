@@ -40,6 +40,12 @@ backdrop passes. The detail action row and the home hero each share one blur pas
 `BackdropGroup`. `GlassSurface.faux` and
 `.hoverOverlay` never take the Liquid Glass path.
 
+The phone drawer follows the floating rail on Liquid Glass: it sits
+`Breakpoints.railInset` in from the leading, top and bottom edges (plus the
+safe area), rounds all four corners at `AppTheme.radiusRail`, and carries the
+rail's rim, shadow and scrim (`FloatingRail.scrimColor`). Without the shader
+it stays a Material drawer flush to the edge.
+
 ## When it runs
 
 `LiquidGlassSupport.initialize()` runs once at startup. It loads the shader
