@@ -2,8 +2,10 @@
 
 The floating control layer on iOS and macOS uses a Liquid Glass material
 drawn by our own shader, `shaders/liquid_glass.frag`. It bends the backdrop
-along the edge, frosts and saturates it, darkens the outer edge and lights a
-specular rim, tuned to the iOS 27 look. Other platforms keep the frosted
+along the edge, frosts and saturates it, tints it adaptively (lighter over
+dark content, stronger over bright content), darkens the outer edge over
+`liquidEdgeShadeWidth`, adds a soft inner glow and a specular rim, and
+blooms a press glow under the finger, tuned to the iOS 27 look. Other platforms keep the frosted
 `GlassSurface` recipes, and the playback OSD (`GlassSurface.osd`) never uses
 it.
 
@@ -13,6 +15,7 @@ it.
 | Tokens | `DepthTokens.liquid*` in `lib/core/theme/depth_tokens.dart` |
 | Startup gate | `lib/core/theme/liquid_glass/liquid_glass_support.dart` |
 | Uniforms | `lib/core/theme/liquid_glass/liquid_glass_uniforms.dart` |
+| Adaptive tint maths, accent tint | `lib/core/theme/liquid_glass/liquid_glass_adaptive.dart` |
 | Render object | `lib/presentation/widgets/glass/liquid_glass_filter.dart` |
 | Press and hover | `lib/presentation/widgets/glass/glass_interaction.dart`, `glass_pointer.dart` |
 | Accessibility flags | `lib/core/theme/liquid_glass/glass_accessibility.dart` |
@@ -44,6 +47,17 @@ Flutter does not expose Reduce Transparency, so the Runners report both
 flags over `mydia/native-tab-bar` (`glassAccessibility`,
 `glassAccessibilityChanged`).
 
+## The app bar's scroll edge
+
+`GlassSurface.appBar` is not a full glass surface. It is a scroll edge band:
+a backdrop blur (`liquidScrollEdgeBlurSigma`) under a vertical gradient of
+the ground colour, `liquidScrollEdgeTopOpacity` at the top and over the first
+60% of the height, fading to `liquidScrollEdgeBottomOpacity` at the bottom,
+with no rim and no refraction. Content scrolls under it and dissolves into
+the bar instead of meeting a hard edge. The chips and buttons placed on it
+are ordinary glass controls. Reduce Transparency still gets the opaque fill,
+and Increase Contrast adds `liquidHighContrastTintBoost` to both ends.
+
 ## Two backdrop passes
 
 `RenderLiquidGlass` pushes two nested `BackdropFilterLayer`s. The outer one
@@ -62,11 +76,29 @@ Flutter upgrade.
 
 ## Tint and legibility
 
-The chrome and modal tints are `DepthTokens.liquidChromeTintOpacity` and
-`liquidModalTintOpacity`, both 0.80. They are bounded below by
-`liquid_glass_legibility_test.dart` (secondary text must keep 3:1 over
-white), so a clearer look has to come from somewhere other than a lower
-tint.
+Each role has a base tint and an adaptive maximum. The shader measures the
+luma of the blurred backdrop and moves the tint alpha from the base (dark
+content) to the maximum (bright content) with a smoothstep between
+`liquidAdaptiveLumaLow` and `liquidAdaptiveLumaHigh`. A surface that passes
+`adaptiveTintMax` null keeps a fixed tint.
+
+| Role | Base | Adaptive max |
+| --- | --- | --- |
+| Chrome | `liquidChromeTintOpacity` 0.5 | `liquidChromeAdaptiveMax` 0.85 |
+| Modal | `liquidModalTintOpacity` 0.55 | `liquidModalAdaptiveMax` 0.85 |
+| Control | `liquidControlTintOpacity` 0.3 | `liquidControlAdaptiveMax` 0.65 |
+| Accent | `liquidAccentTintOpacity` 0.55 | `liquidAccentAdaptiveMax` 0.9 |
+
+Legibility is bounded at the maximum, because that is what sits under the
+text over white content. `liquidAdaptiveAlpha` in
+`liquid_glass_adaptive.dart` reproduces the shader's curve, and
+`liquid_glass_legibility_test.dart` uses it to require secondary text 3:1
+and a white label 4.5:1 over a white backdrop. Change the curve in the
+shader and in `liquidAdaptiveAlpha` together.
+
+The accent tint comes from `accentGlassTint(color)`, which darkens the accent
+until a white label keeps 4.5:1 at `liquidAccentAdaptiveMax` over white; an
+accent that already clears it is returned unchanged.
 
 ## Running the lab
 
@@ -82,6 +114,7 @@ The player app does not build for Linux desktop without libsecret
 scratch Flutter project. Copy the lab in as the scratch project's
 `lib/main.dart` (so plain `flutter run` picks it), plus `depth_tokens.dart`,
 `liquid_glass_support.dart`, `liquid_glass_uniforms.dart`,
+`liquid_glass_adaptive.dart`, `contrast.dart`,
 `liquid_glass_filter.dart` and `glass_pointer.dart`, rewrite their imports,
 and register the shader under `flutter: shaders:`. Headless, from the
 scratch project:
@@ -90,7 +123,8 @@ scratch project:
       flutter run -d linux --dart-define=MYDIA_LIQUID_GLASS=true \
       --dart-define=LAB_SNAPSHOT=/tmp/lab.png
 
-`GDK_SCALE=2` gives a 2x device pixel ratio. Add `LAB_GRID=true` for the
+The lab also needs `liquid_glass_adaptive.dart` and `contrast.dart`, now that
+it uses `accentGlassTint`. `GDK_SCALE=2` gives a 2x device pixel ratio. Add `LAB_GRID=true` for the
 grid and `LAB_SCROLL=<px>` to scroll the backdrop first.
 
 ## Tests
@@ -112,11 +146,16 @@ and falls back to the widget the call site used before everywhere else.
 | Control | Use | Off iOS and macOS |
 | --- | --- | --- |
 | `GlassIconButton` | Floating back and cast buttons over the detail hero | `IconButton` |
-| `PrimaryPlayButton` | Play and Resume: a white glass capsule | Solid white pill |
+| `PrimaryPlayButton` | Play and Resume: an accent glass capsule (`accentGlassTint`, accent tint pair) with a white label | Solid white pill |
 | `GlassChip` | Sort and filter chips; `chipKey` keys the inner chip so tests can read it | `ChoiceChip`, or `FilterChip` with `multiSelect` |
 | `GlassDialog` | Every in-app dialog | `AlertDialog` |
 | `showGlassSheet` | Every in-app bottom sheet | `showModalBottomSheet` with the caller's arguments |
 | `GlassPopoverSurface` | The source picker popover | Elevated Material card |
+
+Control-role glass (`GlassSurface.control`) casts a soft drop shadow,
+`liquidControlShadow`, so it lifts off the content behind it.
+`GlassSurface.control(accentColor:)` tints with the accent instead of the
+ground colour.
 
 Glass controls wrap `GlassInteraction`, which supplies the press swell and
 the macOS hover highlight. Sheets and the source picker popover use
