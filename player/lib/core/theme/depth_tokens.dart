@@ -264,8 +264,13 @@ abstract final class DepthTokens {
 
   /// Backdrop luma range over which the tint rises from its base alpha to
   /// its adaptive max (smoothstep).
-  static const double liquidAdaptiveLumaLow = 0.55;
+  static const double liquidAdaptiveLumaLow = 0.35;
   static const double liquidAdaptiveLumaHigh = 0.9;
+
+  /// Spacing of the local luma taps the adaptive tint reads (logical px).
+  /// The shader takes the brightest of a 3x3 grid this far apart, centred
+  /// on each pixel.
+  static const double liquidAdaptiveRadius = 12.0;
 
   /// Glow under the finger while pressed, and its radius as a fraction of
   /// the surface's shorter side.
@@ -278,7 +283,9 @@ abstract final class DepthTokens {
   // Base tint per role (over a dark backdrop) and the adaptive max the
   // shader raises it to over a bright one. The adaptive max must clear
   // [glassLegibilityFloor]; `liquid_glass_legibility_test.dart` checks text
-  // and icon contrast at the max over pure white for every preset.
+  // and icon contrast for every preset over grey backdrops from black to
+  // white in steps of 0.05, since the tint is lowest at mid luma. The luma
+  // is the brightest nearby, so it is the worst case under a glyph.
   static const double liquidChromeTintOpacity = 0.5;
   static const double liquidModalTintOpacity = 0.55;
   static const double liquidControlTintOpacity = 0.3;

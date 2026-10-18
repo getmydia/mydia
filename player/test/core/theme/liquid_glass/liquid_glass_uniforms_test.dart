@@ -39,7 +39,7 @@ void main() {
       glow: 0.3,
     );
     final floats = u.toFloats(const Size(100, 40));
-    expect(floats, hasLength(24));
+    expect(floats, hasLength(25));
     expect(floats.sublist(17), [
       DepthTokens.liquidEdgeShadeWidth * 2,
       DepthTokens.liquidInnerGlow,
@@ -48,6 +48,7 @@ void main() {
       DepthTokens.liquidAdaptiveLumaHigh,
       0.3,
       DepthTokens.liquidPressGlowRadius,
+      DepthTokens.liquidAdaptiveRadius * 2, // uAdaptRadius
     ]);
   });
 

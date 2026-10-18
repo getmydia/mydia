@@ -205,9 +205,11 @@ class GlassSurface extends StatelessWidget {
   }) : this(
           key: key,
           blurSigma: _controlBlurSigma(prominentColor, accentColor),
+          // Only the frosted fallback reads this alpha, and it cannot adapt,
+          // so it uses the alpha the white label is rated at.
           fillColor: accentColor != null
               ? accentGlassTint(accentColor)
-                  .withValues(alpha: DepthTokens.liquidAccentTintOpacity)
+                  .withValues(alpha: DepthTokens.liquidAccentAdaptiveMax)
               : prominentColor?.withValues(
                   alpha: DepthTokens.liquidProminentTintOpacity),
           tint: prominentColor == null && accentColor == null

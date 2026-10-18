@@ -76,9 +76,11 @@ Flutter upgrade.
 
 ## Tint and legibility
 
-Each role has a base tint and an adaptive maximum. The shader measures the
-luma of the blurred backdrop and moves the tint alpha from the base (dark
-content) to the maximum (bright content) with a smoothstep between
+Each role has a base tint and an adaptive maximum. For each pixel the shader
+reads the brightest luma of the blurred backdrop in a 3x3 grid centred on it,
+`liquidAdaptiveRadius` apart. It takes the maximum, not the mean, so a bright
+patch under a glyph always raises the tint there. The tint alpha then moves
+from the base (dark content) to the maximum (bright content) with a smoothstep between
 `liquidAdaptiveLumaLow` and `liquidAdaptiveLumaHigh`. A surface that passes
 `adaptiveTintMax` null keeps a fixed tint.
 
@@ -89,12 +91,20 @@ content) to the maximum (bright content) with a smoothstep between
 | Control | `liquidControlTintOpacity` 0.3 | `liquidControlAdaptiveMax` 0.65 |
 | Accent | `liquidAccentTintOpacity` 0.55 | `liquidAccentAdaptiveMax` 0.9 |
 
-Legibility is bounded at the maximum, because that is what sits under the
-text over white content. `liquidAdaptiveAlpha` in
-`liquid_glass_adaptive.dart` reproduces the shader's curve, and
-`liquid_glass_legibility_test.dart` uses it to require secondary text 3:1
-and a white label 4.5:1 over a white backdrop. Change the curve in the
-shader and in `liquidAdaptiveAlpha` together.
+The tint is lowest at mid luma, so white is not the worst backdrop: the
+contrast bottoms out where the ramp has only just started. `liquidAdaptiveAlpha`
+in `liquid_glass_adaptive.dart` reproduces the shader's curve, and
+`liquid_glass_legibility_test.dart` uses it to sweep grey backdrops from 0 to 1
+in steps of 0.05 for every preset and role (text 4.5:1, secondary text and
+control icons 3:1, the Play label 4.5:1). A grey's shader luma equals its
+value, and the brightest nearby luma is what the curve takes, so the sweep is
+the worst case under a glyph. `liquidAdaptiveLumaLow` is 0.35 because the
+sweep failed at 0.55 (secondary text 2.6 to 2.9:1 and the Play label 4.1 to
+4.3:1 near luma 0.6 to 0.7). Change the curve in the shader and in
+`liquidAdaptiveAlpha` together.
+
+The frosted fallback of the accent control cannot adapt, so it fills at
+`liquidAccentAdaptiveMax`, the alpha the white label is rated at.
 
 The accent tint comes from `accentGlassTint(color)`, which darkens the accent
 until a white label keeps 4.5:1 at `liquidAccentAdaptiveMax` over white; an

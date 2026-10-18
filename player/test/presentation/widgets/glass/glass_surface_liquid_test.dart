@@ -250,6 +250,25 @@ void main() {
       expect(find.byType(BackdropFilter), findsOneWidget);
     });
 
+    testWidgets('accent control fills at the alpha its label is rated at',
+        (tester) async {
+      LiquidGlassSupport.debugOverride = false;
+      const accent = Color(0xFF0A84FF);
+      await tester.pumpWidget(_host(GlassSurface.control(
+        borderRadius: BorderRadius.circular(24),
+        accentColor: accent,
+        child: _box,
+      )));
+      final box = tester.widget<DecoratedBox>(find.descendant(
+        of: find.byType(BackdropFilter),
+        matching: find.byType(DecoratedBox),
+      ));
+      expect(
+          (box.decoration as BoxDecoration).color,
+          accentGlassTint(accent)
+              .withValues(alpha: DepthTokens.liquidAccentAdaptiveMax));
+    });
+
     liquidVariants.forEach((name, surface) {
       testWidgets('$name keeps its frosted recipe', (tester) async {
         await tester.pumpWidget(_host(surface));

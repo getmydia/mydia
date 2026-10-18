@@ -6,7 +6,7 @@
 // with the surface centred in it.
 //
 // Effects: refraction with dispersion, adaptive tint (the tint alpha rises
-// over bright backdrops), darkened edge, specular rim, inner glow across the
+// with the brightest backdrop luma near each pixel), darkened edge, specular rim, inner glow across the
 // lit edge band, and a press glow centred on the light.
 //
 // Refraction maths adapted from liquid_glass_renderer
@@ -41,6 +41,7 @@ uniform float uLumaLow;     // backdrop luma where adaptation starts
 uniform float uLumaHigh;    // backdrop luma where it reaches uAdaptiveMax
 uniform float uGlow;        // press glow strength
 uniform float uGlowRadius;  // press glow radius, fraction of the short side
+uniform float uAdaptRadius; // physical px
 
 uniform sampler2D uTexture;
 
@@ -65,17 +66,19 @@ vec3 sampleAt(vec2 px) {
   return texture(uTexture, clamped / uSize).rgb;
 }
 
-// Mean luma of the unbent backdrop under the surface, from a 3x3 grid.
-float backdropLuma(vec2 origin) {
-  float sum = 0.0;
-  for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 3; j++) {
-      vec2 f = vec2(0.2 + 0.3 * float(i), 0.2 + 0.3 * float(j));
-      sum += dot(sampleAt(origin + uSurface * f),
-                 vec3(0.2126, 0.7152, 0.0722));
+// Brightest luma of the unbent backdrop near this fragment: a 3x3 grid
+// uAdaptRadius apart, centred on it. The max, not the mean, so a bright
+// patch under a glyph always raises the tint there.
+float backdropLuma(vec2 frag) {
+  float brightest = 0.0;
+  for (int i = -1; i <= 1; i++) {
+    for (int j = -1; j <= 1; j++) {
+      vec2 offset = vec2(float(i), float(j)) * uAdaptRadius;
+      brightest = max(brightest, dot(sampleAt(frag + offset),
+                                     vec3(0.2126, 0.7152, 0.0722)));
     }
   }
-  return sum / 9.0;
+  return brightest;
 }
 
 void main() {
@@ -104,7 +107,7 @@ void main() {
   // Adaptive tint: the base alpha over dark content, rising to uAdaptiveMax
   // over bright content so the label keeps its contrast (mirrored by
   // liquidAdaptiveAlpha in Dart).
-  float adapt = smoothstep(uLumaLow, uLumaHigh, backdropLuma(origin));
+  float adapt = smoothstep(uLumaLow, uLumaHigh, backdropLuma(frag));
   float tintAlpha = mix(uTint.a, max(uAdaptiveMax, uTint.a), adapt);
   color = mix(color, uTint.rgb, tintAlpha);
 

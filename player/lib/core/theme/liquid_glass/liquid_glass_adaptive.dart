@@ -5,9 +5,9 @@ import 'package:flutter/painting.dart';
 import '../contrast.dart';
 import '../depth_tokens.dart';
 
-/// The tint alpha the Liquid Glass shader uses over a backdrop of
-/// [backdropLuma] (0..1): [base] over dark content, rising by smoothstep to
-/// [max] over bright content. Mirrors `liquid_glass.frag` exactly, so the
+/// The tint alpha the Liquid Glass shader uses at a pixel whose brightest
+/// nearby backdrop luma is [backdropLuma] (0..1): [base] over dark content,
+/// rising by smoothstep to [max] over bright content. Mirrors `liquid_glass.frag` exactly, so the
 /// legibility test checks the shader's own maths.
 double liquidAdaptiveAlpha({
   required double base,

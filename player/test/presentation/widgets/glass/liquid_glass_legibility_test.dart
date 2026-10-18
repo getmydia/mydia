@@ -21,6 +21,11 @@ const _white = Color(0xFFFFFFFF);
 Color _over(Color base, double alpha) =>
     Color.alphaBlend(base.withValues(alpha: alpha), _white);
 
+Color _grey(double v) => Color.from(alpha: 1, red: v, green: v, blue: v);
+
+Color _overGrey(Color base, double alpha, double v) =>
+    Color.alphaBlend(base.withValues(alpha: alpha), _grey(v));
+
 void main() {
   final roles = <String, (Color Function(AmbientTintColors), double, double)>{
     'chrome (ground)': (
@@ -91,6 +96,62 @@ void main() {
             contrastRatio(Colors.white, overWhite), greaterThanOrEqualTo(4.5));
         expect(
             contrastRatio(Colors.white, overBlack), greaterThanOrEqualTo(4.5));
+      });
+    });
+  }
+
+  // The tint is lowest at mid luma, so a mid-grey backdrop can be worse than
+  // white. The shader's luma of a grey is its value (the Rec. 709 weights sum
+  // to 1), and it is the brightest luma near the pixel, so a grey sweep covers
+  // every uniform backdrop and the worst case under a glyph.
+  final greys = [for (var i = 0; i <= 20; i++) i * 0.05];
+
+  for (final preset in ThemePreset.values) {
+    final palette = preset.palette(systemAccent: Palettes.macosDefaultAccent);
+    final tint = AmbientTintColors.neutralFor(palette);
+
+    group('${preset.name} over grey backdrops', () {
+      roles.forEach((name, role) {
+        final (pick, base, max) = role;
+        test('$name: text 4.5:1 and secondary 3:1 at every grey', () {
+          for (final v in greys) {
+            final alpha =
+                liquidAdaptiveAlpha(base: base, max: max, backdropLuma: v);
+            final bg = _overGrey(pick(tint), alpha, v);
+            expect(contrastRatio(palette.textPrimary, bg),
+                greaterThanOrEqualTo(4.5),
+                reason: 'text at grey $v');
+            expect(contrastRatio(palette.textSecondary, bg),
+                greaterThanOrEqualTo(3.0),
+                reason: 'secondary at grey $v');
+          }
+        });
+      });
+
+      test('control: icons clear 3:1 at every grey', () {
+        for (final v in greys) {
+          final alpha = liquidAdaptiveAlpha(
+              base: DepthTokens.liquidControlTintOpacity,
+              max: DepthTokens.liquidControlAdaptiveMax,
+              backdropLuma: v);
+          final bg = _overGrey(tint.surface, alpha, v);
+          expect(
+              contrastRatio(palette.textPrimary, bg), greaterThanOrEqualTo(3.0),
+              reason: 'icon at grey $v');
+        }
+      });
+
+      test('accent Play label clears 4.5:1 at every grey', () {
+        final accent = accentGlassTint(palette.primary);
+        for (final v in greys) {
+          final alpha = liquidAdaptiveAlpha(
+              base: DepthTokens.liquidAccentTintOpacity,
+              max: DepthTokens.liquidAccentAdaptiveMax,
+              backdropLuma: v);
+          final bg = _overGrey(accent, alpha, v);
+          expect(contrastRatio(Colors.white, bg), greaterThanOrEqualTo(4.5),
+              reason: 'label at grey $v');
+        }
       });
     });
   }

@@ -69,6 +69,7 @@ class LiquidGlassUniforms {
       DepthTokens.liquidAdaptiveLumaHigh,
       glow,
       DepthTokens.liquidPressGlowRadius,
+      DepthTokens.liquidAdaptiveRadius * dpr,
     ];
   }
 
