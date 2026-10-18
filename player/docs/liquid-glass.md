@@ -36,8 +36,9 @@ artwork, and the capsule behind the selected season. Content stays solid:
 settings rows, inline buttons, switches, sliders, and anything repeated per
 item in a scrolling list. Per-card overlays and metadata chips stay solid
 because they repeat in scrolling lists and each glass surface costs two
-backdrop passes. The detail action row and the home hero each share one blur pass through
-`BackdropGroup`. `GlassSurface.faux` and
+backdrop passes. The detail action row and the home hero sit in a
+`BackdropGroup`, but only the frosted fallback shares its blur there (see
+below). `GlassSurface.faux` and
 `.hoverOverlay` never take the Liquid Glass path.
 
 ## When it runs
@@ -71,11 +72,20 @@ and Increase Contrast adds `liquidHighContrastTintBoost` to both ends.
 ## Two backdrop passes
 
 `RenderLiquidGlass` pushes two nested `BackdropFilterLayer`s. The outer one
-blurs and carries the `BackdropGroup` key, so grouped surfaces share it. The
-inner one runs `ImageFilter.shader` on the blurred result. Composing the two
-with `ImageFilter.compose` shifted the shader's coordinates (the rim landed
-inset on the right and bottom only), so they stay separate. Each surface
-costs two backdrop passes.
+blurs; the inner one runs `ImageFilter.shader` on the blurred result.
+Composing the two with `ImageFilter.compose` shifted the shader's
+coordinates (the rim landed inset on the right and bottom only), so they stay
+separate. Each surface costs two backdrop passes.
+
+The blur never takes the `BackdropGroup` key while the shader is loaded. A
+grouped blur reads the group's shared backdrop, and the lens nested in it
+then no longer finds the surface centred in its input. On an iPhone this
+washed grouped controls out to a flat light grey, drew a white half disc in
+one action circle, and left the highlights in place while the content
+scrolled. Ungrouped surfaces in the same scroll view rendered correctly.
+`flutter test` cannot render the lens, so `liquid_glass_filter_test.dart`
+checks the layer's key instead. The frosted fallback has no lens and still
+shares the group's pass.
 
 ## The shader's coordinate assumption
 
