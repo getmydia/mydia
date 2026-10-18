@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/nav/floating_rail.dart';
 
 Future<BuildContext> _context(WidgetTester tester,
-    {bool highContrast = false}) async {
+    {bool highContrast = false, bool liquid = true}) async {
   late BuildContext captured;
-  await tester.pumpWidget(MediaQuery(
-    data: MediaQueryData(highContrast: highContrast),
-    child: Builder(builder: (context) {
-      captured = context;
-      return const SizedBox();
-    }),
+  await tester.pumpWidget(MaterialApp(
+    theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
+    home: MediaQuery(
+      data: MediaQueryData(highContrast: highContrast),
+      child: Builder(builder: (context) {
+        captured = context;
+        return const SizedBox();
+      }),
+    ),
   ));
+  await tester.pumpAndSettle();
   return captured;
 }
 
@@ -38,5 +44,12 @@ void main() {
   testWidgets('the drawer keeps the Material scrim elsewhere', (tester) async {
     LiquidGlassSupport.debugOverride = false;
     expect(AppShell.drawerScrimColor(await _context(tester)), isNull);
+  });
+
+  testWidgets('the shader being available is not enough without the setting',
+      (tester) async {
+    LiquidGlassSupport.debugOverride = true;
+    expect(AppShell.drawerScrimColor(await _context(tester, liquid: false)),
+        isNull);
   });
 }

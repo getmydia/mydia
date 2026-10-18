@@ -25,6 +25,7 @@ import '../../core/router/page_cover_observer.dart';
 import '../../core/router/root_routes.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/depth_tokens.dart';
+import '../../core/theme/liquid_glass/glass_style.dart';
 import '../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../core/ui/reduced_motion.dart';
 import '../../core/playback/playback_progress_providers.dart';
@@ -183,7 +184,9 @@ class AppShell extends ConsumerStatefulWidget {
   /// Public and `@visibleForTesting` for the reason [dockChrome] is.
   @visibleForTesting
   static Color? drawerScrimColor(BuildContext context) =>
-      LiquidGlassSupport.available ? FloatingRail.scrimColor(context) : null;
+      GlassStyle.of(context) && LiquidGlassSupport.available
+          ? FloatingRail.scrimColor(context)
+          : null;
 
   /// The desktop branch's layers: the rail footprint reporter, the content
   /// column (full width, publishing [contentLeft] plus the safe area as
