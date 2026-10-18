@@ -24,7 +24,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias Mydia.Accounts.Authorization
   alias MydiaWeb.DashboardLive.Components
   alias MydiaWeb.DashboardLive.ShelfComponents
-  alias MydiaWeb.DashboardLive.ShelfRail
+  alias MydiaWeb.DashboardLive.{ShelfFeedback, ShelfRail}
   alias MydiaWeb.DashboardLive.HealthComponents
   alias MydiaWeb.DashboardLive.EditHomeComponents
   alias MydiaWeb.Live.Authorization, as: LiveAuthorization
@@ -95,9 +95,7 @@ defmodule MydiaWeb.DashboardLive.Index do
     |> assign(:regional_selected, nil)
     |> assign(:regional_status, :idle)
     |> assign(:regional_items, [])
-    |> assign(:shelves, [])
-    |> assign(:undo_shelf_item, nil)
-    |> assign(:undo_shelf_message, nil)
+    |> ShelfFeedback.init()
     |> assign(:pending_requests_count, socket.assigns[:pending_requests_count] || 0)
     |> assign(:clients_rollup, %Rollup{
       healthy: 0,
@@ -416,43 +414,10 @@ defmodule MydiaWeb.DashboardLive.Index do
     {:noreply, DetailModal.close(socket)}
   end
 
-  def handle_event("rate_shelf_item", %{"id" => item_id, "rating" => rating}, socket)
-      when is_binary(item_id) and rating in ["up", "down"] do
-    user = socket.assigns.current_user
-    rating_atom = if rating == "up", do: :up, else: :down
+  def handle_event("rate_shelf_item", params, socket),
+    do: {:noreply, ShelfFeedback.rate(socket, params)}
 
-    # An unknown or foreign id is ignored: the reload is the answer either way.
-    case Shelves.rate_item(user, item_id, rating_atom) do
-      {:ok, item} ->
-        {:noreply,
-         socket
-         |> assign(:undo_shelf_item, item)
-         |> assign(:undo_shelf_message, rated_message(rating, item.title))
-         |> close_details_for_shelf_item(item_id)
-         |> reload_shelves()}
-
-      {:error, :not_found} ->
-        {:noreply, reload_shelves(socket)}
-    end
-  end
-
-  def handle_event("rate_shelf_item", _params, socket), do: {:noreply, socket}
-
-  def handle_event("undo_shelf_rating", _params, socket) do
-    case socket.assigns.undo_shelf_item do
-      nil ->
-        {:noreply, socket}
-
-      item ->
-        Shelves.undo_rating(socket.assigns.current_user, item)
-
-        {:noreply,
-         socket
-         |> assign(:undo_shelf_item, nil)
-         |> assign(:undo_shelf_message, nil)
-         |> reload_shelves()}
-    end
-  end
+  def handle_event("undo_shelf_rating", _, socket), do: {:noreply, ShelfFeedback.undo(socket)}
 
   def handle_event("open_edit_home", _params, socket) do
     {:noreply, assign(socket, :editing_home, true)}
@@ -824,7 +789,7 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:trending_tv, trending_tv)
          |> assign(:regional_items, regional_items)
          |> reenrich_shelves()
-         |> record_shelf_add(ref, media_type)
+         |> ShelfFeedback.record_add(ref, media_type)
          |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
@@ -944,7 +909,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:trending_tv, trending_tv)
         |> assign(:regional_items, regional_items)
         |> reenrich_shelves()
-        |> record_shelf_add(Ref.from_search_result(item), media_type)
+        |> ShelfFeedback.record_add(Ref.from_search_result(item), media_type)
         |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
 
@@ -970,37 +935,6 @@ defmodule MydiaWeb.DashboardLive.Index do
   defp parse_event_media_type("movie"), do: {:ok, :movie}
   defp parse_event_media_type("tv_show"), do: {:ok, :tv_show}
   defp parse_event_media_type(_), do: :error
-
-  defp reload_shelves(socket),
-    do: assign_shelves(socket, Shelves.list_for(socket.assigns.current_user, :home))
-
-  defp rated_message("up", title), do: "Noted. #{title} won't be suggested again."
-  defp rated_message("down", title), do: "#{title} won't be suggested again."
-
-  # Rating from the details dialog removes the card the dialog was opened from.
-  defp close_details_for_shelf_item(socket, item_id) do
-    case socket.assigns.selected_item do
-      %{shelf_item_id: ^item_id} -> DetailModal.close(socket)
-      _ -> socket
-    end
-  end
-
-  # A successful add or request of a title that sits on a shelf is a good pick.
-  # Reloads so the card swaps its thumbs for the "Good pick, noted" line.
-  defp record_shelf_add(socket, ref, media_type) do
-    provider = Ref.provider(ref)
-    id = to_string(Ref.id(ref))
-
-    card =
-      Enum.find(ShelfRail.items(socket.assigns.shelves), fn card ->
-        card.provider == provider and card.provider_id == id and card.media_type == media_type
-      end)
-
-    case card && Shelves.record_added(socket.assigns.current_user, card.shelf_item_id) do
-      :ok -> reload_shelves(socket)
-      _ -> socket
-    end
-  end
 
   defp assign_shelves(socket, views) do
     assign(

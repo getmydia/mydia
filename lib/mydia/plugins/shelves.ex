@@ -390,17 +390,17 @@ defmodule Mydia.Plugins.Shelves do
   @spec rate_item(User.t(), String.t(), :up | :down) ::
           {:ok, ShelfItem.t()} | {:error, :not_found}
   def rate_item(%User{} = user, item_id, rating) when rating in [:up, :down] do
-    with {:ok, %ShelfItem{shelf: shelf} = item} <- owned_item(user, item_id) do
-      {:ok, _} =
-        Repo.transaction(fn ->
-          upsert_feedback(shelf, item, rating, if(rating == :up, do: :seen))
-
-          # Not delete!/1: a fill may have replaced the items since the lookup.
-          Repo.delete_all(from i in ShelfItem, where: i.id == ^item.id)
-        end)
-
+    with {:ok, %ShelfItem{} = item} <- owned_item(user, item_id) do
+      {:ok, _} = Repo.transaction(fn -> rate_and_remove(item, rating) end)
       {:ok, item}
     end
+  end
+
+  defp rate_and_remove(%ShelfItem{shelf: shelf} = item, rating) do
+    upsert_feedback(shelf, item, rating, if(rating == :up, do: :seen))
+
+    # Not delete!/1: a fill may have replaced the items since the lookup.
+    Repo.delete_all(from i in ShelfItem, where: i.id == ^item.id)
   end
 
   @doc """

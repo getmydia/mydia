@@ -68,6 +68,7 @@ defmodule Mydia.Plugins.Host do
 
   @behaviour NimblePool
 
+  alias Mydia.Plugins.Host.ShelfRecord
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Log
   alias Mydia.Plugins.Logs
@@ -607,7 +608,9 @@ defmodule Mydia.Plugins.Host do
 
   defp handler_call(%{handler: :fill_shelf, slug: slug, payload: payload}) do
     version = contract_version(slug)
-    {export(version, "handler", "fill-shelf"), [to_shelf_record(payload, version)]}
+
+    {export(version, "handler", "fill-shelf"),
+     [ShelfRecord.build(payload, version, schedule_now(payload))]}
   end
 
   defp handler_call(%{slug: slug, payload: payload}),
@@ -685,55 +688,6 @@ defmodule Mydia.Plugins.Host do
       "config-json": Jason.encode!(Map.get(payload, "config") || %{})
     }
   end
-
-  # Marshal a fill payload into the WIT `shelf-request` record. `subject` is
-  # always absent: no placement passes one yet. `feedback` is a 1.7 field: a
-  # 1.6 guest's record has no such field, so it is dropped for them.
-  defp to_shelf_record(payload, version) do
-    base = %{
-      shelf: to_string(Map.get(payload, "shelf") || ""),
-      "user-id": opt_string(Map.get(payload, "user_id")),
-      subject: :none,
-      exclude: Enum.map(Map.get(payload, "exclude") || [], &to_media_ref/1),
-      limit: Map.get(payload, "limit") || 12,
-      now: schedule_now(payload),
-      "config-json": Jason.encode!(Map.get(payload, "config") || %{})
-    }
-
-    # Feedback goes to every contract except 1.6 (older ones never reach fill-shelf).
-    if version == :v16 do
-      base
-    else
-      Map.put(
-        base,
-        :feedback,
-        Enum.map(Map.get(payload, "feedback") || [], &to_shelf_feedback/1)
-      )
-    end
-  end
-
-  # Enums (`rating`, `via`) cross as atoms, like the other WIT enums.
-  defp to_shelf_feedback(feedback) do
-    %{
-      item: to_media_ref(feedback),
-      title: to_string(Map.get(feedback, :title) || ""),
-      year: opt_value(Map.get(feedback, :year)),
-      rating: Map.fetch!(feedback, :rating),
-      via: opt_value(Map.get(feedback, :via))
-    }
-  end
-
-  defp to_media_ref(ref) do
-    %{
-      "media-type": to_string(Map.get(ref, :media_type) || ""),
-      "tmdb-id": opt_value(Map.get(ref, :tmdb_id)),
-      "tvdb-id": opt_value(Map.get(ref, :tvdb_id)),
-      "imdb-id": opt_string(Map.get(ref, :imdb_id))
-    }
-  end
-
-  defp opt_value(nil), do: :none
-  defp opt_value(value), do: {:some, value}
 
   # Headers arrive as `{k, v}` pairs (a map, or a list built in Elixir) or as
   # `[k, v]` pairs (decoded JSON). Anything else is dropped, not raised on.
