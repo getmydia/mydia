@@ -21,9 +21,21 @@ on:
         type: string
         required: true
       version_code:
-        description: CFBundleVersion. Apple rejects a reused one for the same marketing version.
+        description: >-
+          CFBundleVersion. App Store Connect rejects one that is not above every
+          earlier upload. Ignored when build_number_mode is after_latest and the
+          App Store Connect credentials are present.
         type: string
         required: true
+      build_number_mode:
+        description: >-
+          `fixed` uploads version_code. `after_latest` numbers the build just
+          above the highest upload (17000042 becomes 17000042.1), resolved after
+          this job holds the TestFlight lock. player-ondemand.yml uses it for
+          branch builds, so they never take a number from master's sequence.
+        type: string
+        required: false
+        default: fixed
       groups:
         description: >-
           Comma-separated App Store Connect external group names, matched
@@ -79,6 +91,9 @@ on:
           succeeds. A caller that records the upload as having happened must
           gate on this rather than on the job's own success.
         value: ${{ jobs.build.outputs.uploaded }}
+      build_number:
+        description: The CFBundleVersion this run stamped.
+        value: ${{ jobs.build.outputs.build_number }}
 
 permissions:
   contents: read
@@ -89,6 +104,7 @@ jobs:
     runs-on: macos-26
     outputs:
       uploaded: ${{ steps.upload.outputs.uploaded }}
+      build_number: ${{ steps.build_number.outputs.value }}
     # Serialises the iOS build so a release and a refresh never upload at once.
     #
     # This prevents overlap, not staleness. A refresh queued behind a release
@@ -97,6 +113,10 @@ jobs:
     # window needs a release dispatched during the refresh's queue wait, and the
     # next release corrects it, so the version is deliberately not re-resolved
     # after the lock is acquired.
+    #
+    # The exception is build_number_mode: after_latest, which must read the
+    # highest upload under this lock: read before it, a concurrent upload could
+    # take the number first.
     concurrency:
       group: player-ios-testflight
       cancel-in-progress: false
@@ -128,18 +148,69 @@ jobs:
           flutter-version-file: player/.fvmrc
           channel: 'stable'
 
+      # Before the version stamp, because after_latest needs fastlane to read
+      # App Store Connect. Otherwise only the upload needs it.
+      - name: Setup Ruby for Fastlane
+        if: ${{ env.APP_STORE_CONNECT_API_KEY_ID != '' && (!inputs.dry_run || inputs.build_number_mode == 'after_latest') }}
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: ${{ env.PLAYER_PATH }}/ios
+
+      # A failed lookup fails the job: a guessed number risks exactly the
+      # collision after_latest exists to avoid. Without credentials nothing
+      # uploads either (the upload step below skips too), so version_code is
+      # stamped as before.
+      - name: Resolve build number
+        id: build_number
+        env:
+          MODE: ${{ inputs.build_number_mode }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          HIGHEST_BUILD_NUMBER_PATH: ${{ runner.temp }}/highest-build-number.txt
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            fixed)
+              BUILD_NUMBER="$VERSION_CODE"
+              ;;
+            after_latest)
+              if [ -z "$APP_STORE_CONNECT_API_KEY_ID" ]; then
+                echo "::warning::No App Store Connect credentials; stamping version_code $VERSION_CODE. Nothing will upload."
+                BUILD_NUMBER="$VERSION_CODE"
+              else
+                (cd "$PLAYER_PATH/ios" && bundle exec fastlane highest_build_number)
+                HIGHEST=$(cat "$HIGHEST_BUILD_NUMBER_PATH")
+                BUILD_NUMBER=$(./scripts/branch-build-number.sh "$HIGHEST")
+                echo "Highest upload $HIGHEST, this build $BUILD_NUMBER"
+              fi
+              ;;
+            *)
+              echo "::error::Unknown build_number_mode '$MODE'; expected fixed or after_latest."
+              exit 1
+              ;;
+          esac
+          echo "value=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "- **iOS build number:** \`$BUILD_NUMBER\` ($MODE)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Update version
         working-directory: ${{ env.PLAYER_PATH }}
         env:
           VERSION: ${{ inputs.version }}
-          VERSION_CODE: ${{ inputs.version_code }}
+          BUILD_NUMBER: ${{ steps.build_number.outputs.value }}
         run: |
           # Apple's CFBundleShortVersionString must be at most three
           # period-separated integers, so strip any prerelease suffix
           # (e.g. 0.12.0-beta.2 -> 0.12.0). The unique build number is
-          # carried by VERSION_CODE (CFBundleVersion).
+          # carried by BUILD_NUMBER (CFBundleVersion). Flutter keeps a dotted
+          # one (17000042.1) intact for iOS: it strips only characters other
+          # than digits and periods.
           MARKETING_VERSION="${VERSION%%-*}"
-          sed -i '' "s/^version: .*/version: ${MARKETING_VERSION}+${VERSION_CODE}/" pubspec.yaml
+          sed -i '' "s/^version: .*/version: ${MARKETING_VERSION}+${BUILD_NUMBER}/" pubspec.yaml
 
       - name: Install dependencies
         working-directory: ${{ env.PLAYER_PATH }}
@@ -218,15 +289,6 @@ jobs:
           IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter build ios --release --dart-define=MYDIA_CHANNEL=${{ env.MYDIA_CHANNEL }}
-
-      - name: Setup Ruby for Fastlane
-        if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
-        env:
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-        uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-          working-directory: ${{ env.PLAYER_PATH }}/ios
 
       # The notes reach the shell through env, never through ${{ }} substitution
       # into this body: changelog text contains backticks and $, which would be

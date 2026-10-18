@@ -46,6 +46,32 @@ platform :ios do
     )
   end
 
+  desc "Write the highest build number ever uploaded to HIGHEST_BUILD_NUMBER_PATH"
+  lane :highest_build_number do
+    app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key_content: ENV["APP_STORE_CONNECT_API_KEY_CONTENT"],
+      is_key_content_base64: true
+    )
+
+    # Every build of every marketing version, in every processing state:
+    # App Store Connect's "must be higher" check counts all of them, and a
+    # failed or still-processing upload still holds its number.
+    # latest_testflight_build_number is not used because it reports the most
+    # recent upload, which is not necessarily the highest.
+    bundle_id = CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier)
+    app = Spaceship::ConnectAPI::App.find(bundle_id)
+    UI.user_error!("No App Store Connect app for #{bundle_id}") unless app
+
+    builds = Spaceship::ConnectAPI::Build.all(app_id: app.id, limit: 200)
+    highest = max_build_number(builds.map(&:version))
+    UI.user_error!("App Store Connect lists no builds for #{bundle_id}") unless highest
+
+    UI.message("Highest uploaded build number: #{highest} (of #{builds.length} builds)")
+    File.write(ENV.fetch("HIGHEST_BUILD_NUMBER_PATH"), highest)
+  end
+
   desc "Build and upload to App Store (requires manual review)"
   lane :release do
     setup_ci if ENV['CI']

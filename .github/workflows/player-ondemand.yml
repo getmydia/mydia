@@ -32,7 +32,7 @@ on:
         type: boolean
         default: false
       build_flatpak:
-        description: 'Build Linux Flatpak and publish it to the dev channel (mydia-dev)'
+        description: 'Build Linux Flatpak; a master commit also publishes it to the dev channel (mydia-dev)'
         type: boolean
         default: false
       upload_to_stores:
@@ -63,6 +63,7 @@ jobs:
       contents: read
     outputs:
       sha: ${{ steps.setup.outputs.sha }}
+      branch_mode: ${{ steps.setup.outputs.branch_mode }}
       version: ${{ steps.setup.outputs.version }}
       version_code: ${{ steps.setup.outputs.version_code }}
       notes: ${{ steps.setup.outputs.notes }}
@@ -99,6 +100,20 @@ jobs:
           SHA=$(git rev-parse --verify "origin/$INPUT_REF^{commit}" 2>/dev/null || git rev-parse --verify "$INPUT_REF^{commit}")
           echo "Building SHA: $SHA from ref $INPUT_REF"
 
+          # Branch mode: the commit is not on master's first-parent line. Its
+          # version counts the branch's own commits, so it could outrank the
+          # master build made after the merge. It therefore publishes nowhere
+          # master's builds do: no R2 dev index, no dev Flatpak, no appcast,
+          # and iOS is numbered just above the highest TestFlight upload
+          # instead of from master's sequence (see player-ios.yml).
+          rc=0
+          ./scripts/on-mainline.sh origin/master "$SHA" || rc=$?
+          case "$rc" in
+            0) BRANCH_MODE=false ;;
+            1) BRANCH_MODE=true ;;
+            *) echo "::error::Could not check $SHA against origin/master."; exit 1 ;;
+          esac
+
           if [ -n "$INPUT_VERSION" ]; then
             if ! printf '%s' "$INPUT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
               echo "::error::Invalid version_override '$INPUT_VERSION'. Must match semver (e.g. 1.2.3 or 1.2.3-beta.1)"
@@ -108,13 +123,7 @@ jobs:
           else
             # After the nearest release tag the commit descends from, so it
             # sorts above that release and below the next one.
-            # A published build must sit on master's first-parent line, or a
-            # branch build could outrank the master build made after it merges.
-            if [ "$INPUT_DRY_RUN" = "true" ]; then
-              VERSION=$(./scripts/ondemand-version.sh "$SHA")
-            else
-              VERSION=$(./scripts/ondemand-version.sh --mainline origin/master "$SHA")
-            fi
+            VERSION=$(./scripts/ondemand-version.sh "$SHA")
           fi
 
           # From the version, so the build number follows build order across
@@ -126,10 +135,19 @@ jobs:
           # Generate notes from git log
           LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || echo "v0.0.0")
           NOTES=$(./scripts/testflight-notes.sh "$VERSION" "$SHA" "$LATEST_TAG")
+          if [ "$BRANCH_MODE" = "true" ]; then
+            # Says which branch a TestFlight build came from. Re-capped at
+            # App Store Connect's 4000 characters; ${#} counts characters
+            # under the UTF-8 locale.
+            export LC_ALL=C.UTF-8
+            NOTES="Branch build: ${INPUT_REF} @ ${SHA:0:12}"$'\n\n'"${NOTES}"
+            NOTES="${NOTES:0:4000}"
+          fi
 
           DELIM="notes-$(openssl rand -hex 16)"
           {
             echo "sha=${SHA}"
+            echo "branch_mode=${BRANCH_MODE}"
             echo "version=${VERSION}"
             echo "version_code=${VERSION_CODE}"
             echo "notes<<${DELIM}"
@@ -141,6 +159,7 @@ jobs:
             echo "### On-Demand Player Build"
             echo "- **Target Ref:** \`$INPUT_REF\`"
             echo "- **Commit:** \`$SHA\`"
+            echo "- **Branch mode:** \`$BRANCH_MODE\`"
             echo "- **Version:** \`$VERSION\`"
             echo "- **Version Code:** \`$VERSION_CODE\`"
             echo "- **Store Upload:** \`$INPUT_UPLOAD_TO_STORES\`"
@@ -161,6 +180,9 @@ jobs:
       notes: ${{ needs.prepare.outputs.notes }}
       distribute_external: false
       dry_run: ${{ inputs.dry_run || !inputs.upload_to_stores }}
+      # A branch build takes a TestFlight number just above the highest upload
+      # (17000042.1), which master's next integer build still clears.
+      build_number_mode: ${{ needs.prepare.outputs.branch_mode == 'true' && 'after_latest' || 'fixed' }}
     secrets:
       IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
       IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
@@ -186,8 +208,12 @@ jobs:
     # which never sets publish_dev_build and never touches this bucket, and
     # must never be made to wait behind a dev build publish it has nothing
     # to do with.
+    #
+    # A branch build never publishes, so it takes a group of its own run
+    # instead: holding the shared one for a whole Android build would make a
+    # master dispatch wait behind a build that never touches the index.
     concurrency:
-      group: mydia-dev-builds-index
+      group: ${{ needs.prepare.outputs.branch_mode == 'false' && 'mydia-dev-builds-index' || format('player-ondemand-android-{0}', github.run_id) }}
       cancel-in-progress: false
     uses: ./.github/workflows/player-android.yml
     with:
@@ -197,7 +223,9 @@ jobs:
       upload_to_play_store: false
       play_store_track: 'internal'
       dry_run: ${{ inputs.dry_run }}
-      publish_dev_build: ${{ !inputs.dry_run }}
+      # A branch build's APK stays a run artifact: in the dev index it would
+      # reach every dev-track device and could outrank master's next build.
+      publish_dev_build: ${{ !inputs.dry_run && needs.prepare.outputs.branch_mode == 'false' }}
     secrets:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -280,8 +308,9 @@ jobs:
       - player-flatpak
     # Positive checks for the same reason as the appcast job below: a skipped
     # build (build_flatpak off) must not publish, and neither must a dry run,
-    # whose staged repo was only rehearsed against a throwaway key.
-    if: ${{ !inputs.dry_run && needs.prepare.result == 'success' && needs.player-flatpak.result == 'success' }}
+    # whose staged repo was only rehearsed against a throwaway key. A branch
+    # build stays an artifact rather than replacing the dev channel.
+    if: ${{ !inputs.dry_run && needs.prepare.result == 'success' && needs.prepare.outputs.branch_mode == 'false' && needs.player-flatpak.result == 'success' }}
     # A called workflow cannot widen the caller's token, and the artifact
     # download needs actions: read.
     permissions:
@@ -310,8 +339,9 @@ jobs:
     # failed are different result strings and only a negative check like
     # `!= 'failure'` would miss that a skipped player-android (build_android
     # disabled) also means nothing published. Either way, no dev build
-    # reached the bucket, so the feed has nothing new to pick up.
-    if: ${{ !inputs.dry_run && needs.prepare.result == 'success' && needs.player-android.result == 'success' }}
+    # reached the bucket, so the feed has nothing new to pick up. The same
+    # holds in branch mode, where player-android never publishes.
+    if: ${{ !inputs.dry_run && needs.prepare.result == 'success' && needs.prepare.outputs.branch_mode == 'false' && needs.player-android.result == 'success' }}
     # A reusable workflow gets the calling job's token scopes, so the callee's
     # own permissions block cannot widen this. Reading the release list and
     # checking out the generator is all it does; the Cloudflare deploy
