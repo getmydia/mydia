@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/navigation/sidebar_layout_providers.dart';
-import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/navigation/nav_destination.dart';
@@ -156,12 +156,10 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
       padding: EdgeInsets.only(bottom: bottomInset),
       child: Material(
         key: const Key('filter-editor-surface'),
-        // On Apple the sheet sits on glass from showGlassSheet; an opaque
+        // On Liquid Glass the sheet sits on glass from showGlassSheet; an opaque
         // fill here would hide it.
-        color: LiquidGlassSupport.platformEligible
-            ? Colors.transparent
-            : palette.surface,
-        borderRadius: LiquidGlassSupport.platformEligible
+        color: GlassStyle.of(context) ? Colors.transparent : palette.surface,
+        borderRadius: GlassStyle.of(context)
             ? null
             : const BorderRadius.vertical(top: Radius.circular(20)),
         child: SafeArea(

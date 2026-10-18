@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/colors.dart';
-import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 import 'package:player/presentation/widgets/glass/glass_interaction.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
-Widget _host(Widget child) => ProviderScope(
-      child: MaterialApp(home: Scaffold(body: child)),
+Widget _host(Widget child, {bool? liquid}) => ProviderScope(
+      child: MaterialApp(
+        theme: liquid == null
+            ? null
+            : AppTheme.build(Palettes.projectionBooth, liquid: liquid),
+        home: Scaffold(body: child),
+      ),
     );
 
 void main() {
@@ -213,12 +218,9 @@ void main() {
         trailerUrl: null,
       );
 
-  group('on iOS and macOS', () {
-    setUp(() => LiquidGlassSupport.debugPlatformOverride = true);
-    tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
-
+  group('on Liquid Glass', () {
     testWidgets('every action circle is grouped control glass', (tester) async {
-      await tester.pumpWidget(_host(glassRow()));
+      await tester.pumpWidget(_host(glassRow(), liquid: true));
       final surfaces =
           tester.widgetList<GlassSurface>(find.byType(GlassSurface)).toList();
       expect(surfaces, hasLength(2));
@@ -228,23 +230,22 @@ void main() {
     });
 
     testWidgets('a highlighted action keeps its icon colour', (tester) async {
-      await tester.pumpWidget(_host(glassRow()));
+      await tester.pumpWidget(_host(glassRow(), liquid: true));
       final icon = tester.widget<Icon>(find.byIcon(Icons.check_circle_rounded));
       expect(icon.color, AppColors.success);
     });
 
     testWidgets('tapping a glass circle runs the action', (tester) async {
       var toggled = 0;
-      await tester.pumpWidget(_host(glassRow(onWatched: () => toggled++)));
+      await tester.pumpWidget(
+          _host(glassRow(onWatched: () => toggled++), liquid: true));
       await tester.tap(find.byIcon(Icons.check_circle_rounded));
       expect(toggled, 1);
     });
   });
 
   testWidgets('elsewhere the circles stay faux glass', (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = false;
-    addTearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
-    await tester.pumpWidget(_host(glassRow()));
+    await tester.pumpWidget(_host(glassRow(), liquid: false));
     final surfaces = tester.widgetList<GlassSurface>(find.byType(GlassSurface));
     expect(surfaces, hasLength(2));
     expect(surfaces.every((s) => !s.live), isTrue);

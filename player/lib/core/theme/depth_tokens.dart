@@ -215,9 +215,9 @@ abstract final class DepthTokens {
   static const double radiusOsdSheet = 20.0;
 
   // ---------------------------------------------------------------------------
-  // Liquid Glass (iOS and macOS)
+  // Liquid Glass
   //
-  // The floating control layer's material on Apple platforms: a frosted blur,
+  // The floating control layer's material on Liquid Glass: a frosted blur,
   // refraction in a narrow band at the rim, a saturation and brightness lift,
   // and a specular rim lit from above and below. Read by `LiquidGlassUniforms` and
   // `GlassSurface`. Lengths are logical pixels; the uniforms scale them by

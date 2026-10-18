@@ -1,6 +1,11 @@
-# Liquid Glass on iOS and macOS
+# Liquid Glass
 
-The floating control layer on iOS and macOS uses a Liquid Glass material
+Liquid Glass is a device setting, Settings > Appearance > Liquid Glass
+(`GlassMaterialSetting`). It is on by default on native iOS and macOS, off
+elsewhere, and not offered on Android TV. Native chrome drawn by the iOS and
+macOS Runners (the tab bar and the sidebars) is outside the setting.
+
+With it on, the floating control layer uses a Liquid Glass material
 drawn by our own shader, `shaders/liquid_glass.frag`. It frosts and
 saturates the backdrop (`liquidBlurSigma`, `liquidSaturation`,
 `liquidBrightness`), bends it in a narrow band at the rim (a
@@ -10,15 +15,16 @@ over bright content), adds a soft inner glow along the top and bottom and a
 specular rim lit from above and below (the bottom at `liquidBottomLight` of
 the top) with a `liquidRimHairline` on every edge, and blooms a press glow
 under the pointer. Control glass casts a wide soft drop shadow for depth.
-It is tuned to the iOS 27 look. Other platforms keep the frosted
-`GlassSurface` recipes, and the playback OSD (`GlassSurface.osd`) never uses
-it.
+It is tuned to the iOS 27 look. With the setting off, the app keeps the
+frosted `GlassSurface` recipes and Material controls, and the playback OSD
+(`GlassSurface.osd`) never uses Liquid Glass.
 
 | Piece | File |
 | --- | --- |
 | Shader | `shaders/liquid_glass.frag` |
 | Tokens | `DepthTokens.liquid*` in `lib/core/theme/depth_tokens.dart` |
-| Startup gate | `lib/core/theme/liquid_glass/liquid_glass_support.dart` |
+| Shader loader | `lib/core/theme/liquid_glass/liquid_glass_support.dart` |
+| Design-language flag | `lib/core/theme/liquid_glass/glass_style.dart` |
 | Uniforms | `lib/core/theme/liquid_glass/liquid_glass_uniforms.dart` |
 | Adaptive tint maths | `lib/core/theme/liquid_glass/liquid_glass_adaptive.dart` |
 | Render object | `lib/presentation/widgets/glass/liquid_glass_filter.dart` |
@@ -44,10 +50,18 @@ below). `GlassSurface.faux` and
 ## When it runs
 
 `LiquidGlassSupport.initialize()` runs once at startup. It loads the shader
-on iOS and macOS when `ImageFilter.isShaderFilterSupported` (Impeller). A
+on every platform where `ImageFilter.isShaderFilterSupported` (Impeller),
+whatever the setting, so switching to Liquid Glass needs no restart. A
 failure logs `[LiquidGlass] ... using frosted glass` and every surface keeps
-its frosted recipe. `GlassSurface.appBar`, `.chrome`, `.modal` and
-`.control` then pick the recipe:
+its frosted recipe.
+
+`GlassStyle.of(context)`, carried on the app theme and set from the
+setting, gates the design language: glass controls instead of Material ones.
+`GlassSurface` takes the Liquid Glass recipe only when
+`GlassStyle.of(context)` and `LiquidGlassSupport.available` are both true.
+Without the shader, Liquid Glass means the design language on the frosted
+recipe. `GlassSurface.appBar`, `.chrome`, `.modal` and `.control` then pick
+the recipe:
 
 - Reduce Transparency on: an opaque fill, no backdrop pass.
 - Shader loaded: Liquid Glass, with a stronger tint and a visible rim under
@@ -133,9 +147,6 @@ On a Mac, from `player/`:
 
     flutter run -d macos -t tool/liquid_glass_lab/main.dart
 
-`MYDIA_LIQUID_GLASS=true` (`--dart-define`) makes any platform eligible, for
-the lab only.
-
 The player app does not build for Linux desktop without libsecret
 (`flutter_secure_storage`), so on Linux run the lab from a plugin-free
 scratch Flutter project. Copy the lab in as the scratch project's
@@ -147,8 +158,7 @@ and register the shader under `flutter: shaders:`. Headless, from the
 scratch project:
 
     xvfb-run -a -s "-screen 0 2560x1800x24" env GDK_SCALE=2 \
-      flutter run -d linux --dart-define=MYDIA_LIQUID_GLASS=true \
-      --dart-define=LAB_SNAPSHOT=/tmp/lab.png
+      flutter run -d linux --dart-define=LAB_SNAPSHOT=/tmp/lab.png
 
 `GDK_SCALE=2` gives a 2x device pixel ratio. Add `LAB_GRID=true` for the
 grid and `LAB_SCROLL=<px>` to scroll the backdrop first.
@@ -157,19 +167,19 @@ grid and `LAB_SCROLL=<px>` to scroll the backdrop first.
 
 `flutter test` has no Impeller, so tests drive the structure, not the
 pixels: set `LiquidGlassSupport.debugOverride = true` to select the recipe
-(the render object then pushes the blur alone) and
-`LiquidGlassSupport.debugPlatformOverride` to choose glass or Material
-controls. Reset both in `tearDown`. `liquid_glass_legibility_test.dart`
+(the render object then pushes the blur alone). Pump under
+`AppTheme.build(palette, liquid: true)` (or `false`) to choose glass or
+Material controls. Reset `debugOverride` in `tearDown`. `liquid_glass_legibility_test.dart`
 computes text and icon contrast from the tokens.
 
 ## Controls
 
 The control layer is a small set of helpers under
 `lib/presentation/widgets/glass/` (plus `PrimaryPlayButton`). Each one
-renders glass on iOS and macOS, gated on `LiquidGlassSupport.platformEligible`,
-and falls back to the widget the call site used before everywhere else.
+renders glass when `GlassStyle.of(context)` is true, and falls back to the
+widget the call site used before otherwise.
 
-| Control | Use | Off iOS and macOS |
+| Control | Use | With Liquid Glass off |
 | --- | --- | --- |
 | `GlassIconButton` | Floating back and cast buttons over the detail hero | `IconButton` |
 | `PrimaryPlayButton` | Play and Resume: a neutral glass capsule with a white label | Solid white pill (`FilledButton` on the home hero) |
@@ -196,13 +206,13 @@ its diameter to short rows (the 40 point macOS title row), keeping 4 points
 of clearance above and below.
 
 Content buttons (`FilledButton`, `OutlinedButton` and the like) are capsules
-with no ripple on Apple platforms. `AppTheme.build` sets that, so call sites
-do nothing.
+with no ripple under Liquid Glass. `AppTheme.build(p, liquid: true)` sets
+that, so call sites do nothing.
 
 A widget shown inside a sheet must not paint its own opaque root surface on
-Apple, or it hides the glass behind it. `FilterEditorSheet` and
-`LibrarySortSheet` switch on `LiquidGlassSupport.platformEligible` and drop
-their background there.
+Liquid Glass, or it hides the glass behind it. `FilterEditorSheet` and
+`LibrarySortSheet` switch on `GlassStyle.of(context)` and drop their
+background there.
 
 Two guard tests keep new code on the helpers.
 `glass_dialog_call_sites_test.dart` fails on any `AlertDialog(` outside
