@@ -9,7 +9,7 @@ defmodule Mydia.Plugins.ShelvesFillTest do
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Shelf
-  alias Mydia.Plugins.ShelfDismissal
+  alias Mydia.Plugins.ShelfFeedback
   alias Mydia.Plugins.ShelfItem
   alias Mydia.Plugins.Shelves
   alias Mydia.Plugins.Shelves.Pick
@@ -83,7 +83,7 @@ defmodule Mydia.Plugins.ShelvesFillTest do
   end
 
   test "asks for twice the rail and passes the current items and dismissals as exclude", ctx do
-    Shelves.dismiss_item(ctx.user, shelf_item_fixture(ctx.shelf, %{provider_id: 50}).id)
+    Shelves.rate_item(ctx.user, shelf_item_fixture(ctx.shelf, %{provider_id: 50}).id, :down)
     shelf_item_fixture(ctx.shelf, %{provider_id: 60, media_type: :tv_show})
 
     fill(ctx.shelf, ctx.declared, returning({:ok, %{items: []}}))
@@ -97,6 +97,73 @@ defmodule Mydia.Plugins.ShelvesFillTest do
              %Pick{media_type: :movie, tmdb_id: 50},
              %Pick{media_type: :tv_show, tmdb_id: 60}
            ]
+  end
+
+  describe "feedback in the request" do
+    test "arrives newest first, skips untitled rows and carries the title and rating", ctx do
+      base = ~U[2026-09-01 00:00:00.000000Z]
+
+      for {id, title, rating, via, offset} <- [
+            {1, "Old Harbor", :down, nil, 0},
+            {2, "Ember Tide", :up, :added, 10},
+            {3, nil, :down, nil, 20}
+          ] do
+        Repo.insert!(%ShelfFeedback{
+          plugin_slug: "shelf-test",
+          shelf_key: "picks",
+          user_id: ctx.user.id,
+          media_type: :movie,
+          provider: :tmdb,
+          provider_id: id,
+          rating: rating,
+          via: via,
+          title: title,
+          year: 2020 + id,
+          inserted_at: DateTime.add(base, offset)
+        })
+      end
+
+      fill(ctx.shelf, ctx.declared, returning({:ok, %{items: []}}))
+
+      assert_receive {:invoked, _, _, _, opts}
+
+      assert [
+               %{
+                 media_type: :movie,
+                 tmdb_id: 2,
+                 tvdb_id: nil,
+                 title: "Ember Tide",
+                 year: 2022,
+                 rating: :up,
+                 via: :added
+               },
+               %{tmdb_id: 1, title: "Old Harbor", rating: :down, via: nil}
+             ] = opts[:feedback]
+
+      exclude_ids = Enum.map(opts[:exclude], & &1.tmdb_id)
+      assert Enum.all?(opts[:feedback], &(&1.tmdb_id in exclude_ids))
+    end
+
+    test "is capped at 50", ctx do
+      for id <- 1..55 do
+        Repo.insert!(%ShelfFeedback{
+          plugin_slug: "shelf-test",
+          shelf_key: "picks",
+          user_id: ctx.user.id,
+          media_type: :movie,
+          provider: :tmdb,
+          provider_id: id,
+          title: "Title #{id}",
+          inserted_at: DateTime.add(~U[2026-09-01 00:00:00.000000Z], id)
+        })
+      end
+
+      fill(ctx.shelf, ctx.declared, returning({:ok, %{items: []}}))
+
+      assert_receive {:invoked, _, _, _, opts}
+      assert length(opts[:feedback]) == 50
+      assert hd(opts[:feedback]).tmdb_id == 55
+    end
   end
 
   test "a new fill replaces the old items", ctx do
@@ -122,7 +189,7 @@ defmodule Mydia.Plugins.ShelvesFillTest do
   end
 
   test "a dismissed title is not stored even when the plugin returns it", ctx do
-    Shelves.dismiss_item(ctx.user, shelf_item_fixture(ctx.shelf, %{provider_id: 2}).id)
+    Shelves.rate_item(ctx.user, shelf_item_fixture(ctx.shelf, %{provider_id: 2}).id, :down)
 
     assert :filled =
              fill(
@@ -246,7 +313,7 @@ defmodule Mydia.Plugins.ShelvesFillTest do
     user_id = ctx.user.id
 
     invoker = fn _slug, _key, _user, _opts ->
-      Repo.insert!(%ShelfDismissal{
+      Repo.insert!(%ShelfFeedback{
         plugin_slug: "shelf-test",
         shelf_key: "picks",
         user_id: user_id,

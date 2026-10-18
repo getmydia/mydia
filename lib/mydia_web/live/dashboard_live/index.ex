@@ -417,7 +417,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   def handle_event("dismiss_shelf_item", %{"id" => item_id}, socket) do
     user = socket.assigns.current_user
     # An unknown or foreign id is ignored: the reload below is the answer either way.
-    Shelves.dismiss_item(user, item_id)
+    Shelves.rate_item(user, item_id, :down)
     {:noreply, assign_shelves(socket, Shelves.list_for(user, :home))}
   end
 
