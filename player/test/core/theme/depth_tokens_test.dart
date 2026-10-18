@@ -118,6 +118,45 @@ void main() {
     });
   });
 
+  group('Liquid Glass', () {
+    test('blur, edge, refraction and rim are positive', () {
+      expect(DepthTokens.liquidBlurSigma, greaterThan(0));
+      expect(DepthTokens.liquidEdgeBand, greaterThan(0));
+      expect(DepthTokens.liquidRefraction, greaterThan(0));
+      expect(DepthTokens.liquidRimWidth, greaterThan(0));
+    });
+
+    test('press swells the glass', () {
+      expect(DepthTokens.liquidPressScale, greaterThan(1));
+    });
+
+    test('press is brighter than hover', () {
+      expect(
+        DepthTokens.liquidSpecular + DepthTokens.liquidPressSpecularBoost,
+        greaterThan(
+          DepthTokens.liquidSpecular + DepthTokens.liquidHoverSpecularBoost,
+        ),
+      );
+    });
+
+    test('the resting light sits inside the surface', () {
+      expect(DepthTokens.liquidLightRest.dx, inInclusiveRange(0.0, 1.0));
+      expect(DepthTokens.liquidLightRest.dy, inInclusiveRange(0.0, 1.0));
+    });
+
+    test('tint opacities are valid and the contrast boost is positive', () {
+      for (final opacity in [
+        DepthTokens.liquidChromeTintOpacity,
+        DepthTokens.liquidModalTintOpacity,
+        DepthTokens.liquidControlTintOpacity,
+        DepthTokens.liquidProminentTintOpacity,
+      ]) {
+        expect(opacity, inInclusiveRange(0.0, 1.0));
+      }
+      expect(DepthTokens.liquidHighContrastTintBoost, greaterThan(0));
+    });
+  });
+
   group('theme wiring (R3)', () {
     test('stays dark, with one accent mapped across every accent slot', () {
       final scheme = AppTheme.darkTheme.colorScheme;

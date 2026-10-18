@@ -213,6 +213,81 @@ abstract final class DepthTokens {
 
   /// Corner radius for OSD bottom sheets (top corners) and dialogs.
   static const double radiusOsdSheet = 20.0;
+
+  // ---------------------------------------------------------------------------
+  // Liquid Glass (iOS and macOS)
+  //
+  // The floating control layer's material on Apple platforms: a light blur,
+  // refraction along the edge band, a saturation and brightness lift, a
+  // darkened outer edge and a specular rim. Read by `LiquidGlassUniforms` and
+  // `GlassSurface`. Lengths are logical pixels; the uniforms scale them by
+  // the device pixel ratio. Never used by the OSD.
+  // ---------------------------------------------------------------------------
+
+  /// Blur applied before the shader bends the backdrop.
+  static const double liquidBlurSigma = 6.0;
+
+  /// Width of the band along the edge where the backdrop is bent.
+  static const double liquidEdgeBand = 22.0;
+
+  /// How far the backdrop is displaced at the very rim.
+  static const double liquidRefraction = 14.0;
+
+  /// Extra displacement of red over blue, as a fraction of the refraction.
+  static const double liquidDispersion = 0.12;
+
+  /// Saturation multiplier for the backdrop (1 leaves it unchanged).
+  static const double liquidSaturation = 1.6;
+
+  /// Brightness added to the backdrop, 0..1.
+  static const double liquidBrightness = 0.04;
+
+  /// Specular rim intensity at rest.
+  static const double liquidSpecular = 0.55;
+
+  /// Extra specular while hovered (macOS) or pressed.
+  static const double liquidHoverSpecularBoost = 0.2;
+  static const double liquidPressSpecularBoost = 0.35;
+
+  /// How much the outermost pixels darken (the iOS 27 edge).
+  static const double liquidEdgeShade = 0.35;
+
+  /// Width of the specular rim.
+  static const double liquidRimWidth = 1.0;
+
+  /// Resting light position, as a fraction of the surface (top-left).
+  static const Offset liquidLightRest = Offset(0.25, 0.0);
+
+  /// Tint opacity per surface role. Each must clear
+  /// [glassLegibilityFloor]; `liquid_glass_legibility_test.dart` checks
+  /// text and icon contrast over a pure-white backdrop for every preset.
+  static const double liquidChromeTintOpacity = 0.80;
+  static const double liquidModalTintOpacity = 0.80;
+  static const double liquidControlTintOpacity = 0.6;
+
+  /// The prominent button's white tint (the design system's primary pill).
+  static const double liquidProminentTintOpacity = 0.85;
+
+  /// Added to the tint opacity when Increase Contrast is on.
+  static const double liquidHighContrastTintBoost = 0.15;
+
+  /// Rim alpha drawn as a border when Increase Contrast is on.
+  static const double liquidHighContrastRimAlpha = 0.6;
+
+  /// Press feedback: scale, drag stretch, and timing.
+  static const double liquidPressScale = 1.04;
+  static const double liquidPressStretch = 2.0;
+  static const Duration liquidPressDuration = Duration(milliseconds: 180);
+
+  /// Easing for the press swell: a slight overshoot before it settles.
+  static const Curve liquidPressCurve = Curves.easeOutBack;
+
+  /// Diameter of a floating glass icon button.
+  static const double liquidIconButtonSize = 40.0;
+
+  /// Corner radius of glass dialogs and popovers.
+  static const double liquidDialogRadius = 28.0;
+  static const double liquidPopoverRadius = 16.0;
 }
 
 /// How far an OSD surface lifts off the video.
