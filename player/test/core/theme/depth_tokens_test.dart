@@ -161,8 +161,6 @@ void main() {
         DepthTokens.liquidChromeAdaptiveMax,
         DepthTokens.liquidModalAdaptiveMax,
         DepthTokens.liquidControlAdaptiveMax,
-        DepthTokens.liquidAccentTintOpacity,
-        DepthTokens.liquidAccentAdaptiveMax,
         DepthTokens.liquidAdaptiveLumaLow,
         DepthTokens.liquidAdaptiveLumaHigh,
         DepthTokens.liquidInnerGlow,
@@ -181,10 +179,8 @@ void main() {
           greaterThanOrEqualTo(DepthTokens.liquidModalTintOpacity));
       expect(DepthTokens.liquidControlAdaptiveMax,
           greaterThanOrEqualTo(DepthTokens.liquidControlTintOpacity));
-      expect(DepthTokens.liquidAccentAdaptiveMax,
-          greaterThanOrEqualTo(DepthTokens.liquidAccentTintOpacity));
-      expect(DepthTokens.liquidEdgeShadeWidth,
-          greaterThan(DepthTokens.liquidRimWidth));
+      expect(DepthTokens.liquidRimHairline, inInclusiveRange(0.0, 1.0));
+      expect(DepthTokens.liquidBottomLight, inInclusiveRange(0.0, 1.0));
       expect(DepthTokens.liquidScrollEdgeBottomOpacity,
           lessThan(DepthTokens.liquidScrollEdgeTopOpacity));
     });

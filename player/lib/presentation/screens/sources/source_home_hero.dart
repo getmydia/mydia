@@ -12,9 +12,13 @@ import '../../../core/layout/breakpoints.dart';
 import '../../../core/sources/media_source.dart' show ArtworkRequest;
 import '../../../core/sources/source.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
+import '../../widgets/glass/glass_badge.dart';
+import '../../widgets/glass/glass_button.dart';
+import '../../widgets/primary_play_button.dart';
 import '../../widgets/shell_rail_inset.dart';
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
@@ -100,7 +104,8 @@ class SourceHomeHero extends ConsumerWidget {
             ),
     );
 
-    final info = Column(
+    final glass = LiquidGlassSupport.platformEligible;
+    final infoColumn = Column(
       crossAxisAlignment:
           wide ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
@@ -109,7 +114,7 @@ class SourceHomeHero extends ConsumerWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: [for (final c in chips) _HeroChip(c)],
+            children: [for (final c in chips) _HeroChip(c, grouped: glass)],
           ),
           const SizedBox(height: 14),
         ],
@@ -139,12 +144,16 @@ class SourceHomeHero extends ConsumerWidget {
         const SizedBox(height: 20),
         _HeroActions(
           wide: wide,
+          grouped: glass,
           onPlay: () => playItem(context, ref, item.ref),
           secondaryLabel: isEpisode ? 'All episodes' : 'More info',
           onSecondary: open,
         ),
       ],
     );
+
+    // One backdrop pass shared by the chips, Play and the secondary action.
+    final info = glass ? BackdropGroup(child: infoColumn) : infoColumn;
 
     // UP from the first rail lands on the hero's buttons, which sit at its
     // bottom. On a television this reveals the whole hero, not just the button.
@@ -289,22 +298,22 @@ class SourceHomeHero extends ConsumerWidget {
 }
 
 class _HeroChip extends StatelessWidget {
-  const _HeroChip(this.label);
+  const _HeroChip(this.label, {required this.grouped});
 
   final String label;
+  final bool grouped;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-        decoration: BoxDecoration(
+  Widget build(BuildContext context) => GlassBadge(
+        grouped: grouped,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        fallbackDecoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(AppTheme.radiusChip),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         ),
       );
 }
@@ -312,12 +321,14 @@ class _HeroChip extends StatelessWidget {
 class _HeroActions extends StatelessWidget {
   const _HeroActions({
     required this.wide,
+    required this.grouped,
     required this.onPlay,
     required this.secondaryLabel,
     required this.onSecondary,
   });
 
   final bool wide;
+  final bool grouped;
   final VoidCallback onPlay;
   final String secondaryLabel;
   final VoidCallback onSecondary;
@@ -326,19 +337,35 @@ class _HeroActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final play = FilledButton.icon(
-      key: const Key('source-home-hero-play'),
-      onPressed: onPlay,
-      icon: const Icon(Icons.play_arrow_rounded),
-      label: const Text('Play'),
-      style: FilledButton.styleFrom(minimumSize: const Size(0, _height)),
-    );
-    final secondary = OutlinedButton(
-      key: const Key('source-home-hero-more'),
+    final glass = LiquidGlassSupport.platformEligible;
+    final Widget play = glass
+        ? PrimaryPlayButton(
+            key: const Key('source-home-hero-play'),
+            onPressed: onPlay,
+            grouped: grouped,
+          )
+        : FilledButton.icon(
+            key: const Key('source-home-hero-play'),
+            onPressed: onPlay,
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: const Text('Play'),
+            style: FilledButton.styleFrom(minimumSize: const Size(0, _height)),
+          );
+    Widget secondary = GlassButton(
+      buttonKey: const Key('source-home-hero-more'),
+      label: secondaryLabel,
       onPressed: onSecondary,
-      style: OutlinedButton.styleFrom(minimumSize: const Size(0, _height)),
-      child: Text(secondaryLabel),
+      grouped: grouped,
+      height: glass ? PrimaryPlayButton.height : _height,
     );
+    if (glass) {
+      // Play carries a ring gap around its pill; match it so both pills share
+      // a height and baseline.
+      secondary = Padding(
+        padding: const EdgeInsets.all(PrimaryPlayButton.ringGap),
+        child: secondary,
+      );
+    }
     if (wide) {
       return Row(
         mainAxisSize: MainAxisSize.min,

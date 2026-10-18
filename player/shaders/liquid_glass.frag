@@ -5,9 +5,11 @@
 // coordinates. The input texture is the blurred backdrop under the surface,
 // with the surface centred in it.
 //
-// Effects: refraction with dispersion, adaptive tint (the tint alpha rises
-// with the brightest backdrop luma near each pixel), darkened edge, specular rim, inner glow across the
-// lit edge band, and a press glow centred on the light.
+// Effects: refraction with dispersion in a narrow band at the rim, adaptive
+// tint (the tint alpha rises with the brightest backdrop luma near each
+// pixel), a specular rim lit from above and below with a hairline on every
+// edge, an inner glow along the top and bottom, and a press glow centred on
+// the pointer.
 //
 // Refraction maths adapted from liquid_glass_renderer
 // (https://github.com/whynotmake-it/flutter_liquid_glass, MIT).
@@ -30,18 +32,18 @@ uniform float uDispersion; // red/blue spread, fraction of uRefraction
 uniform float uSaturation;
 uniform float uBrightness;
 uniform float uSpecular;
-uniform float uEdgeShade;
 uniform float uRimWidth;   // physical px
 uniform vec2 uLight;       // light position, 0..1 of the surface
 uniform vec4 uTint;        // straight rgba
-uniform float uShadeWidth;  // darkened edge width, physical px
-uniform float uInnerGlow;   // light across the edge band facing the light
+uniform float uInnerGlow;   // light across the edge band on top and bottom
 uniform float uAdaptiveMax; // tint alpha over a bright backdrop
 uniform float uLumaLow;     // backdrop luma where adaptation starts
 uniform float uLumaHigh;    // backdrop luma where it reaches uAdaptiveMax
 uniform float uGlow;        // press glow strength
 uniform float uGlowRadius;  // press glow radius, fraction of the short side
 uniform float uAdaptRadius; // physical px
+uniform float uHairline;    // rim light on every edge, fraction of uSpecular
+uniform float uBottomLight; // bottom highlight relative to the top
 
 uniform sampler2D uTexture;
 
@@ -90,9 +92,10 @@ void main() {
   float inside = -sdRoundRect(p, halfSize, r);
   vec2 n = sdNormal(p, halfSize, r);
 
-  // Lens: 1 at the rim; the bend eases quadratically to 0 across the edge band.
+  // Lens: 1 at the rim, easing cubically to 0 across the edge band, so the
+  // bend stays in the last few points of the edge.
   float t = clamp(inside / max(uEdge, 1.0), 0.0, 1.0);
-  float lens = (1.0 - t) * (1.0 - t);
+  float lens = (1.0 - t) * (1.0 - t) * (1.0 - t);
 
   // n points outward; samples are pulled inward, so they stay in the texture.
   vec2 shift = -n * lens * uRefraction;
@@ -111,24 +114,17 @@ void main() {
   float tintAlpha = mix(uTint.a, max(uAdaptiveMax, uTint.a), adapt);
   color = mix(color, uTint.rgb, tintAlpha);
 
-  // Darkened outer edge.
-  float edge = 1.0 - smoothstep(0.0, uShadeWidth, inside);
-  color *= 1.0 - uEdgeShade * edge;
-
-  // Specular rim: every edge facing the light is lit (top and left at rest),
-  // with a softer counter-highlight on the opposite edges.
-  vec2 lightPos = (uLight - vec2(0.5)) * uSurface;
-  // Light direction from the centre: every edge facing it is lit, not just
-  // the pixels next to the light point.
-  vec2 lightDir = normalize(lightPos + vec2(1e-4));
-  float facing = dot(n, lightDir);
+  // Specular rim, lit from above and below: n points outward and y grows
+  // downward, so the top edge has n.y < 0. Every edge keeps a hairline.
+  float top = pow(max(-n.y, 0.0), 2.0);
+  float bottom = uBottomLight * pow(max(n.y, 0.0), 2.0);
   float rim = 1.0 - smoothstep(uRimWidth * 0.5, uRimWidth * 1.5, inside);
-  float highlight =
-      pow(max(facing, 0.0), 2.0) + 0.35 * pow(max(-facing, 0.0), 2.0);
-  color += vec3(uSpecular * highlight * rim);
+  color += vec3(uSpecular * (uHairline + top + bottom) * rim);
 
-  // Thickness: a soft glow across the edge band on the lit side.
-  color += vec3(uInnerGlow * lens * max(facing, 0.0));
+  // Thickness: a soft glow across the edge band along the top and bottom.
+  color += vec3(uInnerGlow * lens * (top + bottom));
+
+  vec2 lightPos = (uLight - vec2(0.5)) * uSurface;
 
   // Press glow centred on the light (the pointer while pressed).
   float glowR = max(uGlowRadius * min(uSurface.x, uSurface.y), 1.0);

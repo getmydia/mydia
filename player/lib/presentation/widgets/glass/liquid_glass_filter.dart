@@ -12,9 +12,9 @@ import 'glass_pointer.dart';
 /// [child]. Must sit inside a clip shaped like the surface (`GlassSurface`
 /// puts it in a `ClipRRect`), or the backdrop pass covers the screen.
 ///
-/// Two backdrop passes per surface: the blur, which can be grouped through
-/// `BackdropGroup`, and the lens, a `BackdropFilter` nested inside the blur,
-/// which cannot. Composing the two into one filter shifts the shader's
+/// Two backdrop passes per surface: the blur and the lens, a `BackdropFilter`
+/// nested inside the blur. Neither joins a `BackdropGroup` while the lens
+/// runs (see [RenderLiquidGlass.paint]). Composing the two into one filter shifts the shader's
 /// coordinates, so they stay separate layers.
 ///
 /// Without a loaded shader (tests, or a load failure) it pushes the blur
@@ -38,7 +38,8 @@ class LiquidGlassFilter extends SingleChildRenderObjectWidget {
   /// Tint alpha over a bright backdrop, or null for a fixed tint.
   final double? adaptiveTintMax;
 
-  /// Share one backdrop pass with the enclosing `BackdropGroup`.
+  /// Share one backdrop pass with the enclosing `BackdropGroup`. Honoured
+  /// only on the frosted path, without the lens.
   final bool grouped;
 
   LiquidGlassUniforms _uniforms(BuildContext context) {
@@ -76,9 +77,9 @@ class LiquidGlassFilter extends SingleChildRenderObjectWidget {
   }
 }
 
-/// Paints the blur as the outer [BackdropFilterLayer] (it keeps the
-/// `backdropKey`, so grouping still shares the blur pass) and the lens as a
-/// second [BackdropFilterLayer] nested inside it, holding the shader.
+/// Paints the blur as the outer [BackdropFilterLayer] and the lens as a
+/// second [BackdropFilterLayer] nested inside it, holding the shader. The
+/// blur keeps the `backdropKey` only when there is no lens.
 class RenderLiquidGlass extends RenderProxyBox {
   RenderLiquidGlass({
     required LiquidGlassUniforms uniforms,
@@ -123,7 +124,12 @@ class RenderLiquidGlass extends RenderProxyBox {
         sigmaX: DepthTokens.liquidBlurSigma,
         sigmaY: DepthTokens.liquidBlurSigma,
       )
-      ..backdropKey = _backdropKey;
+      // A grouped blur reads the group's shared backdrop, and the lens nested
+      // in it then no longer finds the surface centred in its input: the rim
+      // and highlights land against the wrong bounds, washing the surface out
+      // and staying put while it scrolls. Only the frosted blur, with no lens,
+      // shares the group's pass.
+      ..backdropKey = LiquidGlassSupport.program == null ? _backdropKey : null;
     context.pushLayer(backdrop, _paintLens, offset);
   }
 

@@ -28,6 +28,12 @@ abstract final class LiquidGlassSupport {
   @visibleForTesting
   static void debugReset() => _program = null;
 
+  /// Installs a loaded shader in tests, to drive the lens path's layers.
+  /// `flutter test` can load the program but cannot render it. Reset to
+  /// null in `tearDown`.
+  @visibleForTesting
+  static set debugProgram(ui.FragmentProgram? program) => _program = program;
+
   /// iOS or macOS (not web). Decides which controls render as glass. Does
   /// not mean the shader loaded; see [available].
   static bool get platformEligible {

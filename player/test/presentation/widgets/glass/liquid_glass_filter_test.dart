@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/presentation/widgets/glass/glass_pointer.dart';
 import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 
@@ -112,5 +113,44 @@ void main() {
         tester.renderObject<RenderLiquidGlass>(find.byType(LiquidGlassFilter));
     expect(render.uniforms.light, DepthTokens.liquidLightRest);
     expect(render.uniforms.specularBoost, 0);
+  });
+
+  group('inside a BackdropGroup', () {
+    Widget grouped() => _host(BackdropGroup(
+          child: const LiquidGlassFilter(
+            radius: 12,
+            tint: Color(0xA0000000),
+            grouped: true,
+            child: SizedBox(width: 80, height: 40),
+          ),
+        ));
+
+    BackdropKey? blurKey(WidgetTester tester) => (tester
+            .renderObject<RenderLiquidGlass>(find.byType(LiquidGlassFilter))
+            .debugLayer! as BackdropFilterLayer)
+        .backdropKey;
+
+    tearDown(() => LiquidGlassSupport.debugProgram = null);
+
+    testWidgets('the frosted blur still shares the group pass', (tester) async {
+      await tester.pumpWidget(grouped());
+      expect(blurKey(tester), isNotNull);
+    });
+
+    // A grouped blur reads the group's shared backdrop, so the lens nested in
+    // it no longer gets the surface centred in its input and draws its rim
+    // and highlights against the wrong bounds (washed out, pinned in place
+    // while the surface scrolls). With a lens, every surface keeps its own
+    // backdrop.
+    testWidgets('with the lens loaded, the blur leaves the group',
+        (tester) async {
+      final program = await tester.runAsync(
+          () => ui.FragmentProgram.fromAsset(LiquidGlassSupport.assetKey));
+      LiquidGlassSupport.debugProgram = program;
+      await tester.pumpWidget(grouped());
+      // flutter test has no Impeller, so painting the lens itself throws.
+      expect(tester.takeException(), isUnsupportedError);
+      expect(blurKey(tester), isNull);
+    });
   });
 }
