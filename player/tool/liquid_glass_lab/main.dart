@@ -1,7 +1,6 @@
 // Dev-only lab for the Liquid Glass shader. Not part of the app.
 //
-//   ./dev flutter run -d linux --dart-define=MYDIA_LIQUID_GLASS=true \
-//     -t tool/liquid_glass_lab/main.dart
+//   ./dev flutter run -d linux -t tool/liquid_glass_lab/main.dart
 //
 // On a Mac: `flutter run -d macos -t tool/liquid_glass_lab/main.dart`.
 // Scroll the backdrop under the glass; toggle the grid to check the rim
@@ -14,7 +13,6 @@
 //   LAB_SCROLL=<pixels>      initial scroll offset of the backdrop.
 //
 //   xvfb-run -a ./dev flutter run -d linux \
-//     --dart-define=MYDIA_LIQUID_GLASS=true \
 //     --dart-define=LAB_SNAPSHOT=/tmp/lab.png -t tool/liquid_glass_lab/main.dart
 //
 // The player app itself does not build on Linux without libsecret, so to run

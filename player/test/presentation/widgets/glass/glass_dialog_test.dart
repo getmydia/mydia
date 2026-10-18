@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass/glass_dialog.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
-Widget _host() => MaterialApp(
+ThemeData _theme({required bool liquid}) =>
+    AppTheme.build(Palettes.projectionBooth, liquid: liquid);
+
+Widget _host({required bool liquid}) => MaterialApp(
+      theme: _theme(liquid: liquid),
       home: Scaffold(
         body: GlassDialog(
           icon: const Icon(Icons.warning_rounded),
@@ -19,11 +24,8 @@ Widget _host() => MaterialApp(
     );
 
 void main() {
-  tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
-
-  testWidgets('iOS and macOS: laid out on modal glass', (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
-    await tester.pumpWidget(_host());
+  testWidgets('Liquid Glass: laid out on modal glass', (tester) async {
+    await tester.pumpWidget(_host(liquid: true));
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byType(GlassSurface), findsOneWidget);
     for (final text in [
@@ -37,20 +39,19 @@ void main() {
     expect(find.byIcon(Icons.warning_rounded), findsOneWidget);
   });
 
-  testWidgets('elsewhere it is the AlertDialog it replaced', (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = false;
-    await tester.pumpWidget(_host());
+  testWidgets('Frosted: it is the AlertDialog it replaced', (tester) async {
+    await tester.pumpWidget(_host(liquid: false));
     final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
     expect((dialog.title! as Text).data, 'Remove account?');
     expect(dialog.actions, hasLength(2));
   });
-  testWidgets('iOS and macOS: tall content scrolls instead of overflowing',
+  testWidgets('Liquid Glass: tall content scrolls instead of overflowing',
       (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
     tester.view.physicalSize = const Size(400, 500);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(MaterialApp(
+      theme: _theme(liquid: true),
       home: Scaffold(
         body: Center(
           child: GlassDialog(

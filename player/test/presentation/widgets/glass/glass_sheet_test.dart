@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass/glass_popover.dart';
 import 'package:player/presentation/widgets/glass/glass_sheet.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
-Widget _opener() => MaterialApp(
+ThemeData _theme({required bool liquid}) =>
+    AppTheme.build(Palettes.projectionBooth, liquid: liquid);
+
+Widget _opener({required bool liquid}) => MaterialApp(
+      theme: _theme(liquid: liquid),
       home: Scaffold(
         body: Builder(
           builder: (context) => Center(
@@ -24,11 +29,8 @@ Widget _opener() => MaterialApp(
     );
 
 void main() {
-  tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
-
-  testWidgets('iOS and macOS: the sheet sits on modal glass', (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
-    await tester.pumpWidget(_opener());
+  testWidgets('Liquid Glass: the sheet sits on modal glass', (tester) async {
+    await tester.pumpWidget(_opener(liquid: true));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     expect(find.text('Sheet body'), findsOneWidget);
@@ -37,10 +39,9 @@ void main() {
     expect(sheet.backgroundColor, Colors.transparent);
   });
 
-  testWidgets('elsewhere it is the plain sheet with the caller colour',
+  testWidgets('Frosted: it is the plain sheet with the caller colour',
       (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = false;
-    await tester.pumpWidget(_opener());
+    await tester.pumpWidget(_opener(liquid: false));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     expect(find.byType(GlassSurface), findsNothing);
@@ -48,16 +49,19 @@ void main() {
     expect(sheet.backgroundColor, Colors.red);
   });
 
-  testWidgets('popover surface: glass on Apple, Material elsewhere',
+  testWidgets('popover surface: glass on Liquid Glass, Material on Frosted',
       (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
-    await tester.pumpWidget(
-        const MaterialApp(home: GlassPopoverSurface(child: Text('Rows'))));
+    await tester.pumpWidget(MaterialApp(
+      theme: _theme(liquid: true),
+      home: const GlassPopoverSurface(child: Text('Rows')),
+    ));
     expect(find.byType(GlassSurface), findsOneWidget);
 
-    LiquidGlassSupport.debugPlatformOverride = false;
-    await tester.pumpWidget(
-        const MaterialApp(home: GlassPopoverSurface(child: Text('Rows'))));
+    await tester.pumpWidget(MaterialApp(
+      theme: _theme(liquid: false),
+      home: const GlassPopoverSurface(child: Text('Rows')),
+    ));
+    await tester.pumpAndSettle();
     expect(find.byType(GlassSurface), findsNothing);
   });
 }

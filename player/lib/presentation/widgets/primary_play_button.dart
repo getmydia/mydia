@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../core/theme/liquid_glass/glass_style.dart';
 import '../../core/theme/palette.dart';
 import 'focus_highlight.dart';
 import 'glass/glass_interaction.dart';
@@ -9,8 +9,8 @@ import 'glass_surface.dart';
 
 /// The detail pages' Play / Resume control: a play icon and a label on a pill.
 ///
-/// Off Apple platforms it is the design system's white pill and never paints
-/// the palette's primary. On iOS and macOS an enabled button is neutral Liquid
+/// Off Liquid Glass it is the design system's white pill and never paints
+/// the palette's primary. On Liquid Glass an enabled button is neutral Liquid
 /// Glass, the same control material as every other floating button, with a
 /// white label; it stands out by size and weight. A null [onPressed] renders the disabled surface and
 /// takes no focus, the same as the control it replaced.
@@ -73,7 +73,7 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final glass = LiquidGlassSupport.platformEligible && _enabled;
+    final glass = GlassStyle.of(context) && _enabled;
     final foreground = !_enabled
         ? palette.textDisabled
         : (glass ? Colors.white : palette.background);
@@ -151,7 +151,7 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
       scale: _scale,
       child: FocusHighlight(
         onActivate: widget.onPressed,
-        // A ring in the gap around the pill. Gold off Apple, where the white
+        // A ring in the gap around the pill. Gold off Liquid Glass, where the white
         // fill would hide a white ring; white on glass, where it reads.
         borderRadius: ringRadius,
         ringColor: glass ? Colors.white : palette.primary,

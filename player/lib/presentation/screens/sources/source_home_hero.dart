@@ -12,7 +12,7 @@ import '../../../core/layout/breakpoints.dart';
 import '../../../core/sources/media_source.dart' show ArtworkRequest;
 import '../../../core/sources/source.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
@@ -104,7 +104,7 @@ class SourceHomeHero extends ConsumerWidget {
             ),
     );
 
-    final glass = LiquidGlassSupport.platformEligible;
+    final glass = GlassStyle.of(context);
     final infoColumn = Column(
       crossAxisAlignment:
           wide ? CrossAxisAlignment.start : CrossAxisAlignment.center,
@@ -337,7 +337,7 @@ class _HeroActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final glass = LiquidGlassSupport.platformEligible;
+    final glass = GlassStyle.of(context);
     final Widget play = glass
         ? PrimaryPlayButton(
             key: const Key('source-home-hero-play'),

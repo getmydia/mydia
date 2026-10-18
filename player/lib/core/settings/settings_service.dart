@@ -1,5 +1,6 @@
 import '../auth/auth_storage.dart';
 import '../player/subtitle_size.dart';
+import '../theme/glass_material.dart';
 import '../theme/theme_preset.dart';
 
 /// Service for managing user settings and preferences.
@@ -24,6 +25,7 @@ class SettingsService {
   static const _subtitleSizeKey = 'subtitle_size';
   static const _updateTrackKey = 'update_track';
   static const _themePresetKey = 'theme_preset';
+  static const _glassMaterialKey = 'glass_material';
 
   /// Get the default quality setting.
   Future<String> getDefaultQuality() async {
@@ -118,12 +120,24 @@ class SettingsService {
     await _storage.write(_themePresetKey, preset.name);
   }
 
+  /// The material this device draws controls with, as its stored name.
+  ///
+  /// Device-level like the theme preset, so [clearSettings] leaves it alone.
+  /// Decoding, including the platform default, belongs to
+  /// `GlassMaterial.resolve`.
+  Future<String?> getGlassMaterial() async => _storage.read(_glassMaterialKey);
+
+  /// Set the material this device draws controls with.
+  Future<void> setGlassMaterial(GlassMaterial material) async {
+    await _storage.write(_glassMaterialKey, material.name);
+  }
+
   /// Clear all settings.
   ///
   /// Deletes an explicit list of keys, not everything in storage. Device-level
   /// choices are deliberately left out of that list: [_updateTrackKey]
-  /// and [_themePresetKey] survive a clear for that reason, as does the Diagnostics
-  /// choice in `DiagnosticsSettings`.
+  /// [_themePresetKey] and [_glassMaterialKey] survive a clear for that reason,
+  /// as does the Diagnostics choice in `DiagnosticsSettings`.
   Future<void> clearSettings() async {
     await Future.wait([
       _storage.delete(_defaultQualityKey),

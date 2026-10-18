@@ -108,7 +108,7 @@ SliverAppBar detailHeroAppBar({
 /// The back control for [detailHeroAppBar]'s title row on the movie and
 /// show screens.
 ///
-/// A glass circle on iOS and macOS (`GlassIconButton`), flat elsewhere, where
+/// A glass circle on Liquid Glass (`GlassIconButton`), flat elsewhere, where
 /// the top scrim [detailHeroAppBar] paints keeps the white glyph legible over
 /// bright art. Pops when the
 /// screen was pushed, otherwise goes home (a deep link has nothing to pop).

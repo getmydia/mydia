@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../glass_surface.dart';
 
-/// A small label over artwork ("Next Up · S1 E13") on iOS and macOS: a glass
+/// A small label over artwork ("Next Up · S1 E13") on Liquid Glass: a glass
 /// capsule with no press interaction. Elsewhere it paints
 /// [fallbackDecoration], the call site's previous look.
 class GlassBadge extends StatelessWidget {
@@ -25,7 +25,7 @@ class GlassBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = Padding(padding: padding, child: child);
-    if (!LiquidGlassSupport.platformEligible) {
+    if (!GlassStyle.of(context)) {
       return DecoratedBox(decoration: fallbackDecoration, child: content);
     }
     return GlassSurface.control(

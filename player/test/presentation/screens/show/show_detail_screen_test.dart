@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/sources/capabilities.dart';
-import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
@@ -109,6 +110,8 @@ Future<void> _pumpScreen(
   String? initialEpisode,
   // Rebuilds the same screen with a new initialEpisode when it changes.
   ValueListenable<String?>? initialEpisodes,
+  // Pumps under the Liquid Glass design language when true.
+  bool liquid = false,
 }) {
   final byseason = episodes ??
       {
@@ -133,6 +136,7 @@ Future<void> _pumpScreen(
           ),
     [source],
     size: size,
+    theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
     routes: [
       GoRoute(
         path: '/s/:sourceId/player/:itemId',
@@ -146,11 +150,9 @@ Future<void> _pumpScreen(
 }
 
 void main() {
-  tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
-
-  testWidgets('on Apple the Next Up pill is a glass badge', (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
-    await _pumpScreen(tester);
+  testWidgets('on Liquid Glass the Next Up pill is a glass badge',
+      (tester) async {
+    await _pumpScreen(tester, liquid: true);
     expect(
       find.ancestor(
         of: find.textContaining('Next Up'),
@@ -160,11 +162,11 @@ void main() {
     );
   });
 
-  testWidgets('on Apple an unselected season is tappable in its padding',
+  testWidgets('on Liquid Glass an unselected season is tappable in its padding',
       (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
     await _pumpScreen(
       tester,
+      liquid: true,
       size: const Size(1000, 2200),
       episodes: {
         1: [_episode(1, watched: true), _episode(2), _episode(3)],
@@ -184,11 +186,11 @@ void main() {
     );
   });
 
-  testWidgets('on Apple only the selected season sits on glass',
+  testWidgets('on Liquid Glass only the selected season sits on glass',
       (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
     await _pumpScreen(
       tester,
+      liquid: true,
       size: const Size(1000, 2200),
       episodes: {
         1: [_episode(1, watched: true), _episode(2), _episode(3)],

@@ -4,6 +4,7 @@ import '../../../core/config/web_config.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../glass_surface.dart';
 import 'sidebar_content.dart';
@@ -51,7 +52,7 @@ class MobileDrawer extends StatelessWidget {
             )
           : null,
     );
-    return LiquidGlassSupport.available
+    return GlassStyle.of(context) && LiquidGlassSupport.available
         ? _floating(context, content)
         : _edgeToEdge(content);
   }

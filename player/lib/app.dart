@@ -17,6 +17,7 @@ import 'core/layout/window_chrome_inset.dart';
 import 'core/media_session/media_session_bridge.dart';
 import 'core/theme/ambient_tint/ambient_tint.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/glass_material.dart';
 import 'core/theme/theme_providers.dart';
 import 'core/platform/native_tab_bar_channel.dart';
 import 'core/window/decoration_layout_source.dart';
@@ -519,7 +520,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final theme = AppTheme.build(ref.watch(paletteProvider));
+    final theme = AppTheme.build(
+      ref.watch(paletteProvider),
+      liquid: ref.watch(glassMaterialSettingProvider) == GlassMaterial.liquid,
+    );
     // Show loading screen while the stored sources are loading
     if (ref.watch(sourcesLoadingProvider)) {
       debugPrint('[MyApp] Showing loading screen');

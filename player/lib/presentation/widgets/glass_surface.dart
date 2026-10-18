@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../core/theme/depth_tokens.dart';
 import '../../core/theme/liquid_glass/glass_accessibility.dart';
+import '../../core/theme/liquid_glass/glass_style.dart';
 import '../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../core/theme/palette.dart';
 import 'glass/liquid_glass_filter.dart';
@@ -40,7 +41,7 @@ enum GlassTint { ground, surface }
 /// [GlassSurface.appBar], [GlassSurface.modal] and [GlassSurface.chrome]
 /// follow the ambient tint ([AmbientTint]); faux, hoverOverlay and osd do not.
 ///
-/// On iOS and macOS, [GlassSurface.appBar], [GlassSurface.chrome],
+/// On Liquid Glass, [GlassSurface.appBar], [GlassSurface.chrome],
 /// [GlassSurface.modal] and [GlassSurface.control] take the Liquid Glass recipe
 /// (`LiquidGlassFilter`) when `LiquidGlassSupport.available`, and an opaque
 /// fill when Reduce Transparency is on. Chrome, modal and control tints adapt
@@ -91,7 +92,7 @@ class GlassSurface extends StatelessWidget {
   final GlassTint? tint;
   final double tintOpacity;
 
-  /// Tint opacity on the Liquid Glass recipe (iOS and macOS). Null means
+  /// Tint opacity on the Liquid Glass recipe. Null means
   /// this surface never takes it: only [GlassSurface.appBar],
   /// [GlassSurface.chrome], [GlassSurface.modal] and [GlassSurface.control]
   /// set it, so the OSD, faux and hover overlay are excluded by
@@ -192,7 +193,7 @@ class GlassSurface extends StatelessWidget {
 
   /// A floating control: a circle or capsule over content (back, close,
   /// cast, Play; the white prominent pill with [prominentColor]). Casts
-  /// [DepthTokens.liquidControlShadow]. Only used on iOS and macOS; the
+  /// [DepthTokens.liquidControlShadow]. Only used on Liquid Glass; the
   /// control widgets render Material elsewhere.
   GlassSurface.control({
     Key? key,
@@ -330,7 +331,7 @@ class GlassSurface extends StatelessWidget {
       if (access.reduceTransparency) {
         return _withShadow(_solid(base.withValues(alpha: 1), resolvedBorder));
       }
-      if (LiquidGlassSupport.available) {
+      if (GlassStyle.of(context) && LiquidGlassSupport.available) {
         return _withShadow(liquidScrollEdge
             ? _scrollEdge(context, base, access)
             : _liquid(context, base, liquidOpacity, access));

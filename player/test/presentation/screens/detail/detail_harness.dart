@@ -42,7 +42,7 @@ class ScriptedDetailSource extends FakeCapableSource {
 
 /// Mounts [screen] over [sources], each answering for its own id. With
 /// [routes], the screen is the router's `/` and those are the places it can
-/// navigate to.
+/// navigate to. [theme] is the app theme, to pick glass or Material controls.
 Future<void> pumpDetailScreen(
   WidgetTester tester,
   Widget screen,
@@ -50,6 +50,7 @@ Future<void> pumpDetailScreen(
   Size size = const Size(1000, 900),
   List<Override> overrides = const [],
   List<GoRoute> routes = const [],
+  ThemeData? theme,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -62,8 +63,9 @@ Future<void> pumpDetailScreen(
         ...overrides,
       ],
       child: routes.isEmpty
-          ? MaterialApp(home: screen)
+          ? MaterialApp(theme: theme, home: screen)
           : MaterialApp.router(
+              theme: theme,
               routerConfig: GoRouter(routes: [
                 GoRoute(path: '/', builder: (_, __) => screen),
                 ...routes,

@@ -2,15 +2,19 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/liquid_glass/glass_accessibility.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
 Widget _host(Widget child,
-        {GlassAccessibility access = GlassAccessibility.none}) =>
+        {GlassAccessibility access = GlassAccessibility.none,
+        bool liquid = true}) =>
     MaterialApp(
+      theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
       home: GlassAccessibilityScope(
         value: access,
         child: Scaffold(
@@ -225,6 +229,24 @@ void main() {
         matching: find.byType(DecoratedBox),
       ));
       expect((box.decoration as BoxDecoration).border, isNotNull);
+    });
+  });
+
+  group('the Frosted setting on a device where the shader works', () {
+    setUp(() => LiquidGlassSupport.debugOverride = true);
+
+    liquidVariants.forEach((name, surface) {
+      testWidgets('$name stays frosted', (tester) async {
+        await tester.pumpWidget(_host(surface, liquid: false));
+        expect(find.byType(LiquidGlassFilter), findsNothing);
+        expect(find.byType(BackdropFilter), findsOneWidget);
+      });
+    });
+
+    testWidgets('the Liquid Glass setting takes the shader', (tester) async {
+      await tester.pumpWidget(
+          _host(const GlassSurface.chrome(child: _box), liquid: true));
+      expect(find.byType(LiquidGlassFilter), findsOneWidget);
     });
   });
 

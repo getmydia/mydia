@@ -7,7 +7,7 @@ void main() {
   for (final preset in ThemePreset.values) {
     test('${preset.name} theme is built from its palette', () {
       final p = preset.palette();
-      final theme = AppTheme.build(p);
+      final theme = AppTheme.build(p, liquid: false);
       expect(theme.extension<MydiaPalette>(), p);
       expect(theme.colorScheme.surface, p.background);
       expect(theme.colorScheme.surfaceContainer, p.surface);

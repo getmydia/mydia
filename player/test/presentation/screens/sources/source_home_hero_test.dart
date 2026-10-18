@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
-import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/sources/source_home_hero.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
@@ -31,6 +32,7 @@ Future<ProviderContainer> _pump(
   WidgetTester tester,
   Size size, {
   ItemSummary? item,
+  bool liquid = false,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -44,6 +46,7 @@ Future<ProviderContainer> _pump(
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
+      theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
       home: Scaffold(
         body: SingleChildScrollView(
           child: SourceHomeHero(
@@ -64,16 +67,11 @@ void main() {
   const playKey = Key('source-home-hero-play');
   const moreKey = Key('source-home-hero-more');
 
-  setUp(() => LiquidGlassSupport.debugPlatformOverride = false);
-  tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
-
-  group('on iOS and macOS', () {
-    setUp(() => LiquidGlassSupport.debugPlatformOverride = true);
-
+  group('on Liquid Glass', () {
     testWidgets('Play and the secondary action are glass and still tap',
         (tester) async {
       await _pump(tester, const Size(1280, 800),
-          item: _movie(showTitle: 'Saltmarsh'));
+          liquid: true, item: _movie(showTitle: 'Saltmarsh'));
       expect(
         find.descendant(
             of: find.byKey(playKey), matching: find.byType(GlassSurface)),
@@ -101,7 +99,7 @@ void main() {
     });
 
     testWidgets('narrow: both pills fill the content width', (tester) async {
-      await _pump(tester, const Size(400, 800));
+      await _pump(tester, const Size(400, 800), liquid: true);
       final play = tester.getSize(find.byKey(playKey));
       final more = tester.getSize(find.byKey(moreKey));
       expect(more.width, play.width - 6);
@@ -109,14 +107,14 @@ void main() {
 
     testWidgets('the episode chip is a glass badge', (tester) async {
       await _pump(tester, const Size(1280, 800),
-          item: _movie(showTitle: 'Saltmarsh'));
+          liquid: true, item: _movie(showTitle: 'Saltmarsh'));
       expect(find.byType(GlassBadge), findsWidgets);
     });
 
     testWidgets('every glass surface shares one BackdropGroup pass',
         (tester) async {
       await _pump(tester, const Size(1280, 800),
-          item: _movie(showTitle: 'Saltmarsh'));
+          liquid: true, item: _movie(showTitle: 'Saltmarsh'));
       final surfaces =
           tester.widgetList<GlassSurface>(find.byType(GlassSurface)).toList();
       // Chips (subtitle-less item: year), Play and the secondary action.
@@ -135,7 +133,7 @@ void main() {
     });
   });
 
-  testWidgets('off Apple there is no BackdropGroup', (tester) async {
+  testWidgets('Frosted has no BackdropGroup', (tester) async {
     await _pump(tester, const Size(1280, 800));
     expect(find.byType(GlassSurface), findsNothing);
     expect(find.byType(BackdropGroup), findsNothing);

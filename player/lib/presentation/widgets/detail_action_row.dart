@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/colors.dart';
-import '../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../core/theme/liquid_glass/glass_style.dart';
 import '../../core/theme/palette.dart';
 import 'focus_highlight.dart';
 import 'glass/glass_interaction.dart';
@@ -133,9 +133,7 @@ class DetailActionRow extends StatelessWidget {
       ],
     );
     // One backdrop pass shared by every glass circle in the row.
-    return LiquidGlassSupport.platformEligible
-        ? BackdropGroup(child: row)
-        : row;
+    return GlassStyle.of(context) ? BackdropGroup(child: row) : row;
   }
 
   Future<void> _openTrailer(BuildContext context, String url) async {
@@ -168,7 +166,7 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final color = highlighted ? highlightColor : palette.textPrimary;
-    final glass = LiquidGlassSupport.platformEligible;
+    final glass = GlassStyle.of(context);
     final iconWidget = Center(child: Icon(icon, color: color, size: 20));
     final circle = SizedBox.square(
       dimension: 44,

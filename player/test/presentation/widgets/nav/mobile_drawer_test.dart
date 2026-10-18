@@ -8,6 +8,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/nav/mobile_drawer.dart';
 
@@ -21,7 +22,8 @@ final _scaffoldKey = GlobalKey<ScaffoldState>();
 Future<void> _openDrawer(WidgetTester tester,
     {ValueChanged<String>? onNavigate,
     FakeViewPadding padding = _padding,
-    TextDirection? direction}) async {
+    TextDirection? direction,
+    bool liquid = true}) async {
   tester.view.physicalSize = const Size(400, 800);
   tester.view.devicePixelRatio = 1;
   tester.view.padding = padding;
@@ -37,6 +39,7 @@ Future<void> _openDrawer(WidgetTester tester,
       mediaSourceProvider(fakeSourceId).overrideWithValue(FakeCapableSource()),
     ],
     child: MaterialApp(
+      theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
       builder: direction == null
           ? null
           : (c, child) =>
@@ -63,7 +66,7 @@ void main() {
   testWidgets('off Liquid Glass the drawer is edge to edge, rounded right',
       (tester) async {
     LiquidGlassSupport.debugOverride = false;
-    await _openDrawer(tester);
+    await _openDrawer(tester, liquid: false);
 
     final glass = tester.widget<GlassSurface>(_glass);
     expect(
@@ -72,6 +75,17 @@ void main() {
         right: Radius.circular(AppTheme.radiusRail),
       ),
     );
+    final rect = tester.getRect(_glass);
+    expect(rect.left, 0);
+    expect(rect.top, 0);
+    expect(rect.bottom, 800);
+  });
+
+  testWidgets('the shader being available is not enough without the setting',
+      (tester) async {
+    LiquidGlassSupport.debugOverride = true;
+    await _openDrawer(tester, liquid: false);
+
     final rect = tester.getRect(_glass);
     expect(rect.left, 0);
     expect(rect.top, 0);

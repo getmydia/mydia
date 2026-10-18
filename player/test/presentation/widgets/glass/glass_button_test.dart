@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass/glass_button.dart';
 import 'package:player/presentation/widgets/glass/glass_interaction.dart';
@@ -8,7 +8,11 @@ import 'package:player/presentation/widgets/glass_surface.dart';
 
 const _key = Key('glass-button-under-test');
 
-Widget _host(VoidCallback? onPressed) => MaterialApp(
+ThemeData _theme({required bool liquid}) =>
+    AppTheme.build(Palettes.projectionBooth, liquid: liquid);
+
+Widget _host(VoidCallback? onPressed, {bool liquid = true}) => MaterialApp(
+      theme: _theme(liquid: liquid),
       home: Scaffold(
         body: Center(
           child: GlassButton(
@@ -21,11 +25,8 @@ Widget _host(VoidCallback? onPressed) => MaterialApp(
     );
 
 void main() {
-  tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
-
-  testWidgets('on iOS and macOS it is a glass capsule that taps by key',
+  testWidgets('on Liquid Glass it is a glass capsule that taps by key',
       (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
     var taps = 0;
     await tester.pumpWidget(_host(() => taps++));
     expect(find.byType(GlassSurface), findsOneWidget);
@@ -37,10 +38,9 @@ void main() {
     expect(tester.getSize(find.byType(GlassSurface)).height, 48);
   });
 
-  testWidgets('elsewhere it is the OutlinedButton, keyed', (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = false;
+  testWidgets('on Frosted it is the OutlinedButton, keyed', (tester) async {
     var taps = 0;
-    await tester.pumpWidget(_host(() => taps++));
+    await tester.pumpWidget(_host(() => taps++, liquid: false));
     expect(find.byType(GlassSurface), findsNothing);
     expect(find.byType(OutlinedButton), findsOneWidget);
     await tester.tap(find.byKey(_key));
@@ -48,7 +48,6 @@ void main() {
   });
 
   testWidgets('a null onPressed disables the glass press', (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
     await tester.pumpWidget(_host(null));
     final interaction =
         tester.widget<GlassInteraction>(find.byType(GlassInteraction));
@@ -57,7 +56,6 @@ void main() {
 
   testWidgets('the glass path is a labelled button, enabled by onPressed',
       (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(_host(() {}));
     expect(
@@ -86,7 +84,6 @@ void main() {
 
   testWidgets('a null onPressed dims the label to textDisabled',
       (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
     await tester.pumpWidget(_host(() {}));
     final enabled = tester.widget<Text>(find.text('All episodes')).style!.color;
     expect(enabled, Colors.white);
@@ -97,8 +94,8 @@ void main() {
   });
 
   testWidgets('grouped passes through to the glass surface', (tester) async {
-    LiquidGlassSupport.debugPlatformOverride = true;
     await tester.pumpWidget(MaterialApp(
+      theme: _theme(liquid: true),
       home: BackdropGroup(
         child: GlassButton(label: 'x', onPressed: () {}, grouped: true),
       ),

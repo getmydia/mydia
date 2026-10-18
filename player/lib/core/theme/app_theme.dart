@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'colors.dart';
-import 'liquid_glass/liquid_glass_support.dart';
+import 'liquid_glass/glass_style.dart';
 import 'palette.dart';
 
 /// Mydia Design System Theme
@@ -26,24 +26,24 @@ class AppTheme {
   static const Color secondaryButtonFill = Color(0x24FFFFFF);
 
   /// The default preset's theme, for tests and callers outside the app root.
-  static ThemeData get darkTheme => build(Palettes.projectionBooth);
+  static ThemeData get darkTheme =>
+      build(Palettes.projectionBooth, liquid: false);
 
-  static ThemeData build(MydiaPalette p) {
-    // iOS and macOS: content buttons take the capsule shape and an
+  static ThemeData build(MydiaPalette p, {required bool liquid}) {
+    // Liquid Glass: content buttons take the capsule shape and an
     // Apple-style highlight instead of the Material ripple, to sit beside
-    // the Liquid Glass controls. See player/docs/liquid-glass.md.
-    final apple = LiquidGlassSupport.platformEligible;
-    final OutlinedBorder buttonShape = apple
+    // the glass controls. See player/docs/liquid-glass.md.
+    final OutlinedBorder buttonShape = liquid
         ? const StadiumBorder()
         : RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusButton),
           );
     final InteractiveInkFeatureFactory? buttonSplash =
-        apple ? NoSplash.splashFactory : null;
+        liquid ? NoSplash.splashFactory : null;
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      extensions: [p],
+      extensions: [p, GlassStyle(liquid: liquid)],
 
       // Font family - matches web app
       fontFamily: 'Inter',

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/theme/colors.dart';
-import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../../domain/models/watch_status.dart';
@@ -436,7 +436,7 @@ class _SeasonChipState extends State<_SeasonChip>
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final glass = LiquidGlassSupport.platformEligible;
+    final glass = GlassStyle.of(context);
     final content = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
