@@ -16,13 +16,17 @@ import '../../screens/sources/fake_media_source.dart';
 
 const _padding = FakeViewPadding(left: 20, top: 47, bottom: 34);
 
+final _scaffoldKey = GlobalKey<ScaffoldState>();
+
 Future<void> _openDrawer(WidgetTester tester,
-    {ValueChanged<String>? onNavigate}) async {
+    {ValueChanged<String>? onNavigate,
+    FakeViewPadding padding = _padding,
+    TextDirection? direction}) async {
   tester.view.physicalSize = const Size(400, 800);
   tester.view.devicePixelRatio = 1;
-  tester.view.padding = _padding;
+  tester.view.padding = padding;
   addTearDown(tester.view.reset);
-  final scaffoldKey = GlobalKey<ScaffoldState>();
+  final scaffoldKey = _scaffoldKey;
 
   await tester.pumpWidget(ProviderScope(
     overrides: [
@@ -33,6 +37,10 @@ Future<void> _openDrawer(WidgetTester tester,
       mediaSourceProvider(fakeSourceId).overrideWithValue(FakeCapableSource()),
     ],
     child: MaterialApp(
+      builder: direction == null
+          ? null
+          : (c, child) =>
+              Directionality(textDirection: direction, child: child!),
       home: Scaffold(
         key: scaffoldKey,
         drawer: MobileDrawer(location: '/', onNavigate: onNavigate ?? (_) {}),
@@ -106,5 +114,42 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(routes, isNotEmpty);
+  });
+
+  testWidgets('a tap in the top margin dismisses the floating drawer',
+      (tester) async {
+    LiquidGlassSupport.debugOverride = true;
+    await _openDrawer(tester);
+    expect(_scaffoldKey.currentState!.isDrawerOpen, isTrue);
+
+    await tester.tapAt(const Offset(100, (Breakpoints.railInset + 47) / 2));
+    await tester.pumpAndSettle();
+    expect(_scaffoldKey.currentState!.isDrawerOpen, isFalse);
+  });
+
+  testWidgets('a tap on empty panel space keeps the floating drawer open',
+      (tester) async {
+    LiquidGlassSupport.debugOverride = true;
+    await _openDrawer(tester);
+
+    final rect = tester.getRect(_glass);
+    await tester.tapAt(Offset(rect.center.dx, rect.bottom - 4));
+    await tester.pumpAndSettle();
+    expect(_scaffoldKey.currentState!.isDrawerOpen, isTrue);
+  });
+
+  testWidgets('the floating drawer insets from the right edge in RTL',
+      (tester) async {
+    LiquidGlassSupport.debugOverride = true;
+    await _openDrawer(
+      tester,
+      padding: const FakeViewPadding(right: 20, top: 47, bottom: 34),
+      direction: TextDirection.rtl,
+    );
+
+    final rect = tester.getRect(_glass);
+    final drawer = tester.getRect(find.byType(Drawer));
+    expect(rect.right, 400 - Breakpoints.railInset - 20);
+    expect(rect.left, drawer.left);
   });
 }

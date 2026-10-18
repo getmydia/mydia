@@ -79,37 +79,57 @@ class MobileDrawer extends StatelessWidget {
   Widget _floating(BuildContext context, Widget content) {
     const inset = Breakpoints.railInset;
     final safe = MediaQuery.paddingOf(context);
+    final leadingSafe = Directionality.of(context) == TextDirection.rtl
+        ? safe.right
+        : safe.left;
+    // Drawer wraps its child in a Material that absorbs hits, so a tap in the
+    // inset margins would never reach the Scaffold scrim. The bottom layer
+    // closes the drawer for those taps; the panel absorbs its own.
     return Drawer(
       backgroundColor: Colors.transparent,
       elevation: 0,
       shape: const RoundedRectangleBorder(),
       clipBehavior: Clip.none,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          inset + safe.left,
-          inset + safe.top,
-          0,
-          inset + safe.bottom,
-        ),
-        child: GlassSurface.chrome(
-          borderRadius:
-              const BorderRadius.all(Radius.circular(AppTheme.radiusRail)),
-          border: Border.all(
-            color: DepthTokens.rimColor,
-            width: DepthTokens.rimWidth,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              excludeFromSemantics: true,
+              onTap: () => Scaffold.maybeOf(context)?.closeDrawer(),
+            ),
           ),
-          shadows: DepthTokens.chrome,
-          // The padding already clears the safe area; drop it so nothing
-          // inside insets itself a second time.
-          child: MediaQuery.removePadding(
-            context: context,
-            removeLeft: true,
-            removeTop: true,
-            removeRight: true,
-            removeBottom: true,
-            child: content,
+          Padding(
+            padding: EdgeInsetsDirectional.fromSTEB(
+              inset + leadingSafe,
+              inset + safe.top,
+              0,
+              inset + safe.bottom,
+            ),
+            child: Listener(
+              behavior: HitTestBehavior.opaque,
+              child: GlassSurface.chrome(
+                borderRadius: const BorderRadius.all(
+                    Radius.circular(AppTheme.radiusRail)),
+                border: Border.all(
+                  color: DepthTokens.rimColor,
+                  width: DepthTokens.rimWidth,
+                ),
+                shadows: DepthTokens.chrome,
+                // The padding already clears the safe area; drop it so
+                // nothing inside insets itself a second time.
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeLeft: true,
+                  removeTop: true,
+                  removeRight: true,
+                  removeBottom: true,
+                  child: content,
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
