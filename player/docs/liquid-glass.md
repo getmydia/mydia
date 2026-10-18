@@ -91,7 +91,7 @@ from the base (dark content) to the maximum (bright content) with a smoothstep b
 | Control | `liquidControlTintOpacity` 0.3 | `liquidControlAdaptiveMax` 0.65 |
 | Accent | `liquidAccentTintOpacity` 0.55 | `liquidAccentAdaptiveMax` 0.9 |
 
-The tint is lowest at mid luma, so white is not the worst backdrop: the
+Contrast is lowest at mid-luma, so white is not the worst backdrop: the
 contrast bottoms out where the ramp has only just started. `liquidAdaptiveAlpha`
 in `liquid_glass_adaptive.dart` reproduces the shader's curve, and
 `liquid_glass_legibility_test.dart` uses it to sweep grey backdrops from 0 to 1
