@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
-import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/core/theme/palette.dart';
 
 void main() {
-  tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
-
   OutlinedBorder? shapeOf(ButtonStyle? style) =>
       style?.shape?.resolve(<WidgetState>{});
 
-  test('iOS and macOS: content buttons are capsules with no ripple', () {
-    LiquidGlassSupport.debugPlatformOverride = true;
-    final theme = AppTheme.build(Palettes.projectionBooth);
+  test('Liquid Glass: content buttons are capsules with no ripple', () {
+    final theme = AppTheme.build(Palettes.projectionBooth, liquid: true);
     for (final style in [
       theme.filledButtonTheme.style,
       theme.elevatedButtonTheme.style,
@@ -24,9 +20,8 @@ void main() {
     }
   });
 
-  test('elsewhere the buttons keep their rounded rectangle', () {
-    LiquidGlassSupport.debugPlatformOverride = false;
-    final theme = AppTheme.build(Palettes.projectionBooth);
+  test('Frosted: the buttons keep their rounded rectangle', () {
+    final theme = AppTheme.build(Palettes.projectionBooth, liquid: false);
     expect(
         shapeOf(theme.filledButtonTheme.style), isA<RoundedRectangleBorder>());
     expect(theme.filledButtonTheme.style?.splashFactory, isNull);

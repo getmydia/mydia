@@ -58,7 +58,7 @@ void main() {
           child: Directionality(
             textDirection: TextDirection.ltr,
             child: Theme(
-              data: AppTheme.build(Palettes.oledBlack),
+              data: AppTheme.build(Palettes.oledBlack, liquid: false),
               child: ShellAmbientTint(child: _Probe(seen)),
             ),
           ),

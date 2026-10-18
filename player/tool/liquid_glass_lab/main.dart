@@ -26,8 +26,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 
 const String _snapshotPath = String.fromEnvironment('LAB_SNAPSHOT');
@@ -103,6 +105,7 @@ class _LabState extends State<_Lab> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
       debugShowCheckedModeBanner: false,
       home: Scaffold(
         body: RepaintBoundary(

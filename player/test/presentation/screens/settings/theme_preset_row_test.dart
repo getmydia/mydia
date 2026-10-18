@@ -15,7 +15,7 @@ class _ThemedHost extends ConsumerWidget {
   const _ThemedHost();
   @override
   Widget build(BuildContext context, WidgetRef ref) => MaterialApp(
-        theme: AppTheme.build(ref.watch(paletteProvider)),
+        theme: AppTheme.build(ref.watch(paletteProvider), liquid: false),
         home: const Scaffold(body: ThemePresetSettingsRow()),
       );
 }
