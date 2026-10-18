@@ -293,17 +293,6 @@ class GlassSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final base = _baseColor(context);
     final liquidOpacity = liquidTintOpacity;
-    if (liquidOpacity != null && base != null) {
-      final access = GlassAccessibilityScope.of(context);
-      if (access.reduceTransparency) {
-        return _withShadow(_solid(base.withValues(alpha: 1)));
-      }
-      if (LiquidGlassSupport.available) {
-        return _withShadow(_liquid(context, base, liquidOpacity, access));
-      }
-    }
-    final fill = fillColor ??
-        (gradient != null ? null : base?.withValues(alpha: tintOpacity));
     final alpha = paletteBorderAlpha;
     final resolvedBorder = border ??
         (alpha == null
@@ -311,6 +300,17 @@ class GlassSurface extends StatelessWidget {
             : Border.all(
                 color: context.palette.border.withValues(alpha: alpha),
               ));
+    if (liquidOpacity != null && base != null) {
+      final access = GlassAccessibilityScope.of(context);
+      if (access.reduceTransparency) {
+        return _withShadow(_solid(base.withValues(alpha: 1), resolvedBorder));
+      }
+      if (LiquidGlassSupport.available) {
+        return _withShadow(_liquid(context, base, liquidOpacity, access));
+      }
+    }
+    final fill = fillColor ??
+        (gradient != null ? null : base?.withValues(alpha: tintOpacity));
     return _withShadow(_surface(fill, resolvedBorder));
   }
 
@@ -327,7 +327,7 @@ class GlassSurface extends StatelessWidget {
   }
 
   /// Reduce Transparency: an opaque fill, no backdrop pass.
-  Widget _solid(Color color) => ClipRRect(
+  Widget _solid(Color color, BoxBorder? border) => ClipRRect(
         borderRadius: borderRadius,
         child: _fill(color, border),
       );

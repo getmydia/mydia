@@ -95,6 +95,19 @@ void main() {
       expect(color?.a, 1.0);
     });
 
+    testWidgets('Reduce Transparency keeps the modal palette border',
+        (tester) async {
+      await tester.pumpWidget(_host(
+        GlassSurface.modal(child: _box),
+        access: const GlassAccessibility(reduceTransparency: true),
+      ));
+      final box = tester.widget<DecoratedBox>(find.descendant(
+        of: find.byType(GlassSurface),
+        matching: find.byType(DecoratedBox),
+      ));
+      expect((box.decoration as BoxDecoration).border, isNotNull);
+    });
+
     testWidgets('Increase Contrast raises the tint and draws a rim',
         (tester) async {
       await tester.pumpWidget(_host(

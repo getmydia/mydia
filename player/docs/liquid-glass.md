@@ -79,10 +79,12 @@ the lab only.
 
 The player app does not build for Linux desktop without libsecret
 (`flutter_secure_storage`), so on Linux run the lab from a plugin-free
-scratch Flutter project. Copy in the lab plus `depth_tokens.dart`,
+scratch Flutter project. Copy the lab in as the scratch project's
+`lib/main.dart` (so plain `flutter run` picks it), plus `depth_tokens.dart`,
 `liquid_glass_support.dart`, `liquid_glass_uniforms.dart`,
 `liquid_glass_filter.dart` and `glass_pointer.dart`, rewrite their imports,
-and register the shader under `flutter: shaders:`. Headless:
+and register the shader under `flutter: shaders:`. Headless, from the
+scratch project:
 
     xvfb-run -a -s "-screen 0 2560x1800x24" env GDK_SCALE=2 \
       flutter run -d linux --dart-define=MYDIA_LIQUID_GLASS=true \
