@@ -21,6 +21,9 @@ Deeper reference lives alongside this file in `player/docs/`:
   ordering, touch pass-through, the `mydia/native-tab-bar` channel, insets,
   `chromeLeading`, the cast accessory, and how the native sidebars mirror
   `SidebarContent`'s rows.
+- [liquid-glass.md](docs/liquid-glass.md) - the Liquid Glass material on iOS
+  and macOS: the shader, where glass goes, the startup gate, Reduce
+  Transparency and Increase Contrast, the lab, and how tests select it.
 
 ## Project Overview
 
