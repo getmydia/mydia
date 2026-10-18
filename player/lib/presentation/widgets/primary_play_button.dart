@@ -20,6 +20,7 @@ class PrimaryPlayButton extends StatefulWidget {
     required this.onPressed,
     this.label = 'Play',
     this.iconOnly = false,
+    this.grouped = false,
   });
 
   /// Drop the text for width-bounded layouts. The label stays as the
@@ -27,6 +28,9 @@ class PrimaryPlayButton extends StatefulWidget {
   final bool iconOnly;
 
   final VoidCallback? onPressed;
+
+  /// Shares the enclosing `BackdropGroup`'s blur pass (glass path only).
+  final bool grouped;
 
   /// "Play", or "Resume" when the item has saved progress.
   final String label;
@@ -133,6 +137,7 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
             child: GlassSurface.control(
               key: PrimaryPlayButton.pillKey,
               borderRadius: radius,
+              grouped: widget.grouped,
               child: Material(type: MaterialType.transparency, child: ink),
             ),
           )

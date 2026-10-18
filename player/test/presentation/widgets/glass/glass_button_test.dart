@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass/glass_button.dart';
 import 'package:player/presentation/widgets/glass/glass_interaction.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -52,5 +53,57 @@ void main() {
     final interaction =
         tester.widget<GlassInteraction>(find.byType(GlassInteraction));
     expect(interaction.enabled, isFalse);
+  });
+
+  testWidgets('the glass path is a labelled button, enabled by onPressed',
+      (tester) async {
+    LiquidGlassSupport.debugPlatformOverride = true;
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_host(() {}));
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('All episodes')),
+      matchesSemantics(
+        label: 'All episodes',
+        isButton: true,
+        isEnabled: true,
+        hasEnabledState: true,
+        hasTapAction: true,
+        isFocusable: false,
+      ),
+    );
+    await tester.pumpWidget(_host(null));
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('All episodes')),
+      matchesSemantics(
+        label: 'All episodes',
+        isButton: true,
+        hasEnabledState: true,
+        isEnabled: false,
+      ),
+    );
+    handle.dispose();
+  });
+
+  testWidgets('a null onPressed dims the label to textDisabled',
+      (tester) async {
+    LiquidGlassSupport.debugPlatformOverride = true;
+    await tester.pumpWidget(_host(() {}));
+    final enabled = tester.widget<Text>(find.text('All episodes')).style!.color;
+    expect(enabled, Colors.white);
+    await tester.pumpWidget(_host(null));
+    final ctx = tester.element(find.byType(GlassButton));
+    expect(tester.widget<Text>(find.text('All episodes')).style!.color,
+        ctx.palette.textDisabled);
+  });
+
+  testWidgets('grouped passes through to the glass surface', (tester) async {
+    LiquidGlassSupport.debugPlatformOverride = true;
+    await tester.pumpWidget(MaterialApp(
+      home: BackdropGroup(
+        child: GlassButton(label: 'x', onPressed: () {}, grouped: true),
+      ),
+    ));
+    expect(
+        tester.widget<GlassSurface>(find.byType(GlassSurface)).grouped, isTrue);
   });
 }

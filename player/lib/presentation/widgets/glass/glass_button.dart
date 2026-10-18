@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 import 'glass_interaction.dart';
 
@@ -17,6 +18,7 @@ class GlassButton extends StatelessWidget {
     this.icon,
     this.height = 48,
     this.buttonKey,
+    this.grouped = false,
   });
 
   final String label;
@@ -26,6 +28,9 @@ class GlassButton extends StatelessWidget {
 
   /// Keys the tappable widget on both paths.
   final Key? buttonKey;
+
+  /// Shares the enclosing `BackdropGroup`'s blur pass (glass path only).
+  final bool grouped;
 
   @override
   Widget build(BuildContext context) {
@@ -48,39 +53,49 @@ class GlassButton extends StatelessWidget {
             );
     }
     final radius = BorderRadius.circular(height / 2);
+    final foreground =
+        onPressed == null ? context.palette.textDisabled : Colors.white;
     return GlassInteraction(
       enabled: onPressed != null,
       child: GlassSurface.control(
         borderRadius: radius,
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            key: buttonKey,
-            onTap: onPressed,
-            borderRadius: radius,
-            splashFactory: NoSplash.splashFactory,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: height),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 22),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (icon != null) ...[
-                      Icon(icon, size: 22, color: Colors.white),
-                      const SizedBox(width: 8),
-                    ],
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontFamily: AppTheme.displayFamily,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+        grouped: grouped,
+        child: Semantics(
+          button: true,
+          enabled: onPressed != null,
+          label: label,
+          excludeSemantics: true,
+          onTap: onPressed,
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              key: buttonKey,
+              onTap: onPressed,
+              borderRadius: radius,
+              splashFactory: NoSplash.splashFactory,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: height),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (icon != null) ...[
+                        Icon(icon, size: 22, color: foreground),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontFamily: AppTheme.displayFamily,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: foreground,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

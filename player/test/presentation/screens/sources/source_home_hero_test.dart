@@ -112,6 +112,33 @@ void main() {
           item: _movie(showTitle: 'Saltmarsh'));
       expect(find.byType(GlassBadge), findsWidgets);
     });
+
+    testWidgets('every glass surface shares one BackdropGroup pass',
+        (tester) async {
+      await _pump(tester, const Size(1280, 800),
+          item: _movie(showTitle: 'Saltmarsh'));
+      final surfaces =
+          tester.widgetList<GlassSurface>(find.byType(GlassSurface)).toList();
+      // Chips (subtitle-less item: year), Play and the secondary action.
+      expect(surfaces.length, greaterThanOrEqualTo(3));
+      expect(surfaces.every((s) => s.live && s.grouped), isTrue);
+      expect(find.byType(BackdropGroup), findsOneWidget);
+      for (final surface in find.byType(GlassSurface).evaluate()) {
+        expect(
+          find.ancestor(
+            of: find.byWidget(surface.widget),
+            matching: find.byType(BackdropGroup),
+          ),
+          findsOneWidget,
+        );
+      }
+    });
+  });
+
+  testWidgets('off Apple there is no BackdropGroup', (tester) async {
+    await _pump(tester, const Size(1280, 800));
+    expect(find.byType(GlassSurface), findsNothing);
+    expect(find.byType(BackdropGroup), findsNothing);
   });
 
   testWidgets('wide: a 248x360 poster with the title to its right',

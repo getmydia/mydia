@@ -3,7 +3,7 @@
 The floating control layer on iOS and macOS uses a Liquid Glass material
 drawn by our own shader, `shaders/liquid_glass.frag`. It frosts and
 saturates the backdrop (`liquidBlurSigma`, `liquidSaturation`,
-`liquidBrightness`), bends it in a narrow band at the rim (an
+`liquidBrightness`), bends it in a narrow band at the rim (a
 `liquidEdgeBand` of 8 points, cubic falloff, `liquidRefraction` with a little
 `liquidDispersion`), tints it adaptively (lighter over dark content, stronger
 over bright content), adds a soft inner glow along the top and bottom and a
@@ -36,7 +36,7 @@ artwork, and the capsule behind the selected season. Content stays solid:
 settings rows, inline buttons, switches, sliders, and anything repeated per
 item in a scrolling list. Per-card overlays and metadata chips stay solid
 because they repeat in scrolling lists and each glass surface costs two
-backdrop passes. The detail action row shares one blur pass through
+backdrop passes. The detail action row and the home hero each share one blur pass through
 `BackdropGroup`. `GlassSurface.faux` and
 `.hoverOverlay` never take the Liquid Glass path.
 
@@ -136,7 +136,6 @@ scratch project:
       flutter run -d linux --dart-define=MYDIA_LIQUID_GLASS=true \
       --dart-define=LAB_SNAPSHOT=/tmp/lab.png
 
-The lab also needs `liquid_glass_adaptive.dart` and `contrast.dart`.
 `GDK_SCALE=2` gives a 2x device pixel ratio. Add `LAB_GRID=true` for the
 grid and `LAB_SCROLL=<px>` to scroll the backdrop first.
 

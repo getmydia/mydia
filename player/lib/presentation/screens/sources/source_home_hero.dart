@@ -104,7 +104,8 @@ class SourceHomeHero extends ConsumerWidget {
             ),
     );
 
-    final info = Column(
+    final glass = LiquidGlassSupport.platformEligible;
+    final infoColumn = Column(
       crossAxisAlignment:
           wide ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
@@ -113,7 +114,7 @@ class SourceHomeHero extends ConsumerWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: [for (final c in chips) _HeroChip(c)],
+            children: [for (final c in chips) _HeroChip(c, grouped: glass)],
           ),
           const SizedBox(height: 14),
         ],
@@ -143,12 +144,16 @@ class SourceHomeHero extends ConsumerWidget {
         const SizedBox(height: 20),
         _HeroActions(
           wide: wide,
+          grouped: glass,
           onPlay: () => playItem(context, ref, item.ref),
           secondaryLabel: isEpisode ? 'All episodes' : 'More info',
           onSecondary: open,
         ),
       ],
     );
+
+    // One backdrop pass shared by the chips, Play and the secondary action.
+    final info = glass ? BackdropGroup(child: infoColumn) : infoColumn;
 
     // UP from the first rail lands on the hero's buttons, which sit at its
     // bottom. On a television this reveals the whole hero, not just the button.
@@ -293,12 +298,14 @@ class SourceHomeHero extends ConsumerWidget {
 }
 
 class _HeroChip extends StatelessWidget {
-  const _HeroChip(this.label);
+  const _HeroChip(this.label, {required this.grouped});
 
   final String label;
+  final bool grouped;
 
   @override
   Widget build(BuildContext context) => GlassBadge(
+        grouped: grouped,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         fallbackDecoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.12),
@@ -314,12 +321,14 @@ class _HeroChip extends StatelessWidget {
 class _HeroActions extends StatelessWidget {
   const _HeroActions({
     required this.wide,
+    required this.grouped,
     required this.onPlay,
     required this.secondaryLabel,
     required this.onSecondary,
   });
 
   final bool wide;
+  final bool grouped;
   final VoidCallback onPlay;
   final String secondaryLabel;
   final VoidCallback onSecondary;
@@ -333,6 +342,7 @@ class _HeroActions extends StatelessWidget {
         ? PrimaryPlayButton(
             key: const Key('source-home-hero-play'),
             onPressed: onPlay,
+            grouped: grouped,
           )
         : FilledButton.icon(
             key: const Key('source-home-hero-play'),
@@ -345,6 +355,7 @@ class _HeroActions extends StatelessWidget {
       buttonKey: const Key('source-home-hero-more'),
       label: secondaryLabel,
       onPressed: onSecondary,
+      grouped: grouped,
       height: glass ? PrimaryPlayButton.height : _height,
     );
     if (glass) {

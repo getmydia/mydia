@@ -206,7 +206,7 @@ class GlassSurface extends StatelessWidget {
           fillColor: prominentColor?.withValues(
               alpha: DepthTokens.liquidProminentTintOpacity),
           tint: prominentColor == null ? GlassTint.surface : null,
-          tintOpacity: DepthTokens.liquidControlTintOpacity,
+          tintOpacity: DepthTokens.controlFillOpacity,
           liquidTintOpacity: prominentColor != null
               ? DepthTokens.liquidProminentTintOpacity
               : DepthTokens.liquidControlTintOpacity,

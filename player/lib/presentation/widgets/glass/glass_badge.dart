@@ -12,11 +12,15 @@ class GlassBadge extends StatelessWidget {
     required this.child,
     required this.padding,
     required this.fallbackDecoration,
+    this.grouped = false,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final Decoration fallbackDecoration;
+
+  /// Shares the enclosing `BackdropGroup`'s blur pass (glass path only).
+  final bool grouped;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +30,7 @@ class GlassBadge extends StatelessWidget {
     }
     return GlassSurface.control(
       borderRadius: BorderRadius.circular(999),
+      grouped: grouped,
       child: content,
     );
   }
