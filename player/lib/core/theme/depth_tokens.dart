@@ -279,6 +279,9 @@ abstract final class DepthTokens {
   static const double liquidPressStretch = 2.0;
   static const Duration liquidPressDuration = Duration(milliseconds: 180);
 
+  /// Easing for the press swell: a slight overshoot before it settles.
+  static const Curve liquidPressCurve = Curves.easeOutBack;
+
   /// Diameter of a floating glass icon button.
   static const double liquidIconButtonSize = 40.0;
 

@@ -30,6 +30,16 @@ class _GlassInteractionState extends State<GlassInteraction> {
   bool _hovered = false;
   Offset? _light;
 
+  @override
+  void didUpdateWidget(GlassInteraction oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled) {
+      _pressed = false;
+      _hovered = false;
+      _light = null;
+    }
+  }
+
   Offset? _fraction(Offset local) {
     final box = context.findRenderObject();
     if (box is! RenderBox || !box.hasSize || box.size.isEmpty) return null;
@@ -73,7 +83,7 @@ class _GlassInteractionState extends State<GlassInteraction> {
         child: AnimatedScale(
           scale: _pressed && !reduce ? DepthTokens.liquidPressScale : 1.0,
           duration: reduce ? Duration.zero : DepthTokens.liquidPressDuration,
-          curve: Curves.easeOutBack,
+          curve: DepthTokens.liquidPressCurve,
           child: Transform.translate(
             offset: stretch,
             child: GlassPointer(

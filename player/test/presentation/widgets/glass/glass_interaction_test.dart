@@ -7,11 +7,17 @@ import 'package:player/presentation/widgets/glass/glass_pointer.dart';
 
 GlassPointer? _pointer;
 
-Widget _host({bool reduceMotion = false, VoidCallback? onTap}) => MaterialApp(
+Widget _host({
+  bool reduceMotion = false,
+  bool enabled = true,
+  VoidCallback? onTap,
+}) =>
+    MaterialApp(
       home: MediaQuery(
         data: MediaQueryData(disableAnimations: reduceMotion),
         child: Center(
           child: GlassInteraction(
+            enabled: enabled,
             child: Builder(builder: (context) {
               _pointer = GlassPointer.maybeOf(context);
               return GestureDetector(
@@ -49,6 +55,36 @@ void main() {
     expect(_pointer?.pressed, isFalse);
     expect(_pointer?.light, isNull);
     expect(taps, 1, reason: 'the child still receives the tap');
+  });
+
+  testWidgets('a pointer cancel clears pressed', (tester) async {
+    await tester.pumpWidget(_host());
+    final gesture = await tester
+        .startGesture(tester.getCenter(find.byType(GestureDetector)));
+    await tester.pump();
+    expect(_pointer?.pressed, isTrue);
+    await gesture.cancel();
+    await tester.pumpAndSettle();
+    expect(_pointer?.pressed, isFalse);
+    expect(_pointer?.light, isNull);
+  });
+
+  testWidgets('disabling mid-press does not leave the glass stuck pressed',
+      (tester) async {
+    await tester.pumpWidget(_host());
+    final gesture = await tester
+        .startGesture(tester.getCenter(find.byType(GestureDetector)));
+    await tester.pump();
+    expect(_pointer?.pressed, isTrue);
+
+    await tester.pumpWidget(_host(enabled: false));
+    await tester.pumpWidget(_host());
+    await tester.pumpAndSettle();
+    expect(_pointer?.pressed, isFalse);
+    expect(_pointer?.hovered, isFalse);
+    expect(_pointer?.light, isNull);
+    expect(_scale(tester), 1.0);
+    await gesture.up();
   });
 
   testWidgets('hover brightens the rim', (tester) async {

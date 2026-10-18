@@ -26,6 +26,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 
@@ -72,26 +73,31 @@ class _LabState extends State<_Lab> {
   }
 
   Future<void> _snapshot() async {
-    final boundary = _captureKey.currentContext?.findRenderObject()
-        as RenderRepaintBoundary?;
-    if (boundary == null) {
-      debugPrint('LAB_SNAPSHOT failed: no render boundary');
+    try {
+      final boundary = _captureKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null) {
+        debugPrint('LAB_SNAPSHOT failed: no render boundary');
+        exit(1);
+      }
+      final image = await boundary.toImage(
+        pixelRatio: View.of(context).devicePixelRatio,
+      );
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) {
+        debugPrint('LAB_SNAPSHOT failed: PNG encoding returned null');
+        exit(1);
+      }
+      await File(_snapshotPath).writeAsBytes(data.buffer.asUint8List());
+      debugPrint(
+        'LAB_SNAPSHOT wrote $_snapshotPath '
+        'shader=${LiquidGlassSupport.available}',
+      );
+      exit(0);
+    } catch (e) {
+      debugPrint('LAB_SNAPSHOT failed: $e');
       exit(1);
     }
-    final image = await boundary.toImage(
-      pixelRatio: View.of(context).devicePixelRatio,
-    );
-    final data = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (data == null) {
-      debugPrint('LAB_SNAPSHOT failed: PNG encoding returned null');
-      exit(1);
-    }
-    await File(_snapshotPath).writeAsBytes(data.buffer.asUint8List());
-    debugPrint(
-      'LAB_SNAPSHOT wrote $_snapshotPath '
-      'shader=${LiquidGlassSupport.available}',
-    );
-    exit(0);
   }
 
   @override
@@ -111,28 +117,32 @@ class _LabState extends State<_Lab> {
                 left: 0,
                 right: 0,
                 height: 88,
-                child: _glass(0, const Color(0xFF101014), 0.65),
+                child: _glass(0, const Color(0xFF101014),
+                    DepthTokens.liquidChromeTintOpacity),
               ),
               Positioned(
                 top: 140,
                 left: 40,
                 width: 44,
                 height: 44,
-                child: _glass(22, const Color(0xFF101014), 0.6),
+                child: _glass(22, const Color(0xFF101014),
+                    DepthTokens.liquidControlTintOpacity),
               ),
               Positioned(
                 top: 140,
                 left: 110,
                 width: 160,
                 height: 48,
-                child: _glass(24, const Color(0xFFFFFFFF), 0.85),
+                child: _glass(24, const Color(0xFFFFFFFF),
+                    DepthTokens.liquidProminentTintOpacity),
               ),
               Positioned(
                 top: 240,
                 left: 40,
                 width: 320,
                 height: 200,
-                child: _glass(28, const Color(0xFF101014), 0.65),
+                child: _glass(28, const Color(0xFF101014),
+                    DepthTokens.liquidModalTintOpacity),
               ),
               Positioned(
                 right: 16,

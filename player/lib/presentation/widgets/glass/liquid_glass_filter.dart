@@ -88,6 +88,7 @@ class RenderLiquidGlass extends RenderProxyBox {
     markNeedsPaint();
   }
 
+  BackdropKey? get backdropKey => _backdropKey;
   BackdropKey? _backdropKey;
   set backdropKey(BackdropKey? value) {
     if (value == _backdropKey) return;
@@ -107,6 +108,7 @@ class RenderLiquidGlass extends RenderProxyBox {
   void paint(PaintingContext context, Offset offset) {
     if (child == null) {
       layer = null;
+      _lens.layer = null;
       return;
     }
     final backdrop = layer ??= BackdropFilterLayer();
