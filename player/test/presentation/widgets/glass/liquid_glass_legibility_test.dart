@@ -2,8 +2,8 @@
 //
 // Worst case is the tint after adaptation over a pure-white backdrop: the
 // backdrop luma is 1, so the alpha is the role's adaptive max. Refraction and
-// blur are the identity over a uniform frame, saturation and brightness
-// clamp at white, and the specular only adds light at the rim, away from
+// blur are the identity over a uniform frame, saturation clamps at white,
+// brightness is modelled as a lift of the grey (clamped at white), and the specular only adds light at the rim, away from
 // glyphs. All presets are dark, so white is the worst backdrop. Text holds
 // WCAG SC 1.4.3 (4.5:1), icons and secondary text SC 1.4.11 (3:1).
 
@@ -21,7 +21,11 @@ const _white = Color(0xFFFFFFFF);
 Color _over(Color base, double alpha) =>
     Color.alphaBlend(base.withValues(alpha: alpha), _white);
 
-Color _grey(double v) => Color.from(alpha: 1, red: v, green: v, blue: v);
+Color _grey(double v) => Color.from(
+    alpha: 1,
+    red: (v + DepthTokens.liquidBrightness).clamp(0.0, 1.0),
+    green: (v + DepthTokens.liquidBrightness).clamp(0.0, 1.0),
+    blue: (v + DepthTokens.liquidBrightness).clamp(0.0, 1.0));
 
 Color _overGrey(Color base, double alpha, double v) =>
     Color.alphaBlend(base.withValues(alpha: alpha), _grey(v));
@@ -138,6 +142,20 @@ void main() {
           expect(
               contrastRatio(palette.textPrimary, bg), greaterThanOrEqualTo(3.0),
               reason: 'icon at grey $v');
+        }
+      });
+
+      test(
+          'control: white labels (Play, glass buttons) clear 4.5:1 at every grey',
+          () {
+        for (final v in greys) {
+          final alpha = liquidAdaptiveAlpha(
+              base: DepthTokens.liquidControlTintOpacity,
+              max: DepthTokens.liquidControlAdaptiveMax,
+              backdropLuma: v);
+          final bg = _overGrey(tint.surface, alpha, v);
+          expect(contrastRatio(Colors.white, bg), greaterThanOrEqualTo(4.5),
+              reason: 'label at grey $v');
         }
       });
 

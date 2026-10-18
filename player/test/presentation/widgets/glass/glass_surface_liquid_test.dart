@@ -144,8 +144,9 @@ void main() {
       expect(
         filterOf(tester).adaptiveTintMax,
         closeTo(
-          DepthTokens.liquidChromeAdaptiveMax +
-              DepthTokens.liquidHighContrastTintBoost,
+          (DepthTokens.liquidChromeAdaptiveMax +
+                  DepthTokens.liquidHighContrastTintBoost)
+              .clamp(0.0, 1.0),
           0.002,
         ),
       );
