@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'glass/glass_dialog.dart';
 
 import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/theme/colors.dart';
@@ -19,7 +20,7 @@ class CompatibilityDetailsDialog extends StatelessWidget {
     final palette = context.palette;
     final requiredVersion = state.requiredVersion;
 
-    return AlertDialog(
+    return GlassDialog(
       title: const Row(
         children: [
           Icon(Icons.system_update, color: AppColors.warning),

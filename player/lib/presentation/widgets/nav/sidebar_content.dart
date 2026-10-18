@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../glass/glass_dialog.dart';
 
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/navigation/sidebar_layout_providers.dart';
@@ -462,7 +463,7 @@ class SidebarContent extends ConsumerWidget {
   Future<void> _confirmReset(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => GlassDialog(
         backgroundColor: context.palette.surfaceVariant,
         title: const Text('Reset sidebar?'),
         content: const Text(

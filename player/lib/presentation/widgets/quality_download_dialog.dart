@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'glass/glass_dialog.dart';
 
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
@@ -43,7 +44,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
     AsyncSnapshot<List<DownloadOption>> snapshot,
   ) {
     final palette = context.palette;
-    return AlertDialog(
+    return GlassDialog(
       backgroundColor: palette.surface,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

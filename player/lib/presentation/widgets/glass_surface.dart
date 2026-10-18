@@ -135,6 +135,7 @@ class GlassSurface extends StatelessWidget {
   /// fill opacity, the palette border @0.2 border, radius 20.
   GlassSurface.modal({
     Key? key,
+    BorderRadius? borderRadius,
     bool grouped = false,
     Widget? child,
   }) : this(
@@ -143,7 +144,7 @@ class GlassSurface extends StatelessWidget {
           tint: GlassTint.surface,
           tintOpacity: DepthTokens.modalFillOpacity,
           liquidTintOpacity: DepthTokens.liquidModalTintOpacity,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: borderRadius ?? BorderRadius.circular(20),
           paletteBorderAlpha: 0.2,
           grouped: grouped,
           child: child,

@@ -1,4 +1,5 @@
 import 'dart:async' show unawaited;
+import 'glass/glass_dialog.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -73,7 +74,7 @@ Future<void> _openReleasePage(AppUpdate update, UrlLauncher launcher) async {
 Future<bool> _confirmInPlace(BuildContext context, AppUpdate update) async {
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
+    builder: (ctx) => GlassDialog(
       title: const Text('Update Mydia'),
       content: Text(
         'Mydia will close and update to v${update.version}. Continue?',

@@ -24,6 +24,7 @@ import 'download_locations.dart';
 import 'series_downloads_screen.dart';
 import 'widgets/download_artwork.dart';
 import 'widgets/download_recovery_banner.dart';
+import '../../widgets/glass/glass_dialog.dart';
 
 export 'widgets/download_recovery_banner.dart'
     show DownloadRecoveryBanner, downloadStateLabel;
@@ -652,7 +653,7 @@ class DownloadsScreen extends ConsumerWidget {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         title: const Text('Cancel Download?'),
         content: Text('Stop downloading "${task.title}"?'),
@@ -814,7 +815,7 @@ class DownloadsScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, DownloadGroup group) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         title: const Text('Delete Download'),
         content: Text(
@@ -847,7 +848,7 @@ class DownloadsScreen extends ConsumerWidget {
     final episodeCount = group.downloads.length + group.activeTasks.length;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         title: const Text('Delete All Episodes'),
         content: Text(
@@ -878,7 +879,7 @@ class DownloadsScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, int queuedCount) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         title: const Text('Cancel All Queued?'),
         content: Text(
@@ -1495,7 +1496,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Clean Up Downloads'),

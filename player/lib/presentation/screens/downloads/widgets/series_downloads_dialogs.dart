@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../widgets/glass/glass_dialog.dart';
 
 import '../../../../core/downloads/download_providers.dart';
 import '../../../../core/sources/source.dart';
@@ -20,7 +21,7 @@ Future<void> showCancelDownloadDialog(
 ) async {
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => GlassDialog(
       backgroundColor: context.palette.surface,
       title: const Text('Cancel Download?'),
       content: Text('Stop downloading ${task.episodeCode}?'),
@@ -55,7 +56,7 @@ Future<void> showDeleteEpisodeDialog(
 ) async {
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => GlassDialog(
       backgroundColor: context.palette.surface,
       title: const Text('Delete Episode'),
       content: Text('Delete ${media.episodeCode}?'),
@@ -92,7 +93,7 @@ Future<void> showDeleteSeasonDialog(
   final label = seasonLabel(seasonNumber);
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => GlassDialog(
       backgroundColor: context.palette.surface,
       title: Text('Delete $label?'),
       content: Text(
@@ -141,7 +142,7 @@ Future<bool> showDeleteAllDialog(
 }) async {
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => GlassDialog(
       backgroundColor: context.palette.surface,
       title: const Text('Delete All Episodes'),
       content: Text(

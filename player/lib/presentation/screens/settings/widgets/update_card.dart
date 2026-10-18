@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../widgets/glass/glass_dialog.dart';
 
 import '../../../../core/theme/palette.dart';
 import '../../../../core/update/update_provider.dart';
@@ -159,7 +160,7 @@ class UpdateCard extends ConsumerWidget {
 
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => GlassDialog(
         title: const Text('Update Mydia'),
         content: const Text(
           'Mydia will download and install the newest build, then offer to '

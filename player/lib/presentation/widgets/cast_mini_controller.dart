@@ -26,6 +26,7 @@ import 'cast_subtitle_sheet.dart';
 import 'nav/dock_glass.dart';
 import 'toast/toast_obstruction.dart';
 import 'toast/toaster.dart';
+import 'glass/glass_dialog.dart';
 
 /// Mounts [CastMiniController] at the bottom of [child], floating above it.
 ///
@@ -817,7 +818,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
 
     final shouldStop = await showDialog<bool>(
       context: dialogContext,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         title: const Text('Stop playback?'),
         content: Text('Stop playing on ${device.name} and disconnect?'),
         actions: [

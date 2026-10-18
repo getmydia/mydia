@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../widgets/glass/glass_dialog.dart';
 
 import '../../../../core/build_channel.dart';
 import '../../../../core/remote/node_registration_providers.dart';
@@ -233,7 +234,7 @@ Future<void> _check(BuildContext context, WidgetRef ref) async {
   if (state.manualCheck == ManualCheckBehaviour.checksAndInstalls) {
     final proceed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => GlassDialog(
         title: const Text('Check for updates'),
         content: const Text(
           'Check for an update and install it if one is found?',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../widgets/glass/glass_dialog.dart';
 
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_service.dart';
@@ -37,7 +38,7 @@ Future<bool> confirmRemoveAccount(
   if (!context.mounted) return false;
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => GlassDialog(
       title: Text(title),
       content: Text('${account.displayName} and its servers are '
           'removed from this device. Nothing changes on the server.'

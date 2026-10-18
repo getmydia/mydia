@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../widgets/glass/glass_dialog.dart';
 
 /// True once [submit] accepted a PIN, false when the viewer cancelled.
 /// [submit] answers null when the PIN worked, or the message to show; on a
@@ -109,7 +110,7 @@ class _PlexPinDialogState extends State<_PlexPinDialog> {
     final theme = Theme.of(context);
     return PopScope(
       canPop: !_busy,
-      child: AlertDialog(
+      child: GlassDialog(
         title: Text('PIN for ${widget.userName}'),
         content: Focus(
           onKeyEvent: _onKey,

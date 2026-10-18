@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../widgets/glass/glass_dialog.dart';
 
 import '../../../../core/logging/log_uploader.dart';
 import '../../../widgets/toast/toaster.dart';
@@ -81,7 +82,7 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
       // Close and Retry are how this closes, and a back press should work
       // like any other dialog.
       canPop: _phase != _Phase.sending,
-      child: AlertDialog(
+      child: GlassDialog(
         title: const Text('Send logs'),
         content: switch (_phase) {
           _Phase.editing => TextField(

@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../widgets/glass/glass_dialog.dart';
 
 import '../../../core/router/root_routes.dart';
 import '../../../core/sources/lock/device_auth.dart';
@@ -119,7 +120,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
   Future<void> _forgotPin() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         title: const Text('Forgot your PIN?'),
         content: const Text('Every server you locked or hid is removed from '
             'this device, and the PIN is deleted. Nothing changes on the '

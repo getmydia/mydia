@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
 import 'toast/toaster.dart';
+import 'glass/glass_dialog.dart';
 
 /// Dialog that asks the user to trust a certificate on first connection.
 ///
@@ -24,7 +25,7 @@ class CertTrustDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    return AlertDialog(
+    return GlassDialog(
       title: const Row(
         children: [
           Icon(Icons.security, color: AppColors.warning),

@@ -7,6 +7,7 @@ import '../../../core/theme/palette.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../../domain/models/remote_device.dart';
 import 'devices_controller.dart';
+import '../../widgets/glass/glass_dialog.dart';
 
 /// One Mydia instance's devices, embedded in its settings screen.
 class DevicesSection extends ConsumerWidget {
@@ -26,7 +27,7 @@ class DevicesSection extends ConsumerWidget {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         title: const Text('Revoke Device'),
         content: Text(
           'Are you sure you want to revoke "${device.deviceName}"? '
