@@ -66,7 +66,7 @@ Which function arrived in which contract version is listed in
 The package version in the WIT file **is** the ABI version, and the contract
 is meant to evolve additively (new functions, new record fields, new variant
 cases) rather than by breaking existing signatures. That's what lets a plugin
-built against `1.0` keep running unmodified against a `1.6` host: the host
+built against `1.0` keep running unmodified against a `1.7` host: the host
 detects the guest's contract version from its bytes at instantiation and
 serves the matching interface, rather than forcing every plugin to track the
 host's latest release.

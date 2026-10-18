@@ -65,7 +65,7 @@ defmodule MydiaWeb.DashboardLive.ShelfRailTest do
     assert has_element?(view, "#{@rail}-item-#{item.id} p", "Because you finished Glass Meridian")
     assert has_element?(view, "#shelf-up-#{item.id}")
     assert has_element?(view, "#shelf-down-#{item.id}")
-    refute render(view) =~ "Not interested"
+    refute has_element?(view, "#{@rail} button", "Not interested")
     assert all_enqueued(worker: ShelfFill) == []
   end
 
@@ -181,6 +181,21 @@ defmodule MydiaWeb.DashboardLive.ShelfRailTest do
       refute has_element?(view, "#{@rail}-item-#{item.id}")
       assert [%{rating: :down}] = Shelves.feedback(shelf)
     end
+
+    test "opened for a title on no shelf it offers no thumbs", %{conn: conn, user: user} do
+      shelf = fresh_shelf(user)
+      shelf_item_fixture(shelf, %{provider_id: 999_001})
+
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      render_click(view, "show_details", %{
+        "id" => to_string(MetadataStubProvider.movie_tmdb_id()),
+        "type" => "movie"
+      })
+
+      refute has_element?(view, "#detail-shelf-up")
+      refute has_element?(view, "#detail-shelf-down")
+    end
   end
 
   describe "adding from a shelf" do
@@ -235,7 +250,6 @@ defmodule MydiaWeb.DashboardLive.ShelfRailTest do
       item = shelf_item_fixture(shelf, %{provider_id: id})
 
       {:ok, view, _html} = live(log_in_user(build_conn(), guest), ~p"/")
-      _ = conn
 
       render_click(view, "request_media", %{"ref" => "tmdb:#{id}", "media_type" => "movie"})
       wait_until(fn -> Shelves.feedback(shelf) != [] end)

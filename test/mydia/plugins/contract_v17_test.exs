@@ -59,7 +59,7 @@ defmodule Mydia.Plugins.ContractV17Test do
     start("v17-feedback", "shelf_fixture_v17.wasm")
 
     feedback = [
-      entry(%{tmdb_id: 11, title: "The Salt Line", year: 2024, rating: :up, via: :seen}),
+      entry(%{tmdb_id: 11, title: "The Tidewater Clock", year: 2024, rating: :up, via: :seen}),
       entry(%{tmdb_id: 12, title: "Harbor Lights", rating: :up, via: :added}),
       entry(%{
         media_type: :tv_show,
@@ -74,7 +74,7 @@ defmodule Mydia.Plugins.ContractV17Test do
              fill("v17-feedback", user, "any", %{"feedback" => feedback})
 
     assert Enum.map(items, & &1.reason) == [
-             "up/seen/The Salt Line/2024",
+             "up/seen/The Tidewater Clock/2024",
              "up/added/Harbor Lights/none",
              "down/none/Ember Tide/2019"
            ]
@@ -96,7 +96,7 @@ defmodule Mydia.Plugins.ContractV17Test do
   test "a 1.6 guest still fills when the payload carries feedback", %{user: user} do
     start("v16-feedback", "shelf_fixture.wasm")
 
-    feedback = [entry(%{tmdb_id: 11, title: "The Salt Line", rating: :down})]
+    feedback = [entry(%{tmdb_id: 11, title: "The Tidewater Clock", rating: :down})]
 
     assert {:ok, %{items: [first, _second, _third]}} =
              fill("v16-feedback", user, "fixed", %{"feedback" => feedback})

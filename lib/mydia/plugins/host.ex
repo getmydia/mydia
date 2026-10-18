@@ -700,6 +700,7 @@ defmodule Mydia.Plugins.Host do
       "config-json": Jason.encode!(Map.get(payload, "config") || %{})
     }
 
+    # Feedback goes to every contract except 1.6 (older ones never reach fill-shelf).
     if version == :v16 do
       base
     else
