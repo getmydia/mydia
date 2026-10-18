@@ -126,11 +126,6 @@ abstract final class DepthTokens {
   /// Modal / sheet glass fill opacity.
   static const double modalFillOpacity = 0.6;
 
-  /// Floating control fill in the frosted recipe (the fallback when the
-  /// Liquid Glass shader is unavailable). The shader path uses
-  /// [liquidControlTintOpacity] instead.
-  static const double controlFillOpacity = 0.3;
-
   /// Minimum glass fill opacity for any chrome surface — the R10 legibility
   /// floor. Chrome fills at or above this keep text legible over worst-case
   /// bright artwork behind the live blur.

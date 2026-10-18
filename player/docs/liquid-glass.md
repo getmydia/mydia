@@ -101,6 +101,10 @@ smoothstep between `liquidAdaptiveLumaLow` (0.15) and
 | Modal | `liquidModalTintOpacity` 0.35 | `liquidModalAdaptiveMax` 0.85 |
 | Control | `liquidControlTintOpacity` 0.2 | `liquidControlAdaptiveMax` 0.65 |
 
+The frosted fallback of `GlassSurface.control` cannot adapt, so it fills at
+`liquidControlAdaptiveMax`, the alpha white control labels are rated at over
+pure white.
+
 Contrast is lowest at mid-luma, so white is not the worst backdrop: the
 contrast bottoms out where the ramp has only just started. `liquidAdaptiveAlpha`
 in `liquid_glass_adaptive.dart` reproduces the shader's curve, and

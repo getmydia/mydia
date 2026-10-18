@@ -206,7 +206,9 @@ class GlassSurface extends StatelessWidget {
           fillColor: prominentColor?.withValues(
               alpha: DepthTokens.liquidProminentTintOpacity),
           tint: prominentColor == null ? GlassTint.surface : null,
-          tintOpacity: DepthTokens.controlFillOpacity,
+          // The frosted fallback cannot adapt, so it fills at the alpha white
+          // control labels are rated at over pure white.
+          tintOpacity: DepthTokens.liquidControlAdaptiveMax,
           liquidTintOpacity: prominentColor != null
               ? DepthTokens.liquidProminentTintOpacity
               : DepthTokens.liquidControlTintOpacity,

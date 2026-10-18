@@ -79,6 +79,12 @@ void main() {
             contrastRatio(palette.textPrimary, bg), greaterThanOrEqualTo(3.0));
       });
 
+      test('control: frosted fallback keeps white labels at 4.5:1 over white',
+          () {
+        final bg = _over(tint.surface, DepthTokens.liquidControlAdaptiveMax);
+        expect(contrastRatio(Colors.white, bg), greaterThanOrEqualTo(4.5));
+      });
+
       test('scroll edge band top: title text clears 4.5:1', () {
         final bg = _over(tint.ground, DepthTokens.liquidScrollEdgeTopOpacity);
         expect(
