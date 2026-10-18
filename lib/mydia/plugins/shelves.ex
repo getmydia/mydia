@@ -458,10 +458,19 @@ defmodule Mydia.Plugins.Shelves do
 
   # A fill stamps every item it deals with one `inserted_at`. The card still
   # belongs to the shelf when every remaining item carries its stamp (or none
-  # remain). `filled_at` is no use here: a too-few refill bumps it and keeps
-  # the old items.
+  # remain). `filled_at` is no use for that: a too-few refill bumps it and keeps
+  # the old items. It is only checked for nil, which `reset_for_user/1` sets
+  # after an access change: nothing is restored then, as the title is unverified.
   defp same_fill?(%Shelf{id: shelf_id}, %ShelfItem{inserted_at: at}) do
-    not Repo.exists?(from i in ShelfItem, where: i.shelf_id == ^shelf_id and i.inserted_at != ^at)
+    case Repo.get!(Shelf, shelf_id) do
+      %Shelf{filled_at: nil} ->
+        false
+
+      _ ->
+        not Repo.exists?(
+          from i in ShelfItem, where: i.shelf_id == ^shelf_id and i.inserted_at != ^at
+        )
+    end
   end
 
   @doc false

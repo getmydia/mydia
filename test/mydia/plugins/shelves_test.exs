@@ -256,6 +256,18 @@ defmodule Mydia.Plugins.ShelvesTest do
       assert Repo.aggregate(ShelfFeedback, :count) == 0
     end
 
+    test "after an access reset the card is not restored" do
+      user = user_fixture()
+      shelf = shelf_fixture(user, filled_at: @now)
+      item = shelf_item_fixture(shelf, %{inserted_at: @now, updated_at: @now})
+      {:ok, deleted} = Shelves.rate_item(user, item.id, :down)
+
+      assert :ok = Shelves.reset_for_user(user.id)
+
+      assert {:ok, :not_restored} = Shelves.undo_rating(user, deleted)
+      assert Repo.aggregate(ShelfItem, :count) == 0
+    end
+
     test "a too-few refill that kept the old cards still restores the card" do
       user = user_fixture()
       shelf = shelf_fixture(user, filled_at: @now)
