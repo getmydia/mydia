@@ -22,6 +22,25 @@ final class NativeTabBarPlugin: NSObject {
     channel.setMethodCallHandler { [weak self] call, result in
       self?.handle(call, result: result)
     }
+    for name in [
+      UIAccessibility.reduceTransparencyStatusDidChangeNotification,
+      UIAccessibility.darkerSystemColorsStatusDidChangeNotification,
+    ] {
+      NotificationCenter.default.addObserver(
+        forName: name, object: nil, queue: .main
+      ) { [weak self] _ in
+        self?.channel.invokeMethod(
+          "glassAccessibilityChanged", arguments: Self.glassAccessibility())
+      }
+    }
+  }
+
+  /// Reduce Transparency and Increase Contrast, for the Flutter glass.
+  static func glassAccessibility() -> [String: Bool] {
+    [
+      "reduceTransparency": UIAccessibility.isReduceTransparencyEnabled,
+      "increaseContrast": UIAccessibility.isDarkerSystemColorsEnabled,
+    ]
   }
 
   #if compiler(>=6.2)
@@ -50,6 +69,10 @@ final class NativeTabBarPlugin: NSObject {
   #endif
 
   private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    if call.method == "glassAccessibility" {
+      result(Self.glassAccessibility())
+      return
+    }
     #if compiler(>=6.2)
     if #available(iOS 26.0, *), let tabs = controller as? MydiaTabBarController {
       switch call.method {

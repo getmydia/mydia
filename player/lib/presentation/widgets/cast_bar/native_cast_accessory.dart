@@ -116,7 +116,8 @@ class _NativeCastAccessoryState extends ConsumerState<NativeCastAccessory> {
       case NativeTabSelected() ||
             NativeInsetsChanged() ||
             NativeLayoutChanged() ||
-            NativeSystemAccentChanged():
+            NativeSystemAccentChanged() ||
+            NativeGlassAccessibilityChanged():
         break;
     }
   }

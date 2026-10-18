@@ -16,6 +16,8 @@ final class NativeTabBarPlugin: NSObject {
   private var observers: [NSObjectProtocol] = []
   /// Registered with the distributed center, so removed from that one.
   private var accentObserver: NSObjectProtocol?
+  /// Registered with the workspace center, so removed from that one.
+  private var accessibilityObserver: NSObjectProtocol?
   /// The View menu items `installCommands` added, removed on the next call.
   private var viewMenuItems: [NSMenuItem] = []
 
@@ -66,10 +68,22 @@ final class NativeTabBarPlugin: NSObject {
     accentObserver = DistributedNotificationCenter.default().addObserver(
       forName: NSNotification.Name("AppleColorPreferencesChangedNotification"),
       object: nil, queue: .main, using: reportAccent)
+
+    // Reduce Transparency and Increase Contrast, for the Flutter glass.
+    accessibilityObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+      object: nil, queue: .main
+    ) { [weak self] _ in
+      self?.channel.invokeMethod(
+        "glassAccessibilityChanged", arguments: Self.glassAccessibility())
+    }
   }
 
   deinit {
     observers.forEach(NotificationCenter.default.removeObserver)
+    if let accessibilityObserver {
+      NSWorkspace.shared.notificationCenter.removeObserver(accessibilityObserver)
+    }
     if let accentObserver {
       DistributedNotificationCenter.default().removeObserver(accentObserver)
     }
@@ -100,6 +114,8 @@ final class NativeTabBarPlugin: NSObject {
       result(nil)
     case "systemAccent":
       result(Self.accentARGB())
+    case "glassAccessibility":
+      result(Self.glassAccessibility())
     case "setWindowBackground":
       if let argb = call.arguments as? Int {
         let color = Self.color(argb: argb)
@@ -187,6 +203,15 @@ final class NativeTabBarPlugin: NSObject {
     guard let titlebar = window.standardWindowButton(.closeButton)?.superview?.superview
     else { return nil }
     return findToggle(in: titlebar).map { $0.convert($0.bounds, to: nil).maxX }
+  }
+
+  /// Reduce Transparency and Increase Contrast, for the Flutter glass.
+  static func glassAccessibility() -> [String: Bool] {
+    let workspace = NSWorkspace.shared
+    return [
+      "reduceTransparency": workspace.accessibilityDisplayShouldReduceTransparency,
+      "increaseContrast": workspace.accessibilityDisplayShouldIncreaseContrast,
+    ]
   }
 
   /// `controlAccentColor` as sRGB ARGB, resolved under the dark appearance

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../theme/liquid_glass/glass_accessibility.dart';
 import 'native_tab_bar_support.dart';
 
 /// One native tab. `toMap` is what `NativeTabSpec(channelValue:)` reads.
@@ -206,6 +207,12 @@ final class NativeSystemAccentChanged extends NativeTabBarEvent {
   final Color color;
 }
 
+/// iOS and macOS: Reduce Transparency or Increase Contrast changed.
+final class NativeGlassAccessibilityChanged extends NativeTabBarEvent {
+  const NativeGlassAccessibilityChanged(this.value);
+  final GlassAccessibility value;
+}
+
 /// The Dart end of `mydia/native-tab-bar`.
 ///
 /// Every setter drops a value equal to the last one sent, so widgets can call
@@ -293,6 +300,20 @@ class NativeTabBarChannel {
       debugPrint('[NativeTabBar] systemAccent: plugin missing: $e');
     } on PlatformException catch (e) {
       debugPrint('[NativeTabBar] systemAccent failed: $e');
+    }
+    return null;
+  }
+
+  /// iOS and macOS: the accessibility flags the glass follows, or null when
+  /// native cannot answer.
+  Future<GlassAccessibility?> queryGlassAccessibility() async {
+    try {
+      final answer = await _channel.invokeMethod<Object?>('glassAccessibility');
+      return GlassAccessibility.fromChannel(answer);
+    } on MissingPluginException catch (e) {
+      debugPrint('[NativeTabBar] glassAccessibility: plugin missing: $e');
+    } on PlatformException catch (e) {
+      debugPrint('[NativeTabBar] glassAccessibility failed: $e');
     }
     return null;
   }
@@ -388,6 +409,11 @@ class NativeTabBarChannel {
       'accessoryPlayPause' => const NativeAccessoryPlayPause(),
       'systemAccentChanged' when arguments is int =>
         NativeSystemAccentChanged(Color(arguments)),
+      'glassAccessibilityChanged' => switch (
+            GlassAccessibility.fromChannel(arguments)) {
+          final value? => NativeGlassAccessibilityChanged(value),
+          null => null,
+        },
       _ => null,
     };
     if (event == null) {
