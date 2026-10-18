@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cast/cast_providers.dart';
 import 'cast_visuals.dart';
+import 'glass/glass_icon_button.dart';
 
 /// The cast affordance, drawn flat at the end of every `WindowTitleRow`.
 ///
@@ -16,7 +17,10 @@ import 'cast_visuals.dart';
 class CastButton extends ConsumerWidget {
   final VoidCallback onPressed;
 
-  const CastButton({super.key, required this.onPressed});
+  /// Draw as a `GlassIconButton`, for title rows that float over a hero.
+  final bool glass;
+
+  const CastButton({super.key, required this.onPressed, this.glass = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,24 +33,34 @@ class CastButton extends ConsumerWidget {
     final visuals = castVisualsFor(connection, device?.name ?? 'device');
     final glyph = visuals.connected ? Icons.cast_connected : Icons.cast;
 
+    final icon = connection == CastConnection.connecting
+        ? Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(glyph, color: visuals.color, size: 16),
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.blue,
+                ),
+              ),
+            ],
+          )
+        : Icon(glyph, color: visuals.color);
+
+    if (glass) {
+      return GlassIconButton(
+        key: const Key('cast-button'),
+        icon: icon,
+        onPressed: onPressed,
+        tooltip: visuals.tooltip,
+      );
+    }
     return IconButton(
       key: const Key('cast-button'),
-      icon: connection == CastConnection.connecting
-          ? Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(glyph, color: visuals.color, size: 16),
-                const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.blue,
-                  ),
-                ),
-              ],
-            )
-          : Icon(glyph, color: visuals.color),
+      icon: icon,
       onPressed: onPressed,
       tooltip: visuals.tooltip,
     );

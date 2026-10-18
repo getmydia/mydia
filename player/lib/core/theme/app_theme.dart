@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'colors.dart';
+import 'liquid_glass/liquid_glass_support.dart';
 import 'palette.dart';
 
 /// Mydia Design System Theme
@@ -28,6 +29,17 @@ class AppTheme {
   static ThemeData get darkTheme => build(Palettes.projectionBooth);
 
   static ThemeData build(MydiaPalette p) {
+    // iOS and macOS: content buttons take the capsule shape and an
+    // Apple-style highlight instead of the Material ripple, to sit beside
+    // the Liquid Glass controls. See player/docs/liquid-glass.md.
+    final apple = LiquidGlassSupport.platformEligible;
+    final OutlinedBorder buttonShape = apple
+        ? const StadiumBorder()
+        : RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radiusButton),
+          );
+    final InteractiveInkFeatureFactory? buttonSplash =
+        apple ? NoSplash.splashFactory : null;
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
@@ -215,9 +227,8 @@ class AppTheme {
             fontWeight: FontWeight.w700,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusButton),
-          ),
+          shape: buttonShape,
+          splashFactory: buttonSplash,
         ),
       ),
 
@@ -231,9 +242,8 @@ class AppTheme {
             fontWeight: FontWeight.w600,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusButton),
-          ),
+          shape: buttonShape,
+          splashFactory: buttonSplash,
         ),
       ),
 
@@ -249,9 +259,8 @@ class AppTheme {
             fontWeight: FontWeight.w600,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusButton),
-          ),
+          shape: buttonShape,
+          splashFactory: buttonSplash,
         ),
       ),
 
@@ -274,9 +283,8 @@ class AppTheme {
             fontWeight: FontWeight.w700,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusButton),
-          ),
+          shape: buttonShape,
+          splashFactory: buttonSplash,
         ),
       ),
 

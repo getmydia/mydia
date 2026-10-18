@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/ambient_tint/ambient_tint.dart';
 import '../screens/sources/source_drawer_button.dart';
+import 'glass/glass_icon_button.dart';
 import 'shell_rail_inset.dart';
 import 'window_chrome/window_title_row.dart';
 
@@ -53,6 +54,7 @@ SliverAppBar detailHeroAppBar({
       child: SizedBox(
         width: double.infinity,
         child: WindowTitleRow(
+          glassButtons: true,
           // The detail pages sit in the shell's Scaffold, so on a phone the
           // drawer is one tap away, at the leading edge as on the listing
           // pages: menu first, then back.
@@ -106,15 +108,16 @@ SliverAppBar detailHeroAppBar({
 /// The back control for [detailHeroAppBar]'s title row on the movie and
 /// show screens.
 ///
-/// Flat like the rest of the title row: the top scrim [detailHeroAppBar]
-/// paints keeps the white glyph legible over bright art. Pops when the
+/// A glass circle on iOS and macOS (`GlassIconButton`), flat elsewhere, where
+/// the top scrim [detailHeroAppBar] paints keeps the white glyph legible over
+/// bright art. Pops when the
 /// screen was pushed, otherwise goes home (a deep link has nothing to pop).
 class DetailHeroBackButton extends StatelessWidget {
   const DetailHeroBackButton({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    return GlassIconButton(
       icon: const Icon(Icons.arrow_back_rounded),
       color: Colors.white,
       tooltip: 'Back',
