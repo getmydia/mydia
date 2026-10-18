@@ -156,7 +156,12 @@ class SettingsRow extends StatelessWidget {
       opacity: dimmed ? 0.45 : 1.0,
       // A toggle row's affordance is the switch, not the row. Wrapping it in an
       // InkWell would make the whole row look tappable while doing nothing.
-      child: isToggle ? content : InkWell(onTap: onTap, child: content),
+      //
+      // MergeSemantics folds the title, subtitle and switch into one node so a
+      // screen reader names the setting when it announces the switch.
+      child: isToggle
+          ? MergeSemantics(child: content)
+          : InkWell(onTap: onTap, child: content),
     );
   }
 }

@@ -43,6 +43,27 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  testWidgets('the switch is announced together with its title',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_host(MockAuthStorage()));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSemantics(find.descendant(
+          of: find.byKey(const Key('glass-material-row')),
+          matching: find.byType(Switch))),
+      isSemantics(
+        label: 'Liquid Glass\nGlass controls and panels',
+        hasToggledState: true,
+        isToggled: false,
+      ),
+    );
+    handle.dispose();
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   testWidgets('is not shown on TV', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     await tester.pumpWidget(_host(MockAuthStorage(), isTv: true));
