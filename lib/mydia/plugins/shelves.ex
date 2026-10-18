@@ -417,7 +417,7 @@ defmodule Mydia.Plugins.Shelves do
 
   @doc """
   Takes back a rating made by `rate_item/3`. The card returns unless the shelf
-  was refilled since it was dealt, in which case the rating is still cleared
+  was refilled with new cards since it was dealt, in which case the rating is still cleared
   and `{:ok, :not_restored}` is returned.
   """
   @spec undo_rating(User.t(), ShelfItem.t()) :: :ok | {:ok, :not_restored}
@@ -443,8 +443,7 @@ defmodule Mydia.Plugins.Shelves do
             f.provider == ^item.provider and f.provider_id == ^item.provider_id
     )
 
-    # replace_items/4 stamps the shelf and its items with the same `now`.
-    if same_fill?(Repo.get!(Shelf, shelf.id), item) do
+    if same_fill?(shelf, item) do
       # A second undo of the same card finds it already back.
       Repo.insert_all(ShelfItem, [Map.take(item, @item_columns)],
         on_conflict: :nothing,
@@ -457,12 +456,13 @@ defmodule Mydia.Plugins.Shelves do
     end
   end
 
-  defp same_fill?(%Shelf{filled_at: %DateTime{} = filled_at}, %ShelfItem{
-         inserted_at: %DateTime{} = at
-       }),
-       do: DateTime.compare(filled_at, at) == :eq
-
-  defp same_fill?(_shelf, _item), do: false
+  # A fill stamps every item it deals with one `inserted_at`. The card still
+  # belongs to the shelf when every remaining item carries its stamp (or none
+  # remain). `filled_at` is no use here: a too-few refill bumps it and keeps
+  # the old items.
+  defp same_fill?(%Shelf{id: shelf_id}, %ShelfItem{inserted_at: at}) do
+    not Repo.exists?(from i in ShelfItem, where: i.shelf_id == ^shelf_id and i.inserted_at != ^at)
+  end
 
   @doc false
   @spec feedback(Shelf.t()) :: [map()]

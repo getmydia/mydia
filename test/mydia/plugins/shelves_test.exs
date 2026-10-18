@@ -247,11 +247,27 @@ defmodule Mydia.Plugins.ShelvesTest do
       item = shelf_item_fixture(shelf, %{inserted_at: @now, updated_at: @now})
       {:ok, deleted} = Shelves.rate_item(user, item.id, :down)
 
-      shelf |> Ecto.Changeset.change(filled_at: DateTime.add(@now, 60)) |> Repo.update!()
+      later = DateTime.add(@now, 60)
+      shelf |> Ecto.Changeset.change(filled_at: later) |> Repo.update!()
+      shelf_item_fixture(shelf, %{position: 1, inserted_at: later, updated_at: later})
 
       assert {:ok, :not_restored} = Shelves.undo_rating(user, deleted)
-      assert Repo.aggregate(ShelfItem, :count) == 0
+      assert Repo.aggregate(ShelfItem, :count) == 1
       assert Repo.aggregate(ShelfFeedback, :count) == 0
+    end
+
+    test "a too-few refill that kept the old cards still restores the card" do
+      user = user_fixture()
+      shelf = shelf_fixture(user, filled_at: @now)
+      item = shelf_item_fixture(shelf, %{inserted_at: @now, updated_at: @now})
+      kept = shelf_item_fixture(shelf, %{position: 1, inserted_at: @now, updated_at: @now})
+      {:ok, deleted} = Shelves.rate_item(user, item.id, :down)
+
+      shelf |> Ecto.Changeset.change(filled_at: DateTime.add(@now, 60)) |> Repo.update!()
+
+      assert :ok = Shelves.undo_rating(user, deleted)
+      assert Repo.get(ShelfItem, item.id)
+      assert Repo.get(ShelfItem, kept.id)
     end
   end
 

@@ -259,14 +259,6 @@ defmodule MydiaWeb.DashboardLive.ShelfRailTest do
     end
   end
 
-  defp wait_until(fun, retries \\ 200) do
-    cond do
-      fun.() -> :ok
-      retries == 0 -> flunk("condition not met in time")
-      true -> Process.sleep(10) && wait_until(fun, retries - 1)
-    end
-  end
-
   test "a finished fill swaps the rail in without a reload", %{conn: conn, user: user} do
     shelf = fresh_shelf(user)
     {:ok, view, _html} = live(conn, ~p"/")
@@ -297,5 +289,19 @@ defmodule MydiaWeb.DashboardLive.ShelfRailTest do
     render_click(view, "rate_shelf_item", %{"id" => other.id, "rating" => "down"})
 
     assert Repo.get(ShelfItem, other.id)
+  end
+
+  defp wait_until(fun, retries \\ 200) do
+    cond do
+      fun.() ->
+        :ok
+
+      retries == 0 ->
+        flunk("condition not met in time")
+
+      true ->
+        Process.sleep(10)
+        wait_until(fun, retries - 1)
+    end
   end
 end
