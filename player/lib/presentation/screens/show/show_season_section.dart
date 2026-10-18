@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../../domain/models/watch_status.dart';
 import '../../widgets/episode_rail.dart';
+import '../../widgets/glass_surface.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/watch_indicator.dart';
@@ -434,6 +436,53 @@ class _SeasonChipState extends State<_SeasonChip>
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final glass = LiquidGlassSupport.platformEligible;
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          widget.label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: glass
+                ? (widget.isSelected
+                    ? palette.textPrimary
+                    : palette.textSecondary)
+                : (widget.isSelected ? Colors.white : palette.textPrimary),
+          ),
+        ),
+        if (widget.unwatched > 0) ...[
+          const SizedBox(width: 6),
+          WatchIndicator(status: widget.watchStatus),
+        ],
+      ],
+    );
+    const padding = EdgeInsets.symmetric(horizontal: 16, vertical: 10);
+    final Widget chip;
+    if (!glass) {
+      chip = AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: padding,
+        decoration: BoxDecoration(
+          color: widget.isSelected ? palette.primary : palette.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: widget.isSelected
+                ? palette.primary
+                : palette.divider.withValues(alpha: 0.3),
+          ),
+        ),
+        child: content,
+      );
+    } else if (widget.isSelected) {
+      chip = GlassSurface.control(
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(padding: padding, child: content),
+      );
+    } else {
+      chip = Padding(padding: padding, child: content);
+    }
     return GestureDetector(
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) {
@@ -443,36 +492,7 @@ class _SeasonChipState extends State<_SeasonChip>
       onTapCancel: () => _controller.reverse(),
       child: ScaleTransition(
         scale: _scaleAnimation,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: widget.isSelected ? palette.primary : palette.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: widget.isSelected
-                  ? palette.primary
-                  : palette.divider.withValues(alpha: 0.3),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: widget.isSelected ? Colors.white : palette.textPrimary,
-                ),
-              ),
-              if (widget.unwatched > 0) ...[
-                const SizedBox(width: 6),
-                WatchIndicator(status: widget.watchStatus),
-              ],
-            ],
-          ),
-        ),
+        child: chip,
       ),
     );
   }

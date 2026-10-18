@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/sources/capabilities.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
@@ -10,6 +11,8 @@ import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
+import 'package:player/presentation/widgets/glass/glass_badge.dart';
+import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/hero_play_control.dart';
 import 'package:player/presentation/widgets/primary_play_button.dart';
 
@@ -143,6 +146,45 @@ Future<void> _pumpScreen(
 }
 
 void main() {
+  tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
+
+  testWidgets('on Apple the Next Up pill is a glass badge', (tester) async {
+    LiquidGlassSupport.debugPlatformOverride = true;
+    await _pumpScreen(tester);
+    expect(
+      find.ancestor(
+        of: find.textContaining('Next Up'),
+        matching: find.byType(GlassBadge),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('on Apple only the selected season sits on glass',
+      (tester) async {
+    LiquidGlassSupport.debugPlatformOverride = true;
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      episodes: {
+        1: [_episode(1, watched: true), _episode(2), _episode(3)],
+        2: [_episode(1, season: 2), _episode(2, season: 2)],
+      },
+    );
+    Finder glassAround(String label) => find.ancestor(
+          of: find.text(label),
+          matching: find.byType(GlassSurface),
+        );
+    expect(glassAround('Season 1'), findsOneWidget);
+    expect(glassAround('Season 2'), findsNothing);
+
+    await tester.tap(find.text('Season 2'));
+    await tester.pumpAndSettle();
+
+    expect(glassAround('Season 2'), findsOneWidget);
+    expect(glassAround('Season 1'), findsNothing);
+  });
+
   testWidgets('the hero offers every version of its episode', (tester) async {
     await _pumpScreen(tester, size: const Size(1280, 900));
     await tester.pumpAndSettle();

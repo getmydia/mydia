@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../widgets/detail_art_image.dart';
+import '../../widgets/glass/glass_badge.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
@@ -242,9 +243,9 @@ class ShowDetailScreen extends ConsumerWidget {
         ? 'Next Up · S${episode.seasonNumber} E${episode.episodeNumber}'
         : 'S${episode.seasonNumber} · E${episode.episodeNumber}';
 
-    return Container(
+    return GlassBadge(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
+      fallbackDecoration: BoxDecoration(
         color: palette.surfaceVariant,
         border: Border.all(color: palette.border),
         borderRadius: BorderRadius.circular(20),
