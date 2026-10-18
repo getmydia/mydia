@@ -37,6 +37,7 @@ import 'core/navigation/sidebar_layout_providers.dart';
 import 'core/relay/relay_api_client.dart' show metadataRelayBaseUrl;
 import 'core/sources/cache/source_cache.dart';
 import 'core/storage/app_hive.dart';
+import 'core/theme/liquid_glass/liquid_glass_support.dart';
 import 'core/window/desktop_window.dart';
 import 'core/startup/startup_error_app.dart';
 import 'core/startup/startup_gate.dart';
@@ -216,6 +217,7 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
         await Future.wait<void>([
           InputCapabilities.initialize(),
           NativeTabBarSupport.initialize(),
+          LiquidGlassSupport.initialize(),
         ]);
       },
       hiveCache: () async {

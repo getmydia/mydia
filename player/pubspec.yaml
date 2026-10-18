@@ -132,6 +132,9 @@ flutter:
     - assets/fonts/Inter-LICENSE.txt
     - assets/fonts/Outfit-LICENSE.txt
 
+  shaders:
+    - shaders/liquid_glass.frag
+
   fonts:
     - family: Inter
       fonts:
