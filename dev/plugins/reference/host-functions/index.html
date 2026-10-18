@@ -4217,7 +4217,7 @@
 <h1 id="host-functions">Host functions</h1>
 <p>The functions a plugin imports from the host, as defined in the <code>host</code>
 interface of the WIT contract (<code>native/mydia_plugin_sdk/wit/plugin.wit</code>, package
-<code>mydia:plugin@1.6.0</code>). The functions a plugin exports for the host to call are
+<code>mydia:plugin@1.7.0</code>). The functions a plugin exports for the host to call are
 in <a href="../guest-exports/">Guest exports</a>.</p>
 <p>In the Rust SDK each function is <code>mydia_plugin_sdk::host::&lt;name&gt;</code> with dashes
 turned into underscores (<code>set-watch-state</code> is <code>host::set_watch_state</code>), and the
@@ -5568,6 +5568,10 @@ against.</p>
 <tr>
 <td>1.6</td>
 <td>The <code>fill-shelf</code> export and the <code>media-ref</code>, <code>shelf-request</code> and <code>shelf-item</code> records. No new host functions.</td>
+</tr>
+<tr>
+<td>1.7</td>
+<td>The shelf-feedback types (<code>shelf-rating</code>, <code>shelf-via</code>, <code>shelf-feedback</code>) and the <code>feedback</code> field on <code>shelf-request</code>. No new host functions.</td>
 </tr>
 </tbody>
 </table>

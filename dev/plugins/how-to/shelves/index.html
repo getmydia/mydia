@@ -3515,8 +3515,11 @@ for one user and expects the titles best first.</p>
 <a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="p">}</span>
 </code></pre></div>
 <p>The request carries <code>shelf</code> (the key you declared), <code>user_id</code>, <code>limit</code>, <code>now</code>,
-<code>config_json</code> and <code>exclude</code>. Leave out the titles in <code>exclude</code>: the host rejects
-them. The full record is under <a href="../../reference/guest-exports/#fill-shelf"><code>fill-shelf</code></a>.</p>
+<code>config_json</code>, <code>exclude</code> and, from contract 1.7, <code>feedback</code>. Leave out the titles
+in <code>exclude</code>: the host rejects them. <code>feedback</code> lists what the user thought of
+earlier suggestions (<code>rating</code> is <code>Up</code> or <code>Down</code>, <code>via</code> says whether they added
+the title or had already seen it), so lean toward what they liked and away from
+what they did not. The full record is under <a href="../../reference/guest-exports/#fill-shelf"><code>fill-shelf</code></a>.</p>
 <p>Return an <code>Err</code> string when the fill fails, and an empty list when you have
 nothing to suggest. An empty list keeps whatever the shelf held.</p>
 <h2 id="3-know-what-the-host-does-with-the-result">3. Know what the host does with the result</h2>

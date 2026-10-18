@@ -3587,7 +3587,7 @@
 <h1 id="guest-exports">Guest exports</h1>
 <p>The functions a plugin exports for the host to call, as defined in the
 <code>handler</code> and <code>page</code> interfaces of the WIT contract
-(<code>native/mydia_plugin_sdk/wit/plugin.wit</code>, package <code>mydia:plugin@1.6.0</code>). The
+(<code>native/mydia_plugin_sdk/wit/plugin.wit</code>, package <code>mydia:plugin@1.7.0</code>). The
 functions a plugin may call are in <a href="../host-functions/">Host functions</a>.</p>
 <p>A guest implements <code>on-event</code> and any of the others it needs. The
 <code>#[mydia_plugin_sdk::plugin]</code> macro wires them up from plain functions:</p>
@@ -4202,6 +4202,11 @@ renders them. For a walkthrough see <a href="../../how-to/shelves/">Fill a shelf
 <td>Titles the host will reject, because they are already shown or were dismissed. Returning them wastes a slot.</td>
 </tr>
 <tr>
+<td><code>feedback</code></td>
+<td><code>list&lt;shelf-feedback&gt;</code></td>
+<td>Contract 1.7. The user's ratings of titles this shelf suggested, newest first, at most 50 (<a href="../limits/#shelves">Limits</a>). Every rated title is also in <code>exclude</code>. A 1.6 guest never sees this field.</td>
+</tr>
+<tr>
 <td><code>limit</code></td>
 <td><code>u32</code></td>
 <td>The most items worth returning (<a href="../limits/#shelves">Limits</a>).</td>
@@ -4215,6 +4220,43 @@ renders them. For a walkthrough see <a href="../../how-to/shelves/">Fill a shelf
 <td><code>config-json</code></td>
 <td><code>string</code></td>
 <td>The operator's settings as a JSON object string.</td>
+</tr>
+</tbody>
+</table>
+<p><code>shelf-feedback</code> (contract 1.7):</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>item</code></td>
+<td><code>media-ref</code></td>
+<td>The rated title.</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td><code>string</code></td>
+<td>The title as the host knows it.</td>
+</tr>
+<tr>
+<td><code>year</code></td>
+<td><code>option&lt;u32&gt;</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>rating</code></td>
+<td><code>shelf-rating</code></td>
+<td><code>up</code> (liked) or <code>down</code> (not for them).</td>
+</tr>
+<tr>
+<td><code>via</code></td>
+<td><code>option&lt;shelf-via&gt;</code></td>
+<td>For an <code>up</code> rating: <code>added</code> when the user added or requested the title from the shelf, <code>seen</code> when they had already seen it and liked it. Absent for <code>down</code>.</td>
 </tr>
 </tbody>
 </table>
