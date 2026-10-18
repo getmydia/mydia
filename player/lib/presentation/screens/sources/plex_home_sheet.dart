@@ -10,6 +10,7 @@ import '../../../core/sources/plex/plex_tv_client.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/source_error.dart';
+import '../../widgets/glass/glass_sheet.dart';
 import '../../widgets/toast/toaster.dart';
 import 'plex_pin_dialog.dart';
 
@@ -22,7 +23,7 @@ Future<void> showPlexHomeSheet(
   String? serverId,
   required ValueChanged<SourceId> onSwitched,
 }) =>
-    showModalBottomSheet<void>(
+    showGlassSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (_) => _PlexHomeSheet(

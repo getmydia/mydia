@@ -7,6 +7,7 @@ import '../../../core/layout/window_chrome_inset.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/glass/glass_dialog.dart';
+import '../../widgets/glass/glass_sheet.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/toast/toaster.dart';
@@ -680,7 +681,7 @@ class DownloadsScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, DownloadGroup group) {
     final isActive = group.activeTasks.isNotEmpty;
 
-    showModalBottomSheet<void>(
+    showGlassSheet<void>(
       context: context,
       backgroundColor: context.palette.surface,
       shape: const RoundedRectangleBorder(
@@ -1222,7 +1223,7 @@ class DownloadsScreen extends ConsumerWidget {
 
   void _showStorageSettings(
       BuildContext context, WidgetRef ref, StorageQuotaStatus status) {
-    showModalBottomSheet<void>(
+    showGlassSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.palette.surface,

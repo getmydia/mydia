@@ -6,6 +6,7 @@ import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/navigation/nav_destination.dart';
 import '../library/library_sort.dart';
+import '../../widgets/glass/glass_sheet.dart';
 import '../library/library_sort_sheet.dart';
 
 /// Opens the filter create/edit sheet.
@@ -15,7 +16,7 @@ Future<void> showFilterEditor({
   MediaFilter? initialFilter,
   FilterDestination? editing,
 }) {
-  return showModalBottomSheet<void>(
+  return showGlassSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -91,7 +92,7 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
   }
 
   Future<void> _showSortPicker() async {
-    final selected = await showModalBottomSheet<LibrarySortSelection>(
+    final selected = await showGlassSheet<LibrarySortSelection>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => LibrarySortSheet(currentSort: _filter.sort),

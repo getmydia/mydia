@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/navigation/sidebar_layout_providers.dart';
 import '../../../core/theme/palette.dart';
+import '../glass/glass_sheet.dart';
 import 'sidebar_content.dart';
 
 /// Opens on the root navigator, so the iPad native sidebar hides while it is
@@ -48,7 +49,7 @@ Future<void> showSidebarEditSheet({
       ),
     );
   } else {
-    await showModalBottomSheet<void>(
+    await showGlassSheet<void>(
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,

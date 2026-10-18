@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/models/cast_device.dart';
+import 'glass/glass_sheet.dart';
 
 /// What the cast caption sheet resolved to when it closed.
 ///
@@ -45,7 +46,7 @@ Future<CastSubtitleSelection> showCastSubtitleSheet(
   required List<CastSubtitleTrack> tracks,
   required CastSubtitleTrack? selected,
 }) async {
-  final result = await showModalBottomSheet<CastSubtitleSelection>(
+  final result = await showGlassSheet<CastSubtitleSelection>(
     context: context,
     builder: (context) => SafeArea(
       child: ListView(
