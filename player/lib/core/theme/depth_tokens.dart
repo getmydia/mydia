@@ -261,8 +261,8 @@ abstract final class DepthTokens {
   /// Tint opacity per surface role. Each must clear
   /// [glassLegibilityFloor]; `liquid_glass_legibility_test.dart` checks
   /// text and icon contrast over a pure-white backdrop for every preset.
-  static const double liquidChromeTintOpacity = 0.65;
-  static const double liquidModalTintOpacity = 0.65;
+  static const double liquidChromeTintOpacity = 0.80;
+  static const double liquidModalTintOpacity = 0.80;
   static const double liquidControlTintOpacity = 0.6;
 
   /// The prominent button's white tint (the design system's primary pill).

@@ -3,7 +3,10 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../core/theme/depth_tokens.dart';
+import '../../core/theme/liquid_glass/glass_accessibility.dart';
+import '../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../core/theme/palette.dart';
+import 'glass/liquid_glass_filter.dart';
 
 /// Which ambient tint colour a glass surface fills with.
 enum GlassTint { ground, surface }
@@ -24,7 +27,8 @@ enum GlassTint { ground, surface }
 /// [DepthTokens] (R2) rather than per-call literals.
 ///
 /// Use the named constructors ([GlassSurface.appBar], [GlassSurface.modal],
-/// [GlassSurface.hoverOverlay], [GlassSurface.faux], [GlassSurface.osd]) to
+/// [GlassSurface.chrome], [GlassSurface.control], [GlassSurface.hoverOverlay],
+/// [GlassSurface.faux], [GlassSurface.osd]) to
 /// reproduce the established visual treatments; the unnamed constructor is
 /// available for bespoke surfaces.
 ///
@@ -35,6 +39,11 @@ enum GlassTint { ground, surface }
 ///
 /// [GlassSurface.appBar], [GlassSurface.modal] and [GlassSurface.chrome]
 /// follow the ambient tint ([AmbientTint]); faux, hoverOverlay and osd do not.
+///
+/// On iOS and macOS, [GlassSurface.appBar], [GlassSurface.chrome],
+/// [GlassSurface.modal] and [GlassSurface.control] take the Liquid Glass recipe
+/// (`LiquidGlassFilter`) when `LiquidGlassSupport.available`, and an opaque
+/// fill when Reduce Transparency is on. See `player/docs/liquid-glass.md`.
 class GlassSurface extends StatelessWidget {
   /// Gaussian blur sigma applied behind the surface. Ignored when [live] is
   /// false.
@@ -77,6 +86,13 @@ class GlassSurface extends StatelessWidget {
   final GlassTint? tint;
   final double tintOpacity;
 
+  /// Tint opacity on the Liquid Glass recipe (iOS and macOS). Null means
+  /// this surface never takes it: only [GlassSurface.appBar],
+  /// [GlassSurface.chrome], [GlassSurface.modal] and [GlassSurface.control]
+  /// set it, so the OSD, faux and hover overlay are excluded by
+  /// construction.
+  final double? liquidTintOpacity;
+
   final Widget? child;
 
   const GlassSurface({
@@ -92,6 +108,7 @@ class GlassSurface extends StatelessWidget {
     this.shadows = const <BoxShadow>[],
     this.tint,
     this.tintOpacity = DepthTokens.chromeFillOpacity,
+    this.liquidTintOpacity,
     this.child,
   });
 
@@ -109,6 +126,7 @@ class GlassSurface extends StatelessWidget {
           blurSigma: DepthTokens.blurChrome,
           tint: GlassTint.ground,
           tintOpacity: opacity,
+          liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
           grouped: grouped,
           child: child,
         );
@@ -124,6 +142,7 @@ class GlassSurface extends StatelessWidget {
           blurSigma: DepthTokens.blurModal,
           tint: GlassTint.surface,
           tintOpacity: DepthTokens.modalFillOpacity,
+          liquidTintOpacity: DepthTokens.liquidModalTintOpacity,
           borderRadius: BorderRadius.circular(20),
           paletteBorderAlpha: 0.2,
           grouped: grouped,
@@ -145,9 +164,34 @@ class GlassSurface extends StatelessWidget {
           blurSigma: DepthTokens.blurChrome,
           tint: GlassTint.surface,
           tintOpacity: opacity,
+          liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
           borderRadius: borderRadius,
           border: border,
           shadows: shadows,
+          grouped: grouped,
+          child: child,
+        );
+
+  /// A floating control: a circle or capsule over content (back, close,
+  /// cast; the primary Play pill with [prominentColor]). Only used on iOS
+  /// and macOS; the control widgets render Material elsewhere.
+  GlassSurface.control({
+    Key? key,
+    required BorderRadius borderRadius,
+    Color? prominentColor,
+    bool grouped = false,
+    Widget? child,
+  }) : this(
+          key: key,
+          blurSigma: DepthTokens.blurChrome,
+          fillColor: prominentColor?.withValues(
+              alpha: DepthTokens.liquidProminentTintOpacity),
+          tint: prominentColor == null ? GlassTint.surface : null,
+          tintOpacity: DepthTokens.liquidControlTintOpacity,
+          liquidTintOpacity: prominentColor == null
+              ? DepthTokens.liquidControlTintOpacity
+              : DepthTokens.liquidProminentTintOpacity,
+          borderRadius: borderRadius,
           grouped: grouped,
           child: child,
         );
@@ -247,15 +291,19 @@ class GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tint = this.tint;
+    final base = _baseColor(context);
+    final liquidOpacity = liquidTintOpacity;
+    if (liquidOpacity != null && base != null) {
+      final access = GlassAccessibilityScope.of(context);
+      if (access.reduceTransparency) {
+        return _withShadow(_solid(base.withValues(alpha: 1)));
+      }
+      if (LiquidGlassSupport.available) {
+        return _withShadow(_liquid(context, base, liquidOpacity, access));
+      }
+    }
     final fill = fillColor ??
-        (tint == null || gradient != null
-            ? null
-            : switch (tint) {
-                GlassTint.ground => AmbientTint.of(context).ground,
-                GlassTint.surface => AmbientTint.of(context).surface,
-              }
-                .withValues(alpha: tintOpacity));
+        (gradient != null ? null : base?.withValues(alpha: tintOpacity));
     final alpha = paletteBorderAlpha;
     final resolvedBorder = border ??
         (alpha == null
@@ -264,6 +312,58 @@ class GlassSurface extends StatelessWidget {
                 color: context.palette.border.withValues(alpha: alpha),
               ));
     return _withShadow(_surface(fill, resolvedBorder));
+  }
+
+  /// The surface's colour before opacity: [fillColor] or the ambient tint.
+  Color? _baseColor(BuildContext context) {
+    final fill = fillColor;
+    if (fill != null) return fill.withValues(alpha: 1);
+    final tint = this.tint;
+    if (tint == null || gradient != null) return null;
+    return switch (tint) {
+      GlassTint.ground => AmbientTint.of(context).ground,
+      GlassTint.surface => AmbientTint.of(context).surface,
+    };
+  }
+
+  /// Reduce Transparency: an opaque fill, no backdrop pass.
+  Widget _solid(Color color) => ClipRRect(
+        borderRadius: borderRadius,
+        child: _fill(color, border),
+      );
+
+  Widget _liquid(
+    BuildContext context,
+    Color base,
+    double opacity,
+    GlassAccessibility access,
+  ) {
+    final alpha = access.increaseContrast
+        ? (opacity + DepthTokens.liquidHighContrastTintBoost).clamp(0.0, 1.0)
+        : opacity;
+    final rim = access.increaseContrast
+        ? Border.all(
+            color: context.palette.textPrimary
+                .withValues(alpha: DepthTokens.liquidHighContrastRimAlpha),
+            width: DepthTokens.rimWidth,
+          )
+        : null;
+    return RepaintBoundary(
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: LiquidGlassFilter(
+          radius: borderRadius.topLeft.x,
+          tint: base.withValues(alpha: alpha),
+          grouped: grouped,
+          // The shader paints the tint; this box only carries the rim
+          // and the child.
+          child: DecoratedBox(
+            decoration: BoxDecoration(borderRadius: borderRadius, border: rim),
+            child: child,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _withShadow(Widget surface) {
