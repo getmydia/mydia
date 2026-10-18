@@ -78,6 +78,24 @@ check.call("distribute_external true string resolves to true", testflight_distri
 ENV["TESTFLIGHT_DISTRIBUTE_EXTERNAL"] = "false"
 check.call("distribute_external false string resolves to false", testflight_distribute_external?, false)
 
+# A branch build is numbered just above this, so it must compare integers one
+# by one, not as strings or floats (17000042.10 > 17000042.9).
+check.call("empty list", max_build_number([]), nil)
+check.call("integers", max_build_number(%w[17000041 17000042 9000000]), "17000042")
+check.call("dotted beats its integer", max_build_number(%w[17000042 17000042.1]), "17000042.1")
+check.call("suffix compares as an integer",
+           max_build_number(%w[17000042.9 17000042.10]), "17000042.10")
+check.call("next integer beats any suffix",
+           max_build_number(%w[17000042.10 17000043]), "17000043")
+check.call("leading zeros are normalised", max_build_number(%w[017000042]), "17000042")
+raised = begin
+  max_build_number(%w[17000042 1.0-beta])
+  false
+rescue ArgumentError
+  true
+end
+check.call("an unreadable number raises", raised, true)
+
 # The Fastfile only loads under fastlane, so this reads it as text, skipping
 # comments. notify_external_testers is what releases an approved build to
 # external testers. While it was false every build waited at "Approved", and the

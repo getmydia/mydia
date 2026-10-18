@@ -41,13 +41,13 @@ commit="${1-}"
 sha=$(git rev-parse --verify --quiet "${commit}^{commit}") || die "not a commit: $commit"
 
 if [ -n "$mainline" ]; then
-  git rev-parse --verify --quiet "${mainline}^{commit}" >/dev/null || die "not a commit: $mainline"
-  # A here-string, not a pipe: grep -q exits on the first match, and whatever
-  # was still writing into a pipe (master's list is past the 64 KiB pipe
-  # buffer) would die of SIGPIPE and fail the check under pipefail.
-  history=$(git rev-list --first-parent "$mainline")
-  grep -qxF "$sha" <<< "$history" \
-    || die "$commit is not on $mainline's first-parent history; use dry_run, or version_override to publish it deliberately"
+  rc=0
+  "$(dirname "${BASH_SOURCE[0]}")/on-mainline.sh" "$mainline" "$sha" || rc=$?
+  case "$rc" in
+    0) ;;
+    1) die "$commit is not on $mainline's first-parent history" ;;
+    *) die "could not check $commit against $mainline" ;;
+  esac
 fi
 
 # Release tags are cut on master's first-parent line. Both the anchor lookup
