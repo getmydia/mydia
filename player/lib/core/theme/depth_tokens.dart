@@ -264,8 +264,8 @@ abstract final class DepthTokens {
 
   /// Backdrop luma range over which the tint rises from its base alpha to
   /// its adaptive max (smoothstep).
-  static const double liquidAdaptiveLumaLow = 0.3;
-  static const double liquidAdaptiveLumaHigh = 0.8;
+  static const double liquidAdaptiveLumaLow = 0.55;
+  static const double liquidAdaptiveLumaHigh = 0.9;
 
   /// Glow under the finger while pressed, and its radius as a fraction of
   /// the surface's shorter side.

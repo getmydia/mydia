@@ -112,11 +112,13 @@ void main() {
   float edge = 1.0 - smoothstep(0.0, uShadeWidth, inside);
   color *= 1.0 - uEdgeShade * edge;
 
-  // Specular rim: brightest where the edge faces the light, with a softer
-  // counter-highlight on the opposite side.
+  // Specular rim: every edge facing the light is lit (top and left at rest),
+  // with a softer counter-highlight on the opposite edges.
   vec2 lightPos = (uLight - vec2(0.5)) * uSurface;
-  vec2 toLight = normalize(lightPos - p + vec2(1e-4));
-  float facing = dot(n, toLight);
+  // Light direction from the centre: every edge facing it is lit, not just
+  // the pixels next to the light point.
+  vec2 lightDir = normalize(lightPos + vec2(1e-4));
+  float facing = dot(n, lightDir);
   float rim = 1.0 - smoothstep(uRimWidth * 0.5, uRimWidth * 1.5, inside);
   float highlight =
       pow(max(facing, 0.0), 2.0) + 0.35 * pow(max(-facing, 0.0), 2.0);
