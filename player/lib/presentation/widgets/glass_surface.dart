@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../core/theme/depth_tokens.dart';
 import '../../core/theme/liquid_glass/glass_accessibility.dart';
+import '../../core/theme/liquid_glass/liquid_glass_adaptive.dart';
 import '../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../core/theme/palette.dart';
 import 'glass/liquid_glass_filter.dart';
@@ -43,7 +44,12 @@ enum GlassTint { ground, surface }
 /// On iOS and macOS, [GlassSurface.appBar], [GlassSurface.chrome],
 /// [GlassSurface.modal] and [GlassSurface.control] take the Liquid Glass recipe
 /// (`LiquidGlassFilter`) when `LiquidGlassSupport.available`, and an opaque
-/// fill when Reduce Transparency is on. See `player/docs/liquid-glass.md`.
+/// fill when Reduce Transparency is on. Chrome, modal and control tints adapt
+/// to the backdrop up to a per-role maximum ([liquidAdaptiveMax]); a white
+/// prominent control never adapts. The control also casts
+/// [DepthTokens.liquidControlShadow]. The app bar is not glass but Apple's
+/// scroll edge: a plain blur under a ground gradient ([liquidScrollEdge]).
+/// See `player/docs/liquid-glass.md`.
 class GlassSurface extends StatelessWidget {
   /// Gaussian blur sigma applied behind the surface. Ignored when [live] is
   /// false.
@@ -93,6 +99,13 @@ class GlassSurface extends StatelessWidget {
   /// construction.
   final double? liquidTintOpacity;
 
+  /// Upper bound the Liquid Glass tint may adapt to; null keeps it fixed.
+  final double? liquidAdaptiveMax;
+
+  /// Paint the Liquid Glass branch as a scroll edge band (blur plus ground
+  /// gradient) instead of the glass shader.
+  final bool liquidScrollEdge;
+
   final Widget? child;
 
   const GlassSurface({
@@ -109,6 +122,8 @@ class GlassSurface extends StatelessWidget {
     this.tint,
     this.tintOpacity = DepthTokens.chromeFillOpacity,
     this.liquidTintOpacity,
+    this.liquidAdaptiveMax,
+    this.liquidScrollEdge = false,
     this.child,
   });
 
@@ -127,6 +142,7 @@ class GlassSurface extends StatelessWidget {
           tint: GlassTint.ground,
           tintOpacity: opacity,
           liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
+          liquidScrollEdge: true,
           grouped: grouped,
           child: child,
         );
@@ -144,6 +160,7 @@ class GlassSurface extends StatelessWidget {
           tint: GlassTint.surface,
           tintOpacity: DepthTokens.modalFillOpacity,
           liquidTintOpacity: DepthTokens.liquidModalTintOpacity,
+          liquidAdaptiveMax: DepthTokens.liquidModalAdaptiveMax,
           borderRadius: borderRadius ?? BorderRadius.circular(20),
           paletteBorderAlpha: 0.2,
           grouped: grouped,
@@ -166,6 +183,7 @@ class GlassSurface extends StatelessWidget {
           tint: GlassTint.surface,
           tintOpacity: opacity,
           liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
+          liquidAdaptiveMax: DepthTokens.liquidChromeAdaptiveMax,
           borderRadius: borderRadius,
           border: border,
           shadows: shadows,
@@ -174,28 +192,53 @@ class GlassSurface extends StatelessWidget {
         );
 
   /// A floating control: a circle or capsule over content (back, close,
-  /// cast; the primary Play pill with [prominentColor]). Only used on iOS
-  /// and macOS; the control widgets render Material elsewhere.
+  /// cast; the primary Play pill with [prominentColor], or tinted by
+  /// [accentColor]). Casts [DepthTokens.liquidControlShadow]. Only used on
+  /// iOS and macOS; the control widgets render Material elsewhere.
   GlassSurface.control({
     Key? key,
     required BorderRadius borderRadius,
     Color? prominentColor,
+    Color? accentColor,
     bool grouped = false,
     Widget? child,
   }) : this(
           key: key,
-          blurSigma: DepthTokens.blurChrome,
-          fillColor: prominentColor?.withValues(
-              alpha: DepthTokens.liquidProminentTintOpacity),
-          tint: prominentColor == null ? GlassTint.surface : null,
+          blurSigma: _controlBlurSigma(prominentColor, accentColor),
+          // Only the frosted fallback reads this alpha, and it cannot adapt,
+          // so it uses the alpha the white label is rated at.
+          fillColor: accentColor != null
+              ? accentGlassTint(accentColor)
+                  .withValues(alpha: DepthTokens.liquidAccentAdaptiveMax)
+              : prominentColor?.withValues(
+                  alpha: DepthTokens.liquidProminentTintOpacity),
+          tint: prominentColor == null && accentColor == null
+              ? GlassTint.surface
+              : null,
           tintOpacity: DepthTokens.liquidControlTintOpacity,
-          liquidTintOpacity: prominentColor == null
-              ? DepthTokens.liquidControlTintOpacity
-              : DepthTokens.liquidProminentTintOpacity,
+          liquidTintOpacity: accentColor != null
+              ? DepthTokens.liquidAccentTintOpacity
+              : prominentColor != null
+                  ? DepthTokens.liquidProminentTintOpacity
+                  : DepthTokens.liquidControlTintOpacity,
+          liquidAdaptiveMax: accentColor != null
+              ? DepthTokens.liquidAccentAdaptiveMax
+              : prominentColor != null
+                  ? null
+                  : DepthTokens.liquidControlAdaptiveMax,
+          shadows: DepthTokens.liquidControlShadow,
           borderRadius: borderRadius,
           grouped: grouped,
           child: child,
         );
+
+  /// The control blur sigma; also where the control's exclusive colour
+  /// arguments are asserted, since a redirecting constructor cannot assert.
+  static double _controlBlurSigma(Color? prominentColor, Color? accentColor) {
+    assert(prominentColor == null || accentColor == null,
+        'pass prominentColor or accentColor, not both');
+    return DepthTokens.blurChrome;
+  }
 
   /// Media-card hover overlay glass: hover blur sigma, vertical black gradient
   /// (0.3 -> 0.6), radius 12.
@@ -307,7 +350,9 @@ class GlassSurface extends StatelessWidget {
         return _withShadow(_solid(base.withValues(alpha: 1), resolvedBorder));
       }
       if (LiquidGlassSupport.available) {
-        return _withShadow(_liquid(context, base, liquidOpacity, access));
+        return _withShadow(liquidScrollEdge
+            ? _scrollEdge(context, base, access)
+            : _liquid(context, base, liquidOpacity, access));
       }
     }
     final fill = fillColor ??
@@ -339,9 +384,10 @@ class GlassSurface extends StatelessWidget {
     double opacity,
     GlassAccessibility access,
   ) {
-    final alpha = access.increaseContrast
-        ? (opacity + DepthTokens.liquidHighContrastTintBoost).clamp(0.0, 1.0)
-        : opacity;
+    final boost =
+        access.increaseContrast ? DepthTokens.liquidHighContrastTintBoost : 0.0;
+    final adaptiveMax = liquidAdaptiveMax;
+    final alpha = (opacity + boost).clamp(0.0, 1.0);
     final rim = access.increaseContrast
         ? Border.all(
             color: context.palette.textPrimary
@@ -355,6 +401,9 @@ class GlassSurface extends StatelessWidget {
         child: LiquidGlassFilter(
           radius: borderRadius.topLeft.x,
           tint: base.withValues(alpha: alpha),
+          adaptiveTintMax: adaptiveMax == null
+              ? null
+              : (adaptiveMax + boost).clamp(0.0, 1.0),
           grouped: grouped,
           // The shader paints the tint; this box only carries the rim
           // and the child.
@@ -363,6 +412,46 @@ class GlassSurface extends StatelessWidget {
             child: child,
           ),
         ),
+      ),
+    );
+  }
+
+  /// The toolbar on Liquid Glass: Apple's hard scroll edge. A plain blur
+  /// under a ground gradient, opaque enough at the top for the title and
+  /// clearer at the bottom so the glass chips there see the content.
+  Widget _scrollEdge(
+      BuildContext context, Color base, GlassAccessibility access) {
+    final boost =
+        access.increaseContrast ? DepthTokens.liquidHighContrastTintBoost : 0.0;
+    double a(double v) => (v + boost).clamp(0.0, 1.0);
+    final top =
+        base.withValues(alpha: a(DepthTokens.liquidScrollEdgeTopOpacity));
+    final filter = ImageFilter.blur(
+      sigmaX: DepthTokens.liquidScrollEdgeBlurSigma,
+      sigmaY: DepthTokens.liquidScrollEdgeBlurSigma,
+    );
+    final fill = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: const [0.0, 0.6, 1.0],
+          colors: [
+            top,
+            top,
+            base.withValues(
+                alpha: a(DepthTokens.liquidScrollEdgeBottomOpacity)),
+          ],
+        ),
+      ),
+      child: child,
+    );
+    return RepaintBoundary(
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: grouped
+            ? BackdropFilter.grouped(filter: filter, child: fill)
+            : BackdropFilter(filter: filter, child: fill),
       ),
     );
   }

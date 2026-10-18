@@ -225,7 +225,7 @@ abstract final class DepthTokens {
   // ---------------------------------------------------------------------------
 
   /// Blur applied before the shader bends the backdrop.
-  static const double liquidBlurSigma = 6.0;
+  static const double liquidBlurSigma = 14.0;
 
   /// Width of the band along the edge where the backdrop is bent.
   static const double liquidEdgeBand = 22.0;
@@ -243,27 +243,70 @@ abstract final class DepthTokens {
   static const double liquidBrightness = 0.04;
 
   /// Specular rim intensity at rest.
-  static const double liquidSpecular = 0.55;
+  static const double liquidSpecular = 0.85;
 
   /// Extra specular while hovered (macOS) or pressed.
   static const double liquidHoverSpecularBoost = 0.2;
   static const double liquidPressSpecularBoost = 0.35;
 
   /// How much the outermost pixels darken (the iOS 27 edge).
-  static const double liquidEdgeShade = 0.35;
+  static const double liquidEdgeShade = 0.5;
 
   /// Width of the specular rim.
-  static const double liquidRimWidth = 1.0;
+  static const double liquidRimWidth = 1.5;
+
+  /// Width of the darkened edge, inward from the rim.
+  static const double liquidEdgeShadeWidth = 6.0;
+
+  /// Light added across the edge band on the side facing the light: the
+  /// glass's thickness.
+  static const double liquidInnerGlow = 0.12;
+
+  /// Backdrop luma range over which the tint rises from its base alpha to
+  /// its adaptive max (smoothstep).
+  static const double liquidAdaptiveLumaLow = 0.35;
+  static const double liquidAdaptiveLumaHigh = 0.9;
+
+  /// Spacing of the local luma taps the adaptive tint reads (logical px).
+  /// The shader takes the brightest of a 3x3 grid this far apart, centred
+  /// on each pixel.
+  static const double liquidAdaptiveRadius = 12.0;
+
+  /// Glow under the finger while pressed, and its radius as a fraction of
+  /// the surface's shorter side.
+  static const double liquidPressGlow = 0.18;
+  static const double liquidPressGlowRadius = 0.9;
 
   /// Resting light position, as a fraction of the surface (top-left).
   static const Offset liquidLightRest = Offset(0.25, 0.0);
 
-  /// Tint opacity per surface role. Each must clear
-  /// [glassLegibilityFloor]; `liquid_glass_legibility_test.dart` checks
-  /// text and icon contrast over a pure-white backdrop for every preset.
-  static const double liquidChromeTintOpacity = 0.80;
-  static const double liquidModalTintOpacity = 0.80;
-  static const double liquidControlTintOpacity = 0.6;
+  // Base tint per role (over a dark backdrop) and the adaptive max the
+  // shader raises it to over a bright one. The adaptive max must clear
+  // [glassLegibilityFloor]; `liquid_glass_legibility_test.dart` checks text
+  // and icon contrast for every preset over grey backdrops from black to
+  // white in steps of 0.05, since the tint is lowest at mid luma. The luma
+  // is the brightest nearby, so it is the worst case under a glyph.
+  static const double liquidChromeTintOpacity = 0.5;
+  static const double liquidModalTintOpacity = 0.55;
+  static const double liquidControlTintOpacity = 0.3;
+  static const double liquidChromeAdaptiveMax = 0.85;
+  static const double liquidModalAdaptiveMax = 0.85;
+  static const double liquidControlAdaptiveMax = 0.65;
+
+  /// The primary Play button's accent glass.
+  static const double liquidAccentTintOpacity = 0.55;
+  static const double liquidAccentAdaptiveMax = 0.9;
+
+  /// The toolbar's scroll edge band: a plain blur under a ground gradient,
+  /// opaque enough for the title at the top, clearer where the chips sit.
+  static const double liquidScrollEdgeBlurSigma = 20.0;
+  static const double liquidScrollEdgeTopOpacity = 0.8;
+  static const double liquidScrollEdgeBottomOpacity = 0.35;
+
+  /// The lift under a floating glass control.
+  static const List<BoxShadow> liquidControlShadow = [
+    BoxShadow(color: Color(0x2E000000), blurRadius: 12, offset: Offset(0, 4)),
+  ];
 
   /// The prominent button's white tint (the design system's primary pill).
   static const double liquidProminentTintOpacity = 0.85;

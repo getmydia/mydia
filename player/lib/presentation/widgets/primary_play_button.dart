@@ -7,16 +7,13 @@ import 'focus_highlight.dart';
 import 'glass/glass_interaction.dart';
 import 'glass_surface.dart';
 
-/// The detail pages' Play / Resume control: the design system's white primary
-/// button, a play icon and a label on a white pill.
+/// The detail pages' Play / Resume control: a play icon and a label on a pill.
 ///
-/// Gold stays reserved for progress, selection, focus rings and badges, so
-/// this never paints the palette's primary. A null [onPressed] renders the
-/// disabled surface and takes no focus, the same as the control it replaced.
-///
-/// On iOS and macOS an enabled button is a white Liquid Glass capsule
-/// (`GlassSurface.control(prominentColor: Colors.white)`); the label colour and
-/// the gold focus ring are unchanged.
+/// Off Apple platforms it is the design system's white pill and never paints
+/// the palette's primary. On iOS and macOS an enabled button is accent-tinted
+/// Liquid Glass with a white label, the tint darkened by `accentGlassTint` so
+/// the label clears 4.5:1. A null [onPressed] renders the disabled surface and
+/// takes no focus, the same as the control it replaced.
 class PrimaryPlayButton extends StatefulWidget {
   const PrimaryPlayButton({
     super.key,
@@ -72,8 +69,10 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final foreground = _enabled ? palette.background : palette.textDisabled;
     final glass = LiquidGlassSupport.platformEligible && _enabled;
+    final foreground = !_enabled
+        ? palette.textDisabled
+        : (glass ? Colors.white : palette.background);
     final radius = glass
         ? const BorderRadius.all(Radius.circular(PrimaryPlayButton.height / 2))
         : _radius;
@@ -134,7 +133,7 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
             child: GlassSurface.control(
               key: PrimaryPlayButton.pillKey,
               borderRadius: radius,
-              prominentColor: Colors.white,
+              accentColor: palette.primary,
               child: Material(type: MaterialType.transparency, child: ink),
             ),
           )
@@ -148,10 +147,11 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
       scale: _scale,
       child: FocusHighlight(
         onActivate: widget.onPressed,
-        // A gold ring in the gap around the pill: the default white ring would
-        // vanish against the white fill if it were drawn on the pill itself.
+        // A ring in the gap around the pill. Gold off Apple, where the white
+        // fill would hide a white ring; white on glass, where a gold ring
+        // would merge into the accent pill.
         borderRadius: ringRadius,
-        ringColor: palette.primary,
+        ringColor: glass ? Colors.white : palette.primary,
         ringOpacity: 1,
         child: Padding(
           padding: const EdgeInsets.all(PrimaryPlayButton.ringGap),

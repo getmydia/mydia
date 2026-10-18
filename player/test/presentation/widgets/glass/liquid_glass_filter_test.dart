@@ -73,6 +73,34 @@ void main() {
     expect(render.uniforms.specularBoost, DepthTokens.liquidPressSpecularBoost);
   });
 
+  testWidgets('passes the adaptive ceiling and a press glow', (tester) async {
+    await tester.pumpWidget(_host(const GlassPointer(
+      pressed: true,
+      child: LiquidGlassFilter(
+        radius: 12,
+        tint: Color(0xA0000000),
+        adaptiveTintMax: 0.7,
+        child: SizedBox(width: 80, height: 40),
+      ),
+    )));
+    final render =
+        tester.renderObject<RenderLiquidGlass>(find.byType(LiquidGlassFilter));
+    expect(render.uniforms.adaptiveMax, 0.7);
+    expect(render.uniforms.glow, DepthTokens.liquidPressGlow);
+  });
+
+  testWidgets('has no glow and no adaptation by default', (tester) async {
+    await tester.pumpWidget(_host(const LiquidGlassFilter(
+      radius: 12,
+      tint: Color(0xA0000000),
+      child: SizedBox(width: 80, height: 40),
+    )));
+    final render =
+        tester.renderObject<RenderLiquidGlass>(find.byType(LiquidGlassFilter));
+    expect(render.uniforms.adaptiveMax, isNull);
+    expect(render.uniforms.glow, 0);
+  });
+
   testWidgets('rests at the default light with no GlassPointer',
       (tester) async {
     await tester.pumpWidget(_host(const LiquidGlassFilter(

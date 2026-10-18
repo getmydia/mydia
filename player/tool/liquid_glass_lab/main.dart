@@ -18,7 +18,7 @@
 //     --dart-define=LAB_SNAPSHOT=/tmp/lab.png -t tool/liquid_glass_lab/main.dart
 //
 // The player app itself does not build on Linux without libsecret, so to run
-// the lab on Linux copy it plus the five glass files into a plugin-free
+// the lab on Linux copy it plus the glass files (see docs/liquid-glass.md) into a plugin-free
 // scratch Flutter project; `GDK_SCALE=2` gives a 2x DPR under xvfb.
 
 import 'dart:io';
@@ -27,6 +27,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_adaptive.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 
@@ -118,7 +119,8 @@ class _LabState extends State<_Lab> {
                 right: 0,
                 height: 88,
                 child: _glass(0, const Color(0xFF101014),
-                    DepthTokens.liquidChromeTintOpacity),
+                    DepthTokens.liquidChromeTintOpacity,
+                    adaptiveMax: DepthTokens.liquidChromeAdaptiveMax),
               ),
               Positioned(
                 top: 140,
@@ -126,7 +128,8 @@ class _LabState extends State<_Lab> {
                 width: 44,
                 height: 44,
                 child: _glass(22, const Color(0xFF101014),
-                    DepthTokens.liquidControlTintOpacity),
+                    DepthTokens.liquidControlTintOpacity,
+                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax),
               ),
               Positioned(
                 top: 140,
@@ -142,7 +145,64 @@ class _LabState extends State<_Lab> {
                 width: 320,
                 height: 200,
                 child: _glass(28, const Color(0xFF101014),
-                    DepthTokens.liquidModalTintOpacity),
+                    DepthTokens.liquidModalTintOpacity,
+                    adaptiveMax: DepthTokens.liquidModalAdaptiveMax),
+              ),
+              // A white strip: the worst case for white labels. Both
+              // controls carry a white label so legibility is visible.
+              const Positioned(
+                top: 470,
+                left: 0,
+                right: 0,
+                height: 120,
+                child: ColoredBox(color: Colors.white),
+              ),
+              Positioned(
+                top: 500,
+                left: 40,
+                width: 120,
+                height: 48,
+                child: _glass(24, const Color(0xFF101014),
+                    DepthTokens.liquidControlTintOpacity,
+                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax,
+                    child: _label(Icons.play_arrow_rounded, 'Play')),
+              ),
+              Positioned(
+                top: 500,
+                left: 190,
+                width: 140,
+                height: 48,
+                child: _glass(24, accentGlassTint(const Color(0xFF0A84FF)),
+                    DepthTokens.liquidAccentTintOpacity,
+                    adaptiveMax: DepthTokens.liquidAccentAdaptiveMax,
+                    child: _label(Icons.play_arrow_rounded, 'Play')),
+              ),
+              // The app bar's scroll edge band, as `GlassSurface._scrollEdge`
+              // builds it, with two glass chips on its lower part.
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 120,
+                child: _scrollEdgeBand(),
+              ),
+              Positioned(
+                top: 76,
+                left: 16,
+                width: 96,
+                height: 32,
+                child: _glass(16, const Color(0xFF101014),
+                    DepthTokens.liquidControlTintOpacity,
+                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax),
+              ),
+              Positioned(
+                top: 76,
+                left: 124,
+                width: 96,
+                height: 32,
+                child: _glass(16, const Color(0xFF101014),
+                    DepthTokens.liquidControlTintOpacity,
+                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax),
               ),
               Positioned(
                 right: 16,
@@ -163,14 +223,67 @@ class _LabState extends State<_Lab> {
     );
   }
 
-  Widget _glass(double radius, Color base, double opacity) => ClipRRect(
+  Widget _glass(
+    double radius,
+    Color base,
+    double opacity, {
+    double? adaptiveMax,
+    Widget child = const SizedBox.expand(),
+  }) =>
+      ClipRRect(
         borderRadius: BorderRadius.circular(radius),
         child: LiquidGlassFilter(
           radius: radius,
           tint: base.withValues(alpha: opacity),
-          child: const SizedBox.expand(),
+          adaptiveTintMax: adaptiveMax,
+          child: child,
         ),
       );
+
+  Widget _label(IconData icon, String text) => Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: Colors.white, size: 22),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      );
+
+  Widget _scrollEdgeBand() {
+    const ground = Color(0xFF101014);
+    final top =
+        ground.withValues(alpha: DepthTokens.liquidScrollEdgeTopOpacity);
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(
+          sigmaX: DepthTokens.liquidScrollEdgeBlurSigma,
+          sigmaY: DepthTokens.liquidScrollEdgeBlurSigma,
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: const [0.0, 0.6, 1.0],
+              colors: [
+                top,
+                top,
+                ground.withValues(
+                    alpha: DepthTokens.liquidScrollEdgeBottomOpacity),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Backdrop extends StatelessWidget {

@@ -155,6 +155,39 @@ void main() {
       }
       expect(DepthTokens.liquidHighContrastTintBoost, greaterThan(0));
     });
+
+    test('adaptive tint tokens are ordered and valid', () {
+      for (final v in [
+        DepthTokens.liquidChromeAdaptiveMax,
+        DepthTokens.liquidModalAdaptiveMax,
+        DepthTokens.liquidControlAdaptiveMax,
+        DepthTokens.liquidAccentTintOpacity,
+        DepthTokens.liquidAccentAdaptiveMax,
+        DepthTokens.liquidAdaptiveLumaLow,
+        DepthTokens.liquidAdaptiveLumaHigh,
+        DepthTokens.liquidInnerGlow,
+        DepthTokens.liquidPressGlow,
+        DepthTokens.liquidPressGlowRadius,
+        DepthTokens.liquidScrollEdgeTopOpacity,
+        DepthTokens.liquidScrollEdgeBottomOpacity,
+      ]) {
+        expect(v, inInclusiveRange(0.0, 1.0));
+      }
+      expect(DepthTokens.liquidAdaptiveLumaLow,
+          lessThan(DepthTokens.liquidAdaptiveLumaHigh));
+      expect(DepthTokens.liquidChromeAdaptiveMax,
+          greaterThanOrEqualTo(DepthTokens.liquidChromeTintOpacity));
+      expect(DepthTokens.liquidModalAdaptiveMax,
+          greaterThanOrEqualTo(DepthTokens.liquidModalTintOpacity));
+      expect(DepthTokens.liquidControlAdaptiveMax,
+          greaterThanOrEqualTo(DepthTokens.liquidControlTintOpacity));
+      expect(DepthTokens.liquidAccentAdaptiveMax,
+          greaterThanOrEqualTo(DepthTokens.liquidAccentTintOpacity));
+      expect(DepthTokens.liquidEdgeShadeWidth,
+          greaterThan(DepthTokens.liquidRimWidth));
+      expect(DepthTokens.liquidScrollEdgeBottomOpacity,
+          lessThan(DepthTokens.liquidScrollEdgeTopOpacity));
+    });
   });
 
   group('theme wiring (R3)', () {
