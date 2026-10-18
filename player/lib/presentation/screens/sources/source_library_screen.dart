@@ -20,6 +20,7 @@ import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/browse_scaffold.dart';
+import '../../widgets/glass/glass_chip.dart';
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
 import 'source_browse_providers.dart';
@@ -385,40 +386,43 @@ class _ChipRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      scrollDirection: Axis.horizontal,
-      children: [
-        for (final option in info.sortOptions)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              key: Key('source-sort-${option.id}'),
-              label: Text(option.label),
-              selected:
-                  (query.sortId ?? info.sortOptions.first.id) == option.id,
-              // A new sort starts in its own default direction.
-              onSelected: (_) => onChanged(BrowseQuery(
-                sortId: option.id,
-                filterIds: query.filterIds,
-                pageSize: query.pageSize,
-              )),
+    return BackdropGroup(
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (final option in info.sortOptions)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GlassChip(
+                chipKey: Key('source-sort-${option.id}'),
+                label: Text(option.label),
+                selected:
+                    (query.sortId ?? info.sortOptions.first.id) == option.id,
+                // A new sort starts in its own default direction.
+                onSelected: (_) => onChanged(BrowseQuery(
+                  sortId: option.id,
+                  filterIds: query.filterIds,
+                  pageSize: query.pageSize,
+                )),
+              ),
             ),
-          ),
-        for (final filter in info.filterOptions)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              key: Key('source-filter-${filter.id}'),
-              label: Text(filter.label),
-              selected: query.filterIds.contains(filter.id),
-              onSelected: (on) => onChanged(query.copyWith(
-                filterIds: on
-                    ? {...query.filterIds, filter.id}
-                    : ({...query.filterIds}..remove(filter.id)),
-              )),
+          for (final filter in info.filterOptions)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GlassChip(
+                multiSelect: true,
+                chipKey: Key('source-filter-${filter.id}'),
+                label: Text(filter.label),
+                selected: query.filterIds.contains(filter.id),
+                onSelected: (on) => onChanged(query.copyWith(
+                  filterIds: on
+                      ? {...query.filterIds, filter.id}
+                      : ({...query.filterIds}..remove(filter.id)),
+                )),
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

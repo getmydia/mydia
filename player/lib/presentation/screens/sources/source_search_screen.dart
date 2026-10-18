@@ -13,6 +13,7 @@ import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/browse_scaffold.dart';
+import '../../widgets/glass/glass_chip.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
@@ -225,19 +226,21 @@ class _KindChips extends StatelessWidget {
         controller: controller,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            for (final kind in _KindFilter.values) ...[
-              ChoiceChip(
-                key: Key('source-search-kind-${kind.name}'),
-                avatar: Icon(kind.icon, size: 18),
-                label: Text(kind.label),
-                selected: selected == kind,
-                onSelected: (_) => onSelected(kind),
-              ),
-              const SizedBox(width: 8),
+        child: BackdropGroup(
+          child: Row(
+            children: [
+              for (final kind in _KindFilter.values) ...[
+                GlassChip(
+                  chipKey: Key('source-search-kind-${kind.name}'),
+                  avatar: Icon(kind.icon, size: 18),
+                  label: Text(kind.label),
+                  selected: selected == kind,
+                  onSelected: (_) => onSelected(kind),
+                ),
+                const SizedBox(width: 8),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

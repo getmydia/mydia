@@ -9,6 +9,7 @@ import '../../../domain/merged/merged_result.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/browse_grid.dart';
+import '../../widgets/glass/glass_chip.dart';
 import '../detail/play_item.dart';
 import '../sources/source_drawer_button.dart';
 import '../sources/source_error_view.dart';
@@ -78,25 +79,27 @@ class _AllServersListingScreenState
           if (widget.listing == AllServersListing.recentlyAdded)
             SizedBox(
               height: 48,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                children: [
-                  for (final (key, label, kind) in [
-                    ('all', 'All', null),
-                    ('movies', 'Movies', LibraryKind.movies),
-                    ('shows', 'TV Shows', LibraryKind.shows),
-                  ])
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        key: Key('all-listing-kind-$key'),
-                        label: Text(label),
-                        selected: _kind == kind,
-                        onSelected: (_) => setState(() => _kind = kind),
+              child: BackdropGroup(
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: [
+                    for (final (key, label, kind) in [
+                      ('all', 'All', null),
+                      ('movies', 'Movies', LibraryKind.movies),
+                      ('shows', 'TV Shows', LibraryKind.shows),
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: GlassChip(
+                          chipKey: Key('all-listing-kind-$key'),
+                          label: Text(label),
+                          selected: _kind == kind,
+                          onSelected: (_) => setState(() => _kind = kind),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           if (merged != null)
