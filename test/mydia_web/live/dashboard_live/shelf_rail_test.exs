@@ -242,7 +242,7 @@ defmodule MydiaWeb.DashboardLive.ShelfRailTest do
       assert has_element?(view, "#shelf-up-#{other.id}")
     end
 
-    test "requesting a shelf title as a guest also records a good pick", %{conn: conn} do
+    test "requesting a shelf title as a guest also records a good pick" do
       guest = user_fixture(%{role: "guest"})
       {:ok, _} = Accounts.put_home_widgets(guest, [:shelves])
       shelf = fresh_shelf(guest)
