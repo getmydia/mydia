@@ -6,6 +6,7 @@ import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
+import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/toast/toaster.dart';
@@ -24,7 +25,6 @@ import 'download_locations.dart';
 import 'series_downloads_screen.dart';
 import 'widgets/download_artwork.dart';
 import 'widgets/download_recovery_banner.dart';
-import '../../widgets/glass/glass_dialog.dart';
 
 export 'widgets/download_recovery_banner.dart'
     show DownloadRecoveryBanner, downloadStateLabel;

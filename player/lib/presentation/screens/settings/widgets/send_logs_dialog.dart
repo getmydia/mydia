@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../widgets/glass/glass_dialog.dart';
 
 import '../../../../core/logging/log_uploader.dart';
 import '../../../widgets/toast/toaster.dart';
+import '../../../widgets/glass/glass_dialog.dart';
 
 /// Asks for an optional note, sends this device's logs once, and shows the
 /// report code to quote, or what went wrong with a way to try again.

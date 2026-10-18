@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../glass/glass_dialog.dart';
 
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/navigation/sidebar_layout_providers.dart';
@@ -10,6 +9,7 @@ import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/navigation/nav_destination.dart';
 import '../../../domain/navigation/sidebar_layout.dart';
 import '../../screens/filter/filter_editor_sheet.dart';
+import '../glass/glass_dialog.dart';
 import '../channel_badge.dart';
 import '../mydia_logo.dart';
 import '../../../domain/navigation/all_servers_locations.dart';

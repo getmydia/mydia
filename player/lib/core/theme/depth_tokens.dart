@@ -287,6 +287,10 @@ abstract final class DepthTokens {
 
   /// Corner radius of glass dialogs and popovers.
   static const double liquidDialogRadius = 28.0;
+
+  /// Minimum width of a glass dialog, matching Material's AlertDialog.
+  static const double liquidDialogMinWidth = 280.0;
+
   static const double liquidPopoverRadius = 16.0;
 }
 

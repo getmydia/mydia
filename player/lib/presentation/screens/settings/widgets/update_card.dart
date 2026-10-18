@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../widgets/glass/glass_dialog.dart';
 
 import '../../../../core/theme/palette.dart';
 import '../../../../core/update/update_provider.dart';
 import '../../../../domain/models/available_update.dart';
 import 'settings_section.dart';
+import '../../../widgets/glass/glass_dialog.dart';
 
 /// The available-update card, shown above the settings sections.
 ///

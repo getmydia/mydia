@@ -4,10 +4,10 @@ import '../../../core/format/relative_time.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
+import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../../domain/models/remote_device.dart';
 import 'devices_controller.dart';
-import '../../widgets/glass/glass_dialog.dart';
 
 /// One Mydia instance's devices, embedded in its settings screen.
 class DevicesSection extends ConsumerWidget {

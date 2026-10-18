@@ -44,4 +44,27 @@ void main() {
     expect((dialog.title! as Text).data, 'Remove account?');
     expect(dialog.actions, hasLength(2));
   });
+  testWidgets('iOS and macOS: tall content scrolls instead of overflowing',
+      (tester) async {
+    LiquidGlassSupport.debugPlatformOverride = true;
+    tester.view.physicalSize = const Size(400, 500);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: GlassDialog(
+            title: const Text('Logs'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [for (var i = 0; i < 60; i++) Text('Row $i')],
+            ),
+            actions: [TextButton(onPressed: () {}, child: const Text('OK'))],
+          ),
+        ),
+      ),
+    ));
+    expect(tester.takeException(), isNull);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+  });
 }

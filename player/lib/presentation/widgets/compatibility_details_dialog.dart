@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'glass/glass_dialog.dart';
 
 import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
+import 'glass/glass_dialog.dart';
 
 /// Explains a version mismatch between this player and the connected server.
 ///

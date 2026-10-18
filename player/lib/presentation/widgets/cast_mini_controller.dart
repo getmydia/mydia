@@ -23,10 +23,10 @@ import 'cast_bar/cast_bar_state.dart';
 import 'cast_bar/cast_pill.dart';
 import 'cast_bar/dock_extents.dart';
 import 'cast_subtitle_sheet.dart';
+import 'glass/glass_dialog.dart';
 import 'nav/dock_glass.dart';
 import 'toast/toast_obstruction.dart';
 import 'toast/toaster.dart';
-import 'glass/glass_dialog.dart';
 
 /// Mounts [CastMiniController] at the bottom of [child], floating above it.
 ///

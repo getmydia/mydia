@@ -5,7 +5,6 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../widgets/glass/glass_dialog.dart';
 
 import '../../../../core/build_channel.dart';
 import '../../../../core/remote/node_registration_providers.dart';
@@ -20,6 +19,7 @@ import '../../../../domain/models/quality_delivery_subtitle.dart';
 import '../../../../domain/models/quality_rung.dart';
 import '../../../../domain/models/user_settings.dart';
 import '../../../widgets/hls_quality_selector.dart';
+import '../../../widgets/glass/glass_dialog.dart';
 import '../settings_controller.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';

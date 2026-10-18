@@ -1,5 +1,4 @@
 import 'dart:async' show unawaited;
-import 'glass/glass_dialog.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/update/install_environment.dart';
 import '../../core/update/update_provider.dart';
 import '../../domain/models/available_update.dart';
+import 'glass/glass_dialog.dart';
 
 /// Opens a URL. Injectable so tests can observe the read-only branch without
 /// a url_launcher platform implementation.

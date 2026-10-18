@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'glass/glass_dialog.dart';
 
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/download_option.dart';
+import 'glass/glass_dialog.dart';
 
 /// Dialog for choosing what to download before a download starts.
 ///

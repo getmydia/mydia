@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../widgets/glass/glass_dialog.dart';
 
 import '../../../../core/downloads/download_providers.dart';
 import '../../../../core/sources/source.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/theme/palette.dart';
 import '../../../../domain/models/download.dart';
+import '../../../widgets/glass/glass_dialog.dart';
 
 /// "Specials" for season 0, "Season N" otherwise. Season 0 is the conventional
 /// home for specials in both TVDB and TMDB data.

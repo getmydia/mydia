@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
-import 'toast/toaster.dart';
 import 'glass/glass_dialog.dart';
+import 'toast/toaster.dart';
 
 /// Dialog that asks the user to trust a certificate on first connection.
 ///

@@ -57,53 +57,58 @@ class GlassDialog extends StatelessWidget {
         borderRadius: BorderRadius.circular(DepthTokens.liquidDialogRadius),
         child: Material(
           type: MaterialType.transparency,
-          child: IntrinsicWidth(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (icon != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                    child: IconTheme.merge(
-                      data: IconThemeData(color: palette.textPrimary),
-                      child: icon,
-                    ),
-                  ),
-                if (title != null)
-                  Padding(
-                    padding:
-                        EdgeInsets.fromLTRB(24, icon == null ? 24 : 16, 24, 16),
-                    child: DefaultTextStyle.merge(
-                      style: (textTheme.headlineSmall ?? const TextStyle())
-                          .copyWith(color: palette.textPrimary),
-                      textAlign:
-                          icon == null ? TextAlign.start : TextAlign.center,
-                      child: title,
-                    ),
-                  ),
-                if (content != null)
-                  Flexible(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                          24, title == null ? 24 : 0, 24, 24),
-                      child: DefaultTextStyle.merge(
-                        style: (textTheme.bodyMedium ?? const TextStyle())
-                            .copyWith(color: palette.textSecondary),
-                        child: content,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minWidth: DepthTokens.liquidDialogMinWidth,
+            ),
+            child: IntrinsicWidth(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (icon != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                      child: IconTheme.merge(
+                        data: IconThemeData(color: palette.textPrimary),
+                        child: icon,
                       ),
                     ),
-                  ),
-                if (actions.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                    child: OverflowBar(
-                      alignment: MainAxisAlignment.end,
-                      spacing: 8,
-                      children: actions,
+                  if (title != null)
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                          24, icon == null ? 24 : 16, 24, 16),
+                      child: DefaultTextStyle.merge(
+                        style: (textTheme.headlineSmall ?? const TextStyle())
+                            .copyWith(color: palette.textPrimary),
+                        textAlign:
+                            icon == null ? TextAlign.start : TextAlign.center,
+                        child: title,
+                      ),
                     ),
-                  ),
-              ],
+                  if (content != null)
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(
+                            24, title == null ? 24 : 0, 24, 24),
+                        child: DefaultTextStyle.merge(
+                          style: (textTheme.bodyMedium ?? const TextStyle())
+                              .copyWith(color: palette.textSecondary),
+                          child: content,
+                        ),
+                      ),
+                    ),
+                  if (actions.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                      child: OverflowBar(
+                        alignment: MainAxisAlignment.end,
+                        spacing: 8,
+                        children: actions,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

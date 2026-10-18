@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../widgets/glass/glass_dialog.dart';
 
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_service.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/models/download.dart';
+import '../../widgets/glass/glass_dialog.dart';
 
 /// The downloads removing [accountId] deletes. Best effort: a lookup that
 /// fails or times out reads as none, so the dialog still opens.
