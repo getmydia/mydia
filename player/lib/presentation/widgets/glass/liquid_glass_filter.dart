@@ -24,6 +24,7 @@ class LiquidGlassFilter extends SingleChildRenderObjectWidget {
     super.key,
     required this.radius,
     required this.tint,
+    this.adaptiveTintMax,
     this.grouped = false,
     super.child,
   });
@@ -33,6 +34,9 @@ class LiquidGlassFilter extends SingleChildRenderObjectWidget {
 
   /// Tint colour with its opacity in alpha.
   final Color tint;
+
+  /// Tint alpha over a bright backdrop, or null for a fixed tint.
+  final double? adaptiveTintMax;
 
   /// Share one backdrop pass with the enclosing `BackdropGroup`.
   final bool grouped;
@@ -50,6 +54,8 @@ class LiquidGlassFilter extends SingleChildRenderObjectWidget {
       tint: tint,
       light: pointer?.light ?? DepthTokens.liquidLightRest,
       specularBoost: boost,
+      adaptiveMax: adaptiveTintMax,
+      glow: pointer?.pressed == true ? DepthTokens.liquidPressGlow : 0.0,
     );
   }
 

@@ -5,6 +5,10 @@
 // coordinates. The input texture is the blurred backdrop under the surface,
 // with the surface centred in it.
 //
+// Effects: refraction with dispersion, adaptive tint (the tint alpha rises
+// over bright backdrops), darkened edge, specular rim, inner glow across the
+// lit edge band, and a press glow centred on the light.
+//
 // Refraction maths adapted from liquid_glass_renderer
 // (https://github.com/whynotmake-it/flutter_liquid_glass, MIT).
 //
@@ -30,6 +34,13 @@ uniform float uEdgeShade;
 uniform float uRimWidth;   // physical px
 uniform vec2 uLight;       // light position, 0..1 of the surface
 uniform vec4 uTint;        // straight rgba
+uniform float uShadeWidth;  // darkened edge width, physical px
+uniform float uInnerGlow;   // light across the edge band facing the light
+uniform float uAdaptiveMax; // tint alpha over a bright backdrop
+uniform float uLumaLow;     // backdrop luma where adaptation starts
+uniform float uLumaHigh;    // backdrop luma where it reaches uAdaptiveMax
+uniform float uGlow;        // press glow strength
+uniform float uGlowRadius;  // press glow radius, fraction of the short side
 
 uniform sampler2D uTexture;
 
@@ -52,6 +63,19 @@ vec2 sdNormal(vec2 p, vec2 b, float r) {
 vec3 sampleAt(vec2 px) {
   vec2 clamped = clamp(px, vec2(0.5), uSize - vec2(0.5));
   return texture(uTexture, clamped / uSize).rgb;
+}
+
+// Mean luma of the unbent backdrop under the surface, from a 3x3 grid.
+float backdropLuma(vec2 origin) {
+  float sum = 0.0;
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 3; j++) {
+      vec2 f = vec2(0.2 + 0.3 * float(i), 0.2 + 0.3 * float(j));
+      sum += dot(sampleAt(origin + uSurface * f),
+                 vec3(0.2126, 0.7152, 0.0722));
+    }
+  }
+  return sum / 9.0;
 }
 
 void main() {
@@ -77,10 +101,15 @@ void main() {
   float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
   color = clamp(mix(vec3(luma), color, uSaturation) + vec3(uBrightness),
                 0.0, 1.0);
-  color = mix(color, uTint.rgb, uTint.a);
+  // Adaptive tint: the base alpha over dark content, rising to uAdaptiveMax
+  // over bright content so the label keeps its contrast (mirrored by
+  // liquidAdaptiveAlpha in Dart).
+  float adapt = smoothstep(uLumaLow, uLumaHigh, backdropLuma(origin));
+  float tintAlpha = mix(uTint.a, max(uAdaptiveMax, uTint.a), adapt);
+  color = mix(color, uTint.rgb, tintAlpha);
 
   // Darkened outer edge.
-  float edge = 1.0 - smoothstep(0.0, uRimWidth * 3.0, inside);
+  float edge = 1.0 - smoothstep(0.0, uShadeWidth, inside);
   color *= 1.0 - uEdgeShade * edge;
 
   // Specular rim: brightest where the edge faces the light, with a softer
@@ -92,6 +121,14 @@ void main() {
   float highlight =
       pow(max(facing, 0.0), 2.0) + 0.35 * pow(max(-facing, 0.0), 2.0);
   color += vec3(uSpecular * highlight * rim);
+
+  // Thickness: a soft glow across the edge band on the lit side.
+  color += vec3(uInnerGlow * lens * max(facing, 0.0));
+
+  // Press glow centred on the light (the pointer while pressed).
+  float glowR = max(uGlowRadius * min(uSurface.x, uSurface.y), 1.0);
+  float d = length(p - lightPos) / glowR;
+  color += vec3(uGlow * exp(-d * d));
 
   fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }

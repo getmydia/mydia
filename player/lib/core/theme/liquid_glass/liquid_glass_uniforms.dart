@@ -15,6 +15,8 @@ class LiquidGlassUniforms {
     required this.tint,
     this.light = DepthTokens.liquidLightRest,
     this.specularBoost = 0,
+    this.adaptiveMax,
+    this.glow = 0,
   });
 
   /// `uSize` (floats 0 and 1) is set by the engine for `ImageFilter.shader`.
@@ -33,6 +35,12 @@ class LiquidGlassUniforms {
 
   /// Added to [DepthTokens.liquidSpecular] (hover, press).
   final double specularBoost;
+
+  /// Tint alpha over a bright backdrop; null keeps the tint fixed.
+  final double? adaptiveMax;
+
+  /// Press glow under the light position.
+  final double glow;
 
   List<double> toFloats(Size size) {
     final dpr = devicePixelRatio;
@@ -54,6 +62,13 @@ class LiquidGlassUniforms {
       tint.g,
       tint.b,
       tint.a,
+      DepthTokens.liquidEdgeShadeWidth * dpr,
+      DepthTokens.liquidInnerGlow,
+      adaptiveMax ?? tint.a,
+      DepthTokens.liquidAdaptiveLumaLow,
+      DepthTokens.liquidAdaptiveLumaHigh,
+      glow,
+      DepthTokens.liquidPressGlowRadius,
     ];
   }
 
@@ -71,9 +86,18 @@ class LiquidGlassUniforms {
       other.radius == radius &&
       other.tint == tint &&
       other.light == light &&
-      other.specularBoost == specularBoost;
+      other.specularBoost == specularBoost &&
+      other.adaptiveMax == adaptiveMax &&
+      other.glow == glow;
 
   @override
-  int get hashCode =>
-      Object.hash(devicePixelRatio, radius, tint, light, specularBoost);
+  int get hashCode => Object.hash(
+        devicePixelRatio,
+        radius,
+        tint,
+        light,
+        specularBoost,
+        adaptiveMax,
+        glow,
+      );
 }
