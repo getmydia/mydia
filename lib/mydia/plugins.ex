@@ -246,6 +246,7 @@ defmodule Mydia.Plugins do
     payload = %{
       "shelf" => shelf_key,
       "exclude" => Keyword.get(opts, :exclude, []),
+      "feedback" => Keyword.get(opts, :feedback, []),
       "limit" => Keyword.get(opts, :limit, 12),
       "now" => unix_seconds(Keyword.get(opts, :now)),
       "config" => if(instance, do: Instances.config_for(instance), else: plugin_settings(slug))

@@ -110,6 +110,7 @@ defmodule Mydia.Plugins.ShelvesTest do
 
       assert {:ok, _} = Shelves.rate_item(user, item.id, :up)
       assert %ShelfFeedback{rating: :up, via: :seen} = Repo.one!(ShelfFeedback)
+      assert Repo.aggregate(ShelfItem, :count) == 0
     end
 
     test "rating the same title again replaces the rating" do
@@ -170,6 +171,18 @@ defmodule Mydia.Plugins.ShelvesTest do
     end
   end
 
+  describe "feedback/1" do
+    test "reports a tvdb title with tvdb_id set and tmdb_id nil" do
+      user = user_fixture()
+      shelf = shelf_fixture(user)
+      item = shelf_item_fixture(shelf, %{provider: :tvdb, provider_id: 77, media_type: :tv_show})
+      Shelves.rate_item(user, item.id, :up)
+
+      assert [%{media_type: :tv_show, tvdb_id: 77, tmdb_id: nil, rating: :up, via: :seen}] =
+               Shelves.feedback(shelf)
+    end
+  end
+
   describe "record_added/2" do
     test "records an up/added rating and keeps the card" do
       user = user_fixture()
@@ -202,6 +215,30 @@ defmodule Mydia.Plugins.ShelvesTest do
 
       assert %ShelfItem{position: 3} = Repo.get!(ShelfItem, item.id)
       assert Repo.aggregate(ShelfFeedback, :count) == 0
+    end
+
+    test "undoing twice does not raise" do
+      user = user_fixture()
+      shelf = shelf_fixture(user, filled_at: @now)
+      item = shelf_item_fixture(shelf, %{inserted_at: @now, updated_at: @now})
+      {:ok, deleted} = Shelves.rate_item(user, item.id, :down)
+
+      assert :ok = Shelves.undo_rating(user, deleted)
+      assert :ok = Shelves.undo_rating(user, deleted)
+      assert Repo.aggregate(ShelfItem, :count) == 1
+    end
+
+    test "a purged shelf or another user's shelf is not restored and does not raise" do
+      user = user_fixture()
+      shelf = shelf_fixture(user, filled_at: @now)
+      item = shelf_item_fixture(shelf, %{inserted_at: @now, updated_at: @now})
+      {:ok, deleted} = Shelves.rate_item(user, item.id, :down)
+
+      assert {:ok, :not_restored} = Shelves.undo_rating(user_fixture(), deleted)
+      assert Repo.aggregate(ShelfItem, :count) == 0
+
+      Shelves.purge("shelf-test")
+      assert {:ok, :not_restored} = Shelves.undo_rating(user, deleted)
     end
 
     test "after a refill the rating is cleared but the card is not restored" do

@@ -415,30 +415,39 @@ defmodule Mydia.Plugins.Shelves do
   """
   @spec undo_rating(User.t(), ShelfItem.t()) :: :ok | {:ok, :not_restored}
   def undo_rating(%User{id: user_id}, %ShelfItem{} = item) do
-    shelf = Repo.get!(Shelf, item.shelf_id)
-    true = shelf.user_id == user_id
+    case Repo.get(Shelf, item.shelf_id) do
+      %Shelf{user_id: ^user_id} = shelf ->
+        {:ok, result} = Repo.transaction(fn -> restore(shelf, item) end)
+        Phoenix.PubSub.broadcast(Mydia.PubSub, topic(user_id), {:shelf_updated, shelf.id})
+        result
 
-    {:ok, result} =
-      Repo.transaction(fn ->
-        Repo.delete_all(
-          from f in ShelfFeedback,
-            where:
-              f.plugin_slug == ^shelf.plugin_slug and f.shelf_key == ^shelf.shelf_key and
-                f.user_id == ^user_id and f.media_type == ^item.media_type and
-                f.provider == ^item.provider and f.provider_id == ^item.provider_id
-        )
+      # The shelf is gone (plugin purged) or is not this user's.
+      _ ->
+        {:ok, :not_restored}
+    end
+  end
 
-        # replace_items/4 stamps the shelf and its items with the same `now`.
-        if same_fill?(Repo.get!(Shelf, shelf.id), item) do
-          Repo.insert_all(ShelfItem, [Map.take(item, @item_columns)])
-          :ok
-        else
-          {:ok, :not_restored}
-        end
-      end)
+  defp restore(%Shelf{} = shelf, %ShelfItem{} = item) do
+    Repo.delete_all(
+      from f in ShelfFeedback,
+        where:
+          f.plugin_slug == ^shelf.plugin_slug and f.shelf_key == ^shelf.shelf_key and
+            f.user_id == ^shelf.user_id and f.media_type == ^item.media_type and
+            f.provider == ^item.provider and f.provider_id == ^item.provider_id
+    )
 
-    Phoenix.PubSub.broadcast(Mydia.PubSub, topic(user_id), {:shelf_updated, shelf.id})
-    result
+    # replace_items/4 stamps the shelf and its items with the same `now`.
+    if same_fill?(Repo.get!(Shelf, shelf.id), item) do
+      # A second undo of the same card finds it already back.
+      Repo.insert_all(ShelfItem, [Map.take(item, @item_columns)],
+        on_conflict: :nothing,
+        conflict_target: :id
+      )
+
+      :ok
+    else
+      {:ok, :not_restored}
+    end
   end
 
   defp same_fill?(%Shelf{filled_at: %DateTime{} = filled_at}, %ShelfItem{
