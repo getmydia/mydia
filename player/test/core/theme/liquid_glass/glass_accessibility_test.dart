@@ -21,6 +21,21 @@ void main() {
         (_) {},
       );
 
+  // The listener asserts on skipped states, so walk the real sequence.
+  void suspendAndResume() {
+    final binding = TestWidgetsFlutterBinding.instance;
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      binding.handleAppLifecycleStateChanged(state);
+    }
+  }
+
   ProviderContainer container() {
     final c = ProviderContainer(overrides: [
       nativeTabBarChannelProvider
@@ -56,6 +71,31 @@ void main() {
     expect(c.read(glassAccessibilityProvider), GlassAccessibility.none);
     await Future<void>.delayed(Duration.zero);
     expect(asked, isFalse);
+
+    suspendAndResume();
+    await Future<void>.delayed(Duration.zero);
+    expect(asked, isFalse);
+  });
+
+  test('on Apple it re-reads the flags when the app resumes', () async {
+    GlassAccessibilityNotifier.debugIsApple = true;
+    var answer = {'reduceTransparency': false, 'increaseContrast': true};
+    messenger.setMockMethodCallHandler(_channel, (call) async {
+      return call.method == 'glassAccessibility' ? answer : null;
+    });
+    final c = container();
+    final sub = c.listen(glassAccessibilityProvider, (_, __) {});
+    addTearDown(sub.close);
+    c.read(glassAccessibilityProvider);
+    await Future<void>.delayed(Duration.zero);
+    expect(c.read(glassAccessibilityProvider),
+        const GlassAccessibility(increaseContrast: true));
+
+    answer = {'reduceTransparency': true, 'increaseContrast': false};
+    suspendAndResume();
+    await Future<void>.delayed(Duration.zero);
+    expect(c.read(glassAccessibilityProvider),
+        const GlassAccessibility(reduceTransparency: true));
   });
 
   test('on Apple it takes the queried flags, then follows pushes', () async {

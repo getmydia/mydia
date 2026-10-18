@@ -52,6 +52,8 @@ final glassAccessibilityProvider =
   GlassAccessibilityNotifier.new,
 );
 
+/// Queries the flags once, follows native pushes, and re-queries on app resume
+/// because iOS does not replay notifications missed while suspended.
 class GlassAccessibilityNotifier extends Notifier<GlassAccessibility> {
   /// Forces the platform check in tests. Reset to null in `tearDown`.
   @visibleForTesting
@@ -71,15 +73,21 @@ class GlassAccessibilityNotifier extends Notifier<GlassAccessibility> {
       if (event is NativeGlassAccessibilityChanged) state = event.value;
     });
     ref.onDispose(sub.cancel);
-    // Bounded like the tab bar probe: no answer in 2 seconds keeps the
-    // glass on, and a later push still applies.
-    unawaited(channel
-        .queryGlassAccessibility()
-        .timeout(const Duration(seconds: 2), onTimeout: () => null)
-        .then((value) {
-      if (value != null && ref.mounted) state = value;
-    }));
+    final lifecycle = AppLifecycleListener(
+      onResume: () => unawaited(_refresh(channel)),
+    );
+    ref.onDispose(lifecycle.dispose);
+    unawaited(_refresh(channel));
     return GlassAccessibility.none;
+  }
+
+  /// Bounded like the tab bar probe: no answer in 2 seconds keeps the
+  /// current value, and a later push still applies.
+  Future<void> _refresh(NativeTabBarChannel channel) async {
+    final value = await channel
+        .queryGlassAccessibility()
+        .timeout(const Duration(seconds: 2), onTimeout: () => null);
+    if (value != null && ref.mounted) state = value;
   }
 }
 
