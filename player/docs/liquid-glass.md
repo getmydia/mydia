@@ -2,10 +2,10 @@
 
 The floating control layer on iOS and macOS uses a Liquid Glass material
 drawn by our own shader, `shaders/liquid_glass.frag`. It bends the backdrop
-along the edge, frosts and saturates it, tints it adaptively (lighter over
-dark content, stronger over bright content), darkens the outer edge over
-`liquidEdgeShadeWidth`, adds a soft inner glow and a specular rim, and
-blooms a press glow under the finger, tuned to the iOS 27 look. Other platforms keep the frosted
+in a narrow band at the rim, frosts and saturates it, tints it adaptively
+(lighter over dark content, stronger over bright content), adds a soft inner
+glow and a specular rim lit from above and below, and blooms a press glow
+under the finger, tuned to the iOS 27 look. Other platforms keep the frosted
 `GlassSurface` recipes, and the playback OSD (`GlassSurface.osd`) never uses
 it.
 

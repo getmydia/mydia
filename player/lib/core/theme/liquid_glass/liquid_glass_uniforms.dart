@@ -54,7 +54,6 @@ class LiquidGlassUniforms {
       DepthTokens.liquidSaturation,
       DepthTokens.liquidBrightness,
       DepthTokens.liquidSpecular + specularBoost,
-      DepthTokens.liquidEdgeShade,
       DepthTokens.liquidRimWidth * dpr,
       light.dx,
       light.dy,
@@ -62,7 +61,6 @@ class LiquidGlassUniforms {
       tint.g,
       tint.b,
       tint.a,
-      DepthTokens.liquidEdgeShadeWidth * dpr,
       DepthTokens.liquidInnerGlow,
       adaptiveMax ?? tint.a,
       DepthTokens.liquidAdaptiveLumaLow,
@@ -70,6 +68,8 @@ class LiquidGlassUniforms {
       glow,
       DepthTokens.liquidPressGlowRadius,
       DepthTokens.liquidAdaptiveRadius * dpr,
+      DepthTokens.liquidRimHairline,
+      DepthTokens.liquidBottomLight,
     ];
   }
 

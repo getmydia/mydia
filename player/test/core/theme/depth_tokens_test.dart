@@ -183,8 +183,8 @@ void main() {
           greaterThanOrEqualTo(DepthTokens.liquidControlTintOpacity));
       expect(DepthTokens.liquidAccentAdaptiveMax,
           greaterThanOrEqualTo(DepthTokens.liquidAccentTintOpacity));
-      expect(DepthTokens.liquidEdgeShadeWidth,
-          greaterThan(DepthTokens.liquidRimWidth));
+      expect(DepthTokens.liquidRimHairline, inInclusiveRange(0.0, 1.0));
+      expect(DepthTokens.liquidBottomLight, inInclusiveRange(0.0, 1.0));
       expect(DepthTokens.liquidScrollEdgeBottomOpacity,
           lessThan(DepthTokens.liquidScrollEdgeTopOpacity));
     });
