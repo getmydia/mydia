@@ -66,6 +66,19 @@ expect_version "without --mainline a side-branch commit still versions" "0.16.0-
 expect_failure "a commit reachable only through a merged side branch" feature~1 --mainline master
 expect_failure "a merged feature tip is still off the first-parent line" feature --mainline master
 
+# scripts/on-mainline.sh is what player-ondemand.yml uses to decide branch
+# mode, and what --mainline above delegates to. 0 on, 1 off, 2 unknown.
+expect_mainline() {
+  local label="$1" want="$2" commit="$3" got=0
+  (cd "$REPO" && "$ON_MAINLINE" master "$commit" >/dev/null 2>&1) || got=$?
+  [ "$want" = "$got" ] || note_failure "on-mainline $label: exit $got, wanted $want"
+}
+ON_MAINLINE="$ROOT/scripts/on-mainline.sh"
+expect_mainline "master tip" 0 HEAD
+expect_mainline "merged feature tip" 1 feature
+expect_mainline "side-branch commit" 1 feature~1
+expect_mainline "unresolvable commit" 2 does-not-exist
+
 commit six
 tag plugins-v2026.10.2
 tag metadata-relay-v0.20.0

@@ -206,6 +206,11 @@ jobs:
       - name: Check / On-demand version
         run: ./scripts/tests/ondemand-version-test.sh
 
+      # Same reason: a branch build's TestFlight number is only ever minted by
+      # a dispatched player-ios.yml run.
+      - name: Check / Branch build number
+        run: ./scripts/tests/branch-build-number-test.sh
+
       # ci-fastlane.yml proves the Fastfile parses and that release_metadata.rb
       # is reachable through require_relative. This proves what the helpers in
       # it actually return, which a lane listing cannot see. It also pins

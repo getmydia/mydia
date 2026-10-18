@@ -43,3 +43,22 @@ end
 def testflight_distribute_external?
   ENV.fetch("TESTFLIGHT_DISTRIBUTE_EXTERNAL", "true") == "true"
 end
+
+# The highest of a list of CFBundleVersion strings, compared the way App Store
+# Connect compares them: period-separated integers, one by one, so 17000042.10
+# beats 17000042.9 and 17000043 beats both. The `highest_build_number` lane
+# feeds it every build the app has uploaded; a branch build is numbered just
+# above the result (scripts/branch-build-number.sh).
+#
+# Raises on a value that is not up to three period-separated integers rather
+# than skipping it: a number this cannot read might be the highest, and a guess
+# below it would be rejected at upload. Returns nil for an empty list.
+def max_build_number(versions)
+  parsed = versions.map do |v|
+    s = v.to_s.strip
+    raise ArgumentError, "unreadable build number #{v.inspect}" unless s.match?(/\A\d+(\.\d+){0,2}\z/)
+
+    s.split(".").map(&:to_i)
+  end
+  parsed.max&.join(".")
+end

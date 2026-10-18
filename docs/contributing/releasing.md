@@ -523,19 +523,17 @@ gh workflow run player-ondemand.yml --repo getmydia/mydia -f dry_run=true
 | `build_macos` | boolean | `false` | Build macOS (signed & notarized DMG). |
 | `build_windows` | boolean | `false` | Build Windows (Inno Setup installer). |
 | `build_linux` | boolean | `false` | Build Linux (`.tar.gz` bundle). |
-| `build_flatpak` | boolean | `false` | Build the Linux Flatpak and publish it to the `mydia-dev` channel. On `dry_run` it builds and rehearses signing but publishes nothing. |
+| `build_flatpak` | boolean | `false` | Build the Linux Flatpak and publish it to the `mydia-dev` channel (master commits only; see "Branch builds"). On `dry_run` it builds and rehearses signing but publishes nothing. |
 | `upload_to_stores` | boolean | `true` | Upload iOS build to TestFlight (internal testers). |
 | `version_override` | string | `""` | Custom version string (e.g. `0.14.0-dev.42`). If empty, auto-derived. |
 | `dry_run` | boolean | `false` | Build and sign without uploading to TestFlight. |
 
 ### Versioning and build numbers
 
-Unless overridden by `version_override`, the version string is derived
-automatically from the latest release tag as
-`<major>.<next_minor>.0-dev.<run_number>` (for example, `0.14.0-dev.42`). The
-workflow refuses to derive one once `run_number` passes 299, since that is the
-ceiling of the dev band below, and asks for an explicit `version_override`
-instead.
+Unless overridden by `version_override`, `scripts/ondemand-version.sh` derives
+the version from the nearest release tag on the commit's first-parent line,
+counting first-parent commits since it: `0.17.0-dev.42`
+after `v0.16.0`, `0.17.0-beta.2.dev.3` after `v0.17.0-beta.2`.
 
 Every workflow that mints a build number, this one, `release.yml`, and
 `player-ios-refresh.yml`, calls the same `scripts/build-number.sh <version>` to
@@ -577,6 +575,33 @@ Google Play's requirement that `versionCode` only increase no longer enters
 into it: `scripts/build-number.sh` already keeps a dev build's number below
 the beta and stable of the same version, so there is nothing left for it to
 leapfrog.
+
+### Branch builds
+
+Any ref can be dispatched. When the commit is not on `origin/master`'s
+first-parent history (`scripts/on-mainline.sh`), the run is in branch mode,
+shown in the run summary, and publishes nowhere master's builds do:
+
+- Android skips the R2 dev index, so dev-track devices never see the APK. Take
+  it from the run's artifacts. The job also stays out of the
+  `mydia-dev-builds-index` lock, so it never queues a master build.
+- `flatpak-publish` and `appcast` are skipped; the Flatpak bundle stays an
+  artifact.
+- macOS signs and notarizes as on master, since notarization shares no
+  sequence or channel with master's builds, so the DMG opens without a
+  Gatekeeper prompt. Before branch mode a branch build had to be a `dry_run`,
+  which skips signing and notarization; a `dry_run` still does.
+- iOS still uploads to TestFlight internal testers, but with
+  `build_number_mode: after_latest`. App Store Connect rejects any upload whose
+  `CFBundleVersion` is not above every earlier one, so a branch build numbered
+  from master's sequence would block master's later builds. Instead it reads
+  the highest upload while holding the TestFlight lock and goes just above it:
+  `17000042` becomes `17000042.1`, then `17000042.2`. Master's next build is a
+  later first-parent commit, so its integer (`17000043` or higher) still
+  clears it. The TestFlight notes open with the branch and commit.
+
+The one shared resource left is the `player-ios-testflight` lock: a release or
+master iOS upload dispatched while a branch iOS build runs waits for it.
 
 ### Distribution channels
 
