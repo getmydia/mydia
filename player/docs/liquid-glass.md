@@ -1,11 +1,16 @@
 # Liquid Glass on iOS and macOS
 
 The floating control layer on iOS and macOS uses a Liquid Glass material
-drawn by our own shader, `shaders/liquid_glass.frag`. It bends the backdrop
-in a narrow band at the rim, frosts and saturates it, tints it adaptively
-(lighter over dark content, stronger over bright content), adds a soft inner
-glow and a specular rim lit from above and below, and blooms a press glow
-under the finger, tuned to the iOS 27 look. Other platforms keep the frosted
+drawn by our own shader, `shaders/liquid_glass.frag`. It frosts and
+saturates the backdrop (`liquidBlurSigma`, `liquidSaturation`,
+`liquidBrightness`), bends it in a narrow band at the rim (an
+`liquidEdgeBand` of 8 points, cubic falloff, `liquidRefraction` with a little
+`liquidDispersion`), tints it adaptively (lighter over dark content, stronger
+over bright content), adds a soft inner glow along the top and bottom and a
+specular rim lit from above and below (the bottom at `liquidBottomLight` of
+the top) with a `liquidRimHairline` on every edge, and blooms a press glow
+under the pointer. Control glass casts a wide soft drop shadow for depth.
+It is tuned to the iOS 27 look. Other platforms keep the frosted
 `GlassSurface` recipes, and the playback OSD (`GlassSurface.osd`) never uses
 it.
 
@@ -15,7 +20,7 @@ it.
 | Tokens | `DepthTokens.liquid*` in `lib/core/theme/depth_tokens.dart` |
 | Startup gate | `lib/core/theme/liquid_glass/liquid_glass_support.dart` |
 | Uniforms | `lib/core/theme/liquid_glass/liquid_glass_uniforms.dart` |
-| Adaptive tint maths, accent tint | `lib/core/theme/liquid_glass/liquid_glass_adaptive.dart` |
+| Adaptive tint maths | `lib/core/theme/liquid_glass/liquid_glass_adaptive.dart` |
 | Render object | `lib/presentation/widgets/glass/liquid_glass_filter.dart` |
 | Press and hover | `lib/presentation/widgets/glass/glass_interaction.dart`, `glass_pointer.dart` |
 | Accessibility flags | `lib/core/theme/liquid_glass/glass_accessibility.dart` |
@@ -25,9 +30,14 @@ it.
 
 Glass belongs to the control layer that floats over content: app and title
 bars, the dock, rail, drawer and cast pill, floating buttons over heroes,
-sheets, dialogs and popovers, and the primary Play button. Content stays
-solid: settings rows, inline buttons, switches, sliders, and anything
-repeated per item in a scrolling list. `GlassSurface.faux` and
+sheets, dialogs and popovers, the primary Play button, the home hero's
+buttons and episode badge, the detail action row, the "Next Up" badge over
+artwork, and the capsule behind the selected season. Content stays solid:
+settings rows, inline buttons, switches, sliders, and anything repeated per
+item in a scrolling list. Per-card overlays and metadata chips stay solid
+because they repeat in scrolling lists and each glass surface costs two
+backdrop passes. The detail action row shares one blur pass through
+`BackdropGroup`. `GlassSurface.faux` and
 `.hoverOverlay` never take the Liquid Glass path.
 
 ## When it runs
@@ -80,35 +90,28 @@ Each role has a base tint and an adaptive maximum. For each pixel the shader
 reads the brightest luma of the blurred backdrop in a 3x3 grid centred on it,
 `liquidAdaptiveRadius` apart. It takes the maximum, not the mean, so a bright
 patch under a glyph always raises the tint there. The tint alpha then moves
-from the base (dark content) to the maximum (bright content) with a smoothstep between
-`liquidAdaptiveLumaLow` and `liquidAdaptiveLumaHigh`. A surface that passes
+from the base (dark content) to the maximum (bright content) with a
+smoothstep between `liquidAdaptiveLumaLow` (0.15) and
+`liquidAdaptiveLumaHigh` (0.9). A surface that passes
 `adaptiveTintMax` null keeps a fixed tint.
 
 | Role | Base | Adaptive max |
 | --- | --- | --- |
-| Chrome | `liquidChromeTintOpacity` 0.5 | `liquidChromeAdaptiveMax` 0.85 |
-| Modal | `liquidModalTintOpacity` 0.55 | `liquidModalAdaptiveMax` 0.85 |
-| Control | `liquidControlTintOpacity` 0.3 | `liquidControlAdaptiveMax` 0.65 |
-| Accent | `liquidAccentTintOpacity` 0.55 | `liquidAccentAdaptiveMax` 0.9 |
+| Chrome | `liquidChromeTintOpacity` 0.3 | `liquidChromeAdaptiveMax` 0.9 |
+| Modal | `liquidModalTintOpacity` 0.35 | `liquidModalAdaptiveMax` 0.85 |
+| Control | `liquidControlTintOpacity` 0.2 | `liquidControlAdaptiveMax` 0.65 |
 
 Contrast is lowest at mid-luma, so white is not the worst backdrop: the
 contrast bottoms out where the ramp has only just started. `liquidAdaptiveAlpha`
 in `liquid_glass_adaptive.dart` reproduces the shader's curve, and
 `liquid_glass_legibility_test.dart` uses it to sweep grey backdrops from 0 to 1
 in steps of 0.05 for every preset and role (text 4.5:1, secondary text and
-control icons 3:1, the Play label 4.5:1). A grey's shader luma equals its
-value, and the brightest nearby luma is what the curve takes, so the sweep is
-the worst case under a glyph. `liquidAdaptiveLumaLow` is 0.35 because the
-sweep failed at 0.55 (secondary text 2.6 to 2.9:1 and the Play label 4.1 to
-4.3:1 near luma 0.6 to 0.7). Change the curve in the shader and in
-`liquidAdaptiveAlpha` together.
-
-The frosted fallback of the accent control cannot adapt, so it fills at
-`liquidAccentAdaptiveMax`, the alpha the white label is rated at.
-
-The accent tint comes from `accentGlassTint(color)`, which darkens the accent
-until a white label keeps 4.5:1 at `liquidAccentAdaptiveMax` over white; an
-accent that already clears it is returned unchanged.
+control icons 3:1, white control labels such as Play and the glass buttons
+4.5:1). A grey's shader luma equals its value, and the brightest nearby luma
+is what the curve takes, so the sweep is the worst case under a glyph. The
+shader lifts the backdrop by `liquidBrightness` before tinting while the tint
+alpha still reads the unlifted luma, so the test lifts each grey the same way.
+Change the curve in the shader and in `liquidAdaptiveAlpha` together.
 
 ## Running the lab
 
@@ -133,8 +136,8 @@ scratch project:
       flutter run -d linux --dart-define=MYDIA_LIQUID_GLASS=true \
       --dart-define=LAB_SNAPSHOT=/tmp/lab.png
 
-The lab also needs `liquid_glass_adaptive.dart` and `contrast.dart`, now that
-it uses `accentGlassTint`. `GDK_SCALE=2` gives a 2x device pixel ratio. Add `LAB_GRID=true` for the
+The lab also needs `liquid_glass_adaptive.dart` and `contrast.dart`.
+`GDK_SCALE=2` gives a 2x device pixel ratio. Add `LAB_GRID=true` for the
 grid and `LAB_SCROLL=<px>` to scroll the backdrop first.
 
 ## Tests
@@ -156,16 +159,20 @@ and falls back to the widget the call site used before everywhere else.
 | Control | Use | Off iOS and macOS |
 | --- | --- | --- |
 | `GlassIconButton` | Floating back and cast buttons over the detail hero | `IconButton` |
-| `PrimaryPlayButton` | Play and Resume: an accent glass capsule (`accentGlassTint`, accent tint pair) with a white label | Solid white pill |
+| `PrimaryPlayButton` | Play and Resume: a neutral glass capsule with a white label | Solid white pill (`FilledButton` on the home hero) |
+| `GlassButton` | The home hero's secondary action | `OutlinedButton` |
+| `GlassBadge` | The home hero's episode chip and the show detail "Next Up" pill | The call site's previous decoration |
 | `GlassChip` | Sort and filter chips; `chipKey` keys the inner chip so tests can read it | `ChoiceChip`, or `FilterChip` with `multiSelect` |
 | `GlassDialog` | Every in-app dialog | `AlertDialog` |
 | `showGlassSheet` | Every in-app bottom sheet | `showModalBottomSheet` with the caller's arguments |
 | `GlassPopoverSurface` | The source picker popover | Elevated Material card |
 
 Control-role glass (`GlassSurface.control`) casts a soft drop shadow,
-`liquidControlShadow`, so it lifts off the content behind it.
-`GlassSurface.control(accentColor:)` tints with the accent instead of the
-ground colour.
+`liquidControlShadow`, so it lifts off the content behind it. The detail
+action row and the season selector use `GlassSurface.control` directly: the
+action row draws circles with `grouped: true` inside one `BackdropGroup`, and
+the season selector draws one capsule behind the selected season while
+unselected seasons stay plain labels.
 
 Glass controls wrap `GlassInteraction`, which supplies the press swell and
 the macOS hover highlight. Sheets and the source picker popover use
@@ -190,3 +197,13 @@ Two guard tests keep new code on the helpers.
 `showModalBottomSheet<` outside `showGlassSheet`. Each has an allowlist for
 the exceptions: the player-screen dialog (`resume_dialog.dart`), and the OSD
 and player-opened sheets (`osd_sheet.dart`, `quality_selector.dart`).
+
+## Clear and Tinted
+
+iOS 26.1 added a Clear/Tinted Liquid Glass setting (Settings, Display &
+Brightness). Apple applies it automatically to system glass, but no public
+UIKit or AppKit API reports the user's choice: none was found in Apple's
+documentation or in the UIAccessibility bindings as of iOS 26.2. Our shader
+cannot follow it, so it ships one look tuned to the default. If Apple exposes
+the value, add it to the `glassAccessibility` payload on
+`mydia/native-tab-bar` and select a higher base-tint token set for Tinted.
