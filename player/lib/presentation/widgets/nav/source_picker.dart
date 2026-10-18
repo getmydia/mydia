@@ -13,7 +13,7 @@ import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
-import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../../../core/ui/reduced_motion.dart';
 import '../glass/glass_emergence.dart';
@@ -85,9 +85,9 @@ Future<PickerChoice?> showSourcePicker(
   final anchor = box.localToGlobal(Offset.zero) & box.size;
   // Once, here: the transition runs through the exit animation too, when
   // the anchor may already be inactive.
-  final emergenceAlignment = LiquidGlassSupport.platformEligible
-      ? glassEmergenceAlignment(anchorContext)
-      : null;
+  final liquid = GlassStyle.of(anchorContext);
+  final emergenceAlignment =
+      liquid ? glassEmergenceAlignment(anchorContext) : null;
   return showGeneralDialog<PickerChoice>(
     context: anchorContext,
     barrierDismissible: true,
@@ -100,21 +100,23 @@ Future<PickerChoice?> showSourcePicker(
       animation: animation,
       emergenceAlignment: emergenceAlignment,
       reduceMotion: ReducedMotion.of(context),
+      liquid: liquid,
       child: child,
     ),
   );
 }
 
-/// The popover route's transition: [glassEmergence] on Apple platforms
-/// (pass the opener's [emergenceAlignment]), the plain fade elsewhere.
+/// The popover route's transition: [glassEmergence] on Liquid Glass
+/// (pass the opener's [emergenceAlignment]), the plain fade otherwise.
 @visibleForTesting
 Widget popoverTransition({
   required Animation<double> animation,
   required Alignment? emergenceAlignment,
   required bool reduceMotion,
+  required bool liquid,
   required Widget child,
 }) {
-  if (!LiquidGlassSupport.platformEligible) {
+  if (!liquid) {
     return FadeTransition(opacity: animation, child: child);
   }
   return glassEmergence(

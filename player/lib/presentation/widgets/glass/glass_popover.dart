@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/depth_tokens.dart';
-import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 
-/// The popover's card: modal glass on iOS and macOS, the elevated
+/// The popover's card: modal glass on Liquid Glass, the elevated
 /// `surfaceVariant` Material elsewhere (the source picker's previous look).
 class GlassPopoverSurface extends StatelessWidget {
   const GlassPopoverSurface({super.key, required this.child});
@@ -14,7 +14,7 @@ class GlassPopoverSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!LiquidGlassSupport.platformEligible) {
+    if (!GlassStyle.of(context)) {
       return Material(
         color: context.palette.surfaceVariant,
         elevation: 8,

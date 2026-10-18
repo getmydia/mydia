@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 import 'glass_interaction.dart';
 
 /// A text button floating over content (the home hero's secondary action) on
-/// iOS and macOS: a neutral glass capsule with a white label and the Liquid
+/// Liquid Glass: a neutral glass capsule with a white label and the Liquid
 /// Glass press feel. Elsewhere it is the [OutlinedButton] the call site used
 /// before.
 class GlassButton extends StatelessWidget {
@@ -35,7 +35,7 @@ class GlassButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = this.icon;
-    if (!LiquidGlassSupport.platformEligible) {
+    if (!GlassStyle.of(context)) {
       final style = OutlinedButton.styleFrom(minimumSize: Size(0, height));
       return icon == null
           ? OutlinedButton(

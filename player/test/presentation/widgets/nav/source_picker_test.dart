@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
-import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/presentation/widgets/nav/sidebar_row.dart';
 import 'package:player/presentation/widgets/nav/source_picker.dart';
 
@@ -353,25 +352,21 @@ void main() {
 }
 
 void popoverTransitionTests() {
-  Widget build(bool apple) {
-    LiquidGlassSupport.debugPlatformOverride = apple;
-    return popoverTransition(
-      animation: const AlwaysStoppedAnimation(0.5),
-      emergenceAlignment: Alignment.center,
-      reduceMotion: false,
-      child: const SizedBox(),
-    );
-  }
+  Widget build(bool liquid) => popoverTransition(
+        animation: const AlwaysStoppedAnimation(0.5),
+        emergenceAlignment: Alignment.center,
+        reduceMotion: false,
+        liquid: liquid,
+        child: const SizedBox(),
+      );
 
-  tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
-
-  testWidgets('popover transition only fades off Apple', (tester) async {
+  testWidgets('popover transition only fades off Liquid Glass', (tester) async {
     await tester.pumpWidget(build(false));
     expect(find.byType(ScaleTransition), findsNothing);
     expect(find.byType(FadeTransition), findsOneWidget);
   });
 
-  testWidgets('popover transition scales on Apple', (tester) async {
+  testWidgets('popover transition scales on Liquid Glass', (tester) async {
     await tester.pumpWidget(build(true));
     expect(find.byType(ScaleTransition), findsOneWidget);
   });

@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/depth_tokens.dart';
-import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 
-/// An [AlertDialog] on iOS and macOS modal glass, and the plain
-/// [AlertDialog] everywhere else.
+/// An [AlertDialog] on Liquid Glass modal glass, and the plain
+/// [AlertDialog] otherwise.
 ///
 /// [AlertDialog] paints its own Material and cannot put a backdrop behind
 /// it, so the glass path rebuilds its layout (icon, title, content,
 /// end-aligned actions) inside [GlassSurface.modal], as `OsdDialog` does for
-/// the OSD material. [backgroundColor] and [shape] only apply off Apple.
+/// the OSD material. [backgroundColor] and [shape] only apply off Liquid Glass.
 class GlassDialog extends StatelessWidget {
   const GlassDialog({
     super.key,
@@ -32,7 +32,7 @@ class GlassDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!LiquidGlassSupport.platformEligible) {
+    if (!GlassStyle.of(context)) {
       return AlertDialog(
         icon: this.icon,
         title: this.title,

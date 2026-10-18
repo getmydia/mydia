@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/ui/reduced_motion.dart';
 import '../glass_surface.dart';
 import 'glass_emergence.dart';
 
-/// [showModalBottomSheet] on iOS and macOS modal glass, growing out of
-/// [origin] when given. Elsewhere it is the plain sheet with the caller's
+/// [showModalBottomSheet] on Liquid Glass modal glass, growing out of
+/// [origin] when given. Otherwise it is the plain sheet with the caller's
 /// [backgroundColor] and [shape], exactly as before.
 Future<T?> showGlassSheet<T>({
   required BuildContext context,
@@ -18,7 +18,8 @@ Future<T?> showGlassSheet<T>({
   ShapeBorder? shape,
   bool useRootNavigator = false,
 }) {
-  if (!LiquidGlassSupport.platformEligible) {
+  final liquid = GlassStyle.of(context);
+  if (!liquid) {
     return showModalBottomSheet<T>(
       context: context,
       builder: builder,

@@ -3,12 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/depth_tokens.dart';
-import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 import 'glass_interaction.dart';
 
-/// A floating icon button over content (back, cast) on iOS and macOS: a
+/// A floating icon button over content (back, cast) on Liquid Glass: a
 /// glass circle with the Liquid Glass press feel. Elsewhere it is the plain
 /// [IconButton] the call site used before.
 class GlassIconButton extends StatelessWidget {
@@ -27,7 +27,7 @@ class GlassIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!LiquidGlassSupport.platformEligible) {
+    if (!GlassStyle.of(context)) {
       return IconButton(
         icon: icon,
         onPressed: onPressed,

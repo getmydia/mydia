@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../core/theme/depth_tokens.dart';
 import '../../core/theme/liquid_glass/glass_accessibility.dart';
+import '../../core/theme/liquid_glass/glass_style.dart';
 import '../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../core/theme/palette.dart';
 import 'glass/liquid_glass_filter.dart';
@@ -330,7 +331,7 @@ class GlassSurface extends StatelessWidget {
       if (access.reduceTransparency) {
         return _withShadow(_solid(base.withValues(alpha: 1), resolvedBorder));
       }
-      if (LiquidGlassSupport.available) {
+      if (GlassStyle.of(context) && LiquidGlassSupport.available) {
         return _withShadow(liquidScrollEdge
             ? _scrollEdge(context, base, access)
             : _liquid(context, base, liquidOpacity, access));

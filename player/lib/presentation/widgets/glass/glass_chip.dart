@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 import 'glass_interaction.dart';
 
-/// A toolbar chip (sort, filter) on iOS and macOS: a glass capsule, white
+/// A toolbar chip (sort, filter) on Liquid Glass: a glass capsule, white
 /// prominent glass when selected. Elsewhere it is the [ChoiceChip] (or
 /// [FilterChip] with [multiSelect]) the row used before.
 ///
@@ -31,7 +31,7 @@ class GlassChip extends StatelessWidget {
   final Widget? avatar;
 
   /// Key for the rendered chip itself: the [ChoiceChip]/[FilterChip] off
-  /// Apple platforms, the capsule on them. Use it instead of `key` when a
+  /// Liquid Glass, the capsule on it. Use it instead of `key` when a
   /// test needs to read the chip widget, since `key` sits on [GlassChip].
   final Key? chipKey;
 
@@ -41,7 +41,7 @@ class GlassChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final onSelected = this.onSelected;
     final avatar = this.avatar;
-    if (!LiquidGlassSupport.platformEligible) {
+    if (!GlassStyle.of(context)) {
       return multiSelect
           ? FilterChip(
               key: chipKey,
