@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/sources/source_home_hero.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
 import 'package:player/presentation/widgets/artwork_image.dart';
+import 'package:player/presentation/widgets/glass/glass_badge.dart';
+import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/shell_rail_inset.dart';
 
 import 'fake_media_source.dart';
@@ -60,6 +63,83 @@ void main() {
   const posterKey = Key('source-home-hero-poster');
   const playKey = Key('source-home-hero-play');
   const moreKey = Key('source-home-hero-more');
+
+  setUp(() => LiquidGlassSupport.debugPlatformOverride = false);
+  tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
+
+  group('on iOS and macOS', () {
+    setUp(() => LiquidGlassSupport.debugPlatformOverride = true);
+
+    testWidgets('Play and the secondary action are glass and still tap',
+        (tester) async {
+      await _pump(tester, const Size(1280, 800),
+          item: _movie(showTitle: 'Saltmarsh'));
+      expect(
+        find.descendant(
+            of: find.byKey(playKey), matching: find.byType(GlassSurface)),
+        findsOneWidget,
+      );
+      expect(find.byType(FilledButton), findsNothing);
+      expect(find.byType(OutlinedButton), findsNothing);
+      expect(find.byKey(moreKey), findsOneWidget);
+      expect(find.text('All episodes'), findsOneWidget);
+      // Both pills share a height.
+      expect(
+        tester.getSize(find.byKey(moreKey)).height,
+        tester.getSize(find.byKey(playKey)).height - 6,
+      );
+      // The harness has no router, so check the taps are wired rather than
+      // firing them: both pills carry a live InkWell.
+      expect(tester.widget<InkWell>(find.byKey(moreKey)).onTap, isNotNull);
+      expect(
+        tester
+            .widget<InkWell>(find.descendant(
+                of: find.byKey(playKey), matching: find.byType(InkWell)))
+            .onTap,
+        isNotNull,
+      );
+    });
+
+    testWidgets('narrow: both pills fill the content width', (tester) async {
+      await _pump(tester, const Size(400, 800));
+      final play = tester.getSize(find.byKey(playKey));
+      final more = tester.getSize(find.byKey(moreKey));
+      expect(more.width, play.width - 6);
+    });
+
+    testWidgets('the episode chip is a glass badge', (tester) async {
+      await _pump(tester, const Size(1280, 800),
+          item: _movie(showTitle: 'Saltmarsh'));
+      expect(find.byType(GlassBadge), findsWidgets);
+    });
+
+    testWidgets('every glass surface shares one BackdropGroup pass',
+        (tester) async {
+      await _pump(tester, const Size(1280, 800),
+          item: _movie(showTitle: 'Saltmarsh'));
+      final surfaces =
+          tester.widgetList<GlassSurface>(find.byType(GlassSurface)).toList();
+      // Chips (subtitle-less item: year), Play and the secondary action.
+      expect(surfaces.length, greaterThanOrEqualTo(3));
+      expect(surfaces.every((s) => s.live && s.grouped), isTrue);
+      expect(find.byType(BackdropGroup), findsOneWidget);
+      for (final surface in find.byType(GlassSurface).evaluate()) {
+        expect(
+          find.ancestor(
+            of: find.byWidget(surface.widget),
+            matching: find.byType(BackdropGroup),
+          ),
+          findsOneWidget,
+        );
+      }
+    });
+  });
+
+  testWidgets('off Apple there is no BackdropGroup', (tester) async {
+    await _pump(tester, const Size(1280, 800));
+    expect(find.byType(GlassSurface), findsNothing);
+    expect(find.byType(BackdropGroup), findsNothing);
+  });
 
   testWidgets('wide: a 248x360 poster with the title to its right',
       (tester) async {

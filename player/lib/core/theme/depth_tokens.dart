@@ -217,30 +217,30 @@ abstract final class DepthTokens {
   // ---------------------------------------------------------------------------
   // Liquid Glass (iOS and macOS)
   //
-  // The floating control layer's material on Apple platforms: a light blur,
-  // refraction along the edge band, a saturation and brightness lift, a
-  // darkened outer edge and a specular rim. Read by `LiquidGlassUniforms` and
+  // The floating control layer's material on Apple platforms: a frosted blur,
+  // refraction in a narrow band at the rim, a saturation and brightness lift,
+  // and a specular rim lit from above and below. Read by `LiquidGlassUniforms` and
   // `GlassSurface`. Lengths are logical pixels; the uniforms scale them by
   // the device pixel ratio. Never used by the OSD.
   // ---------------------------------------------------------------------------
 
   /// Blur applied before the shader bends the backdrop.
-  static const double liquidBlurSigma = 14.0;
+  static const double liquidBlurSigma = 20.0;
 
   /// Width of the band along the edge where the backdrop is bent.
-  static const double liquidEdgeBand = 22.0;
+  static const double liquidEdgeBand = 8.0;
 
   /// How far the backdrop is displaced at the very rim.
-  static const double liquidRefraction = 14.0;
+  static const double liquidRefraction = 10.0;
 
   /// Extra displacement of red over blue, as a fraction of the refraction.
-  static const double liquidDispersion = 0.12;
+  static const double liquidDispersion = 0.05;
 
   /// Saturation multiplier for the backdrop (1 leaves it unchanged).
-  static const double liquidSaturation = 1.6;
+  static const double liquidSaturation = 1.3;
 
   /// Brightness added to the backdrop, 0..1.
-  static const double liquidBrightness = 0.04;
+  static const double liquidBrightness = 0.07;
 
   /// Specular rim intensity at rest.
   static const double liquidSpecular = 0.85;
@@ -249,22 +249,23 @@ abstract final class DepthTokens {
   static const double liquidHoverSpecularBoost = 0.2;
   static const double liquidPressSpecularBoost = 0.35;
 
-  /// How much the outermost pixels darken (the iOS 27 edge).
-  static const double liquidEdgeShade = 0.5;
-
   /// Width of the specular rim.
   static const double liquidRimWidth = 1.5;
 
-  /// Width of the darkened edge, inward from the rim.
-  static const double liquidEdgeShadeWidth = 6.0;
+  /// Rim light every edge gets, as a fraction of the specular, so the sides
+  /// of a capsule keep a hairline while the top and bottom carry the light.
+  static const double liquidRimHairline = 0.12;
 
-  /// Light added across the edge band on the side facing the light: the
-  /// glass's thickness.
+  /// The bottom edge's highlight relative to the top edge's.
+  static const double liquidBottomLight = 0.6;
+
+  /// Light added across the edge band on the top and bottom edges: the glass's
+  /// thickness.
   static const double liquidInnerGlow = 0.12;
 
   /// Backdrop luma range over which the tint rises from its base alpha to
   /// its adaptive max (smoothstep).
-  static const double liquidAdaptiveLumaLow = 0.35;
+  static const double liquidAdaptiveLumaLow = 0.15;
   static const double liquidAdaptiveLumaHigh = 0.9;
 
   /// Spacing of the local luma taps the adaptive tint reads (logical px).
@@ -277,7 +278,7 @@ abstract final class DepthTokens {
   static const double liquidPressGlow = 0.18;
   static const double liquidPressGlowRadius = 0.9;
 
-  /// Resting light position, as a fraction of the surface (top-left).
+  /// Resting position of the press and hover glow, as a fraction of the surface. The rim no longer follows it.
   static const Offset liquidLightRest = Offset(0.25, 0.0);
 
   // Base tint per role (over a dark backdrop) and the adaptive max the
@@ -286,16 +287,12 @@ abstract final class DepthTokens {
   // and icon contrast for every preset over grey backdrops from black to
   // white in steps of 0.05, since the tint is lowest at mid luma. The luma
   // is the brightest nearby, so it is the worst case under a glyph.
-  static const double liquidChromeTintOpacity = 0.5;
-  static const double liquidModalTintOpacity = 0.55;
-  static const double liquidControlTintOpacity = 0.3;
-  static const double liquidChromeAdaptiveMax = 0.85;
+  static const double liquidChromeTintOpacity = 0.3;
+  static const double liquidModalTintOpacity = 0.35;
+  static const double liquidControlTintOpacity = 0.2;
+  static const double liquidChromeAdaptiveMax = 0.9;
   static const double liquidModalAdaptiveMax = 0.85;
   static const double liquidControlAdaptiveMax = 0.65;
-
-  /// The primary Play button's accent glass.
-  static const double liquidAccentTintOpacity = 0.55;
-  static const double liquidAccentAdaptiveMax = 0.9;
 
   /// The toolbar's scroll edge band: a plain blur under a ground gradient,
   /// opaque enough for the title at the top, clearer where the chips sit.
@@ -303,9 +300,10 @@ abstract final class DepthTokens {
   static const double liquidScrollEdgeTopOpacity = 0.8;
   static const double liquidScrollEdgeBottomOpacity = 0.35;
 
-  /// The lift under a floating glass control.
+  /// The lift under a floating glass control: wide and soft, the depth cue
+  /// that replaced the darkened edge.
   static const List<BoxShadow> liquidControlShadow = [
-    BoxShadow(color: Color(0x2E000000), blurRadius: 12, offset: Offset(0, 4)),
+    BoxShadow(color: Color(0x33000000), blurRadius: 24, offset: Offset(0, 8)),
   ];
 
   /// The prominent button's white tint (the design system's primary pill).

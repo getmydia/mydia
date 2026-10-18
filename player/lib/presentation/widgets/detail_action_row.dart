@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../core/theme/palette.dart';
 import 'focus_highlight.dart';
+import 'glass/glass_interaction.dart';
 import 'glass_surface.dart';
 import 'toast/toaster.dart';
 
@@ -121,7 +123,7 @@ class DetailActionRow extends StatelessWidget {
         ),
     ];
 
-    return Row(
+    final row = Row(
       mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
       children: [
         for (final action in actions)
@@ -130,6 +132,10 @@ class DetailActionRow extends StatelessWidget {
               : Expanded(child: action),
       ],
     );
+    // One backdrop pass shared by every glass circle in the row.
+    return LiquidGlassSupport.platformEligible
+        ? BackdropGroup(child: row)
+        : row;
   }
 
   Future<void> _openTrailer(BuildContext context, String url) async {
@@ -162,6 +168,25 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final color = highlighted ? highlightColor : palette.textPrimary;
+    final glass = LiquidGlassSupport.platformEligible;
+    final iconWidget = Center(child: Icon(icon, color: color, size: 20));
+    final circle = SizedBox.square(
+      dimension: 44,
+      child: glass
+          ? GlassSurface.control(
+              borderRadius: BorderRadius.circular(22),
+              grouped: true,
+              child: iconWidget,
+            )
+          : GlassSurface.faux(
+              fillColor: highlighted
+                  ? highlightColor.withValues(alpha: 0.15)
+                  : Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(22),
+              showRim: false,
+              child: iconWidget,
+            ),
+    );
 
     return FocusHighlight(
       onActivate: onTap,
@@ -172,21 +197,12 @@ class _ActionButton extends StatelessWidget {
         // InkWell defaults canRequestFocus to true, which would otherwise
         // register a second, invisible focus stop nested inside the first.
         canRequestFocus: false,
+        splashFactory: glass ? NoSplash.splashFactory : null,
         borderRadius: BorderRadius.circular(22),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox.square(
-              dimension: 44,
-              child: GlassSurface.faux(
-                fillColor: highlighted
-                    ? highlightColor.withValues(alpha: 0.15)
-                    : Colors.white.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(22),
-                showRim: false,
-                child: Center(child: Icon(icon, color: color, size: 20)),
-              ),
-            ),
+            glass ? GlassInteraction(child: circle) : circle,
             const SizedBox(height: 6),
             Text(
               label,

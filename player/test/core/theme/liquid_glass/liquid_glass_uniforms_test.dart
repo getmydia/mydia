@@ -13,7 +13,7 @@ void main() {
       light: Offset(0.5, 1),
       specularBoost: 0.1,
     );
-    expect(u.toFloats(const Size(100, 40)).sublist(0, 17), [
+    expect(u.toFloats(const Size(100, 40)).sublist(0, 16), [
       200, 80, // uSurface
       40, // uRadius
       DepthTokens.liquidEdgeBand * 2,
@@ -22,14 +22,13 @@ void main() {
       DepthTokens.liquidSaturation,
       DepthTokens.liquidBrightness,
       DepthTokens.liquidSpecular + 0.1,
-      DepthTokens.liquidEdgeShade,
       DepthTokens.liquidRimWidth * 2,
       0.5, 1, // uLight
       tint.r, tint.g, tint.b, tint.a,
     ]);
   });
 
-  test('appends shade, glow, adaptive and press uniforms after the tint', () {
+  test('appends glow, adaptive, press and rim uniforms after the tint', () {
     const tint = Color(0x80102030);
     const u = LiquidGlassUniforms(
       devicePixelRatio: 2,
@@ -40,8 +39,7 @@ void main() {
     );
     final floats = u.toFloats(const Size(100, 40));
     expect(floats, hasLength(25));
-    expect(floats.sublist(17), [
-      DepthTokens.liquidEdgeShadeWidth * 2,
+    expect(floats.sublist(16), [
       DepthTokens.liquidInnerGlow,
       0.7,
       DepthTokens.liquidAdaptiveLumaLow,
@@ -49,6 +47,8 @@ void main() {
       0.3,
       DepthTokens.liquidPressGlowRadius,
       DepthTokens.liquidAdaptiveRadius * 2, // uAdaptRadius
+      DepthTokens.liquidRimHairline,
+      DepthTokens.liquidBottomLight,
     ]);
   });
 
@@ -56,8 +56,8 @@ void main() {
     const tint = Color(0x80102030);
     const u = LiquidGlassUniforms(devicePixelRatio: 1, radius: 8, tint: tint);
     final floats = u.toFloats(const Size(10, 10));
-    expect(floats[19], tint.a);
-    expect(floats[22], 0);
+    expect(floats[17], tint.a);
+    expect(floats[20], 0);
   });
 
   test('equality covers adaptiveMax and glow', () {

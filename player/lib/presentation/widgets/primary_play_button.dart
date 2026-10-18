@@ -10,9 +10,9 @@ import 'glass_surface.dart';
 /// The detail pages' Play / Resume control: a play icon and a label on a pill.
 ///
 /// Off Apple platforms it is the design system's white pill and never paints
-/// the palette's primary. On iOS and macOS an enabled button is accent-tinted
-/// Liquid Glass with a white label, the tint darkened by `accentGlassTint` so
-/// the label clears 4.5:1. A null [onPressed] renders the disabled surface and
+/// the palette's primary. On iOS and macOS an enabled button is neutral Liquid
+/// Glass, the same control material as every other floating button, with a
+/// white label; it stands out by size and weight. A null [onPressed] renders the disabled surface and
 /// takes no focus, the same as the control it replaced.
 class PrimaryPlayButton extends StatefulWidget {
   const PrimaryPlayButton({
@@ -20,6 +20,7 @@ class PrimaryPlayButton extends StatefulWidget {
     required this.onPressed,
     this.label = 'Play',
     this.iconOnly = false,
+    this.grouped = false,
   });
 
   /// Drop the text for width-bounded layouts. The label stays as the
@@ -27,6 +28,9 @@ class PrimaryPlayButton extends StatefulWidget {
   final bool iconOnly;
 
   final VoidCallback? onPressed;
+
+  /// Shares the enclosing `BackdropGroup`'s blur pass (glass path only).
+  final bool grouped;
 
   /// "Play", or "Resume" when the item has saved progress.
   final String label;
@@ -133,7 +137,7 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
             child: GlassSurface.control(
               key: PrimaryPlayButton.pillKey,
               borderRadius: radius,
-              accentColor: palette.primary,
+              grouped: widget.grouped,
               child: Material(type: MaterialType.transparency, child: ink),
             ),
           )
@@ -148,8 +152,7 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
       child: FocusHighlight(
         onActivate: widget.onPressed,
         // A ring in the gap around the pill. Gold off Apple, where the white
-        // fill would hide a white ring; white on glass, where a gold ring
-        // would merge into the accent pill.
+        // fill would hide a white ring; white on glass, where it reads.
         borderRadius: ringRadius,
         ringColor: glass ? Colors.white : palette.primary,
         ringOpacity: 1,
