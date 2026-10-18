@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
+import 'glass/glass_dialog.dart';
 
 class DownloadDialog extends StatefulWidget {
   final List<MediaFile> files;
@@ -41,7 +42,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    return AlertDialog(
+    return GlassDialog(
       backgroundColor: palette.surface,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

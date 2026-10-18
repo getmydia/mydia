@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/navigation/sidebar_layout_providers.dart';
+import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/navigation/nav_destination.dart';
 import '../library/library_sort.dart';
+import '../../widgets/glass/glass_sheet.dart';
 import '../library/library_sort_sheet.dart';
 
 /// Opens the filter create/edit sheet.
@@ -15,7 +17,7 @@ Future<void> showFilterEditor({
   MediaFilter? initialFilter,
   FilterDestination? editing,
 }) {
-  return showModalBottomSheet<void>(
+  return showGlassSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -91,7 +93,7 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
   }
 
   Future<void> _showSortPicker() async {
-    final selected = await showModalBottomSheet<LibrarySortSelection>(
+    final selected = await showGlassSheet<LibrarySortSelection>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => LibrarySortSheet(currentSort: _filter.sort),
@@ -153,8 +155,15 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: Material(
-        color: palette.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        key: const Key('filter-editor-surface'),
+        // On Apple the sheet sits on glass from showGlassSheet; an opaque
+        // fill here would hide it.
+        color: LiquidGlassSupport.platformEligible
+            ? Colors.transparent
+            : palette.surface,
+        borderRadius: LiquidGlassSupport.platformEligible
+            ? null
+            : const BorderRadius.vertical(top: Radius.circular(20)),
         child: SafeArea(
           top: false,
           child: SingleChildScrollView(

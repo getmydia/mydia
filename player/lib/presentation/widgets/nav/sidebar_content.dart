@@ -9,6 +9,7 @@ import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/navigation/nav_destination.dart';
 import '../../../domain/navigation/sidebar_layout.dart';
 import '../../screens/filter/filter_editor_sheet.dart';
+import '../glass/glass_dialog.dart';
 import '../channel_badge.dart';
 import '../mydia_logo.dart';
 import '../../../domain/navigation/all_servers_locations.dart';
@@ -462,7 +463,7 @@ class SidebarContent extends ConsumerWidget {
   Future<void> _confirmReset(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => GlassDialog(
         backgroundColor: context.palette.surfaceVariant,
         title: const Text('Reset sidebar?'),
         content: const Text(

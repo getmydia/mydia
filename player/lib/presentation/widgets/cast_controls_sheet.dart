@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'cast_bar/cast_bar_state.dart';
+import 'glass/glass_sheet.dart';
 import 'cast_mini_controller.dart';
 import 'nav/dock_glass.dart';
 
@@ -12,7 +13,7 @@ import 'nav/dock_glass.dart';
 /// every control (scrubber, skip, subtitles, stop, pull, reconnect) behaves
 /// exactly as it does there. There is no other full-screen remote.
 Future<void> showCastControlsSheet(BuildContext context) =>
-    showModalBottomSheet<void>(
+    showGlassSheet<void>(
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,

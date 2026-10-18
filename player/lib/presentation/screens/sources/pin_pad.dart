@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/sources/lock/pin_store.dart';
+import '../../widgets/glass/glass_dialog.dart';
 
 class PinPad extends StatefulWidget {
   const PinPad({super.key, required this.onSubmit, this.autofocus = true});
@@ -132,7 +133,7 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return GlassDialog(
       key: const Key('pin-setup-dialog'),
       title: Text(_first == null ? 'Choose a PIN' : 'Enter it again'),
       // Scrolls: the pad plus this text is taller than a landscape phone.

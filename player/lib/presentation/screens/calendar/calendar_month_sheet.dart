@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/palette.dart';
 import '../../widgets/focus_highlight.dart';
+import '../../widgets/glass/glass_sheet.dart';
 import 'calendar_dates.dart';
 
 /// Opens the month sheet and returns the day picked, or null when dismissed.
@@ -13,7 +14,7 @@ Future<DateTime?> showCalendarMonthSheet(
   required DateTime initialMonth,
   required DateTime today,
 }) =>
-    showModalBottomSheet<DateTime>(
+    showGlassSheet<DateTime>(
       context: context,
       backgroundColor: context.palette.surface,
       isScrollControlled: true,

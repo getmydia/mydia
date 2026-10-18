@@ -282,11 +282,19 @@ abstract final class DepthTokens {
   /// Easing for the press swell: a slight overshoot before it settles.
   static const Curve liquidPressCurve = Curves.easeOutBack;
 
-  /// Diameter of a floating glass icon button.
-  static const double liquidIconButtonSize = 40.0;
+  /// Diameter of a floating glass icon button: 44, Apple's minimum touch
+  /// target.
+  static const double liquidIconButtonSize = 44.0;
+
+  /// Clearance kept above and below a glass icon button in a short row.
+  static const double liquidIconButtonInset = 4.0;
 
   /// Corner radius of glass dialogs and popovers.
   static const double liquidDialogRadius = 28.0;
+
+  /// Minimum width of a glass dialog, matching Material's AlertDialog.
+  static const double liquidDialogMinWidth = 280.0;
+
   static const double liquidPopoverRadius = 16.0;
 }
 

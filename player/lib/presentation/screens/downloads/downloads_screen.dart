@@ -6,6 +6,8 @@ import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
+import '../../widgets/glass/glass_dialog.dart';
+import '../../widgets/glass/glass_sheet.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/toast/toaster.dart';
@@ -652,7 +654,7 @@ class DownloadsScreen extends ConsumerWidget {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         title: const Text('Cancel Download?'),
         content: Text('Stop downloading "${task.title}"?'),
@@ -679,7 +681,7 @@ class DownloadsScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, DownloadGroup group) {
     final isActive = group.activeTasks.isNotEmpty;
 
-    showModalBottomSheet<void>(
+    showGlassSheet<void>(
       context: context,
       backgroundColor: context.palette.surface,
       shape: const RoundedRectangleBorder(
@@ -814,7 +816,7 @@ class DownloadsScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, DownloadGroup group) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         title: const Text('Delete Download'),
         content: Text(
@@ -847,7 +849,7 @@ class DownloadsScreen extends ConsumerWidget {
     final episodeCount = group.downloads.length + group.activeTasks.length;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         title: const Text('Delete All Episodes'),
         content: Text(
@@ -878,7 +880,7 @@ class DownloadsScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, int queuedCount) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         title: const Text('Cancel All Queued?'),
         content: Text(
@@ -1221,7 +1223,7 @@ class DownloadsScreen extends ConsumerWidget {
 
   void _showStorageSettings(
       BuildContext context, WidgetRef ref, StorageQuotaStatus status) {
-    showModalBottomSheet<void>(
+    showGlassSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.palette.surface,
@@ -1495,7 +1497,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Clean Up Downloads'),

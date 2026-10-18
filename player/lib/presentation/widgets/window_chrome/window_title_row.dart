@@ -28,6 +28,7 @@ class WindowTitleRow extends ConsumerWidget {
     this.title,
     this.actions = const [],
     this.showCast = true,
+    this.glassButtons = false,
     this.controller,
     @visibleForTesting this.onBandPointerDown,
   });
@@ -36,6 +37,9 @@ class WindowTitleRow extends ConsumerWidget {
   final Widget? title;
   final List<Widget> actions;
   final bool showCast;
+
+  /// Draw the cast button as glass, for a row over hero art.
+  final bool glassButtons;
 
   /// Injected by tests. Defaults to the real window.
   final WindowController? controller;
@@ -135,6 +139,7 @@ class WindowTitleRow extends ConsumerWidget {
           if (showCast)
             CastButton(
               key: castKey,
+              glass: glassButtons,
               onPressed: () => pickCastDevice(context, ref),
             ),
         ],

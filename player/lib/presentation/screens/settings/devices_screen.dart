@@ -4,6 +4,7 @@ import '../../../core/format/relative_time.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
+import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../../domain/models/remote_device.dart';
 import 'devices_controller.dart';
@@ -26,7 +27,7 @@ class DevicesSection extends ConsumerWidget {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         title: const Text('Revoke Device'),
         content: Text(
           'Are you sure you want to revoke "${device.deviceName}"? '

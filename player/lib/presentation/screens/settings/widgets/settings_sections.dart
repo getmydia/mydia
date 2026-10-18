@@ -19,6 +19,7 @@ import '../../../../domain/models/quality_delivery_subtitle.dart';
 import '../../../../domain/models/quality_rung.dart';
 import '../../../../domain/models/user_settings.dart';
 import '../../../widgets/hls_quality_selector.dart';
+import '../../../widgets/glass/glass_dialog.dart';
 import '../settings_controller.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
@@ -233,7 +234,7 @@ Future<void> _check(BuildContext context, WidgetRef ref) async {
   if (state.manualCheck == ManualCheckBehaviour.checksAndInstalls) {
     final proceed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => GlassDialog(
         title: const Text('Check for updates'),
         content: const Text(
           'Check for an update and install it if one is found?',

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/download_option.dart';
+import 'glass/glass_dialog.dart';
 
 /// Dialog for choosing what to download before a download starts.
 ///
@@ -43,7 +44,7 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
     AsyncSnapshot<List<DownloadOption>> snapshot,
   ) {
     final palette = context.palette;
-    return AlertDialog(
+    return GlassDialog(
       backgroundColor: palette.surface,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

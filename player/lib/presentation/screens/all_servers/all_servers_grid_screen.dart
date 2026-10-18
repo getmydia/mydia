@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/sources/source.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/browse_grid.dart';
+import '../../widgets/glass/glass_chip.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../sources/source_error_view.dart';
 import 'all_servers_banner.dart';
@@ -48,21 +49,23 @@ class AllServersGridScreen extends ConsumerWidget {
           SizedBox(height: scrollTopPadding),
           SizedBox(
             height: 48,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: [
-                for (final s in SharedSort.values)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      key: Key('all-grid-sort-${s.name}'),
-                      label: Text(_sortLabel(s)),
-                      selected: (state?.sort ?? SharedSort.title) == s,
-                      onSelected: (_) => notifier.setSort(s),
+            child: BackdropGroup(
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  for (final s in SharedSort.values)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GlassChip(
+                        chipKey: Key('all-grid-sort-${s.name}'),
+                        label: Text(_sortLabel(s)),
+                        selected: (state?.sort ?? SharedSort.title) == s,
+                        onSelected: (_) => notifier.setSort(s),
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
           if (state != null && skipped.isNotEmpty)

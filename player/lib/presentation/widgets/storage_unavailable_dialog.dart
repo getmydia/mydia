@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'glass/glass_dialog.dart';
 
 /// Warns that credentials were accepted but could not be saved.
 ///
@@ -12,7 +13,7 @@ class StorageUnavailableDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return AlertDialog(
+    return GlassDialog(
       icon: const Icon(Icons.warning_amber_rounded, size: 32),
       title: const Text('Connection could not be saved'),
       content: Column(

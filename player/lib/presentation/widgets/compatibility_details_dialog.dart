@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
+import 'glass/glass_dialog.dart';
 
 /// Explains a version mismatch between this player and the connected server.
 ///
@@ -19,7 +20,7 @@ class CompatibilityDetailsDialog extends StatelessWidget {
     final palette = context.palette;
     final requiredVersion = state.requiredVersion;
 
-    return AlertDialog(
+    return GlassDialog(
       title: const Row(
         children: [
           Icon(Icons.system_update, color: AppColors.warning),

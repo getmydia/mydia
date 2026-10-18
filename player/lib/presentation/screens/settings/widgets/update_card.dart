@@ -6,6 +6,7 @@ import '../../../../core/theme/palette.dart';
 import '../../../../core/update/update_provider.dart';
 import '../../../../domain/models/available_update.dart';
 import 'settings_section.dart';
+import '../../../widgets/glass/glass_dialog.dart';
 
 /// The available-update card, shown above the settings sections.
 ///
@@ -159,7 +160,7 @@ class UpdateCard extends ConsumerWidget {
 
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => GlassDialog(
         title: const Text('Update Mydia'),
         content: const Text(
           'Mydia will download and install the newest build, then offer to '

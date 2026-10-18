@@ -23,6 +23,7 @@ import 'cast_bar/cast_bar_state.dart';
 import 'cast_bar/cast_pill.dart';
 import 'cast_bar/dock_extents.dart';
 import 'cast_subtitle_sheet.dart';
+import 'glass/glass_dialog.dart';
 import 'nav/dock_glass.dart';
 import 'toast/toast_obstruction.dart';
 import 'toast/toaster.dart';
@@ -817,7 +818,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
 
     final shouldStop = await showDialog<bool>(
       context: dialogContext,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         title: const Text('Stop playback?'),
         content: Text('Stop playing on ${device.name} and disconnect?'),
         actions: [

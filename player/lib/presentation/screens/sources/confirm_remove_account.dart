@@ -6,6 +6,7 @@ import '../../../core/downloads/download_service.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/models/download.dart';
+import '../../widgets/glass/glass_dialog.dart';
 
 /// The downloads removing [accountId] deletes. Best effort: a lookup that
 /// fails or times out reads as none, so the dialog still opens.
@@ -37,7 +38,7 @@ Future<bool> confirmRemoveAccount(
   if (!context.mounted) return false;
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => GlassDialog(
       title: Text(title),
       content: Text('${account.displayName} and its servers are '
           'removed from this device. Nothing changes on the server.'

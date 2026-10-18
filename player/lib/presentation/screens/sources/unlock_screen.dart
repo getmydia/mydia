@@ -12,6 +12,7 @@ import '../../../core/sources/lock/device_auth.dart';
 import '../../../core/sources/lock/pin_store.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/toast/toaster.dart';
 import 'pin_pad.dart';
 
@@ -119,7 +120,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
   Future<void> _forgotPin() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassDialog(
         title: const Text('Forgot your PIN?'),
         content: const Text('Every server you locked or hid is removed from '
             'this device, and the PIN is deleted. Nothing changes on the '

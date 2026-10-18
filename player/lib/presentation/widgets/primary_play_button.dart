@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../core/theme/palette.dart';
 import 'focus_highlight.dart';
+import 'glass/glass_interaction.dart';
+import 'glass_surface.dart';
 
 /// The detail pages' Play / Resume control: the design system's white primary
 /// button, a play icon and a label on a white pill.
@@ -10,6 +13,10 @@ import 'focus_highlight.dart';
 /// Gold stays reserved for progress, selection, focus rings and badges, so
 /// this never paints the palette's primary. A null [onPressed] renders the
 /// disabled surface and takes no focus, the same as the control it replaced.
+///
+/// On iOS and macOS an enabled button is a white Liquid Glass capsule
+/// (`GlassSurface.control(prominentColor: Colors.white)`); the label colour and
+/// the gold focus ring are unchanged.
 class PrimaryPlayButton extends StatefulWidget {
   const PrimaryPlayButton({
     super.key,
@@ -66,69 +73,89 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
   Widget build(BuildContext context) {
     final palette = context.palette;
     final foreground = _enabled ? palette.background : palette.textDisabled;
+    final glass = LiquidGlassSupport.platformEligible && _enabled;
+    final radius = glass
+        ? const BorderRadius.all(Radius.circular(PrimaryPlayButton.height / 2))
+        : _radius;
+    final ringRadius = glass
+        ? BorderRadius.circular(
+            PrimaryPlayButton.height / 2 + PrimaryPlayButton.ringGap)
+        : _ringRadius;
+    final ink = InkWell(
+      borderRadius: radius,
+      splashFactory: glass ? NoSplash.splashFactory : null,
+      // FocusHighlight above is the single focus stop for this button.
+      // InkWell would otherwise register a second, invisible one nested
+      // inside it, so a D-pad user would press twice to clear it.
+      canRequestFocus: false,
+      onTap: widget.onPressed,
+      // GlassInteraction supplies the press swell on glass.
+      onTapDown: _enabled && !glass ? (_) => _controller.forward() : null,
+      onTapUp: _enabled && !glass ? (_) => _controller.reverse() : null,
+      onTapCancel: _enabled && !glass ? () => _controller.reverse() : null,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: PrimaryPlayButton.height),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: widget.iconOnly ? 11 : 22,
+          ),
+          child: Semantics(
+            label: widget.iconOnly ? widget.label : null,
+            excludeSemantics: widget.iconOnly,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.play_arrow_rounded,
+                  size: 26,
+                  color: foreground,
+                ),
+                if (!widget.iconOnly) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontFamily: AppTheme.displayFamily,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: foreground,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    final Widget pill = glass
+        ? GlassInteraction(
+            child: GlassSurface.control(
+              key: PrimaryPlayButton.pillKey,
+              borderRadius: radius,
+              prominentColor: Colors.white,
+              child: Material(type: MaterialType.transparency, child: ink),
+            ),
+          )
+        : Material(
+            key: PrimaryPlayButton.pillKey,
+            color: _enabled ? Colors.white : palette.surfaceVariant,
+            borderRadius: radius,
+            child: ink,
+          );
     return ScaleTransition(
       scale: _scale,
       child: FocusHighlight(
         onActivate: widget.onPressed,
         // A gold ring in the gap around the pill: the default white ring would
         // vanish against the white fill if it were drawn on the pill itself.
-        borderRadius: _ringRadius,
+        borderRadius: ringRadius,
         ringColor: palette.primary,
         ringOpacity: 1,
         child: Padding(
           padding: const EdgeInsets.all(PrimaryPlayButton.ringGap),
-          child: Material(
-            key: PrimaryPlayButton.pillKey,
-            color: _enabled ? Colors.white : palette.surfaceVariant,
-            borderRadius: _radius,
-            child: InkWell(
-              borderRadius: _radius,
-              // FocusHighlight above is the single focus stop for this button.
-              // InkWell would otherwise register a second, invisible one nested
-              // inside it, so a D-pad user would press twice to clear it.
-              canRequestFocus: false,
-              onTap: widget.onPressed,
-              onTapDown: _enabled ? (_) => _controller.forward() : null,
-              onTapUp: _enabled ? (_) => _controller.reverse() : null,
-              onTapCancel: _enabled ? () => _controller.reverse() : null,
-              child: ConstrainedBox(
-                constraints:
-                    const BoxConstraints(minHeight: PrimaryPlayButton.height),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: widget.iconOnly ? 11 : 22,
-                  ),
-                  child: Semantics(
-                    label: widget.iconOnly ? widget.label : null,
-                    excludeSemantics: widget.iconOnly,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.play_arrow_rounded,
-                          size: 26,
-                          color: foreground,
-                        ),
-                        if (!widget.iconOnly) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            widget.label,
-                            style: TextStyle(
-                              fontFamily: AppTheme.displayFamily,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: foreground,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+          child: pill,
         ),
       ),
     );

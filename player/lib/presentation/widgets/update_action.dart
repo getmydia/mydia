@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/update/install_environment.dart';
 import '../../core/update/update_provider.dart';
 import '../../domain/models/available_update.dart';
+import 'glass/glass_dialog.dart';
 
 /// Opens a URL. Injectable so tests can observe the read-only branch without
 /// a url_launcher platform implementation.
@@ -73,7 +74,7 @@ Future<void> _openReleasePage(AppUpdate update, UrlLauncher launcher) async {
 Future<bool> _confirmInPlace(BuildContext context, AppUpdate update) async {
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
+    builder: (ctx) => GlassDialog(
       title: const Text('Update Mydia'),
       content: Text(
         'Mydia will close and update to v${update.version}. Continue?',

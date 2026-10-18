@@ -55,6 +55,9 @@ void main() {
       Future<void>.delayed(const Duration(milliseconds: 40));
 
   /// Whether a resize reaches the store, i.e. persistence is not paused.
+  ///
+  /// Polls because a fixed real-time wait raced the debounced save on loaded
+  /// CI runners.
   Future<bool> persists(
     FakeWindowController window,
     WindowGeometryController geometry,
@@ -63,7 +66,11 @@ void main() {
     const probe = Rect.fromLTWH(33, 33, 1001, 701);
     window.bounds = probe;
     geometry.onWindowResize();
-    await settle();
+    final clock = Stopwatch()..start();
+    while (clock.elapsed < const Duration(seconds: 2)) {
+      if (store.get()?.bounds == probe) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
     return store.get()?.bounds == probe;
   }
 

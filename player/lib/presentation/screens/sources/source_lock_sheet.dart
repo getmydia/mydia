@@ -10,6 +10,7 @@ import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
+import '../../widgets/glass/glass_sheet.dart';
 import '../../widgets/toast/toaster.dart';
 import 'pin_pad.dart';
 
@@ -20,7 +21,7 @@ Future<void> changeServerLock(BuildContext context, WidgetRef ref,
     await context.push(unlockLocation());
     return;
   }
-  final choice = await showModalBottomSheet<SourceLock>(
+  final choice = await showGlassSheet<SourceLock>(
     context: context,
     showDragHandle: true,
     builder: (context) => _LockSheet(current: record.lockOf(server.id)),
