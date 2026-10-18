@@ -65,12 +65,19 @@ class GlassAccessibilityNotifier extends Notifier<GlassAccessibility> {
           (defaultTargetPlatform == TargetPlatform.iOS ||
               defaultTargetPlatform == TargetPlatform.macOS));
 
+  /// Counts applied native pushes so a late query reply can tell it was
+  /// overtaken.
+  int _pushes = 0;
+
   @override
   GlassAccessibility build() {
     if (!_isApple) return GlassAccessibility.none;
     final channel = ref.watch(nativeTabBarChannelProvider);
     final sub = channel.events.listen((event) {
-      if (event is NativeGlassAccessibilityChanged) state = event.value;
+      if (event is NativeGlassAccessibilityChanged) {
+        _pushes++;
+        state = event.value;
+      }
     });
     ref.onDispose(sub.cancel);
     final lifecycle = AppLifecycleListener(
@@ -84,10 +91,13 @@ class GlassAccessibilityNotifier extends Notifier<GlassAccessibility> {
   /// Bounded like the tab bar probe: no answer in 2 seconds keeps the
   /// current value, and a later push still applies.
   Future<void> _refresh(NativeTabBarChannel channel) async {
+    final pushesBefore = _pushes;
     final value = await channel
         .queryGlassAccessibility()
         .timeout(const Duration(seconds: 2), onTimeout: () => null);
-    if (value != null && ref.mounted) state = value;
+    // A push that arrived while the query was in flight is newer than this
+    // reply, so the reply must not overwrite it with stale values.
+    if (value != null && ref.mounted && _pushes == pushesBefore) state = value;
   }
 }
 

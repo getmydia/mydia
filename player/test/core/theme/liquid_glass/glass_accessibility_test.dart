@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -120,6 +122,33 @@ void main() {
       const GlassAccessibility(
           reduceTransparency: true, increaseContrast: true),
     );
+  });
+
+  test('a push that lands while a query is in flight beats the late reply',
+      () async {
+    GlassAccessibilityNotifier.debugIsApple = true;
+    final reply = Completer<void>();
+    messenger.setMockMethodCallHandler(_channel, (call) async {
+      if (call.method != 'glassAccessibility') return null;
+      await reply.future;
+      return {'reduceTransparency': false, 'increaseContrast': false};
+    });
+    final c = container();
+    final sub = c.listen(glassAccessibilityProvider, (_, __) {});
+    addTearDown(sub.close);
+    c.read(glassAccessibilityProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await fromNative('glassAccessibilityChanged',
+        {'reduceTransparency': true, 'increaseContrast': false});
+    expect(c.read(glassAccessibilityProvider),
+        const GlassAccessibility(reduceTransparency: true));
+
+    reply.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(c.read(glassAccessibilityProvider),
+        const GlassAccessibility(reduceTransparency: true));
   });
 
   testWidgets('the scope defaults to none', (tester) async {
