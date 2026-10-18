@@ -16,9 +16,11 @@ void main() {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
       final path = entity.path.replaceAll(r'\', '/');
       if (_allowed.contains(path) || path.endsWith('.g.dart')) continue;
-      if (RegExp(r'\bAlertDialog\(').hasMatch(entity.readAsStringSync())) {
-        offenders.add(path);
-      }
+      final code = entity
+          .readAsLinesSync()
+          .map((line) => line.replaceFirst(RegExp(r'//.*'), ''))
+          .join('\n');
+      if (RegExp(r'\bAlertDialog\(').hasMatch(code)) offenders.add(path);
     }
     expect(offenders, isEmpty,
         reason: 'Use GlassDialog (lib/presentation/widgets/glass/).');

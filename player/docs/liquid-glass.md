@@ -119,9 +119,12 @@ and falls back to the widget the call site used before everywhere else.
 | `GlassPopoverSurface` | The source picker popover | Elevated Material card |
 
 Glass controls wrap `GlassInteraction`, which supplies the press swell and
-the macOS hover highlight. Dialogs, sheets and popovers grow from the control
-that opened them through `glassEmergence`: a scale from 0.9 plus a fade, or
-the fade alone when Reduce Motion is on.
+the macOS hover highlight. Sheets and the source picker popover use
+`glassEmergence`: a scale from 0.9 plus a fade, or the fade alone when Reduce
+Motion is on. A sheet grows from its opener only when `origin` is passed.
+Dialogs go through plain `showDialog` and do not. `GlassIconButton` adapts
+its diameter to short rows (the 40 point macOS title row), keeping 4 points
+of clearance above and below.
 
 Content buttons (`FilledButton`, `OutlinedButton` and the like) are capsules
 with no ripple on Apple platforms. `AppTheme.build` sets that, so call sites

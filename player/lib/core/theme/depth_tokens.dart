@@ -286,6 +286,9 @@ abstract final class DepthTokens {
   /// target.
   static const double liquidIconButtonSize = 44.0;
 
+  /// Clearance kept above and below a glass icon button in a short row.
+  static const double liquidIconButtonInset = 4.0;
+
   /// Corner radius of glass dialogs and popovers.
   static const double liquidDialogRadius = 28.0;
 

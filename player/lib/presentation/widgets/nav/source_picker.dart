@@ -13,6 +13,7 @@ import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../../core/theme/palette.dart';
 import '../../../core/ui/reduced_motion.dart';
 import '../glass/glass_emergence.dart';
@@ -84,7 +85,9 @@ Future<PickerChoice?> showSourcePicker(
   final anchor = box.localToGlobal(Offset.zero) & box.size;
   // Once, here: the transition runs through the exit animation too, when
   // the anchor may already be inactive.
-  final emergenceAlignment = glassEmergenceAlignment(anchorContext);
+  final emergenceAlignment = LiquidGlassSupport.platformEligible
+      ? glassEmergenceAlignment(anchorContext)
+      : null;
   return showGeneralDialog<PickerChoice>(
     context: anchorContext,
     barrierDismissible: true,
@@ -93,12 +96,32 @@ Future<PickerChoice?> showSourcePicker(
     barrierColor: Colors.transparent,
     transitionDuration: const Duration(milliseconds: 150),
     pageBuilder: (_, __, ___) => _Popover(anchor: anchor, child: list),
-    transitionBuilder: (context, animation, __, child) => glassEmergence(
+    transitionBuilder: (context, animation, __, child) => popoverTransition(
       animation: animation,
-      alignment: emergenceAlignment,
+      emergenceAlignment: emergenceAlignment,
       reduceMotion: ReducedMotion.of(context),
       child: child,
     ),
+  );
+}
+
+/// The popover route's transition: [glassEmergence] on Apple platforms
+/// (pass the opener's [emergenceAlignment]), the plain fade elsewhere.
+@visibleForTesting
+Widget popoverTransition({
+  required Animation<double> animation,
+  required Alignment? emergenceAlignment,
+  required bool reduceMotion,
+  required Widget child,
+}) {
+  if (!LiquidGlassSupport.platformEligible) {
+    return FadeTransition(opacity: animation, child: child);
+  }
+  return glassEmergence(
+    animation: animation,
+    alignment: emergenceAlignment ?? Alignment.center,
+    reduceMotion: reduceMotion,
+    child: child,
   );
 }
 

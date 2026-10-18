@@ -38,4 +38,27 @@ void main() {
     expect(find.byType(GlassSurface), findsNothing);
     expect(find.byType(IconButton), findsOneWidget);
   });
+
+  testWidgets('it is 44 points unconstrained and fits a 40 point row to 32',
+      (tester) async {
+    LiquidGlassSupport.debugPlatformOverride = true;
+    Widget button() => GlassIconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () {},
+        );
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: Center(child: button())),
+    ));
+    expect(tester.getSize(find.byType(GlassSurface)), const Size(44, 44));
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(height: 40, child: Center(child: button())),
+        ),
+      ),
+    ));
+    expect(tester.getSize(find.byType(GlassSurface)), const Size(32, 32));
+  });
 }
