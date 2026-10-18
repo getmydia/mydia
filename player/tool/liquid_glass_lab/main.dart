@@ -16,6 +16,10 @@
 //   xvfb-run -a ./dev flutter run -d linux \
 //     --dart-define=MYDIA_LIQUID_GLASS=true \
 //     --dart-define=LAB_SNAPSHOT=/tmp/lab.png -t tool/liquid_glass_lab/main.dart
+//
+// The player app itself does not build on Linux without libsecret, so to run
+// the lab on Linux copy it plus the five glass files into a plugin-free
+// scratch Flutter project; `GDK_SCALE=2` gives a 2x DPR under xvfb.
 
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -74,7 +78,9 @@ class _LabState extends State<_Lab> {
       debugPrint('LAB_SNAPSHOT failed: no render boundary');
       exit(1);
     }
-    final image = await boundary.toImage(pixelRatio: 1);
+    final image = await boundary.toImage(
+      pixelRatio: View.of(context).devicePixelRatio,
+    );
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     if (data == null) {
       debugPrint('LAB_SNAPSHOT failed: PNG encoding returned null');

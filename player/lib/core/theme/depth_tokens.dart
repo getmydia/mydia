@@ -228,10 +228,10 @@ abstract final class DepthTokens {
   static const double liquidBlurSigma = 6.0;
 
   /// Width of the band along the edge where the backdrop is bent.
-  static const double liquidEdgeBand = 14.0;
+  static const double liquidEdgeBand = 22.0;
 
   /// How far the backdrop is displaced at the very rim.
-  static const double liquidRefraction = 10.0;
+  static const double liquidRefraction = 14.0;
 
   /// Extra displacement of red over blue, as a fraction of the refraction.
   static const double liquidDispersion = 0.12;

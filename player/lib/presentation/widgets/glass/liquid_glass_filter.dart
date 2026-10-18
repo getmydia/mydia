@@ -12,8 +12,13 @@ import 'glass_pointer.dart';
 /// [child]. Must sit inside a clip shaped like the surface (`GlassSurface`
 /// puts it in a `ClipRRect`), or the backdrop pass covers the screen.
 ///
+/// Two backdrop passes per surface: the blur, which can be grouped through
+/// `BackdropGroup`, and the lens, a `BackdropFilter` nested inside the blur,
+/// which cannot. Composing the two into one filter shifts the shader's
+/// coordinates, so they stay separate layers.
+///
 /// Without a loaded shader (tests, or a load failure) it pushes the blur
-/// alone, so the structure is the same on every path.
+/// alone and the child paints directly inside it.
 class LiquidGlassFilter extends SingleChildRenderObjectWidget {
   const LiquidGlassFilter({
     super.key,
@@ -65,6 +70,9 @@ class LiquidGlassFilter extends SingleChildRenderObjectWidget {
   }
 }
 
+/// Paints the blur as the outer [BackdropFilterLayer] (it keeps the
+/// `backdropKey`, so grouping still shares the blur pass) and the lens as a
+/// second [BackdropFilterLayer] nested inside it, holding the shader.
 class RenderLiquidGlass extends RenderProxyBox {
   RenderLiquidGlass({
     required LiquidGlassUniforms uniforms,
@@ -103,28 +111,33 @@ class RenderLiquidGlass extends RenderProxyBox {
     }
     final backdrop = layer ??= BackdropFilterLayer();
     backdrop
-      ..filter = _filter()
+      ..filter = ui.ImageFilter.blur(
+        sigmaX: DepthTokens.liquidBlurSigma,
+        sigmaY: DepthTokens.liquidBlurSigma,
+      )
       ..backdropKey = _backdropKey;
-    context.pushLayer(backdrop, super.paint, offset);
+    context.pushLayer(backdrop, _paintLens, offset);
   }
 
-  ui.ImageFilter _filter() {
-    final blur = ui.ImageFilter.blur(
-      sigmaX: DepthTokens.liquidBlurSigma,
-      sigmaY: DepthTokens.liquidBlurSigma,
-    );
+  final LayerHandle<BackdropFilterLayer> _lens = LayerHandle();
+
+  void _paintLens(PaintingContext context, Offset offset) {
     final program = LiquidGlassSupport.program;
-    if (program == null) return blur;
+    if (program == null) {
+      _lens.layer = null;
+      super.paint(context, offset);
+      return;
+    }
     final shader = _shader ??= program.fragmentShader();
     _uniforms.applyTo(shader, size);
-    return ui.ImageFilter.compose(
-      outer: ui.ImageFilter.shader(shader),
-      inner: blur,
-    );
+    final lens = _lens.layer ??= BackdropFilterLayer();
+    lens.filter = ui.ImageFilter.shader(shader);
+    context.pushLayer(lens, super.paint, offset);
   }
 
   @override
   void dispose() {
+    _lens.layer = null;
     _shader?.dispose();
     _shader = null;
     super.dispose();

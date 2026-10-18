@@ -1,8 +1,9 @@
 // Liquid Glass for the floating control layer on iOS and macOS.
 //
-// Runs as ImageFilter.shader composed over a blur inside a BackdropFilter
-// (RenderLiquidGlass). The input texture is the blurred backdrop under the
-// surface; the surface is centred in it (any blur margin is symmetric).
+// Runs in a BackdropFilter nested inside a blur BackdropFilter
+// (RenderLiquidGlass), because composing the two shifts the shader's
+// coordinates. The input texture is the blurred backdrop under the surface,
+// with the surface centred in it.
 //
 // Refraction maths adapted from liquid_glass_renderer
 // (https://github.com/whynotmake-it/flutter_liquid_glass, MIT).
@@ -62,9 +63,9 @@ void main() {
   float inside = -sdRoundRect(p, halfSize, r);
   vec2 n = sdNormal(p, halfSize, r);
 
-  // Lens: 1 at the rim, easing to 0 across the edge band (circular profile).
+  // Lens: 1 at the rim; the bend eases quadratically to 0 across the edge band.
   float t = clamp(inside / max(uEdge, 1.0), 0.0, 1.0);
-  float lens = 1.0 - sqrt(max(0.0, 1.0 - (1.0 - t) * (1.0 - t)));
+  float lens = (1.0 - t) * (1.0 - t);
 
   // n points outward; samples are pulled inward, so they stay in the texture.
   vec2 shift = -n * lens * uRefraction;
