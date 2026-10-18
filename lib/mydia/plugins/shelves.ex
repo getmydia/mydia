@@ -456,21 +456,19 @@ defmodule Mydia.Plugins.Shelves do
     end
   end
 
-  # A fill stamps every item it deals with one `inserted_at`. The card still
-  # belongs to the shelf when every remaining item carries its stamp (or none
-  # remain). `filled_at` is no use for that: a too-few refill bumps it and keeps
-  # the old items. It is only checked for nil, which `reset_for_user/1` sets
-  # after an access change: nothing is restored then, as the title is unverified.
+  # `replace_items/4` stamps the items and `filled_at` with the same `now`; a
+  # too-few fill bumps only `filled_at`; `reset_for_user/1` clears both. The
+  # card still belongs to the shelf when every remaining item carries its stamp
+  # and the shelf either still holds one (so no reset emptied it) or `filled_at`
+  # is untouched. On an empty shelf only that proves no reset or refill ran
+  # since the card was dealt: the title is unverified otherwise.
   defp same_fill?(%Shelf{id: shelf_id}, %ShelfItem{inserted_at: at}) do
-    case Repo.get!(Shelf, shelf_id) do
-      %Shelf{filled_at: nil} ->
-        false
+    %Shelf{filled_at: filled_at} = Repo.get!(Shelf, shelf_id)
+    items = from(i in ShelfItem, where: i.shelf_id == ^shelf_id)
 
-      _ ->
-        not Repo.exists?(
-          from i in ShelfItem, where: i.shelf_id == ^shelf_id and i.inserted_at != ^at
-        )
-    end
+    filled_at != nil and
+      not Repo.exists?(where(items, [i], i.inserted_at != ^at)) and
+      (Repo.exists?(items) or DateTime.compare(filled_at, at) == :eq)
   end
 
   @doc false

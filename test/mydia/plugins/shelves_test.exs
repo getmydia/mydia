@@ -285,6 +285,30 @@ defmodule Mydia.Plugins.ShelvesTest do
       assert Repo.get(ShelfItem, item.id)
       assert Repo.get(ShelfItem, kept.id)
     end
+
+    test "a too-few fill after an access reset does not restore the card" do
+      user = user_fixture()
+      shelf = shelf_fixture(user, filled_at: @now)
+      item = shelf_item_fixture(shelf, %{inserted_at: @now, updated_at: @now})
+      {:ok, deleted} = Shelves.rate_item(user, item.id, :down)
+
+      assert :ok = Shelves.reset_for_user(user.id)
+      shelf |> Ecto.Changeset.change(filled_at: DateTime.add(@now, 60)) |> Repo.update!()
+
+      assert {:ok, :not_restored} = Shelves.undo_rating(user, deleted)
+      assert Repo.aggregate(ShelfItem, :count) == 0
+    end
+
+    test "rating every card leaves the shelf empty and undo still restores" do
+      user = user_fixture()
+      shelf = shelf_fixture(user, filled_at: @now)
+      item = shelf_item_fixture(shelf, %{inserted_at: @now, updated_at: @now})
+      {:ok, deleted} = Shelves.rate_item(user, item.id, :down)
+      assert Repo.aggregate(ShelfItem, :count) == 0
+
+      assert :ok = Shelves.undo_rating(user, deleted)
+      assert Repo.get(ShelfItem, item.id)
+    end
   end
 
   describe "reset_for_user/1" do
