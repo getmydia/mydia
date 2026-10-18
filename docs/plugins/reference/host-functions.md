@@ -2,7 +2,7 @@
 
 The functions a plugin imports from the host, as defined in the `host`
 interface of the WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`, package
-`mydia:plugin@1.6.0`). The functions a plugin exports for the host to call are
+`mydia:plugin@1.7.0`). The functions a plugin exports for the host to call are
 in [Guest exports](guest-exports.md).
 
 In the Rust SDK each function is `mydia_plugin_sdk::host::<name>` with dashes

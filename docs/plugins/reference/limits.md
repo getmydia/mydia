@@ -114,6 +114,7 @@ The security headers are in
 | `ttl_seconds` | 3,600 to 2,592,000 (1 hour to 30 days) | |
 | `placement` and `scope` | `home` and `user` | The only values accepted. |
 | `limit` handed to `fill-shelf` | 24 | The rail shows 12. |
+| `feedback` handed to `fill-shelf` | 50 entries | Newest first. |
 | Candidates resolved per fill | 48 | Four times the 12 shown, taken in the order returned. |
 | Candidate resolution | 6 at once, 10 s each | A title that takes longer is dropped. |
 | Titles that must survive | 3 | Fewer keeps the previous list and counts the fill as done. |

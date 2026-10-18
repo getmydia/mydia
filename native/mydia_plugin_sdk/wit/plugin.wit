@@ -48,7 +48,15 @@
 // `fill-shelf` the read functions (`search`, `data-list`, `data-read`) act as
 // the request's user; every `write-outcome` function is refused. Every 1.5
 // type, function and export is byte-stable.
-package mydia:plugin@1.6.0;
+//
+// 1.7.0 (additive over 1.6.0): shelf feedback. `shelf-request` gains
+// `feedback`, the user's ratings of titles this shelf suggested, newest first:
+// `up` with `via` `added` (added or requested from the shelf) or `seen` (seen
+// elsewhere and liked), or `down` (not for them). Every rated title is also in
+// `exclude`. New `shelf-rating`, `shelf-via` and `shelf-feedback` types. Every
+// other 1.6 type, function and export is byte-stable; a 1.6 guest is served
+// the 1.6 `shelf-request` without `feedback`.
+package mydia:plugin@1.7.0;
 
 /// Shared types for the plugin contract.
 interface types {
@@ -522,6 +530,8 @@ interface types {
     user-id: option<string>,
     subject: option<media-ref>,
     exclude: list<media-ref>,
+    /// 1.7.0: the user's ratings of titles this shelf suggested, newest first.
+    feedback: list<shelf-feedback>,
     limit: u32,
     now: s64,
     config-json: string,
@@ -532,6 +542,20 @@ interface types {
   record shelf-item {
     item: media-ref,
     reason: option<string>,
+  }
+
+  // ── 1.7.0 additions ──────────────────────────────────────────────────────
+
+  enum shelf-rating { up, down }
+  enum shelf-via { added, seen }
+
+  /// One rating the shelf's user gave a title this shelf suggested.
+  record shelf-feedback {
+    item: media-ref,
+    title: string,
+    year: option<u32>,
+    rating: shelf-rating,
+    via: option<shelf-via>,
   }
 }
 

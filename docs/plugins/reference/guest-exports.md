@@ -2,7 +2,7 @@
 
 The functions a plugin exports for the host to call, as defined in the
 `handler` and `page` interfaces of the WIT contract
-(`native/mydia_plugin_sdk/wit/plugin.wit`, package `mydia:plugin@1.6.0`). The
+(`native/mydia_plugin_sdk/wit/plugin.wit`, package `mydia:plugin@1.7.0`). The
 functions a plugin may call are in [Host functions](host-functions.md).
 
 A guest implements `on-event` and any of the others it needs. The
@@ -289,9 +289,20 @@ renders them. For a walkthrough see [Fill a shelf](../how-to/shelves.md).
 | `user-id` | `option<string>` | The user the shelf belongs to. Absent for a server-wide shelf. |
 | `subject` | `option<media-ref>` | The title the shelf is about. Absent on the home page. |
 | `exclude` | `list<media-ref>` | Titles the host will reject, because they are already shown or were dismissed. Returning them wastes a slot. |
+| `feedback` | `list<shelf-feedback>` | Contract 1.7. The user's ratings of titles this shelf suggested, newest first, at most 50 ([Limits](limits.md#shelves)). Every rated title is also in `exclude`. A 1.6 guest never sees this field. |
 | `limit` | `u32` | The most items worth returning ([Limits](limits.md#shelves)). |
 | `now` | `s64` | Unix epoch seconds. |
 | `config-json` | `string` | The operator's settings as a JSON object string. |
+
+`shelf-feedback` (contract 1.7):
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `item` | `media-ref` | The rated title. |
+| `title` | `string` | The title as the host knows it. |
+| `year` | `option<u32>` | |
+| `rating` | `shelf-rating` | `up` (liked) or `down` (not for them). |
+| `via` | `option<shelf-via>` | For an `up` rating: `added` when the user added or requested the title from the shelf, `seen` when they had already seen it and liked it. Absent for `down`. |
 
 `shelf-item` has `item: media-ref` and `reason: option<string>`. `media-ref`:
 

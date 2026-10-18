@@ -3,14 +3,14 @@ defmodule Mydia.Plugins.Host do
   WASM **component-model** runtime host for the plugin platform.
 
   Guests are WebAssembly components built against the canonical
-  `mydia:plugin@1.6.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
+  `mydia:plugin@1.7.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
   The host instantiates them through `Wasmex.Components.*` and calls the typed
   `handler.on-event` / `handler.on-schedule` exports, plus (1.5) the typed
   `handler.setup` / `handler.check-health` exports and `page.on-http` for a
-  plugin's own pages (1.5+). A guest built against an older minor (1.0 to 1.5)
+  plugin's own pages (1.5+). A guest built against an older minor (1.0 to 1.6)
   is served the matching namespace + export, detected from the component bytes
   at `start_plugin` (`detect_contract/1`), so old guests keep working against
-  the 1.6 host.
+  the 1.7 host.
 
   Each installed plugin gets its own `NimblePool`, which bounds how many guests
   run concurrently on the dirty NIF schedulers. Each *invocation* checks out a
@@ -81,11 +81,11 @@ defmodule Mydia.Plugins.Host do
   # The typed handler exports, addressed by their interface path. The interface
   # version is part of the path because the WIT package version IS the ABI
   # version; wasmtime semver-matches so a 1.1 guest's `handler@1.1.0/on-event`
-  # still resolves against this 1.6 lookup. `on-schedule` is 1.1+: a 1.0
+  # still resolves against this 1.7 lookup. `on-schedule` is 1.1+: a 1.0
   # guest has no such export and the schedule call fails soft. `setup` and
   # `check-health` are 1.5+; `call/4` refuses them on an older guest. The
   # `page` interface (1.4+) is versioned with the package, so a 1.4 page guest
-  # exports `page@1.4.0` and a 1.6 one `page@1.6.0`. `fill-shelf` is 1.6+.
+  # exports `page@1.4.0` and a 1.7 one `page@1.7.0`. `fill-shelf` is 1.6+.
   #
   # The three host functions a 1.0 guest imports. wasmex links the provided
   # imports map to the guest's *exact* imported package name (no semver fuzzing),
@@ -96,6 +96,7 @@ defmodule Mydia.Plugins.Host do
   # Contract versions the host serves, newest first. The WIT package version is
   # the ABI version, so it is part of every export path and import namespace.
   @contracts [
+    v17: "1.7.0",
     v16: "1.6.0",
     v15: "1.5.0",
     v14: "1.4.0",
@@ -105,13 +106,13 @@ defmodule Mydia.Plugins.Host do
     v10: "1.0.0"
   ]
 
-  @type contract :: :v10 | :v11 | :v12 | :v13 | :v14 | :v15 | :v16
+  @type contract :: :v10 | :v11 | :v12 | :v13 | :v14 | :v15 | :v16 | :v17
 
   # First version that exports each interface or function.
-  @schedule_since [:v11, :v12, :v13, :v14, :v15, :v16]
-  @page_since [:v14, :v15, :v16]
-  @typed_since [:v15, :v16]
-  @shelf_since [:v16]
+  @schedule_since [:v11, :v12, :v13, :v14, :v15, :v16, :v17]
+  @page_since [:v14, :v15, :v16, :v17]
+  @typed_since [:v15, :v16, :v17]
+  @shelf_since [:v16, :v17]
 
   defp export(version, interface, function),
     do: ["mydia:plugin/#{interface}@#{Keyword.fetch!(@contracts, version)}", function]
@@ -517,7 +518,7 @@ defmodule Mydia.Plugins.Host do
   # Re-key the full imports map to the 1.0 namespace, keeping only the three
   # functions a 1.0 guest imports.
   defp to_legacy_imports(full_imports) do
-    funcs = Map.get(full_imports, host_namespace(:v16), %{})
+    funcs = Map.get(full_imports, host_namespace(:v17), %{})
     %{host_namespace(:v10) => Map.take(funcs, @legacy_host_funcs)}
   end
 
@@ -604,8 +605,10 @@ defmodule Mydia.Plugins.Host do
   defp handler_call(%{handler: :check_health, slug: slug}),
     do: {export(contract_version(slug), "handler", "check-health"), []}
 
-  defp handler_call(%{handler: :fill_shelf, slug: slug, payload: payload}),
-    do: {export(contract_version(slug), "handler", "fill-shelf"), [to_shelf_record(payload)]}
+  defp handler_call(%{handler: :fill_shelf, slug: slug, payload: payload}) do
+    version = contract_version(slug)
+    {export(version, "handler", "fill-shelf"), [to_shelf_record(payload, version)]}
+  end
 
   defp handler_call(%{slug: slug, payload: payload}),
     do: {export(contract_version(slug), "handler", "on-event"), [to_event_record(payload)]}
@@ -615,7 +618,7 @@ defmodule Mydia.Plugins.Host do
   # as before.
   defp supported(slug, since) do
     version = contract_version(slug)
-    if version in since, do: version, else: :v16
+    if version in since, do: version, else: :v17
   end
 
   # Marshal a setup payload into the WIT `setup-request` record. The instance
@@ -684,9 +687,10 @@ defmodule Mydia.Plugins.Host do
   end
 
   # Marshal a fill payload into the WIT `shelf-request` record. `subject` is
-  # always absent: no placement passes one yet.
-  defp to_shelf_record(payload) do
-    %{
+  # always absent: no placement passes one yet. `feedback` is a 1.7 field: a
+  # 1.6 guest's record has no such field, so it is dropped for them.
+  defp to_shelf_record(payload, version) do
+    base = %{
       shelf: to_string(Map.get(payload, "shelf") || ""),
       "user-id": opt_string(Map.get(payload, "user_id")),
       subject: :none,
@@ -694,6 +698,27 @@ defmodule Mydia.Plugins.Host do
       limit: Map.get(payload, "limit") || 12,
       now: schedule_now(payload),
       "config-json": Jason.encode!(Map.get(payload, "config") || %{})
+    }
+
+    if version == :v16 do
+      base
+    else
+      Map.put(
+        base,
+        :feedback,
+        Enum.map(Map.get(payload, "feedback") || [], &to_shelf_feedback/1)
+      )
+    end
+  end
+
+  # Enums (`rating`, `via`) cross as atoms, like the other WIT enums.
+  defp to_shelf_feedback(feedback) do
+    %{
+      item: to_media_ref(feedback),
+      title: to_string(Map.get(feedback, :title) || ""),
+      year: opt_value(Map.get(feedback, :year)),
+      rating: Map.fetch!(feedback, :rating),
+      via: opt_value(Map.get(feedback, :via))
     }
   end
 

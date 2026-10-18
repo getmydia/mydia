@@ -64,8 +64,11 @@ fn on_event(_evt: Event) -> Result<String, String> {
 ```
 
 The request carries `shelf` (the key you declared), `user_id`, `limit`, `now`,
-`config_json` and `exclude`. Leave out the titles in `exclude`: the host rejects
-them. The full record is under [`fill-shelf`](../reference/guest-exports.md#fill-shelf).
+`config_json`, `exclude` and, from contract 1.7, `feedback`. Leave out the titles
+in `exclude`: the host rejects them. `feedback` lists what the user thought of
+earlier suggestions (`rating` is `Up` or `Down`, `via` says whether they added
+the title or had already seen it), so lean toward what they liked and away from
+what they did not. The full record is under [`fill-shelf`](../reference/guest-exports.md#fill-shelf).
 
 Return an `Err` string when the fill fails, and an empty list when you have
 nothing to suggest. An empty list keeps whatever the shelf held.

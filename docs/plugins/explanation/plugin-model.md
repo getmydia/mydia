@@ -52,7 +52,7 @@ authors never hand-write the generated binding boilerplate.
 ## Exports, imports, and the contract version
 
 A plugin is a Wasm **component** built for `wasm32-wasip2` against the
-canonical WIT contract `mydia:plugin@1.6.0`, living at
+canonical WIT contract `mydia:plugin@1.7.0`, living at
 `native/mydia_plugin_sdk/wit/plugin.wit`.
 
 It **exports** handlers the host calls (events, schedules, the setup wizard,
