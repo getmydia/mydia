@@ -3,6 +3,7 @@
 /// place it without wiring.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,6 +12,7 @@ import '../../../../core/remote/node_registration_providers.dart';
 import '../../../../core/remote/registration_status.dart';
 import '../../../../core/remote/remote_control_settings.dart';
 import '../../../../core/settings/stats_overlay_setting.dart';
+import '../../../../core/theme/glass_material.dart';
 import '../../../../core/theme/palette.dart';
 import '../../../../core/update/update_backend.dart';
 import '../../../../core/update/update_provider.dart';
@@ -21,6 +23,7 @@ import '../../../../domain/models/user_settings.dart';
 import '../../../widgets/hls_quality_selector.dart';
 import '../../../widgets/glass/glass_dialog.dart';
 import '../settings_controller.dart';
+import 'glass_material_row.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 import 'subtitle_size_row.dart';
@@ -334,13 +337,18 @@ class VersionFooter extends StatelessWidget {
   }
 }
 
-/// Device-level look: the theme preset.
+/// Device-level look: the theme preset and the glass material.
 class AppearanceSettingsSection extends StatelessWidget {
   const AppearanceSettingsSection({super.key});
 
   @override
-  Widget build(BuildContext context) => const SettingsSection(
+  Widget build(BuildContext context) => SettingsSection(
         label: 'Appearance',
-        children: [ThemePresetSettingsRow()],
+        children: [
+          const ThemePresetSettingsRow(),
+          // Conditional here so a TV does not get a divider above nothing.
+          if (GlassMaterial.liquid.isAvailableOn(defaultTargetPlatform))
+            const GlassMaterialSettingsRow(),
+        ],
       );
 }
