@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass/glass_chip.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
@@ -63,6 +64,19 @@ void main() {
       onSelected: (_) {},
     )));
     expect(find.byKey(const Key('av')), findsOneWidget);
+  });
+
+  testWidgets('glass avatar takes the label colour when selected',
+      (tester) async {
+    LiquidGlassSupport.debugPlatformOverride = true;
+    await tester.pumpWidget(_host(GlassChip(
+      avatar: const Icon(Icons.dns, key: Key('av')),
+      label: const Text('Sort A'),
+      selected: true,
+      onSelected: (_) {},
+    )));
+    final context = tester.element(find.byKey(const Key('av')));
+    expect(IconTheme.of(context).color, context.palette.background);
   });
 
   testWidgets('the semantics report selection', (tester) async {

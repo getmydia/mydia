@@ -59,6 +59,7 @@ class GlassChip extends StatelessWidget {
             );
     }
     final palette = context.palette;
+    final foreground = selected ? palette.background : palette.textPrimary;
     const radius = BorderRadius.all(Radius.circular(_height / 2));
     return Semantics(
       key: chipKey,
@@ -82,23 +83,24 @@ class GlassChip extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Center(
                     widthFactor: 1,
-                    child: DefaultTextStyle.merge(
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: selected
-                                ? palette.background
-                                : palette.textPrimary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                      child: avatar == null
-                          ? label
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                avatar,
-                                const SizedBox(width: 6),
-                                label,
-                              ],
+                    child: IconTheme.merge(
+                      data: IconThemeData(color: foreground),
+                      child: DefaultTextStyle.merge(
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              color: foreground,
+                              fontWeight: FontWeight.w600,
                             ),
+                        child: avatar == null
+                            ? label
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  avatar,
+                                  const SizedBox(width: 6),
+                                  label,
+                                ],
+                              ),
+                      ),
                     ),
                   ),
                 ),
