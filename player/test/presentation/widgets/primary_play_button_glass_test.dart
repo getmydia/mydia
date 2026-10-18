@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/glass/glass_interaction.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/primary_play_button.dart';
@@ -14,7 +16,7 @@ Widget _host(VoidCallback? onPressed) => MaterialApp(
 void main() {
   tearDown(() => LiquidGlassSupport.debugPlatformOverride = null);
 
-  testWidgets('iOS and macOS: a white glass capsule that plays',
+  testWidgets('iOS and macOS: an accent glass capsule that plays',
       (tester) async {
     LiquidGlassSupport.debugPlatformOverride = true;
     var taps = 0;
@@ -22,6 +24,14 @@ void main() {
     expect(find.byType(GlassSurface), findsOneWidget);
     expect(find.byType(GlassInteraction), findsOneWidget);
     expect(find.byKey(PrimaryPlayButton.pillKey), findsOneWidget);
+    final glass =
+        tester.widget<GlassSurface>(find.byKey(PrimaryPlayButton.pillKey));
+    expect(glass.liquidAdaptiveMax, DepthTokens.liquidAccentAdaptiveMax);
+    expect(tester.widget<Icon>(find.byIcon(Icons.play_arrow_rounded)).color,
+        Colors.white);
+    expect(tester.widget<Text>(find.text('Play')).style?.color, Colors.white);
+    expect(tester.widget<FocusHighlight>(find.byType(FocusHighlight)).ringColor,
+        Colors.white);
     await tester.tap(find.byKey(PrimaryPlayButton.pillKey));
     expect(taps, 1);
   });
