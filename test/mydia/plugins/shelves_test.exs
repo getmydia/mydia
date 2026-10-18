@@ -15,6 +15,10 @@ defmodule Mydia.Plugins.ShelvesTest do
 
   @now ~U[2026-10-01 12:00:00.000000Z]
 
+  # Schemaless inserts skip the schema's type dumping: Postgres wants 16 raw
+  # bytes for a binary_id column, SQLite stores the text form.
+  defp raw_uuid(id), do: if(Mydia.DB.postgres?(), do: Ecto.UUID.dump!(id), else: id)
+
   describe "declared/1" do
     test "lists enabled, granted plugins' shelves for a placement" do
       register_shelf_plugin!()
@@ -146,10 +150,10 @@ defmodule Mydia.Plugins.ShelvesTest do
 
       Repo.insert_all("plugin_shelf_dismissals", [
         %{
-          id: Ecto.UUID.generate(),
+          id: raw_uuid(Ecto.UUID.generate()),
           plugin_slug: "shelf-test",
           shelf_key: "picks",
-          user_id: user.id,
+          user_id: raw_uuid(user.id),
           media_type: "movie",
           provider: "tmdb",
           provider_id: 9,
