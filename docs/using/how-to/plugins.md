@@ -175,8 +175,17 @@ menu.
 
 Home gains one **Picked for you** entry in **Customize Home** that turns on
 every shelf plugins provide. People who customized Home before the plugin
-arrived have to tick it once. Each card has a **Not interested** button, and a
-dismissed title never returns to that shelf for that person.
+arrived have to tick it once. Each card offers three actions:
+
+- **Add** (or **Request**, for guests) puts the title in the library. The card
+  stays and reads "Good pick, noted", which tells the plugin you liked it.
+- **Seen it** (thumbs up) says you know the title and liked it. The card goes
+  away and the title is not suggested again.
+- **Not for me** (thumbs down) removes the card and the title is not suggested
+  again.
+
+After a thumbs up or down, an **Undo** bar appears above the shelves and brings
+the card back. The same two thumbs are in the details dialog opened from a card.
 
 ## See also
 

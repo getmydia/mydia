@@ -226,11 +226,10 @@ defmodule Mydia.Plugins do
 
   @doc """
   Calls a plugin's 1.6 `fill-shelf` export for one of its declared shelves, as
-  `user`. The plugin's settings ride along under `config`, as they do for a
-  page call.
+  `user`. The plugin's settings ride along under `config`, as for a page call.
 
-  Options: `:exclude` (maps with `:media_type`, `:tmdb_id`, `:tvdb_id`,
-  `:imdb_id`), `:limit`, `:now` (a `DateTime`, or Unix seconds).
+  Options: `:exclude` and `:feedback` (maps keyed by `:media_type` and the
+  provider ids), `:limit`, `:now` (a `DateTime`, or Unix seconds).
 
   Errors: `:unsupported` for a guest older than 1.6, `:busy` when a fill for
   this user is already running, `:guest_error` carrying the guest's message.
@@ -246,6 +245,7 @@ defmodule Mydia.Plugins do
     payload = %{
       "shelf" => shelf_key,
       "exclude" => Keyword.get(opts, :exclude, []),
+      "feedback" => Keyword.get(opts, :feedback, []),
       "limit" => Keyword.get(opts, :limit, 12),
       "now" => unix_seconds(Keyword.get(opts, :now)),
       "config" => if(instance, do: Instances.config_for(instance), else: plugin_settings(slug))

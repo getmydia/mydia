@@ -1,0 +1,25 @@
+# Shelf test fixture (1.7). fill-shelf echoes the request's feedback: one movie
+# per entry, tmdb id taken from the entry (0 when absent), and a reason of
+# "<rating>/<via>/<title>/<year>" (via "none" and year "none" when absent).
+# Any shelf key behaves the same.
+#
+# Built to wasm32-wasip2 and checked in at ../shelf_fixture_v17.wasm:
+#   devenv shell -- cargo build --release --target wasm32-wasip2 \
+#     --manifest-path test/support/fixtures/plugins/shelf_fixture_v17/Cargo.toml
+[package]
+name = "shelf_fixture_v17"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mydia-plugin-sdk = { path = "../../../../../native/mydia_plugin_sdk" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"

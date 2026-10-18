@@ -5,7 +5,7 @@ defmodule Mydia.Plugins.ShelfSchemaTest do
 
   alias Mydia.Accounts
   alias Mydia.Plugins.Shelf
-  alias Mydia.Plugins.ShelfDismissal
+  alias Mydia.Plugins.ShelfFeedback
   alias Mydia.Plugins.ShelfItem
 
   defp shelf!(user, key \\ "picks") do
@@ -52,7 +52,7 @@ defmodule Mydia.Plugins.ShelfSchemaTest do
     user = user_fixture()
     shelf!(user)
 
-    Repo.insert!(%ShelfDismissal{
+    Repo.insert!(%ShelfFeedback{
       plugin_slug: "shelfy",
       shelf_key: "picks",
       user_id: user.id,
@@ -64,7 +64,7 @@ defmodule Mydia.Plugins.ShelfSchemaTest do
     {:ok, _} = Accounts.delete_user(user)
 
     assert Repo.aggregate(Shelf, :count) == 0
-    assert Repo.aggregate(ShelfDismissal, :count) == 0
+    assert Repo.aggregate(ShelfFeedback, :count) == 0
   end
 
   test "the bookkeeping changeset caps the error text" do

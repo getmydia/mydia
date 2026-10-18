@@ -2,7 +2,7 @@
 
 The functions a plugin imports from the host, as defined in the `host`
 interface of the WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`, package
-`mydia:plugin@1.6.0`). The functions a plugin exports for the host to call are
+`mydia:plugin@1.7.0`). The functions a plugin exports for the host to call are
 in [Guest exports](guest-exports.md).
 
 In the Rust SDK each function is `mydia_plugin_sdk::host::<name>` with dashes
@@ -684,5 +684,6 @@ against.
 | 1.4 | Plugin pages (`on-http`), `search`, `media-add`, the `collection-*` writes, `mark-watched-state`, `add-favorite`, and the `media-request`, `download` and `collection` list cases. |
 | 1.5 | Instances and account links (`links-list`, `link-request`, `propose-accounts`, `set-link-token`, `set-link-status`), `kv-list`, `kv-set-many`, `report-sync-run`, `origin` on `playback-progress`, and the `setup` and `check-health` exports. |
 | 1.6 | The `fill-shelf` export and the `media-ref`, `shelf-request` and `shelf-item` records. No new host functions. |
+| 1.7 | The shelf-feedback types (`shelf-rating`, `shelf-via`, `shelf-feedback`) and the `feedback` field on `shelf-request`. No new host functions. |
 
 <!-- source: native/mydia_plugin_sdk/wit/plugin.wit:1-51 -->

@@ -6,7 +6,7 @@ defmodule Mydia.Plugins.Shelves do
   A plugin declares a shelf in its manifest (`shelves`, under `surfaces:shelf`)
   and returns ids and reasons from its `fill-shelf` export. Everything else is
   here: which shelves exist, whose row is whose, when a row is stale, and what
-  a user dismissed. The fill itself is in this module too (`fill/3`), run by
+  a user rated. The fill itself is in this module too (`fill/3`), run by
   `Mydia.Jobs.ShelfFill`.
 
   This is the only module that reads or writes the three shelf tables.
@@ -24,7 +24,7 @@ defmodule Mydia.Plugins.Shelves do
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Plugin
   alias Mydia.Plugins.Shelf
-  alias Mydia.Plugins.ShelfDismissal
+  alias Mydia.Plugins.ShelfFeedback
   alias Mydia.Plugins.ShelfItem
   alias Mydia.Plugins.Shelves.Declared
   alias Mydia.Plugins.Shelves.Pick
@@ -39,6 +39,22 @@ defmodule Mydia.Plugins.Shelves do
   @rail_limit 12
   @fill_limit 24
   @error_max 500
+  @feedback_limit 50
+
+  @item_columns [
+    :id,
+    :shelf_id,
+    :position,
+    :media_type,
+    :provider,
+    :provider_id,
+    :reason,
+    :title,
+    :year,
+    :poster_path,
+    :inserted_at,
+    :updated_at
+  ]
 
   # However often its events fire, a shelf is not refilled within this long of
   # its last fill. A binge would otherwise cost a model run per dashboard visit.
@@ -88,7 +104,14 @@ defmodule Mydia.Plugins.Shelves do
   def list_for(%User{} = user, placement, now \\ DateTime.utc_now()) do
     for %Declared{} = declared <- declared(placement) do
       shelf = ensure_shelf(declared, user)
-      %View{declared: declared, shelf: shelf, items: items(shelf), stale?: stale?(shelf, now)}
+
+      %View{
+        declared: declared,
+        shelf: shelf,
+        items: items(shelf),
+        stale?: stale?(shelf, now),
+        added: added_item_keys(shelf)
+      }
     end
   end
 
@@ -205,7 +228,13 @@ defmodule Mydia.Plugins.Shelves do
 
     case Accounts.get_user_by_id(shelf.user_id) do
       %User{} = user ->
-        request = [exclude: exclude(shelf), limit: @fill_limit, now: now]
+        request = [
+          exclude: exclude(shelf),
+          feedback: feedback(shelf),
+          limit: @fill_limit,
+          now: now
+        ]
+
         claimed = claim(shelf, declared, now)
 
         case invoker.(declared.slug, declared.key, user, request) do
@@ -349,55 +378,168 @@ defmodule Mydia.Plugins.Shelves do
     end
   end
 
-  # ── Dismissals ────────────────────────────────────────────────────────────
+  # ── Feedback ──────────────────────────────────────────────────────────────
 
   @doc """
-  Records that `user` is not interested in an item and removes its card.
+  Rates an item `:down` (not interested) or `:up` (liked it, seen) and removes
+  its card. Returns the deleted item so the caller can offer `undo_rating/2`.
 
-  The dismissal is keyed on the shelf's plugin and key, so the next fill
-  excludes the title even though the item row is gone.
+  The rating is keyed on the shelf's plugin and key, so the next fill excludes
+  the title even though the item row is gone.
   """
-  @spec dismiss_item(User.t(), String.t()) :: :ok | {:error, :not_found}
-  def dismiss_item(%User{id: user_id}, item_id) do
-    with {:ok, id} <- Ecto.UUID.cast(item_id),
-         %ShelfItem{shelf: %Shelf{user_id: ^user_id} = shelf} = item <-
-           ShelfItem |> Repo.get(id) |> Repo.preload(:shelf) do
-      {:ok, _} =
-        Repo.transaction(fn ->
-          Repo.insert!(
-            %ShelfDismissal{
-              plugin_slug: shelf.plugin_slug,
-              shelf_key: shelf.shelf_key,
-              user_id: user_id,
-              media_type: item.media_type,
-              provider: item.provider,
-              provider_id: item.provider_id
-            },
-            on_conflict: :nothing,
-            conflict_target: [
-              :plugin_slug,
-              :shelf_key,
-              :user_id,
-              :media_type,
-              :provider,
-              :provider_id
-            ]
-          )
+  @spec rate_item(User.t(), String.t(), :up | :down) ::
+          {:ok, ShelfItem.t()} | {:error, :not_found}
+  def rate_item(%User{} = user, item_id, rating) when rating in [:up, :down] do
+    with {:ok, %ShelfItem{} = item} <- owned_item(user, item_id) do
+      {:ok, _} = Repo.transaction(fn -> rate_and_remove(item, rating) end)
+      {:ok, item}
+    end
+  end
 
-          # Not delete!/1: a fill may have replaced the items since the lookup.
-          Repo.delete_all(from i in ShelfItem, where: i.id == ^item.id)
-        end)
+  defp rate_and_remove(%ShelfItem{shelf: shelf} = item, rating) do
+    upsert_feedback(shelf, item, rating, if(rating == :up, do: :seen))
+
+    # Not delete!/1: a fill may have replaced the items since the lookup.
+    Repo.delete_all(from i in ShelfItem, where: i.id == ^item.id)
+  end
+
+  @doc """
+  Records that the user added an item from the shelf: a thumbs up the plugin
+  hears about. The card stays.
+  """
+  @spec record_added(User.t(), String.t()) :: :ok | {:error, :not_found}
+  def record_added(%User{} = user, item_id) do
+    with {:ok, %ShelfItem{shelf: shelf} = item} <- owned_item(user, item_id) do
+      upsert_feedback(shelf, item, :up, :added)
+      :ok
+    end
+  end
+
+  @doc """
+  Takes back a rating made by `rate_item/3`. The card returns unless the shelf
+  was refilled with new cards since it was dealt, in which case the rating is still cleared
+  and `{:ok, :not_restored}` is returned.
+  """
+  @spec undo_rating(User.t(), ShelfItem.t()) :: :ok | {:ok, :not_restored}
+  def undo_rating(%User{id: user_id}, %ShelfItem{} = item) do
+    case Repo.get(Shelf, item.shelf_id) do
+      %Shelf{user_id: ^user_id} = shelf ->
+        {:ok, result} = Repo.transaction(fn -> restore(shelf, item) end)
+        Phoenix.PubSub.broadcast(Mydia.PubSub, topic(user_id), {:shelf_updated, shelf.id})
+        result
+
+      # The shelf is gone (plugin purged) or is not this user's.
+      _ ->
+        {:ok, :not_restored}
+    end
+  end
+
+  defp restore(%Shelf{} = shelf, %ShelfItem{} = item) do
+    Repo.delete_all(
+      from f in ShelfFeedback,
+        where:
+          f.plugin_slug == ^shelf.plugin_slug and f.shelf_key == ^shelf.shelf_key and
+            f.user_id == ^shelf.user_id and f.media_type == ^item.media_type and
+            f.provider == ^item.provider and f.provider_id == ^item.provider_id
+    )
+
+    if same_fill?(shelf, item) do
+      # A second undo of the same card finds it already back.
+      Repo.insert_all(ShelfItem, [Map.take(item, @item_columns)],
+        on_conflict: :nothing,
+        conflict_target: :id
+      )
 
       :ok
+    else
+      {:ok, :not_restored}
+    end
+  end
+
+  # `replace_items/4` stamps the items and `filled_at` with the same `now`; a
+  # too-few fill bumps only `filled_at`; `reset_for_user/1` clears both. The
+  # card still belongs to the shelf when every remaining item carries its stamp
+  # and the shelf either still holds one (so no reset emptied it) or `filled_at`
+  # is untouched. On an empty shelf only that proves no reset or refill ran
+  # since the card was dealt: the title is unverified otherwise.
+  defp same_fill?(%Shelf{id: shelf_id}, %ShelfItem{inserted_at: at}) do
+    %Shelf{filled_at: filled_at} = Repo.get!(Shelf, shelf_id)
+    items = from(i in ShelfItem, where: i.shelf_id == ^shelf_id)
+
+    filled_at != nil and
+      not Repo.exists?(where(items, [i], i.inserted_at != ^at)) and
+      (Repo.exists?(items) or DateTime.compare(filled_at, at) == :eq)
+  end
+
+  @doc false
+  @spec feedback(Shelf.t()) :: [map()]
+  def feedback(%Shelf{} = shelf) do
+    from(f in titled_feedback(shelf), order_by: [desc: f.inserted_at], limit: @feedback_limit)
+    |> Repo.all()
+    |> Enum.map(fn %ShelfFeedback{} = f ->
+      %{
+        media_type: f.media_type,
+        tmdb_id: if(f.provider == :tmdb, do: f.provider_id),
+        tvdb_id: if(f.provider == :tvdb, do: f.provider_id),
+        title: f.title,
+        year: f.year,
+        rating: f.rating,
+        via: f.via
+      }
+    end)
+  end
+
+  @doc "Keys of the titles the user added from this shelf, rated `:up` via `:added`."
+  @spec added_item_keys(Shelf.t()) :: MapSet.t(ProviderKey.t())
+  def added_item_keys(%Shelf{} = shelf) do
+    from(f in titled_feedback(shelf),
+      where: f.rating == :up and f.via == :added,
+      select: {f.media_type, f.provider, f.provider_id}
+    )
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  defp titled_feedback(%Shelf{} = shelf) do
+    from f in ShelfFeedback,
+      where:
+        f.plugin_slug == ^shelf.plugin_slug and f.shelf_key == ^shelf.shelf_key and
+          f.user_id == ^shelf.user_id and not is_nil(f.title)
+  end
+
+  defp upsert_feedback(%Shelf{} = shelf, %ShelfItem{} = item, rating, via) do
+    Repo.insert!(
+      %ShelfFeedback{
+        plugin_slug: shelf.plugin_slug,
+        shelf_key: shelf.shelf_key,
+        user_id: shelf.user_id,
+        media_type: item.media_type,
+        provider: item.provider,
+        provider_id: item.provider_id,
+        rating: rating,
+        via: via,
+        title: item.title,
+        year: item.year
+      },
+      on_conflict: {:replace, [:rating, :via, :title, :year, :inserted_at]},
+      conflict_target: [:plugin_slug, :shelf_key, :user_id, :media_type, :provider, :provider_id]
+    )
+  end
+
+  defp owned_item(%User{id: user_id}, item_id) do
+    with {:ok, id} <- Ecto.UUID.cast(item_id),
+         %ShelfItem{shelf: %Shelf{user_id: ^user_id}} = item <-
+           ShelfItem |> Repo.get(id) |> Repo.preload(:shelf) do
+      {:ok, item}
     else
       _ -> {:error, :not_found}
     end
   end
 
-  @doc "The titles this shelf's user dismissed, as provider keys."
+  @doc "The titles this shelf's user rated, up or down, as provider keys."
   @spec dismissed_keys(Shelf.t()) :: MapSet.t(ProviderKey.t())
   def dismissed_keys(%Shelf{} = shelf) do
-    from(d in ShelfDismissal,
+    from(d in ShelfFeedback,
       where:
         d.plugin_slug == ^shelf.plugin_slug and d.shelf_key == ^shelf.shelf_key and
           d.user_id == ^shelf.user_id,
@@ -427,7 +569,7 @@ defmodule Mydia.Plugins.Shelves do
 
   @doc """
   Empties every shelf of a user and marks them stale, so the next visit refills
-  under whatever rules now apply (an access restriction changed). Dismissals
+  under whatever rules now apply (an access restriction changed). Ratings
   stay. Broadcasts `{:shelf_updated, shelf_id}` for each shelf so an open page
   drops its cards.
   """
@@ -450,12 +592,12 @@ defmodule Mydia.Plugins.Shelves do
     :ok
   end
 
-  @doc "Deletes every shelf, item and dismissal of a plugin. Called on revoke and remove."
+  @doc "Deletes every shelf, item and rating of a plugin. Called on revoke and remove."
   @spec purge(String.t()) :: :ok
   def purge(slug) when is_binary(slug) do
     # Items go with their shelf through the foreign key.
     Repo.delete_all(from s in Shelf, where: s.plugin_slug == ^slug)
-    Repo.delete_all(from d in ShelfDismissal, where: d.plugin_slug == ^slug)
+    Repo.delete_all(from d in ShelfFeedback, where: d.plugin_slug == ^slug)
     :ok
   end
 

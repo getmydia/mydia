@@ -24,7 +24,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias Mydia.Accounts.Authorization
   alias MydiaWeb.DashboardLive.Components
   alias MydiaWeb.DashboardLive.ShelfComponents
-  alias MydiaWeb.DashboardLive.ShelfRail
+  alias MydiaWeb.DashboardLive.{ShelfFeedback, ShelfRail}
   alias MydiaWeb.DashboardLive.HealthComponents
   alias MydiaWeb.DashboardLive.EditHomeComponents
   alias MydiaWeb.Live.Authorization, as: LiveAuthorization
@@ -95,7 +95,7 @@ defmodule MydiaWeb.DashboardLive.Index do
     |> assign(:regional_selected, nil)
     |> assign(:regional_status, :idle)
     |> assign(:regional_items, [])
-    |> assign(:shelves, [])
+    |> ShelfFeedback.init()
     |> assign(:pending_requests_count, socket.assigns[:pending_requests_count] || 0)
     |> assign(:clients_rollup, %Rollup{
       healthy: 0,
@@ -414,12 +414,10 @@ defmodule MydiaWeb.DashboardLive.Index do
     {:noreply, DetailModal.close(socket)}
   end
 
-  def handle_event("dismiss_shelf_item", %{"id" => item_id}, socket) do
-    user = socket.assigns.current_user
-    # An unknown or foreign id is ignored: the reload below is the answer either way.
-    Shelves.dismiss_item(user, item_id)
-    {:noreply, assign_shelves(socket, Shelves.list_for(user, :home))}
-  end
+  def handle_event("rate_shelf_item", params, socket),
+    do: {:noreply, ShelfFeedback.rate(socket, params)}
+
+  def handle_event("undo_shelf_rating", _, socket), do: {:noreply, ShelfFeedback.undo(socket)}
 
   def handle_event("open_edit_home", _params, socket) do
     {:noreply, assign(socket, :editing_home, true)}
@@ -791,6 +789,7 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:trending_tv, trending_tv)
          |> assign(:regional_items, regional_items)
          |> reenrich_shelves()
+         |> ShelfFeedback.record_add(ref, media_type)
          |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
@@ -910,6 +909,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:trending_tv, trending_tv)
         |> assign(:regional_items, regional_items)
         |> reenrich_shelves()
+        |> ShelfFeedback.record_add(Ref.from_search_result(item), media_type)
         |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
 

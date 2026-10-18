@@ -234,6 +234,30 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                         Go to {media_type_label(@item)}
                       </.link>
                     <% end %>
+                    <%!-- Only for an item opened from a plugin shelf: the same
+                         `rate_shelf_item` event the shelf card sends. --%>
+                    <%= if shelf_item_id = shelf_rating_id(@item) do %>
+                      <button
+                        id="detail-shelf-up"
+                        type="button"
+                        phx-click="rate_shelf_item"
+                        phx-value-id={shelf_item_id}
+                        phx-value-rating="up"
+                        class="btn btn-sm bg-base-100/60 hover:bg-base-100 hover:text-success"
+                      >
+                        <.icon name="hero-hand-thumb-up" class="w-4 h-4" /> Seen it, liked it
+                      </button>
+                      <button
+                        id="detail-shelf-down"
+                        type="button"
+                        phx-click="rate_shelf_item"
+                        phx-value-id={shelf_item_id}
+                        phx-value-rating="down"
+                        class="btn btn-sm bg-base-100/60 hover:bg-base-100 hover:text-error"
+                      >
+                        <.icon name="hero-hand-thumb-down" class="w-4 h-4" /> Not for me
+                      </button>
+                    <% end %>
                   <% end %>
                 </div>
               </div>
@@ -411,6 +435,14 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
 
   defp outside_scope?(scope, item, metadata),
     do: not Mydia.Media.writable?(scope, %{type: media_type_string(item), metadata: metadata})
+
+  # The shelf item to rate from the dialog: set only on cards dealt by a plugin
+  # shelf, and gone once the user has added the title from it.
+  defp shelf_rating_id(nil), do: nil
+
+  defp shelf_rating_id(item) do
+    if Map.get(item, :shelf_added?, false), do: nil, else: Map.get(item, :shelf_item_id)
+  end
 
   defp in_library?(nil), do: false
   defp in_library?(item), do: Map.get(item, :in_library, false)
