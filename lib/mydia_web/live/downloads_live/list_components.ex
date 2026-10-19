@@ -356,6 +356,8 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
     default: "row",
     doc: "\"row\" or \"drawer\"; prefixes ids and hides Details in the drawer"
 
+  attr :class, :any, default: nil
+
   @doc """
   The action strip for one download: a `join` of icon buttons, with rarer
   actions in an "Actions" dropdown beside it (see
@@ -363,7 +365,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
   """
   def download_actions(assigns) do
     ~H"""
-    <div :if={@tab in [:queue, :completed]} class="flex items-center gap-2 shrink-0">
+    <div :if={@tab in [:queue, :completed]} class={["flex items-center gap-2 shrink-0", @class]}>
       <.row_actions>
         <.row_action
           :if={@context == "row"}
