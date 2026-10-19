@@ -96,6 +96,9 @@ defmodule MydiaWeb.SegmentedControl do
     attr :label, :string, required: true
     attr :icon, :string
     attr :id, :string
+
+    attr :class, :any,
+      doc: "classes for the segment's outermost element (the tooltip wrapper when icon_only)"
   end
 
   def segmented_control(assigns) do
@@ -103,7 +106,7 @@ defmodule MydiaWeb.SegmentedControl do
     <div class="join" id={@id} role="group" aria-label={@label} {@rest}>
       <%= for option <- @option do %>
         <%= if @icon_only do %>
-          <div class="tooltip tooltip-bottom" data-tip={option.label}>
+          <div class={["tooltip tooltip-bottom", option[:class]]} data-tip={option.label}>
             <.segment
               option={option}
               selected?={selected?(option, @value)}
@@ -148,7 +151,8 @@ defmodule MydiaWeb.SegmentedControl do
         @icon_only && "btn-square",
         !@icon_only && "gap-1.5",
         @selected? && "btn-primary",
-        !@selected? && "dark:hover:bg-base-300"
+        !@selected? && "dark:hover:bg-base-300",
+        !@icon_only && @option[:class]
       ]}
       phx-click={@event}
       aria-label={@icon_only && @option.label}

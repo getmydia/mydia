@@ -602,7 +602,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           <.icon name="hero-document" class="w-4 h-4 text-base-content/50 flex-shrink-0" />
           <span
             id={"episode-file-name-#{@file.id}"}
-            class="font-mono text-sm truncate"
+            class="font-mono text-sm min-w-0 line-clamp-2 wrap-anywhere"
             title={Mydia.Library.MediaFile.display_path(@file)}
           >
             {Mydia.Library.MediaFile.display_name(@file)}
@@ -948,15 +948,14 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                 >
                   <%!-- Left side: File info --%>
                   <div class="min-w-0 @md/mfrow:flex-1 flex flex-col gap-2">
-                    <%!-- File name. The full path lives on the title attribute
-                          and in the file details modal. Rendered here it left
-                          about 90px of column beside the button strip on a
-                          375px phone, and break-all shredded it into a tall
-                          narrow stack of characters rather than clipping. --%>
+                    <%!-- File name, two lines then an ellipsis (#1189). The full
+                          path lives on the title attribute and in the file
+                          details modal; rendered here it shredded into a tall
+                          stack beside the button strip on a 375px phone. --%>
                     <% file_path = Mydia.Library.MediaFile.display_path(file) %>
                     <p
                       id={"file-name-#{file.id}"}
-                      class="text-sm font-mono text-base-content truncate leading-relaxed"
+                      class="text-sm font-mono text-base-content line-clamp-2 wrap-anywhere leading-relaxed"
                       title={file_path}
                     >
                       <%!-- display_name/1 is the "Unknown file" label when there is no path,
@@ -1031,7 +1030,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <div class="min-w-0 @md/mfrow:flex-1 flex flex-col gap-1">
                     <p
                       id={"extra-name-#{file.id}"}
-                      class="text-sm font-mono truncate"
+                      class="text-sm font-mono line-clamp-2 wrap-anywhere"
                       title={Mydia.Library.MediaFile.display_path(file)}
                     >
                       {Mydia.Library.MediaFile.display_name(file)}

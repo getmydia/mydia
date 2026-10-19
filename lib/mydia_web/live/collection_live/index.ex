@@ -72,7 +72,7 @@ defmodule MydiaWeb.CollectionLive.Index do
             <h1 class="text-2xl font-bold">Collections</h1>
             <p class="text-base-content/60">Organize your media into custom groups</p>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <.view_mode_toggle view_mode={@view_mode} />
             <button
               id="browse-presets-button"
@@ -313,9 +313,15 @@ defmodule MydiaWeb.CollectionLive.Index do
   end
 
   @impl true
-  def handle_event("toggle_view", %{"mode" => mode}, socket) do
-    view_mode = String.to_existing_atom(mode)
-    {:noreply, assign(socket, :view_mode, view_mode)}
+  # The grid and the list are separate stream containers, and a stream's
+  # items are gone from the socket once rendered. Switching containers
+  # without re-streaming renders the new one empty, and switching back left
+  # the old one empty too until a refresh (#1189).
+  def handle_event("toggle_view", %{"mode" => mode}, socket) when mode in ~w(grid list) do
+    {:noreply,
+     socket
+     |> assign(:view_mode, String.to_existing_atom(mode))
+     |> load_collections()}
   end
 
   def handle_event("search", %{"search" => query}, socket) do

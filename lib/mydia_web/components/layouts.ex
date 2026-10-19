@@ -102,8 +102,11 @@ defmodule MydiaWeb.Layouts do
           </div>
         </header>
 
-        <!-- Main content area -->
-        <main class="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 pb-20 lg:pb-8">
+        <!-- Main content area. The bottom padding clears the floating mobile
+             dock (shown below lg) plus the home-indicator inset. It is set
+             apart from the other sides because `sm:p-4`/`md:p-6` used to
+             override it, leaving 16-24px under the dock on tablets (#1189). -->
+        <main class="flex-1 px-3 pt-3 sm:px-4 sm:pt-4 md:px-6 md:pt-6 lg:p-8 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
           <div
             :if={@changelog_notice}
             id="changelog-banner"

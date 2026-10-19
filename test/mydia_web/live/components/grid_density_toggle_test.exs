@@ -21,17 +21,34 @@ defmodule MydiaWeb.Components.GridDensityToggleTest do
     dense = GridDensityComponents.grid_columns_class("dense")
 
     assert compact == "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8"
-    assert dense == "grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12"
+    assert dense == "grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12"
     refute compact == dense
   end
 
-  test "each density gives a phone its own column count" do
+  test "comfortable and compact give a phone their own column count" do
     # Density is per-browser, so a phone only ever shows what was chosen on
     # that phone. If these collapse to one count again, the toggle is inert
     # below sm: while still being rendered there.
     assert GridDensityComponents.grid_columns_class("comfortable") =~ ~r/^grid-cols-2\s/
     assert GridDensityComponents.grid_columns_class("compact") =~ ~r/^grid-cols-3\s/
-    assert GridDensityComponents.grid_columns_class("dense") =~ ~r/^grid-cols-4\s/
+  end
+
+  test "dense is not offered on phones and falls back to compact's columns there" do
+    # Four columns left a phone card too narrow for its badges (#1189).
+    assert GridDensityComponents.grid_columns_class("dense") =~ ~r/^grid-cols-3\s/
+
+    html =
+      render_component(&GridDensityComponents.grid_density_toggle/1,
+        density: "comfortable",
+        id: "library-density-toggle"
+      )
+
+    wrappers =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(".max-sm\\:hidden button")
+
+    assert wrappers |> LazyHTML.attribute("phx-value-density") == ["dense"]
   end
 
   test "levels are listed in toggle order and are the only valid values" do

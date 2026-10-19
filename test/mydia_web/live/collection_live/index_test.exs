@@ -14,6 +14,29 @@ defmodule MydiaWeb.CollectionLive.IndexTest do
     %{conn: log_in_user(conn, user), user: user}
   end
 
+  describe "view mode toggle" do
+    # The grid and list are separate stream containers. Before #1189 the
+    # list rendered empty, and so did the grid after switching back.
+    test "both views keep their rows across switches", %{conn: conn, user: user} do
+      {:ok, collection} =
+        Collections.create_collection(user, %{
+          name: "Rainy Evenings",
+          type: "manual",
+          visibility: "private"
+        })
+
+      row = "collections-#{collection.id}"
+      {:ok, view, _html} = live(conn, ~p"/collections")
+      assert has_element?(view, "#collections-grid ##{row}")
+
+      view |> element(~s(button[phx-value-mode="list"])) |> render_click()
+      assert has_element?(view, "#collections-list ##{row}")
+
+      view |> element(~s(button[phx-value-mode="grid"])) |> render_click()
+      assert has_element?(view, "#collections-grid ##{row}")
+    end
+  end
+
   describe "preset gallery" do
     test "the browse presets button opens the gallery", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/collections")
