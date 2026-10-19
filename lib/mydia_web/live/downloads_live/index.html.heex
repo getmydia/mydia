@@ -262,24 +262,26 @@
                   :if={media_item_id}
                   navigate={~p"/media/#{media_item_id}"}
                   id={"download-title-link-#{download.id}"}
-                  class="link link-hover font-medium text-sm truncate"
+                  class="link link-hover font-medium text-sm truncate min-w-0"
                 >
                   {get_display_title(download)}
                 </.link>
-                <span :if={is_nil(media_item_id)} class="font-medium text-sm truncate">
+                <span :if={is_nil(media_item_id)} class="font-medium text-sm truncate min-w-0">
                   {get_display_title(download)}
                 </span>
+                <%!-- shrink-[4], not shrink-0: a long episode name gives way
+                   before the show title, which otherwise truncated to nothing. --%>
                 <%= if get_episode_details(download) do %>
                   <.link
                     :if={media_item_id}
                     navigate={~p"/media/#{media_item_id}"}
-                    class="link link-hover text-xs text-base-content/50 shrink-0 truncate"
+                    class="link link-hover text-xs text-base-content/50 shrink-[4] min-w-0 truncate"
                   >
                     {get_episode_details(download)}
                   </.link>
                   <span
                     :if={is_nil(media_item_id)}
-                    class="text-xs text-base-content/50 shrink-0 truncate"
+                    class="text-xs text-base-content/50 shrink-[4] min-w-0 truncate"
                   >
                     {get_episode_details(download)}
                   </span>
@@ -360,18 +362,22 @@
                  can still change the outcome. --%>
               <%= if soft_stalled?(download) and not removing?(download) do %>
                 <div class="text-xs text-warning flex flex-wrap items-center gap-1.5 mt-0.5">
-                  <.icon name="hero-clock" class="size-3 shrink-0" />
-                  <%= if download.auto_reject_capped? do %>
-                    <span id={"stall-capped-#{download.id}"}>
-                      No progress for {format_duration(stall_elapsed_seconds(download))}. Mydia has stopped replacing stalled releases for this title. Cancelling will block this release.
-                    </span>
-                  <% else %>
-                    <span>
-                      No progress for {format_duration(stall_elapsed_seconds(download))}. If nothing changes in the next {format_duration(
-                        stall_remaining_seconds(download, @stall_grace_map)
-                      )}, Mydia will remove it and search for a different release.
-                    </span>
-                  <% end %>
+                  <%!-- Icon and text share a non-wrapping line so the icon
+                     never sits alone above a wrapped sentence. --%>
+                  <div class="flex items-start gap-1.5 basis-full">
+                    <.icon name="hero-clock" class="size-3 shrink-0 mt-0.5" />
+                    <%= if download.auto_reject_capped? do %>
+                      <span id={"stall-capped-#{download.id}"}>
+                        No progress for {format_duration(stall_elapsed_seconds(download))}. Mydia has stopped replacing stalled releases for this title. Cancelling will block this release.
+                      </span>
+                    <% else %>
+                      <span>
+                        No progress for {format_duration(stall_elapsed_seconds(download))}. If nothing changes in the next {format_duration(
+                          stall_remaining_seconds(download, @stall_grace_map)
+                        )}, Mydia will remove it and search for a different release.
+                      </span>
+                    <% end %>
+                  </div>
                   <button
                     type="button"
                     id={"stall-reject-#{download.id}"}
@@ -395,7 +401,10 @@
               <%!-- Line 3: compact metadata cluster (every metric carries an icon) --%>
               <div class="flex items-center gap-x-3 gap-y-1 flex-wrap mt-1 text-xs text-base-content/60">
                 <% quality_str = Quality.format(get_metadata_value(download, "quality")) %>
-                <span :if={quality_str && quality_str != ""} class="badge badge-ghost badge-sm">
+                <span
+                  :if={quality_str && quality_str != ""}
+                  class="badge badge-ghost badge-sm whitespace-nowrap"
+                >
                   {quality_str}
                 </span>
                 <% protocol = format_protocol(get_metadata_value(download, "download_protocol")) %>
@@ -489,10 +498,13 @@
               <% end %>
             </div>
             <%!-- Action buttons --%>
+            <%!-- Below sm the strip takes its own grid row, so it stops
+                 squeezing the content column to half the screen. --%>
             <ListComponents.download_actions
               :if={not removing?(download)}
               download={download}
               tab={ListView.row_kind(download)}
+              class="max-sm:row-start-2 max-sm:col-span-full max-sm:justify-end max-sm:-mt-2"
             />
           </li>
         </ul>
