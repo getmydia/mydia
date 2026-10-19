@@ -28,17 +28,25 @@ defmodule MydiaWeb.GridDensityComponents do
 
   @default "comfortable"
 
-  # Each density has its own phone (unprefixed) column count. This is safe
-  # because density is a per-browser setting (see
+  # Comfortable and Compact each have their own phone (unprefixed) column
+  # count. This is safe because density is a per-browser setting (see
   # `MydiaWeb.Plugs.GridDensityCookie`): a phone only shows what was chosen
   # on that phone. Issue #700 was the account-wide version of this setting
-  # pushing a desktop's Dense onto phones; at 3 or 4 columns the poster
-  # fields menu is how a phone user trims card text.
+  # pushing a desktop's Dense onto phones.
+  #
+  # Dense is not offered below `sm:` at all (#1189). Four columns on a phone
+  # leave a card body about 35px wide, too narrow for even one badge, so the
+  # button is hidden there and a phone that chose Dense before that falls
+  # back to Compact's three columns.
   @classes %{
     "comfortable" => "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
     "compact" => "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8",
-    "dense" => "grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12"
+    "dense" => "grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12"
   }
+
+  # Levels hidden on phones. `max-sm:hidden` on the last segment needs the
+  # end-cap rule in `assets/css/app.css` to re-round the segment before it.
+  @phone_hidden ["dense"]
 
   # A 1 → 3 → many progression. The labels used to carry the meaning; once
   # they are gone the icons have to, and the previous three sat on no common
@@ -86,7 +94,7 @@ defmodule MydiaWeb.GridDensityComponents do
   attr :id, :string, required: true
 
   def grid_density_toggle(assigns) do
-    assigns = assign(assigns, :levels, @levels)
+    assigns = assign(assigns, levels: @levels, phone_hidden: @phone_hidden)
 
     ~H"""
     <.segmented_control
@@ -104,6 +112,7 @@ defmodule MydiaWeb.GridDensityComponents do
         value={value}
         label={label}
         icon={icon_name}
+        class={value in @phone_hidden && "max-sm:hidden"}
       />
     </.segmented_control>
     """

@@ -99,6 +99,17 @@
 
 /* This file is for your main application CSS */
 
+/* A `join` whose last segment is `max-sm:hidden` (the Dense grid option,
+   #1189). daisyUI rounds the end cap with `:last-child`, which a
+   display:none element still is, so the visible segment before it would end
+   square. Give it the end-cap corners itself. */
+@media (width < 40rem) {
+  .join > :has(+ .max-sm\:hidden:last-child) {
+    --join-se: calc(var(--radius-field) * var(--join-h));
+    --join-ee: var(--radius-field);
+  }
+}
+
 /* Hide badges when selection mode is active */
 .selection-mode .hide-on-select {
   display: none !important;

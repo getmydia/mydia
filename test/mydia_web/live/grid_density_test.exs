@@ -33,13 +33,13 @@ defmodule MydiaWeb.GridDensityTest do
     assert html =~ "grid-cols-2 sm:grid-cols-3"
   end
 
-  test "the browser's cookie picks the libraries columns, phone included", %{conn: conn} do
+  test "the browser's cookie picks the libraries columns", %{conn: conn} do
     {:ok, _view, html} =
       conn
       |> put_req_cookie("mydia_grid_density", "dense")
       |> live(~p"/movies")
 
-    assert html =~ "grid-cols-4 sm:grid-cols-6"
+    assert html =~ "grid-cols-3 sm:grid-cols-6"
   end
 
   test "the browser's cookie picks discover's density", %{conn: conn} do

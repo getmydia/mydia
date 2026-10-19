@@ -535,8 +535,11 @@
                 <:meta :if={any_poster_meta_field?(@poster_fields)}>
                   <%!-- Status badge and year --%>
                   <div class="flex flex-col gap-1 min-w-0 overflow-hidden">
-                    <div class="flex items-center justify-between gap-2 flex-wrap">
-                      <div class="flex items-center gap-1 min-w-0">
+                    <%!-- Both groups wrap: on a narrow card (three columns on a
+                         phone) a badge that does not fit drops to its own
+                         line instead of being clipped (#1189). --%>
+                    <div class="flex items-center justify-between gap-x-2 gap-y-1 flex-wrap">
+                      <div class="flex flex-wrap items-center gap-1 min-w-0">
                         <div
                           :if={PosterFields.show?(@poster_fields, :status)}
                           class="tooltip tooltip-right"
@@ -557,7 +560,7 @@
                           </div>
                         <% end %>
                       </div>
-                      <div class="flex items-center gap-1 shrink-0">
+                      <div class="flex flex-wrap items-center gap-1 min-w-0">
                         <div
                           :if={PosterFields.show?(@poster_fields, :content_rating)}
                           class="shrink-0 whitespace-nowrap"

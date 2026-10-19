@@ -83,7 +83,9 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
           phx-update="ignore"
           class="toggle toggle-primary toggle-sm"
         />
-        <span class="text-sm font-medium whitespace-nowrap">
+        <%!-- No whitespace-nowrap: on a phone this one line was wider than
+             the screen and dragged the whole page sideways (#1189). --%>
+        <span class="text-sm font-medium">
           Automatically import confident matches in this run
         </span>
       </label>
