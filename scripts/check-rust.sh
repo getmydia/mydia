@@ -36,7 +36,7 @@ for manifest in "${MANIFESTS[@]}"; do
   crate="$(basename "$(dirname "$manifest")")"
   echo "==> $crate"
   cargo fmt --manifest-path "$manifest" --all "${FMT_ARGS[@]}" || failed+=("$crate (fmt)")
-  cargo clippy --manifest-path "$manifest" --all-targets -- -D warnings || failed+=("$crate (clippy)")
+  cargo clippy --manifest-path "$manifest" --all-targets --all-features -- -D warnings || failed+=("$crate (clippy)")
 done
 
 if [ ${#failed[@]} -gt 0 ]; then

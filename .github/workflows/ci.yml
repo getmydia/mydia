@@ -496,6 +496,11 @@ jobs:
       - name: Lint wasm plugins (fmt + clippy)
         run: devenv shell -- scripts/check-plugins.sh
 
+      # plugins-publish.yml only tests plugins-extra/ on release; this covers
+      # the bundled plugins/ too, on every change.
+      - name: Test wasm plugins
+        run: devenv shell -- scripts/test-plugins.sh
+
       # `test-introspection` is off in every real build and exposes only a
       # counter. Without it here, `two_sends_to_one_unconnected_peer_share_a_dial`
       # is compiled out and the guarantee that concurrent requests to one peer
@@ -509,6 +514,11 @@ jobs:
       # so there is no target install step.
       - name: wasm build
         run: devenv shell -- cargo build --manifest-path native/mydia_p2p_core/Cargo.toml --target wasm32-unknown-unknown --no-default-features
+
+      # The wasm build compiles out the `host` feature, so the host-target
+      # clippy in check-rust.sh never sees that cfg path.
+      - name: wasm lint
+        run: devenv shell -- cargo clippy --manifest-path native/mydia_p2p_core/Cargo.toml --target wasm32-unknown-unknown --no-default-features -- -D warnings
 
       - name: Subsync tests
         run: devenv shell -- cargo test --manifest-path native/mydia_subsync/Cargo.toml

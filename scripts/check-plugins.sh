@@ -50,10 +50,13 @@ for manifest in "$PROJECT_ROOT"/plugins/*/Cargo.toml "$PROJECT_ROOT"/plugins-ext
   echo "==> $(basename "$crate_dir")"
 
   crate="$(basename "$crate_dir")"
+  # --all-targets also lints the #[cfg(test)] code. It builds for wasm32-wasip2
+  # here even though the tests themselves run on the host (scripts/test-plugins.sh);
+  # clippy only needs the test targets to type-check, not to execute.
   # shellcheck disable=SC2086
   cargo fmt --manifest-path "$manifest" -- $FMT_MODE || failed+=("$crate (fmt)")
   cargo clippy --manifest-path "$manifest" \
-    --release --target "$TARGET" -- -D warnings || failed+=("$crate (clippy)")
+    --release --target "$TARGET" --all-targets -- -D warnings || failed+=("$crate (clippy)")
 done
 
 if [ ${#failed[@]} -gt 0 ]; then
