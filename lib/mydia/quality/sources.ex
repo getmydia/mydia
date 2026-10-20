@@ -78,7 +78,7 @@ defmodule Mydia.Quality.Sources do
   Every source label this module can detect, in match order.
   """
   @spec all() :: [String.t()]
-  def all, do: Enum.map(patterns(), fn {label, _pattern} -> label end)
+  def all, do: patterns() |> Enum.map(fn {label, _pattern} -> label end) |> Enum.uniq()
 
   @doc """
   Detects the source of a release name, or `nil` when no source token is found.
@@ -113,7 +113,9 @@ defmodule Mydia.Quality.Sources do
   1. `Screener` sits above `DVD`, otherwise `DVDScr` matches the bare `dvd`
      pattern first and resolves to `DVD`.
   2. Every good source is checked before every cam-tier source, so an explicit
-     `BluRay` token beats a `-TS` release-group suffix.
+     `BluRay` token beats a `-TS` release-group suffix. The one exception is
+     the bare `WEB` form of `WEB-DL`, checked last because `web` is also an
+     ordinary title word that must not mask a cam-tier token.
   """
   @spec patterns() :: [{String.t(), Regex.t()}]
   def patterns do
@@ -138,7 +140,11 @@ defmodule Mydia.Quality.Sources do
       {"Telesync", ~r/\btelesync\b|\bhd\-?ts\b|\bpdvd\b|\bpredvd\b|#{delimited("ts")}/i},
       {"CAM", ~r/\bhd\-?cam\b|\bcam\-?rip\b|\bhqcam\b|#{delimited("cam")}/i},
       {"Workprint", ~r/\bworkprint\b|#{delimited("wp")}/i},
-      {"PDTV", ~r/pdtv/i}
+      {"PDTV", ~r/pdtv/i},
+      # Scene WEB releases are untouched streaming downloads, which is what
+      # WEB-DL names. A bare `web` is also an ordinary title word, so this sits
+      # last: an explicit cam-tier token anywhere in the name still wins.
+      {"WEB-DL", ~r/\bweb\b/i}
     ]
   end
 

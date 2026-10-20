@@ -48,13 +48,15 @@ defmodule Mydia.Indexers.QualityParser do
     ]
   end
 
-  # Codec patterns
+  # Codec patterns. Indexers spell the same codec `H.264`, `H264` and, when
+  # they replace every dot with a space, `H 264`. The space form needs a word
+  # boundary so a title word ending in h or x ("Box 264") is not read as one.
   defp codecs do
     [
-      {"x265", ~r/x\.?265|hevc/i},
-      {"x264", ~r/x\.?264/i},
-      {"H.265", ~r/h\.265|hevc/i},
-      {"H.264", ~r/h\.264|avc/i},
+      {"x265", ~r/x\.?265|\bx\s265|hevc/i},
+      {"x264", ~r/x\.?264|\bx\s264/i},
+      {"H.265", ~r/h\.?265|\bh\s265|hevc/i},
+      {"H.264", ~r/h\.?264|\bh\s264|avc/i},
       {"XviD", ~r/xvid/i},
       {"DivX", ~r/divx/i},
       {"VP9", ~r/vp9/i},
