@@ -33,10 +33,11 @@ v1.0.3 image was built 2026-07-20, nine days before the fix.
 Only iroh 1.0.3 moved to `noq ^1.1.0`; 1.0.1 and 1.0.2 are on `noq ^1.0.1`. So
 v1.0.2 is the highest unaffected relay image, and it passes `verify-image.sh`.
 Before trying v1.0.4 or later, confirm its image carries noq-udp 1.1.1 or newer.
+That guidance is superseded: see "v1.4.0 is the next target" below.
 
 Mydia's own crates are not affected, since all three `Cargo.lock` files already
-resolve `noq-udp 1.1.1`. This is purely a property of the prebuilt relay image, so
-do not change anything in `native/` or `player/rust/` in response to it.
+resolve `noq-udp 1.4.0`. This is purely a property of the prebuilt relay image,
+so do not change anything in `native/` or `player/rust/` in response to it.
 
 ## v1.4.0 is the next target
 
@@ -68,13 +69,13 @@ than the amd64 sub-manifest, so the node still picks its own architecture.
 
 ## GA release tags are v-prefixed
 
-Docker Hub publishes `v1.0.0` through `v1.3.0` as of 2026-10-20 (`v1.0.0` to
-`v1.0.3`, then `v1.1.0`, `v1.2.0` and `v1.3.0`), with `latest` now pointing at
-`v1.3.0`, not `v1.0.3`. Earlier guidance held that 1.0+ drops the `v` prefix, and that
-is wrong for GA releases. The unprefixed convention applied only to `1.0.0-rc.0`,
-where the `v`-prefixed tag was a stale, segfaulting test build that caused a
-roughly 3 minute CrashLoopBackOff in PR #137's rollout. Treat that as a
-one-release anomaly and check the tag list before assuming either form:
+Docker Hub publishes `v1.0.0` to `v1.0.3` and `v1.1.0` to `v1.3.0` as of
+2026-10-20, with `latest` pointing at `v1.3.0`. Earlier guidance held that 1.0+
+drops the `v` prefix, and that is wrong for GA releases. The unprefixed
+convention applied only to `1.0.0-rc.0`, where the `v`-prefixed tag was a stale,
+segfaulting test build that caused a roughly 3 minute CrashLoopBackOff in
+PR #137's rollout. Treat that as a one-release anomaly and check the tag list
+before assuming either form:
 https://hub.docker.com/r/n0computer/iroh-relay/tags
 
 ## Rollout mechanics
