@@ -39,6 +39,9 @@ spec:
           #
           # Before changing this line, run ./verify-image.sh <image>. A plain
           # boot test cannot catch this: the panic needs real UDP traffic.
+          #
+          # Next target is v1.4.0, for the rustls advisories RUSTSEC-2026-0346
+          # to 0349. v1.1.0 to v1.3.0 are skipped: they carry a vulnerable rustls.
           image: n0computer/iroh-relay:v1.0.0@sha256:0124f8c335d9ad6618db13dc580b597ad5f1be0c987b6742696f4c1f5e325720
           args: ["--config-path", "/config/config.toml"]
           ports:

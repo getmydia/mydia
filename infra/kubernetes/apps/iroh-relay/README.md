@@ -38,6 +38,27 @@ Mydia's own crates are not affected, since all three `Cargo.lock` files already
 resolve `noq-udp 1.1.1`. This is purely a property of the prebuilt relay image, so
 do not change anything in `native/` or `player/rust/` in response to it.
 
+## v1.4.0 is the next target
+
+iroh 1.4.0 fixes RUSTSEC-2026-0346 to 0349 by moving to rustls 0.23.46, and n0
+asks relay operators to upgrade. The advisories cover Debug impls leaking TLS
+secrets (0346), buffered application data sent to the outer server after an ECH
+rejection (0347), Brotli certificate decompression allocating up to 1 GiB before
+authentication (0348), and an unauthenticated ServerHello downgrading later
+connections to classical key exchange (0349).
+
+The v1.1.0, v1.2.0 and v1.3.0 images carry a vulnerable rustls and must not be
+adopted. Go from v1.0.0 straight to v1.4.0.
+
+iroh 1.4.0 locks noq-udp 1.4.0, which is past the musl `cmsghdr` panic
+(noq#774), so the v1.0.3 failure should not recur. `verify-image.sh` is still
+mandatory. Release notes also say iroh-relay 1.4.0 puts a 30 s timeout on
+`/generate_204` and closes the connection after one response.
+
+The `n0computer/iroh-relay:v1.4.0` image was not yet on Docker Hub on
+2026-10-20. Once it is, resolve the OCI index digest, run `./verify-image.sh`,
+then follow "Rollout mechanics" below.
+
 ## Pin by digest, tag alongside
 
 Write `image: n0computer/iroh-relay:v1.0.0@sha256:<digest>`. The tag is for humans
@@ -47,8 +68,9 @@ than the amd64 sub-manifest, so the node still picks its own architecture.
 
 ## GA release tags are v-prefixed
 
-Docker Hub publishes `v1.0.0`, `v1.0.1`, `v1.0.2` and `v1.0.3`, with `v1.0.3`
-carrying `latest`. Earlier guidance held that 1.0+ drops the `v` prefix, and that
+Docker Hub publishes `v1.0.0` through `v1.3.0` as of 2026-10-20 (`v1.0.0` to
+`v1.0.3`, then `v1.1.0`, `v1.2.0` and `v1.3.0`), with `latest` now pointing at
+`v1.3.0`, not `v1.0.3`. Earlier guidance held that 1.0+ drops the `v` prefix, and that
 is wrong for GA releases. The unprefixed convention applied only to `1.0.0-rc.0`,
 where the `v`-prefixed tag was a stale, segfaulting test build that caused a
 roughly 3 minute CrashLoopBackOff in PR #137's rollout. Treat that as a
