@@ -16,7 +16,7 @@ pub enum LibraryKind {
 }
 
 impl LibraryKind {
-    #[allow(
+    #[expect(
         clippy::should_implement_trait,
         reason = "returns Option, not Result, so FromStr does not fit"
     )]
