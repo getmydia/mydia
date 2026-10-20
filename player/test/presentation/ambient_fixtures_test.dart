@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/cache/poster_cache_manager.dart';
 import 'package:player/core/sources/media_source.dart' show ArtworkRequest;
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint.dart';
@@ -74,6 +75,9 @@ void main() {
   // directories once the event loop runs for real (see _settleTint).
   late Directory cacheDir;
   setUpAll(() {
+    // An earlier file in the shared isolate may have built the managers
+    // outside a mockNetworkImages zone, leaving them a real HttpClient.
+    resetCacheManagersForTest();
     cacheDir = Directory.systemTemp.createTempSync('ambient_fixtures_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -82,6 +86,7 @@ void main() {
     );
   });
   tearDownAll(() {
+    resetCacheManagersForTest();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
