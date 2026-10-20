@@ -1532,7 +1532,12 @@ fn next_connection_id() -> ConnectionId {
     NEXT_CONNECTION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
-/// The connection to use when talking to a peer: its most recent one.
+/// The connection to use when talking to a peer: its most recent open one.
+///
+/// A connection that has closed but is not yet pruned from the map (the prune
+/// runs on a task of its own) is skipped. Without that, a retry issued right
+/// after a stall close would pick the dead connection and fail at once, rather
+/// than dial a fresh one.
 fn current_connection<'a>(
     connected_peers: &'a HashMap<String, PeerConnections>,
     peer_id: &str,
@@ -1540,6 +1545,7 @@ fn current_connection<'a>(
     connected_peers
         .get(peer_id)?
         .iter()
+        .filter(|(_, conn)| conn.close_reason().is_none())
         .max_by_key(|(id, _)| *id)
         .map(|(_, conn)| conn)
 }
@@ -3496,6 +3502,29 @@ mod tests {
             "expected the responder's own timeout Error, got {result:?}"
         );
         assert_eq!(dialer.debug_connection_count(&responder_id).await, 1);
+    }
+
+    /// A request issued right after a connection closed must not pick the dead
+    /// connection while it is still in the map awaiting its prune: it dials a
+    /// fresh one and succeeds.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_request_right_after_a_close_uses_a_fresh_connection() {
+        let (responder, responder_id) = Host::new(test_config());
+        let (dialer, _dialer_id) = Host::new(test_config());
+        spawn_event_drain(&responder);
+        spawn_event_drain(&dialer);
+
+        let responder_addr = wait_for_addr(&responder).await;
+        dialer
+            .dial(responder_addr)
+            .await
+            .expect("dial should succeed");
+        assert!(dialer.debug_close_connection(&responder_id).await);
+
+        let result = dialer
+            .send_request(responder_id.clone(), MydiaRequest::Ping)
+            .await;
+        assert_eq!(result, Ok(MydiaResponse::Pong));
     }
 
     /// A controller resuming from suspension holds a connection its target
