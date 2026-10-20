@@ -149,10 +149,10 @@ async fn an_unreachable_dial_does_not_block_other_commands_body() {
     );
 }
 
-/// Answer \`Custom\` requests on \`host\`, echoing the payload back.
+/// Answer `Custom` requests on `host`, echoing the payload back.
 ///
-/// \`Ping\` is answered inside \``handle_connection`\` and never reaches an event,
-/// so it cannot be used here. \`Custom\` exercises the real generic path.
+/// `Ping` is answered inside `handle_connection` and never reaches an event,
+/// so it cannot be used here. `Custom` exercises the real generic path.
 fn spawn_echo_responder(host: std::sync::Arc<Host>) {
     tokio::spawn(async move {
         loop {

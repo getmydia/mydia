@@ -32,6 +32,20 @@ fn duration_ms(d: std::time::Duration) -> u64 {
     u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
 }
 
+/// Megabits per second for `bytes` moved in `elapsed_ms`, or 0 for a zero
+/// interval. Used only in log lines.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "log-only throughput figure; 52 bits of mantissa far exceed its precision"
+)]
+fn throughput_mbps(bytes: u64, elapsed_ms: u64) -> f64 {
+    if elapsed_ms > 0 {
+        (bytes as f64 * 8.0) / (elapsed_ms as f64 * 1000.0)
+    } else {
+        0.0
+    }
+}
+
 /// Whole nanoseconds in `d`. A `u64` of nanoseconds spans about 584 years, far
 /// beyond any timed transfer, so saturating never changes a real measurement.
 #[cfg(feature = "host")]
@@ -2341,17 +2355,15 @@ async fn stream_file_to_quic(
             return (0u64, 0u64, 0u32);
         }
 
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "host role only, built for 64-bit targets where usize is u64"
-        )]
-        let mut remaining = length as usize;
+        // Kept in u64: on a 32-bit target a range over 4 GiB would truncate
+        // if narrowed to usize up front.
+        let mut remaining = length;
         let mut io_nanos: u64 = 0;
         let mut backpressure_nanos: u64 = 0;
         let mut chunk_count: u32 = 0;
 
         while remaining > 0 {
-            let to_read = std::cmp::min(CHUNK_SIZE, remaining);
+            let to_read = usize::try_from(remaining).map_or(CHUNK_SIZE, |r| r.min(CHUNK_SIZE));
             let mut buf = vec![0u8; to_read];
 
             let io_start = Instant::now();
@@ -2368,7 +2380,7 @@ async fn stream_file_to_quic(
             }
             io_nanos += duration_nanos(io_start.elapsed());
 
-            remaining -= to_read;
+            remaining -= to_read as u64;
             chunk_count += 1;
 
             // Blocking send — back-pressures when channel is full
@@ -2433,16 +2445,7 @@ async fn stream_file_to_quic(
     // Get reader metrics (should be done by now since chunk_rx is exhausted)
     let (io_ms, backpressure_ms, _reader_chunks) = reader_handle.await.unwrap_or((0, 0, 0));
 
-    let throughput_mbps = if total_ms > 0 {
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "log-only throughput figure; 52 bits of mantissa far exceed its precision"
-        )]
-        let mbps = (total_bytes as f64 * 8.0) / (total_ms as f64 * 1000.0);
-        mbps
-    } else {
-        0.0
-    };
+    let throughput_mbps = throughput_mbps(total_bytes, total_ms);
 
     tracing::info!(
         "p2p_metrics_server: stream_complete bytes={} chunks={} total_ms={} io_ms={} backpressure_ms={} quic_write_ms={} throughput_mbps={:.2} path={}",
@@ -2505,18 +2508,22 @@ async fn run_hls_stream_worker(
                 }
             }
             StreamCmd::Chunk { data, reply } => {
-                #[expect(
-                    clippy::cast_possible_truncation,
-                    reason = "HLS chunks are media segments pieces of at most a few MB, far below u32::MAX"
-                )]
-                let len = data.len() as u32;
-                let len_bytes = len.to_be_bytes();
-                let write_res = if let Err(e) = send.write_all(&len_bytes).await {
-                    Err(format!("Failed to write chunk length: {e}"))
-                } else if let Err(e) = send.write_all(&data).await {
-                    Err(format!("Failed to write chunk: {e}"))
-                } else {
-                    Ok(())
+                // The frame length is a u32; a chunk that does not fit is
+                // refused rather than written with a truncated length.
+                let write_res = match u32::try_from(data.len()) {
+                    Err(_) => Err(format!(
+                        "Chunk of {} bytes does not fit a u32 frame length",
+                        data.len()
+                    )),
+                    Ok(len) => {
+                        if let Err(e) = send.write_all(&len.to_be_bytes()).await {
+                            Err(format!("Failed to write chunk length: {e}"))
+                        } else if let Err(e) = send.write_all(&data).await {
+                            Err(format!("Failed to write chunk: {e}"))
+                        } else {
+                            Ok(())
+                        }
+                    }
                 };
                 let is_err = write_res.is_err();
                 let _ = reply.send(write_res);
@@ -3100,16 +3107,7 @@ async fn do_send_hls_request(
 
         let transfer_ms = duration_ms(transfer_start.elapsed());
         let total_ms = duration_ms(t0.elapsed());
-        let throughput_mbps = if transfer_ms > 0 {
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "log-only throughput figure; 52 bits of mantissa far exceed its precision"
-            )]
-            let mbps = (total_bytes as f64 * 8.0) / (transfer_ms as f64 * 1000.0);
-            mbps
-        } else {
-            0.0
-        };
+        let throughput_mbps = throughput_mbps(total_bytes, transfer_ms);
 
         tracing::info!(
             "p2p_metrics: transfer_complete total_ms={} transfer_ms={} bytes={} content_length={} chunks={} throughput_mbps={:.2} cancelled={} connection_type={} session={} path={}",

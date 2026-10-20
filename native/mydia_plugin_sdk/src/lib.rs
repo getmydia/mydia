@@ -11,9 +11,9 @@
 //! [`mydia::plugin::host`] module (`http_request`, `data_read`).
 
 // An attribute on the `wit_bindgen::generate!` invocation does not reach the
-// code it expands to, so this one lint is allowed crate-wide. The crate holds
+// code it expands to, so this one lint is expected crate-wide (it fires on both the host and wasm32-wasip2 builds). The crate holds
 // no hand-written `Vec::from_raw_parts`, only the generated list lowerings.
-#![allow(
+#![expect(
     clippy::same_length_and_capacity,
     reason = "fires in wit-bindgen generated list lowering, which cannot be edited or targeted"
 )]
