@@ -1,0 +1,36 @@
+# Canonical Rust lint set for every first-party crate.
+#
+# Each crate's Cargo.toml carries a copy of these tables ([workspace.lints] in
+# server/Cargo.toml). scripts/check-rust-lints.sh fails pre-commit and CI when a
+# copy is missing an entry or holds a different value. A crate may ADD entries
+# (for example a check-cfg list) but may not drop or weaken one.
+#
+# Levels are "warn": every gate runs clippy with -D warnings, so findings fail
+# CI and pre-commit while a local `cargo test` still builds mid-refactor.
+# Test code is relaxed by clippy.toml at the repo root.
+#
+# Exceptions are local, always with `reason = "..."`. Prefer #[expect], which
+# fails once the lint stops firing; #[allow] only where expect cannot work.
+
+[lints.rust]
+unsafe_code = "deny"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints we opt out of.
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Panic-free non-test code (enabled in the follow-up change).
+unwrap_used = "allow"
+expect_used = "allow"
+panic = "allow"
+todo = "allow"
+unimplemented = "allow"
+# Hygiene.
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+undocumented_unsafe_blocks = "warn"
+allow_attributes_without_reason = "warn"

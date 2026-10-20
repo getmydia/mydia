@@ -492,6 +492,13 @@ in
       files = "^plugins/.*\\.rs$";
       pass_filenames = false;
     };
+    rust-lints = {
+      enable = true;
+      name = "rust lint tables match rust-lints.toml";
+      entry = "scripts/check-rust-lints.sh";
+      files = "(^|/)(Cargo\\.toml|clippy\\.toml|rust-lints\\.toml)$|^scripts/check[-_]rust[-_]lints";
+      pass_filenames = false;
+    };
     mix-format = {
       enable = true;
       name = "mix format";

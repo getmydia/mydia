@@ -150,6 +150,12 @@ jobs:
           fi
           exit "$FAIL"
 
+      # Every first-party crate carries a copy of rust-lints.toml's tables.
+      - name: Guard the Rust lint tables
+        run: |
+          scripts/check-rust-lints.sh
+          scripts/test-check-rust-lints.sh
+
       # BUILD_COMMIT's value changes on every commit, and BuildKit folds a RUN's
       # environment into its ExecOp cache key while a COPY is a FileOp that
       # ignores it. Declared above the dependency layers it therefore leaves

@@ -19,3 +19,27 @@ opt-level = "s"
 lto = true
 strip = true
 panic = "abort"
+
+# Copied from rust-lints.toml; scripts/check-rust-lints.sh keeps it in sync.
+[lints.rust]
+unsafe_code = "deny"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints we opt out of.
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Panic-free non-test code (enabled in the follow-up change).
+unwrap_used = "allow"
+expect_used = "allow"
+panic = "allow"
+todo = "allow"
+unimplemented = "allow"
+# Hygiene.
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+undocumented_unsafe_blocks = "warn"
+allow_attributes_without_reason = "warn"
