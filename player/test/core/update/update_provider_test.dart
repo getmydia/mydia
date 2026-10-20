@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show exit;
 
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,7 +28,9 @@ class _FakeBackend implements UpdateBackend {
     UpdateTrack currentTrack = UpdateTrack.stable,
   }) : _currentTrack = currentTrack;
 
-  final UpdateOutcome outcome;
+  /// Mutable so a test can change what the next `requestUpdate` returns.
+  UpdateOutcome outcome;
+  int requests = 0;
 
   /// Mutable so a test can change what the next `selectTrack` call returns,
   /// proving trackUrl is decided fresh on every switch rather than sticking
@@ -73,6 +76,7 @@ class _FakeBackend implements UpdateBackend {
   Future<UpdateOutcome> requestUpdate({
     void Function(double progress)? onProgress,
   }) async {
+    requests++;
     onProgress?.call(0.5);
     return outcome;
   }
@@ -122,9 +126,14 @@ class _RestartSucceedingPortal implements FlatpakPortal {
   Future<void> close() async {}
 }
 
-ProviderContainer _container(_FakeBackend backend) {
+ProviderContainer _container(
+  _FakeBackend backend, {
+  Future<bool> Function()? canInstall,
+}) {
   final container = ProviderContainer(
     overrides: [
+      if (canInstall != null)
+        installPermissionCheckProvider.overrideWithValue(canInstall),
       updateBackendFactoryProvider.overrideWithValue(
         ({required String currentVersion}) async => backend,
       ),
@@ -156,6 +165,86 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_packageInfoChannel, null);
     debugExitProcess = exit;
+  });
+
+  group('install permission resume', () {
+    const denied = UpdateUnsupported(
+      'not allowed',
+      needsInstallPermission: true,
+    );
+
+    Future<ProviderContainer> deniedContainer(
+      _FakeBackend backend,
+      bool Function() allowed,
+    ) async {
+      final container = _container(backend, canInstall: () async => allowed());
+      container.read(updateProvider);
+      await Future<void>.delayed(Duration.zero);
+      await container.read(updateProvider.notifier).requestUpdate();
+      expect(container.read(updateProvider).error, 'not allowed');
+      return container;
+    }
+
+    testWidgets('resuming with the permission granted re-requests the update',
+        (tester) async {
+      final backend = _FakeBackend(outcome: denied);
+      var granted = false;
+      final container = await tester.runAsync(
+        () => deniedContainer(backend, () => granted),
+      );
+      expect(backend.requests, 1);
+
+      // The user flips the toggle, then Android brings the app back.
+      granted = true;
+      backend.outcome = const AlreadyUpToDate();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+
+      expect(backend.requests, 2);
+      expect(container!.read(updateProvider).error, isNull);
+      expect(container.read(updateProvider).notice, "You're up to date");
+    });
+
+    testWidgets(
+        'resuming still denied clears the pending install and names the '
+        'permission', (tester) async {
+      final backend = _FakeBackend(outcome: denied);
+      final container = await tester.runAsync(
+        () => deniedContainer(backend, () => false),
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+
+      expect(backend.requests, 1);
+      expect(container!.read(updateProvider).error,
+          contains('Install unknown apps'));
+
+      // The flag is cleared: a later resume does nothing more. The listener
+      // ignores a same-state change, so leave the foreground first or this
+      // second resume never fires at all.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      expect(backend.requests, 1);
+    });
+
+    testWidgets('a resume with no install pending does nothing',
+        (tester) async {
+      final backend = _FakeBackend();
+      var asked = false;
+      final container = _container(backend, canInstall: () async {
+        asked = true;
+        return true;
+      });
+      container.read(updateProvider);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+
+      expect(asked, isFalse);
+      expect(backend.requests, 0);
+    });
   });
 
   test('an update published by the backend reaches the state', () async {

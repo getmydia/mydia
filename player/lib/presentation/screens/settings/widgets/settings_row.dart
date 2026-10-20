@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/palette.dart';
+import '../../../widgets/focus_highlight.dart';
 
 enum _RowKind { navigation, toggle, action }
 
@@ -137,7 +138,12 @@ class SettingsRow extends StatelessWidget {
             ],
             if (isToggle) ...[
               const SizedBox(width: 12),
-              Switch(value: toggleValue, onChanged: onChanged),
+              // The row is the focus target, so the switch stays out of the
+              // traversal order. It remains clickable by pointer: ExcludeFocus
+              // only removes focusability, not hit testing.
+              ExcludeFocus(
+                child: Switch(value: toggleValue, onChanged: onChanged),
+              ),
             ],
             if (_kind == _RowKind.navigation) ...[
               const SizedBox(width: 4),
@@ -152,16 +158,38 @@ class SettingsRow extends StatelessWidget {
       ),
     );
 
+    final toggleCallback = onChanged;
+
     return Opacity(
       opacity: dimmed ? 0.45 : 1.0,
-      // A toggle row's affordance is the switch, not the row. Wrapping it in an
-      // InkWell would make the whole row look tappable while doing nothing.
+      // FocusHighlight draws the ring for keyboard and D-pad traversal and
+      // activates on Enter, Space or select. A null callback makes it
+      // unfocusable, so dimmed and purely informational rows are skipped.
+      //
+      // A toggle row's pointer affordance is the switch, not the row. Wrapping
+      // it in an InkWell would make the whole row look tappable by mouse while
+      // doing nothing. Under a remote the whole row is one stop and activating
+      // it flips the switch.
       //
       // MergeSemantics folds the title, subtitle and switch into one node so a
       // screen reader names the setting when it announces the switch.
       child: isToggle
-          ? MergeSemantics(child: content)
-          : InkWell(onTap: onTap, child: content),
+          ? FocusHighlight(
+              onActivate: toggleCallback == null
+                  ? null
+                  : () => toggleCallback(!toggleValue),
+              child: MergeSemantics(child: content),
+            )
+          : FocusHighlight(
+              onActivate: onTap,
+              // The InkWell keeps the pointer ripple. Focus belongs to
+              // FocusHighlight, so the InkWell must not also be a stop.
+              child: InkWell(
+                canRequestFocus: false,
+                onTap: onTap,
+                child: content,
+              ),
+            ),
     );
   }
 }

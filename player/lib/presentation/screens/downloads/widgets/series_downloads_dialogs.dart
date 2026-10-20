@@ -58,6 +58,7 @@ Future<void> showDeleteEpisodeDialog(
     context: context,
     builder: (context) => GlassDialog(
       backgroundColor: context.palette.surface,
+      destructive: true,
       title: const Text('Delete Episode'),
       content: Text('Delete ${media.episodeCode}?'),
       actions: [
@@ -95,6 +96,7 @@ Future<void> showDeleteSeasonDialog(
     context: context,
     builder: (context) => GlassDialog(
       backgroundColor: context.palette.surface,
+      destructive: true,
       title: Text('Delete $label?'),
       content: Text(
         'Delete $episodeCount episode${episodeCount == 1 ? '' : 's'} '
@@ -144,6 +146,7 @@ Future<bool> showDeleteAllDialog(
     context: context,
     builder: (context) => GlassDialog(
       backgroundColor: context.palette.surface,
+      destructive: true,
       title: const Text('Delete All Episodes'),
       content: Text(
         'Delete all $totalCount episode${totalCount == 1 ? '' : 's'} '

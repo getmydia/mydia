@@ -28,6 +28,7 @@ class DevicesSection extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => GlassDialog(
+        destructive: true,
         title: const Text('Revoke Device'),
         content: Text(
           'Are you sure you want to revoke "${device.deviceName}"? '

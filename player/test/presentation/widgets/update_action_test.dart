@@ -13,6 +13,9 @@ class _FakeUpdateNotifier extends UpdateNotifier {
   int requestCount = 0;
 
   @override
+  bool get canUpdateInPlace => true;
+
+  @override
   UpdateState build() => _state;
 
   @override
@@ -38,6 +41,7 @@ Future<void> _pump(
   required _FakeUpdateNotifier notifier,
   required InstallEnvironment environment,
   required List<Uri> launched,
+  bool directionalPrimary = false,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -51,6 +55,7 @@ Future<void> _pump(
                 ref,
                 environmentOverride: environment,
                 launcher: (uri) async => launched.add(uri),
+                directionalPrimary: directionalPrimary,
               ),
               child: const Text('go'),
             ),
@@ -83,6 +88,28 @@ void main() {
     expect(find.textContaining('0.15.0'), findsOneWidget);
     expect(notifier.requestCount, 0);
     expect(launched, isEmpty);
+  });
+
+  testWidgets(
+      'on a directional-primary device an in-place update skips confirm',
+      (tester) async {
+    final notifier = _FakeUpdateNotifier(
+      UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+    );
+
+    await _pump(
+      tester,
+      notifier: notifier,
+      environment: InstallEnvironment.inPlace,
+      launched: <Uri>[],
+      directionalPrimary: true,
+    );
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.textContaining('Mydia will close and update'), findsNothing);
+    expect(notifier.requestCount, 1);
   });
 
   testWidgets('confirming an in-place update requests it', (tester) async {

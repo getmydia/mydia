@@ -88,6 +88,10 @@ class _FakeUpdateNotifier extends UpdateNotifier {
   final UpdateState _state;
   int applyCount = 0;
 
+  // startUpdate only confirms for a backend that can update in place.
+  @override
+  bool get canUpdateInPlace => true;
+
   @override
   UpdateState build() => _state;
 

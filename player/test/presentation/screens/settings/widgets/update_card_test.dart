@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/update/install_environment.dart';
 import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/available_update.dart';
@@ -15,6 +16,14 @@ class _FakeUpdateNotifier extends UpdateNotifier {
 
   @override
   final bool canUpdateInPlace;
+
+  int requestCount = 0;
+
+  @override
+  Future<void> requestUpdate({
+    void Function(double progress)? onProgress,
+  }) async =>
+      requestCount++;
 
   @override
   UpdateState build() => _state;
@@ -43,7 +52,9 @@ Future<void> _pump(
       child: MaterialApp(
         home: Scaffold(
           body: ListView(
-            children: const [UpdateCard()],
+            children: const [
+              UpdateCard(environmentOverride: InstallEnvironment.inPlace),
+            ],
           ),
         ),
       ),
@@ -109,6 +120,49 @@ void main() {
     expect(find.text('Release Notes'), findsOneWidget);
     expect(find.text('Update available: v0.15.0'), findsOneWidget);
     expect(find.text('Faster library scans'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Update Now requests the update directly when the backend cannot '
+      'update in place', (tester) async {
+    final notifier =
+        _FakeUpdateNotifier(UpdateState(availableUpdate: _update()));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [updateProvider.overrideWith(() => notifier)],
+        child: MaterialApp(
+          home: Scaffold(
+            body: ListView(
+              children: const [
+                UpdateCard(environmentOverride: InstallEnvironment.inPlace),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Update Now'));
+    await tester.pumpAndSettle();
+
+    expect(notifier.requestCount, 1);
+    expect(find.text('Update Mydia'), findsNothing);
+  });
+
+  testWidgets(
+      'Update Now on an in-place install shows the shared confirm dialog',
+      (tester) async {
+    await _pump(
+      tester,
+      state: UpdateState(availableUpdate: _update()),
+      canUpdateInPlace: true,
+    );
+
+    await tester.tap(find.text('Update Now'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Mydia will close and update'), findsOneWidget);
   });
 
   testWidgets('shows progress instead of buttons while applying',
@@ -226,15 +280,13 @@ void main() {
     });
 
     testWidgets(
-        'the update-now confirm dialog for a version-less update never '
+        'Update Now on a version-less update opens no dialog and never '
         'renders the literal word null', (tester) async {
-      // Task 8 covered the heading only, since its regression test never
-      // taps anything. The dialog is built from a separate onPressed closure
-      // inside showDialog, so it needs its own coverage: reverting the null
-      // guard there would otherwise pass the whole suite undetected.
-      await _pump(
-        tester,
-        state: const UpdateState(
+      // The card's own confirm dialog is gone; Update Now goes through
+      // startUpdate, whose Flatpak branch requests the update with no
+      // confirmation. The null guard still matters for anything it shows.
+      final notifier = _FakeUpdateNotifier(
+        const UpdateState(
           availableUpdate: FlatpakRemoteUpdate(
             releaseNotesUrl: 'https://example.invalid/releases',
           ),
@@ -242,11 +294,27 @@ void main() {
         ),
         canUpdateInPlace: true,
       );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [updateProvider.overrideWith(() => notifier)],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ListView(
+                children: const [
+                  UpdateCard(environmentOverride: InstallEnvironment.flatpak),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
 
       await tester.tap(find.text('Update Now'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Update Mydia'), findsOneWidget);
+      expect(notifier.requestCount, 1);
+      expect(find.text('Update Mydia'), findsNothing);
       expect(find.textContaining('null'), findsNothing);
     });
 

@@ -656,6 +656,7 @@ class DownloadsScreen extends ConsumerWidget {
       context: context,
       builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
+        destructive: true,
         title: const Text('Cancel Download?'),
         content: Text('Stop downloading "${task.title}"?'),
         actions: [
@@ -818,6 +819,7 @@ class DownloadsScreen extends ConsumerWidget {
       context: context,
       builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
+        destructive: true,
         title: const Text('Delete Download'),
         content: Text(
             'Delete "${group.title}"? The downloaded file will be removed.'),
@@ -851,6 +853,7 @@ class DownloadsScreen extends ConsumerWidget {
       context: context,
       builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
+        destructive: true,
         title: const Text('Delete All Episodes'),
         content: Text(
           'Delete all $episodeCount episode${episodeCount == 1 ? '' : 's'} of "${group.title}"?',
@@ -882,6 +885,7 @@ class DownloadsScreen extends ConsumerWidget {
       context: context,
       builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
+        destructive: true,
         title: const Text('Cancel All Queued?'),
         content: Text(
           'Cancel $queuedCount queued download${queuedCount == 1 ? '' : 's'}?',
@@ -1500,6 +1504,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
       builder: (context) => GlassDialog(
         backgroundColor: context.palette.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        destructive: true,
         title: const Text('Clean Up Downloads'),
         content: Text(
           'This will delete all downloaded media (${StorageSettings.formatBytes(totalCleanable)}). '

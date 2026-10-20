@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/palette.dart';
+import 'glass/glass_dialog.dart';
 
 /// Dialog that asks the user if they want to resume playback from a saved position.
 ///
@@ -27,7 +28,7 @@ class ResumeDialog extends StatelessWidget {
         ? (savedPositionSeconds / totalDurationSeconds).clamp(0.0, 1.0)
         : 0.0;
 
-    return AlertDialog(
+    return GlassDialog(
       title: const Text('Resume Playback'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
