@@ -99,8 +99,11 @@ the core waits `STALL_PROBE_AFTER` (6s), sends a `Ping` on the same connection, 
 gives it `STALL_PROBE_TIMEOUT` (3s). A `Pong` means the request is merely slow and
 the wait continues. No `Pong` closes the connection and fails the request with an
 error prefixed `connection_stalled:`; the closed connection is pruned, so the next
-request dials a fresh one. The Dart GraphQL transport retries a query once after
-such a failure, but never a mutation, which may already have run. Media streams have their own recovery and are not probed.
+request dials a fresh one. The Dart GraphQL transport resends a query once when
+it fails after reaching the connection (`connection_stalled`, or the connection
+closing under it). It never retries a connect or dial failure, which a second
+dial to the same address rarely fixes, and never a mutation, which may already
+have run. Media streams have their own recovery and are not probed.
 
 ## E2E pairing breaks typed codes on older players, by design
 
