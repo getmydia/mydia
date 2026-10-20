@@ -23,6 +23,10 @@ mod imp {
 
     static RUNTIME: OnceLock<Runtime> = OnceLock::new();
 
+    #[expect(
+        clippy::expect_used,
+        reason = "the shared runtime backs every Host; if the OS cannot start its worker threads there is nothing to fall back to, and returning an error would change Host::new, enter and every blocking wrapper"
+    )]
     fn runtime() -> &'static Runtime {
         RUNTIME.get_or_init(|| {
             Runtime::new().expect("failed to create the mydia_p2p_core tokio runtime")

@@ -4,6 +4,13 @@
 //! that close reaches the server, the old transfer keeps running to the end
 //! of the file and shares the connection with the one that is playing.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use mydia_p2p_core::{
     Event, HlsRequest, HlsResponseHeader, HlsStreamResponse, Host, HostConfig, HLS_PEER_STOPPED,
 };

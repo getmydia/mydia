@@ -297,8 +297,7 @@ fn stream_file_range(
 #[expect(
     clippy::needless_pass_by_value,
     clippy::too_many_lines,
-    clippy::unnecessary_wraps,
-    reason = "rustler decodes NIF arguments by value; the event forwarding loop is one thread body; the NIF contract returns a Result"
+    reason = "rustler decodes NIF arguments by value; the event forwarding loop is one thread body"
 )]
 #[allow(
     unused_variables,
@@ -316,8 +315,12 @@ fn start_listening(
     // `RemoteControl`/`Custom` rejection path.
     let resource_for_thread = resource.clone();
 
+    // Built before the thread starts so a failure reaches the caller instead
+    // of killing the listener thread silently.
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("listener runtime failed: {e}"))))?;
+
     thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let host = &resource_for_thread.host;
             let mut rx = event_rx.lock().await;

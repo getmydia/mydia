@@ -5,6 +5,13 @@
 //! wiring is needed. This test exists to pin the Host lifecycle (spawn, dial,
 //! request, response) across the async refactor that follows.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use mydia_p2p_core::{blocking, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::time::Duration;
 

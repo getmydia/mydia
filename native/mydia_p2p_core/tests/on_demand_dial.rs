@@ -4,6 +4,13 @@
 //! address through `Host::add_address_hint` first, so the node-ID path under
 //! test resolves locally. `two_node_control.rs` covers dialing by address.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::time::Duration;
 

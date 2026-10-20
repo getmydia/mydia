@@ -3,6 +3,13 @@
 //! does. This is what lets the server switch remote access off without
 //! leaving an iroh endpoint on the network.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use mydia_p2p_core::{blocking, Host, HostConfig};
 use std::time::Duration;
 

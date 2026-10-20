@@ -5,6 +5,13 @@
 //! running an older build, while reordering is harmless. These assertions exist
 //! so a rename fails here rather than in the field.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use mydia_p2p_core::{
     MydiaRequest, MydiaResponse, PlaybackSnapshot, PlaybackState, RemoteControlRequest,
     RemoteControlResponse, TargetCapabilities,
