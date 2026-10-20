@@ -25,6 +25,7 @@ defmodule Mydia.Indexers.Cardigann.EngineSwitcherTest do
       Application.put_env(:mydia, :runtime_config, runtime)
       Application.put_env(:mydia, :cardigann_cache_dir, cache_dir)
       Application.delete_env(:mydia, :fake_wasm_engine_pid)
+      Application.delete_env(:mydia, :fake_wasm_engine_status)
       :persistent_term.erase({EngineSwitcher, :active})
       Mydia.Indexers.register_adapters()
       File.rm_rf(dir)

@@ -176,14 +176,32 @@ defmodule Mydia.Storage.S3.MultipartTest do
   } do
     initiate(bypass)
     test_pid = self()
+    # Part 2's 403 halts the upload, which kills any part still in flight.
+    # If part 3's handler was mid-request then, cowboy shuts it down and
+    # Bypass re-raises that `:shutdown` from its on_exit check, failing the
+    # test with `** (exit) shutdown`. So part 2 answers only once part 3's
+    # handler is done.
+    part3_done = :atomics.new(1, [])
 
     Bypass.expect(bypass, "PUT", "/lib/movies/big.mkv", fn conn ->
       conn = Plug.Conn.fetch_query_params(conn)
       {:ok, _body, conn} = Plug.Conn.read_body(conn, length: 20 * @mib)
 
       case conn.query_params["partNumber"] do
-        "1" -> conn |> Plug.Conn.put_resp_header("etag", "\"p1\"") |> Plug.Conn.resp(200, "")
-        _ -> Plug.Conn.resp(conn, 403, "")
+        "1" ->
+          conn |> Plug.Conn.put_resp_header("etag", "\"p1\"") |> Plug.Conn.resp(200, "")
+
+        "2" ->
+          # A match, not a bare call: answering after a timeout would bring
+          # the race back as a misleading `:shutdown`. Parts run concurrently
+          # (the default concurrency is 4), so part 3 always arrives.
+          :ok = spin(part3_done, 1, System.monotonic_time(:millisecond) + 10_000)
+          Plug.Conn.resp(conn, 403, "")
+
+        _ ->
+          conn = Plug.Conn.send_resp(conn, 403, "")
+          :atomics.put(part3_done, 1, 1)
+          conn
       end
     end)
 

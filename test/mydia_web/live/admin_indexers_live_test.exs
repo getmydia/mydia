@@ -570,6 +570,9 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       runtime = Application.get_env(:mydia, :runtime_config)
       Application.put_env(:mydia, :features, Keyword.put(features, :cardigann_enabled, true))
       Application.put_env(:mydia, :fake_wasm_engine_pid, self())
+      # Cleared up front, not only on exit: another module's leftover :ready
+      # makes a switch to Prowlarr cut over at once, so no transition shows.
+      Application.delete_env(:mydia, :fake_wasm_engine_status)
       Repo.delete_all(ConfigSetting)
       {:ok, _} = Mydia.Config.Loader.reload()
       start_supervised!(Mydia.Indexers.Health)
