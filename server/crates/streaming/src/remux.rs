@@ -1,4 +1,4 @@
-//! Port of lib/mydia/streaming/ffmpeg_remuxer.ex.
+//! Port of `lib/mydia/streaming/ffmpeg_remuxer.ex`.
 //!
 //! Stream copy into fragmented MP4, which is near-instant because no frame is
 //! ever re-encoded. The movflags are what make it streamable: `empty_moov`

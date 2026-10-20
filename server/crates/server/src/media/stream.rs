@@ -69,7 +69,7 @@ async fn serve(
     // Only REMUX changes what the bytes are; every other value, including an
     // unrecognized one, serves the file as it sits on disk.
     if query.strategy.as_deref() == Some("REMUX") {
-        return crate::media::remux::serve(&row).await;
+        return crate::media::remux::serve(&row);
     }
 
     serve_range(&row.path, metadata.len(), &headers).await

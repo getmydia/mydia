@@ -19,7 +19,7 @@ pub enum Mode {
     NeedsTranscoding,
 }
 
-/// Port of check_compatibility/1 (compatibility.ex:43-58).
+/// Port of `check_compatibility/1` (compatibility.ex:43-58).
 pub fn check(
     container: Option<&str>,
     video_codec: Option<&str>,
@@ -37,10 +37,10 @@ pub fn check(
     }
 }
 
-/// Port of get_container_format/1 (compatibility.ex:174-201).
+/// Port of `get_container_format/1` (compatibility.ex:174-201).
 ///
 /// The first two Elixir branches (metadata container, then the first segment
-/// of format_name) both collapse into the stored `container` column, which
+/// of `format_name`) both collapse into the stored `container` column, which
 /// Slice 2a already normalizes the same way Elixir does
 /// (ffprobe.rs:363-375 against file_analyzer.ex:305-314). What is left is the
 /// extension fallback.
@@ -56,7 +56,7 @@ pub fn container_format(container: Option<&str>, path: &str) -> String {
     Path::new(path)
         .extension()
         .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_lowercase())
+        .map(str::to_lowercase)
         .unwrap_or_default()
 }
 
@@ -64,7 +64,7 @@ pub fn container_format(container: Option<&str>, path: &str) -> String {
 fn compatible_container(container: Option<&str>) -> bool {
     matches!(
         container.map(str::to_lowercase).as_deref(),
-        Some("mp4") | Some("webm") | Some("m4v")
+        Some("mp4" | "webm" | "m4v")
     )
 }
 
@@ -72,16 +72,7 @@ fn compatible_container(container: Option<&str>) -> bool {
 fn remuxable_container(container: Option<&str>) -> bool {
     matches!(
         container.map(str::to_lowercase).as_deref(),
-        Some("mkv")
-            | Some("matroska")
-            | Some("avi")
-            | Some("mov")
-            | Some("ts")
-            | Some("mpegts")
-            | Some("m2ts")
-            | Some("mts")
-            | Some("wmv")
-            | Some("flv")
+        Some("mkv" | "matroska" | "avi" | "mov" | "ts" | "mpegts" | "m2ts" | "mts" | "wmv" | "flv")
     )
 }
 

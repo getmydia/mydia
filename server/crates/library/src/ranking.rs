@@ -1,4 +1,4 @@
-//! Port of lib/mydia/library/file_ranking.ex.
+//! Port of `lib/mydia/library/file_ranking.ex`.
 //!
 //! Used wherever a caller names a movie or an episode rather than a specific
 //! file. Ranking is deliberately device-blind: it always prefers the highest
@@ -44,7 +44,7 @@ pub fn resolution_pixels(resolution: Option<&str>) -> u32 {
     parse_trailing_number(&key)
 }
 
-/// Port of the `(\d+)[pi]?$` fallback (file_ranking.ex:46). Deliberately
+/// Port of the `(\d+)[pi]?$` fallback (`file_ranking.ex:46`). Deliberately
 /// unanchored at the start, so "1920x1080" answers 1080.
 fn parse_trailing_number(key: &str) -> u32 {
     let digits: String = key

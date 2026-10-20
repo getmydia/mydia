@@ -17,7 +17,7 @@ pub async fn convert(source: &str, format: &str) -> Result<Vec<u8>, StreamingErr
 /// Pulls one subtitle stream out of a video and converts it.
 ///
 /// `stream_index` is the *global* ffprobe stream index, which is what Slice
-/// 2a stored as the track id (ffprobe.rs subtitle_tracks) and what
+/// 2a stored as the track id (ffprobe.rs `subtitle_tracks`) and what
 /// extractor.ex:250 maps with.
 pub async fn extract_embedded(
     video: &str,

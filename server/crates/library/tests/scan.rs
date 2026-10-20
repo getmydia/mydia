@@ -27,12 +27,15 @@ fn synthesize(root: &Path, relative: &str) -> bool {
         ])
         .arg(&path)
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .is_ok_and(|s| s.success())
 }
 
 /// Synthesizes every relative path, or skips the calling test when any encode
 /// fails. Returns true when the fixtures are ready.
+#[expect(
+    clippy::print_stderr,
+    reason = "a skipped test has no tracing subscriber, and the notice must reach the test log"
+)]
 fn synthesize_all(root: &Path, relatives: &[&str]) -> bool {
     for relative in relatives {
         if !synthesize(root, relative) {
@@ -362,7 +365,7 @@ async fn the_library_path_records_when_it_was_scanned() {
 
 #[tokio::test]
 async fn the_scan_records_sidecar_subtitles_next_to_a_video() {
-    let (db, _guard) = mydia_db::pool::connect_temp().await.unwrap();
+    let (db, _guard) = connect_temp().await.unwrap();
     let media = tempfile::tempdir().unwrap();
 
     // A real video is required: probe failure skips persist, so a zero-byte
@@ -373,18 +376,16 @@ async fn the_scan_records_sidecar_subtitles_next_to_a_video() {
     }
     std::fs::write(media.path().join("Film (2019)/Film (2019).eng.srt"), b"1\n").unwrap();
 
-    let rows = mydia_db::library_paths::sync_from_config(
+    let rows = library_paths::sync_from_config(
         &db,
         &[(media.path().display().to_string(), "movies".to_string())],
     )
     .await
     .unwrap();
 
-    mydia_library::scan::scan_library_path(&db, &rows[0])
-        .await
-        .unwrap();
+    scan_library_path(&db, &rows[0]).await.unwrap();
 
-    let file = mydia_db::media_files::find_by_path(
+    let file = media_files::find_by_path(
         &db,
         media
             .path()

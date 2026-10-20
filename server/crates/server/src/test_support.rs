@@ -13,7 +13,7 @@ use mydia_db::users::{create, NewUser};
 pub const TEST_SECRET: &[u8] = b"test-secret-that-is-long-enough-for-hs256";
 
 /// Builds a router backed by a throwaway database holding one user. Hold the
-/// returned TempDir for the duration of the test.
+/// returned `TempDir` for the duration of the test.
 pub async fn app_with_user(username: &str, password: &str) -> (Router, tempfile::TempDir) {
     let (db, guard) = mydia_db::pool::connect_temp().await.unwrap();
 
@@ -68,7 +68,7 @@ pub async fn post_graphql_authed(app: Router, query: &str, token: &str) -> serde
 /// Builds a router over a database seeded with one user and one library path,
 /// scans that path, and returns an access token for the user.
 ///
-/// Hold the returned TempDir for the duration of the test: dropping it deletes
+/// Hold the returned `TempDir` for the duration of the test: dropping it deletes
 /// the database.
 pub async fn app_over_library(
     username: &str,

@@ -100,8 +100,7 @@ pub fn walk(root: &Path) -> Result<Vec<VideoFile>, LibraryError> {
         let mtime = metadata
             .modified()
             .ok()
-            .map(DateTime::<Utc>::from)
-            .unwrap_or_else(Utc::now);
+            .map_or_else(Utc::now, DateTime::<Utc>::from);
 
         found.push(VideoFile {
             path: path.to_path_buf(),
@@ -118,8 +117,7 @@ pub fn walk(root: &Path) -> Result<Vec<VideoFile>, LibraryError> {
 fn has_video_extension(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .map(|e| VIDEO_EXTENSIONS.contains(&e.to_lowercase().as_str()))
-        .unwrap_or(false)
+        .is_some_and(|e| VIDEO_EXTENSIONS.contains(&e.to_lowercase().as_str()))
 }
 
 /// A file whose stem carries a sample marker as its own token, separated by

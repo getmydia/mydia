@@ -2,11 +2,11 @@
 //! input.
 //!
 //! The 17 types owned by this module (keep in sync with
-//! tests/types_common.rs): Node, NodeEdge, NodeConnection, PageInfo,
-//! SortInput, and the enums MediaType, SearchResultType,
-//! LibraryType, SortField, SortDirection, MediaCategory, SubtitleFormat,
-//! StreamingStrategy, StreamingCandidateStrategy, SegmentType,
-//! MediaStreamType, PlaylistMode.
+//! `tests/types_common.rs)`: Node, `NodeEdge`, `NodeConnection`, `PageInfo`,
+//! `SortInput`, and the enums `MediaType`, `SearchResultType`,
+//! `LibraryType`, `SortField`, `SortDirection`, `MediaCategory`, `SubtitleFormat`,
+//! `StreamingStrategy`, `StreamingCandidateStrategy`, `SegmentType`,
+//! `MediaStreamType`, `PlaylistMode`.
 
 use async_graphql::{Enum, InputObject, Interface, Object, SimpleObject, ID};
 
@@ -171,6 +171,10 @@ pub enum PlaylistMode {
 
 /// Renders just this group's types as SDL, so the group can be compared
 /// against the contract before the whole schema exists.
+#[expect(
+    clippy::used_underscore_binding,
+    reason = "the #[Object] macro reads the stub resolver arguments, which are named with a leading underscore"
+)]
 pub fn sdl_fragment() -> String {
     use async_graphql::{EmptyMutation, EmptySubscription, Schema};
 

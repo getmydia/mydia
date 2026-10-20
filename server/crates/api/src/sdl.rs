@@ -266,21 +266,21 @@ mod tests {
 
     #[test]
     fn ordering_differences_are_erased() {
-        let a = r#"
+        let a = r"
             type Movie { id: ID! title: String! }
             type Show { id: ID! }
-        "#;
-        let b = r#"
+        ";
+        let b = r"
             type Show { id: ID! }
             type Movie { title: String! id: ID! }
-        "#;
+        ";
 
         assert_eq!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn descriptions_are_ignored() {
-        let a = r#"type Movie { id: ID! }"#;
+        let a = r"type Movie { id: ID! }";
         let b = r#""A movie" type Movie { "The id" id: ID! }"#;
 
         assert_eq!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
@@ -288,16 +288,16 @@ mod tests {
 
     #[test]
     fn a_missing_field_survives_canonicalization() {
-        let a = r#"type Movie { id: ID! title: String! }"#;
-        let b = r#"type Movie { id: ID! }"#;
+        let a = r"type Movie { id: ID! title: String! }";
+        let b = r"type Movie { id: ID! }";
 
         assert_ne!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn a_changed_nullability_survives_canonicalization() {
-        let a = r#"type Movie { title: String! }"#;
-        let b = r#"type Movie { title: String }"#;
+        let a = r"type Movie { title: String! }";
+        let b = r"type Movie { title: String }";
 
         assert_ne!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
@@ -309,13 +309,13 @@ mod tests {
 
     #[test]
     fn builtin_directive_definitions_do_not_survive_canonicalization() {
-        let with_builtins = r#"
+        let with_builtins = r"
             directive @skip(if: Boolean!) on FIELD
             directive @include(if: Boolean!) on FIELD
             directive @specifiedBy(url: String!) on SCALAR
             type Movie { id: ID! }
-        "#;
-        let without_builtins = r#"type Movie { id: ID! }"#;
+        ";
+        let without_builtins = r"type Movie { id: ID! }";
 
         assert_eq!(
             canonicalize(with_builtins).unwrap(),
@@ -325,11 +325,11 @@ mod tests {
 
     #[test]
     fn a_custom_directive_definition_still_survives_canonicalization() {
-        let with_custom = r#"
+        let with_custom = r"
             directive @auth on FIELD_DEFINITION
             type Movie { id: ID! }
-        "#;
-        let without_custom = r#"type Movie { id: ID! }"#;
+        ";
+        let without_custom = r"type Movie { id: ID! }";
 
         assert_ne!(
             canonicalize(with_custom).unwrap(),
@@ -339,8 +339,8 @@ mod tests {
 
     #[test]
     fn directive_definition_differences_survive_canonicalization() {
-        let a = r#"directive @auth on FIELD_DEFINITION"#;
-        let b = r#"directive @auth on OBJECT"#;
+        let a = r"directive @auth on FIELD_DEFINITION";
+        let b = r"directive @auth on OBJECT";
 
         assert_ne!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
@@ -360,126 +360,126 @@ mod tests {
 
     #[test]
     fn attached_type_directives_survive_canonicalization() {
-        let a = r#"type Movie @deprecated { id: ID! }"#;
-        let b = r#"type Movie { id: ID! }"#;
+        let a = r"type Movie @deprecated { id: ID! }";
+        let b = r"type Movie { id: ID! }";
 
         assert_ne!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn attached_field_directives_survive_canonicalization() {
-        let a = r#"type Query { movie: Movie @deprecated }"#;
-        let b = r#"type Query { movie: Movie }"#;
+        let a = r"type Query { movie: Movie @deprecated }";
+        let b = r"type Query { movie: Movie }";
 
         assert_ne!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn attached_argument_directives_survive_canonicalization() {
-        let a = r#"type Query { movie(id: ID! @deprecated): Movie }"#;
-        let b = r#"type Query { movie(id: ID!): Movie }"#;
+        let a = r"type Query { movie(id: ID! @deprecated): Movie }";
+        let b = r"type Query { movie(id: ID!): Movie }";
 
         assert_ne!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn attached_enum_value_directives_survive_canonicalization() {
-        let a = r#"enum Role { ADMIN @deprecated USER }"#;
-        let b = r#"enum Role { ADMIN USER }"#;
+        let a = r"enum Role { ADMIN @deprecated USER }";
+        let b = r"enum Role { ADMIN USER }";
 
         assert_ne!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn attached_input_field_directives_survive_canonicalization() {
-        let a = r#"input Filter { term: String @deprecated }"#;
-        let b = r#"input Filter { term: String }"#;
+        let a = r"input Filter { term: String @deprecated }";
+        let b = r"input Filter { term: String }";
 
         assert_ne!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn field_argument_defaults_survive_canonicalization() {
-        let a = r#"type Query { movies(first: Int = 10): [Movie!]! }"#;
-        let b = r#"type Query { movies(first: Int = 20): [Movie!]! }"#;
+        let a = r"type Query { movies(first: Int = 10): [Movie!]! }";
+        let b = r"type Query { movies(first: Int = 20): [Movie!]! }";
 
         assert_ne!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn input_field_defaults_survive_canonicalization() {
-        let a = r#"input Page { size: Int = 10 }"#;
-        let b = r#"input Page { size: Int = 20 }"#;
+        let a = r"input Page { size: Int = 10 }";
+        let b = r"input Page { size: Int = 20 }";
 
         assert_ne!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn default_value_ordering_is_erased() {
-        let a = r#"input Page { size: Int = 10 offset: Int = 0 }"#;
-        let b = r#"input Page { offset: Int = 0 size: Int = 10 }"#;
+        let a = r"input Page { size: Int = 10 offset: Int = 0 }";
+        let b = r"input Page { offset: Int = 0 size: Int = 10 }";
 
         assert_eq!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn schema_block_differences_survive_canonicalization() {
-        let a = r#"
+        let a = r"
             schema { query: QueryA }
             type QueryA { ok: Boolean! }
-        "#;
-        let b = r#"
+        ";
+        let b = r"
             schema { query: QueryB }
             type QueryB { ok: Boolean! }
-        "#;
+        ";
 
         assert_ne!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn schema_block_ordering_is_erased() {
-        let a = r#"
+        let a = r"
             schema { query: Query mutation: Mutation subscription: Sub }
             type Query { ok: Boolean! }
             type Mutation { ok: Boolean! }
             type Sub { ok: Boolean! }
-        "#;
-        let b = r#"
+        ";
+        let b = r"
             schema { subscription: Sub mutation: Mutation query: Query }
             type Sub { ok: Boolean! }
             type Mutation { ok: Boolean! }
             type Query { ok: Boolean! }
-        "#;
+        ";
 
         assert_eq!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn nested_object_value_field_ordering_is_erased() {
-        let a = r#"
+        let a = r"
             input Page { filter: FilterInput = { a: 1, b: 2 } }
             input FilterInput { x: Int }
-        "#;
-        let b = r#"
+        ";
+        let b = r"
             input Page { filter: FilterInput = { b: 2, a: 1 } }
             input FilterInput { x: Int }
-        "#;
+        ";
 
         assert_eq!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }
 
     #[test]
     fn nested_object_value_in_directive_args_ordering_is_erased() {
-        let a = r#"
+        let a = r"
             directive @config(value: ConfigInput!) on FIELD_DEFINITION
             input ConfigInput { a: Int b: Int }
             type Query { f: Int @config(value: { a: 1, b: 2 }) }
-        "#;
-        let b = r#"
+        ";
+        let b = r"
             directive @config(value: ConfigInput!) on FIELD_DEFINITION
             input ConfigInput { a: Int b: Int }
             type Query { f: Int @config(value: { b: 2, a: 1 }) }
-        "#;
+        ";
 
         assert_eq!(canonicalize(a).unwrap(), canonicalize(b).unwrap());
     }

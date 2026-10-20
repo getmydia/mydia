@@ -46,6 +46,10 @@ pub async fn serve(
     };
 
     // An external track id is a uuid; an embedded one is a stream index.
+    #[expect(
+        clippy::match_same_arms,
+        reason = "the guarded arm between the two NOT_FOUND arms means they cannot be merged without changing which arm a row hits"
+    )]
     let bytes = match mydia_db::external_subtitles::find(&state.db, &track_id).await {
         Ok(Some(sub)) if sub.media_file_id == file.id => {
             mydia_streaming::subtitles::convert(&sub.path, format).await

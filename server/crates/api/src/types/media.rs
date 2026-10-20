@@ -1,11 +1,11 @@
 //! Media-shaped types.
 //!
 //! The 18 types owned by this module (keep in sync with
-//! tests/types_media.rs): Movie, TvShow, Season, Episode, ShowNextUp,
-//! MovieEdge, MovieConnection, TvShowEdge, TvShowConnection, Artwork,
-//! CastMember, MediaFile, MediaStream, MediaSegment, Progress, LibraryPath,
-//! RecentlyAddedItem, SubtitleTrack, SubtitleCandidate, SubtitleProviderStatus,
-//! SubtitleSearchPayload, SubtitleTrackSetting.
+//! `tests/types_media.rs)`: Movie, `TvShow`, Season, Episode, `ShowNextUp`,
+//! `MovieEdge`, `MovieConnection`, `TvShowEdge`, `TvShowConnection`, Artwork,
+//! `CastMember`, `MediaFile`, `MediaStream`, `MediaSegment`, Progress, `LibraryPath`,
+//! `RecentlyAddedItem`, `SubtitleTrack`, `SubtitleCandidate`, `SubtitleProviderStatus`,
+//! `SubtitleSearchPayload`, `SubtitleTrackSetting`.
 
 use async_graphql::{
     ComplexObject, Enum, InputValueError, InputValueResult, Scalar, ScalarType, SimpleObject,
@@ -89,7 +89,7 @@ pub struct SubtitleTrack {
     pub hearing_impaired: bool,
     /// The file this track belongs to. Not part of the contract; the URL
     /// resolver needs it. The Elixir resolver does the same thing by stuffing
-    /// `_media_file_id` onto the track map (subtitle_resolver.ex:31).
+    /// `_media_file_id` onto the track map (`subtitle_resolver.ex:31`).
     #[graphql(skip)]
     pub media_file_id: String,
 }
@@ -99,7 +99,7 @@ impl SubtitleTrack {
     /// common_types.ex:394-406. Note the prefix: subtitles live under
     /// /api/player/v1, not the /api/v1 the stream URLs use.
     ///
-    /// Every SubtitleFormat variant is matched: Elixir's Atom.to_string/1
+    /// Every `SubtitleFormat` variant is matched: Elixir's `Atom.to_string/1`
     /// lowercases the enum atom into the query value, including ssa/pgs/
     /// vobsub/unknown which the plan's three-arm match omitted.
     async fn url(&self, format: Option<SubtitleFormat>) -> Option<String> {
@@ -142,7 +142,7 @@ impl SubtitleTrack {
 
 /// One subtitle a provider is offering, before it has been downloaded.
 ///
-/// common_types.ex:`:subtitle_candidate`. Acquisition is not this server's
+/// `common_types.ex`:`:subtitle_candidate`. Acquisition is not this server's
 /// job (it grabs no media), so nothing here is ever constructed. The type
 /// exists because the player talks to both servers and GraphQL rejects an
 /// entire query containing an unknown field, so the shape has to match even
@@ -163,7 +163,7 @@ pub struct SubtitleCandidate {
 
 /// What one provider had to say about a search.
 ///
-/// common_types.ex:`:subtitle_provider_status`.
+/// `common_types.ex`:`:subtitle_provider_status`.
 #[derive(SimpleObject)]
 pub struct SubtitleProviderStatus {
     pub name: String,
@@ -174,7 +174,7 @@ pub struct SubtitleProviderStatus {
 
 /// Results of a subtitle search across every enabled provider.
 ///
-/// common_types.ex:`:subtitle_search_payload`.
+/// `common_types.ex`:`:subtitle_search_payload`.
 #[derive(SimpleObject)]
 pub struct SubtitleSearchPayload {
     pub results: Vec<SubtitleCandidate>,
@@ -183,7 +183,7 @@ pub struct SubtitleSearchPayload {
 
 /// A stored timing correction for one subtitle track.
 ///
-/// common_types.ex:`:subtitle_track_setting`. This server stores no subtitle
+/// `common_types.ex`:`:subtitle_track_setting`. This server stores no subtitle
 /// corrections, so `subtitleTrackSettings` always answers an empty list, which
 /// is indistinguishable from "nothing has been corrected" and needs no special
 /// handling on the client.
@@ -195,8 +195,8 @@ pub struct SubtitleTrackSetting {
 
 /// Whether a remembered subtitle choice names a track or turns subtitles off.
 ///
-/// common_types.ex:`:subtitle_preference_mode`. async-graphql spells enum
-/// values in SCREAMING_SNAKE_CASE, which is the spelling the contract uses
+/// `common_types.ex`:`:subtitle_preference_mode`. async-graphql spells enum
+/// values in `SCREAMING_SNAKE_CASE`, which is the spelling the contract uses
 /// (`OFF`, `TRACK`), so no rename attribute is needed.
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
 pub enum SubtitlePreferenceMode {
@@ -226,7 +226,7 @@ pub struct SubtitlePreference {
 
 /// Outcome of remembering a viewer's subtitle choice.
 ///
-/// common_types.ex:`:subtitle_preference_result`.
+/// `common_types.ex`:`:subtitle_preference_result`.
 #[derive(SimpleObject)]
 pub struct SubtitlePreferenceResult {
     pub media_item_id: ID,
@@ -339,7 +339,7 @@ pub struct RecentlyAddedItem {
     pub tmdb_id: Option<i32>,
     /// TVDB id of the movie or show. Null for episodes and collections.
     pub tvdb_id: Option<i32>,
-    /// IMDb id of the movie or show. Null for episodes and collections.
+    /// `IMDb` id of the movie or show. Null for episodes and collections.
     pub imdb_id: Option<String>,
     pub watch_status: Option<WatchStatus>,
 }
@@ -565,6 +565,10 @@ pub struct TvShowConnection {
 
 #[derive(SimpleObject)]
 #[graphql(complex)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "fields mirror the GraphQL LibraryPath type"
+)]
 pub struct LibraryPath {
     pub id: ID,
     #[graphql(skip)]

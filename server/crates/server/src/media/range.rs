@@ -59,6 +59,10 @@ pub fn parse(header: Option<&str>, size: u64) -> Range {
 }
 
 /// range_helper.ex:104-121.
+#[expect(
+    clippy::match_same_arms,
+    reason = "the explicit arms document the supported extensions; the wildcard is the documented fallback"
+)]
 pub fn mime_for(path: &str) -> &'static str {
     let ext = path.rsplit_once('.').map(|(_, e)| e.to_lowercase());
 

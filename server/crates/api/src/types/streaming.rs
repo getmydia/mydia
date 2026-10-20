@@ -1,9 +1,9 @@
 //! Streaming and download types.
 //!
-//! Types owned by this module (keep in sync with tests/types_remaining.rs):
-//! StreamingCandidatesResult, StreamingCandidate, StreamingMetadata,
-//! StreamingSessionResult, DownloadOption, PrepareDownloadResult,
-//! DownloadJobStatus, CancelDownloadResult.
+//! Types owned by this module (keep in sync with `tests/types_remaining.rs)`:
+//! `StreamingCandidatesResult`, `StreamingCandidate`, `StreamingMetadata`,
+//! `StreamingSessionResult`, `DownloadOption`, `PrepareDownloadResult`,
+//! `DownloadJobStatus`, `CancelDownloadResult`.
 
 use async_graphql::{SimpleObject, ID};
 

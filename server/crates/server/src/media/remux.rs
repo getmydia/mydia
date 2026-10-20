@@ -5,7 +5,7 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use mydia_db::media_files::MediaFileRow;
 
-pub async fn serve(row: &MediaFileRow) -> Response {
+pub fn serve(row: &MediaFileRow) -> Response {
     match mydia_streaming::remux::start(&row.path, row.duration_seconds) {
         Ok(stream) => (
             StatusCode::OK,

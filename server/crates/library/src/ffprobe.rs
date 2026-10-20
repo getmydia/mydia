@@ -1,6 +1,6 @@
 //! ffprobe as a subprocess.
 //!
-//! The mapping functions below are ports of lib/mydia/library/file_analyzer.ex.
+//! The mapping functions below are ports of `lib/mydia/library/file_analyzer.ex`.
 //! They must produce byte-identical strings, because the conformance suite
 //! compares MediaFile.resolution, codec, audioCodec and hdrFormat between the
 //! Elixir server and this one.
@@ -13,7 +13,7 @@ use serde_json::Value;
 
 use crate::LibraryError;
 
-/// Matches the Elixir default (file_analyzer.ex:59). Slow network mounts are
+/// Matches the Elixir default (`file_analyzer.ex:59`). Slow network mounts are
 /// the reason this is generous.
 const TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -223,7 +223,7 @@ fn effective_height(width: Option<i64>, height: i64) -> i64 {
     }
 }
 
-/// Port of file_analyzer.ex's extract_video_codec (lines 389-441).
+/// Port of `file_analyzer.ex`'s `extract_video_codec` (lines 389-441).
 fn video_codec(stream: &Value) -> Option<String> {
     let name = stream.get("codec_name").and_then(Value::as_str)?;
     let profile = stream.get("profile").and_then(Value::as_str);
@@ -256,7 +256,7 @@ fn video_codec(stream: &Value) -> Option<String> {
     Some(label)
 }
 
-/// Port of file_analyzer.ex's extract_audio_codec (lines 443-522). The codec
+/// Port of `file_analyzer.ex`'s `extract_audio_codec` (lines 443-522). The codec
 /// label and the channel label are joined with a space, and a missing channel
 /// count leaves the codec alone.
 fn audio_codec(stream: &Value) -> Option<String> {
@@ -313,7 +313,7 @@ fn audio_codec(stream: &Value) -> Option<String> {
 /// does not compute or expose. `display/1` itself gates only on whether
 /// `dv_profile` is present (`Hdr.dolby_vision?/1`), unconditionally, before
 /// ever consulting a base -- so every Dolby Vision variant, including profile
-/// 5 (whose IPTPQc2 base layer is not HDR10-decodable even though it signals
+/// 5 (whose `IPTPQc2` base layer is not HDR10-decodable even though it signals
 /// smpte2084), reports "Dolby Vision" here too.
 ///
 /// The old bt2020-primaries-means-HDR rule is deleted, not ported: wide gamut
@@ -370,7 +370,7 @@ fn bitrate(video: Option<&Value>, format: Option<&Value>) -> Option<i64> {
     read(video).or_else(|| read(format))
 }
 
-/// Port of file_analyzer.ex's extract_container / normalize_container_name
+/// Port of `file_analyzer.ex`'s `extract_container` / `normalize_container_name`
 /// (lines 282-314). ffprobe reports comma-separated aliases (for example
 /// `"mov,mp4,m4a,3gp,3g2,mj2"`); the first one is the canonical name before
 /// the alias table collapses containers that share a demuxer.
@@ -392,11 +392,9 @@ fn container_name(format: &Value) -> Option<String> {
 /// contract's SubtitleTrack.format carries format names ("srt").
 fn normalize_subtitle_format(codec_name: &str) -> String {
     match codec_name {
-        "subrip" => "srt",
-        "ass" => "ass",
+        "subrip" | "mov_text" => "srt",
         "ssa" => "ass",
         "webvtt" => "vtt",
-        "mov_text" => "srt",
         "dvd_subtitle" => "vobsub",
         "hdmv_pgs_subtitle" => "pgs",
         other => other,

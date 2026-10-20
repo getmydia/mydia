@@ -43,18 +43,23 @@ struct StoredSubtitleTrack {
 }
 
 /// The Elixir server encodes a season's global id as `season:<show>:<n>`
-/// (lib/mydia_web/schema/resolvers/node_id.ex:24). Every other type uses its
+/// (`lib/mydia_web/schema/resolvers/node_id.ex:24`). Every other type uses its
 /// raw row id.
 pub fn season_node_id(show_id: &str, season_number: i64) -> String {
     format!("season:{show_id}:{season_number}")
 }
 
 fn timestamp(raw: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(raw)
-        .map(|value| value.with_timezone(&Utc))
-        .unwrap_or_else(|_| Utc.timestamp_opt(0, 0).single().unwrap_or_else(Utc::now))
+    DateTime::parse_from_rfc3339(raw).map_or_else(
+        |_| Utc.timestamp_opt(0, 0).single().unwrap_or_else(Utc::now),
+        |value| value.with_timezone(&Utc),
+    )
 }
 
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the GraphQL field is nullable and callers assign the Option directly"
+)]
 fn artwork(item: &MediaItemRow) -> Option<Artwork> {
     Some(Artwork {
         poster_url: item.poster_url.clone(),
@@ -195,12 +200,16 @@ pub fn media_file_from(row: &MediaFileRow, external: &[ExternalSubtitleRow]) -> 
     }
 }
 
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the GraphQL list field is nullable and callers assign the Option directly"
+)]
 fn files_of(files: &[MediaFileRow], externals: &ExternalsByFile) -> Option<Vec<Option<MediaFile>>> {
     Some(
         files
             .iter()
             .map(|f| {
-                let external = externals.get(&f.id).map(Vec::as_slice).unwrap_or(&[]);
+                let external = externals.get(&f.id).map_or(&[][..], Vec::as_slice);
                 Some(media_file_from(f, external))
             })
             .collect(),

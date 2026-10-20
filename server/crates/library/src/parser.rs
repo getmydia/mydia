@@ -16,7 +16,10 @@ pub enum LibraryKind {
 }
 
 impl LibraryKind {
-    #[allow(clippy::should_implement_trait)]
+    #[allow(
+        clippy::should_implement_trait,
+        reason = "returns Option, not Result, so FromStr does not fit"
+    )]
     pub fn from_str(value: &str) -> Option<Self> {
         match value {
             "movies" => Some(Self::Movies),
@@ -154,7 +157,7 @@ fn last_year_match(name: &str) -> Option<(usize, i32)> {
 }
 
 /// Leading quality tokens, matched one at a time so a run of them can be
-/// consumed. "1080p BluRay" is not a title; "Blade Runner" is.
+/// consumed. "1080p `BluRay`" is not a title; "Blade Runner" is.
 static QUALITY_TOKEN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?i)^(\d{3,4}p|4k|uhd|hdr\d*|bluray|blu-ray|web-?dl|webrip|hdtv|dvdrip|remux|x26[45]|h\.?26[45]|hevc|avc|aac|dts|proper|repack)([\s._-]+|$)",

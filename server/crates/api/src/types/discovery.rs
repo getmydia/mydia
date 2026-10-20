@@ -1,9 +1,9 @@
 //! Discovery, search and remote access types.
 //!
-//! Types owned by this module (keep in sync with tests/types_remaining.rs):
-//! ContinueWatchingItem, RemoveFromContinueWatchingResult, RecentlyAddedItem,
-//! UpNextItem, Collection, SearchResult, SearchSection, SearchResults,
-//! RemoteAccessStatus, ServerCompatibility, CalendarEntry, CalendarEntryKind.
+//! Types owned by this module (keep in sync with `tests/types_remaining.rs)`:
+//! `ContinueWatchingItem`, `RemoveFromContinueWatchingResult`, `RecentlyAddedItem`,
+//! `UpNextItem`, Collection, `SearchResult`, `SearchSection`, `SearchResults`,
+//! `RemoteAccessStatus`, `ServerCompatibility`, `CalendarEntry`, `CalendarEntryKind`.
 
 use async_graphql::{Enum, SimpleObject, ID};
 use chrono::{DateTime, Utc};
@@ -36,7 +36,7 @@ pub struct ContinueWatchingItem {
     pub tmdb_id: Option<i32>,
     /// TVDB id of the movie or show. Null for episodes and collections.
     pub tvdb_id: Option<i32>,
-    /// IMDb id of the movie or show. Null for episodes and collections.
+    /// `IMDb` id of the movie or show. Null for episodes and collections.
     pub imdb_id: Option<String>,
 }
 
@@ -82,7 +82,7 @@ pub struct SearchResult {
     pub tmdb_id: Option<i32>,
     /// TVDB id of the movie or show. Null for episodes and collections.
     pub tvdb_id: Option<i32>,
-    /// IMDb id of the movie or show. Null for episodes and collections.
+    /// `IMDb` id of the movie or show. Null for episodes and collections.
     pub imdb_id: Option<String>,
 }
 

@@ -8,7 +8,7 @@
 use std::path::Path;
 
 /// Extensions carried, matching what the release-name tokenizer already knows
-/// about (release_parser/tokenizer.ex:119).
+/// about (`release_parser/tokenizer.ex:119`).
 const SUBTITLE_EXTENSIONS: &[&str] = &["srt", "ass", "ssa", "sub", "vtt"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,7 +70,7 @@ fn split_language(rest: &str) -> Option<(String, String)> {
 }
 
 /// ssa and ass are the same format, and the embedded path already collapses
-/// them (ffprobe.rs normalize_subtitle_format).
+/// them (ffprobe.rs `normalize_subtitle_format`).
 fn normalize(ext: &str) -> String {
     match ext.to_lowercase().as_str() {
         "ssa" => "ass".to_string(),

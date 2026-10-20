@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use chrono::Utc;
 
 use crate::{Db, DbError};
@@ -69,7 +71,7 @@ pub async fn list_for_file(
 /// Loads external subtitles for many files at once.
 ///
 /// A show detail query holds every file of every episode, so asking per file
-/// turns one request into one query per episode. Chunked because SQLite caps
+/// turns one request into one query per episode. Chunked because `SQLite` caps
 /// bound parameters per statement, and a large enough library would otherwise
 /// fail on the limit rather than merely being slow.
 pub async fn list_for_files(
@@ -128,7 +130,7 @@ pub async fn prune_for_file(db: &Db, media_file_id: &str, keep: &[String]) -> Re
     let mut query = String::from("DELETE FROM external_subtitles WHERE media_file_id = ?1");
 
     for index in 0..keep.len() {
-        query.push_str(&format!(" AND path <> ?{}", index + 2));
+        let _ = write!(query, " AND path <> ?{}", index + 2);
     }
 
     // Safe: the appended fragments are `AND path <> ?N` markers, one per

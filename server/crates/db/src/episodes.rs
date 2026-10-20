@@ -83,7 +83,7 @@ pub async fn list_for_show(db: &Db, show_id: &str) -> Result<Vec<EpisodeRow>, Db
         .await?)
 }
 
-/// Ordered by episode number, matching browse_resolver.ex:154.
+/// Ordered by episode number, matching `browse_resolver.ex:154`.
 pub async fn list_for_season(
     db: &Db,
     show_id: &str,

@@ -16,7 +16,7 @@ struct Case {
     kind: LibraryKind,
     title: &'static str,
     year: Option<i32>,
-    /// None for a movie, Some((season, episode, episode_end)) otherwise.
+    /// None for a movie, Some((season, episode, `episode_end`)) otherwise.
     episode: Option<(i32, i32, Option<i32>)>,
 }
 
@@ -252,41 +252,31 @@ fn tier_b_corpus_pass_count_does_not_regress() {
         // The corpus holds bare release names, not paths, and covers both
         // movies and series, so Mixed is the only honest library kind here.
         let path = root.join(format!("{}.mkv", case.input));
-        let parsed = parse(&path, root, LibraryKind::Mixed);
+        let result = parse(&path, root, LibraryKind::Mixed);
 
-        let ok = match &parsed {
+        let ok = match &result {
             None => false,
-            Some(parsed) => {
+            Some(hit) => {
                 let title_ok = case
                     .expected
                     .title
                     .as_ref()
-                    .map(|want| normalize(&parsed.title) == normalize(want))
-                    .unwrap_or(true);
+                    .is_none_or(|want| normalize(&hit.title) == normalize(want));
 
-                let year_ok = case
-                    .expected
-                    .year
-                    .map(|want| parsed.year == Some(want))
-                    .unwrap_or(true);
+                let year_ok = case.expected.year.is_none_or(|want| hit.year == Some(want));
 
-                let (season, episode) = match parsed.kind {
+                let (season, episode) = match hit.kind {
                     ParsedKind::Movie => (None, None),
                     ParsedKind::Episode {
                         season, episode, ..
                     } => (Some(season), Some(episode)),
                 };
 
-                let season_ok = case
-                    .expected
-                    .season
-                    .map(|want| season == Some(want))
-                    .unwrap_or(true);
+                let season_ok = case.expected.season.is_none_or(|want| season == Some(want));
                 let episode_ok = case
                     .expected
                     .episode
-                    .map(|want| episode == Some(want))
-                    .unwrap_or(true);
+                    .is_none_or(|want| episode == Some(want));
 
                 title_ok && year_ok && season_ok && episode_ok
             }

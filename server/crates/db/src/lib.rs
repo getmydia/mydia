@@ -1,4 +1,4 @@
-//! SQLite storage for Mydia Server.
+//! `SQLite` storage for Mydia Server.
 //!
 //! This crate is the only one that writes application SQL. Background job
 //! queue tables are managed by apalis in a later slice.

@@ -75,5 +75,5 @@ fn bearer(headers: &HeaderMap) -> Option<String> {
         .to_str()
         .ok()?
         .strip_prefix("Bearer ")
-        .map(|s| s.to_string())
+        .map(ToString::to_string)
 }
