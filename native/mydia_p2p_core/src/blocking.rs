@@ -25,7 +25,7 @@ pub fn get_network_stats(host: &Host) -> NetworkStats {
 
 /// Stop the host and wait until its endpoint is closed.
 pub fn shutdown(host: &Host) {
-    block_on(host.shutdown())
+    block_on(host.shutdown());
 }
 
 pub fn send_response(

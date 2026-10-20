@@ -116,7 +116,7 @@ impl std::error::Error for PairingSealError {}
 pub fn normalize_code(code: &str) -> String {
     code.chars()
         .filter(|c| !c.is_whitespace() && *c != '-')
-        .flat_map(|c| c.to_uppercase())
+        .flat_map(char::to_uppercase)
         .collect()
 }
 
@@ -291,13 +291,11 @@ mod tests {
     #[test]
     fn tampered_ciphertext_fails_the_tag() {
         let sealed = seal_claim("K7RPM2", &payload()).unwrap();
-        let mut raw = base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .decode(&sealed.sealed)
-            .unwrap();
+        let mut raw = URL_SAFE_NO_PAD.decode(&sealed.sealed).unwrap();
         // Flip a bit well past the nonce so the AEAD tag is what rejects it.
         let last = raw.len() - 1;
         raw[last] ^= 0x01;
-        let tampered = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&raw);
+        let tampered = URL_SAFE_NO_PAD.encode(&raw);
         assert_eq!(
             open_claim("K7RPM2", &tampered).unwrap_err(),
             PairingSealError::Open
@@ -306,7 +304,7 @@ mod tests {
 
     #[test]
     fn truncated_blob_is_rejected_before_decrypting() {
-        let short = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0u8; 8]);
+        let short = URL_SAFE_NO_PAD.encode([0u8; 8]);
         assert_eq!(
             open_claim("K7RPM2", &short).unwrap_err(),
             PairingSealError::Decode

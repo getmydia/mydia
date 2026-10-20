@@ -29,6 +29,12 @@
 //! DNS discovery and relay) is also informative and is what Task 1 records
 //! in its report, since a genuine two-machine run isn't available here.
 
+#![expect(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "command-line example"
+)]
+
 use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::env;
 
@@ -84,7 +90,7 @@ async fn main() {
                 .await
             {
                 Ok(MydiaResponse::Custom(bytes)) => {
-                    println!("SUCCESS: got {bytes:?} back from {target_id} via node-ID-only dial")
+                    println!("SUCCESS: got {bytes:?} back from {target_id} via node-ID-only dial");
                 }
                 Ok(other) => println!("unexpected response: {other:?}"),
                 Err(e) => {

@@ -24,10 +24,8 @@ async fn slow_or_unreachable_dial_does_not_block_local_queries() {
     let _addr = wait_for_addr(&host).await;
 
     // Construct an endpoint address pointing to documentation IP 192.0.2.1 with a different node ID
-    let unreachable_addr = format!(
-        r#"{{"id":"{}","addrs":[{{"Ip":"192.0.2.1:12345"}}]}}"#,
-        other_node_id
-    );
+    let unreachable_addr =
+        format!(r#"{{"id":"{other_node_id}","addrs":[{{"Ip":"192.0.2.1:12345"}}]}}"#);
 
     // Spawn the dial in the background (it will take a long time to fail/timeout)
     let dial_host = host.clone();
@@ -93,14 +91,14 @@ async fn concurrent_dials_to_valid_peers_both_succeed() {
     let stats = c.get_network_stats().await;
     assert_eq!(stats.connected_peers, 2);
 
-    let resp1 = c
+    let reply_a = c
         .send_request(server1_id, mydia_p2p_core::MydiaRequest::Ping)
         .await
         .unwrap();
-    let resp2 = c
+    let reply_b = c
         .send_request(server2_id, mydia_p2p_core::MydiaRequest::Ping)
         .await
         .unwrap();
-    assert!(matches!(resp1, mydia_p2p_core::MydiaResponse::Pong));
-    assert!(matches!(resp2, mydia_p2p_core::MydiaResponse::Pong));
+    assert!(matches!(reply_a, mydia_p2p_core::MydiaResponse::Pong));
+    assert!(matches!(reply_b, mydia_p2p_core::MydiaResponse::Pong));
 }

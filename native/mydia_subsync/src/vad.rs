@@ -34,6 +34,10 @@ pub fn spans_from_flags(flags: &[bool], frame_ms: i64, min_span_ms: i64) -> Vec<
         .chain(std::iter::once(false))
         .enumerate()
     {
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "index counts audio frames, which cannot approach i64::MAX"
+        )]
         let index = index as i64;
 
         match (is_voice, start) {
@@ -59,7 +63,7 @@ pub fn spans_from_flags(flags: &[bool], frame_ms: i64, min_span_ms: i64) -> Vec<
 /// A trailing partial frame is discarded rather than zero padded, because
 /// libfvad rejects any frame that is not exactly 10, 20 or 30ms.
 pub fn voice_spans_from_pcm(path: &str) -> Result<Vec<(i64, i64)>, String> {
-    let file = File::open(path).map_err(|e| format!("cannot open {}: {}", path, e))?;
+    let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
     let mut reader = BufReader::new(file);
     let mut vad = Vad::new_with_rate(SampleRate::Rate8kHz);
 
@@ -67,20 +71,19 @@ pub fn voice_spans_from_pcm(path: &str) -> Result<Vec<(i64, i64)>, String> {
     let mut flags = Vec::new();
 
     loop {
-        match read_exact_or_eof(&mut reader, &mut raw)? {
-            false => break,
-            true => {
-                let samples: Vec<i16> = raw
-                    .chunks_exact(2)
-                    .map(|pair| i16::from_le_bytes([pair[0], pair[1]]))
-                    .collect();
+        if read_exact_or_eof(&mut reader, &mut raw)? {
+            let samples: Vec<i16> = raw
+                .chunks_exact(2)
+                .map(|pair| i16::from_le_bytes([pair[0], pair[1]]))
+                .collect();
 
-                let is_voice = vad
-                    .is_voice_segment(&samples)
-                    .map_err(|_| "vad rejected a frame".to_string())?;
+            let is_voice = vad
+                .is_voice_segment(&samples)
+                .map_err(|()| "vad rejected a frame".to_string())?;
 
-                flags.push(is_voice);
-            }
+            flags.push(is_voice);
+        } else {
+            break;
         }
     }
 
@@ -96,7 +99,7 @@ fn read_exact_or_eof(reader: &mut impl Read, buf: &mut [u8]) -> Result<bool, Str
         match reader.read(&mut buf[filled..]) {
             Ok(0) => return Ok(false),
             Ok(n) => filled += n,
-            Err(e) => return Err(format!("read failed: {}", e)),
+            Err(e) => return Err(format!("read failed: {e}")),
         }
     }
 

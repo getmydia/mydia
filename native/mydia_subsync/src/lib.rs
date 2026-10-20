@@ -16,6 +16,10 @@ mod vad;
 /// Runs on a dirty scheduler: `align_nosplit` is documented as taking up to
 /// roughly 300ms on feature-length input, far past the 1ms budget a normal NIF
 /// may occupy.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value"
+)]
 #[rustler::nif(schedule = "DirtyCpu")]
 fn align(reference: Vec<(i64, i64)>, list: Vec<(i64, i64)>) -> (i64, f64) {
     align::align_spans(&reference, &list)
@@ -25,6 +29,10 @@ fn align(reference: Vec<(i64, i64)>, list: Vec<(i64, i64)>) -> (i64, f64) {
 ///
 /// Returns a list of `{start_ms, end_ms}`. Runs on a dirty scheduler: this
 /// reads and processes the whole audio track of a feature film.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value"
+)]
 #[rustler::nif(schedule = "DirtyCpu")]
 fn voice_spans(pcm_path: String) -> Result<Vec<(i64, i64)>, String> {
     vad::voice_spans_from_pcm(&pcm_path)

@@ -10,6 +10,14 @@
 //! emit the component. Host capabilities are reached through the generated
 //! [`mydia::plugin::host`] module (`http_request`, `data_read`).
 
+// An attribute on the `wit_bindgen::generate!` invocation does not reach the
+// code it expands to, so this one lint is allowed crate-wide. The crate holds
+// no hand-written `Vec::from_raw_parts`, only the generated list lowerings.
+#![allow(
+    clippy::same_length_and_capacity,
+    reason = "fires in wit-bindgen generated list lowering, which cannot be edited or targeted"
+)]
+
 wit_bindgen::generate!({
     world: "plugin",
     // The SDK is a library; downstream plugin crates invoke the export macro it

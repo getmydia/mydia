@@ -121,49 +121,54 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let func = parse_macro_input!(item as ItemFn);
     let fn_name = &func.sig.ident;
 
-    let on_schedule_body = match args.on_schedule {
-        Some(path) => quote! { #path(tick) },
-        None => quote! {
+    let on_schedule_body = if let Some(path) = args.on_schedule {
+        quote! { #path(tick) }
+    } else {
+        quote! {
             ::core::result::Result::Err(
                 ::std::string::String::from("on-schedule not implemented by this plugin"),
             )
-        },
+        }
     };
 
-    let on_http_body = match args.on_http {
-        Some(path) => quote! { #path(req) },
-        None => quote! {
+    let on_http_body = if let Some(path) = args.on_http {
+        quote! { #path(req) }
+    } else {
+        quote! {
             ::core::result::Result::Err(
                 ::std::string::String::from("on-http not implemented by this plugin"),
             )
-        },
+        }
     };
 
-    let setup_body = match args.setup {
-        Some(path) => quote! { #path(req) },
-        None => quote! {
+    let setup_body = if let Some(path) = args.setup {
+        quote! { #path(req) }
+    } else {
+        quote! {
             ::core::result::Result::Err(
                 ::std::string::String::from("setup not implemented by this plugin"),
             )
-        },
+        }
     };
 
-    let check_health_body = match args.check_health {
-        Some(path) => quote! { #path() },
-        None => quote! {
+    let check_health_body = if let Some(path) = args.check_health {
+        quote! { #path() }
+    } else {
+        quote! {
             ::core::result::Result::Err(
                 ::std::string::String::from("check-health not implemented by this plugin"),
             )
-        },
+        }
     };
 
-    let fill_shelf_body = match args.fill_shelf {
-        Some(path) => quote! { #path(req) },
-        None => quote! {
+    let fill_shelf_body = if let Some(path) = args.fill_shelf {
+        quote! { #path(req) }
+    } else {
+        quote! {
             ::core::result::Result::Err(
                 ::std::string::String::from("fill-shelf not implemented by this plugin"),
             )
-        },
+        }
     };
 
     let expanded = quote! {

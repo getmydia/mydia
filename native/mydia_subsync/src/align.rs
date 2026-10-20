@@ -78,6 +78,10 @@ mod tests {
         spans.iter().map(|&(s, e)| (s + by, e + by)).collect()
     }
 
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "test helper over a handful of spans"
+    )]
     fn normalized(score: f64, list: &[(i64, i64)]) -> f64 {
         score / list.len() as f64
     }

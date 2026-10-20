@@ -1,4 +1,4 @@
-//! NIF bindings for mydia_p2p_core (iroh-based)
+//! NIF bindings for `mydia_p2p_core` (iroh-based)
 //!
 //! Provides Erlang/Elixir interop for the p2p networking functionality.
 
@@ -27,18 +27,18 @@ struct HostResource {
 impl rustler::Resource for HostResource {}
 
 /// Start the p2p host with configuration.
-/// relay_urls: Custom relay URLs for NAT traversal, in preference order.
+/// `relay_urls`: Custom relay URLs for NAT traversal, in preference order.
 /// An empty list uses iroh's default relays.
-/// bind_port: UDP port for direct connections (0 or None for random port).
-/// keypair_path: Path to store/load the node's keypair for persistent identity.
-/// Returns (resource, node_id_string).
+/// `bind_port`: UDP port for direct connections (0 or None for random port).
+/// `keypair_path`: Path to store/load the node's keypair for persistent identity.
+/// Returns (resource, `node_id_string`).
 #[rustler::nif]
-fn start_host<'a>(
-    env: Env<'a>,
+fn start_host(
+    env: Env<'_>,
     relay_urls: Vec<String>,
     bind_port: Option<u16>,
     keypair_path: Option<String>,
-) -> Term<'a> {
+) -> Term<'_> {
     let config = HostConfig {
         relay_urls,
         bind_port,
@@ -52,25 +52,37 @@ fn start_host<'a>(
     (resource, node_id_str).encode(env)
 }
 
-/// Dial a peer using their EndpointAddr JSON.
+/// Dial a peer using their `EndpointAddr` JSON.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value; a ResourceArc cannot be taken by reference"
+)]
 #[rustler::nif(schedule = "DirtyIo")]
 fn dial(
     resource: ResourceArc<HostResource>,
     endpoint_addr_json: String,
 ) -> Result<String, rustler::Error> {
     match blocking::dial(&resource.host, endpoint_addr_json) {
-        Ok(_) => Ok("ok".to_string()),
+        Ok(()) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
 }
 
-/// Get this node's EndpointAddr as JSON for sharing.
+/// Get this node's `EndpointAddr` as JSON for sharing.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value; a ResourceArc cannot be taken by reference"
+)]
 #[rustler::nif(schedule = "DirtyIo")]
 fn get_node_addr(resource: ResourceArc<HostResource>) -> String {
     blocking::get_node_addr(&resource.host)
 }
 
 /// Get network statistics.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value; a ResourceArc cannot be taken by reference"
+)]
 #[rustler::nif(schedule = "DirtyIo")]
 fn get_network_stats(resource: ResourceArc<HostResource>) -> ElixirNetworkStats {
     let stats = blocking::get_network_stats(&resource.host);
@@ -158,6 +170,10 @@ enum ElixirResponse {
 }
 
 /// Send a response to an incoming request.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value; a ResourceArc cannot be taken by reference"
+)]
 #[rustler::nif(schedule = "DirtyIo")]
 fn send_response(
     resource: ResourceArc<HostResource>,
@@ -182,15 +198,19 @@ fn send_response(
     };
 
     match blocking::send_response(&resource.host, request_id, core_response) {
-        Ok(_) => Ok("ok".to_string()),
+        Ok(()) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
 }
 
 /// Send an HLS response header for a streaming request.
-/// Must be called before any send_hls_chunk calls.
-/// Uses DirtyIo scheduler because the blocking shim parks the thread until the
+/// Must be called before any `send_hls_chunk` calls.
+/// Uses `DirtyIo` scheduler because the blocking shim parks the thread until the
 /// async Host call completes.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value; a ResourceArc cannot be taken by reference"
+)]
 #[rustler::nif(schedule = "DirtyIo")]
 fn send_hls_header(
     resource: ResourceArc<HostResource>,
@@ -206,15 +226,19 @@ fn send_hls_header(
     };
 
     match blocking::send_hls_header(&resource.host, stream_id, core_header) {
-        Ok(_) => Ok("ok".to_string()),
+        Ok(()) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
 }
 
 /// Send a chunk of HLS data.
-/// Must be called after send_hls_header and before finish_hls_stream.
-/// Uses DirtyIo scheduler because the blocking shim parks the thread until the
+/// Must be called after `send_hls_header` and before `finish_hls_stream`.
+/// Uses `DirtyIo` scheduler because the blocking shim parks the thread until the
 /// async Host call completes.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value; a ResourceArc cannot be taken by reference"
+)]
 #[rustler::nif(schedule = "DirtyIo")]
 fn send_hls_chunk(
     resource: ResourceArc<HostResource>,
@@ -222,22 +246,26 @@ fn send_hls_chunk(
     data: Binary,
 ) -> Result<String, rustler::Error> {
     match blocking::send_hls_chunk(&resource.host, stream_id, data.as_slice().to_vec()) {
-        Ok(_) => Ok("ok".to_string()),
+        Ok(()) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
 }
 
 /// Finish an HLS stream.
 /// Must be called after all chunks have been sent.
-/// Uses DirtyIo scheduler because the blocking shim parks the thread until the
+/// Uses `DirtyIo` scheduler because the blocking shim parks the thread until the
 /// async Host call completes.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value; a ResourceArc cannot be taken by reference"
+)]
 #[rustler::nif(schedule = "DirtyIo")]
 fn finish_hls_stream(
     resource: ResourceArc<HostResource>,
     stream_id: String,
 ) -> Result<String, rustler::Error> {
     match blocking::finish_hls_stream(&resource.host, stream_id) {
-        Ok(_) => Ok("ok".to_string()),
+        Ok(()) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
 }
@@ -245,8 +273,12 @@ fn finish_hls_stream(
 /// Stream a file range directly to a QUIC stream.
 /// Reads the file in Rust and writes length-prefixed chunks, avoiding per-chunk NIF overhead.
 /// The stream is finished automatically after all data is written.
-/// Uses DirtyIo scheduler because the blocking shim parks the thread until the
+/// Uses `DirtyIo` scheduler because the blocking shim parks the thread until the
 /// async Host call completes.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value; a ResourceArc cannot be taken by reference"
+)]
 #[rustler::nif(schedule = "DirtyIo")]
 fn stream_file_range(
     resource: ResourceArc<HostResource>,
@@ -256,14 +288,23 @@ fn stream_file_range(
     length: u64,
 ) -> Result<String, rustler::Error> {
     match blocking::stream_file_range(&resource.host, stream_id, file_path, offset, length) {
-        Ok(_) => Ok("ok".to_string()),
+        Ok(()) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
 }
 
 /// Start listening for events and forward them to the given Elixir process.
+#[expect(
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines,
+    clippy::unnecessary_wraps,
+    reason = "rustler decodes NIF arguments by value; the event forwarding loop is one thread body; the NIF contract returns a Result"
+)]
+#[allow(
+    unused_variables,
+    reason = "the rustler macro looks the parameter up by the name `env`, so it cannot be renamed `_env`"
+)]
 #[rustler::nif]
-#[allow(unused_variables)]
 fn start_listening(
     env: Env,
     resource: ResourceArc<HostResource>,
@@ -435,6 +476,10 @@ fn start_listening(
 /// Stop the host: close the iroh endpoint and end its event loop. Returns once
 /// the endpoint is closed. `Mydia.P2p.Server` calls this from `terminate/2`, so
 /// switching remote access off takes the node off the network.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value; a ResourceArc cannot be taken by reference"
+)]
 #[rustler::nif(schedule = "DirtyIo")]
 fn stop_host(resource: ResourceArc<HostResource>) -> String {
     blocking::shutdown(&resource.host);
@@ -446,13 +491,17 @@ fn stop_host(resource: ResourceArc<HostResource>) -> String {
 /// `DirtyCpu` rather than the `DirtyIo` used by the networking NIFs above:
 /// Argon2id at 64 MiB is compute-bound and takes a few hundred milliseconds,
 /// which would stall a normal scheduler.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value"
+)]
 #[rustler::nif(schedule = "DirtyCpu")]
-fn seal_pairing_claim<'a>(
-    env: Env<'a>,
+fn seal_pairing_claim(
+    env: Env<'_>,
     code: String,
     node_addr: String,
     instance_id: String,
-) -> Term<'a> {
+) -> Term<'_> {
     let payload = mydia_p2p_core::pairing_seal::ClaimPayload {
         node_addr,
         instance_id,

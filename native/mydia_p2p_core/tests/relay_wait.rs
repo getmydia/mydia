@@ -10,7 +10,7 @@ use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(60);
+const TEST_TIMEOUT: Duration = Duration::from_mins(1);
 
 fn test_config() -> HostConfig {
     HostConfig {
@@ -19,7 +19,7 @@ fn test_config() -> HostConfig {
     }
 }
 
-/// Waits for `Event::Ready` and returns the node's own EndpointAddr JSON.
+/// Waits for `Event::Ready` and returns the node's own `EndpointAddr` JSON.
 async fn wait_for_ready(host: &Host) -> String {
     let mut rx = host.event_rx.lock().await;
     while let Some(event) = rx.recv().await {
@@ -65,7 +65,7 @@ fn spawn_echo_responder(host: Arc<Host>) {
                         .send_response(request_id, MydiaResponse::Custom(payload))
                         .await;
                 }
-                Some(_) => continue,
+                Some(_) => {}
                 None => break,
             }
         }

@@ -1,4 +1,4 @@
-//! mydia_p2p_core - Iroh-based P2P networking for Mydia
+//! `mydia_p2p_core` - Iroh-based P2P networking for Mydia
 //!
 //! This crate provides the core P2P functionality using iroh for
 //! NAT traversal and QUIC-based connections.
@@ -26,6 +26,19 @@ use std::sync::{Once, RwLock};
 use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
+/// Whole milliseconds in `d`. A `u64` of milliseconds spans hundreds of
+/// millions of years, so saturating never changes a real measurement.
+fn duration_ms(d: std::time::Duration) -> u64 {
+    u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
+}
+
+/// Whole nanoseconds in `d`. A `u64` of nanoseconds spans about 584 years, far
+/// beyond any timed transfer, so saturating never changes a real measurement.
+#[cfg(feature = "host")]
+fn duration_nanos(d: std::time::Duration) -> u64 {
+    u64::try_from(d.as_nanos()).unwrap_or(u64::MAX)
+}
+
 // Gated at the declaration site rather than inside the file: on wasm a
 // mistaken caller should be told the module does not exist, not that it is
 // empty.
@@ -52,7 +65,7 @@ pub enum MydiaRequest {
     GraphQL(GraphQLRequest),
     HlsStream(HlsRequest),
     Custom(Vec<u8>),
-    RemoteControl(remote_control::RemoteControlRequest),
+    RemoteControl(RemoteControlRequest),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -118,7 +131,7 @@ pub enum MydiaResponse {
     HlsHeader(HlsResponseHeader),
     Custom(Vec<u8>),
     Error(String),
-    RemoteControl(remote_control::RemoteControlResponse),
+    RemoteControl(RemoteControlResponse),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -286,7 +299,7 @@ pub enum Event {
         request: MydiaRequest,
         request_id: String,
     },
-    /// HLS streaming request - requires streaming response via send_hls_header/chunk/finish
+    /// HLS streaming request - requires streaming response via `send_hls_header/chunk/finish`
     HlsStreamRequest {
         peer: String,
         request: HlsRequest,
@@ -434,10 +447,10 @@ where
 /// Visitor to extract the message field from a tracing event
 struct MessageVisitor<'a>(&'a mut String);
 
-impl<'a> tracing::field::Visit for MessageVisitor<'a> {
+impl tracing::field::Visit for MessageVisitor<'_> {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == "message" {
-            *self.0 = format!("{:?}", value);
+            *self.0 = format!("{value:?}");
         } else if self.0.is_empty() {
             // If no message field, use the first field
             *self.0 = format!("{}: {:?}", field.name(), value);
@@ -487,7 +500,7 @@ pub struct NetworkStats {
 #[derive(Clone, Default)]
 pub struct HostConfig {
     /// Custom relay URLs for NAT traversal, in preference order. Empty means
-    /// use iroh's default relays. Entries that do not parse as a RelayUrl are
+    /// use iroh's default relays. Entries that do not parse as a `RelayUrl` are
     /// dropped; if that leaves nothing, the defaults are used rather than an
     /// empty custom map, which Endpoint rejects.
     pub relay_urls: Vec<String>,
@@ -503,7 +516,7 @@ pub struct HostConfig {
 /// Load or generate an Ed25519 keypair for the node identity.
 ///
 /// `keypair_bytes` wins when set. That is the browser's path: wasm has no
-/// filesystem, so the caller reads the secret out of IndexedDB and hands it
+/// filesystem, so the caller reads the secret out of `IndexedDB` and hands it
 /// in. `keypair_path` is the native path and is compiled out without the
 /// `host` feature.
 fn load_or_generate_keypair(config: &HostConfig) -> SecretKey {
@@ -537,17 +550,17 @@ fn load_or_generate_keypair(config: &HostConfig) -> SecretKey {
     secret_key
 }
 
-/// Serialize EndpointAddr to JSON for sharing
+/// Serialize `EndpointAddr` to JSON for sharing
 fn endpoint_addr_to_json(addr: &EndpointAddr) -> String {
     serde_json::to_string(addr).unwrap_or_default()
 }
 
-/// Deserialize EndpointAddr from JSON
+/// Deserialize `EndpointAddr` from JSON
 fn endpoint_addr_from_json(json: &str) -> Result<EndpointAddr, String> {
-    serde_json::from_str(json).map_err(|e| format!("Invalid EndpointAddr JSON: {}", e))
+    serde_json::from_str(json).map_err(|e| format!("Invalid EndpointAddr JSON: {e}"))
 }
 
-/// Extract actual node ID from either a bare node ID string or an EndpointAddr JSON.
+/// Extract actual node ID from either a bare node ID string or an `EndpointAddr` JSON.
 fn resolve_node_id(node_id: &str) -> String {
     if node_id.starts_with('{') {
         match endpoint_addr_from_json(node_id) {
@@ -620,7 +633,7 @@ impl Host {
         )
     }
 
-    /// Dial a peer using their EndpointAddr JSON
+    /// Dial a peer using their `EndpointAddr` JSON
     pub async fn dial(&self, endpoint_addr_json: String) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
@@ -824,7 +837,7 @@ impl Host {
     }
 
     /// Send an HLS response header for a streaming request.
-    /// Must be called before any send_hls_chunk calls.
+    /// Must be called before any `send_hls_chunk` calls.
     #[cfg(feature = "host")]
     pub async fn send_hls_header(
         &self,
@@ -844,7 +857,7 @@ impl Host {
     }
 
     /// Send a chunk of HLS data.
-    /// Must be called after send_hls_header and before finish_hls_stream.
+    /// Must be called after `send_hls_header` and before `finish_hls_stream`.
     #[cfg(feature = "host")]
     pub async fn send_hls_chunk(&self, stream_id: String, data: Vec<u8>) -> Result<(), String> {
         let (tx, rx) = oneshot::channel();
@@ -1026,12 +1039,15 @@ fn build_relay_mode(config: &HostConfig) -> Option<RelayMode> {
         return None;
     }
 
-    let relay_map = RelayMap::from_iter(configured.into_iter().chain([
-        default_relays::default_na_east_relay(),
-        default_relays::default_na_west_relay(),
-        default_relays::default_eu_relay(),
-        default_relays::default_ap_relay(),
-    ]));
+    let relay_map: RelayMap = configured
+        .into_iter()
+        .chain([
+            default_relays::default_na_east_relay(),
+            default_relays::default_na_west_relay(),
+            default_relays::default_eu_relay(),
+            default_relays::default_ap_relay(),
+        ])
+        .collect();
 
     Some(RelayMode::Custom(relay_map))
 }
@@ -1141,6 +1157,10 @@ fn spawn_dial(
 }
 
 /// Main event loop that runs in a background thread
+#[expect(
+    clippy::too_many_lines,
+    reason = "single select loop over every event source; splitting it is a refactor, not a lint fix"
+)]
 async fn run_event_loop(
     secret_key: SecretKey,
     config: HostConfig,
@@ -1287,7 +1307,7 @@ async fn run_event_loop(
         #[cfg(feature = "host")]
         {
             running = tokio::select! {
-                _ = shutdown_requested(&mut shutdown_rx) => false,
+                () = shutdown_requested(&mut shutdown_rx) => false,
 
                 result = &mut online, if !online_done => {
                     online_done = true;
@@ -1369,7 +1389,7 @@ async fn run_event_loop(
         #[cfg(not(feature = "host"))]
         {
             running = tokio::select! {
-                _ = shutdown_requested(&mut shutdown_rx) => false,
+                () = shutdown_requested(&mut shutdown_rx) => false,
 
                 result = &mut online, if !online_done => {
                     online_done = true;
@@ -1473,8 +1493,8 @@ async fn unless_shutdown(
 ) -> bool {
     tokio::select! {
         biased;
-        _ = shutdown_requested(shutdown_rx) => false,
-        _ = work => true,
+        () = shutdown_requested(shutdown_rx) => false,
+        () = work => true,
     }
 }
 
@@ -1698,10 +1718,10 @@ async fn handle_dial_finished(
             }
             let waiting = dials.remove(&node_id).unwrap_or_default();
             for reply in waiting.dial_replies {
-                let _ = reply.send(Err(format!("Failed to connect: {}", e)));
+                let _ = reply.send(Err(format!("Failed to connect: {e}")));
             }
             for (_, reply) in waiting.requests {
-                let _ = reply.send(Err(format!("dial_failed: {}", e)));
+                let _ = reply.send(Err(format!("dial_failed: {e}")));
             }
         }
     }
@@ -1843,31 +1863,32 @@ async fn dispatch_stream_cmd(hls_registry: &HlsStreamRegistry, stream_id: &str, 
         let registry = hls_registry.lock().await;
         registry.get(stream_id).cloned()
     };
-    match stream_tx {
-        Some(stream_tx) => {
-            if let Err(mpsc::error::SendError(failed_cmd)) = stream_tx.send(cmd).await {
-                let reply = match failed_cmd {
-                    StreamCmd::Header { reply, .. } => reply,
-                    StreamCmd::Chunk { reply, .. } => reply,
-                    StreamCmd::StreamFileRange { reply, .. } => reply,
-                    StreamCmd::Finish { reply } => reply,
-                };
-                let _ = reply.send(Err(format!("HLS stream not found: {}", stream_id)));
-            }
-        }
-        None => {
-            let reply = match cmd {
-                StreamCmd::Header { reply, .. } => reply,
-                StreamCmd::Chunk { reply, .. } => reply,
-                StreamCmd::StreamFileRange { reply, .. } => reply,
-                StreamCmd::Finish { reply } => reply,
+    if let Some(stream_tx) = stream_tx {
+        if let Err(mpsc::error::SendError(failed_cmd)) = stream_tx.send(cmd).await {
+            let reply = match failed_cmd {
+                StreamCmd::Header { reply, .. }
+                | StreamCmd::Chunk { reply, .. }
+                | StreamCmd::StreamFileRange { reply, .. }
+                | StreamCmd::Finish { reply } => reply,
             };
-            let _ = reply.send(Err(format!("HLS stream not found: {}", stream_id)));
+            let _ = reply.send(Err(format!("HLS stream not found: {stream_id}")));
         }
+    } else {
+        let reply = match cmd {
+            StreamCmd::Header { reply, .. }
+            | StreamCmd::Chunk { reply, .. }
+            | StreamCmd::StreamFileRange { reply, .. }
+            | StreamCmd::Finish { reply } => reply,
+        };
+        let _ = reply.send(Err(format!("HLS stream not found: {stream_id}")));
     }
 }
 
 /// Dispatch a single command from a `Host` handle.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one match arm per Command variant; splitting it is a refactor, not a lint fix"
+)]
 async fn handle_command(
     cmd: Command,
     connected_peers: &mut HashMap<String, PeerConnections>,
@@ -1959,52 +1980,46 @@ async fn handle_command(
             reply,
         } => {
             let actual_node_id = resolve_node_id(&node_id);
-            match current_connection(connected_peers, &actual_node_id) {
-                Some(conn) => {
-                    let conn = conn.clone();
-                    runtime::spawn(async move {
-                        let result = send_request_on(conn, request).await;
-                        let _ = reply.send(result);
-                    });
+            if let Some(conn) = current_connection(connected_peers, &actual_node_id) {
+                let conn = conn.clone();
+                runtime::spawn(async move {
+                    let result = send_request_on(conn, request).await;
+                    let _ = reply.send(result);
+                });
+            } else {
+                // No route yet, so dial one. This is what remote control
+                // needs: a controller probes a target by sending `Hello`
+                // to a bare node ID out of the roster. A dial already in
+                // flight to the peer, whether a `Dial` or an earlier
+                // request's, is joined rather than duplicated.
+                if let Some(in_flight) = dials.get_mut(&actual_node_id) {
+                    in_flight.requests.push((request, reply));
+                    return;
                 }
-                None => {
-                    // No route yet, so dial one. This is what remote control
-                    // needs: a controller probes a target by sending `Hello`
-                    // to a bare node ID out of the roster. A dial already in
-                    // flight to the peer, whether a `Dial` or an earlier
-                    // request's, is joined rather than duplicated.
-                    if let Some(in_flight) = dials.get_mut(&actual_node_id) {
-                        in_flight.requests.push((request, reply));
-                        return;
-                    }
-                    match actual_node_id.parse::<EndpointId>() {
-                        Ok(id) => {
-                            tracing::info!(
-                                "Dialing {} on demand for a queued request",
-                                actual_node_id
-                            );
-                            *dials_started += 1;
-                            let attempt = *dials_started;
-                            dials.insert(
-                                actual_node_id,
-                                InFlightDial {
-                                    requests: vec![(request, reply)],
-                                    with_addrs: false,
-                                    attempt,
-                                    ..Default::default()
-                                },
-                            );
-                            spawn_dial(
-                                ctx.endpoint,
-                                EndpointAddr::new(id),
-                                Some(ON_DEMAND_DIAL_TIMEOUT),
+                match actual_node_id.parse::<EndpointId>() {
+                    Ok(id) => {
+                        tracing::info!("Dialing {} on demand for a queued request", actual_node_id);
+                        *dials_started += 1;
+                        let attempt = *dials_started;
+                        dials.insert(
+                            actual_node_id,
+                            InFlightDial {
+                                requests: vec![(request, reply)],
+                                with_addrs: false,
                                 attempt,
-                                ctx.internal_tx.clone(),
-                            );
-                        }
-                        Err(e) => {
-                            let _ = reply.send(Err(format!("dial_failed: invalid node ID: {}", e)));
-                        }
+                                ..Default::default()
+                            },
+                        );
+                        spawn_dial(
+                            ctx.endpoint,
+                            EndpointAddr::new(id),
+                            Some(ON_DEMAND_DIAL_TIMEOUT),
+                            attempt,
+                            ctx.internal_tx.clone(),
+                        );
+                    }
+                    Err(e) => {
+                        let _ = reply.send(Err(format!("dial_failed: invalid node ID: {e}")));
                     }
                 }
             }
@@ -2026,7 +2041,7 @@ async fn handle_command(
         Command::GetNetworkStats { reply } => {
             // Get the actual relay URL from the endpoint address
             let addr = ctx.endpoint.addr();
-            let relay_url = addr.relay_urls().next().map(|u| u.to_string());
+            let relay_url = addr.relay_urls().next().map(ToString::to_string);
 
             // Get connection type for the first connected peer
             let first_peer = connected_peers
@@ -2098,7 +2113,7 @@ async fn handle_command(
         }
         #[cfg(test)]
         Command::DebugConnectionCount { peer_id, reply } => {
-            let count = connected_peers.get(&peer_id).map_or(0, |conns| conns.len());
+            let count = connected_peers.get(&peer_id).map_or(0, HashMap::len);
             let _ = reply.send(count);
         }
         #[cfg(test)]
@@ -2171,7 +2186,7 @@ async fn handle_command(
                     });
                 }
                 None => {
-                    let _ = reply.send(Err(format!("Not connected to peer: {}", actual_node_id)));
+                    let _ = reply.send(Err(format!("Not connected to peer: {actual_node_id}")));
                 }
             }
         }
@@ -2179,7 +2194,7 @@ async fn handle_command(
 }
 
 /// Monitor a peer connection for type changes (e.g. relay -> direct after hole-punching).
-/// Awaits PathEvent notifications from iroh and emits ConnectionTypeChanged on transitions.
+/// Awaits `PathEvent` notifications from iroh and emits `ConnectionTypeChanged` on transitions.
 /// Stops after 2 minutes (hole-punching window) or when Direct is reached.
 async fn monitor_connection_type(conn: Connection, peer_id: String, event_tx: mpsc::Sender<Event>) {
     let mut current_type = PeerConnectionType::from_connection(&conn);
@@ -2199,7 +2214,7 @@ async fn monitor_connection_type(conn: Connection, peer_id: String, event_tx: mp
                         remote_addr,
                         conn.paths()
                             .iter()
-                            .find(|p| p.is_selected())
+                            .find(iroh::endpoint::Path::is_selected)
                             .map(|p| p.rtt())
                     );
                     true
@@ -2263,7 +2278,7 @@ async fn monitor_connection_type(conn: Connection, peer_id: String, event_tx: mp
     };
 
     // Cap the watcher at 2 minutes so it doesn't leak for long-lived connections.
-    if runtime::time::timeout(std::time::Duration::from_secs(120), monitor)
+    if runtime::time::timeout(std::time::Duration::from_mins(2), monitor)
         .await
         .is_err()
     {
@@ -2285,13 +2300,17 @@ fn stream_write_error(context: &str, e: iroh::endpoint::WriteError) -> String {
     }
 }
 
-/// Stream a file range to a QUIC SendStream with length-prefixed chunks.
+/// Stream a file range to a QUIC `SendStream` with length-prefixed chunks.
 /// Uses a bounded channel pipeline: blocking reader → async QUIC writer.
 /// Memory usage is bounded at ~4MB regardless of file size.
 ///
 /// Host role only: the blocking reader needs `spawn_blocking` and `std::fs`,
 /// neither of which a browser has.
 #[cfg(feature = "host")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "reader task, writer loop and metrics share state; splitting it is a refactor, not a lint fix"
+)]
 async fn stream_file_to_quic(
     mut send: SendStream,
     file_path: &str,
@@ -2322,6 +2341,10 @@ async fn stream_file_to_quic(
             return (0u64, 0u64, 0u32);
         }
 
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "host role only, built for 64-bit targets where usize is u64"
+        )]
         let mut remaining = length as usize;
         let mut io_nanos: u64 = 0;
         let mut backpressure_nanos: u64 = 0;
@@ -2333,7 +2356,7 @@ async fn stream_file_to_quic(
 
             let io_start = Instant::now();
             match file.read_exact(&mut buf) {
-                Ok(_) => {}
+                Ok(()) => {}
                 Err(e) => {
                     tracing::error!("Read error: {}", e);
                     return (
@@ -2343,7 +2366,7 @@ async fn stream_file_to_quic(
                     );
                 }
             }
-            io_nanos += io_start.elapsed().as_nanos() as u64;
+            io_nanos += duration_nanos(io_start.elapsed());
 
             remaining -= to_read;
             chunk_count += 1;
@@ -2359,7 +2382,7 @@ async fn stream_file_to_quic(
                     chunk_count,
                 );
             }
-            backpressure_nanos += bp_start.elapsed().as_nanos() as u64;
+            backpressure_nanos += duration_nanos(bp_start.elapsed());
         }
         // chunk_tx is dropped here, signalling end of data
         (
@@ -2376,6 +2399,10 @@ async fn stream_file_to_quic(
 
     while let Some(chunk) = chunk_rx.recv().await {
         let chunk_len = chunk.len() as u64;
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "reader chunks are at most CHUNK_SIZE (1 MB), far below u32::MAX"
+        )]
         let len = chunk.len() as u32;
         let len_bytes = len.to_be_bytes();
 
@@ -2386,7 +2413,7 @@ async fn stream_file_to_quic(
         send.write_all(&chunk)
             .await
             .map_err(|e| stream_write_error("Failed to write chunk data", e))?;
-        quic_write_nanos += w_start.elapsed().as_nanos() as u64;
+        quic_write_nanos += duration_nanos(w_start.elapsed());
 
         total_bytes += chunk_len;
         write_chunks += 1;
@@ -2398,16 +2425,21 @@ async fn stream_file_to_quic(
         .await
         .map_err(|e| stream_write_error("Failed to write terminator", e))?;
     send.finish()
-        .map_err(|e| format!("Failed to finish stream: {}", e))?;
+        .map_err(|e| format!("Failed to finish stream: {e}"))?;
 
-    let total_ms = t0.elapsed().as_millis() as u64;
+    let total_ms = duration_ms(t0.elapsed());
     let quic_write_ms = quic_write_nanos / 1_000_000;
 
     // Get reader metrics (should be done by now since chunk_rx is exhausted)
     let (io_ms, backpressure_ms, _reader_chunks) = reader_handle.await.unwrap_or((0, 0, 0));
 
     let throughput_mbps = if total_ms > 0 {
-        (total_bytes as f64 * 8.0) / (total_ms as f64 * 1000.0) // Mbps
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "log-only throughput figure; 52 bits of mantissa far exceed its precision"
+        )]
+        let mbps = (total_bytes as f64 * 8.0) / (total_ms as f64 * 1000.0);
+        mbps
     } else {
         0.0
     };
@@ -2449,17 +2481,21 @@ async fn run_hls_stream_worker(
                 let header_response = MydiaResponse::HlsHeader(header);
                 let write_res = match serde_cbor::to_vec(&header_response) {
                     Ok(header_data) => {
+                        #[expect(
+                            clippy::cast_possible_truncation,
+                            reason = "a CBOR-encoded HLS header is a few hundred bytes, far below u32::MAX"
+                        )]
                         let len = header_data.len() as u32;
                         let len_bytes = len.to_be_bytes();
                         if let Err(e) = send.write_all(&len_bytes).await {
-                            Err(format!("Failed to write header length: {}", e))
+                            Err(format!("Failed to write header length: {e}"))
                         } else if let Err(e) = send.write_all(&header_data).await {
-                            Err(format!("Failed to write header: {}", e))
+                            Err(format!("Failed to write header: {e}"))
                         } else {
                             Ok(())
                         }
                     }
-                    Err(e) => Err(format!("Failed to encode header: {}", e)),
+                    Err(e) => Err(format!("Failed to encode header: {e}")),
                 };
                 let is_err = write_res.is_err();
                 let _ = reply.send(write_res);
@@ -2469,12 +2505,16 @@ async fn run_hls_stream_worker(
                 }
             }
             StreamCmd::Chunk { data, reply } => {
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "HLS chunks are media segments pieces of at most a few MB, far below u32::MAX"
+                )]
                 let len = data.len() as u32;
                 let len_bytes = len.to_be_bytes();
                 let write_res = if let Err(e) = send.write_all(&len_bytes).await {
-                    Err(format!("Failed to write chunk length: {}", e))
+                    Err(format!("Failed to write chunk length: {e}"))
                 } else if let Err(e) = send.write_all(&data).await {
-                    Err(format!("Failed to write chunk: {}", e))
+                    Err(format!("Failed to write chunk: {e}"))
                 } else {
                     Ok(())
                 };
@@ -2500,9 +2540,9 @@ async fn run_hls_stream_worker(
                 hls_registry.lock().await.remove(&stream_id);
                 let zero_bytes = [0u8; 4];
                 let write_res = if let Err(e) = send.write_all(&zero_bytes).await {
-                    Err(format!("Failed to write terminator: {}", e))
+                    Err(format!("Failed to write terminator: {e}"))
                 } else if let Err(e) = send.finish() {
-                    Err(format!("Failed to finish stream: {}", e))
+                    Err(format!("Failed to finish stream: {e}"))
                 } else {
                     tracing::debug!("HLS stream {} finished", stream_id);
                     Ok(())
@@ -2527,6 +2567,13 @@ const CONNECTION_EVENT_QUEUE: usize = 64;
 
 /// Write `response` on `send` and finish the stream, ignoring write errors:
 /// a peer that has gone away has nothing left to tell.
+#[cfg_attr(
+    feature = "host",
+    expect(
+        unused_qualifications,
+        reason = "SendStream is imported only for the host role; the full path keeps the wasm build compiling"
+    )
+)]
 async fn respond_now(mut send: iroh::endpoint::SendStream, response: MydiaResponse) {
     if let Ok(response_data) = serde_cbor::to_vec(&response) {
         let _ = send.write_all(&response_data).await;
@@ -2544,6 +2591,10 @@ async fn respond_now(mut send: iroh::endpoint::SendStream, response: MydiaRespon
 /// behind, and with it the `Ping`s a client sends to tell a stalled path from
 /// a slow server (see [`STALL_PROBE_AFTER`]): the client would then close a
 /// connection that was perfectly alive.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one accept loop with per-request-kind handling; splitting it is a refactor, not a lint fix"
+)]
 async fn handle_connection(
     conn: Connection,
     peer_id: String,
@@ -2590,7 +2641,7 @@ async fn handle_connection(
                     }
                 };
                 #[cfg(feature = "host")]
-                let request_read_ms = t0.elapsed().as_millis() as u64;
+                let request_read_ms = duration_ms(t0.elapsed());
 
                 let request: MydiaRequest = match serde_cbor::from_slice(&data) {
                     Ok(req) => req,
@@ -2600,7 +2651,7 @@ async fn handle_connection(
                     }
                 };
                 #[cfg(feature = "host")]
-                let decode_ms = t0.elapsed().as_millis() as u64 - request_read_ms;
+                let decode_ms = duration_ms(t0.elapsed()) - request_read_ms;
 
                 tracing::debug!("Received request from {}: {:?}", peer_id, request);
 
@@ -2634,17 +2685,14 @@ async fn handle_connection(
                 // before registering anything, so a refused request leaves no
                 // registration behind, and a queued one is always registered
                 // before the host can answer it.
-                let permit = match queue_tx.try_reserve() {
-                    Ok(permit) => permit,
-                    Err(_) => {
-                        tracing::warn!(
-                            "Refusing a request from {}: {} are already waiting for the host app",
-                            peer_id,
-                            CONNECTION_EVENT_QUEUE
-                        );
-                        respond_now(send, MydiaResponse::Error("server_busy".to_string())).await;
-                        continue;
-                    }
+                let Ok(permit) = queue_tx.try_reserve() else {
+                    tracing::warn!(
+                        "Refusing a request from {}: {} are already waiting for the host app",
+                        peer_id,
+                        CONNECTION_EVENT_QUEUE
+                    );
+                    respond_now(send, MydiaResponse::Error("server_busy".to_string())).await;
+                    continue;
                 };
 
                 // For HLS streaming requests, create a dedicated per-stream worker task
@@ -2676,7 +2724,7 @@ async fn handle_connection(
                     // not when the host app takes it: that happens later, on
                     // the forwarder, which warns on its own when the host is
                     // slow to take one.
-                    let event_queued_ms = t0.elapsed().as_millis() as u64;
+                    let event_queued_ms = duration_ms(t0.elapsed());
 
                     tracing::info!(
                         "p2p_metrics_server: request_intake request_read_ms={} decode_ms={} event_queued_ms={} session={} path={}",
@@ -2900,17 +2948,16 @@ async fn send_request_on(conn: Connection, request: MydiaRequest) -> Result<Mydi
     }
 
     let attempt = do_send_request(conn.clone(), request);
-    match runtime::time::timeout(CONTROL_REQUEST_TIMEOUT, attempt).await {
-        Ok(result) => result,
-        Err(_) => {
-            tracing::warn!(
-                "Control request to {} unanswered after {}ms; closing the connection",
-                conn.remote_id(),
-                CONTROL_REQUEST_TIMEOUT.as_millis()
-            );
-            conn.close(0u32.into(), b"control request timed out");
-            Err("control request timed out".to_string())
-        }
+    if let Ok(result) = runtime::time::timeout(CONTROL_REQUEST_TIMEOUT, attempt).await {
+        result
+    } else {
+        tracing::warn!(
+            "Control request to {} unanswered after {}ms; closing the connection",
+            conn.remote_id(),
+            CONTROL_REQUEST_TIMEOUT.as_millis()
+        );
+        conn.close(0u32.into(), b"control request timed out");
+        Err("control request timed out".to_string())
     }
 }
 
@@ -2927,27 +2974,27 @@ async fn do_send_request(conn: Connection, request: MydiaRequest) -> Result<Mydi
     let (mut send, mut recv) = conn
         .open_bi()
         .await
-        .map_err(|e| format!("Failed to open stream: {}", e))?;
+        .map_err(|e| format!("Failed to open stream: {e}"))?;
 
     // Send the request
     let request_data =
-        serde_cbor::to_vec(&request).map_err(|e| format!("Failed to encode request: {}", e))?;
+        serde_cbor::to_vec(&request).map_err(|e| format!("Failed to encode request: {e}"))?;
 
     send.write_all(&request_data)
         .await
-        .map_err(|e| format!("Failed to send request: {}", e))?;
+        .map_err(|e| format!("Failed to send request: {e}"))?;
 
     send.finish()
-        .map_err(|e| format!("Failed to finish send: {}", e))?;
+        .map_err(|e| format!("Failed to finish send: {e}"))?;
 
     // Read the response
     let response_data = recv
         .read_to_end(MAX_RESPONSE_BYTES)
         .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
+        .map_err(|e| format!("Failed to read response: {e}"))?;
 
     let response: MydiaResponse = serde_cbor::from_slice(&response_data)
-        .map_err(|e| format!("Failed to decode response: {}", e))?;
+        .map_err(|e| format!("Failed to decode response: {e}"))?;
 
     Ok(response)
 }
@@ -2970,27 +3017,27 @@ async fn do_send_hls_request(
     let (mut send, mut recv) = conn
         .open_bi()
         .await
-        .map_err(|e| format!("Failed to open stream: {}", e))?;
-    let open_bi_ms = t0.elapsed().as_millis() as u64;
+        .map_err(|e| format!("Failed to open stream: {e}"))?;
+    let open_bi_ms = duration_ms(t0.elapsed());
 
     // Send the request
     let request = MydiaRequest::HlsStream(request);
     let request_data =
-        serde_cbor::to_vec(&request).map_err(|e| format!("Failed to encode request: {}", e))?;
+        serde_cbor::to_vec(&request).map_err(|e| format!("Failed to encode request: {e}"))?;
 
     send.write_all(&request_data)
         .await
-        .map_err(|e| format!("Failed to send request: {}", e))?;
+        .map_err(|e| format!("Failed to send request: {e}"))?;
 
     send.finish()
-        .map_err(|e| format!("Failed to finish send: {}", e))?;
-    let request_sent_ms = t0.elapsed().as_millis() as u64;
+        .map_err(|e| format!("Failed to finish send: {e}"))?;
+    let request_sent_ms = duration_ms(t0.elapsed());
 
     // Read the header (length-prefixed)
     let mut len_buf = [0u8; 4];
     recv.read_exact(&mut len_buf)
         .await
-        .map_err(|e| format!("Failed to read header length: {}", e))?;
+        .map_err(|e| format!("Failed to read header length: {e}"))?;
     let header_len = u32::from_be_bytes(len_buf) as usize;
 
     if header_len == 0 {
@@ -3000,17 +3047,17 @@ async fn do_send_hls_request(
     let mut header_data = vec![0u8; header_len];
     recv.read_exact(&mut header_data)
         .await
-        .map_err(|e| format!("Failed to read header: {}", e))?;
+        .map_err(|e| format!("Failed to read header: {e}"))?;
 
     let header_response: MydiaResponse = serde_cbor::from_slice(&header_data)
-        .map_err(|e| format!("Failed to decode header: {}", e))?;
+        .map_err(|e| format!("Failed to decode header: {e}"))?;
 
     let header = match header_response {
         MydiaResponse::HlsHeader(h) => h,
-        MydiaResponse::Error(e) => return Err(format!("Server error: {}", e)),
+        MydiaResponse::Error(e) => return Err(format!("Server error: {e}")),
         _ => return Err("Unexpected response type".to_string()),
     };
-    let header_received_ms = t0.elapsed().as_millis() as u64;
+    let header_received_ms = duration_ms(t0.elapsed());
 
     tracing::info!(
         "p2p_metrics: hls_request open_bi_ms={} request_sent_ms={} header_received_ms={} status={} content_length={} connection_type={} session={} path={}",
@@ -3040,9 +3087,9 @@ async fn do_send_hls_request(
         // end either wait. `Ok(_)` disables the cancel branch when every
         // `HlsCancel` is dropped, which is not a cancel.
         let cancelled = tokio::select! {
-            _ = forward_hls_chunks(&mut recv, &chunk_tx, &mut total_bytes, &mut chunk_count) => false,
+            () = forward_hls_chunks(&mut recv, &chunk_tx, &mut total_bytes, &mut chunk_count) => false,
             Ok(_) = cancel_rx.wait_for(|cancelled| *cancelled) => true,
-            _ = chunk_tx.closed() => true,
+            () = chunk_tx.closed() => true,
         };
 
         if cancelled {
@@ -3051,10 +3098,15 @@ async fn do_send_hls_request(
             let _ = recv.stop(0u32.into());
         }
 
-        let transfer_ms = transfer_start.elapsed().as_millis() as u64;
-        let total_ms = t0.elapsed().as_millis() as u64;
+        let transfer_ms = duration_ms(transfer_start.elapsed());
+        let total_ms = duration_ms(t0.elapsed());
         let throughput_mbps = if transfer_ms > 0 {
-            (total_bytes as f64 * 8.0) / (transfer_ms as f64 * 1000.0)
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "log-only throughput figure; 52 bits of mantissa far exceed its precision"
+            )]
+            let mbps = (total_bytes as f64 * 8.0) / (transfer_ms as f64 * 1000.0);
+            mbps
         } else {
             0.0
         };
@@ -3551,12 +3603,12 @@ mod tests {
 
     #[tokio::test]
     async fn stall_probe_returns_a_fast_answer_without_probing() {
-        let probed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let probed = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let p = probed.clone();
         let result = await_with_stall_probe(
             async { Ok::<_, String>(7) },
             move || async move {
-                p.store(true, std::sync::atomic::Ordering::SeqCst);
+                p.store(true, Ordering::SeqCst);
                 Ok(())
             },
             std::time::Duration::from_millis(50),
@@ -3564,7 +3616,7 @@ mod tests {
         )
         .await;
         assert_eq!(result, StallOutcome::Finished(Ok(7)));
-        assert!(!probed.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(!probed.load(Ordering::SeqCst));
     }
 
     #[tokio::test]
@@ -3829,7 +3881,7 @@ mod tests {
     /// first dial is in flight (it timed out once, 2026-09-13).
     #[tokio::test(flavor = "multi_thread")]
     async fn a_stale_connection_closing_does_not_report_a_live_peer_as_gone() {
-        let shared_key = iroh::SecretKey::generate().to_bytes();
+        let shared_key = SecretKey::generate().to_bytes();
         let client_config = || HostConfig {
             keypair_bytes: Some(shared_key),
             ..test_config()
@@ -3927,7 +3979,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn the_newest_connection_closing_does_not_report_a_live_peer_as_gone() {
         // Random per run for the reason given on the test above.
-        let shared_key = iroh::SecretKey::generate().to_bytes();
+        let shared_key = SecretKey::generate().to_bytes();
         let client_config = || HostConfig {
             keypair_bytes: Some(shared_key),
             ..test_config()
