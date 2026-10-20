@@ -230,13 +230,31 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     // connection open here is the video pipeline's own: mpv holds a range
     // request for the whole file, so unforced it is left waiting on a socket
     // nothing will ever answer instead of seeing its stream end.
-    await _cancelActiveSources();
-    await _server?.close(force: true);
-    _server = null;
+    //
+    // State is detached before the first await. A next-episode start lands
+    // while the close is pending; it must see no server, so it binds its
+    // own, and its target must survive this teardown finishing. Reading
+    // `port` off the closing server throws "HttpServer is not bound to a
+    // socket".
+    final server = _detachServer();
     _targets.clear();
     _lanToken = null;
     _lanAddress = null;
+    await _closeServer(server);
     debugPrint('[LocalProxy] Stopped');
+  }
+
+  /// Takes the current server out of service without waiting for it to close.
+  HttpServer? _detachServer() {
+    final server = _server;
+    _server = null;
+    return server;
+  }
+
+  /// Closes [server], cancelling the transfers it was carrying.
+  Future<void> _closeServer(HttpServer? server) async {
+    await _cancelActiveSources();
+    await server?.close(force: true);
   }
 
   /// Interface name prefixes that are never the address a TV on the sofa can
@@ -345,9 +363,12 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     // invalidates whatever URL the video pipeline is holding regardless, and
     // the caller restarts local playback afterwards. Left unforced, the
     // request in flight against the old port would hang rather than end.
-    await _cancelActiveSources();
-    await _server?.close(force: true);
-    _server = null;
+    // Detached before the await for the same reason as [_tearDown].
+    await _closeServer(_detachServer());
+    // A start that ran during the close bound a server of its own; this
+    // rebind replaces it. A failed bind is that start's to report.
+    await _binding?.catchError((Object _) {});
+    await _closeServer(_detachServer());
 
     if (_targets.isEmpty) {
       // Nothing to rebind: there is no proxy running to expose. Drop the

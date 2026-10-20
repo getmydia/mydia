@@ -363,6 +363,34 @@ void main() {
               'connection the proxy no longer has the state to answer',
         );
       });
+
+      // The up-next handover: the outgoing episode's release starts the
+      // teardown, and the incoming episode's start runs while that teardown is
+      // still awaiting the socket close. The start used to see the closing
+      // server, return early, and build its URL from it, which threw
+      // "HttpServer is not bound to a socket"; or, a moment later, have its
+      // target cleared out from under it by the finishing teardown.
+      test('a start during a pending teardown gets a live server', () async {
+        p2p.onSendHlsRequest = (_) async => testHlsResponse(
+              status: HttpStatus.ok,
+              contentType: 'application/vnd.apple.mpegurl',
+              data: utf8.encode('#EXTM3U\n'),
+            );
+
+        final outgoing = Object();
+        await proxy.start(
+            owner: outgoing, targetPeer: 'peer-1', target: target);
+
+        final stopping = proxy.release(outgoing);
+        await proxy.start(owner: owner, targetPeer: 'peer-1', target: target);
+        final url = proxy.buildHlsUrl('session123', target: target);
+        await stopping;
+
+        expect(proxy.isRunning, isTrue);
+        expect(Uri.parse(url).port, equals(proxy.port));
+        final response = await makeRequest('/hls/session123/index.m3u8');
+        expect(response.statusCode, equals(HttpStatus.ok));
+      });
     });
   });
 }
