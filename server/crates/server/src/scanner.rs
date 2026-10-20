@@ -38,7 +38,7 @@ pub async fn run_once(db: &Db) {
 /// tick.
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "the scan loop is a 'static task, so the handle is moved into it"
+    reason = "`settings` is only read, but the spawned task is 'static so it must own it; a reference would force a clone inside"
 )]
 pub fn spawn(db: Db, settings: LibrarySettings) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {

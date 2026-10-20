@@ -179,17 +179,13 @@ fn format_hvc1(prefix: &str, profile: u32, tier: u32, level: u32) -> String {
 }
 
 /// codec_string.ex:462-469.
-#[expect(
-    clippy::match_same_arms,
-    reason = "the explicit arms document the supported containers; the wildcard is the documented fallback"
-)]
 fn container_to_mime(container: &str) -> &'static str {
     match container {
-        "mp4" | "m4v" | "mov" => "video/mp4",
         "mkv" => "video/x-matroska",
         "webm" => "video/webm",
         "ts" => "video/mp2t",
         "avi" => "video/x-msvideo",
+        // mp4, m4v, mov and anything unrecognised all answer video/mp4.
         _ => "video/mp4",
     }
 }

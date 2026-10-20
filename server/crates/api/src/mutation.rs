@@ -81,7 +81,7 @@ impl RootMutationType {
 
     /// Download a subtitle candidate returned by subtitleSearch.
     ///
-    /// `mutation_types.ex`:`:download_subtitle`. This server acquires no media,
+    /// `mutation_types.ex:download_subtitle`. This server acquires no media,
     /// and `subtitleSearch` here never returns a candidate, so any token
     /// reaching this field came from somewhere else. The return type is
     /// non-null, so an explicit error is the only honest answer available.
@@ -98,7 +98,7 @@ impl RootMutationType {
 
     /// Store a timing correction for one subtitle track.
     ///
-    /// `mutation_types.ex`:`:set_subtitle_offset`. This server has no table for
+    /// `mutation_types.ex:set_subtitle_offset`. This server has no table for
     /// subtitle corrections. The return type is non-null, so an explicit error
     /// is the only honest answer available.
     async fn set_subtitle_offset(

@@ -1,6 +1,6 @@
 //! Authentication, device and API key types.
 //!
-//! Types owned by this module (keep in sync with `tests/types_remaining.rs)`:
+//! Types owned by this module (keep in sync with `tests/types_remaining.rs`):
 //! User, `LoginResult`, `LoginInput`, `VerifyTotpInput`, `AccessToken`, `MediaToken`,
 //! `ApiKey`, `CreateApiKeyResult`, `RemoteDevice`, `RevokeDeviceResult`, `ClaimCode`,
 //! `ToggleFavoriteResult`.

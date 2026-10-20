@@ -1,6 +1,6 @@
 //! Discovery, search and remote access types.
 //!
-//! Types owned by this module (keep in sync with `tests/types_remaining.rs)`:
+//! Types owned by this module (keep in sync with `tests/types_remaining.rs`):
 //! `ContinueWatchingItem`, `RemoveFromContinueWatchingResult`, `RecentlyAddedItem`,
 //! `UpNextItem`, Collection, `SearchResult`, `SearchSection`, `SearchResults`,
 //! `RemoteAccessStatus`, `ServerCompatibility`, `CalendarEntry`, `CalendarEntryKind`.

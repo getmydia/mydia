@@ -480,7 +480,7 @@ impl RootQueryType {
     /// Get streaming candidates for a media item
     /// Search every enabled subtitle provider for a media file.
     ///
-    /// `query_types.ex`:`:subtitle_search`. This server acquires no media, which
+    /// `query_types.ex:subtitle_search`. This server acquires no media, which
     /// includes not fetching subtitles from providers, so the search is always
     /// empty. It reports that as a provider status rather than an empty result
     /// list with no explanation, so a client can tell "nothing found" apart
@@ -511,7 +511,7 @@ impl RootQueryType {
     /// Fetch one subtitle track's body directly, without resolving every
     /// track on the media file.
     ///
-    /// `query_types.ex`:`:subtitle_content`. Mirrors `SubtitleTrack::content`
+    /// `query_types.ex:subtitle_content`. Mirrors `SubtitleTrack::content`
     /// above: this server acquires no media and does not extract subtitle
     /// bodies, so it answers null rather than guessing. Present for contract
     /// parity, since the player selects this field regardless of which
@@ -530,7 +530,7 @@ impl RootQueryType {
 
     /// Stored timing corrections for a media file's subtitle tracks.
     ///
-    /// `query_types.ex`:`:subtitle_track_settings`. This server stores no
+    /// `query_types.ex:subtitle_track_settings`. This server stores no
     /// corrections, so the list is always empty. That is the same answer a
     /// Mydia server gives for a file nobody has corrected, so a client needs no
     /// branch for it.
