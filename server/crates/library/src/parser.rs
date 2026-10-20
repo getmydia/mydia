@@ -50,6 +50,10 @@ pub struct ParsedFile {
 }
 
 /// A year in parentheses or brackets, or as a standalone separated token.
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by a_plex_style_movie_parses"
+)]
 static YEAR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[\(\[\s._-](\d{4})[\)\]\s._-]?").expect("static pattern"));
 
@@ -158,6 +162,10 @@ fn last_year_match(name: &str) -> Option<(usize, i32)> {
 
 /// Leading quality tokens, matched one at a time so a run of them can be
 /// consumed. "1080p `BluRay`" is not a title; "Blade Runner" is.
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by a_resolution_is_not_mistaken_for_a_year"
+)]
 static QUALITY_TOKEN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?i)^(\d{3,4}p|4k|uhd|hdr\d*|bluray|blu-ray|web-?dl|webrip|hdtv|dvdrip|remux|x26[45]|h\.?26[45]|hevc|avc|aac|dts|proper|repack)([\s._-]+|$)",
@@ -179,6 +187,10 @@ fn is_only_quality_tokens(title: &str) -> bool {
 /// scene-release separators. Marks the start of release metadata, so a
 /// year-less scene name like "Movie.Title.1080p.BluRay" keeps "Movie Title"
 /// and drops everything from "1080p" onward.
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by a_scene_movie_parses"
+)]
 static QUALITY_CUT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?i)(?:^|[\s._-])(\d{3,4}p|4k|uhd|hdr\d*|bluray|blu-ray|web-?dl|webrip|hdtv|dvdrip|remux|x26[45]|h\.?26[45]|hevc|avc|aac|dts|proper|repack)(?:[\s._-]|$)",

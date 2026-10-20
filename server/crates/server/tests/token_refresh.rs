@@ -2,6 +2,13 @@
 //! `login.rs` covers `login` and `devices`; this file exercises the other
 //! three device/token mutations the same brief asked for.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use mydia_auth::tokens::{Issuer, TokenKind};

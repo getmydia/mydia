@@ -10,6 +10,7 @@ use tokio_util::io::ReaderStream;
 
 use crate::media::auth::authorize;
 use crate::media::range::{mime_for, parse, Range};
+use crate::media::STREAMING_MODE;
 use crate::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -100,7 +101,7 @@ async fn serve_range(path: &str, size: u64, headers: &HeaderMap) -> Response {
                     (header::CONTENT_TYPE, mime.to_string()),
                     (header::CONTENT_RANGE, format!("bytes {start}-{end}/{size}")),
                     (header::CONTENT_LENGTH, length.to_string()),
-                    ("x-streaming-mode".parse().unwrap(), "direct".to_string()),
+                    (STREAMING_MODE, "direct".to_string()),
                 ],
                 body,
             )
@@ -118,7 +119,7 @@ async fn serve_range(path: &str, size: u64, headers: &HeaderMap) -> Response {
                     (header::ACCEPT_RANGES, "bytes".to_string()),
                     (header::CONTENT_TYPE, mime.to_string()),
                     (header::CONTENT_LENGTH, size.to_string()),
-                    ("x-streaming-mode".parse().unwrap(), "direct".to_string()),
+                    (STREAMING_MODE, "direct".to_string()),
                 ],
                 Body::from_stream(ReaderStream::new(file)),
             )

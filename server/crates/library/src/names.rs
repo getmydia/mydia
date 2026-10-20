@@ -2,9 +2,17 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by bracketed_group_prefixes_are_dropped"
+)]
 static BRACKETED: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[[^\]]*\]|\{[^}]*\}").expect("static pattern"));
 
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by runs_of_whitespace_collapse"
+)]
 static WHITESPACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s+").expect("static pattern"));
 
 /// Turns a raw filename fragment into a display title.

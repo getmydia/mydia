@@ -2,6 +2,13 @@
 //! types this group owns are compared; the remaining groups arrive in later
 //! tasks and full equality is asserted in `tests/sdl_parity.rs`.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use mydia_api::sdl::canonicalize;
 
 /// The 17 types owned by this group: the Node interface, the pagination

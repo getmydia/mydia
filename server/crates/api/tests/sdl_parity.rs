@@ -8,6 +8,13 @@
 //! If this test fails, either this schema drifted or the Elixir schema did.
 //! Run `mix schema.export` in the repo root to find out which.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use mydia_api::sdl::canonicalize;
 
 fn reference_sdl() -> String {

@@ -1,6 +1,13 @@
 //! Remux output is verified by probing it, not by trusting the exit code.
 //! ffmpeg exits 0 on plenty of output nobody can play.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use std::io::Write;
 
 use futures_util::StreamExt;

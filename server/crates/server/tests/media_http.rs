@@ -1,5 +1,12 @@
 //! The byte endpoints, exercised the way a video player exercises them.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 mod support;
 
 use axum::body::Body;

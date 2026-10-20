@@ -5,13 +5,15 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use mydia_db::media_files::MediaFileRow;
 
+use super::STREAMING_MODE;
+
 pub fn serve(row: &MediaFileRow) -> Response {
     match mydia_streaming::remux::start(&row.path, row.duration_seconds) {
         Ok(stream) => (
             StatusCode::OK,
             [
                 (header::CONTENT_TYPE, "video/mp4"),
-                ("x-streaming-mode".parse().unwrap(), "remux"),
+                (STREAMING_MODE, "remux"),
             ],
             Body::from_stream(stream),
         )

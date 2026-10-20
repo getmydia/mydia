@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use mydia_library::sidecar::discover;
 
 fn touch(dir: &std::path::Path, name: &str) {

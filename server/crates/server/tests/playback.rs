@@ -1,5 +1,12 @@
 //! The player's own playback documents, run against the server.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 mod support;
 
 use mydia_server::test_support::{app_over_library, post_graphql_with_variables};
