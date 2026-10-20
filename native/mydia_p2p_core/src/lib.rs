@@ -2516,7 +2516,34 @@ async fn run_hls_stream_worker(
     hls_registry.lock().await.remove(&stream_id);
 }
 
+/// How many of one connection's requests may wait for the host app to take
+/// them off the shared event channel before more are refused.
+///
+/// The event channel holds 100 events for every connection the host has, so
+/// this bounds what one peer can pile up behind a host that has stopped
+/// draining. A peer that gets this far ahead is sent `server_busy` for each
+/// further request until the host catches up.
+const CONNECTION_EVENT_QUEUE: usize = 64;
+
+/// Write `response` on `send` and finish the stream, ignoring write errors:
+/// a peer that has gone away has nothing left to tell.
+async fn respond_now(mut send: iroh::endpoint::SendStream, response: MydiaResponse) {
+    if let Ok(response_data) = serde_cbor::to_vec(&response) {
+        let _ = send.write_all(&response_data).await;
+        let _ = send.finish();
+    }
+}
+
 /// Handle incoming streams from a peer connection
+///
+/// The accept loop never waits on the host app. Each request is handed to
+/// this connection's own queue, and a forwarder task moves the queue onto the
+/// shared event channel in order, so the host still sees one connection's
+/// requests in the order they arrived. Waiting on the shared channel here
+/// instead would stop this loop accepting streams whenever the host fell
+/// behind, and with it the `Ping`s a client sends to tell a stalled path from
+/// a slow server (see [`STALL_PROBE_AFTER`]): the client would then close a
+/// connection that was perfectly alive.
 async fn handle_connection(
     conn: Connection,
     peer_id: String,
@@ -2526,6 +2553,25 @@ async fn handle_connection(
     disconnect_tx: mpsc::Sender<(String, ConnectionId)>,
     #[cfg(feature = "host")] hls_registry: HlsStreamRegistry,
 ) {
+    // The forwarder ends once `queue_tx` is dropped, which happens when this
+    // function returns, after it has passed on whatever was still queued.
+    let (queue_tx, mut queue_rx) = mpsc::channel::<Event>(CONNECTION_EVENT_QUEUE);
+    let forward_peer = peer_id.clone();
+    runtime::spawn(async move {
+        while let Some(event) = queue_rx.recv().await {
+            let started = runtime::time::Instant::now();
+            let _ = event_tx.send(event).await;
+            let waited = started.elapsed();
+            if waited >= std::time::Duration::from_secs(1) {
+                tracing::warn!(
+                    "Host app took {}ms to accept a request event from {}",
+                    waited.as_millis(),
+                    forward_peer
+                );
+            }
+        }
+    });
+
     loop {
         match conn.accept_bi().await {
             Ok((send, mut recv)) => {
@@ -2558,14 +2604,11 @@ async fn handle_connection(
 
                 tracing::debug!("Received request from {}: {:?}", peer_id, request);
 
-                // For Ping requests, respond immediately
+                // For Ping requests, respond immediately, whatever state the
+                // host app is in. This is what the client's stall probe
+                // relies on.
                 if matches!(request, MydiaRequest::Ping) {
-                    let mut send = send;
-                    let response = MydiaResponse::Pong;
-                    if let Ok(response_data) = serde_cbor::to_vec(&response) {
-                        let _ = send.write_all(&response_data).await;
-                        let _ = send.finish();
-                    }
+                    respond_now(send, MydiaResponse::Pong).await;
                     continue;
                 }
 
@@ -2579,14 +2622,30 @@ async fn handle_connection(
                 // failing to decode, which would drop the stream and leave the
                 // caller waiting out a timeout. See getmydia/mydia#687.
                 if matches!(request, MydiaRequest::ReadMedia(_)) {
-                    let mut send = send;
-                    let response = MydiaResponse::Error("unsupported_request_type".to_string());
-                    if let Ok(response_data) = serde_cbor::to_vec(&response) {
-                        let _ = send.write_all(&response_data).await;
-                        let _ = send.finish();
-                    }
+                    respond_now(
+                        send,
+                        MydiaResponse::Error("unsupported_request_type".to_string()),
+                    )
+                    .await;
                     continue;
                 }
+
+                // Everything else goes to the host app. Claim a queue slot
+                // before registering anything, so a refused request leaves no
+                // registration behind, and a queued one is always registered
+                // before the host can answer it.
+                let permit = match queue_tx.try_reserve() {
+                    Ok(permit) => permit,
+                    Err(_) => {
+                        tracing::warn!(
+                            "Refusing a request from {}: {} are already waiting for the host app",
+                            peer_id,
+                            CONNECTION_EVENT_QUEUE
+                        );
+                        respond_now(send, MydiaResponse::Error("server_busy".to_string())).await;
+                        continue;
+                    }
+                };
 
                 // For HLS streaming requests, create a dedicated per-stream worker task
                 // and register it in the HLS registry.
@@ -2607,21 +2666,23 @@ async fn handle_connection(
                         hls_registry.clone(),
                     ));
 
-                    // Emit the HLS stream event
-                    let _ = event_tx
-                        .send(Event::HlsStreamRequest {
-                            peer: peer_id.clone(),
-                            request: hls_request.clone(),
-                            stream_id,
-                        })
-                        .await;
-                    let event_emitted_ms = t0.elapsed().as_millis() as u64;
+                    // Queue the HLS stream event for the host app.
+                    permit.send(Event::HlsStreamRequest {
+                        peer: peer_id.clone(),
+                        request: hls_request.clone(),
+                        stream_id,
+                    });
+                    // Measured when the event joins this connection's queue,
+                    // not when the host app takes it: that happens later, on
+                    // the forwarder, which warns on its own when the host is
+                    // slow to take one.
+                    let event_queued_ms = t0.elapsed().as_millis() as u64;
 
                     tracing::info!(
-                        "p2p_metrics_server: request_intake request_read_ms={} decode_ms={} event_emitted_ms={} session={} path={}",
+                        "p2p_metrics_server: request_intake request_read_ms={} decode_ms={} event_queued_ms={} session={} path={}",
                         request_read_ms,
                         decode_ms,
-                        event_emitted_ms,
+                        event_queued_ms,
                         hls_request.session_id,
                         hls_request.path
                     );
@@ -2641,16 +2702,16 @@ async fn handle_connection(
                     state.pending_responses.insert(request_id.clone(), resp_tx);
                 }
 
-                // Emit the request event
-                let _ = event_tx
-                    .send(Event::RequestReceived {
-                        peer: peer_id.clone(),
-                        request,
-                        request_id: request_id.clone(),
-                    })
-                    .await;
+                // Queue the request event for the host app.
+                permit.send(Event::RequestReceived {
+                    peer: peer_id.clone(),
+                    request,
+                    request_id: request_id.clone(),
+                });
 
-                // Wait for the response and send it
+                // Wait for the response and send it. The clock starts when
+                // the request is queued, so time spent waiting for a slow
+                // host app counts against `RESPONSE_TIMEOUT`.
                 let request_id_clone = request_id.clone();
                 let shared_state_clone = shared_state.clone();
                 runtime::spawn(async move {
@@ -2733,9 +2794,11 @@ const CONTROL_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_m
 /// LOG-50PX02 shows every request on such a connection waiting about 35
 /// seconds until iroh fell back to the relay, after which all of them
 /// completed at once. A slow server is not that: its core answers `Ping`
-/// itself, in the serve loop, without touching the GraphQL pipeline. So a
-/// probe tells a dead path from a slow query, and only the dead path is given
-/// up on.
+/// itself, in the per-connection accept loop, which hands every other request
+/// to a queue rather than waiting on the host app (see `handle_connection`).
+/// A server whose GraphQL pipeline is slow or backed up still answers the
+/// probe promptly, so a probe tells a dead path from a slow query, and only
+/// the dead path is given up on.
 ///
 /// Shrunk under `cfg(test)` to stay below the test `RESPONSE_TIMEOUT`.
 #[cfg(not(test))]
@@ -3399,6 +3462,91 @@ mod tests {
             matches!(response, MydiaResponse::Error(_)),
             "expected a timeout Error response, got {response:?}"
         );
+    }
+
+    /// A host app that stops draining its events must not stop its core
+    /// answering `Ping`. The client's stall probe reads an unanswered ping as
+    /// a dead path and closes the connection, so a serve loop that waited on
+    /// the shared event channel would turn a busy host into dropped clients.
+    ///
+    /// The responder is drained only until it reports the connection, then
+    /// left alone. Requests nobody answers fill its 100-item event channel,
+    /// then this connection's queue, until the core starts refusing them with
+    /// `server_busy`. A `Ping` sent after that must still come straight back.
+    /// Before the fix, the serve loop stopped accepting streams as soon as
+    /// the event channel was full, so the requests below went unanswered.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn ping_is_answered_while_the_host_app_is_not_draining_events() {
+        let (responder, responder_id) = Host::new(test_config());
+        let (dialer, _dialer_id) = Host::new(test_config());
+        spawn_event_drain(&dialer);
+
+        // `Connected` is sent before the connection's serve loop is spawned,
+        // so the responder has to be drained at least that far.
+        let event_rx = responder.event_rx.clone();
+        let drained_until_connected = tokio::spawn(async move {
+            let mut rx = event_rx.lock().await;
+            while let Some(event) = rx.recv().await {
+                if matches!(event, Event::Connected { .. }) {
+                    return;
+                }
+            }
+        });
+
+        let responder_addr = wait_for_addr(&responder).await;
+        dialer
+            .dial(responder_addr)
+            .await
+            .expect("dial should succeed");
+        tokio::time::timeout(std::time::Duration::from_secs(10), drained_until_connected)
+            .await
+            .expect("the responder to report the connection")
+            .expect("drain task panicked");
+
+        // Waves of 40 stay below QUIC's limit of 100 open streams. Each
+        // request is either refused at once or times out after the test
+        // `RESPONSE_TIMEOUT`, so a wave finishes well inside the bound below.
+        let dialer = Arc::new(dialer);
+        let mut refused = false;
+        for _ in 0..10 {
+            let wave: Vec<_> = (0..40u8)
+                .map(|i| {
+                    let dialer = dialer.clone();
+                    let responder_id = responder_id.clone();
+                    tokio::spawn(async move {
+                        dialer
+                            .send_request(responder_id, MydiaRequest::Custom(vec![i]))
+                            .await
+                    })
+                })
+                .collect();
+            for task in wave {
+                let response = tokio::time::timeout(std::time::Duration::from_secs(5), task)
+                    .await
+                    .expect("a request went unanswered: the serve loop is waiting on the host app")
+                    .expect("send task panicked")
+                    .expect("send_request itself should not error");
+                if response == MydiaResponse::Error("server_busy".to_string()) {
+                    refused = true;
+                }
+            }
+            if refused {
+                break;
+            }
+        }
+        assert!(
+            refused,
+            "the responder never refused a request, so its event channel never filled"
+        );
+
+        let pong = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            dialer.send_request(responder_id, MydiaRequest::Ping),
+        )
+        .await
+        .expect("the Ping went unanswered while the host app was not draining")
+        .expect("send_request itself should not error");
+        assert_eq!(pong, MydiaResponse::Pong);
     }
 
     #[tokio::test]
