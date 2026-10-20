@@ -192,7 +192,10 @@ defmodule Mydia.Storage.S3.MultipartTest do
           conn |> Plug.Conn.put_resp_header("etag", "\"p1\"") |> Plug.Conn.resp(200, "")
 
         "2" ->
-          spin(part3_done, 1, System.monotonic_time(:millisecond) + 2_000)
+          # A match, not a bare call: answering after a timeout would bring
+          # the race back as a misleading `:shutdown`. Parts run concurrently
+          # (the default concurrency is 4), so part 3 always arrives.
+          :ok = spin(part3_done, 1, System.monotonic_time(:millisecond) + 10_000)
           Plug.Conn.resp(conn, 403, "")
 
         _ ->
