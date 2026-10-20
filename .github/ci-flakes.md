@@ -451,6 +451,19 @@ evidence the wait is bounded by configuration, not by load.
 
 ### Postgres job
 
+**`Mydia.Storage.S3.MultipartTest`, "a failed part aborts the upload and
+completes nothing"** (`test/mydia/storage/s3/multipart_test.exs`). **Fixed
+2026-10-19.** Failed with a bare `** (exit) shutdown` plus a logged
+`Bypass.Instance` crash (`GenServer.stop(:normal, ...)`, "no process"). Part 2's
+403 halts `Task.async_stream`, which kills every part still uploading. When part
+3's request was mid-flight, cowboy shut its Bypass handler down, Bypass stored
+that `:shutdown` as the expectation's result, and its `on_exit` verify re-raised
+it in the test. Whether part 3 is still in flight is timing, so it only surfaced
+on the concurrent Postgres job. The fix makes part 2 answer only after part 3's
+handler has sent its response. The general shape: a Bypass expectation whose
+client can be killed mid-request fails the test even when every assertion passed.
+Seen on master at `576d20b0`.
+
 **`CrashReporter.TowerReporterTest`**, high rate, roughly 3 in 5 runs. Fails
 `assert wait_until(fn -> Queue.count() >= 1 end)`, a 2s poll, and a different test
 in the module fails each run, which is the tell that it is timing rather than a
@@ -627,6 +640,15 @@ own items. `run_all/1` walks every monitored item in the table, and one this
 test never created was visible; where it came from was not established.
 
 ### SQLite job
+
+**`MydiaWeb.AdminIndexersLiveTest`, "Cardigann engine section a running switch
+keeps the picker open"** (`test/mydia_web/live/admin_indexers_live_test.exs`).
+**Fixed 2026-10-19.** Failed `refute has_element?(view, "#cardigann-engine-toggle")`.
+Seed order, not adapter: `engine_switcher_test.exs` set the global
+`:fake_wasm_engine_status` to `:ready` and never cleared it, and this describe
+block only cleared it on exit. When the switcher module ran first, the switch to
+Prowlarr cut over at once, no transition rendered, and the toggle came back. Both
+setups now clear the key. Seen on master at `576d20b0` on the SQLite 2/4 shard.
 
 **`Downloads.ClientHealthTest`**, `(Exqlite.Error) Database busy`, with
 `Ecto.StaleEntryError` and `DBConnection.ConnectionError: owner exited` noise.
