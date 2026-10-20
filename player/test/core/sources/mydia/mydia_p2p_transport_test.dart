@@ -20,6 +20,22 @@ class _ScriptedP2p extends P2pService {
       answer();
 }
 
+class _CountingP2p extends P2pService {
+  _CountingP2p(this.answers);
+  final List<Future<Map<String, dynamic>> Function()> answers;
+  int calls = 0;
+  @override
+  Future<Map<String, dynamic>> sendGraphQLRequest({
+    required String peer,
+    required String query,
+    Map<String, dynamic>? variables,
+    String? operationName,
+    String? authToken,
+    String? deviceProfile,
+  }) =>
+      answers[calls++]();
+}
+
 Matcher _kind(SourceErrorKind kind) =>
     throwsA(isA<SourceException>().having((e) => e.kind, 'kind', kind));
 
@@ -68,6 +84,73 @@ void main() {
     );
     expect(p2p.lastToken, 'tok-1');
     expect(p2p.lastDeviceProfile, 'prof-val');
+  });
+
+  group('retry after a transport failure', () {
+    test('a query is retried once and returns the second answer', () async {
+      final p2p = _CountingP2p([
+        () async => throw Exception('connection_stalled: no answer'),
+        () async => {'a': 1},
+      ]);
+      final result = await P2pMydiaTransport(p2p: p2p, nodeAddr: 'node')
+          .send('query Q { a }', {});
+      expect(result, {'a': 1});
+      expect(p2p.calls, 2);
+    });
+
+    test('an anonymous query is retried too', () async {
+      final p2p = _CountingP2p([
+        () async => throw StateError('closed'),
+        () async => {'a': 1},
+      ]);
+      await P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{ a }', {});
+      expect(p2p.calls, 2);
+    });
+
+    test('a mutation is never retried', () async {
+      final p2p = _CountingP2p([
+        () async => throw Exception('connection_stalled: no answer'),
+        () async => {'a': 1},
+      ]);
+      await expectLater(
+          P2pMydiaTransport(p2p: p2p, nodeAddr: 'node')
+              .send('mutation M { a }', {}),
+          _kind(SourceErrorKind.unreachable));
+      expect(p2p.calls, 1);
+    });
+
+    test('a server answer is never retried', () async {
+      final p2p = _CountingP2p([
+        () async => throw const P2pGraphQLError('boom'),
+        () async => {'a': 1},
+      ]);
+      await expectLater(
+          P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{ a }', {}),
+          throwsA(isA<MydiaGraphqlError>()));
+      expect(p2p.calls, 1);
+    });
+
+    test('a query failing twice is unreachable', () async {
+      final p2p = _CountingP2p([
+        () async => throw StateError('closed'),
+        () async => throw StateError('closed again'),
+      ]);
+      await expectLater(
+          P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{ a }', {}),
+          _kind(SourceErrorKind.unreachable));
+      expect(p2p.calls, 2);
+    });
+
+    test('an unparseable document is not retried', () async {
+      final p2p = _CountingP2p([
+        () async => throw StateError('closed'),
+        () async => {'a': 1},
+      ]);
+      await expectLater(
+          P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{{{', {}),
+          _kind(SourceErrorKind.unreachable));
+      expect(p2p.calls, 1);
+    });
   });
 }
 

@@ -1,6 +1,9 @@
 /// How a Mydia server's GraphQL travels: HTTP to its URL, or p2p to its node.
 library;
 
+import 'package:gql/ast.dart';
+import 'package:gql/language.dart';
+
 import '../../../domain/sources/source_error.dart';
 import '../../p2p/p2p_service.dart';
 import '../../player/device_profile.dart';
@@ -114,14 +117,28 @@ class P2pMydiaTransport implements MydiaGqlTransport {
     String? deviceProfile,
     Duration? timeout,
   }) async {
+    Future<Map<String, dynamic>> attempt() => _p2p.sendGraphQLRequest(
+          peer: _nodeAddr,
+          query: query,
+          variables: variables,
+          authToken: token,
+          deviceProfile: deviceProfile,
+        );
+
     try {
-      return await _p2p.sendGraphQLRequest(
-        peer: _nodeAddr,
-        query: query,
-        variables: variables,
-        authToken: token,
-        deviceProfile: deviceProfile,
-      );
+      try {
+        return await attempt();
+      } on P2pGraphQLError {
+        rethrow;
+      } catch (_) {
+        // A failure here means the answer never arrived: the core closes a
+        // connection whose path went silent (`connection_stalled`), which
+        // also fails every request sharing it. A query is safe to send
+        // again, and the retry dials a fresh connection. A mutation may
+        // already have run, so it is never replayed.
+        if (!_isQueryOnly(query)) rethrow;
+        return await attempt();
+      }
     } on P2pGraphQLError catch (e) {
       if (isMydiaAuthError(e.message)) {
         throw const SourceException.unauthorized();
@@ -133,5 +150,20 @@ class P2pMydiaTransport implements MydiaGqlTransport {
       // answer, so they all mean it could not be reached.
       throw const SourceException.unreachable();
     }
+  }
+}
+
+/// Whether every operation in [document] is a query, so sending it twice
+/// cannot repeat a side effect. Anything unparseable counts as not a query.
+bool _isQueryOnly(String document) {
+  try {
+    final operations = parseString(document)
+        .definitions
+        .whereType<OperationDefinitionNode>()
+        .toList();
+    return operations.isNotEmpty &&
+        operations.every((op) => op.type == OperationType.query);
+  } catch (_) {
+    return false;
   }
 }
