@@ -138,6 +138,14 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
         ..owners.add(owner);
     }
 
+    // A LAN rebind replaces the server, so wait for it and take its result.
+    // A failed rebind leaves no server, which the bind below then covers.
+    for (var rebind = _rebinding; rebind != null;) {
+      await rebind.catchError((Object _) {});
+      final next = _rebinding;
+      rebind = identical(next, rebind) ? null : next;
+    }
+
     if (_server != null) return;
 
     // Concurrent starts share one bind; each rolls back only its own claim.
@@ -346,6 +354,26 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   Future<void> setLanAccess(bool enabled) async {
     if (enabled == isLanAccessible) return;
 
+    // Published synchronously so a [start] arriving at any point in the
+    // rebind waits for it, rather than binding a server of its own that the
+    // rebind would then close or overwrite.
+    final rebind = _rebind(enabled);
+    _rebinding = rebind;
+    try {
+      await rebind;
+    } finally {
+      if (identical(_rebinding, rebind)) _rebinding = null;
+    }
+  }
+
+  /// The [setLanAccess] in flight, if any. [start] waits on it.
+  Future<void>? _rebinding;
+
+  Future<void> _rebind(bool enabled) async {
+    // A start that began before this rebind finishes its bind first, so the
+    // server it returns with is the one closed below rather than a later one.
+    await _binding?.catchError((Object _) {});
+
     if (enabled) {
       final address = await resolveLanAddress();
       if (address == null) {
@@ -365,10 +393,6 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     // request in flight against the old port would hang rather than end.
     // Detached before the await for the same reason as [_tearDown].
     await _closeServer(_detachServer());
-    // A start that ran during the close bound a server of its own; this
-    // rebind replaces it. A failed bind is that start's to report.
-    await _binding?.catchError((Object _) {});
-    await _closeServer(_detachServer());
 
     if (_targets.isEmpty) {
       // Nothing to rebind: there is no proxy running to expose. Drop the
@@ -380,15 +404,19 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       return;
     }
 
-    _server = await HttpServer.bind(
+    final server = await HttpServer.bind(
       enabled ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4,
       0,
     );
-    _server!.listen(_handleRequest);
+    if (_targets.isEmpty) {
+      // Torn down while binding, as in [_bindServer].
+      await server.close(force: true);
+      return;
+    }
+    _server = server;
+    server.listen(_handleRequest);
 
-    debugPrint(
-      '[LocalProxy] Rebound (lan=$enabled) on port ${_server!.port}',
-    );
+    debugPrint('[LocalProxy] Rebound (lan=$enabled) on port ${server.port}');
   }
 
   static String _generateToken() {

@@ -59,6 +59,26 @@ void main() {
       expect(service.buildHlsUrl('sess-1', target: 'macct'), startsWith(base!));
     });
 
+    // A start that overlapped the rebind used to return with the old
+    // loopback server, which the rebind then closed: its URL was dead on
+    // arrival.
+    test('a start during a LAN rebind builds its URL on the rebound server',
+        () async {
+      final service = LocalProxyService.forTesting();
+      await service.start(
+          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
+      addTearDown(service.shutdown);
+
+      final rebinding = service.setLanAccess(true);
+      await service.start(
+          owner: Object(), targetPeer: 'peer-1', target: 'macct');
+      final url = service.buildHlsUrl('sess-1', target: 'macct');
+      await rebinding;
+
+      expect(Uri.parse(url).port, service.port);
+      if (service.isLanAccessible) expect(url, startsWith(service.lanBaseUrl!));
+    });
+
     test('requests without the token prefix are rejected when LAN-exposed',
         () async {
       final service = LocalProxyService.forTesting();
