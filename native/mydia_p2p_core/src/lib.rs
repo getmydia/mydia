@@ -2691,6 +2691,67 @@ const CONTROL_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_s
 #[cfg(test)]
 const CONTROL_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
 
+/// How long a GraphQL request may go unanswered before the connection it was
+/// sent on is probed with a `Ping`.
+///
+/// A direct path can be selected and then go silent: production log
+/// LOG-50PX02 shows every request on such a connection waiting about 35
+/// seconds until iroh fell back to the relay, after which all of them
+/// completed at once. A slow server is not that: its core answers `Ping`
+/// itself, in the serve loop, without touching the GraphQL pipeline. So a
+/// probe tells a dead path from a slow query, and only the dead path is given
+/// up on.
+///
+/// Shrunk under `cfg(test)` to stay below the test `RESPONSE_TIMEOUT`.
+#[cfg(not(test))]
+const STALL_PROBE_AFTER: std::time::Duration = std::time::Duration::from_secs(6);
+#[cfg(test)]
+const STALL_PROBE_AFTER: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// How long the `Ping` sent after [`STALL_PROBE_AFTER`] may take.
+#[cfg(not(test))]
+const STALL_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+#[cfg(test)]
+const STALL_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
+
+#[derive(Debug, PartialEq)]
+enum StallOutcome<T> {
+    /// The request finished, successfully or not, on its own.
+    Finished(T),
+    /// The request was still pending and the probe failed or timed out.
+    Stalled,
+}
+
+/// Await `request`. If it is still pending after `probe_after`, run `probe`,
+/// bounded by `probe_timeout`, while the request keeps running.
+///
+/// A probe that answers means the path is alive, so the request is awaited
+/// with no further limit. A probe that errors or times out means it is not.
+async fn await_with_stall_probe<T, R, P, PF>(
+    request: R,
+    probe: P,
+    probe_after: std::time::Duration,
+    probe_timeout: std::time::Duration,
+) -> StallOutcome<T>
+where
+    R: std::future::Future<Output = T>,
+    P: FnOnce() -> PF,
+    PF: std::future::Future<Output = Result<(), String>>,
+{
+    futures::pin_mut!(request);
+    if let Ok(result) = runtime::time::timeout(probe_after, &mut request).await {
+        return StallOutcome::Finished(result);
+    }
+
+    let probe = runtime::time::timeout(probe_timeout, probe());
+    futures::pin_mut!(probe);
+    match futures::future::select(&mut request, probe).await {
+        futures::future::Either::Left((result, _)) => StallOutcome::Finished(result),
+        futures::future::Either::Right((Ok(Ok(())), _)) => StallOutcome::Finished(request.await),
+        futures::future::Either::Right(_) => StallOutcome::Stalled,
+    }
+}
+
 /// Send a request, giving up on the connection itself if a remote-control
 /// request goes unanswered for [`CONTROL_REQUEST_TIMEOUT`].
 ///
@@ -2699,10 +2760,43 @@ const CONTROL_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_m
 /// timed out here would swallow every later request too. Closed, it is pruned
 /// like any other, and the caller's next request dials a fresh one on demand.
 ///
-/// Only remote control gets this. GraphQL and media requests can legitimately
-/// take longer than any bound worth setting here, and they have their own
-/// recovery.
+/// Remote control has the fixed timeout above. GraphQL can legitimately take
+/// longer than any bound worth setting, so it is probed instead (see
+/// [`STALL_PROBE_AFTER`]): only a connection that also fails a ping is given
+/// up on. Media streams are unchanged and have their own recovery.
 async fn send_request_on(conn: Connection, request: MydiaRequest) -> Result<MydiaResponse, String> {
+    if matches!(request, MydiaRequest::GraphQL(_)) {
+        let probe_conn = conn.clone();
+        let outcome = await_with_stall_probe(
+            do_send_request(conn.clone(), request),
+            move || async move {
+                match do_send_request(probe_conn, MydiaRequest::Ping).await? {
+                    MydiaResponse::Pong => Ok(()),
+                    other => Err(format!("unexpected probe response: {other:?}")),
+                }
+            },
+            STALL_PROBE_AFTER,
+            STALL_PROBE_TIMEOUT,
+        )
+        .await;
+        return match outcome {
+            StallOutcome::Finished(result) => result,
+            StallOutcome::Stalled => {
+                let waited = STALL_PROBE_AFTER + STALL_PROBE_TIMEOUT;
+                tracing::warn!(
+                    "GraphQL request to {} unanswered and a ping got no reply after {}ms; closing the connection",
+                    conn.remote_id(),
+                    waited.as_millis()
+                );
+                conn.close(0u32.into(), b"request stalled");
+                Err(format!(
+                    "connection_stalled: no answer to a ping after {}s",
+                    waited.as_secs()
+                ))
+            }
+        };
+    }
+
     if !matches!(request, MydiaRequest::RemoteControl(_)) {
         return do_send_request(conn, request).await;
     }
@@ -3270,6 +3364,109 @@ mod tests {
             matches!(response, MydiaResponse::Error(_)),
             "expected a timeout Error response, got {response:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn stall_probe_returns_a_fast_answer_without_probing() {
+        let probed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let p = probed.clone();
+        let result = await_with_stall_probe(
+            async { Ok::<_, String>(7) },
+            move || async move {
+                p.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            },
+            std::time::Duration::from_millis(50),
+            std::time::Duration::from_millis(50),
+        )
+        .await;
+        assert_eq!(result, StallOutcome::Finished(Ok(7)));
+        assert!(!probed.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn stall_probe_keeps_waiting_when_the_probe_answers() {
+        let result = await_with_stall_probe(
+            async {
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                Ok::<_, String>(7)
+            },
+            || async { Ok(()) },
+            std::time::Duration::from_millis(20),
+            std::time::Duration::from_millis(20),
+        )
+        .await;
+        assert_eq!(result, StallOutcome::Finished(Ok(7)));
+    }
+
+    #[tokio::test]
+    async fn stall_probe_reports_stalled_when_the_probe_times_out() {
+        let result = await_with_stall_probe(
+            std::future::pending::<Result<i32, String>>(),
+            std::future::pending::<Result<(), String>>,
+            std::time::Duration::from_millis(20),
+            std::time::Duration::from_millis(20),
+        )
+        .await;
+        assert_eq!(result, StallOutcome::Stalled);
+    }
+
+    #[tokio::test]
+    async fn stall_probe_reports_stalled_when_the_probe_errors() {
+        let result = await_with_stall_probe(
+            std::future::pending::<Result<i32, String>>(),
+            || async { Err("connection lost".to_string()) },
+            std::time::Duration::from_millis(20),
+            std::time::Duration::from_millis(20),
+        )
+        .await;
+        assert_eq!(result, StallOutcome::Stalled);
+    }
+
+    #[tokio::test]
+    async fn stall_probe_returns_the_request_if_it_lands_while_probing() {
+        let result = await_with_stall_probe(
+            async {
+                tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+                Ok::<_, String>(7)
+            },
+            std::future::pending::<Result<(), String>>,
+            std::time::Duration::from_millis(20),
+            std::time::Duration::from_millis(200),
+        )
+        .await;
+        assert_eq!(result, StallOutcome::Finished(Ok(7)));
+    }
+
+    /// A GraphQL request the server is slow to answer must not be mistaken
+    /// for a dead path: the probe's `Ping` is answered by the core itself, so
+    /// the request keeps waiting and the connection survives.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_slow_graphql_answer_is_not_treated_as_a_stall() {
+        let (responder, responder_id) = Host::new(test_config());
+        let (dialer, _dialer_id) = Host::new(test_config());
+        spawn_event_drain(&responder);
+        spawn_event_drain(&dialer);
+
+        let responder_addr = wait_for_addr(&responder).await;
+        dialer
+            .dial(responder_addr)
+            .await
+            .expect("dial should succeed");
+
+        let request = MydiaRequest::GraphQL(GraphQLRequest {
+            query: "{ slow }".to_string(),
+            variables: None,
+            operation_name: None,
+            auth_token: None,
+            device_profile: None,
+        });
+        let result = dialer.send_request(responder_id.clone(), request).await;
+        assert!(
+            matches!(result, Ok(MydiaResponse::Error(_))),
+            "expected the responder's own timeout Error, got {result:?}"
+        );
+        assert_eq!(dialer.debug_connection_count(&responder_id).await, 1);
     }
 
     /// A controller resuming from suspension holds a connection its target
