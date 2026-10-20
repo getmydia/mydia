@@ -70,4 +70,16 @@ defmodule Mydia.Accounts.ThemePreferenceTest do
     assert {:ok, pref} = Accounts.update_preference(pref, %{"theme" => "light"})
     assert UserPreference.theme_selection(pref).dark.id == "mydia-dark"
   end
+
+  test "a stale stored radius does not block an unrelated save" do
+    pref = user_fixture() |> Accounts.get_user_preference!()
+
+    pref =
+      pref
+      |> Ecto.Changeset.change(preferences: Map.put(pref.preferences, "radius", "retired"))
+      |> Repo.update!()
+
+    assert {:ok, pref} = Accounts.update_preference(pref, %{"theme" => "light"})
+    assert UserPreference.theme_selection(pref).radius == "theme"
+  end
 end
