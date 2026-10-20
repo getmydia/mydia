@@ -29,12 +29,12 @@ pedantic = { level = "warn", priority = -1 }
 must_use_candidate = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
-# Panic-free non-test code (enabled in the follow-up change).
-unwrap_used = "allow"
-expect_used = "allow"
-panic = "allow"
-todo = "allow"
-unimplemented = "allow"
+# Panic-free non-test code.
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
 # Hygiene.
 dbg_macro = "warn"
 print_stdout = "warn"
