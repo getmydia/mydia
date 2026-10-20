@@ -98,9 +98,16 @@ jobs:
             rust:
               - 'native/**'
               - 'plugins/**'
+              - 'player/rust/**'
+              - 'plugins-extra/**'
               - 'rust-toolchain.toml'
+              - 'rust-lints.toml'
+              - 'clippy.toml'
               - 'scripts/check-rust.sh'
               - 'scripts/check-plugins.sh'
+              - 'scripts/check-rust-lints.sh'
+              - 'scripts/check_rust_lints.py'
+              - 'scripts/test-check-rust-lints.sh'
               - 'devenv.nix'
               - 'devenv.lock'
               - '.github/workflows/ci.yml'
@@ -483,7 +490,7 @@ jobs:
 
       # Same script as the native-rust pre-commit hook, so a commit made
       # outside devenv (which skips the hook) is still gated here.
-      - name: Lint native crates (fmt + clippy)
+      - name: Lint native and player crates (fmt + clippy)
         run: devenv shell -- scripts/check-rust.sh
 
       - name: Lint wasm plugins (fmt + clippy)

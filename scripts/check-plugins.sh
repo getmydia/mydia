@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Lint every WASM plugin crate under plugins/.
+# Lint every WASM plugin crate under plugins/ and plugins-extra/.
 #
 # Plugins compile to wasm32-wasip2 component-model guests (built against the WIT
 # contract via the SDK's wit-bindgen), so we check them against that target
@@ -15,17 +15,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-PLUGINS_DIR="$PROJECT_ROOT/plugins"
 TARGET="wasm32-wasip2"
 
 FMT_MODE="--check"
 if [ "${1:-}" = "--fix" ]; then
   FMT_MODE=""
-fi
-
-if [ ! -d "$PLUGINS_DIR" ]; then
-  echo "No plugins/ directory; nothing to check."
-  exit 0
 fi
 
 # Verify the *active* toolchain has the target's std, by probing its sysroot
@@ -48,7 +42,7 @@ if [ -n "$SYSROOT" ] && [ ! -d "$SYSROOT/lib/rustlib/$TARGET" ]; then
 fi
 
 found=0
-for manifest in "$PLUGINS_DIR"/*/Cargo.toml; do
+for manifest in "$PROJECT_ROOT"/plugins/*/Cargo.toml "$PROJECT_ROOT"/plugins-extra/*/Cargo.toml; do
   [ -e "$manifest" ] || continue
   found=1
   crate_dir="$(dirname "$manifest")"
@@ -61,5 +55,5 @@ for manifest in "$PLUGINS_DIR"/*/Cargo.toml; do
 done
 
 if [ "$found" -eq 0 ]; then
-  echo "No plugin crates found under plugins/."
+  echo "No plugin crates found under plugins/ or plugins-extra/."
 fi
