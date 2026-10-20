@@ -28,6 +28,23 @@ defmodule Mydia.Accounts.ThemePreferenceTest do
     assert selection.dark.id == "dracula"
   end
 
+  test "accepts every radius id and reads it into the selection" do
+    pref = user_fixture() |> Accounts.get_user_preference!()
+    assert UserPreference.theme_selection(pref).radius == "theme"
+
+    for radius <- Mydia.Accounts.Themes.radii() do
+      assert {:ok, pref} = Accounts.update_preference(pref, %{"radius" => radius})
+      assert UserPreference.theme_selection(pref).radius == radius
+    end
+  end
+
+  test "rejects an unknown radius" do
+    pref = user_fixture() |> Accounts.get_user_preference!()
+
+    assert {:error, changeset} = Accounts.update_preference(pref, %{"radius" => "pointy"})
+    assert %{preferences: [_ | _]} = errors_on(changeset)
+  end
+
   test "rejects a theme in the wrong slot and unknown ids" do
     pref = user_fixture() |> Accounts.get_user_preference!()
 

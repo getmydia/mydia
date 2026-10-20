@@ -214,6 +214,14 @@
               />
             </div>
 
+            <div class="form-control w-full mt-6">
+              <span class="label-text font-medium">Corners</span>
+              <p class="text-sm text-base-content/60 mb-3">
+                How round cards, buttons and inputs are. Theme keeps each theme's own corners.
+              </p>
+              <.radius_picker id="theme-radius-picker" selected={@theme_selection.radius} />
+            </div>
+
             <%= if @player_enabled do %>
               <div class="divider my-2"></div>
 

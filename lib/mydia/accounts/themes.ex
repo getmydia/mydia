@@ -10,10 +10,15 @@ defmodule Mydia.Accounts.Themes do
 
   Removing a theme is safe: a stored id that is no longer listed reads as
   the default for its slot.
+
+  Corner roundness is a separate choice. `theme` keeps the theme's own radii;
+  every other id in `radii/0` needs a `:root[data-radius="<id>"]` rule in
+  `assets/css/app.css`, also checked by the parity test.
   """
   alias Mydia.Accounts.Themes.{Selection, Theme}
 
   @modes ~w(system light dark)
+  @radii ~w(theme sharp soft round)
 
   @themes [
     %Theme{id: "mydia-light", label: "Mydia Light", scheme: :light, base: "#f8fafc"},
@@ -32,6 +37,9 @@ defmodule Mydia.Accounts.Themes do
 
   @doc "The three modes: follow the OS, always light, always dark."
   def modes, do: @modes
+
+  @doc "Corner roundness choices: the theme's own, or one of three presets."
+  def radii, do: @radii
 
   @doc "Every theme, light first, in picker order."
   def all, do: @themes
@@ -56,17 +64,18 @@ defmodule Mydia.Accounts.Themes do
   def default(:light), do: get("mydia-light")
   def default(:dark), do: get("mydia-dark")
 
-  def default_selection, do: selection(nil, nil, nil)
+  def default_selection, do: selection(nil, nil, nil, nil)
 
   @doc """
   Resolves stored values into a `Selection`. Each field falls back on its
   own, so one bad value never discards the others.
   """
-  def selection(mode, light_id, dark_id) do
+  def selection(mode, light_id, dark_id, radius) do
     %Selection{
       mode: if(mode in @modes, do: mode, else: "system"),
       light: get(light_id, :light) || default(:light),
-      dark: get(dark_id, :dark) || default(:dark)
+      dark: get(dark_id, :dark) || default(:dark),
+      radius: if(radius in @radii, do: radius, else: "theme")
     }
   end
 
@@ -79,6 +88,7 @@ defmodule Mydia.Accounts.Themes do
   def to_client(%Selection{} = s) do
     %{
       mode: s.mode,
+      radius: s.radius,
       light_theme: s.light.id,
       dark_theme: s.dark.id,
       light_base: s.light.base,

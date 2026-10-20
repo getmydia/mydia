@@ -411,6 +411,7 @@ defmodule MydiaWeb.Layouts do
       "data-dark-base": selection.dark.base,
       "data-theme": active && active.id,
       "data-color-scheme": active && Atom.to_string(active.scheme),
+      "data-radius": if(selection.radius != "theme", do: selection.radius),
       style: "background-color: #{(active || selection.dark).base}"
     ]
   end

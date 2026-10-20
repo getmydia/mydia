@@ -31,21 +31,33 @@ defmodule MydiaWeb.Components.DarkVariantTest do
   end
 
   test "a fixed dark mode with a non-Mydia theme emits data-color-scheme=dark" do
-    attrs = Layouts.theme_html_attrs(Themes.selection("dark", nil, "dracula"))
+    attrs = Layouts.theme_html_attrs(Themes.selection("dark", nil, "dracula", nil))
 
     assert attrs[:"data-theme"] == "dracula"
     assert attrs[:"data-color-scheme"] == "dark"
   end
 
   test "a fixed light mode emits data-color-scheme=light" do
-    attrs = Layouts.theme_html_attrs(Themes.selection("light", "nord", nil))
+    attrs = Layouts.theme_html_attrs(Themes.selection("light", "nord", nil, nil))
 
     assert attrs[:"data-color-scheme"] == "light"
   end
 
   test "system mode leaves the scheme to the browser" do
-    attrs = Layouts.theme_html_attrs(Themes.selection("system", nil, nil))
+    attrs = Layouts.theme_html_attrs(Themes.selection("system", nil, nil, nil))
 
     assert attrs[:"data-color-scheme"] == nil
+  end
+
+  test "a radius preset emits data-radius; the theme's own corners omit it" do
+    for radius <- Themes.radii() -- ["theme"] do
+      attrs = Layouts.theme_html_attrs(Themes.selection("dark", nil, nil, radius))
+      assert attrs[:"data-radius"] == radius
+    end
+
+    assert Layouts.theme_html_attrs(Themes.selection("dark", nil, nil, "theme"))[:"data-radius"] ==
+             nil
+
+    assert Layouts.theme_html_attrs(nil)[:"data-radius"] == nil
   end
 end

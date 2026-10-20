@@ -74,11 +74,11 @@ defmodule Mydia.Accounts.UserPreference do
   end
 
   @doc """
-  The resolved theme choice: mode plus a light and a dark theme.
+  The resolved theme choice: mode, a light and a dark theme, and corner radius.
 
-  The slots are deliberately not in `@defaults`: an unset slot reads as
-  `Themes.default/1`, so changing a default later reaches every user who
-  never picked one.
+  The slots and the radius are deliberately not in `@defaults`: an unset slot
+  reads as `Themes.default/1`, so changing a default later reaches every user
+  who never picked one.
   """
   def theme_selection(%__MODULE__{preferences: prefs}) do
     prefs = prefs || %{}
@@ -86,7 +86,8 @@ defmodule Mydia.Accounts.UserPreference do
     Themes.selection(
       Map.get(prefs, "theme"),
       Map.get(prefs, "light_theme"),
-      Map.get(prefs, "dark_theme")
+      Map.get(prefs, "dark_theme"),
+      Map.get(prefs, "radius")
     )
   end
 
@@ -256,6 +257,7 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("theme", Themes.modes())
     |> validate_theme_slot("light_theme", :light)
     |> validate_theme_slot("dark_theme", :dark)
+    |> validate_preference_value("radius", Themes.radii())
     |> validate_preference_value("metadata_language", @valid_languages)
     |> validate_preference_value("interface_language", @valid_languages)
     |> validate_preference_value("close_manual_search_after_grab", [true, false])

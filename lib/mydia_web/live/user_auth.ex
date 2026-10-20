@@ -371,6 +371,9 @@ defmodule MydiaWeb.Live.UserAuth do
        when slot in ["light", "dark"],
        do: save_theme(socket, %{"#{slot}_theme" => id})
 
+  defp handle_theme_event("set_theme_radius", %{"radius" => radius}, socket),
+    do: save_theme(socket, %{"radius" => radius})
+
   defp handle_theme_event(_event, _params, socket), do: {:cont, socket}
 
   defp save_theme(%{assigns: %{current_user: %Mydia.Accounts.User{} = user}} = socket, delta) do

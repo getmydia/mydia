@@ -41,6 +41,10 @@
               root.setAttribute('data-dark-theme', m.dark);
               root.setAttribute('data-light-base', m.lightBase);
               root.setAttribute('data-dark-base', m.darkBase);
+              // Mirrors written before the roundness setting have no radius.
+              if (/^[a-z]+$/.test(m.radius) && m.radius !== 'theme') {
+                root.setAttribute('data-radius', m.radius);
+              }
             }
           } catch (e) {}
         }
@@ -61,7 +65,8 @@
               light: root.getAttribute('data-light-theme'),
               dark: root.getAttribute('data-dark-theme'),
               lightBase: root.getAttribute('data-light-base'),
-              darkBase: root.getAttribute('data-dark-base')
+              darkBase: root.getAttribute('data-dark-base'),
+              radius: root.getAttribute('data-radius') || 'theme'
             }));
           } catch (e) {}
         }

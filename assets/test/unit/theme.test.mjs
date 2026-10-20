@@ -14,6 +14,7 @@ function fakeRoot() {
     style: {},
     setAttribute: (k, v) => attrs.set(k, String(v)),
     getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
+    removeAttribute: (k) => attrs.delete(k),
   };
 }
 
@@ -51,9 +52,31 @@ test("fromPayload maps the server's keys", () => {
       dark_theme: "mocha",
       light_base: "#eceff4",
       dark_base: "#1e1e2e",
+      radius: "soft",
     }),
-    { ...selection, mode: "dark" },
+    { ...selection, mode: "dark", radius: "soft" },
   );
+});
+
+test("applySelection sets data-radius for a preset and mirrors it", () => {
+  const root = fakeRoot();
+  const storage = memoryStorage();
+
+  applySelection(root, { ...selection, radius: "sharp" }, false, storage);
+
+  assert.equal(root.getAttribute("data-radius"), "sharp");
+  assert.equal(JSON.parse(storage.getItem(MIRROR_KEY)).radius, "sharp");
+});
+
+test("applySelection removes data-radius for the theme's own corners", () => {
+  const root = fakeRoot();
+  const storage = memoryStorage();
+
+  applySelection(root, { ...selection, radius: "round" }, false, storage);
+  assert.equal(root.getAttribute("data-radius"), "round");
+
+  applySelection(root, { ...selection, radius: "theme" }, false, storage);
+  assert.equal(root.getAttribute("data-radius"), null);
 });
 
 test("applySelection writes attributes, background and the mirror", () => {

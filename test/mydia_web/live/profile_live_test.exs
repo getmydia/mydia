@@ -78,6 +78,21 @@ defmodule MydiaWeb.ProfileLiveTest do
     assert_push_event(view, "theme_changed", %{dark_theme: "dracula"})
   end
 
+  test "the corners picker defaults to Theme and saves a preset", %{conn: conn, user: user} do
+    {:ok, view, _html} = live(conn, ~p"/profile")
+
+    assert has_element?(view, "#theme-radius-picker")
+    assert has_element?(view, "#theme-radius-theme[checked]")
+
+    view |> element("#theme-radius-sharp") |> render_click()
+
+    assert has_element?(view, "#theme-radius-sharp[checked]")
+    refute has_element?(view, "#theme-radius-theme[checked]")
+    selection = user |> Accounts.get_user_preference!() |> UserPreference.theme_selection()
+    assert selection.radius == "sharp"
+    assert_push_event(view, "theme_changed", %{radius: "sharp"})
+  end
+
   test "a theme change is not undone by a later profile save", %{conn: conn, user: user} do
     {:ok, view, _html} = live(conn, ~p"/profile")
 

@@ -19,6 +19,7 @@ export function fromPayload(detail) {
     dark: detail.dark_theme,
     lightBase: detail.light_base,
     darkBase: detail.dark_base,
+    radius: detail.radius,
   };
 }
 
@@ -55,6 +56,13 @@ export function applySelection(root, selection, prefersDark, storage, doc) {
   root.setAttribute("data-dark-theme", selection.dark);
   root.setAttribute("data-light-base", selection.lightBase);
   root.setAttribute("data-dark-base", selection.darkBase);
+
+  // "theme" is the absence of the attribute, as theme_html_attrs/1 renders it.
+  if (selection.radius && selection.radius !== "theme") {
+    root.setAttribute("data-radius", selection.radius);
+  } else {
+    root.removeAttribute("data-radius");
+  }
 
   const id = resolveThemeId(selection, prefersDark);
   root.setAttribute("data-theme", id);

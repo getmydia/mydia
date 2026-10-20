@@ -14,6 +14,12 @@ defmodule MydiaWeb.ThemesCssParityTest do
     assert MapSet.new(Enum.map(Themes.all(), & &1.id)) == css_theme_ids()
   end
 
+  test "every radius preset has a data-radius rule" do
+    for id <- Themes.radii(), id != "theme" do
+      assert app_css() =~ ~s(:root[data-radius="#{id}"]), "no CSS rule for radius #{id}"
+    end
+  end
+
   defp css_theme_ids do
     MapSet.new(mydia_ids() ++ daisyui_ids() ++ catppuccin_ids())
   end

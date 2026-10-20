@@ -54,6 +54,20 @@ defmodule MydiaWeb.ThemeHookTest do
   end
 
   describe "theme events from any LiveView" do
+    test "set_theme_radius persists and pushes the radius", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_hook(view, "set_theme_radius", %{"radius" => "round"})
+
+      assert user
+             |> Accounts.get_user_preference!()
+             |> UserPreference.theme_selection()
+             |> Map.get(:radius) ==
+               "round"
+
+      assert_push_event(view, "theme_changed", %{radius: "round"})
+    end
+
     test "set_theme_mode persists and pushes the full selection", %{conn: conn, user: user} do
       {:ok, view, _html} = live(conn, ~p"/movies")
 
