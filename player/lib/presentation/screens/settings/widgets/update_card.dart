@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/palette.dart';
+import '../../../../core/update/install_environment.dart';
 import '../../../../core/update/update_provider.dart';
 import '../../../../domain/models/available_update.dart';
 import 'settings_section.dart';
-import '../../../widgets/glass/glass_dialog.dart';
+import '../../../widgets/update_action.dart';
 
 /// The available-update card, shown above the settings sections.
 ///
@@ -15,7 +16,23 @@ import '../../../widgets/glass/glass_dialog.dart';
 /// platforms that update through a store, so a dead card is unrepresentable
 /// rather than merely guarded against.
 class UpdateCard extends ConsumerWidget {
-  const UpdateCard({super.key});
+  /// Forwarded to [startUpdate], so a test is not at the mercy of whichever
+  /// install environment the host running it happens to be.
+  @visibleForTesting
+  final InstallEnvironment? environmentOverride;
+
+  const UpdateCard({super.key, this.environmentOverride});
+
+  /// The Material focus overlay is a faint tint that all but disappears on the
+  /// dark palette, which leaves a D-pad user unsure which button is selected.
+  /// An outline on focus matches the ring [FocusHighlight] draws elsewhere.
+  static final ButtonStyle _focusRing = ButtonStyle(
+    side: WidgetStateBorderSide.resolveWith(
+      (states) => states.contains(WidgetState.focused)
+          ? const BorderSide(color: Colors.white, width: 2)
+          : null,
+    ),
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -99,6 +116,7 @@ class UpdateCard extends ConsumerWidget {
                   FilledButton.icon(
                     onPressed: () =>
                         ref.read(updateProvider.notifier).restart(),
+                    style: _focusRing,
                     icon: const Icon(Icons.restart_alt, size: 18),
                     label: const Text('Restart'),
                   )
@@ -106,12 +124,18 @@ class UpdateCard extends ConsumerWidget {
                   Row(
                     children: [
                       FilledButton.icon(
-                        onPressed: () => _handleUpdateTap(context, ref),
+                        onPressed: () => startUpdate(
+                          context,
+                          ref,
+                          environmentOverride: environmentOverride,
+                        ),
+                        style: _focusRing,
                         icon: const Icon(Icons.download, size: 18),
                         label: const Text('Update Now'),
                       ),
                       const SizedBox(width: 8),
                       TextButton(
+                        style: _focusRing,
                         onPressed: () =>
                             _openReleaseNotes(update.releaseNotesUrl),
                         child: const Text('Release Notes'),
@@ -148,39 +172,6 @@ class UpdateCard extends ConsumerWidget {
     if (version != null) return 'Update available: v$version';
     if (update != null) return 'A new version of Mydia Player is available';
     return 'Updates';
-  }
-
-  void _handleUpdateTap(BuildContext context, WidgetRef ref) {
-    final notifier = ref.read(updateProvider.notifier);
-
-    if (!notifier.canUpdateInPlace) {
-      notifier.requestUpdate();
-      return;
-    }
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => GlassDialog(
-        title: const Text('Update Mydia'),
-        content: const Text(
-          'Mydia will download and install the newest build, then offer to '
-          'restart. Continue?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              notifier.requestUpdate();
-            },
-            child: const Text('Update'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _openReleaseNotes(String url) async {

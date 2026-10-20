@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/player/input_capabilities.dart';
 import '../../core/update/install_environment.dart';
 import '../../core/update/update_provider.dart';
 import '../../domain/models/available_update.dart';
@@ -21,6 +22,12 @@ typedef UrlLauncher = Future<void> Function(Uri uri);
 /// wrong; one shared action answers that objection instead of working around
 /// it.
 ///
+/// On a directional-primary device (Android TV) the `inPlace` branch skips
+/// the confirmation: Android's package installer opens its own confirm
+/// screen, which is the confirmation, and a second dialog is one more
+/// remote press for nothing. [directionalPrimary] defaults to
+/// [InputCapabilities.directionalPrimary] and exists so tests can choose.
+///
 /// Flatpak used to show a dialog naming `flatpak update <app id>` for the
 /// user to run themselves. `UpdateBackend` now knows how to update a Flatpak
 /// install in place through `org.freedesktop.portal.Flatpak`, so that branch
@@ -33,6 +40,7 @@ Future<void> startUpdate(
   WidgetRef ref, {
   InstallEnvironment? environmentOverride,
   UrlLauncher? launcher,
+  bool? directionalPrimary,
 }) async {
   final update = ref.read(updateProvider).availableUpdate;
   if (update == null) return;
@@ -53,12 +61,24 @@ Future<void> startUpdate(
       }
 
     case InstallEnvironment.inPlace:
+      final notifier = ref.read(updateProvider.notifier);
+      // A backend that cannot update in place has nothing to confirm; asking
+      // it anyway is how it explains itself (UpdateUnsupported). The Settings
+      // card always did this, so one shared path keeps it.
+      if (!notifier.canUpdateInPlace) {
+        unawaited(notifier.requestUpdate());
+        return;
+      }
       if (update is! AppUpdate) return;
+      if (directionalPrimary ?? InputCapabilities.directionalPrimary) {
+        unawaited(notifier.requestUpdate());
+        return;
+      }
       final confirmed = await _confirmInPlace(context, update);
       // The dialog awaited a person, so the widget that started this can be
       // gone by the time it returns.
       if (!confirmed || !context.mounted) return;
-      unawaited(ref.read(updateProvider.notifier).requestUpdate());
+      unawaited(notifier.requestUpdate());
   }
 }
 

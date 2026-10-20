@@ -5,6 +5,7 @@ import '../../../core/connection/connection_summary.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/p2p_service.dart';
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/update/update_provider.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/connection_tone_color.dart';
@@ -87,49 +88,99 @@ class SettingsScreen extends ConsumerWidget {
           appBar: header(context),
           // An explicit padding turns off ListView's own MediaQuery bottom
           // inset, so the dock's height has to be reserved here by hand.
-          body: ListView(
-            padding: EdgeInsets.fromLTRB(
-              horizontal,
-              20,
-              horizontal,
-              DockInsets.bottomOf(context),
-            ),
-            children: [
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 660),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // With several Mydia accounts this would name only the
-                      // bound one; each instance's own screen carries it.
-                      if (!manyMydiaAccounts)
-                        SettingsIdentity(
-                          username: settings?.username ?? '',
-                          serverUrl: settings?.serverUrl ?? '',
+          body: SettingsInitialFocus(
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                horizontal,
+                20,
+                horizontal,
+                DockInsets.bottomOf(context),
+              ),
+              children: [
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 660),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // With several Mydia accounts this would name only the
+                        // bound one; each instance's own screen carries it.
+                        if (!manyMydiaAccounts)
+                          SettingsIdentity(
+                            username: settings?.username ?? '',
+                            serverUrl: settings?.serverUrl ?? '',
+                          ),
+                        const UpdateCard(),
+                        PlaybackSettingsSection(
+                          settings: settings,
+                          failed: settingsAsync.hasError,
                         ),
-                      const UpdateCard(),
-                      PlaybackSettingsSection(
-                        settings: settings,
-                        failed: settingsAsync.hasError,
-                      ),
-                      const SizedBox(height: 18),
-                      const AppearanceSettingsSection(),
-                      const SizedBox(height: 18),
-                      _ManageSection(connection: summary),
-                      const SizedBox(height: 18),
-                      const SourcesSettingsSection(),
-                      VersionFooter(version: currentVersion),
-                    ],
+                        const SizedBox(height: 18),
+                        const AppearanceSettingsSection(),
+                        const SizedBox(height: 18),
+                        _ManageSection(connection: summary),
+                        const SizedBox(height: 18),
+                        const SourcesSettingsSection(),
+                        VersionFooter(version: currentVersion),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// Hands focus to the first focusable row when Settings opens on a television.
+///
+/// A remote has no pointer, so without this the first D-pad press only
+/// establishes focus instead of moving it and the screen opens with no visible
+/// target. Elsewhere focus is left alone: a phone or desktop has no use for an
+/// initial ring.
+///
+/// Later focus moves scroll the target into view through Flutter's default
+/// traversal, which calls `Scrollable.ensureVisible`. That works here because
+/// the settings sections sit in a `Column`, which builds every row, rather than
+/// in lazily built sliver children.
+class SettingsInitialFocus extends StatefulWidget {
+  const SettingsInitialFocus({
+    super.key,
+    required this.child,
+    this.directionalPrimary,
+  });
+
+  final Widget child;
+
+  /// Overrides [InputCapabilities.directionalPrimary], which tests cannot set.
+  final bool? directionalPrimary;
+
+  @override
+  State<SettingsInitialFocus> createState() => _SettingsInitialFocusState();
+}
+
+class _SettingsInitialFocusState extends State<SettingsInitialFocus> {
+  @override
+  void initState() {
+    super.initState();
+    if (!(widget.directionalPrimary ?? InputCapabilities.directionalPrimary)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final scope = FocusScope.of(context);
+      // Respect a descendant that already claimed focus, such as an
+      // autofocusing control.
+      if (scope.focusedChild != null) return;
+      scope.nextFocus();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _ManageSection extends ConsumerWidget {

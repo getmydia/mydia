@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../domain/models/available_update.dart';
+import 'android_installer.dart';
 import 'backends/flatpak_update_backend.dart';
 import 'update_backend.dart';
 import 'update_host.dart';
@@ -31,6 +33,20 @@ final updateBackendFactoryProvider = Provider<UpdateBackendFactory>(
         currentVersion: currentVersion,
       ),
 );
+
+/// Whether Android will let this app install a package right now. Overridden
+/// in tests, so the resume path can be driven without the installer channel.
+final installPermissionCheckProvider = Provider<Future<bool> Function()>(
+  (ref) => const AndroidInstaller().canInstall,
+);
+
+/// What the user sees when they come back from Android's settings without
+/// having granted the permission. Names the toggle as Android labels it, since
+/// "Allow from this source" alone does not say what is being allowed.
+const String _installPermissionStillDenied =
+    'Mydia still is not allowed to install updates. Turn on "Install unknown '
+    'apps" (Allow from this source) for Mydia in Android settings, then '
+    'tap Retry.';
 
 /// State for the update system.
 class UpdateState {
@@ -140,10 +156,17 @@ class UpdateNotifier extends Notifier<UpdateState> {
   UpdateBackend? _backend;
   StreamSubscription<AvailableUpdate?>? _sub;
 
+  /// Set when an install was refused for want of Android's install
+  /// permission, so coming back from the settings screen can finish it.
+  bool _installPending = false;
+  AppLifecycleListener? _lifecycle;
+
   @override
   UpdateState build() {
     ref.onDispose(() {
       _sub?.cancel();
+      _lifecycle?.dispose();
+      _lifecycle = null;
       _backend?.dispose();
     });
 
@@ -264,6 +287,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
     final backend = _backend;
     if (backend == null || !ref.mounted || state.isApplying) return;
 
+    _setInstallPending(false);
     state = state.copyWith(
       isApplying: true,
       downloadProgress: 0.0,
@@ -291,8 +315,8 @@ class UpdateNotifier extends Notifier<UpdateState> {
           notice: "You're up to date",
           clearUpdate: true,
         ),
-      UpdateUnsupported(:final reason) =>
-        state.copyWith(isApplying: false, error: reason),
+      UpdateUnsupported(:final reason, :final needsInstallPermission) =>
+        _unsupported(reason, needsInstallPermission),
       UpdateFailed(:final message) =>
         state.copyWith(isApplying: false, error: message),
       // The backend has already handed this off somewhere outside the app
@@ -307,6 +331,43 @@ class UpdateNotifier extends Notifier<UpdateState> {
           clearUpdate: true,
         ),
     };
+  }
+
+  UpdateState _unsupported(String reason, bool needsInstallPermission) {
+    _setInstallPending(needsInstallPermission);
+    return state.copyWith(isApplying: false, error: reason);
+  }
+
+  /// Watches for the app coming back to the foreground only while an install
+  /// is waiting on the permission, so no other install holds an observer.
+  void _setInstallPending(bool pending) {
+    if (_installPending == pending) return;
+    _installPending = pending;
+    if (pending) {
+      _lifecycle = AppLifecycleListener(onResume: _onResumed);
+    } else {
+      _lifecycle?.dispose();
+      _lifecycle = null;
+    }
+  }
+
+  /// The user is back from Android's "install unknown apps" screen. Retries
+  /// the install if they granted it; otherwise gives up on the pending
+  /// install and leaves the error and Retry for them to act on.
+  Future<void> _onResumed() async {
+    if (!_installPending || state.isApplying) return;
+
+    final allowed = await ref.read(installPermissionCheckProvider)();
+    // Cleared only after the await, and only if still pending, so a second
+    // resume that raced this one does not retry twice.
+    if (!ref.mounted || !_installPending) return;
+    _setInstallPending(false);
+
+    if (allowed) {
+      await requestUpdate();
+    } else {
+      state = state.copyWith(error: _installPermissionStillDenied);
+    }
   }
 
   /// Restart into the newly installed build. Flatpak only; every other

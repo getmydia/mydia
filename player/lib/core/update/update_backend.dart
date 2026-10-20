@@ -38,7 +38,12 @@ final class AlreadyUpToDate extends UpdateOutcome {
 final class UpdateUnsupported extends UpdateOutcome {
   final String reason;
 
-  const UpdateUnsupported(this.reason);
+  /// The refusal is Android's "install unknown apps" permission, which the
+  /// user can grant outside the app and then come back. Lets the notifier
+  /// retry on resume instead of matching on [reason]'s wording.
+  final bool needsInstallPermission;
+
+  const UpdateUnsupported(this.reason, {this.needsInstallPermission = false});
 }
 
 final class UpdateFailed extends UpdateOutcome {

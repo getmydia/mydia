@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 
@@ -9,7 +11,19 @@ Future<void> _pump(WidgetTester tester, Widget row) async {
   await tester.pump();
 }
 
+/// The focus node FocusHighlight owns for [title]'s row. Asked from the ring,
+/// which sits directly under the detector's Focus, so the lookup does not land
+/// on the InkWell's own (non-focusable) node.
+FocusNode _node(WidgetTester tester, String title) {
+  final ring = find.ancestor(
+    of: find.text(title),
+    matching: find.byKey(FocusHighlight.ringKey),
+  );
+  return Focus.of(tester.element(ring.first));
+}
+
 void main() {
+  _focusTests();
   group('SettingsRow.navigation', () {
     testWidgets('shows its title, subtitle, and trailing value',
         (tester) async {
@@ -218,6 +232,114 @@ void main() {
             .first,
       );
       expect(opacity.opacity, 1.0);
+    });
+  });
+}
+
+void _focusTests() {
+  group('SettingsRow focus', () {
+    testWidgets('Enter on a navigation row calls onTap', (tester) async {
+      var taps = 0;
+      await _pump(
+        tester,
+        SettingsRow.navigation(
+          icon: Icons.hd,
+          title: 'Default quality',
+          onTap: () => taps++,
+        ),
+      );
+      _node(tester, 'Default quality').requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      expect(taps, 2);
+    });
+
+    testWidgets('a navigation row with null onTap is not focusable',
+        (tester) async {
+      await _pump(
+        tester,
+        const SettingsRow.navigation(
+          icon: Icons.hd,
+          title: 'Default quality',
+          onTap: null,
+        ),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(_node(tester, 'Default quality').hasFocus, isFalse);
+    });
+
+    testWidgets('key activation flips a toggle row', (tester) async {
+      bool? received;
+      await _pump(
+        tester,
+        SettingsRow.toggle(
+          icon: Icons.fast_forward,
+          title: 'Skip intros',
+          value: false,
+          onChanged: (v) => received = v,
+        ),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(received, isTrue);
+    });
+
+    testWidgets('the Switch is not a separate traversal stop', (tester) async {
+      await _pump(
+        tester,
+        Column(
+          children: [
+            SettingsRow.toggle(
+              icon: Icons.fast_forward,
+              title: 'First',
+              value: false,
+              onChanged: (_) {},
+            ),
+            SettingsRow.navigation(
+              icon: Icons.hd,
+              title: 'Second',
+              onTap: () {},
+            ),
+          ],
+        ),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final first = FocusManager.instance.primaryFocus;
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final second = FocusManager.instance.primaryFocus;
+      expect(second, isNot(first));
+      expect(
+        find.descendant(
+          of: find.ancestor(
+              of: find.text('Second'), matching: find.byType(FocusHighlight)),
+          matching: find.text('Second'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        _node(tester, 'Second').hasPrimaryFocus,
+        isTrue,
+      );
+    });
+
+    testWidgets('a disabled toggle row is not focusable', (tester) async {
+      await _pump(
+        tester,
+        const SettingsRow.toggle(
+          icon: Icons.fast_forward,
+          title: 'Skip intros',
+          value: false,
+          onChanged: null,
+        ),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(_node(tester, 'Skip intros').hasFocus, isFalse);
     });
   });
 }

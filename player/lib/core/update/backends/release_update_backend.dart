@@ -121,7 +121,7 @@ class ReleaseUpdateBackend implements UpdateBackend {
     } on InstallerPermissionDenied catch (e) {
       // Not a failure to retry: the user has to grant the permission, and the
       // updater has already opened the screen where they do it.
-      return UpdateUnsupported(e.toString());
+      return UpdateUnsupported(e.toString(), needsInstallPermission: true);
     } on InstallerUnavailable catch (e) {
       return UpdateUnsupported(e.toString());
     } catch (e) {

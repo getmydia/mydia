@@ -39,6 +39,7 @@ Future<bool> confirmRemoveAccount(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => GlassDialog(
+      destructive: true,
       title: Text(title),
       content: Text('${account.displayName} and its servers are '
           'removed from this device. Nothing changes on the server.'
