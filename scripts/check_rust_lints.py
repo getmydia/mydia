@@ -65,13 +65,14 @@ def main():
                 continue
             check_table(rel, load(manifest).get("lints", {}), canonical, errors)
 
-    extra = sorted(
-        p.relative_to(root).as_posix()
-        for p in walk(root)
-        if p.name in ("clippy.toml", ".clippy.toml") and p.parent != root
-    )
-    for rel in extra:
-        errors.append(f"{rel}: only the repo-root clippy.toml is allowed")
+    if not (root / "clippy.toml").is_file():
+        errors.append("clippy.toml: the repo-root clippy.toml is missing")
+    for p in sorted(walk(root)):
+        rel = p.relative_to(root).as_posix()
+        if p.name == ".clippy.toml":
+            errors.append(f"{rel}: use clippy.toml (clippy reads .clippy.toml too, which can shadow it)")
+        elif p.name == "clippy.toml" and p.parent != root:
+            errors.append(f"{rel}: only the repo-root clippy.toml is allowed")
 
     for e in errors:
         print(e)

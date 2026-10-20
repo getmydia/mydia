@@ -32,5 +32,15 @@ copy_tree
 # A second clippy.toml must fail.
 cp "$TMP/clippy.toml" "$TMP/server/clippy.toml"
 if "$TMP/scripts/check-rust-lints.sh" >/dev/null 2>&1; then echo "FAIL: nested clippy.toml accepted"; exit 1; fi
+copy_tree
+
+# A root .clippy.toml must fail.
+cp "$TMP/clippy.toml" "$TMP/.clippy.toml"
+if "$TMP/scripts/check-rust-lints.sh" >/dev/null 2>&1; then echo "FAIL: root .clippy.toml accepted"; exit 1; fi
+copy_tree
+
+# A missing root clippy.toml must fail.
+rm "$TMP/clippy.toml"
+if "$TMP/scripts/check-rust-lints.sh" >/dev/null 2>&1; then echo "FAIL: missing clippy.toml accepted"; exit 1; fi
 
 echo "check-rust-lints: all cases pass"
