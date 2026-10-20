@@ -105,6 +105,7 @@ jobs:
               - 'clippy.toml'
               - 'scripts/check-rust.sh'
               - 'scripts/check-plugins.sh'
+              - 'scripts/test-plugins.sh'
               - 'scripts/check-rust-lints.sh'
               - 'scripts/check_rust_lints.py'
               - 'scripts/test-check-rust-lints.sh'
