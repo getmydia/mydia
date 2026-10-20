@@ -455,14 +455,51 @@ class P2pService {
   /// browser. The first ever load generates and stores a secret here. Only a
   /// platform with the no-op stub keystore stores nothing, and then it
   /// regenerates on each launch.
-  Future<Uint8List?> _loadOrCreateKeypairBytes() async {
-    final keystore = createKeystore();
+  ///
+  /// One load runs per process, and every caller shares it. Read, generate and
+  /// write are separate awaits, so two loads running at once on a first run
+  /// would both read nothing, and each generate a secret: the host would start
+  /// on one while the keystore kept the other. A reset() during startup does
+  /// exactly that, as would a second P2pService. A load that fails is
+  /// forgotten, so the next attempt tries the keystore again.
+  static Future<Uint8List?> _loadOrCreateKeypairBytes() {
+    final existing = _nodeSecretLoad;
+    if (existing != null) return existing;
+
+    final attempt = _readOrCreateNodeSecret(_keystoreFactory());
+    _nodeSecretLoad = attempt;
+    attempt.then<void>((_) {}, onError: (Object _) {
+      if (identical(_nodeSecretLoad, attempt)) _nodeSecretLoad = null;
+    });
+    return attempt;
+  }
+
+  static Future<Uint8List?> _readOrCreateNodeSecret(
+      P2pKeystore keystore) async {
     final stored = await keystore.read().timeout(_keystoreTimeout);
     if (stored != null) return stored;
     final secret = _generateNodeSecret();
     await keystore.write(secret).timeout(_keystoreTimeout);
     debugPrint('[P2P] Stored a new node identity');
     return secret;
+  }
+
+  /// The load [_loadOrCreateKeypairBytes] shares, in flight or finished.
+  static Future<Uint8List?>? _nodeSecretLoad;
+
+  static P2pKeystore Function() _keystoreFactory = createKeystore;
+
+  /// Run [_loadOrCreateKeypairBytes] without building a host. Tests only.
+  @visibleForTesting
+  static Future<Uint8List?> debugLoadOrCreateKeypairBytes() =>
+      _loadOrCreateKeypairBytes();
+
+  /// Forget the shared node secret load and read through [keystore] from now
+  /// on, or the platform keystore when it is omitted. Tests only.
+  @visibleForTesting
+  static void debugResetNodeSecret({P2pKeystore Function()? keystore}) {
+    _nodeSecretLoad = null;
+    _keystoreFactory = keystore ?? createKeystore;
   }
 
   Future<void> _initialize({List<String>? relayUrls}) async {
