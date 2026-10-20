@@ -135,7 +135,7 @@ async fn the_library_is_empty_but_the_query_succeeds() {
 
     let body = mydia_server::test_support::post_graphql_authed(
         app,
-        r#"query {
+        r"query {
              movies(first: 10) {
                edges { cursor }
                pageInfo { hasNextPage hasPreviousPage }
@@ -146,7 +146,7 @@ async fn the_library_is_empty_but_the_query_succeeds() {
                pageInfo { hasNextPage hasPreviousPage }
                totalCount
              }
-           }"#,
+           }",
         &token,
     )
     .await;

@@ -1,0 +1,7 @@
+# Shared by every Rust crate in the repo: clippy reads the nearest clippy.toml
+# walking up from each crate's manifest. Do not add another one below this.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = true

@@ -98,9 +98,17 @@ jobs:
             rust:
               - 'native/**'
               - 'plugins/**'
+              - 'player/rust/**'
+              - 'plugins-extra/**'
               - 'rust-toolchain.toml'
+              - 'rust-lints.toml'
+              - 'clippy.toml'
               - 'scripts/check-rust.sh'
               - 'scripts/check-plugins.sh'
+              - 'scripts/test-plugins.sh'
+              - 'scripts/check-rust-lints.sh'
+              - 'scripts/check_rust_lints.py'
+              - 'scripts/test-check-rust-lints.sh'
               - 'devenv.nix'
               - 'devenv.lock'
               - '.github/workflows/ci.yml'
@@ -149,6 +157,12 @@ jobs:
             FAIL=1
           fi
           exit "$FAIL"
+
+      # Every first-party crate carries a copy of rust-lints.toml's tables.
+      - name: Guard the Rust lint tables
+        run: |
+          scripts/check-rust-lints.sh
+          scripts/test-check-rust-lints.sh
 
       # BUILD_COMMIT's value changes on every commit, and BuildKit folds a RUN's
       # environment into its ExecOp cache key while a COPY is a FileOp that
@@ -477,11 +491,16 @@ jobs:
 
       # Same script as the native-rust pre-commit hook, so a commit made
       # outside devenv (which skips the hook) is still gated here.
-      - name: Lint native crates (fmt + clippy)
+      - name: Lint native and player crates (fmt + clippy)
         run: devenv shell -- scripts/check-rust.sh
 
       - name: Lint wasm plugins (fmt + clippy)
         run: devenv shell -- scripts/check-plugins.sh
+
+      # plugins-publish.yml only tests plugins-extra/ on release; this covers
+      # the bundled plugins/ too, on every change.
+      - name: Test wasm plugins
+        run: devenv shell -- scripts/test-plugins.sh
 
       # `test-introspection` is off in every real build and exposes only a
       # counter. Without it here, `two_sends_to_one_unconnected_peer_share_a_dial`
@@ -496,6 +515,11 @@ jobs:
       # so there is no target install step.
       - name: wasm build
         run: devenv shell -- cargo build --manifest-path native/mydia_p2p_core/Cargo.toml --target wasm32-unknown-unknown --no-default-features
+
+      # The wasm build compiles out the `host` feature, so the host-target
+      # clippy in check-rust.sh never sees that cfg path.
+      - name: wasm lint
+        run: devenv shell -- cargo clippy --manifest-path native/mydia_p2p_core/Cargo.toml --target wasm32-unknown-unknown --no-default-features -- -D warnings
 
       - name: Subsync tests
         run: devenv shell -- cargo test --manifest-path native/mydia_subsync/Cargo.toml

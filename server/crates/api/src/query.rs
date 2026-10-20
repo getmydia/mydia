@@ -5,6 +5,14 @@
 //! `mydia_db`. None of them panic, because a panicking resolver would take
 //! down a request the player made in good faith.
 
+// The `#[Object]` macro expands outside the impl block, so an expectation on
+// the impl does not reach the underscore bindings it reads. Every resolver in
+// this file is affected, so the expectation is file-wide.
+#![expect(
+    clippy::used_underscore_binding,
+    reason = "the #[Object] macro reads every resolver argument, including stub ones named with a leading underscore"
+)]
+
 use async_graphql::{Context, Error, Object, Result, ID};
 
 use crate::context::{authenticated_user, ApiContext};
@@ -41,6 +49,7 @@ fn empty_page_info() -> PageInfo {
 pub struct RootQueryType;
 
 #[Object(name = "RootQueryType")]
+#[expect(clippy::unused_async, reason = "async-graphql resolvers must be async")]
 impl RootQueryType {
     /// Get any node by its global ID
     async fn node(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Node>> {
@@ -216,7 +225,7 @@ impl RootQueryType {
             }));
         }
 
-        let page = Page::new(first, after);
+        let page = Page::new(first, after.as_deref());
         let total = mydia_db::media_items::count(&api.db, "movie")
             .await
             .map_err(|e| Error::new(e.to_string()))?;
@@ -243,12 +252,12 @@ impl RootQueryType {
                 node: crate::mapping::movie_from(item, &files, &externals),
                 // Page-local, mirroring browse_resolver.ex:93-97. See the
                 // note in this task's description before "fixing" it.
-                cursor: crate::cursor::encode(index as i64),
+                cursor: crate::cursor::encode(i64::try_from(index).unwrap_or(i64::MAX)),
             });
         }
 
         Ok(Some(MovieConnection {
-            page_info: page.info(total, edges.len() as i64),
+            page_info: page.info(total, i64::try_from(edges.len()).unwrap_or(i64::MAX)),
             edges,
             total_count: i32::try_from(total).unwrap_or(i32::MAX),
         }))
@@ -274,7 +283,7 @@ impl RootQueryType {
             }));
         }
 
-        let page = Page::new(first, after);
+        let page = Page::new(first, after.as_deref());
         let total = mydia_db::media_items::count(&api.db, "tv_show")
             .await
             .map_err(|e| Error::new(e.to_string()))?;
@@ -294,12 +303,12 @@ impl RootQueryType {
         for (index, item) in items.iter().enumerate() {
             edges.push(TvShowEdge {
                 node: load_show(api, item).await?,
-                cursor: crate::cursor::encode(index as i64),
+                cursor: crate::cursor::encode(i64::try_from(index).unwrap_or(i64::MAX)),
             });
         }
 
         Ok(Some(TvShowConnection {
-            page_info: page.info(total, edges.len() as i64),
+            page_info: page.info(total, i64::try_from(edges.len()).unwrap_or(i64::MAX)),
             edges,
             total_count: i32::try_from(total).unwrap_or(i32::MAX),
         }))
@@ -471,7 +480,7 @@ impl RootQueryType {
     /// Get streaming candidates for a media item
     /// Search every enabled subtitle provider for a media file.
     ///
-    /// query_types.ex:`:subtitle_search`. This server acquires no media, which
+    /// `query_types.ex:subtitle_search`. This server acquires no media, which
     /// includes not fetching subtitles from providers, so the search is always
     /// empty. It reports that as a provider status rather than an empty result
     /// list with no explanation, so a client can tell "nothing found" apart
@@ -502,7 +511,7 @@ impl RootQueryType {
     /// Fetch one subtitle track's body directly, without resolving every
     /// track on the media file.
     ///
-    /// query_types.ex:`:subtitle_content`. Mirrors `SubtitleTrack::content`
+    /// `query_types.ex:subtitle_content`. Mirrors `SubtitleTrack::content`
     /// above: this server acquires no media and does not extract subtitle
     /// bodies, so it answers null rather than guessing. Present for contract
     /// parity, since the player selects this field regardless of which
@@ -521,7 +530,7 @@ impl RootQueryType {
 
     /// Stored timing corrections for a media file's subtitle tracks.
     ///
-    /// query_types.ex:`:subtitle_track_settings`. This server stores no
+    /// `query_types.ex:subtitle_track_settings`. This server stores no
     /// corrections, so the list is always empty. That is the same answer a
     /// Mydia server gives for a file nobody has corrected, so a client needs no
     /// branch for it.
@@ -650,13 +659,11 @@ struct Page {
 }
 
 impl Page {
-    fn new(first: Option<i32>, after: Option<String>) -> Self {
+    fn new(first: Option<i32>, after: Option<&str>) -> Self {
         Self {
-            first: first.map(i64::from).unwrap_or(20).max(0),
+            first: first.map_or(20, i64::from).max(0),
             offset: after
-                .as_deref()
-                .map(|cursor| crate::cursor::decode(cursor) + 1)
-                .unwrap_or(0)
+                .map_or(0, |cursor| crate::cursor::decode(cursor) + 1)
                 .max(0),
         }
     }
@@ -702,11 +709,12 @@ fn browse_sort(sort: Option<&SortInput>) -> BrowseSort {
             | SortField::ReleaseDate
             | SortField::LastPlayed
             | SortField::WatchState
-            | SortField::Random,
-        ) => BrowseField::Title,
-        // Title is the default and the fallback, matching MediaSort's
-        // catch-all clause.
-        Some(SortField::Title) | None => BrowseField::Title,
+            | SortField::Random
+            // Title is the default and the fallback, matching MediaSort's
+            // catch-all clause.
+            | SortField::Title,
+        )
+        | None => BrowseField::Title,
     };
 
     BrowseSort {

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 /// Every test carries its own bound: `endpoint.connect` has no timeout of its
 /// own inside the crate, so a regression would otherwise hang CI.
-const TEST_TIMEOUT: Duration = Duration::from_secs(60);
+const TEST_TIMEOUT: Duration = Duration::from_mins(1);
 
 fn test_config() -> HostConfig {
     HostConfig {
@@ -20,7 +20,7 @@ fn test_config() -> HostConfig {
     }
 }
 
-/// Waits for `Event::Ready` and returns the node's own EndpointAddr JSON.
+/// Waits for `Event::Ready` and returns the node's own `EndpointAddr` JSON.
 async fn wait_for_ready(host: &Host) -> String {
     let mut rx = host.event_rx.lock().await;
     while let Some(event) = rx.recv().await {
@@ -49,7 +49,7 @@ fn unreachable_node_id() -> String {
     iroh::SecretKey::generate().public().to_string()
 }
 
-/// The EndpointAddr JSON a roster entry produces: a node ID and nothing else.
+/// The `EndpointAddr` JSON a roster entry produces: a node ID and nothing else.
 fn node_addr_json_without_addrs(node_id: &str) -> String {
     format!(r#"{{"id":"{node_id}","addrs":[]}}"#)
 }
@@ -149,10 +149,10 @@ async fn an_unreachable_dial_does_not_block_other_commands_body() {
     );
 }
 
-/// Answer \`Custom\` requests on \`host\`, echoing the payload back.
+/// Answer `Custom` requests on `host`, echoing the payload back.
 ///
-/// \`Ping\` is answered inside \`handle_connection\` and never reaches an event,
-/// so it cannot be used here. \`Custom\` exercises the real generic path.
+/// `Ping` is answered inside `handle_connection` and never reaches an event,
+/// so it cannot be used here. `Custom` exercises the real generic path.
 fn spawn_echo_responder(host: std::sync::Arc<Host>) {
     tokio::spawn(async move {
         loop {
@@ -170,7 +170,7 @@ fn spawn_echo_responder(host: std::sync::Arc<Host>) {
                         .send_response(request_id, MydiaResponse::Custom(payload))
                         .await;
                 }
-                Some(_) => continue,
+                Some(_) => {}
                 None => break,
             }
         }

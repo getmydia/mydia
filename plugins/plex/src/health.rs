@@ -31,6 +31,10 @@ pub fn quick_base(host: &mut dyn Host, cfg: &PluginConfig) -> Result<(String, St
     Err(PlexError::Unreachable("no server address known yet".into()))
 }
 
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "mirrors the WIT check-health export, which returns a result; every probe outcome is a Health value"
+)]
 pub fn check(host: &mut dyn Host) -> Result<Health, String> {
     // check-health receives no config; the schedule keeps endpoint/current
     // current, including for an explicitly configured URL.

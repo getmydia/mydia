@@ -44,7 +44,7 @@ fn read_media_is_refused_without_reading_the_file() {
     let request = MydiaRequest::ReadMedia(ReadMediaRequest {
         file_path: probe.to_string_lossy().into_owned(),
         offset: 0,
-        length: secret.len() as u32,
+        length: u32::try_from(secret.len()).expect("probe is a few bytes"),
     });
 
     let response = rt

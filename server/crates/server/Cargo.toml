@@ -34,3 +34,6 @@ tracing-subscriber.workspace = true
 
 [dev-dependencies]
 sqlx.workspace = true
+
+[lints]
+workspace = true

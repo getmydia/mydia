@@ -1,6 +1,6 @@
 //! Proves the common type group matches the reference contract. Only the
 //! types this group owns are compared; the remaining groups arrive in later
-//! tasks and full equality is asserted in tests/sdl_parity.rs.
+//! tasks and full equality is asserted in `tests/sdl_parity.rs`.
 
 use mydia_api::sdl::canonicalize;
 

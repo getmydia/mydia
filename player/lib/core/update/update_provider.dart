@@ -34,6 +34,14 @@ final updateBackendFactoryProvider = Provider<UpdateBackendFactory>(
       ),
 );
 
+/// Reads the running build's version. Overridden in tests: `PackageInfo`
+/// caches its first successful read in a static for the life of the isolate,
+/// so mocking its platform channel in one test file leaves every later file in
+/// the same isolate with a working read, and a real update check behind it.
+final installedVersionReaderProvider = Provider<Future<String> Function()>(
+  (ref) => () async => (await PackageInfo.fromPlatform()).version,
+);
+
 /// Whether Android will let this app install a package right now. Overridden
 /// in tests, so the resume path can be driven without the installer channel.
 final installPermissionCheckProvider = Provider<Future<bool> Function()>(
@@ -176,7 +184,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   Future<void> _init() async {
     try {
-      final info = await PackageInfo.fromPlatform();
+      final version = await ref.read(installedVersionReaderProvider)();
 
       // The container can be disposed while that read is in flight, since
       // build fires this off with an unawaited Future.microtask and nothing
@@ -184,10 +192,10 @@ class UpdateNotifier extends Notifier<UpdateState> {
       // compatibility_provider.dart.
       if (!ref.mounted) return;
 
-      state = state.copyWith(currentVersion: info.version);
+      state = state.copyWith(currentVersion: version);
 
       final backend = await ref.read(updateBackendFactoryProvider)(
-        currentVersion: info.version,
+        currentVersion: version,
       );
       if (backend == null) return;
       // The container can be disposed while that await is in flight too, for

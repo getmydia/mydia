@@ -2,8 +2,8 @@
 
 use mydia_plugin_sdk::host;
 use mydia_plugin_sdk::types::{
-    CollectionAttrs, FavoriteTarget, HostError, ListItem, ListRequest, MediaAddTarget,
-    SearchKind, SearchRequest, WatchStateTarget, WriteOutcome,
+    CollectionAttrs, FavoriteTarget, HostError, ListItem, ListRequest, MediaAddTarget, SearchKind,
+    SearchRequest, WatchStateTarget, WriteOutcome,
 };
 use serde_json::{json, Value};
 
@@ -46,8 +46,11 @@ pub struct Outcome {
     pub pending: Option<String>,
 }
 
-fn text(v: Value) -> Outcome {
-    Outcome { content: v.to_string(), pending: None }
+fn text(v: &Value) -> Outcome {
+    Outcome {
+        content: v.to_string(),
+        pending: None,
+    }
 }
 
 /// Friendly, bounded text for a host error: the model and the page never see
@@ -63,12 +66,12 @@ pub fn host_error_text(e: &HostError) -> String {
     format!("{label}: {}", clip(detail, 200))
 }
 
-fn err(e: HostError) -> Outcome {
-    text(json!({"error": host_error_text(&e)}))
+fn err(e: &HostError) -> Outcome {
+    text(&json!({"error": host_error_text(e)}))
 }
 
 fn reject(msg: &str) -> Outcome {
-    text(json!({"error": msg}))
+    text(&json!({"error": msg}))
 }
 
 /// Cuts a string to `max` characters, marking the cut.
@@ -108,7 +111,7 @@ fn check_u32(a: &Value, k: &str) -> Result<(), String> {
 fn check_ids(a: &Value) -> Result<(), String> {
     match a.get("media_item_ids").and_then(|v| v.as_array()) {
         Some(v) if v.len() > MAX_IDS => Err(format!("at most {MAX_IDS} media_item_ids per call")),
-        Some(v) if v.iter().all(|x| x.is_string()) => Ok(()),
+        Some(v) if v.iter().all(Value::is_string) => Ok(()),
         _ => Err("media_item_ids must be a list of strings".into()),
     }
 }
@@ -122,7 +125,10 @@ pub fn validate(name: &str, a: &Value) -> Result<(), String> {
         "search_library" | "search_catalog" => check_media_type(a, false),
         "list" => match a["what"].as_str() {
             Some(w) if LIST_NAMESPACES.contains(&w) => Ok(()),
-            _ => Err(format!("what must be one of {}", LIST_NAMESPACES.join(", "))),
+            _ => Err(format!(
+                "what must be one of {}",
+                LIST_NAMESPACES.join(", ")
+            )),
         },
         "add_media" => check_media_type(a, true),
         "add_to_collection" | "remove_from_collection" => check_ids(a),
@@ -139,7 +145,7 @@ pub fn validate(name: &str, a: &Value) -> Result<(), String> {
 }
 
 fn s(a: &Value, k: &str) -> Option<String> {
-    a[k].as_str().map(|x| x.to_string())
+    a[k].as_str().map(ToString::to_string)
 }
 
 fn i(a: &Value, k: &str) -> Option<i64> {
@@ -147,7 +153,13 @@ fn i(a: &Value, k: &str) -> Option<i64> {
 }
 
 fn strs(a: &Value, k: &str) -> Vec<String> {
-    a[k].as_array().map(|v| v.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default()
+    a[k].as_array()
+        .map(|v| {
+            v.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub fn write(r: Result<WriteOutcome, HostError>) -> Outcome {
@@ -157,7 +169,7 @@ pub fn write(r: Result<WriteOutcome, HostError>) -> Outcome {
             content: json!({"awaiting_user_approval": true, "note": "The user will approve or deny this in a dialog. Do not repeat it."}).to_string(),
             pending: Some(id),
         },
-        Err(e) => err(e),
+        Err(e) => err(&e),
     }
 }
 
@@ -167,46 +179,103 @@ pub fn run(name: &str, a: &Value) -> Outcome {
     }
     match name {
         "search_library" | "search_catalog" => {
-            let kind = if name == "search_library" { SearchKind::Library } else { SearchKind::Catalog };
-            match host::search(&SearchRequest { kind, query: s(a, "query").unwrap_or_default(), media_type: s(a, "media_type"), limit: Some(10) }) {
-                Ok(hits) => text(json!(hits.iter().map(|h| json!({
+            let kind = if name == "search_library" {
+                SearchKind::Library
+            } else {
+                SearchKind::Catalog
+            };
+            match host::search(&SearchRequest {
+                kind,
+                query: s(a, "query").unwrap_or_default(),
+                media_type: s(a, "media_type"),
+                limit: Some(10),
+            }) {
+                Ok(hits) => text(&json!(hits.iter().map(|h| json!({
                     "title": clip(&h.title, 200), "year": h.year, "type": h.item_type,
                     "media_item_id": h.media_item_id, "tmdb_id": h.tmdb_id, "tvdb_id": h.tvdb_id,
                     "overview": h.overview.as_ref().map(|o| clip(o, 200))
                 })).collect::<Vec<_>>())),
-                Err(e) => err(e),
+                Err(e) => err(&e),
             }
         }
         "list" => {
             let ns = s(a, "what").unwrap_or_default();
-            match host::data_list(&ListRequest { namespace: ns, cursor: None, updated_since: None, limit: Some(50) }) {
-                Ok(page) => text(json!(page.items.iter().map(list_item).collect::<Vec<_>>())),
-                Err(e) => err(e),
+            match host::data_list(&ListRequest {
+                namespace: ns,
+                cursor: None,
+                updated_since: None,
+                limit: Some(50),
+            }) {
+                Ok(page) => text(&json!(page.items.iter().map(list_item).collect::<Vec<_>>())),
+                Err(e) => err(&e),
             }
         }
-        "add_media" => write(host::media_add(&MediaAddTarget { media_type: s(a, "media_type").unwrap_or_default(), tmdb_id: i(a, "tmdb_id"), tvdb_id: i(a, "tvdb_id") })),
-        "create_collection" => write(host::collection_create(&CollectionAttrs { name: s(a, "name"), description: s(a, "description"), kind: s(a, "kind"), smart_rules_json: s(a, "smart_rules_json") })),
-        "update_collection" => write(host::collection_update(&s(a, "id").unwrap_or_default(), &CollectionAttrs { name: s(a, "name"), description: s(a, "description"), kind: None, smart_rules_json: s(a, "smart_rules_json") })),
-        "add_to_collection" => write(host::collection_add_items(&s(a, "id").unwrap_or_default(), &strs(a, "media_item_ids"))),
-        "remove_from_collection" => write(host::collection_remove_items(&s(a, "id").unwrap_or_default(), &strs(a, "media_item_ids"))),
-        "set_watched" => write(host::mark_watched_state(&WatchStateTarget {
-            user_id: String::new(), imdb_id: s(a, "imdb_id"), tmdb_id: i(a, "tmdb_id"), tvdb_id: i(a, "tvdb_id"),
-            season_number: i(a, "season").and_then(|n| u32::try_from(n).ok()), episode_number: i(a, "episode").and_then(|n| u32::try_from(n).ok()),
-            watched: a["watched"].as_bool().unwrap_or(false), position_seconds: None, duration_seconds: None, watched_at: None,
+        "add_media" => write(host::media_add(&MediaAddTarget {
+            media_type: s(a, "media_type").unwrap_or_default(),
+            tmdb_id: i(a, "tmdb_id"),
+            tvdb_id: i(a, "tvdb_id"),
         })),
-        "add_favorite" => write(host::add_favorite(&FavoriteTarget { user_id: String::new(), imdb_id: s(a, "imdb_id"), tmdb_id: i(a, "tmdb_id"), tvdb_id: i(a, "tvdb_id") })),
-        "watch_history" => text(crate::watch_history::run(a)),
-        other => text(json!({"error": format!("unknown tool {other}")})),
+        "create_collection" => write(host::collection_create(&CollectionAttrs {
+            name: s(a, "name"),
+            description: s(a, "description"),
+            kind: s(a, "kind"),
+            smart_rules_json: s(a, "smart_rules_json"),
+        })),
+        "update_collection" => write(host::collection_update(
+            &s(a, "id").unwrap_or_default(),
+            &CollectionAttrs {
+                name: s(a, "name"),
+                description: s(a, "description"),
+                kind: None,
+                smart_rules_json: s(a, "smart_rules_json"),
+            },
+        )),
+        "add_to_collection" => write(host::collection_add_items(
+            &s(a, "id").unwrap_or_default(),
+            &strs(a, "media_item_ids"),
+        )),
+        "remove_from_collection" => write(host::collection_remove_items(
+            &s(a, "id").unwrap_or_default(),
+            &strs(a, "media_item_ids"),
+        )),
+        "set_watched" => write(host::mark_watched_state(&WatchStateTarget {
+            user_id: String::new(),
+            imdb_id: s(a, "imdb_id"),
+            tmdb_id: i(a, "tmdb_id"),
+            tvdb_id: i(a, "tvdb_id"),
+            season_number: i(a, "season").and_then(|n| u32::try_from(n).ok()),
+            episode_number: i(a, "episode").and_then(|n| u32::try_from(n).ok()),
+            watched: a["watched"].as_bool().unwrap_or(false),
+            position_seconds: None,
+            duration_seconds: None,
+            watched_at: None,
+        })),
+        "add_favorite" => write(host::add_favorite(&FavoriteTarget {
+            user_id: String::new(),
+            imdb_id: s(a, "imdb_id"),
+            tmdb_id: i(a, "tmdb_id"),
+            tvdb_id: i(a, "tvdb_id"),
+        })),
+        "watch_history" => text(&crate::watch_history::run(a)),
+        other => text(&json!({"error": format!("unknown tool {other}")})),
     }
 }
 
 fn list_item(item: &ListItem) -> Value {
     match item {
-        ListItem::Collection(c) => json!({"id": c.id, "name": clip(&c.name, 200), "kind": c.kind, "items": c.item_count}),
-        ListItem::MediaRequest(r) => json!({"title": clip(&r.title, 200), "status": r.status, "year": r.year}),
-        ListItem::Download(d) => json!({"title": clip(&d.title, 200), "status": d.status, "progress": d.progress, "eta_seconds": d.eta_seconds}),
+        ListItem::Collection(c) => {
+            json!({"id": c.id, "name": clip(&c.name, 200), "kind": c.kind, "items": c.item_count})
+        }
+        ListItem::MediaRequest(r) => {
+            json!({"title": clip(&r.title, 200), "status": r.status, "year": r.year})
+        }
+        ListItem::Download(d) => {
+            json!({"title": clip(&d.title, 200), "status": d.status, "progress": d.progress, "eta_seconds": d.eta_seconds})
+        }
         ListItem::MediaItem(m) => json!({"id": m.id, "title": clip(&m.title, 200), "year": m.year}),
-        ListItem::LibraryItem(l) => json!({"id": l.id, "title": clip(&l.title, 200), "year": l.year, "owned": l.owned}),
+        ListItem::LibraryItem(l) => {
+            json!({"id": l.id, "title": clip(&l.title, 200), "year": l.year, "owned": l.owned})
+        }
         ListItem::PlaybackProgress(_) => json!({}),
     }
 }
@@ -226,6 +295,10 @@ mod tests {
         }
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "every call site passes a json! literal; a reference would add & to each"
+    )]
     fn rejected(name: &str, args: Value) -> bool {
         validate(name, &args).is_err()
     }
@@ -252,16 +325,29 @@ mod tests {
     fn media_type_is_checked() {
         assert!(rejected("add_media", json!({})));
         assert!(rejected("add_media", json!({"media_type": "episode"})));
-        assert!(rejected("search_library", json!({"query": "x", "media_type": "book"})));
+        assert!(rejected(
+            "search_library",
+            json!({"query": "x", "media_type": "book"})
+        ));
         assert!(validate("search_library", &json!({"query": "x"})).is_ok());
         assert!(validate("add_media", &json!({"media_type": "movie"})).is_ok());
     }
 
     #[test]
     fn negative_or_huge_numbers_are_rejected() {
-        assert!(rejected("set_watched", json!({"watched": true, "season": -1})));
-        assert!(rejected("set_watched", json!({"watched": true, "episode": 5_000_000_000i64})));
-        assert!(validate("set_watched", &json!({"watched": true, "season": 1, "episode": 2})).is_ok());
+        assert!(rejected(
+            "set_watched",
+            json!({"watched": true, "season": -1})
+        ));
+        assert!(rejected(
+            "set_watched",
+            json!({"watched": true, "episode": 5_000_000_000i64})
+        ));
+        assert!(validate(
+            "set_watched",
+            &json!({"watched": true, "season": 1, "episode": 2})
+        )
+        .is_ok());
     }
 
     #[test]
@@ -273,10 +359,20 @@ mod tests {
     #[test]
     fn id_lists_are_capped_and_typed() {
         let many: Vec<String> = (0..=MAX_IDS).map(|n| n.to_string()).collect();
-        assert!(rejected("add_to_collection", json!({"id": "c", "media_item_ids": many})));
-        assert!(rejected("remove_from_collection", json!({"id": "c", "media_item_ids": [1, 2]})));
+        assert!(rejected(
+            "add_to_collection",
+            json!({"id": "c", "media_item_ids": many})
+        ));
+        assert!(rejected(
+            "remove_from_collection",
+            json!({"id": "c", "media_item_ids": [1, 2]})
+        ));
         assert!(rejected("add_to_collection", json!({"id": "c"})));
-        assert!(validate("add_to_collection", &json!({"id": "c", "media_item_ids": ["a"]})).is_ok());
+        assert!(validate(
+            "add_to_collection",
+            &json!({"id": "c", "media_item_ids": ["a"]})
+        )
+        .is_ok());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! Golden bytes for the request and response encodings.
 //!
-//! serde_cbor uses serde's externally tagged representation, so an enum is
+//! `serde_cbor` uses serde's externally tagged representation, so an enum is
 //! keyed on the variant *name*. Renaming a variant therefore breaks every peer
 //! running an older build, while reordering is harmless. These assertions exist
 //! so a rename fails here rather than in the field.
@@ -11,7 +11,11 @@ use mydia_p2p_core::{
 };
 
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    use std::fmt::Write;
+    bytes.iter().fold(String::new(), |mut out, b| {
+        write!(out, "{b:02x}").expect("writing to a String cannot fail");
+        out
+    })
 }
 
 #[test]
@@ -69,6 +73,13 @@ fn every_request_variant_name_is_frozen() {
 
 #[test]
 fn an_old_peer_fails_cleanly_on_an_unknown_variant() {
+    #[derive(Debug, serde::Deserialize)]
+    #[allow(dead_code, reason = "variants exist only to be decoded against")]
+    enum OldRequest {
+        Ping,
+        Custom(Vec<u8>),
+    }
+
     // What an old target does when a new controller says Hello: the whole
     // request fails to decode. The controller reads that as "too old".
     let hello = serde_cbor::to_vec(&MydiaRequest::RemoteControl(RemoteControlRequest::Hello {
@@ -76,13 +87,6 @@ fn an_old_peer_fails_cleanly_on_an_unknown_variant() {
         protocol_version: 1,
     }))
     .unwrap();
-
-    #[derive(Debug, serde::Deserialize)]
-    #[allow(dead_code)]
-    enum OldRequest {
-        Ping,
-        Custom(Vec<u8>),
-    }
 
     let result: Result<OldRequest, _> = serde_cbor::from_slice(&hello);
     let err = result.expect_err("an old peer must reject an unknown variant");

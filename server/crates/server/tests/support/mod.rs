@@ -1,12 +1,15 @@
 //! Shared fixtures for the media tests.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "each test binary uses a different subset of these shared helpers"
+)]
 
 use axum::Router;
 use mydia_server::test_support::post_graphql_authed;
 
 /// A one-movie library on disk: a short real H.264/AAC MP4, which is the
 /// direct-play case, laid out the way the scanner expects.
-pub async fn movie_library() -> tempfile::TempDir {
+pub fn movie_library() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let movie = dir.path().join("Test Film (2019)");
     std::fs::create_dir_all(&movie).unwrap();
@@ -17,7 +20,7 @@ pub async fn movie_library() -> tempfile::TempDir {
 }
 
 /// A one-movie library whose file is an MKV, which is the remux case.
-pub async fn mkv_library() -> tempfile::TempDir {
+pub fn mkv_library() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let movie = dir.path().join("Remux Film (2020)");
     std::fs::create_dir_all(&movie).unwrap();
@@ -83,7 +86,7 @@ pub async fn first_file_id(app: Router, token: &str) -> String {
 }
 
 /// A movie with an English sidecar beside a real playable file.
-pub async fn library_with_sidecar() -> tempfile::TempDir {
+pub fn library_with_sidecar() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let movie = dir.path().join("Subbed Film (2022)");
     std::fs::create_dir_all(&movie).unwrap();

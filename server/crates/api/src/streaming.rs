@@ -65,7 +65,7 @@ fn candidate_into(candidate: Candidate) -> StreamingCandidate {
     }
 }
 
-/// Port of build_metadata_response/1 (candidates.ex:133-147).
+/// Port of `build_metadata_response/1` (candidates.ex:133-147).
 fn metadata_for(row: &MediaFileRow) -> StreamingMetadata {
     StreamingMetadata {
         duration: row.duration_seconds,

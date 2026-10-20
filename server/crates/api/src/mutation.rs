@@ -4,6 +4,14 @@
 //! silent absence would confuse a caller more than an explicit error,
 //! `not_implemented`. None of them panic.
 
+// The `#[Object]` macro expands outside the impl block, so an expectation on
+// the impl does not reach the underscore bindings it reads. Every resolver in
+// this file is affected, so the expectation is file-wide.
+#![expect(
+    clippy::used_underscore_binding,
+    reason = "the #[Object] macro reads every resolver argument, including stub ones named with a leading underscore"
+)]
+
 use async_graphql::{Context, Error, ErrorExtensions, Object, Result, ID};
 use chrono::{DateTime, Utc};
 use mydia_auth::tokens::TokenKind;
@@ -47,6 +55,7 @@ fn forbidden() -> Error {
 pub struct RootMutationType;
 
 #[Object(name = "RootMutationType")]
+#[expect(clippy::unused_async, reason = "async-graphql resolvers must be async")]
 impl RootMutationType {
     /// Update playback progress for a movie
     async fn update_movie_progress(
@@ -72,7 +81,7 @@ impl RootMutationType {
 
     /// Download a subtitle candidate returned by subtitleSearch.
     ///
-    /// mutation_types.ex:`:download_subtitle`. This server acquires no media,
+    /// `mutation_types.ex:download_subtitle`. This server acquires no media,
     /// and `subtitleSearch` here never returns a candidate, so any token
     /// reaching this field came from somewhere else. The return type is
     /// non-null, so an explicit error is the only honest answer available.
@@ -89,7 +98,7 @@ impl RootMutationType {
 
     /// Store a timing correction for one subtitle track.
     ///
-    /// mutation_types.ex:`:set_subtitle_offset`. This server has no table for
+    /// `mutation_types.ex:set_subtitle_offset`. This server has no table for
     /// subtitle corrections. The return type is non-null, so an explicit error
     /// is the only honest answer available.
     async fn set_subtitle_offset(
@@ -296,7 +305,7 @@ impl RootMutationType {
             .issue(&user.id, TokenKind::Access, vec![])
             .map_err(|e| Error::new(e.to_string()))?;
 
-        let expires_in = (expires_at - Utc::now()).num_seconds() as i32;
+        let expires_in = i32::try_from((expires_at - Utc::now()).num_seconds()).unwrap_or(i32::MAX);
 
         Ok(Some(LoginResult {
             token: Some(token),
@@ -368,7 +377,10 @@ impl RootMutationType {
     // has to mirror it exactly or `sdl_parity` fails. Splitting it into a
     // struct would change the emitted SDL, which is the one thing that must
     // not happen here.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the signature mirrors the argument list the Elixir schema declares; sdl_parity pins it"
+    )]
     async fn start_streaming_session(
         &self,
         _ctx: &Context<'_>,
@@ -408,7 +420,10 @@ impl RootMutationType {
     // Elixir schema declares, and this signature has to mirror it exactly or
     // `sdl_parity` fails. Collecting them into a struct would change the
     // emitted SDL, which is the one thing that must not happen here.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the signature mirrors the argument list the Elixir schema declares; sdl_parity pins it"
+    )]
     async fn set_subtitle_preference(
         &self,
         _ctx: &Context<'_>,

@@ -2,7 +2,7 @@
 //!
 //! A supervised task rather than a job queue: this slice has one job kind, and
 //! apalis earns its place in Slice 5 where transcode-to-file needs
-//! cancellation and retries. Durable progress already lives in scan_runs, so
+//! cancellation and retries. Durable progress already lives in `scan_runs`, so
 //! introducing a queue later does not change what the API reads.
 
 use std::time::Duration;
@@ -13,7 +13,7 @@ use mydia_db::Db;
 /// Runs one pass over every monitored library path.
 ///
 /// Returns nothing: a scan failure is an operational event, recorded in
-/// scan_runs and logged, not something a caller can usefully act on.
+/// `scan_runs` and logged, not something a caller can usefully act on.
 pub async fn run_once(db: &Db) {
     match mydia_library::scan::scan_all(db).await {
         Ok(outcomes) => {
@@ -36,6 +36,10 @@ pub async fn run_once(db: &Db) {
 /// Spawns the scan loop. A panic inside one pass is caught here so it cannot
 /// take the process down (design rule 4), and the loop continues on its next
 /// tick.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "`settings` is only read, but the spawned task is 'static so it must own it; a reference would force a clone inside"
+)]
 pub fn spawn(db: Db, settings: LibrarySettings) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         if settings.scan_on_start {

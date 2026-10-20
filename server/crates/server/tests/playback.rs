@@ -4,11 +4,11 @@ mod support;
 
 use mydia_server::test_support::{app_over_library, post_graphql_with_variables};
 
-/// The MediaFileFragment as the player declares it
-/// (player/lib/graphql/fragments/media_file_fragment.graphql), inlined into a
+/// The `MediaFileFragment` as the player declares it
+/// (`player/lib/graphql/fragments/media_file_fragment.graphql`), inlined into a
 /// movie query. If this document stops matching the player's, playback breaks
 /// in a way no unit test sees.
-const MOVIE_WITH_FILES: &str = r#"
+const MOVIE_WITH_FILES: &str = r"
 query MovieDetail($id: ID!) {
   movie(id: $id) {
     id
@@ -27,9 +27,9 @@ query MovieDetail($id: ID!) {
     }
   }
 }
-"#;
+";
 
-const CANDIDATES: &str = r#"
+const CANDIDATES: &str = r"
 query StreamingCandidates($contentType: String!, $id: ID!) {
   streamingCandidates(contentType: $contentType, id: $id) {
     fileId
@@ -37,11 +37,11 @@ query StreamingCandidates($contentType: String!, $id: ID!) {
     metadata { duration width height bitrate resolution hdrFormat originalCodec originalAudioCodec container }
   }
 }
-"#;
+";
 
 #[tokio::test]
 async fn a_scanned_movie_carries_relative_playback_urls() {
-    let media = support::movie_library().await;
+    let media = support::movie_library();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
 
@@ -71,7 +71,7 @@ async fn a_scanned_movie_carries_relative_playback_urls() {
 
 #[tokio::test]
 async fn streaming_candidates_lead_with_something_the_player_can_direct_play() {
-    let media = support::movie_library().await;
+    let media = support::movie_library();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
 
@@ -103,7 +103,7 @@ async fn streaming_candidates_lead_with_something_the_player_can_direct_play() {
 async fn an_unknown_id_is_a_graphql_error_not_a_null() {
     // player_screen.dart:1360-1395 self-heals only when the rejection arrives
     // as a GraphQL error with no transport error beside it.
-    let media = support::movie_library().await;
+    let media = support::movie_library();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
 
@@ -120,7 +120,7 @@ async fn an_unknown_id_is_a_graphql_error_not_a_null() {
 
 #[tokio::test]
 async fn subtitle_tracks_carry_a_url_the_player_can_fetch() {
-    let media = support::library_with_sidecar().await;
+    let media = support::library_with_sidecar();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
 
@@ -160,7 +160,7 @@ async fn subtitle_tracks_carry_a_url_the_player_can_fetch() {
 /// player's documents fails here rather than drifting silently.
 #[tokio::test]
 async fn every_player_playback_document_resolves() {
-    let media = support::library_with_sidecar().await;
+    let media = support::library_with_sidecar();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
 
@@ -177,11 +177,11 @@ async fn every_player_playback_document_resolves() {
 
     let document = format!(
         "{fragment}\n{}",
-        r#"
+        r"
 query Probe($id: ID!) {
   movie(id: $id) { id files { ...MediaFileFragment } }
 }
-"#
+"
     );
 
     let body = post_graphql_with_variables(

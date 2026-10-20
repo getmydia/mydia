@@ -21,7 +21,7 @@ const SELECT: &str = "SELECT id, path, library_type, monitored, scan_interval,
                       FROM library_paths";
 
 /// Makes the rows match the configured paths exactly: new paths are inserted,
-/// existing paths keep their id and their last_scan_at, and paths no longer in
+/// existing paths keep their id and their `last_scan_at`, and paths no longer in
 /// the configuration are deleted along with everything they own.
 ///
 /// Deleting cascades to media items and files. That is correct: those rows

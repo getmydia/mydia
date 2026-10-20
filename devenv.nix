@@ -466,9 +466,9 @@ in
   git-hooks.hooks = {
     native-rust = {
       enable = true;
-      name = "cargo fmt + clippy (native crates)";
+      name = "cargo fmt + clippy (native and player crates)";
       entry = "scripts/check-rust.sh";
-      files = "^native/.*\\.rs$";
+      files = "^(native|player/rust)/.*\\.rs$";
       pass_filenames = false;
     };
     server-fmt = {
@@ -489,7 +489,14 @@ in
       enable = true;
       name = "cargo fmt + clippy (wasm plugins)";
       entry = "scripts/check-plugins.sh";
-      files = "^plugins/.*\\.rs$";
+      files = "^plugins(-extra)?/.*\\.rs$";
+      pass_filenames = false;
+    };
+    rust-lints = {
+      enable = true;
+      name = "rust lint tables match rust-lints.toml";
+      entry = "scripts/check-rust-lints.sh";
+      files = "(^|/)(Cargo\\.toml|clippy\\.toml|rust-lints\\.toml)$|^scripts/(test-)?check[-_]rust[-_]lints";
       pass_filenames = false;
     };
     mix-format = {

@@ -82,7 +82,7 @@ async fn scan_library_path_inner(
     let files = walk::walk(root)?;
 
     let mut outcome = ScanOutcome {
-        files_seen: files.len() as i64,
+        files_seen: i64::try_from(files.len()).unwrap_or(i64::MAX),
         ..Default::default()
     };
 
@@ -236,7 +236,7 @@ async fn persist(
     // cache from the walk, and nothing is probed. `seen` is the keep list for
     // prune_for_file; an empty list deletes every row for this file, which is
     // correct only when no sidecars remain on disk.
-    let sidecars = crate::sidecar::discover(std::path::Path::new(&stored.path));
+    let sidecars = crate::sidecar::discover(Path::new(&stored.path));
     let seen: Vec<String> = sidecars.iter().map(|s| s.path.clone()).collect();
 
     for sidecar in sidecars {

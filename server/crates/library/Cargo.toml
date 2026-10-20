@@ -23,3 +23,6 @@ walkdir.workspace = true
 [dev-dependencies]
 sqlx.workspace = true
 tempfile.workspace = true
+
+[lints]
+workspace = true

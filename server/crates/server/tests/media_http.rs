@@ -29,7 +29,7 @@ async fn get(
 
 #[tokio::test]
 async fn a_whole_file_request_returns_the_whole_file() {
-    let media = support::movie_library().await;
+    let media = support::movie_library();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
     let file_id = support::first_file_id(app.clone(), &token).await;
@@ -55,7 +55,7 @@ async fn a_whole_file_request_returns_the_whole_file() {
 
 #[tokio::test]
 async fn a_range_request_returns_exactly_that_range() {
-    let media = support::movie_library().await;
+    let media = support::movie_library();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
     let file_id = support::first_file_id(app.clone(), &token).await;
@@ -83,7 +83,7 @@ async fn a_range_request_returns_exactly_that_range() {
 
 #[tokio::test]
 async fn an_unsatisfiable_range_is_refused_with_the_file_size() {
-    let media = support::movie_library().await;
+    let media = support::movie_library();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
     let file_id = support::first_file_id(app.clone(), &token).await;
@@ -105,7 +105,7 @@ async fn an_unsatisfiable_range_is_refused_with_the_file_size() {
 
 #[tokio::test]
 async fn an_unauthenticated_request_gets_nothing() {
-    let media = support::movie_library().await;
+    let media = support::movie_library();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
     let file_id = support::first_file_id(app.clone(), &token).await;
@@ -128,7 +128,7 @@ async fn an_unauthenticated_request_gets_nothing() {
 async fn a_query_token_authenticates_the_same_request() {
     // The claim-code transport, which no header-only implementation would
     // catch.
-    let media = support::movie_library().await;
+    let media = support::movie_library();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
     let file_id = support::first_file_id(app.clone(), &token).await;
@@ -149,7 +149,7 @@ async fn a_query_token_authenticates_the_same_request() {
 
 #[tokio::test]
 async fn an_unknown_file_is_a_404() {
-    let media = support::movie_library().await;
+    let media = support::movie_library();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
 
@@ -160,7 +160,7 @@ async fn an_unknown_file_is_a_404() {
 
 #[tokio::test]
 async fn the_remux_strategy_serves_fragmented_mp4() {
-    let media = support::mkv_library().await;
+    let media = support::mkv_library();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
     let file_id = support::first_file_id(app.clone(), &token).await;
@@ -187,7 +187,7 @@ async fn the_remux_strategy_serves_fragmented_mp4() {
 
 #[tokio::test]
 async fn an_external_subtitle_is_converted_to_the_requested_format() {
-    let media = support::library_with_sidecar().await;
+    let media = support::library_with_sidecar();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
 
@@ -219,7 +219,7 @@ async fn an_external_subtitle_is_converted_to_the_requested_format() {
 async fn a_track_belonging_to_another_file_is_refused() {
     // extractor.ex:97-105 answers :unauthorized; the Elixir controller maps
     // that to HTTP 403. This endpoint answers 404 instead.
-    let media = support::library_with_sidecar().await;
+    let media = support::library_with_sidecar();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
 
@@ -238,7 +238,7 @@ async fn a_track_belonging_to_another_file_is_refused() {
 
 #[tokio::test]
 async fn an_unknown_track_is_a_404() {
-    let media = support::library_with_sidecar().await;
+    let media = support::library_with_sidecar();
     let (app, _guard, token) =
         app_over_library("admin", "adminadmin", media.path(), "movies").await;
 

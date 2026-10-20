@@ -63,7 +63,6 @@ pub fn mime_for(path: &str) -> &'static str {
     let ext = path.rsplit_once('.').map(|(_, e)| e.to_lowercase());
 
     match ext.as_deref() {
-        Some("mp4") => "video/mp4",
         Some("m4v") => "video/x-m4v",
         Some("mkv") => "video/x-matroska",
         Some("avi") => "video/x-msvideo",
@@ -72,6 +71,7 @@ pub fn mime_for(path: &str) -> &'static str {
         Some("wmv") => "video/x-ms-wmv",
         Some("flv") => "video/x-flv",
         Some("ts") => "video/mp2t",
+        // mp4 and anything unrecognised both answer video/mp4.
         _ => "video/mp4",
     }
 }

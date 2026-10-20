@@ -9,7 +9,7 @@ use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::sync::Arc;
 use std::time::Duration;
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(60);
+const TEST_TIMEOUT: Duration = Duration::from_mins(1);
 
 fn test_config() -> HostConfig {
     HostConfig {
@@ -62,7 +62,7 @@ fn spawn_echo_responder(host: Arc<Host>) {
                         .send_response(request_id, MydiaResponse::Custom(payload))
                         .await;
                 }
-                Some(_) => continue,
+                Some(_) => {}
                 None => break,
             }
         }
@@ -134,11 +134,11 @@ async fn a_dial_and_a_send_to_one_peer_share_a_connect() {
 
         // `join!` polls in order, so the Dial command is queued before the
         // send: the send finds the dial in flight and waits on it.
-        let (dialed, response) = tokio::join!(
+        let (dial_result, response) = tokio::join!(
             dialer.dial(addr),
             dialer.send_request(id, MydiaRequest::Custom(b"shared".to_vec())),
         );
-        dialed.expect("dial");
+        dial_result.expect("dial");
         assert_eq!(
             response.expect("send"),
             MydiaResponse::Custom(b"shared".to_vec())
@@ -189,12 +189,12 @@ async fn a_dial_with_addresses_replaces_an_addressless_dial_in_flight() {
         // the request's on-demand (addressless) dial is queued first; the
         // `dial` that carries the address arrives while it is still
         // running and must supersede it.
-        let (response, dialed) = tokio::join!(
+        let (response, dial_result) = tokio::join!(
             dialer.send_request(id, MydiaRequest::Custom(b"probe".to_vec())),
             dialer.dial(addr),
         );
 
-        dialed.expect("the address-carrying dial should succeed");
+        dial_result.expect("the address-carrying dial should succeed");
         assert_eq!(
             response.expect("the queued request should complete"),
             MydiaResponse::Custom(b"probe".to_vec())

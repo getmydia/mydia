@@ -218,12 +218,15 @@ mod tests {
             facts("mkv", "HEVC (Main)", Some("DTS")),
         ] {
             let list = build(&f);
-            let last = list.last().unwrap();
-            assert_eq!(last.strategy, Strategy::Transcode);
-            assert_eq!(last.container, "ts");
-            assert_eq!(last.video_codec.as_deref(), Some("avc1.640028"));
-            assert_eq!(last.audio_codec.as_deref(), Some("mp4a.40.2"));
-            assert_eq!(last.mime, r#"video/mp2t; codecs="avc1.640028, mp4a.40.2""#);
+            let fallback = list.last().unwrap();
+            assert_eq!(fallback.strategy, Strategy::Transcode);
+            assert_eq!(fallback.container, "ts");
+            assert_eq!(fallback.video_codec.as_deref(), Some("avc1.640028"));
+            assert_eq!(fallback.audio_codec.as_deref(), Some("mp4a.40.2"));
+            assert_eq!(
+                fallback.mime,
+                r#"video/mp2t; codecs="avc1.640028, mp4a.40.2""#
+            );
         }
     }
 

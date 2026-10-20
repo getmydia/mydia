@@ -4,6 +4,7 @@
 use crate::host::Host;
 use crate::http::{plex_headers, query, request, send, send_json, Auth, PlexError};
 use serde::{Deserialize, Deserializer};
+use std::fmt::Write;
 
 pub const PAGE_SIZE: u32 = 200;
 /// The smallest page a too-large response shrinks to before that page is skipped.
@@ -122,7 +123,7 @@ pub struct Fetched {
 impl Fetched {
     /// True when the listing may continue past this page.
     pub fn has_more(&self) -> bool {
-        self.skipped || self.items.len() as u32 >= self.size
+        self.skipped || u32::try_from(self.items.len()).unwrap_or(u32::MAX) >= self.size
     }
 }
 
@@ -175,7 +176,7 @@ pub fn section_items(
 ) -> Result<Page, PlexError> {
     let mut path = format!("/library/sections/{section_key}/all?includeGuids=1");
     if let Some(since) = since {
-        path.push_str(&format!("&lastViewedAt%3E={since}"));
+        let _ = write!(path, "&lastViewedAt%3E={since}");
     }
     list_page(host, base, link_id, &path, start, size)
 }
@@ -194,7 +195,7 @@ pub fn section_episodes(
 ) -> Result<Page, PlexError> {
     let mut path = format!("/library/sections/{section_key}/all?type=4&includeGuids=1");
     if let Some(since) = since {
-        path.push_str(&format!("&lastViewedAt%3E={since}"));
+        let _ = write!(path, "&lastViewedAt%3E={since}");
     }
     list_page(host, base, link_id, &path, start, size)
 }
@@ -240,7 +241,7 @@ pub fn all_leaves(
         start += if fetched.skipped {
             fetched.size
         } else {
-            fetched.items.len() as u32
+            u32::try_from(fetched.items.len()).unwrap_or(u32::MAX)
         };
         let more = fetched.has_more();
         out.extend(fetched.items);

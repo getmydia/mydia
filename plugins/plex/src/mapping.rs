@@ -92,9 +92,8 @@ pub fn movie_entries(item: &Metadata) -> Vec<KvEntry> {
 }
 
 pub fn episode_entries(show: &ExternalIds, ep: &Metadata) -> Vec<KvEntry> {
-    let (season, episode) = match (ep.parent_index, ep.index) {
-        (Some(s), Some(e)) => (s, e),
-        _ => return Vec::new(),
+    let (Some(season), Some(episode)) = (ep.parent_index, ep.index) else {
+        return Vec::new();
     };
     let own = guid::parse_guids(&ep.guids);
     let entry = MapEntry {
@@ -122,7 +121,7 @@ pub fn episode_entries(show: &ExternalIds, ep: &Metadata) -> Vec<KvEntry> {
 }
 
 /// Candidate rev keys for a local progress row, in lookup order. An episode row
-/// carries its show's ids (HostFunctions.to_playback_progress/1).
+/// carries its show's ids (`HostFunctions.to_playback_progress/1`).
 pub fn rev_keys_for_progress(p: &PlaybackProgress) -> Vec<String> {
     let mut sources: Vec<(&str, String)> = Vec::new();
     if let Some(t) = p.tmdb_id {
@@ -264,7 +263,7 @@ pub fn crawl_step(
             }
         } else {
             let mut entries: Vec<KvEntry> = fetched.items.iter().flat_map(movie_entries).collect();
-            state.offset += fetched.items.len() as u32;
+            state.offset += u32::try_from(fetched.items.len()).unwrap_or(u32::MAX);
             entries.push(state_entry(&state));
             store::set_many(host, &entries).map_err(host_err)?;
         }
@@ -316,6 +315,10 @@ fn state_entry(state: &CrawlState) -> KvEntry {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "passed directly to map_err, which hands the error over by value"
+)]
 fn host_err(e: mydia_plugin_sdk::types::HostError) -> PlexError {
     PlexError::Unexpected(format!("store: {e:?}"))
 }

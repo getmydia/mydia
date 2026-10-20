@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io' show exit;
 
 import 'package:flutter/widgets.dart' show AppLifecycleState;
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/backends/flatpak_update_backend.dart';
@@ -11,15 +10,6 @@ import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/available_update.dart';
-
-/// `build()` calls the real `PackageInfo.fromPlatform()`, which is a
-/// MethodChannel call. `flutter test` never runs the generated dart plugin
-/// registrant for plain (non-widget) tests, so without this mock the call
-/// throws MissingPluginException, is swallowed by `_init`'s catch, and every
-/// test below would see a notifier that never got as far as creating a
-/// backend.
-const _packageInfoChannel =
-    MethodChannel('dev.fluttercommunity.plus/package_info');
 
 class _FakeBackend implements UpdateBackend {
   _FakeBackend({
@@ -134,6 +124,7 @@ ProviderContainer _container(
     overrides: [
       if (canInstall != null)
         installPermissionCheckProvider.overrideWithValue(canInstall),
+      installedVersionReaderProvider.overrideWithValue(() async => '0.15.0'),
       updateBackendFactoryProvider.overrideWithValue(
         ({required String currentVersion}) async => backend,
       ),
@@ -146,24 +137,7 @@ ProviderContainer _container(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(_packageInfoChannel, (call) async {
-      if (call.method == 'getAll') {
-        return {
-          'appName': 'Mydia Player',
-          'packageName': 'dev.mydia.player',
-          'version': '0.15.0',
-          'buildNumber': '1',
-        };
-      }
-      return null;
-    });
-  });
-
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(_packageInfoChannel, null);
     debugExitProcess = exit;
   });
 
@@ -366,6 +340,7 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
+        installedVersionReaderProvider.overrideWithValue(() async => '0.15.0'),
         updateBackendFactoryProvider.overrideWithValue(
           ({required String currentVersion}) async => backend,
         ),
@@ -399,6 +374,7 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
+        installedVersionReaderProvider.overrideWithValue(() async => '0.15.0'),
         updateBackendFactoryProvider.overrideWithValue(
           ({required String currentVersion}) async => backend,
         ),

@@ -123,16 +123,19 @@ impl Loader {
         Self::default()
     }
 
+    #[must_use]
     pub fn with_yaml(mut self, path: &Path) -> Self {
         self.yaml = Some(path.to_path_buf());
         self
     }
 
+    #[must_use]
     pub fn with_env(mut self) -> Self {
         self.env = true;
         self
     }
 
+    #[must_use]
     pub fn with_overlay(mut self, overlay: Vec<(String, String)>) -> Self {
         self.overlay = overlay;
         self
@@ -226,7 +229,7 @@ fn apply_overlay(config: &mut Config, key: &str, value: &str) -> Result<(), Conf
                 .map_err(|_| ConfigError::InvalidOverlayValue {
                     key: key.to_string(),
                     value: value.to_string(),
-                })?
+                })?;
         }
         "metadata_relay_url" => config.metadata_relay_url = value.to_string(),
         "secret_key_base" => config.secret_key_base = value.to_string(),

@@ -1,17 +1,17 @@
-//! Port of lib/mydia/streaming/codec_string.ex.
+//! Port of `lib/mydia/streaming/codec_string.ex`.
 //!
 //! The Elixir module prefers raw ffprobe profile and level integers when the
 //! metadata carries them, and derives from the human-readable profile name
 //! otherwise. Nothing in the Elixir codebase ever writes those integers:
-//! `video_profile_idc` and friends appear only on the FileMetadata struct and
-//! in codec_string.ex itself. The Elixir server therefore always takes the
+//! `video_profile_idc` and friends appear only on the `FileMetadata` struct and
+//! in `codec_string.ex` itself. The Elixir server therefore always takes the
 //! derived branch, and so does this port. Adding the raw branch here would
 //! make Mydia Server answer differently from the server it is measured
 //! against.
 
-/// Level 4.0 covers 1080p at 30fps. codec_string.ex:194.
+/// Level 4.0 covers 1080p at 30fps. `codec_string.ex:194`.
 const H264_DEFAULT_LEVEL: u32 = 40;
-/// Level 4.0 for HEVC is level_idc 120. codec_string.ex:290.
+/// Level 4.0 for HEVC is `level_idc` 120. `codec_string.ex:290`.
 const HEVC_DEFAULT_LEVEL: u32 = 120;
 
 /// codec_string.ex:56-67.
@@ -36,7 +36,7 @@ pub fn video_codec_string(codec: Option<&str>) -> Option<String> {
     }
 }
 
-/// codec_string.ex:84-100. DTS, TrueHD and PCM have no RFC 6381 string, which
+/// codec_string.ex:84-100. DTS, `TrueHD` and PCM have no RFC 6381 string, which
 /// is why they answer None rather than a guess.
 pub fn audio_codec_string(codec: Option<&str>) -> Option<String> {
     let codec = codec?;
@@ -132,7 +132,7 @@ fn is_hevc(c: &str) -> bool {
     c.contains("hevc") || c.contains("h265") || c.contains("h.265")
 }
 
-/// codec_string.ex:196-232, returning (profile_idc, constraint_flags).
+/// codec_string.ex:196-232, returning (`profile_idc`, `constraint_flags`).
 fn h264_profile(c: &str) -> (u32, u32) {
     if c.contains("constrained baseline") {
         (66, 0x40)
@@ -152,7 +152,7 @@ fn h264_profile(c: &str) -> (u32, u32) {
     }
 }
 
-/// codec_string.ex:292-316, returning (profile_idc, tier_flag).
+/// codec_string.ex:292-316, returning (`profile_idc`, `tier_flag`).
 fn hevc_profile(c: &str) -> (u32, u32) {
     if c.contains("main 10") || c.contains("main10") {
         (2, 0)
@@ -168,7 +168,7 @@ fn hevc_profile(c: &str) -> (u32, u32) {
 }
 
 fn format_avc1(profile: u32, constraint: u32, level: u32) -> String {
-    format!("avc1.{:02x}{:02x}{:02x}", profile, constraint, level)
+    format!("avc1.{profile:02x}{constraint:02x}{level:02x}")
 }
 
 /// codec_string.ex:276-286. The compatibility field is 4 for every profile the
@@ -181,11 +181,11 @@ fn format_hvc1(prefix: &str, profile: u32, tier: u32, level: u32) -> String {
 /// codec_string.ex:462-469.
 fn container_to_mime(container: &str) -> &'static str {
     match container {
-        "mp4" | "m4v" | "mov" => "video/mp4",
         "mkv" => "video/x-matroska",
         "webm" => "video/webm",
         "ts" => "video/mp2t",
         "avi" => "video/x-msvideo",
+        // mp4, m4v, mov and anything unrecognised all answer video/mp4.
         _ => "video/mp4",
     }
 }

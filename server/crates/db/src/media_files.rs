@@ -172,12 +172,15 @@ pub async fn list_for_episode(db: &Db, episode_id: &str) -> Result<Vec<MediaFile
 /// on disk is touched, because Mydia Server has no delete capability.
 ///
 /// Keep-lists are staged through a temp table so libraries larger than
-/// SQLite's bound-parameter limit (commonly 999) still prune correctly.
+/// `SQLite`'s bound-parameter limit (commonly 999) still prune correctly.
 pub async fn prune_outside(
     db: &Db,
     library_path_id: &str,
     keep: &[String],
 ) -> Result<u64, DbError> {
+    // Stay well under SQLite's default bind-parameter limit per statement.
+    const CHUNK: usize = 400;
+
     // A file belongs to this library through its item, directly for a movie
     // and through the show for an episode.
     let scope = "(media_item_id IN (SELECT id FROM media_items WHERE library_path_id = ?)
@@ -214,9 +217,6 @@ pub async fn prune_outside(
     sqlx::query("DELETE FROM media_files_prune_keep")
         .execute(&mut *tx)
         .await?;
-
-    // Stay well under SQLite's default bind-parameter limit per statement.
-    const CHUNK: usize = 400;
     for chunk in keep.chunks(CHUNK) {
         let placeholders = vec!["(?)"; chunk.len()].join(", ");
         let sql =

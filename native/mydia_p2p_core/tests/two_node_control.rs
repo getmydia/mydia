@@ -11,7 +11,7 @@ use std::time::Duration;
 /// bound anywhere in the crate. Rather than depend on that scattered,
 /// implicit, and change-able set of internal timeouts, the test declares its
 /// own explicit bound over the whole exchange.
-const TEST_TIMEOUT: Duration = Duration::from_secs(60);
+const TEST_TIMEOUT: Duration = Duration::from_mins(1);
 
 fn test_config() -> HostConfig {
     HostConfig {

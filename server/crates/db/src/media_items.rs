@@ -123,7 +123,7 @@ pub struct BrowseSort {
 }
 
 /// A movie has files directly. A show has them through its episodes. Both are
-/// what `has_files: true` means in browse_resolver.ex:71,120.
+/// what `has_files: true` means in `browse_resolver.ex:71,120`.
 const HAS_FILES: &str = "(
     EXISTS (SELECT 1 FROM media_files f WHERE f.media_item_id = media_items.id)
  OR EXISTS (SELECT 1 FROM media_files f
@@ -177,7 +177,7 @@ pub async fn browse(
 }
 
 /// Counts everything that matches, not just the page, matching
-/// browse_resolver.ex:104,147.
+/// `browse_resolver.ex:104,147`.
 pub async fn count(db: &Db, media_type: &str) -> Result<i64, DbError> {
     let sql = format!("SELECT count(*) FROM media_items WHERE media_type = ? AND {HAS_FILES}");
 

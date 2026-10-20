@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
-# Lint every WASM plugin crate under plugins/.
+# Lint every WASM plugin crate under plugins/ and plugins-extra/.
 #
 # Plugins compile to wasm32-wasip2 component-model guests (built against the WIT
 # contract via the SDK's wit-bindgen), so we check them against that target
@@ -15,17 +15,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-PLUGINS_DIR="$PROJECT_ROOT/plugins"
 TARGET="wasm32-wasip2"
 
 FMT_MODE="--check"
 if [ "${1:-}" = "--fix" ]; then
   FMT_MODE=""
-fi
-
-if [ ! -d "$PLUGINS_DIR" ]; then
-  echo "No plugins/ directory; nothing to check."
-  exit 0
 fi
 
 # Verify the *active* toolchain has the target's std, by probing its sysroot
@@ -48,18 +42,31 @@ if [ -n "$SYSROOT" ] && [ ! -d "$SYSROOT/lib/rustlib/$TARGET" ]; then
 fi
 
 found=0
-for manifest in "$PLUGINS_DIR"/*/Cargo.toml; do
+failed=()
+for manifest in "$PROJECT_ROOT"/plugins/*/Cargo.toml "$PROJECT_ROOT"/plugins-extra/*/Cargo.toml; do
   [ -e "$manifest" ] || continue
   found=1
   crate_dir="$(dirname "$manifest")"
   echo "==> $(basename "$crate_dir")"
 
+  crate="$(basename "$crate_dir")"
   # shellcheck disable=SC2086
-  cargo fmt --manifest-path "$manifest" -- $FMT_MODE
+  cargo fmt --manifest-path "$manifest" -- $FMT_MODE || failed+=("$crate (fmt)")
+  # --all-targets also lints the #[cfg(test)] code. It builds for wasm32-wasip2
+  # here even though the tests themselves run on the host (scripts/test-plugins.sh);
+  # clippy only needs the test targets to type-check, not to execute.
   cargo clippy --manifest-path "$manifest" \
-    --release --target "$TARGET" -- -D warnings
+    --release --target "$TARGET" --all-targets -- -D warnings || failed+=("$crate (clippy)")
 done
 
+if [ ${#failed[@]} -gt 0 ]; then
+  echo
+  echo "Plugin checks failed:"
+  printf '  %s\n' "${failed[@]}"
+  echo "Run scripts/check-plugins.sh --fix for formatting; clippy findings need a code fix."
+  exit 1
+fi
+
 if [ "$found" -eq 0 ]; then
-  echo "No plugin crates found under plugins/."
+  echo "No plugin crates found under plugins/ or plugins-extra/."
 fi

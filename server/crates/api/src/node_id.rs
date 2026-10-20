@@ -1,4 +1,4 @@
-//! Global node ids, matching lib/mydia_web/schema/resolvers/node_id.ex.
+//! Global node ids, matching `lib/mydia_web/schema/resolvers/node_id.ex`.
 //!
 //! Only the `node` query uses these. Every type's own `id` field is its raw
 //! row id, which is what `movie(id:)` and friends take.

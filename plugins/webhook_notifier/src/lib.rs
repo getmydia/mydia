@@ -22,11 +22,17 @@
 //! adapted at the two call sites.
 
 use std::collections::HashMap;
+use std::fmt::Write;
 
 use mydia_plugin_sdk::types::{DataRequest, Event, MediaItem, OutboundRequest, ReadResult};
 use tinyjson::JsonValue;
 
 #[mydia_plugin_sdk::plugin]
+#[expect(
+    clippy::needless_pass_by_value,
+    clippy::unnecessary_wraps,
+    reason = "the plugin macro fixes this by-value, Result-returning handler signature"
+)]
 fn on_event(evt: Event) -> Result<String, String> {
     Ok(stringify(&process(&event_to_json(&evt))))
 }
@@ -41,17 +47,17 @@ fn event_to_json(evt: &Event) -> JsonValue {
     };
 
     map.insert("event".to_string(), string(&evt.event));
-    insert_opt(&mut map, "category", &evt.category);
-    insert_opt(&mut map, "severity", &evt.severity);
-    insert_opt(&mut map, "actor_type", &evt.actor_type);
-    insert_opt(&mut map, "actor_id", &evt.actor_id);
-    insert_opt(&mut map, "resource_type", &evt.resource_type);
-    insert_opt(&mut map, "resource_id", &evt.resource_id);
+    insert_opt(&mut map, "category", evt.category.as_ref());
+    insert_opt(&mut map, "severity", evt.severity.as_ref());
+    insert_opt(&mut map, "actor_type", evt.actor_type.as_ref());
+    insert_opt(&mut map, "actor_id", evt.actor_id.as_ref());
+    insert_opt(&mut map, "resource_type", evt.resource_type.as_ref());
+    insert_opt(&mut map, "resource_id", evt.resource_id.as_ref());
 
     JsonValue::Object(map)
 }
 
-fn insert_opt(map: &mut HashMap<String, JsonValue>, key: &str, value: &Option<String>) {
+fn insert_opt(map: &mut HashMap<String, JsonValue>, key: &str, value: Option<&String>) {
     if let Some(v) = value {
         map.insert(key.to_string(), string(v));
     }
@@ -99,7 +105,7 @@ fn http_call(req: &JsonValue) -> JsonValue {
             .unwrap_or("POST")
             .to_string(),
         headers,
-        body: get(req, "body").and_then(as_str).map(|s| s.to_string()),
+        body: get(req, "body").and_then(as_str).map(ToString::to_string),
     };
 
     match host_http(&out) {
@@ -139,22 +145,22 @@ fn media_item_to_json(item: &MediaItem) -> JsonValue {
         ),
     ];
 
-    push_opt_str(&mut pairs, "original_title", &item.original_title);
-    push_opt_str(&mut pairs, "imdb_id", &item.imdb_id);
-    push_opt_str(&mut pairs, "overview", &item.overview);
-    push_opt_str(&mut pairs, "tagline", &item.tagline);
-    push_opt_str(&mut pairs, "poster_path", &item.poster_path);
-    push_opt_str(&mut pairs, "backdrop_path", &item.backdrop_path);
+    push_opt_str(&mut pairs, "original_title", item.original_title.as_ref());
+    push_opt_str(&mut pairs, "imdb_id", item.imdb_id.as_ref());
+    push_opt_str(&mut pairs, "overview", item.overview.as_ref());
+    push_opt_str(&mut pairs, "tagline", item.tagline.as_ref());
+    push_opt_str(&mut pairs, "poster_path", item.poster_path.as_ref());
+    push_opt_str(&mut pairs, "backdrop_path", item.backdrop_path.as_ref());
     push_opt_num(&mut pairs, "year", item.year.map(f64::from));
-    push_opt_num(&mut pairs, "tmdb_id", item.tmdb_id.map(|v| v as f64));
-    push_opt_num(&mut pairs, "tvdb_id", item.tvdb_id.map(|v| v as f64));
+    push_opt_num(&mut pairs, "tmdb_id", item.tmdb_id.map(i64_to_f64));
+    push_opt_num(&mut pairs, "tvdb_id", item.tvdb_id.map(i64_to_f64));
     push_opt_num(&mut pairs, "runtime", item.runtime.map(f64::from));
     push_opt_num(&mut pairs, "rating", item.rating);
 
     object(pairs)
 }
 
-fn push_opt_str(pairs: &mut Vec<(&str, JsonValue)>, key: &'static str, value: &Option<String>) {
+fn push_opt_str(pairs: &mut Vec<(&str, JsonValue)>, key: &'static str, value: Option<&String>) {
     if let Some(v) = value {
         pairs.push((key, string(v)));
     }
@@ -297,7 +303,13 @@ fn ntfy_request(
     push_setting_header(&mut headers, config, "ntfy_priority", "priority", |v| {
         v.to_string()
     });
-    push_setting_header(&mut headers, config, "ntfy_tags", "tags", |v| v.to_string());
+    push_setting_header(
+        &mut headers,
+        config,
+        "ntfy_tags",
+        "tags",
+        ToString::to_string,
+    );
     push_setting_header(&mut headers, config, "ntfy_token", "authorization", |v| {
         format!("Bearer {v}")
     });
@@ -468,10 +480,23 @@ fn scalar(v: &JsonValue) -> Option<String> {
     }
 }
 
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "tinyjson stores every number as f64; media ids are far below 2^53"
+)]
+fn i64_to_f64(v: i64) -> f64 {
+    v as f64
+}
+
 // tinyjson stores every number as f64; render integral values without a ".0".
 fn format_number(n: f64) -> String {
     if n.fract() == 0.0 && n.abs() < 1e15 {
-        format!("{}", n as i64)
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "guarded by fract() == 0 and abs() < 1e15, so the value is integral and fits i64"
+        )]
+        let integral = n as i64;
+        format!("{integral}")
     } else {
         format!("{n}")
     }
@@ -486,19 +511,16 @@ fn render_template(template: &str, ctx: &HashMap<String, String>) -> String {
     while let Some(start) = rest.find("{{") {
         out.push_str(&rest[..start]);
         let after = &rest[start + 2..];
-        match after.find("}}") {
-            Some(end) => {
-                let key = after[..end].trim();
-                if let Some(value) = ctx.get(key) {
-                    out.push_str(value);
-                }
-                rest = &after[end + 2..];
+        if let Some(end) = after.find("}}") {
+            let key = after[..end].trim();
+            if let Some(value) = ctx.get(key) {
+                out.push_str(value);
             }
-            None => {
-                // Unterminated placeholder: emit the remainder literally.
-                out.push_str(&rest[start..]);
-                return out;
-            }
+            rest = &after[end + 2..];
+        } else {
+            // Unterminated placeholder: emit the remainder literally.
+            out.push_str(&rest[start..]);
+            return out;
         }
     }
 
@@ -548,9 +570,11 @@ fn percent_encode(value: &str) -> String {
     for b in value.bytes() {
         match b {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char)
+                out.push(b as char);
             }
-            _ => out.push_str(&format!("%{b:02X}")),
+            _ => {
+                let _ = write!(out, "%{b:02X}");
+            }
         }
     }
     out

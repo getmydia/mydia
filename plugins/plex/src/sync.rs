@@ -5,7 +5,7 @@
 //! One tick, per active user link:
 //!   1. Pull pass. Items Plex reports as viewed since the link's pull cursor
 //!      (minus a 15 minute overlap), resumable page by page through
-//!      link/<id>/cursor/pull_page.
+//!      link/<id>/`cursor/pull_page`.
 //!   2. Push pass. Local rows for that user updated since link/<id>/cursor/push
 //!      that this instance did not write. Remote state is the snapshot when one
 //!      exists, because the pull pass already covered every remote change;
@@ -100,7 +100,7 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
-    /// `at` is the remote's last-watched time, as in Engine.snapshot_side/1.
+    /// `at` is the remote's last-watched time, as in `Engine.snapshot_side/1`.
     pub fn side(&self) -> Side {
         Side {
             watched: self.watched,
@@ -132,7 +132,7 @@ pub fn remote_side(item: &Metadata) -> Side {
         position: item
             .view_offset
             .filter(|ms| *ms > 0)
-            .map(|ms| (ms / 1000) as i64),
+            .map(|ms| i64::try_from(ms / 1000).unwrap_or(i64::MAX)),
         at: item.last_viewed_at,
     }
 }
@@ -145,7 +145,7 @@ pub fn local_side(p: &PlaybackProgress) -> Side {
     }
 }
 
-/// Client-side guard matching the native provider's changed_since?/2: an
+/// Client-side guard matching the native provider's `changed_since?/2`: an
 /// in-progress item may have a viewOffset but no lastViewedAt stamp yet.
 pub fn changed_since(item: &Metadata, since: Option<i64>) -> bool {
     match (since, item.last_viewed_at) {
@@ -244,7 +244,7 @@ enum LinkOutcome {
 
 /// One scheduled tick. `server_link` (endpoint link, else owner) runs the crawl;
 /// each user link reads and writes Plex with its own token, or through
-/// `owner_link` when link/<id>/uses_owner is set. `Err(Unauthorized)` means the
+/// `owner_link` when link/<id>/`uses_owner` is set. `Err(Unauthorized)` means the
 /// instance credential itself was refused.
 pub fn run_tick(
     h: &mut dyn Host,
@@ -439,6 +439,10 @@ fn request_link(
     })
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "pull, push and bookkeeping passes share one deadline and one Applier; splitting is a refactor outside this lint pass"
+)]
 fn sync_link(
     h: &mut dyn Host,
     ctx: &LinkCtx,
@@ -467,13 +471,12 @@ fn sync_link(
         .filter(|s| s.kind == "movie" || s.kind == "show")
         .collect();
     if let Some(key) = &page.section_key {
-        match sections.iter().position(|s| &s.key == key) {
-            Some(i) => page.section_index = i,
+        if let Some(i) = sections.iter().position(|s| &s.key == key) {
+            page.section_index = i;
+        } else {
             // The section is gone: start the pass over rather than skip one.
-            None => {
-                page.section_index = 0;
-                page.offset = 0;
-            }
+            page.section_index = 0;
+            page.offset = 0;
         }
     }
     let mut seen: HashSet<String> = HashSet::new();
@@ -519,12 +522,9 @@ fn sync_link(
             // resolve to the canonical key), so its "local" side is unknown, not
             // absent: reuse the snapshot so only Plex-side changes act on it.
             let local_side = if ctx.canonical.contains(rk) {
-                local
-                    .get(&ctx.user_id, rk)
-                    .map(|r| r.side)
-                    .unwrap_or(ABSENT)
+                local.get(&ctx.user_id, rk).map_or(ABSENT, |r| r.side)
             } else {
-                snapshot.as_ref().map(Snapshot::side).unwrap_or(ABSENT)
+                snapshot.as_ref().map_or(ABSENT, Snapshot::side)
             };
             ap.item(
                 h,
@@ -579,13 +579,14 @@ fn sync_link(
         let snapshot = read_snapshot(h, &ctx.link_id, rk)?;
         let remote = match &snapshot {
             Some(s) => s.side(),
-            None => match api::metadata(h, ctx.base, &ctx.req_link, rk)? {
-                Some(item) => remote_side(&item),
-                None => {
+            None => {
+                if let Some(item) = api::metadata(h, ctx.base, &ctx.req_link, rk)? {
+                    remote_side(&item)
+                } else {
                     ap.counts.not_found += 1;
                     continue;
                 }
-            },
+            }
         };
         let errors_before = ap.counts.errors;
         ap.item(h, ctx, rk, &row.side, &remote, snapshot.as_ref())?;
@@ -750,20 +751,22 @@ fn pull(
         return Ok(false);
     };
     // Episodes resolve by their show's ids plus coordinates, like the crawl.
-    let (imdb, tmdb, tvdb) = if entry.kind == "episode" {
+    let ids = if entry.kind == "episode" {
         (entry.show_imdb.clone(), entry.show_tmdb, entry.show_tvdb)
     } else {
         (entry.imdb.clone(), entry.tmdb, entry.tvdb)
     };
     let target = WatchStateTarget {
         user_id: ctx.user_id.clone(),
-        imdb_id: imdb,
-        tmdb_id: tmdb,
-        tvdb_id: tvdb,
+        imdb_id: ids.0,
+        tmdb_id: ids.1,
+        tvdb_id: ids.2,
         season_number: entry.season,
         episode_number: entry.episode,
         watched: c.watched,
-        position_seconds: c.position.map(|p| p.max(0) as u32),
+        position_seconds: c
+            .position
+            .map(|p| u32::try_from(p.max(0)).unwrap_or(u32::MAX)),
         duration_seconds: None,
         watched_at: remote_at.map(time::to_rfc3339),
     };
@@ -782,7 +785,13 @@ fn push(h: &mut dyn Host, ctx: &LinkCtx, rk: &str, c: Change) -> Result<(), Plex
         api::unscrobble(h, ctx.base, &ctx.req_link, rk)?;
     }
     if let Some(p) = c.position {
-        api::progress(h, ctx.base, &ctx.req_link, rk, p.max(0) as u32)?;
+        api::progress(
+            h,
+            ctx.base,
+            &ctx.req_link,
+            rk,
+            u32::try_from(p.max(0)).unwrap_or(u32::MAX),
+        )?;
     }
     Ok(())
 }

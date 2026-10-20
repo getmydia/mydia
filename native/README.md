@@ -163,3 +163,34 @@ Both read `GET /client-config` from the metadata relay at boot, so a relay can
 be added or moved by changing the metadata relay's configuration rather than
 shipping a new server image and player build. Change one of those two files
 and you almost certainly need to change the other.
+
+## Rust rules
+
+Every first-party crate (`server/`, `native/`, `player/rust/`, `plugins/`,
+`plugins-extra/`) uses one lint set: clippy pedantic, no `dbg!` or printing, no
+`unsafe` outside generated code, and a `reason` on every lint exception.
+
+- The canonical tables live in `rust-lints.toml`. Each `Cargo.toml` carries a
+  copy (`[workspace.lints]` in `server/Cargo.toml`), and
+  `scripts/check-rust-lints.sh` (pre-commit and CI) fails when one drifts. A
+  crate may add entries, never drop or weaken one.
+- `clippy.toml` at the repo root relaxes the panic and print lints inside tests.
+  It is the only clippy.toml allowed.
+- An exception is local and states why:
+  `#[expect(clippy::cast_possible_truncation, reason = "track index is < 64")]`.
+  Prefer `#[expect]`, which errors once the lint stops firing, so stale
+  exceptions surface. Use `#[allow]` only where `expect` cannot work, such as
+  the generated `frb_generated` module.
+- Adding a crate: copy the tables from `rust-lints.toml` into its `Cargo.toml`.
+  Crates under `native/`, `player/rust/`, `plugins/` and `plugins-extra/` are
+  linted automatically.
+
+Each group has its own gate, all running clippy with `-D warnings`:
+
+- `scripts/check-rust.sh` covers `native/*` and `player/rust/*` with
+  `--all-targets --all-features`. The p2p core also gets a wasm32 clippy step in CI.
+- `scripts/check-plugins.sh` covers the plugins against `wasm32-wasip2`, test
+  code included, and reports every failing crate instead of stopping at the first.
+- `server/` is linted by `ci-server.yml` and its own hook.
+- `scripts/test-plugins.sh` runs the plugin tests on the host, which clippy only
+  type-checks.

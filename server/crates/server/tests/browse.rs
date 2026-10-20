@@ -27,12 +27,15 @@ fn synthesize(root: &Path, relative: &str) -> bool {
         ])
         .arg(&path)
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .is_ok_and(|s| s.success())
 }
 
 /// Synthesizes every relative path, or skips the calling test when any encode
 /// fails. Returns true when the fixtures are ready.
+#[expect(
+    clippy::print_stderr,
+    reason = "a skipped test has no tracing subscriber, and the notice must reach the test log"
+)]
 fn synthesize_all(root: &Path, relatives: &[&str]) -> bool {
     for relative in relatives {
         if !synthesize(root, relative) {
@@ -43,9 +46,9 @@ fn synthesize_all(root: &Path, relatives: &[&str]) -> bool {
     true
 }
 
-/// MoviesList from player/lib/graphql/queries/movies_list.graphql, with its
+/// `MoviesList` from `player/lib/graphql/queries/movies_list.graphql`, with its
 /// two fragments inlined.
-const MOVIES_LIST: &str = r#"
+const MOVIES_LIST: &str = r"
 query MoviesList {
   movies(first: 20) {
     edges {
@@ -61,10 +64,10 @@ query MoviesList {
     totalCount
   }
 }
-"#;
+";
 
-/// TvShowsList from player/lib/graphql/queries/tv_shows_list.graphql.
-const TV_SHOWS_LIST: &str = r#"
+/// `TvShowsList` from `player/lib/graphql/queries/tv_shows_list.graphql`.
+const TV_SHOWS_LIST: &str = r"
 query TvShowsList {
   tvShows(first: 20) {
     edges {
@@ -81,10 +84,10 @@ query TvShowsList {
     totalCount
   }
 }
-"#;
+";
 
-/// SeasonEpisodes from player/lib/graphql/queries/season_episodes.graphql.
-const SEASON_EPISODES: &str = r#"
+/// `SeasonEpisodes` from `player/lib/graphql/queries/season_episodes.graphql`.
+const SEASON_EPISODES: &str = r"
 query SeasonEpisodes($showId: ID!, $seasonNumber: Int!) {
   seasonEpisodes(showId: $showId, seasonNumber: $seasonNumber) {
     id seasonNumber episodeNumber title overview airDate runtime monitored
@@ -97,10 +100,10 @@ query SeasonEpisodes($showId: ID!, $seasonNumber: Int!) {
     }
   }
 }
-"#;
+";
 
-/// MovieDetail from player/lib/graphql/queries/movie_detail.graphql.
-const MOVIE_DETAIL: &str = r#"
+/// `MovieDetail` from `player/lib/graphql/queries/movie_detail.graphql`.
+const MOVIE_DETAIL: &str = r"
 query MovieDetail($id: ID!) {
   movie(id: $id) {
     id title originalTitle year overview runtime genres contentRating rating
@@ -115,7 +118,7 @@ query MovieDetail($id: ID!) {
     isFavorite
   }
 }
-"#;
+";
 
 #[tokio::test]
 async fn the_player_can_list_a_scanned_movie_library() {

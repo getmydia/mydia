@@ -15,9 +15,11 @@ dead-code detector, `mix mydia.dead_code`, is available for manual use; see
 
 Run the Rust gates with `scripts/check-rust.sh` (native crates) and
 `scripts/check-plugins.sh` (wasm plugins); `--fix` rewrites formatting.
-Clippy findings need a code fix. The crate list lives in
-`scripts/check-rust.sh` and nowhere else: the pre-commit hook and CI both
-call it.
+Clippy findings need a code fix. Both scripts find crates by directory
+(`native/*`, `player/rust/*`, `plugins/*`, `plugins-extra/*`), so a new crate is
+gated without editing a list; the pre-commit hook and CI both call them. All
+first-party crates share one lint set, described in
+[`native/README.md`](native/README.md#rust-rules).
 
 These gates follow one rule, and it is the rule that keeps them honest:
 
