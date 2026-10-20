@@ -189,9 +189,9 @@ mod tests {
         let mut list: Vec<Chat> = (0..MAX_CHATS)
             .map(|i| chat(&format!("{i:x}"), 100 - i as u64))
             .collect();
-        let last = list.last().unwrap().id.clone();
+        let oldest = list.last().unwrap().id.clone();
         let evicted = touch(&mut list, "fff", &[user("new")], 200);
-        assert_eq!(evicted, vec![last]);
+        assert_eq!(evicted, vec![oldest]);
         assert_eq!(list.len(), MAX_CHATS);
         assert_eq!(list[0].id, "fff");
     }

@@ -1290,7 +1290,7 @@ mod tests {
         }"#;
         let items = parse_all_items(body);
         assert_eq!(items.len(), 2);
-        assert_eq!(items[0].tvdb, Some(320724));
+        assert_eq!(items[0].tvdb, Some(320_724));
         assert_eq!(items[0].season, Some(1));
         assert_eq!(items[0].episode, Some(1));
         assert_eq!(items[0].key(), "tvdb:320724:s1e1");
@@ -1367,7 +1367,7 @@ mod tests {
         }"#;
         let items = parse_all_items(body);
         assert_eq!(items.len(), 2);
-        assert_eq!(items[0].tvdb, Some(320724));
+        assert_eq!(items[0].tvdb, Some(320_724));
         assert_eq!(items[0].tmdb, Some(67195));
         assert_eq!(items[1].tmdb, Some(27205));
     }

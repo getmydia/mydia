@@ -112,7 +112,7 @@ mod tests {
         let body = r#"{"choices":[{"message":{"role":"assistant","content":"hi"}}]}"#;
         match parse_reply(200, body).unwrap() {
             Reply::Text { text, .. } => assert_eq!(text, "hi"),
-            _ => panic!("expected text"),
+            Reply::Tools { .. } => panic!("expected text"),
         }
     }
 
@@ -124,7 +124,7 @@ mod tests {
                 assert_eq!(calls[0].name, "search_library");
                 assert_eq!(calls[0].arguments.as_ref().unwrap()["query"], "x");
             }
-            _ => panic!("expected tools"),
+            Reply::Text { .. } => panic!("expected tools"),
         }
     }
 
@@ -133,7 +133,7 @@ mod tests {
         let body = r#"{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"c1","function":{"name":"list","arguments":"{oops"}}]}}]}"#;
         match parse_reply(200, body).unwrap() {
             Reply::Tools { calls, .. } => assert!(calls[0].arguments.is_err()),
-            _ => panic!("expected tools"),
+            Reply::Text { .. } => panic!("expected tools"),
         }
     }
 
@@ -150,7 +150,7 @@ mod tests {
                 assert!(message.get("reasoning").is_none());
                 assert_eq!(message["content"], "hi");
             }
-            _ => panic!("expected text"),
+            Reply::Tools { .. } => panic!("expected text"),
         }
     }
 

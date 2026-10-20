@@ -295,6 +295,10 @@ mod tests {
         }
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "every call site passes a json! literal; a reference would add & to each"
+    )]
     fn rejected(name: &str, args: Value) -> bool {
         validate(name, &args).is_err()
     }

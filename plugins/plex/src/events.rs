@@ -140,6 +140,10 @@ mod tests {
     const NOW: i64 = 1_767_225_600;
     const B: &str = "http://plex.test";
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "every call site passes a json! value or a local built for it; a reference would add & to each"
+    )]
     fn event(name: &str, actor: Option<&str>, meta: Value) -> Event {
         Event {
             event: name.into(),
