@@ -1,15 +1,15 @@
 import 'dart:typed_data';
 
 import 'p2p_keystore_stub.dart'
+    if (dart.library.io) 'p2p_keystore_native.dart'
     if (dart.library.js_interop) 'p2p_keystore_web.dart' as impl;
 
 /// Persistence for the node's Ed25519 secret key.
 ///
-/// Native platforms leave the identity to the Rust core, so the stub returns
-/// null, `HostConfig.keypair_bytes` goes unset, and the core decides exactly
-/// as it did before any of this existed. A browser has no filesystem, so the
-/// web implementation stores the raw 32 bytes in IndexedDB and hands them to
-/// `HostConfig.keypair_bytes`.
+/// Native platforms store the secret in the platform keyring. A browser has
+/// no filesystem, so the web implementation stores the raw 32 bytes in
+/// IndexedDB. Either way they are handed to `HostConfig.keypair_bytes`. The
+/// stub keeps no identity and remains only for platforms with neither.
 abstract class P2pKeystore {
   /// The stored secret, or null when nothing has been stored yet.
   ///

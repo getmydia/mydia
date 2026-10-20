@@ -202,6 +202,20 @@ class P2pGraphQLError implements Exception {
   String toString() => 'Exception: $message';
 }
 
+/// A p2p request failed before it reached the connection: host startup, the
+/// dial, or the wait for the peer to connect did not succeed. Distinct from a
+/// failure after the request was handed over, which a caller may retry on a
+/// fresh connection; a second dial to the same address almost never fares
+/// better. It prints as its [cause] did before this wrapper existed.
+class P2pConnectError implements Exception {
+  const P2pConnectError(this.cause);
+
+  final Object cause;
+
+  @override
+  String toString() => cause.toString();
+}
+
 /// Service to handle P2P networking via iroh-based Rust Native Core
 class P2pService {
   P2PHost? _host;
@@ -435,23 +449,57 @@ class P2pService {
     }
   }
 
-  /// The node's persisted secret key, or null to let the Rust core decide.
+  /// The node's persisted secret key.
   ///
-  /// Native returns null. The stub keystore stores nothing there, so
-  /// `keypair_bytes` goes unset and the core picks the identity exactly as it
-  /// did before any of this existed. A browser has no filesystem, so the raw
-  /// 32 bytes come out of IndexedDB instead, and the first ever load generates
-  /// and stores them here.
-  Future<Uint8List?> _loadOrCreateKeypairBytes() async {
-    final keystore = createKeystore();
+  /// Every platform keeps it: the platform keyring on native, IndexedDB in a
+  /// browser. The first ever load generates and stores a secret here. Only a
+  /// platform with the no-op stub keystore stores nothing, and then it
+  /// regenerates on each launch.
+  ///
+  /// One load runs per process, and every caller shares it. Read, generate and
+  /// write are separate awaits, so two loads running at once on a first run
+  /// would both read nothing, and each generate a secret: the host would start
+  /// on one while the keystore kept the other. A reset() during startup does
+  /// exactly that, as would a second P2pService. A load that fails is
+  /// forgotten, so the next attempt tries the keystore again.
+  static Future<Uint8List?> _loadOrCreateKeypairBytes() {
+    final existing = _nodeSecretLoad;
+    if (existing != null) return existing;
+
+    final attempt = _readOrCreateNodeSecret(_keystoreFactory());
+    _nodeSecretLoad = attempt;
+    attempt.then<void>((_) {}, onError: (Object _) {
+      if (identical(_nodeSecretLoad, attempt)) _nodeSecretLoad = null;
+    });
+    return attempt;
+  }
+
+  static Future<Uint8List?> _readOrCreateNodeSecret(
+      P2pKeystore keystore) async {
     final stored = await keystore.read().timeout(_keystoreTimeout);
     if (stored != null) return stored;
-    if (!kIsWeb) return null;
-
     final secret = _generateNodeSecret();
     await keystore.write(secret).timeout(_keystoreTimeout);
-    debugPrint('[P2P] Stored a new browser node identity');
+    debugPrint('[P2P] Stored a new node identity');
     return secret;
+  }
+
+  /// The load [_loadOrCreateKeypairBytes] shares, in flight or finished.
+  static Future<Uint8List?>? _nodeSecretLoad;
+
+  static P2pKeystore Function() _keystoreFactory = createKeystore;
+
+  /// Run [_loadOrCreateKeypairBytes] without building a host. Tests only.
+  @visibleForTesting
+  static Future<Uint8List?> debugLoadOrCreateKeypairBytes() =>
+      _loadOrCreateKeypairBytes();
+
+  /// Forget the shared node secret load and read through [keystore] from now
+  /// on, or the platform keystore when it is omitted. Tests only.
+  @visibleForTesting
+  static void debugResetNodeSecret({P2pKeystore Function()? keystore}) {
+    _nodeSecretLoad = null;
+    _keystoreFactory = keystore ?? createKeystore;
   }
 
   Future<void> _initialize({List<String>? relayUrls}) async {
@@ -477,7 +525,15 @@ class P2pService {
       debugPrint(
           '[P2P] Initializing iroh-based P2P Host with relays: $resolved');
 
-      final keypairBytes = await _loadOrCreateKeypairBytes();
+      Uint8List? keypairBytes;
+      try {
+        keypairBytes = await _loadOrCreateKeypairBytes();
+      } catch (e) {
+        // A broken keyring must not keep the player offline. Starting with
+        // an identity the core generates is how native ran before this was
+        // persisted, and re-registration heals the device row.
+        debugPrint('[P2P] Could not load the stored node identity: $e');
+      }
       if (stale()) return;
 
       // Initialize Host via FRB - returns (P2PHost, String)
@@ -769,9 +825,18 @@ class P2pService {
     String? authToken,
     String? deviceProfile,
   }) async {
-    final host = await _requireHost();
-
-    final normalized = await _normalizePeerForRequest(peer);
+    final P2PHost host;
+    final ({String nodeId, String? endpointAddrJson}) normalized;
+    try {
+      host = await _requireHost();
+      normalized = await _normalizePeerForRequest(peer);
+    } catch (e) {
+      // Nothing was sent yet: startup produced no host, or the dial failed.
+      // Callers that retry a failed request tell this apart from a failure
+      // after the connection took it, and retrying either would only run
+      // startup or the dial again.
+      throw P2pConnectError(e);
+    }
 
     debugPrint('[P2P] Sending GraphQL request to ${normalized.nodeId}');
 

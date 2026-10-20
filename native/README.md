@@ -78,38 +78,32 @@ restart on a fixed `P2P_BIND_PORT` never races the old socket.
 the log channel over, and releasing the old sender is what closes the old
 channel and ends the old listener thread.
 
-## send_request never dials, so player-to-player casting cannot work
+## send_request dials on demand, and probes a stalled GraphQL connection
 
-`handle_send_request` (`native/mydia_p2p_core/src/lib.rs`, around line 1558) looks
-the peer up in `connected_peers` and returns `Err("Not connected to peer: <id>")`
-when it is absent. It never dials. Only `Command::Dial` into `handle_dial` calls
-`endpoint.connect(...)`.
+`Command::SendRequest` (`native/mydia_p2p_core/src/lib.rs`) uses the peer's live
+connection when `connected_peers` has one. When it has none, it dials: the request
+is queued on an `InFlightDial` for that node ID, and a dial already in flight, from
+`Command::Dial` or an earlier request, is joined rather than duplicated. A
+controller can therefore send `Hello` to a bare node ID out of `RemoteRoster`.
+`handle_command` still awaits inline in the host event loop, so keep anything slow
+out of that arm.
 
-Every `P2pService.dial` and `ensureConnected` call site in the player targets the
-server: `player/lib/core/channels/pairing_service.dart:214,317` and
-`player/lib/core/graphql/p2p_link.dart:186`. Nothing dials another player.
+The Dart side does not lean on this for every call. `P2pService._normalizePeerForRequest`,
+given a bare node ID, only calls `_waitForConnectedPeer` (a 10s poll) and never
+dials; it dials only when handed a full EndpointAddr JSON.
 
-So `MydiaCastBackend._probe` (`player/lib/core/cast/mydia_cast_backend.dart`)
-sends `Hello` to a bare node ID read out of `RemoteRoster`, the Rust side fails
-instantly with "not connected", `_probe` swallows it and returns null, and a
-second player can never appear in the cast picker. Casting to another player is
-non-functional in general, not only in CI. The 3-second `probeBudget` is a red
-herring, since no budget helps a call that never dials.
-
-This is what makes the `remote_control one player drives another end to end` E2E
-(`player/integration_test/remote_control_test.dart`) fail at step 3. Do not
-re-diagnose it as a CI discovery or timing flake. The guesses in PR #527's body
-("probe budget too short in CI", "`RemoteRoster.allows()` refusing A") are both
-wrong; `allows()` self-heals, triggering one throttled refetch for an unknown peer
-before it refuses.
-
-There is a Dart-side twin. `P2pService._normalizePeerForRequest`, given a bare
-node ID, only calls `_waitForConnectedPeer` (a 10s poll) and never dials either.
-It dials only when handed a full EndpointAddr JSON.
-
-Fixing this means making `send_request` connect on demand. Careful:
-`handle_command` awaits inline in the host event loop, so a dial there would stall
-every other command while an unreachable peer times out.
+A request that goes unanswered is handled per kind in `send_request_on`. Remote
+control keeps the fixed `CONTROL_REQUEST_TIMEOUT` of 4s and closes the connection
+when it expires. GraphQL can legitimately run long, so it has no deadline. Instead
+the core waits `STALL_PROBE_AFTER` (6s), sends a `Ping` on the same connection, and
+gives it `STALL_PROBE_TIMEOUT` (3s). A `Pong` means the request is merely slow and
+the wait continues. No `Pong` closes the connection and fails the request with an
+error prefixed `connection_stalled:`; the closed connection is pruned, so the next
+request dials a fresh one. The Dart GraphQL transport resends a query once when
+it fails after reaching the connection (`connection_stalled`, or the connection
+closing under it). It never retries a connect or dial failure, which a second
+dial to the same address rarely fixes, and never a mutation, which may already
+have run. Media streams have their own recovery and are not probed.
 
 ## E2E pairing breaks typed codes on older players, by design
 
