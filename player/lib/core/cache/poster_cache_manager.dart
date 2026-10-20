@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 /// Custom cache manager for movie and TV show posters.
@@ -121,4 +122,20 @@ class SeekSpriteCacheManager extends CacheManager with ImageCacheManager {
             fileService: HttpFileService(),
           ),
         );
+}
+
+/// Drops every cache manager singleton so the next use builds a fresh one.
+///
+/// Each manager's `HttpFileService` creates its `HttpClient` when the manager
+/// is first built, so a manager built outside a test's `HttpOverrides` zone
+/// keeps a real client for the life of the isolate. `flutter test
+/// --concurrency 1` shares one isolate across files, so a test that needs its
+/// artwork loads answered by `mockNetworkImages` calls this first, and again
+/// when it is done so its mock client does not leak onward.
+@visibleForTesting
+void resetCacheManagersForTest() {
+  PosterCacheManager._instance = null;
+  BackdropCacheManager._instance = null;
+  EpisodeThumbnailCacheManager._instance = null;
+  SeekSpriteCacheManager._instance = null;
 }

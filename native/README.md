@@ -168,7 +168,8 @@ and you almost certainly need to change the other.
 
 Every first-party crate (`server/`, `native/`, `player/rust/`, `plugins/`,
 `plugins-extra/`) uses one lint set: clippy pedantic, no `dbg!` or printing, no
-`unsafe` outside generated code, and a `reason` on every lint exception.
+`unsafe` outside generated code, no `unwrap`, `expect`, `panic!`, `todo!` or
+`unimplemented!` in non-test code, and a `reason` on every lint exception.
 
 - The canonical tables live in `rust-lints.toml`. Each `Cargo.toml` carries a
   copy (`[workspace.lints]` in `server/Cargo.toml`), and
@@ -181,6 +182,14 @@ Every first-party crate (`server/`, `native/`, `player/rust/`, `plugins/`,
   Prefer `#[expect]`, which errors once the lint stops firing, so stale
   exceptions surface. Use `#[allow]` only where `expect` cannot work, such as
   the generated `frb_generated` module.
+- A genuine invariant may keep `expect("...")` under
+  `#[expect(clippy::expect_used, reason = "...")]`. Anything a caller, the
+  network or the filesystem can trigger returns an error instead.
+- `clippy.toml` covers `#[test]` fns and `#[cfg(test)]` modules only. An
+  integration-test crate (`tests/*.rs`, with the modules it includes) whose
+  helpers sit outside `#[test]` fns takes one crate-level
+  `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, reason = "...")]`.
+  That allow is for test crates only, never for production code.
 - Adding a crate: copy the tables from `rust-lints.toml` into its `Cargo.toml`.
   Crates under `native/`, `player/rust/`, `plugins/` and `plugins-extra/` are
   linted automatically.

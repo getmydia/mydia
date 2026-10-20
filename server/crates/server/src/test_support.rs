@@ -2,6 +2,13 @@
 //! #[cfg(test)] because integration tests link the library as an external
 //! crate and cannot see cfg(test) items.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test-only helpers, always compiled because integration tests link this crate externally; nothing outside tests/ calls them"
+)]
+
 use axum::Router;
 use mydia_api::context::ApiContext;
 use mydia_auth::tokens::Issuer;

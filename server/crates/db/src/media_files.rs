@@ -122,9 +122,10 @@ pub async fn upsert(db: &Db, new: NewMediaFile) -> Result<MediaFileRow, DbError>
     .execute(db.pool())
     .await?;
 
+    // The row was just written, so a miss means it was deleted concurrently.
     Ok(find_by_path(db, &new.path)
         .await?
-        .expect("the row was just written"))
+        .ok_or(sqlx::Error::RowNotFound)?)
 }
 
 pub async fn find_by_path(db: &Db, path: &str) -> Result<Option<MediaFileRow>, DbError> {

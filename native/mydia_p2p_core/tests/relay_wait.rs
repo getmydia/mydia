@@ -5,6 +5,12 @@
 //! although the server's address already names a relay the dial can use.
 //! These hosts have relays disabled, so their wait never ends inside a test.
 #![cfg(feature = "test-introspection")]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
 
 use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::sync::Arc;

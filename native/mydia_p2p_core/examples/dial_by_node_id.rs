@@ -32,7 +32,9 @@
 #![expect(
     clippy::print_stdout,
     clippy::print_stderr,
-    reason = "command-line example"
+    clippy::expect_used,
+    clippy::panic,
+    reason = "command-line example: prints its results and aborts on failure"
 )]
 
 use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};

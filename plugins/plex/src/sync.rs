@@ -670,16 +670,16 @@ impl Applier {
         match decide(local, remote, snap_side.as_ref(), ctx.direction) {
             Action::Noop => self.counts.unchanged += 1,
             Action::Record(c) => {
-                self.record(h, ctx, rk, c, remote.at, snapshot.is_some());
+                self.record(h, ctx, rk, c, remote.at, snapshot.is_some())?;
                 self.counts.unchanged += 1;
             }
             Action::SkippedByDirection(c) => {
-                self.record(h, ctx, rk, c, remote.at, snapshot.is_some());
+                self.record(h, ctx, rk, c, remote.at, snapshot.is_some())?;
                 self.counts.skipped += 1;
             }
             Action::Pull(c) => {
                 if pull(h, ctx, rk, c, remote.at)? {
-                    self.record(h, ctx, rk, c, remote.at, snapshot.is_some());
+                    self.record(h, ctx, rk, c, remote.at, snapshot.is_some())?;
                     self.counts.pulled += 1;
                 } else {
                     self.counts.not_found += 1;
@@ -687,7 +687,7 @@ impl Applier {
             }
             Action::Push(c) => match push(h, ctx, rk, c) {
                 Ok(()) => {
-                    self.record(h, ctx, rk, c, remote.at, snapshot.is_some());
+                    self.record(h, ctx, rk, c, remote.at, snapshot.is_some())?;
                     self.counts.pushed += 1;
                 }
                 Err(PlexError::Unauthorized) => return Err(SyncError::Unauthorized),
@@ -711,13 +711,13 @@ impl Applier {
         c: Change,
         remote_at: Option<i64>,
         has_snapshot: bool,
-    ) {
+    ) -> Result<(), SyncError> {
         // A missing snapshot and an unwatched, position-less one reconcile
         // identically, so storing the latter for every unwatched item in the
         // library only spends quota. An existing snapshot is always refreshed:
         // leaving a stale "watched" behind would repeat the unwatch forever.
         if !has_snapshot && !c.watched && c.position.is_none() {
-            return;
+            return Ok(());
         }
         let snap = Snapshot {
             watched: c.watched,
@@ -725,10 +725,11 @@ impl Applier {
             synced_at: time::to_rfc3339(h.now()),
             remote_last_watched_at: remote_at.map(time::to_rfc3339),
         };
-        self.pending.push(KvEntry {
-            key: store::link_state_key(&ctx.link_id, rk),
-            value: serde_json::to_string(&snap).expect("Snapshot serializes"),
-        });
+        self.pending.push(store::json_entry(
+            store::link_state_key(&ctx.link_id, rk),
+            &snap,
+        )?);
+        Ok(())
     }
 
     fn flush(&mut self, h: &mut dyn Host) -> Result<(), SyncError> {

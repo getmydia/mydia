@@ -1,5 +1,12 @@
 //! Proves the auth, streaming and discovery type groups match the contract.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use mydia_api::sdl::canonicalize;
 
 const OWNED_AUTH: &[&str] = &[

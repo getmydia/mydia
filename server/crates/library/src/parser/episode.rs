@@ -7,37 +7,65 @@ use crate::names::{clean_title, plausible_year};
 use crate::parser::{ParsedFile, ParsedKind};
 
 /// S01E02, S01E02E03, S01.E02, s1e2.
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by a_scene_episode_parses"
+)]
 static SXXEYY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\bs(\d{1,3})[\s._-]*e(\d{1,4})(?:[\s._-]*e(\d{1,4}))?\b")
         .expect("static pattern")
 });
 
 /// Season 2 Episode 5. Tried before the cross form, whose pattern is looser.
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by the_spelled_out_form_parses"
+)]
 static SPELLED: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\bseason[\s._-]*(\d{1,3})[\s._-]*episode[\s._-]*(\d{1,4})\b")
         .expect("static pattern")
 });
 
 /// 1x02.
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by the_cross_form_parses"
+)]
 static CROSS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)\b(\d{1,2})x(\d{1,3})\b").expect("static pattern"));
 
 /// A leading episode number in a season folder: "02 - Title.mkv".
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by a_season_folder_supplies_a_missing_season"
+)]
 static LEADING_NUMBER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(\d{1,3})(?:[\s._-]|$)").expect("static pattern"));
 
 /// "[Group] Show Name - 12 (1080p)" and "[Group] Show Name - 12v2".
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by an_absolute_numbered_anime_episode_parses_as_season_one"
+)]
 static ABSOLUTE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^\[[^\]]+\]\s*(?P<title>.+?)\s*-\s*(?P<episode>\d{1,4})(?:v\d+)?\b")
         .expect("static pattern")
 });
 
 /// "Season 01", "Season 1", "S01", "Series 2".
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by a_season_folder_supplies_a_missing_season"
+)]
 static SEASON_FOLDER: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)^(?:season|series|s)[\s._-]*(\d{1,3})$").expect("static pattern")
 });
 
 /// A year, for splitting "Show Name (2015)".
+#[expect(
+    clippy::expect_used,
+    reason = "literal pattern is valid; covered by a_show_year_is_kept"
+)]
 static YEAR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[\(\[\s._-](\d{4})[\)\]\s._-]?").expect("static pattern"));
 

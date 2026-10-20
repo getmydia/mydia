@@ -1,5 +1,12 @@
 //! Proves the media type group matches the reference contract.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use mydia_api::sdl::canonicalize;
 
 /// The 18 types owned by this group. Keep in sync with the comment in

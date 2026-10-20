@@ -7,6 +7,13 @@
 //! its own. The variant stays on the wire so a peer that does send one gets a
 //! clean refusal rather than a dropped stream, and this pins that refusal.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
 use mydia_p2p_core::{blocking, Host, HostConfig, MydiaRequest, MydiaResponse, ReadMediaRequest};
 use std::time::Duration;
 

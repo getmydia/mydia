@@ -4,6 +4,12 @@
 //! connected sends its own `dial()`. Each used to start its own
 //! `endpoint.connect`, so a launch opened 4 to 7 connections to one server.
 #![cfg(feature = "test-introspection")]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
 
 use mydia_p2p_core::{Event, Host, HostConfig, MydiaRequest, MydiaResponse};
 use std::sync::Arc;

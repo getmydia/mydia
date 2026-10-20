@@ -68,7 +68,7 @@ fn plan(state: Option<&CrawlState>, now: i64) -> Plan {
     }
 }
 
-pub fn movie_entries(item: &Metadata) -> Vec<KvEntry> {
+pub fn movie_entries(item: &Metadata) -> Result<Vec<KvEntry>, PlexError> {
     let ids = guid::parse_guids(&item.guids);
     let entry = MapEntry {
         kind: "movie".into(),
@@ -81,19 +81,19 @@ pub fn movie_entries(item: &Metadata) -> Vec<KvEntry> {
         show_tvdb: None,
         show_imdb: None,
     };
-    let mut out = vec![map_entry(&item.rating_key, &entry)];
+    let mut out = vec![map_entry(&item.rating_key, &entry)?];
     for (source, id) in id_pairs(&ids) {
         out.push(rev_entry(
             store::rev_movie_key(source, &id),
             &item.rating_key,
-        ));
+        )?);
     }
-    out
+    Ok(out)
 }
 
-pub fn episode_entries(show: &ExternalIds, ep: &Metadata) -> Vec<KvEntry> {
+pub fn episode_entries(show: &ExternalIds, ep: &Metadata) -> Result<Vec<KvEntry>, PlexError> {
     let (Some(season), Some(episode)) = (ep.parent_index, ep.index) else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
     let own = guid::parse_guids(&ep.guids);
     let entry = MapEntry {
@@ -107,7 +107,7 @@ pub fn episode_entries(show: &ExternalIds, ep: &Metadata) -> Vec<KvEntry> {
         show_tvdb: show.tvdb,
         show_imdb: show.imdb.clone(),
     };
-    let mut out = vec![map_entry(&ep.rating_key, &entry)];
+    let mut out = vec![map_entry(&ep.rating_key, &entry)?];
     // Episodes resolve by the show's ids plus coordinates, exactly as the native
     // crawl mapped them: Plex puts every id on the show, and a local show often
     // carries only one of them.
@@ -115,9 +115,9 @@ pub fn episode_entries(show: &ExternalIds, ep: &Metadata) -> Vec<KvEntry> {
         out.push(rev_entry(
             store::rev_episode_key(source, &id, season, episode),
             &ep.rating_key,
-        ));
+        )?);
     }
-    out
+    Ok(out)
 }
 
 /// Candidate rev keys for a local progress row, in lookup order. An episode row
@@ -160,18 +160,12 @@ fn id_pairs(ids: &ExternalIds) -> Vec<(&'static str, String)> {
     out
 }
 
-fn map_entry(rating_key: &str, entry: &MapEntry) -> KvEntry {
-    KvEntry {
-        key: store::map_key(rating_key),
-        value: serde_json::to_string(entry).expect("MapEntry serializes"),
-    }
+fn map_entry(rating_key: &str, entry: &MapEntry) -> Result<KvEntry, PlexError> {
+    store::json_entry(store::map_key(rating_key), entry)
 }
 
-fn rev_entry(key: String, rating_key: &str) -> KvEntry {
-    KvEntry {
-        key,
-        value: serde_json::to_string(rating_key).expect("string serializes"),
-    }
+fn rev_entry(key: String, rating_key: &str) -> Result<KvEntry, PlexError> {
+    store::json_entry(key, rating_key)
 }
 
 pub fn crawl_step(
@@ -184,7 +178,9 @@ pub fn crawl_step(
     let existing: Option<CrawlState> = store::get_json(host, store::CRAWL_STATE)?;
     let mut state = match plan(existing.as_ref(), now) {
         Plan::Fresh => return Ok(CrawlProgress::Fresh),
-        Plan::Continue => existing.expect("continue implies state"),
+        Plan::Continue => existing.ok_or_else(|| {
+            PlexError::Unexpected("crawl plan continued without saved state".into())
+        })?,
         Plan::Start => {
             let section_keys = api::sections(host, base, link)?
                 .into_iter()
@@ -243,7 +239,7 @@ pub fn crawl_step(
                 match api::all_leaves(host, base, link, &show.rating_key) {
                     Ok(episodes) => {
                         for ep in &episodes {
-                            entries.extend(episode_entries(&show_ids, ep));
+                            entries.extend(episode_entries(&show_ids, ep)?);
                         }
                     }
                     Err(PlexError::Unauthorized) => return Err(PlexError::Unauthorized),
@@ -258,13 +254,16 @@ pub fn crawl_step(
                     ),
                 }
                 state.offset += 1;
-                entries.push(state_entry(&state));
+                entries.push(state_entry(&state)?);
                 store::set_many(host, &entries).map_err(host_err)?;
             }
         } else {
-            let mut entries: Vec<KvEntry> = fetched.items.iter().flat_map(movie_entries).collect();
+            let mut entries: Vec<KvEntry> = Vec::new();
+            for item in &fetched.items {
+                entries.extend(movie_entries(item)?);
+            }
             state.offset += u32::try_from(fetched.items.len()).unwrap_or(u32::MAX);
-            entries.push(state_entry(&state));
+            entries.push(state_entry(&state)?);
             store::set_many(host, &entries).map_err(host_err)?;
         }
 
@@ -308,11 +307,8 @@ pub fn lookup_rating_key(
     Ok(None)
 }
 
-fn state_entry(state: &CrawlState) -> KvEntry {
-    KvEntry {
-        key: store::CRAWL_STATE.into(),
-        value: serde_json::to_string(state).expect("CrawlState serializes"),
-    }
+fn state_entry(state: &CrawlState) -> Result<KvEntry, PlexError> {
+    store::json_entry(store::CRAWL_STATE.into(), state)
 }
 
 #[expect(
@@ -377,7 +373,8 @@ mod tests {
             &["imdb://tt9000001", "tmdb://4001"],
             None,
             None,
-        ));
+        ))
+        .unwrap();
         assert_eq!(
             keys(&e),
             vec!["map/100", "rev/movie/imdb/tt9000001", "rev/movie/tmdb/4001"]
@@ -400,7 +397,7 @@ mod tests {
                 id: "tvdb://378000".into(),
             },
         ]);
-        let e = episode_entries(&show, &meta("201", &[], Some(1), Some(2)));
+        let e = episode_entries(&show, &meta("201", &[], Some(1), Some(2))).unwrap();
         assert_eq!(
             keys(&e),
             vec![
@@ -425,7 +422,9 @@ mod tests {
             tmdb: None,
             tvdb: Some(1),
         };
-        assert!(episode_entries(&show, &meta("202", &[], None, Some(2))).is_empty());
+        assert!(episode_entries(&show, &meta("202", &[], None, Some(2)))
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
