@@ -435,22 +435,19 @@ class P2pService {
     }
   }
 
-  /// The node's persisted secret key, or null to let the Rust core decide.
+  /// The node's persisted secret key.
   ///
-  /// Native returns null. The stub keystore stores nothing there, so
-  /// `keypair_bytes` goes unset and the core picks the identity exactly as it
-  /// did before any of this existed. A browser has no filesystem, so the raw
-  /// 32 bytes come out of IndexedDB instead, and the first ever load generates
-  /// and stores them here.
+  /// Every platform keeps it: the platform keyring on native, IndexedDB in a
+  /// browser. The first ever load generates and stores a secret here. Only a
+  /// platform with the no-op stub keystore stores nothing, and then it
+  /// regenerates on each launch.
   Future<Uint8List?> _loadOrCreateKeypairBytes() async {
     final keystore = createKeystore();
     final stored = await keystore.read().timeout(_keystoreTimeout);
     if (stored != null) return stored;
-    if (!kIsWeb) return null;
-
     final secret = _generateNodeSecret();
     await keystore.write(secret).timeout(_keystoreTimeout);
-    debugPrint('[P2P] Stored a new browser node identity');
+    debugPrint('[P2P] Stored a new node identity');
     return secret;
   }
 
@@ -477,7 +474,15 @@ class P2pService {
       debugPrint(
           '[P2P] Initializing iroh-based P2P Host with relays: $resolved');
 
-      final keypairBytes = await _loadOrCreateKeypairBytes();
+      Uint8List? keypairBytes;
+      try {
+        keypairBytes = await _loadOrCreateKeypairBytes();
+      } catch (e) {
+        // A broken keyring must not keep the player offline. Starting with
+        // an identity the core generates is how native ran before this was
+        // persisted, and re-registration heals the device row.
+        debugPrint('[P2P] Could not load the stored node identity: $e');
+      }
       if (stale()) return;
 
       // Initialize Host via FRB - returns (P2PHost, String)
