@@ -130,12 +130,18 @@ class P2pMydiaTransport implements MydiaGqlTransport {
         return await attempt();
       } on P2pGraphQLError {
         rethrow;
+      } on P2pConnectError {
+        // Never handed to a connection, so there is no dead path to replace,
+        // and dialing the same address again almost never succeeds. Retrying
+        // would only double the time an offline server takes to surface.
+        rethrow;
       } catch (_) {
-        // A failure here means the answer never arrived: the core closes a
-        // connection whose path went silent (`connection_stalled`), which
-        // also fails every request sharing it. A query is safe to send
-        // again, and the retry dials a fresh connection. A mutation may
-        // already have run, so it is never replayed.
+        // A failure here means the answer never arrived after the request
+        // reached a connection: the core closes one whose path went silent
+        // (`connection_stalled`), which also fails every request sharing it.
+        // A query is safe to send again, and the retry dials a fresh
+        // connection. A mutation may already have run, so it is never
+        // replayed.
         if (!_isQueryOnly(query)) rethrow;
         return await attempt();
       }

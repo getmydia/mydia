@@ -130,6 +130,17 @@ void main() {
       expect(p2p.calls, 1);
     });
 
+    test('a connect failure is not retried', () async {
+      final p2p = _CountingP2p([
+        () async => throw P2pConnectError(Exception('dial failed')),
+        () async => {'a': 1},
+      ]);
+      await expectLater(
+          P2pMydiaTransport(p2p: p2p, nodeAddr: 'node').send('{ a }', {}),
+          _kind(SourceErrorKind.unreachable));
+      expect(p2p.calls, 1);
+    });
+
     test('a query failing twice is unreachable', () async {
       final p2p = _CountingP2p([
         () async => throw StateError('closed'),
