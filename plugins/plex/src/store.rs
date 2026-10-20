@@ -80,6 +80,15 @@ pub fn put_json<T: Serialize>(host: &mut dyn Host, key: &str, value: &T) -> Resu
     host.kv_set(key, &raw).map_err(host_err)
 }
 
+/// A batch entry holding `value` as JSON.
+pub fn json_entry<T: Serialize + ?Sized>(
+    key: String,
+    value: &T,
+) -> Result<mydia_plugin_sdk::types::KvEntry, PlexError> {
+    let value = serde_json::to_string(value).map_err(|e| PlexError::Unexpected(e.to_string()))?;
+    Ok(mydia_plugin_sdk::types::KvEntry { key, value })
+}
+
 /// The host refuses a `kv-set-many` over this many entries (`Kv.max_batch`).
 pub const KV_MAX_BATCH: usize = 500;
 
