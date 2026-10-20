@@ -34,27 +34,49 @@ defmodule Mydia.Accounts.ThemesTest do
     assert Themes.valid_id?("nord", :light)
   end
 
-  test "selection/3 falls back per field" do
-    s = Themes.selection("dark", "nord", "dracula")
-    assert %Selection{mode: "dark", light: %{id: "nord"}, dark: %{id: "dracula"}} = s
+  test "radii/0 lists the theme's own corners first, then the presets" do
+    assert Themes.radii() == ~w(theme sharp soft round)
+  end
 
-    s = Themes.selection("bogus", "dracula", "retired-theme")
+  test "selection/4 falls back per field" do
+    s = Themes.selection("dark", "nord", "dracula", "sharp")
+
+    assert %Selection{mode: "dark", light: %{id: "nord"}, dark: %{id: "dracula"}, radius: "sharp"} =
+             s
+
+    s = Themes.selection("bogus", "dracula", "retired-theme", "pointy")
     assert s.mode == "system"
     assert s.light.id == "mydia-light"
     assert s.dark.id == "mydia-dark"
+    assert s.radius == "theme"
 
-    assert Themes.selection(nil, nil, nil) == Themes.default_selection()
+    assert Themes.selection(nil, nil, nil, nil) == Themes.default_selection()
+  end
+
+  test "selection/4 keeps every listed radius and drops the rest on its own" do
+    for radius <- Themes.radii() do
+      assert Themes.selection("dark", "nord", "dim", radius).radius == radius
+    end
+
+    for bad <- [nil, "square", "", 3, :sharp] do
+      s = Themes.selection("dark", "nord", "dim", bad)
+      assert s.radius == "theme"
+      assert s.mode == "dark"
+      assert s.light.id == "nord"
+      assert s.dark.id == "dim"
+    end
   end
 
   test "active/1 picks the slot for fixed modes and nil for system" do
-    assert Themes.active(Themes.selection("light", "nord", "dim")).id == "nord"
-    assert Themes.active(Themes.selection("dark", "nord", "dim")).id == "dim"
-    assert Themes.active(Themes.selection("system", "nord", "dim")) == nil
+    assert Themes.active(Themes.selection("light", "nord", "dim", nil)).id == "nord"
+    assert Themes.active(Themes.selection("dark", "nord", "dim", nil)).id == "dim"
+    assert Themes.active(Themes.selection("system", "nord", "dim", nil)) == nil
   end
 
   test "to_client/1 is the push_event payload" do
-    assert Themes.to_client(Themes.selection("dark", "nord", "dim")) == %{
+    assert Themes.to_client(Themes.selection("dark", "nord", "dim", "soft")) == %{
              mode: "dark",
+             radius: "soft",
              light_theme: "nord",
              dark_theme: "dim",
              light_base: Themes.get("nord").base,

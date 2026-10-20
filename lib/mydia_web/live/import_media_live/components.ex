@@ -423,7 +423,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         <ul
           id={"members-#{@dom_key}"}
           phx-update="stream"
-          class="bg-base-200/50 rounded-xl p-3 divide-y divide-base-200/60 max-h-80 overflow-y-auto"
+          class="bg-base-200/50 rounded-box p-3 divide-y divide-base-200/60 max-h-80 overflow-y-auto"
         >
           <li
             :for={{member_dom_id, candidate} <- @members}

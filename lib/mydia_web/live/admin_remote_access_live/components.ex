@@ -81,7 +81,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
       <%!-- Status Row --%>
       <div class="space-y-3">
         <%!-- Status Card --%>
-        <div class="flex flex-col gap-2 p-4 bg-base-200 rounded-xl border border-base-300">
+        <div class="flex flex-col gap-2 p-4 bg-base-200 rounded-box border border-base-300">
           <div class="flex items-center gap-3">
             <div class={[
               "w-3 h-3 rounded-full shrink-0",

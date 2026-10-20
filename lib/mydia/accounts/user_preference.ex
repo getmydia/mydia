@@ -74,11 +74,11 @@ defmodule Mydia.Accounts.UserPreference do
   end
 
   @doc """
-  The resolved theme choice: mode plus a light and a dark theme.
+  The resolved theme choice: mode, a light and a dark theme, and corner radius.
 
-  The slots are deliberately not in `@defaults`: an unset slot reads as
-  `Themes.default/1`, so changing a default later reaches every user who
-  never picked one.
+  The slots and the radius are deliberately not in `@defaults`: an unset slot
+  reads as `Themes.default/1`, so changing a default later reaches every user
+  who never picked one.
   """
   def theme_selection(%__MODULE__{preferences: prefs}) do
     prefs = prefs || %{}
@@ -86,7 +86,8 @@ defmodule Mydia.Accounts.UserPreference do
     Themes.selection(
       Map.get(prefs, "theme"),
       Map.get(prefs, "light_theme"),
-      Map.get(prefs, "dark_theme")
+      Map.get(prefs, "dark_theme"),
+      Map.get(prefs, "radius")
     )
   end
 
@@ -256,6 +257,7 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("theme", Themes.modes())
     |> validate_theme_slot("light_theme", :light)
     |> validate_theme_slot("dark_theme", :dark)
+    |> validate_theme_radius()
     |> validate_preference_value("metadata_language", @valid_languages)
     |> validate_preference_value("interface_language", @valid_languages)
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
@@ -319,6 +321,18 @@ defmodule Mydia.Accounts.UserPreference do
          false <- value == Map.get(changeset.data.preferences || %{}, key),
          false <- Themes.valid_id?(value, scheme) do
       add_error(changeset, :preferences, "invalid value for #{key}: #{inspect(value)}")
+    else
+      _ -> changeset
+    end
+  end
+
+  # Same stale-value rule as validate_theme_slot/3.
+  defp validate_theme_radius(changeset) do
+    with prefs when is_map(prefs) <- get_change(changeset, :preferences),
+         value when not is_nil(value) <- Map.get(prefs, "radius"),
+         false <- value == Map.get(changeset.data.preferences || %{}, "radius"),
+         false <- value in Themes.radii() do
+      add_error(changeset, :preferences, "invalid value for radius: #{inspect(value)}")
     else
       _ -> changeset
     end

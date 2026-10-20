@@ -1031,7 +1031,7 @@ defmodule MydiaWeb.CoreComponents do
         x-cloak
         class="absolute bottom-24 right-4 z-20"
       >
-        <div class="bg-neutral/95 backdrop-blur-sm rounded-xl overflow-hidden max-w-xs shadow-2xl">
+        <div class="bg-neutral/95 backdrop-blur-sm rounded-box overflow-hidden max-w-xs shadow-2xl">
           <%!-- Next episode info --%>
           <div class="next-episode-info p-4 flex gap-3">
             <div class="next-episode-poster flex-shrink-0 w-20 h-28 bg-white/10 rounded-lg overflow-hidden">

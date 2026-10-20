@@ -47,7 +47,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
           <button
             type="button"
             id="pair-device-button"
-            class="group flex w-full items-center gap-3 p-4 text-left bg-gradient-to-br from-primary/5 via-base-200 to-secondary/5 rounded-xl border border-primary/20 cursor-pointer hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all"
+            class="group flex w-full items-center gap-3 p-4 text-left bg-gradient-to-br from-primary/5 via-base-200 to-secondary/5 rounded-box border border-primary/20 cursor-pointer hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all"
             phx-click="open_pairing_modal"
           >
             <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
@@ -69,7 +69,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
         <% else %>
           <div
             id="pairing-disabled-notice"
-            class="flex items-center gap-3 p-4 bg-base-200 rounded-xl border border-base-300"
+            class="flex items-center gap-3 p-4 bg-base-200 rounded-box border border-base-300"
           >
             <div class="w-11 h-11 rounded-xl bg-base-300 flex items-center justify-center shrink-0">
               <.icon name="hero-qr-code" class="w-5 h-5 opacity-40" />
@@ -126,7 +126,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
             <% qr_svg = generate_qr_code(@ra_config, @p2p_status, @claim_code) %>
             <%= if qr_svg do %>
               <div class="flex flex-col items-center gap-2">
-                <div class="p-3 bg-white rounded-xl shadow-md">
+                <div class="p-3 bg-white rounded-box shadow-md">
                   {Phoenix.HTML.raw(qr_svg)}
                 </div>
               </div>
@@ -146,7 +146,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
             <div class="text-center">
               <%= cond do %>
                 <% @claim_code_rendezvous_status == :registered -> %>
-                  <div class="inline-flex items-center gap-2 bg-base-200 rounded-xl px-5 py-3">
+                  <div class="inline-flex items-center gap-2 bg-base-200 rounded-box px-5 py-3">
                     <code id="claim-code" class="text-2xl font-bold tracking-[0.25em] font-mono">
                       {@claim_code}
                     </code>
@@ -180,7 +180,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
                 <% @claim_code_rendezvous_status == :unregistered -> %>
                   <div
                     id="pairing-relay-warning"
-                    class="inline-flex flex-col items-center gap-2 bg-warning/10 border border-warning/30 rounded-xl px-6 py-4 max-w-sm"
+                    class="inline-flex flex-col items-center gap-2 bg-warning/10 border border-warning/30 rounded-box px-6 py-4 max-w-sm"
                   >
                     <div class="flex items-center gap-2">
                       <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-warning" />
@@ -192,7 +192,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
                     </p>
                   </div>
                 <% true -> %>
-                  <div class="inline-flex flex-col items-center gap-3 bg-base-200 rounded-xl px-8 py-5">
+                  <div class="inline-flex flex-col items-center gap-3 bg-base-200 rounded-box px-8 py-5">
                     <span class="loading loading-spinner loading-lg text-primary"></span>
                     <div class="text-sm text-base-content/60">Preparing pairing code...</div>
                   </div>

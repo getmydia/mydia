@@ -49,7 +49,7 @@ export default function catppuccinTheme(flavor: Flavor) {
     "--size-field": "0.25rem",
     "--size-selector": "0.25rem",
     "--border": "1px",
-    "--depth": "1",
+    "--depth": "0",
     "--noise": "0",
   });
 }

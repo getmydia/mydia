@@ -44,6 +44,32 @@
 @plugin "./catppuccinTheme.macchiato.ts";
 @plugin "./catppuccinTheme.mocha.ts";
 
+/* Corner roundness presets (Mydia.Accounts.Themes.radii/0). `theme` has no rule
+   and keeps each theme's own values. :root[...] outranks daisyUI's
+   [data-theme=x] on <html> whatever the source order; the descendant selector
+   covers elements with their own data-theme, such as the profile previews.
+   Checked by test/mydia_web/themes_css_parity_test.exs. */
+:root[data-radius="sharp"],
+:root[data-radius="sharp"] [data-theme] {
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.25rem;
+}
+
+:root[data-radius="soft"],
+:root[data-radius="soft"] [data-theme] {
+  --radius-selector: 0.25rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.5rem;
+}
+
+:root[data-radius="round"],
+:root[data-radius="round"] [data-theme] {
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+}
+
 /* Add variants based on LiveView classes */
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);

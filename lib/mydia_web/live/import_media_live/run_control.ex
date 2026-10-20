@@ -19,7 +19,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
     <section
       id="import-run-control"
       class={[
-        "bg-base-100 shadow-md border border-base-200 rounded-2xl p-4 sm:p-6",
+        "bg-base-100 shadow-md border border-base-200 rounded-box p-4 sm:p-6",
         @active_run && "min-h-80 flex flex-col justify-center"
       ]}
     >
@@ -154,7 +154,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
         lands on :stopped with the explanation in this field, and hiding it
         would leave the user with a bare "Import stopped" and no reason.
       --%>
-      <div :if={@run.error} class="bg-error/10 border border-error/20 rounded-xl p-3.5 text-xs">
+      <div :if={@run.error} class="bg-error/10 border border-error/20 rounded-box p-3.5 text-xs">
         <p class="font-semibold text-error mb-1.5 flex items-center gap-1.5">
           <.icon name="hero-exclamation-triangle" class="w-4 h-4 shrink-0" />
           {error_label(@run.status)}

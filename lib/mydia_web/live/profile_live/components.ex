@@ -100,4 +100,54 @@ defmodule MydiaWeb.ProfileLive.Components do
     </fieldset>
     """
   end
+
+  # Glyph corner per radius id: each preset's --radius-box from app.css.
+  # `theme` gets an icon instead, since var(--radius-box) would draw the
+  # active preset's corner rather than the theme's own.
+  @radius_options [
+    {"theme", "Theme", nil},
+    {"sharp", "Sharp", "0.25rem"},
+    {"soft", "Soft", "0.5rem"},
+    {"round", "Round", "0.75rem"}
+  ]
+
+  @doc """
+  A joined row of radio buttons for the corner roundness, one per
+  `Mydia.Accounts.Themes.radii/0` id. Each shows a corner drawn at that
+  preset's `--radius-box`.
+  """
+  attr :id, :string, required: true
+  attr :selected, :string, required: true, doc: "the current radius id"
+
+  def radius_picker(assigns) do
+    assigns = assign(assigns, :options, @radius_options)
+
+    ~H"""
+    <div id={@id} class="join" role="radiogroup" aria-label="Corners">
+      <label
+        :for={{value, label, corner} <- @options}
+        class={["btn join-item", value == @selected && "btn-primary"]}
+      >
+        <input
+          id={"theme-radius-#{value}"}
+          type="radio"
+          name="theme_radius"
+          value={value}
+          checked={value == @selected}
+          phx-click="set_theme_radius"
+          phx-value-radius={value}
+          class="sr-only"
+        />
+        <.icon :if={is_nil(corner)} name="hero-swatch" class="size-4" />
+        <span
+          :if={corner}
+          class="inline-block size-4 border-t-2 border-l-2 border-current"
+          style={"border-top-left-radius: #{corner}"}
+          aria-hidden="true"
+        ></span>
+        {label}
+      </label>
+    </div>
+    """
+  end
 end
