@@ -74,18 +74,14 @@ const midnight = {
   "--color-error-content": "oklch(100% 0 0)", // #ffffff
 
   // DaisyUI v5 specific settings
-  "--rounded-box": "1rem", // border radius rounded-box utility
-  "--rounded-btn": "0.5rem", // border radius rounded-btn utility
-  "--rounded-badge": "1.9rem", // border radius rounded-badge utility
   "--animation-btn": "0.25s", // duration of animation when you click on button
   "--animation-input": "0.2s", // duration of animation for inputs like checkbox, toggle, radio
   "--btn-focus-scale": "0.95", // scale transform of button when you focus on it
   "--border-btn": "1px", // border width of buttons
   "--tab-border": "1px", // border width of tabs
-  "--tab-radius": "0.5rem", // border radius of tabs
 
   // Effects
-  "--depth": "1", // subtle depth/shadow on interactive components
+  "--depth": "0", // flat buttons: no inner highlight or text shadow
   "--noise": "0", // no texture noise
 
   // DaisyUI v5 structural variables
@@ -189,18 +185,14 @@ export default plugin(
         "--color-error-content": "oklch(100% 0 0)", // #ffffff
 
         // DaisyUI v5 specific settings
-        "--rounded-box": "1rem", // border radius rounded-box utility
-        "--rounded-btn": "0.5rem", // border radius rounded-btn utility
-        "--rounded-badge": "1.9rem", // border radius rounded-badge utility
         "--animation-btn": "0.25s", // duration of animation when you click on button
         "--animation-input": "0.2s", // duration of animation for inputs like checkbox, toggle, radio
         "--btn-focus-scale": "0.95", // scale transform of button when you focus on it
         "--border-btn": "1px", // border width of buttons
         "--tab-border": "1px", // border width of tabs
-        "--tab-radius": "0.5rem", // border radius of tabs
 
         // Effects
-        "--depth": "1", // subtle depth/shadow on interactive components
+        "--depth": "0", // flat buttons: no inner highlight or text shadow
         "--noise": "0", // no texture noise
 
         // DaisyUI v5 structural variables

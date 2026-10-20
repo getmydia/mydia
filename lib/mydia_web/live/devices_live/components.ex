@@ -265,7 +265,7 @@ defmodule MydiaWeb.DevicesLive.Components do
             href={"https://mydia.dev/download/#{platform.id}"}
             target="_blank"
             rel="noopener"
-            class="flex items-center gap-3 p-4 rounded-xl border border-base-300 hover:border-primary/40 hover:shadow-md transition-all"
+            class="flex items-center gap-3 p-4 rounded-box border border-base-300 hover:border-primary/40 hover:shadow-md transition-all"
           >
             <div class="w-10 h-10 rounded-lg bg-base-200 flex items-center justify-center shrink-0">
               <.icon name={platform.icon} class="w-5 h-5" />
@@ -284,7 +284,7 @@ defmodule MydiaWeb.DevicesLive.Components do
             :if={!@hide_player}
             id="download-web"
             navigate={~p"/player"}
-            class="flex items-center gap-3 p-4 rounded-xl border border-base-300 hover:border-primary/40 hover:shadow-md transition-all"
+            class="flex items-center gap-3 p-4 rounded-box border border-base-300 hover:border-primary/40 hover:shadow-md transition-all"
           >
             <div class="w-10 h-10 rounded-lg bg-base-200 flex items-center justify-center shrink-0">
               <.icon name="hero-globe-alt" class="w-5 h-5" />

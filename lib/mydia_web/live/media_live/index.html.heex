@@ -1080,7 +1080,7 @@
               type="button"
               phx-click="batch_add_to_collection"
               phx-value-collection-id={collection.id}
-              class="w-full group flex items-center gap-4 p-4 rounded-xl bg-base-200/50 hover:bg-base-200 border border-transparent hover:border-primary/20 transition-all duration-200 text-left"
+              class="w-full group flex items-center gap-4 p-4 rounded-box bg-base-200/50 hover:bg-base-200 border border-transparent hover:border-primary/20 transition-all duration-200 text-left"
             >
               <%!-- Collection Icon --%>
               <div class={[
@@ -1122,7 +1122,7 @@
           <%!-- Create New Collection Link --%>
           <.link
             navigate={~p"/collections/new"}
-            class="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-dashed border-base-300 hover:border-primary/40 hover:bg-primary/5 transition-all duration-200"
+            class="w-full flex items-center gap-4 p-4 rounded-box border-2 border-dashed border-base-300 hover:border-primary/40 hover:bg-primary/5 transition-all duration-200"
           >
             <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-base-200 flex items-center justify-center">
               <.icon name="hero-plus" class="w-6 h-6 text-base-content/40" />
