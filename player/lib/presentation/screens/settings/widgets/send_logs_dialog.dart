@@ -97,6 +97,8 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
       focusNode: _noteRowFocus,
       onActivate: _startEditingNote,
       child: InkWell(
+        // FocusHighlight owns the row's focus; this only takes pointer taps.
+        canRequestFocus: false,
         borderRadius: BorderRadius.circular(8),
         onTap: _startEditingNote,
         child: Padding(

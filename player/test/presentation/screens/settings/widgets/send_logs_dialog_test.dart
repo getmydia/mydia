@@ -52,6 +52,24 @@ void main() {
     });
   }
 
+  testWidgets('after sending, Done takes the focus Send gave up',
+      (tester) async {
+    await _open(tester, tv: true);
+    await tester.tap(find.byKey(_send));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('diagnostics-report-code')), findsOneWidget);
+    final focused = FocusManager.instance.primaryFocus?.context;
+    expect(focused, isNotNull);
+    expect(
+      find.ancestor(
+        of: find.byElementPredicate((e) => e == focused),
+        matching: find.widgetWithText(FilledButton, 'Done'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('off TV the note field is inline', (tester) async {
     await _open(tester, tv: false);
     expect(find.byKey(_note), findsOneWidget);

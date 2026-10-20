@@ -63,8 +63,22 @@ class _GlassDialogState extends State<GlassDialog> {
   @override
   void initState() {
     super.initState();
-    // A content autofocus is only applied after the first frame's callbacks,
-    // so the microtask hop lets it win before the fallback looks.
+    _scheduleDefaultFocus();
+  }
+
+  @override
+  void didUpdateWidget(GlassDialog oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A caller can swap its actions while the dialog stays up (Send logs goes
+    // editing, sending, sent), which disposes the focused button and leaves
+    // the route with no target. The focused-child guard keeps this a no-op
+    // whenever something still holds focus.
+    if (!identical(oldWidget.actions, widget.actions)) _scheduleDefaultFocus();
+  }
+
+  /// A content autofocus is only applied after the frame's callbacks, so the
+  /// microtask hop lets it win before the fallback looks.
+  void _scheduleDefaultFocus() {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => Future<void>.microtask(_focusDefaultAction),
     );

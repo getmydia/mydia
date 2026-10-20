@@ -220,7 +220,10 @@ void main() {
       expect(container!.read(updateProvider).error,
           contains('Install unknown apps'));
 
-      // The flag is cleared: a later resume does nothing more.
+      // The flag is cleared: a later resume does nothing more. The listener
+      // ignores a same-state change, so leave the foreground first or this
+      // second resume never fires at all.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       expect(backend.requests, 1);

@@ -283,11 +283,10 @@ void main() {
         'Update Now on a version-less update opens no dialog and never '
         'renders the literal word null', (tester) async {
       // The card's own confirm dialog is gone; Update Now goes through
-      // startUpdate, which never asks about an update that is not an
-      // AppUpdate. The null guard still matters for anything it shows.
-      await _pump(
-        tester,
-        state: const UpdateState(
+      // startUpdate, whose Flatpak branch requests the update with no
+      // confirmation. The null guard still matters for anything it shows.
+      final notifier = _FakeUpdateNotifier(
+        const UpdateState(
           availableUpdate: FlatpakRemoteUpdate(
             releaseNotesUrl: 'https://example.invalid/releases',
           ),
@@ -295,10 +294,26 @@ void main() {
         ),
         canUpdateInPlace: true,
       );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [updateProvider.overrideWith(() => notifier)],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ListView(
+                children: const [
+                  UpdateCard(environmentOverride: InstallEnvironment.flatpak),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
 
       await tester.tap(find.text('Update Now'));
       await tester.pumpAndSettle();
 
+      expect(notifier.requestCount, 1);
       expect(find.text('Update Mydia'), findsNothing);
       expect(find.textContaining('null'), findsNothing);
     });
