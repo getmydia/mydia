@@ -135,6 +135,23 @@ defmodule Mydia.Quality.SourcesTest do
       assert Sources.detect("Movie.2026.DVDRip.XviD") == "DVDRip"
     end
 
+    test "a bare WEB token resolves WEB-DL" do
+      assert Sources.detect("Movie.2026.1080p.WEB.H264-GRP") == "WEB-DL"
+      assert Sources.detect("Show 2026 S01E01 1080p WEB h264-GRP") == "WEB-DL"
+      assert Sources.detect("Show.2026.S01E01.1080p.WEB-GRP") == "WEB-DL"
+      assert Sources.detect("Movie.2026.2160p.4K.WEB.x265.10bit.AAC5.1-[GRP].mkv") == "WEB-DL"
+    end
+
+    test "a WEB title word never outranks a cam-tier token" do
+      assert Sources.detect("Tangled.Web.2026.1080p.TELESYNC.x264") == "Telesync"
+      assert Sources.detect("Tangled.Web.2026.CAM.x264") == "CAM"
+    end
+
+    test "WEB inside a longer word is not a source" do
+      assert Sources.detect("Webster.Lane.2026.1080p.x264") == nil
+      assert Sources.detect("Cobweb.2026.1080p.x264") == nil
+    end
+
     test "returns nil when no source token is present" do
       assert Sources.detect("Movie.2026.1080p.x264") == nil
     end

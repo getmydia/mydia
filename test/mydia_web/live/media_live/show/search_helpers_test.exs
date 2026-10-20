@@ -589,6 +589,30 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
              ]
     end
 
+    test "releases spelling the codec without a dot or with a space reach their family" do
+      titles = [
+        "Glass.Harbor.2019.1080p.WEB.H264-GRP",
+        "Glass Harbor 2019 1080p WEB-DL DDP5 1 H 264-GRP",
+        "Glass.Harbor.2019.2160p.WEB.H265-GRP",
+        "Glass Harbor 2019 2160p WEB-DL DDP5 1 H 265-GRP"
+      ]
+
+      results =
+        Enum.map(
+          titles,
+          &%SearchResult{filter_result(&1, nil, nil) | quality: QualityParser.parse(&1)}
+        )
+
+      filtered = fn codec ->
+        results
+        |> SearchHelpers.filter_search_results(filter_assigns(%{codec_filter: codec}))
+        |> Enum.map(& &1.title)
+      end
+
+      assert filtered.("AVC") == Enum.take(titles, 2)
+      assert filtered.("HEVC") == Enum.drop(titles, 2)
+    end
+
     test "an unparsed release is hidden only while that filter is active", %{results: results} do
       assert length(SearchHelpers.filter_search_results(results, filter_assigns(%{}))) == 4
 

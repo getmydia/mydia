@@ -171,6 +171,21 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert QualityParser.extract_codec("Movie.2160p.WEB-DL.H.265") == "H.265"
     end
 
+    # Indexers often drop the dot (H264) or replace every dot with a space
+    # (H 264), which left these releases with no codec at all.
+    test "extracts H.264 and H.265 written without a dot or with a space" do
+      assert QualityParser.extract_codec("Movie.1080p.WEB.H264-GRP") == "H.264"
+      assert QualityParser.extract_codec("Movie.1080p.WEB.h264-GRP") == "H.264"
+      assert QualityParser.extract_codec("Movie 1080p WEB-DL DDP5 1 H 264-GRP") == "H.264"
+      assert QualityParser.extract_codec("Movie.2160p.WEB.H265-GRP") == "H.265"
+      assert QualityParser.extract_codec("Movie 2160p WEB-DL DDP5 1 H 265-GRP") == "H.265"
+    end
+
+    test "extracts x264 and x265 written with a space" do
+      assert QualityParser.extract_codec("Movie 1080p BluRay x 264-GRP") == "x264"
+      assert QualityParser.extract_codec("Movie 2160p BluRay x 265-GRP") == "x265"
+    end
+
     test "extracts other codecs" do
       assert QualityParser.extract_codec("Movie.XviD") == "XviD"
       assert QualityParser.extract_codec("Movie.DivX") == "DivX"
