@@ -45,6 +45,9 @@ void main() {
       expect('$error', contains('P2P host initialization failed'),
           reason: 'startup produced no host here, so the request fails only '
               'after startup has finished');
+      expect(error, isA<P2pConnectError>(),
+          reason: 'nothing was sent, so the transport must not retry it and '
+              'run startup again');
     });
 
     test('an HLS request sent during startup waits for it', () async {

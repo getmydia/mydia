@@ -202,11 +202,11 @@ class P2pGraphQLError implements Exception {
   String toString() => 'Exception: $message';
 }
 
-/// A p2p request failed before it reached the connection: the dial, or the wait
-/// for the peer to connect, did not succeed. Distinct from a failure after the
-/// request was handed over, which a caller may retry on a fresh connection; a
-/// second dial to the same address almost never fares better. It prints as its
-/// [cause] did before this wrapper existed.
+/// A p2p request failed before it reached the connection: host startup, the
+/// dial, or the wait for the peer to connect did not succeed. Distinct from a
+/// failure after the request was handed over, which a caller may retry on a
+/// fresh connection; a second dial to the same address almost never fares
+/// better. It prints as its [cause] did before this wrapper existed.
 class P2pConnectError implements Exception {
   const P2pConnectError(this.cause);
 
@@ -825,14 +825,16 @@ class P2pService {
     String? authToken,
     String? deviceProfile,
   }) async {
-    final host = await _requireHost();
-
+    final P2PHost host;
     final ({String nodeId, String? endpointAddrJson}) normalized;
     try {
+      host = await _requireHost();
       normalized = await _normalizePeerForRequest(peer);
     } catch (e) {
-      // Nothing was sent yet. Callers that retry a failed request tell this
-      // apart from a failure after the connection took it.
+      // Nothing was sent yet: startup produced no host, or the dial failed.
+      // Callers that retry a failed request tell this apart from a failure
+      // after the connection took it, and retrying either would only run
+      // startup or the dial again.
       throw P2pConnectError(e);
     }
 
