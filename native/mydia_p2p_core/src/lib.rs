@@ -2184,9 +2184,38 @@ async fn monitor_connection_type(conn: Connection, peer_id: String, event_tx: mp
             // Decide whether this event warrants a recompute. PathEvent is #[non_exhaustive],
             // so the wildcard arm safely ignores future variants.
             let should_recheck = match event {
-                PathEvent::Opened { .. }
-                | PathEvent::Closed { .. }
-                | PathEvent::Selected { .. } => true,
+                PathEvent::Selected {
+                    ref remote_addr, ..
+                } => {
+                    tracing::info!(
+                        "Path selected for {}: {} (rtt {:?})",
+                        peer_id,
+                        remote_addr,
+                        conn.paths()
+                            .iter()
+                            .find(|p| p.is_selected())
+                            .map(|p| p.rtt())
+                    );
+                    true
+                }
+                PathEvent::Closed {
+                    ref remote_addr,
+                    ref last_stats,
+                    ..
+                } => {
+                    tracing::info!(
+                        "Path closed for {}: {} (rtt {:?}, lost {} packets / {} bytes, mtu probes {} sent {} lost)",
+                        peer_id,
+                        remote_addr,
+                        last_stats.rtt,
+                        last_stats.lost_packets,
+                        last_stats.lost_bytes,
+                        last_stats.sent_plpmtud_probes,
+                        last_stats.lost_plpmtud_probes
+                    );
+                    true
+                }
+                PathEvent::Opened { .. } => true,
                 PathEvent::Lagged { missed, .. } => {
                     tracing::warn!(
                         "PathEvent stream lagged for {} (missed {}), resyncing from snapshot",
