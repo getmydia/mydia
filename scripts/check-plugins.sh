@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 # Lint every WASM plugin crate under plugins/ and plugins-extra/.
 #
@@ -42,17 +42,27 @@ if [ -n "$SYSROOT" ] && [ ! -d "$SYSROOT/lib/rustlib/$TARGET" ]; then
 fi
 
 found=0
+failed=()
 for manifest in "$PROJECT_ROOT"/plugins/*/Cargo.toml "$PROJECT_ROOT"/plugins-extra/*/Cargo.toml; do
   [ -e "$manifest" ] || continue
   found=1
   crate_dir="$(dirname "$manifest")"
   echo "==> $(basename "$crate_dir")"
 
+  crate="$(basename "$crate_dir")"
   # shellcheck disable=SC2086
-  cargo fmt --manifest-path "$manifest" -- $FMT_MODE
+  cargo fmt --manifest-path "$manifest" -- $FMT_MODE || failed+=("$crate (fmt)")
   cargo clippy --manifest-path "$manifest" \
-    --release --target "$TARGET" -- -D warnings
+    --release --target "$TARGET" -- -D warnings || failed+=("$crate (clippy)")
 done
+
+if [ ${#failed[@]} -gt 0 ]; then
+  echo
+  echo "Plugin checks failed:"
+  printf '  %s\n' "${failed[@]}"
+  echo "Run scripts/check-plugins.sh --fix for formatting; clippy findings need a code fix."
+  exit 1
+fi
 
 if [ "$found" -eq 0 ]; then
   echo "No plugin crates found under plugins/ or plugins-extra/."

@@ -27,20 +27,44 @@ pub struct Preset {
 }
 
 const fn hosted(label: &'static str, base_url: &'static str) -> Preset {
-    Preset { label, base_url: Some(base_url), models_auth: ModelsAuth::Bearer, models_query: "", needs_key: true, local: false }
+    Preset {
+        label,
+        base_url: Some(base_url),
+        models_auth: ModelsAuth::Bearer,
+        models_query: "",
+        needs_key: true,
+        local: false,
+    }
 }
 
 const fn operator(label: &'static str, local: bool) -> Preset {
-    Preset { label, base_url: None, models_auth: ModelsAuth::Bearer, models_query: "", needs_key: false, local }
+    Preset {
+        label,
+        base_url: None,
+        models_auth: ModelsAuth::Bearer,
+        models_query: "",
+        needs_key: false,
+        local,
+    }
 }
 
 /// Custom is first: it is the fallback for a missing or unknown provider.
 static PRESETS: [Preset; 11] = [
     operator(CUSTOM, false),
     hosted("OpenAI", "https://api.openai.com/v1"),
-    Preset { models_auth: ModelsAuth::Anthropic, models_query: "?limit=1000", ..hosted("Anthropic", "https://api.anthropic.com/v1") },
-    Preset { models_query: "?supported_parameters=tools", ..hosted("OpenRouter", "https://openrouter.ai/api/v1") },
-    hosted("Google Gemini", "https://generativelanguage.googleapis.com/v1beta/openai"),
+    Preset {
+        models_auth: ModelsAuth::Anthropic,
+        models_query: "?limit=1000",
+        ..hosted("Anthropic", "https://api.anthropic.com/v1")
+    },
+    Preset {
+        models_query: "?supported_parameters=tools",
+        ..hosted("OpenRouter", "https://openrouter.ai/api/v1")
+    },
+    hosted(
+        "Google Gemini",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+    ),
     hosted("Groq", "https://api.groq.com/openai/v1"),
     hosted("Mistral", "https://api.mistral.ai/v1"),
     hosted("DeepSeek", "https://api.deepseek.com/v1"),
@@ -63,32 +87,52 @@ fn field(settings: &Value, key: &str) -> String {
 /// which is how configs from before presets keep working.
 pub fn selected(settings: &Value) -> &'static Preset {
     let label = field(settings, "provider");
-    PRESETS.iter().find(|p| p.label == label).unwrap_or(&PRESETS[0])
+    PRESETS
+        .iter()
+        .find(|p| p.label == label)
+        .unwrap_or(&PRESETS[0])
 }
 
 fn with_v1(url: &str) -> String {
-    let rest = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
-    if rest.contains('/') { url.to_string() } else { format!("{url}/v1") }
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    if rest.contains('/') {
+        url.to_string()
+    } else {
+        format!("{url}/v1")
+    }
 }
 
 pub fn resolve(settings: &Value) -> Result<Resolved, String> {
     let preset = selected(settings);
     let api_key = field(settings, "api_key");
-    let base_url = match preset.base_url {
-        Some(url) => url.to_string(),
-        None => {
-            let raw = field(settings, "base_url");
-            let raw = raw.trim_end_matches('/');
-            if raw.is_empty() {
-                return Err(format!("An admin needs to set the {} server URL in the plugin settings.", preset.label));
-            }
-            if preset.local { with_v1(raw) } else { raw.to_string() }
+    let base_url = if let Some(url) = preset.base_url {
+        url.to_string()
+    } else {
+        let raw = field(settings, "base_url");
+        let raw = raw.trim_end_matches('/');
+        if raw.is_empty() {
+            return Err(format!(
+                "An admin needs to set the {} server URL in the plugin settings.",
+                preset.label
+            ));
+        }
+        if preset.local {
+            with_v1(raw)
+        } else {
+            raw.to_string()
         }
     };
     if preset.needs_key && api_key.is_empty() {
-        return Err(format!("An admin needs to add the {} API key in the plugin settings.", preset.label));
+        return Err(format!(
+            "An admin needs to add the {} API key in the plugin settings.",
+            preset.label
+        ));
     }
-    Ok(Resolved { preset, base_url, api_key })
+    Ok(Resolved {
+        preset,
+        base_url,
+        api_key,
+    })
 }
 
 impl Resolved {
@@ -101,7 +145,11 @@ impl Resolved {
     }
 
     fn bearer(&self) -> Vec<(String, String)> {
-        if self.api_key.is_empty() { vec![] } else { vec![("authorization".into(), format!("Bearer {}", self.api_key))] }
+        if self.api_key.is_empty() {
+            vec![]
+        } else {
+            vec![("authorization".into(), format!("Bearer {}", self.api_key))]
+        }
     }
 
     pub fn chat_headers(&self) -> Vec<(String, String)> {
@@ -113,7 +161,10 @@ impl Resolved {
     pub fn models_headers(&self) -> Vec<(String, String)> {
         match self.preset.models_auth {
             ModelsAuth::Bearer => self.bearer(),
-            ModelsAuth::Anthropic => vec![("x-api-key".into(), self.api_key.clone()), ("anthropic-version".into(), "2023-06-01".into())],
+            ModelsAuth::Anthropic => vec![
+                ("x-api-key".into(), self.api_key.clone()),
+                ("anthropic-version".into(), "2023-06-01".into()),
+            ],
         }
     }
 }
@@ -130,15 +181,27 @@ mod tests {
     #[test]
     fn hosted_presets_use_their_fixed_url() {
         let r = resolve(&json!({"provider": "OpenRouter", "api_key": "k"})).unwrap();
-        assert_eq!(r.chat_url(), "https://openrouter.ai/api/v1/chat/completions");
-        assert_eq!(r.models_url(), "https://openrouter.ai/api/v1/models?supported_parameters=tools");
+        assert_eq!(
+            r.chat_url(),
+            "https://openrouter.ai/api/v1/chat/completions"
+        );
+        assert_eq!(
+            r.models_url(),
+            "https://openrouter.ai/api/v1/models?supported_parameters=tools"
+        );
         let r = resolve(&json!({"provider": "Google Gemini", "api_key": "k"})).unwrap();
-        assert_eq!(r.chat_url(), "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+        assert_eq!(
+            r.chat_url(),
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        );
     }
 
     #[test]
     fn a_stale_base_url_is_ignored_for_hosted_presets() {
-        let r = resolve(&json!({"provider": "OpenAI", "api_key": "k", "base_url": "http://old.lan/v1"})).unwrap();
+        let r = resolve(
+            &json!({"provider": "OpenAI", "api_key": "k", "base_url": "http://old.lan/v1"}),
+        )
+        .unwrap();
         assert_eq!(r.base_url, "https://api.openai.com/v1");
     }
 
@@ -161,9 +224,11 @@ mod tests {
 
     #[test]
     fn local_presets_append_v1_to_a_bare_host() {
-        let r = resolve(&json!({"provider": "Ollama", "base_url": "http://ollama.lan:11434/"})).unwrap();
+        let r = resolve(&json!({"provider": "Ollama", "base_url": "http://ollama.lan:11434/"}))
+            .unwrap();
         assert_eq!(r.base_url, "http://ollama.lan:11434/v1");
-        let r = resolve(&json!({"provider": "LM Studio", "base_url": "http://box:1234/v1"})).unwrap();
+        let r =
+            resolve(&json!({"provider": "LM Studio", "base_url": "http://box:1234/v1"})).unwrap();
         assert_eq!(r.base_url, "http://box:1234/v1");
     }
 
@@ -198,9 +263,15 @@ mod tests {
         assert_eq!(header(&h, "x-api-key"), Some("k"));
         assert_eq!(header(&h, "anthropic-version"), Some("2023-06-01"));
         assert_eq!(header(&h, "authorization"), None);
-        assert_eq!(r.models_url(), "https://api.anthropic.com/v1/models?limit=1000");
+        assert_eq!(
+            r.models_url(),
+            "https://api.anthropic.com/v1/models?limit=1000"
+        );
         let r = resolve(&json!({"provider": "OpenAI", "api_key": "k"})).unwrap();
-        assert_eq!(header(&r.models_headers(), "authorization"), Some("Bearer k"));
+        assert_eq!(
+            header(&r.models_headers(), "authorization"),
+            Some("Bearer k")
+        );
     }
 
     #[test]
@@ -214,10 +285,7 @@ mod tests {
         let manifest: Value = serde_json::from_str(include_str!("../manifest.json")).unwrap();
         let schema = manifest["settings_schema"].as_array().unwrap();
         let options = |key: &str| -> Vec<String> {
-            schema
-                .iter()
-                .find(|f| f["key"] == key)
-                .unwrap()["options"]
+            schema.iter().find(|f| f["key"] == key).unwrap()["options"]
                 .as_array()
                 .unwrap()
                 .iter()
@@ -226,12 +294,22 @@ mod tests {
         };
         let labels: Vec<String> = PRESETS.iter().map(|p| p.label.to_string()).collect();
         assert_eq!(options("provider"), labels);
-        assert_eq!(options("model_choice"), vec!["Users can choose", "Admin model only"]);
+        assert_eq!(
+            options("model_choice"),
+            vec!["Users can choose", "Admin model only"]
+        );
 
         for field in schema {
-            for p in field["visible_when"]["provider"].as_array().into_iter().flatten() {
+            for p in field["visible_when"]["provider"]
+                .as_array()
+                .into_iter()
+                .flatten()
+            {
                 let p = p.as_str().unwrap();
-                assert!(p.is_empty() || labels.iter().any(|l| l == p), "visible_when names unknown provider {p:?}");
+                assert!(
+                    p.is_empty() || labels.iter().any(|l| l == p),
+                    "visible_when names unknown provider {p:?}"
+                );
             }
         }
 
@@ -243,7 +321,10 @@ mod tests {
             .collect();
         for p in PRESETS.iter().filter_map(|p| p.base_url) {
             let host = p.split("://").nth(1).unwrap().split('/').next().unwrap();
-            assert!(hosts.contains(&host.to_string()), "{host} missing from net:http");
+            assert!(
+                hosts.contains(&host.to_string()),
+                "{host} missing from net:http"
+            );
         }
     }
 }

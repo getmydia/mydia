@@ -16,24 +16,29 @@ pub fn to_rfc3339(unix: i64) -> String {
     )
 }
 
-pub fn parse_rfc3339(s: &str) -> Option<i64> {
-    let b = s.as_bytes();
-    if b.len() < 20
-        || b[4] != b'-'
-        || b[7] != b'-'
-        || b[10] != b'T'
-        || b[13] != b':'
-        || b[16] != b':'
+pub fn parse_rfc3339(text: &str) -> Option<i64> {
+    let bytes = text.as_bytes();
+    if bytes.len() < 20
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16] != b':'
     {
         return None;
     }
-    let num = |from: usize, to: usize| -> Option<i64> { s.get(from..to)?.parse::<i64>().ok() };
-    let (y, mo, d) = (num(0, 4)?, num(5, 7)?, num(8, 10)?);
-    let (h, mi, se) = (num(11, 13)?, num(14, 16)?, num(17, 19)?);
-    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || h > 23 || mi > 59 || se > 60 {
+    let num = |from: usize, to: usize| -> Option<i64> { text.get(from..to)?.parse::<i64>().ok() };
+    let (year, month, day) = (num(0, 4)?, num(5, 7)?, num(8, 10)?);
+    let (hour, minute, second) = (num(11, 13)?, num(14, 16)?, num(17, 19)?);
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 60
+    {
         return None;
     }
-    let mut rest = s.get(19..)?;
+    let mut rest = text.get(19..)?;
     if let Some(frac) = rest.strip_prefix('.') {
         let digits = frac.bytes().take_while(u8::is_ascii_digit).count();
         if digits == 0 {
@@ -54,7 +59,13 @@ pub fn parse_rfc3339(s: &str) -> Option<i64> {
         }
         _ => return None,
     };
-    Some(days_from_civil(y, mo as u32, d as u32) * 86_400 + h * 3600 + mi * 60 + se - offset)
+    Some(
+        days_from_civil(year, u32::try_from(month).ok()?, u32::try_from(day).ok()?) * 86_400
+            + hour * 3600
+            + minute * 60
+            + second
+            - offset,
+    )
 }
 
 // Howard Hinnant's civil calendar algorithms.
@@ -62,8 +73,8 @@ fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = (if y >= 0 { y } else { y - 399 }) / 400;
     let yoe = y - era * 400;
-    let m = m as i64;
-    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d as i64 - 1;
+    let m = i64::from(m);
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + i64::from(d) - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     era * 146_097 + doe - 719_468
 }
@@ -76,7 +87,17 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "doy is in 0..=365 and mp in 0..=11, so the day is in 1..=31"
+    )]
     let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "mp is in 0..=11, so the month is in 1..=12"
+    )]
     let m = (if mp < 10 { mp + 3 } else { mp - 9 }) as u32;
     (if m <= 2 { y + 1 } else { y }, m, d)
 }

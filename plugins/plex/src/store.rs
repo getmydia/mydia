@@ -55,6 +55,10 @@ pub fn link_uses_owner_key(link_id: &str) -> String {
     format!("link/{link_id}/uses_owner")
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "passed directly to map_err, which hands the error over by value"
+)]
 fn host_err(e: mydia_plugin_sdk::types::HostError) -> PlexError {
     PlexError::Unexpected(format!("store: {e:?}"))
 }

@@ -3,7 +3,8 @@
 use serde_json::{json, Value};
 
 pub fn request_body(model: &str, messages: &[Value], tools: &Value) -> String {
-    json!({ "model": model, "messages": messages, "tools": tools, "tool_choice": "auto" }).to_string()
+    json!({ "model": model, "messages": messages, "tools": tools, "tool_choice": "auto" })
+        .to_string()
 }
 
 pub struct ToolCall {
@@ -14,8 +15,14 @@ pub struct ToolCall {
 }
 
 pub enum Reply {
-    Text { message: Value, text: String },
-    Tools { message: Value, calls: Vec<ToolCall> },
+    Text {
+        message: Value,
+        text: String,
+    },
+    Tools {
+        message: Value,
+        calls: Vec<ToolCall>,
+    },
 }
 
 /// Models send arguments as a JSON string; empty means no arguments. Anything
@@ -46,9 +53,16 @@ pub fn sanitize(message: &Value) -> Value {
 }
 
 pub fn parse_reply(status: u16, body: &str) -> Result<Reply, String> {
-    let v: Value = serde_json::from_str(body).map_err(|_| format!("The model server answered {status} with something that is not JSON."))?;
+    let v: Value = serde_json::from_str(body).map_err(|_| {
+        format!("The model server answered {status} with something that is not JSON.")
+    })?;
     if !(200..300).contains(&status) {
-        let detail: String = v["error"]["message"].as_str().unwrap_or("no detail").chars().take(200).collect();
+        let detail: String = v["error"]["message"]
+            .as_str()
+            .unwrap_or("no detail")
+            .chars()
+            .take(200)
+            .collect();
         return Err(format!("The model server answered {status}: {detail}"));
     }
     let message = sanitize(&v["choices"][0]["message"]);
@@ -82,7 +96,12 @@ mod tests {
 
     #[test]
     fn request_body_carries_the_model() {
-        let body: Value = serde_json::from_str(&request_body("m-1", &[json!({"role":"user","content":"hi"})], &json!([]))).unwrap();
+        let body: Value = serde_json::from_str(&request_body(
+            "m-1",
+            &[json!({"role":"user","content":"hi"})],
+            &json!([]),
+        ))
+        .unwrap();
         assert_eq!(body["model"], "m-1");
         assert_eq!(body["tool_choice"], "auto");
         assert_eq!(body["messages"][0]["content"], "hi");
@@ -143,7 +162,9 @@ mod tests {
 
     #[test]
     fn surfaces_provider_errors() {
-        let err = parse_reply(401, r#"{"error":{"message":"bad key"}}"#).err().unwrap();
+        let err = parse_reply(401, r#"{"error":{"message":"bad key"}}"#)
+            .err()
+            .unwrap();
         assert!(err.contains("401") && err.contains("bad key"));
     }
 }

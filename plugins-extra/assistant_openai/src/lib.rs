@@ -38,19 +38,41 @@ const APP_JS: &str = include_str!("app.js");
 /// The page with its stylesheet and scripts inlined: the frame's CSP allows
 /// inline code but no other origin.
 fn page_html() -> String {
-    UI_HTML.replace("__APP_CSS__", UI_CSS).replace("__MARKDOWN_JS__", MARKDOWN_JS).replace("__CHATS_JS__", CHATS_JS).replace("__APP_JS__", APP_JS)
+    UI_HTML
+        .replace("__APP_CSS__", UI_CSS)
+        .replace("__MARKDOWN_JS__", MARKDOWN_JS)
+        .replace("__CHATS_JS__", CHATS_JS)
+        .replace("__APP_JS__", APP_JS)
 }
 
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "returned as-is by every handler arm, whose signature is the plugin's Result contract"
+)]
 fn respond(status: u16, content_type: &str, body: String) -> Result<PageResponse, String> {
-    Ok(PageResponse { status, headers: vec![("content-type".into(), content_type.into()), ("cache-control".into(), "no-store".into())], body })
+    Ok(PageResponse {
+        status,
+        headers: vec![
+            ("content-type".into(), content_type.into()),
+            ("cache-control".into(), "no-store".into()),
+        ],
+        body,
+    })
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "every call site hands over a freshly built json! value"
+)]
 fn respond_json(status: u16, v: Value) -> Result<PageResponse, String> {
     respond(status, "application/json", v.to_string())
 }
 
 fn body(req: &PageRequest) -> Value {
-    req.body.as_deref().and_then(|b| serde_json::from_str(b).ok()).unwrap_or_else(|| json!({}))
+    req.body
+        .as_deref()
+        .and_then(|b| serde_json::from_str(b).ok())
+        .unwrap_or_else(|| json!({}))
 }
 
 fn settings(req: &PageRequest) -> Result<Value, String> {
@@ -95,7 +117,9 @@ fn load_chats(user_id: &str) -> Option<Vec<Chat>> {
     let Some(raw) = host::kv_get(&legacy_key).ok()? else {
         return Some(vec![]);
     };
-    let adopted: Vec<Chat> = chats::adopt(&history::decode(Some(raw.clone()))).into_iter().collect();
+    let adopted: Vec<Chat> = chats::adopt(&history::decode(Some(raw.clone())))
+        .into_iter()
+        .collect();
     if !adopted.is_empty() {
         host::kv_set(&history::key(user_id, chats::LEGACY_ID), &raw).ok()?;
     }
@@ -119,7 +143,11 @@ fn store_turn(user_id: &str, chat_id: &str, now: u64, messages: Vec<Value>) -> C
             }
             list.swap_remove(0)
         }
-        None => Chat { id: chat_id.into(), title: chats::title_from(&messages), updated_at: now },
+        None => Chat {
+            id: chat_id.into(),
+            title: chats::title_from(&messages),
+            updated_at: now,
+        },
     };
     save(user_id, chat_id, messages);
     entry
@@ -128,18 +156,28 @@ fn store_turn(user_id: &str, chat_id: &str, now: u64, messages: Vec<Value>) -> C
 fn list_chats(req: &PageRequest) -> Result<PageResponse, String> {
     match load_chats(&req.user_id) {
         Some(list) => respond_json(200, json!({"chats": list})),
-        None => respond_json(200, json!({"chats": [], "error": "Could not load your chats."})),
+        None => respond_json(
+            200,
+            json!({"chats": [], "error": "Could not load your chats."}),
+        ),
     }
 }
 
 fn show_history(req: &PageRequest) -> Result<PageResponse, String> {
-    let Some(chat_id) = chat_id_of(&body(req)) else { return invalid_chat() };
-    respond_json(200, json!({"messages": history::transcript(&load(&req.user_id, &chat_id))}))
+    let Some(chat_id) = chat_id_of(&body(req)) else {
+        return invalid_chat();
+    };
+    respond_json(
+        200,
+        json!({"messages": history::transcript(&load(&req.user_id, &chat_id))}),
+    )
 }
 
 fn delete_chat(req: &PageRequest) -> Result<PageResponse, String> {
     const FAILED: &str = "Could not delete that chat.";
-    let Some(chat_id) = chat_id_of(&body(req)) else { return invalid_chat() };
+    let Some(chat_id) = chat_id_of(&body(req)) else {
+        return invalid_chat();
+    };
     let Some(mut list) = load_chats(&req.user_id) else {
         return respond_json(200, json!({"error": FAILED}));
     };
@@ -151,6 +189,10 @@ fn delete_chat(req: &PageRequest) -> Result<PageResponse, String> {
     respond_json(200, json!({"ok": true}))
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the plugin macro fixes this by-value handler signature"
+)]
 fn handle_http(req: PageRequest) -> Result<PageResponse, String> {
     match (req.method.as_str(), req.path.as_str()) {
         // The script is inlined: a separate /app.js request would carry no frame
@@ -187,28 +229,56 @@ fn outcome_note(kind: Outcome, body: &Value) -> String {
     let mut lines: Vec<String> = vec![];
     match kind {
         Outcome::Confirmed => {
-            for r in body["results"].as_array().into_iter().flatten().take(MAX_NOTE_IDS) {
+            for r in body["results"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .take(MAX_NOTE_IDS)
+            {
                 if let Some(id) = chats::valid_id(&r["id"]) {
-                    let word = if r["ok"] == json!(true) { "applied" } else { "failed" };
+                    let word = if r["ok"] == json!(true) {
+                        "applied"
+                    } else {
+                        "failed"
+                    };
                     lines.push(format!("write {id}: {word}"));
                 }
             }
         }
         Outcome::Denied | Outcome::Expired => {
-            let word = if kind == Outcome::Denied { "denied" } else { "expired" };
-            for id in body["ids"].as_array().into_iter().flatten().take(MAX_NOTE_IDS) {
+            let word = if kind == Outcome::Denied {
+                "denied"
+            } else {
+                "expired"
+            };
+            for id in body["ids"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .take(MAX_NOTE_IDS)
+            {
                 if let Some(id) = chats::valid_id(id) {
                     lines.push(format!("write {id}: {word}"));
                 }
             }
         }
     }
-    format!("{}{}", history::OUTCOME_PREFIX, if lines.is_empty() { "no writes".to_string() } else { lines.join("; ") })
+    format!(
+        "{}{}",
+        history::OUTCOME_PREFIX,
+        if lines.is_empty() {
+            "no writes".to_string()
+        } else {
+            lines.join("; ")
+        }
+    )
 }
 
 fn note(req: &PageRequest, kind: Outcome) -> Result<PageResponse, String> {
     let body = body(req);
-    let Some(chat_id) = chat_id_of(&body) else { return invalid_chat() };
+    let Some(chat_id) = chat_id_of(&body) else {
+        return invalid_chat();
+    };
     let mut msgs = load(&req.user_id, &chat_id);
     // A chat deleted while its approval was open has nothing to add the note to.
     if !msgs.is_empty() {
@@ -219,7 +289,11 @@ fn note(req: &PageRequest, kind: Outcome) -> Result<PageResponse, String> {
     respond_json(200, json!({"ok": true}))
 }
 
-fn models_response(settings: &Value, pick: Option<&str>, listed: Result<Vec<models::ModelInfo>, String>) -> Value {
+fn models_response(
+    settings: &Value,
+    pick: Option<&str>,
+    listed: Result<Vec<models::ModelInfo>, String>,
+) -> Value {
     let mut out = json!({
         "provider": provider::selected(settings).label,
         "current": models::effective(settings, pick),
@@ -245,8 +319,13 @@ fn list_models(req: &PageRequest) -> Result<PageResponse, String> {
         Ok(vec![])
     } else {
         provider::resolve(&settings).and_then(|endpoint| {
-            let resp = host::http_request(&OutboundRequest { url: endpoint.models_url(), method: "GET".into(), headers: endpoint.models_headers(), body: None })
-                .map_err(|e| format!("Could not list models. {}", tools::host_error_text(&e)))?;
+            let resp = host::http_request(&OutboundRequest {
+                url: endpoint.models_url(),
+                method: "GET".into(),
+                headers: endpoint.models_headers(),
+                body: None,
+            })
+            .map_err(|e| format!("Could not list models. {}", tools::host_error_text(&e)))?;
             models::parse(resp.status, resp.body.as_deref().unwrap_or(""))
         })
     };
@@ -259,7 +338,10 @@ fn choose_model(req: &PageRequest) -> Result<PageResponse, String> {
         Err(e) => return respond_json(200, json!({"error": e})),
     };
     if models::locked(&settings) {
-        return respond_json(403, json!({"error": "An admin has chosen the model for everyone."}));
+        return respond_json(
+            403,
+            json!({"error": "An admin has chosen the model for everyone."}),
+        );
     }
     let pick = body(req)["model"].as_str().unwrap_or("").trim().to_string();
     let key = models::key(&req.user_id);
@@ -269,23 +351,49 @@ fn choose_model(req: &PageRequest) -> Result<PageResponse, String> {
         }
     } else if !models::valid_id(&pick) {
         return respond_json(400, json!({"error": "That is not a valid model id."}));
-    } else if host::kv_set(&key, &models::encode_pick(provider::selected(&settings).label, &pick)).is_err() {
+    } else if host::kv_set(
+        &key,
+        &models::encode_pick(provider::selected(&settings).label, &pick),
+    )
+    .is_err()
+    {
         return respond_json(200, json!({"error": "Could not save your model choice."}));
     }
     let picked = (!pick.is_empty()).then_some(pick.as_str());
-    respond_json(200, json!({"current": models::effective(&settings, picked)}))
+    respond_json(
+        200,
+        json!({"current": models::effective(&settings, picked)}),
+    )
 }
 
 /// One chat-completions round trip. The error text is ready to show a person.
-pub(crate) fn ask_model(endpoint: &provider::Resolved, model: &str, convo: &[Value], defs: &Value) -> Result<Reply, String> {
-    let resp = host::http_request(&OutboundRequest { url: endpoint.chat_url(), method: "POST".into(), headers: endpoint.chat_headers(), body: Some(chat::request_body(model, convo, defs)) })
-        .map_err(|e| format!("Could not reach the model server. {}", tools::host_error_text(&e)))?;
-    chat::parse_reply(resp.status, resp.body.as_deref().unwrap_or("")).map_err(|e| format!("{} ({model}): {e}", endpoint.preset.label))
+pub(crate) fn ask_model(
+    endpoint: &provider::Resolved,
+    model: &str,
+    convo: &[Value],
+    defs: &Value,
+) -> Result<Reply, String> {
+    let resp = host::http_request(&OutboundRequest {
+        url: endpoint.chat_url(),
+        method: "POST".into(),
+        headers: endpoint.chat_headers(),
+        body: Some(chat::request_body(model, convo, defs)),
+    })
+    .map_err(|e| {
+        format!(
+            "Could not reach the model server. {}",
+            tools::host_error_text(&e)
+        )
+    })?;
+    chat::parse_reply(resp.status, resp.body.as_deref().unwrap_or(""))
+        .map_err(|e| format!("{} ({model}): {e}", endpoint.preset.label))
 }
 
 fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
     let body = body(req);
-    let Some(chat_id) = chat_id_of(&body) else { return invalid_chat() };
+    let Some(chat_id) = chat_id_of(&body) else {
+        return invalid_chat();
+    };
     let now = now_of(&body);
     let settings = match settings(req) {
         Ok(s) => s,
@@ -295,7 +403,8 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
         Ok(e) => e,
         Err(e) => return respond_json(200, json!({"error": e})),
     };
-    let Some(model) = models::effective(&settings, user_pick(&req.user_id, &settings).as_deref()) else {
+    let Some(model) = models::effective(&settings, user_pick(&req.user_id, &settings).as_deref())
+    else {
         return respond_json(200, json!({"error": models::missing_message(&settings)}));
     };
     let text = body["message"].as_str().unwrap_or("").trim().to_string();
@@ -320,29 +429,44 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
             Ok(Reply::Text { message, text }) => {
                 msgs.push(message);
                 let chat = store_turn(&req.user_id, &chat_id, now, msgs);
-                return respond_json(200, json!({"reply": text, "pending": pending, "chat": chat}));
+                return respond_json(
+                    200,
+                    json!({"reply": text, "pending": pending, "chat": chat}),
+                );
             }
             Ok(Reply::Tools { message, calls }) => {
                 msgs.push(message);
                 for call in calls {
                     let out = match &call.arguments {
                         Ok(args) => tools::run(&call.name, args),
-                        Err(m) => tools::Outcome { content: json!({"error": m}).to_string(), pending: None },
+                        Err(m) => tools::Outcome {
+                            content: json!({"error": m}).to_string(),
+                            pending: None,
+                        },
                     };
                     if let Some(id) = out.pending {
                         pending.push(id);
                     }
-                    msgs.push(json!({"role": "tool", "tool_call_id": call.id, "content": out.content}));
+                    msgs.push(
+                        json!({"role": "tool", "tool_call_id": call.id, "content": out.content}),
+                    );
                 }
             }
         }
     }
 
     let chat = store_turn(&req.user_id, &chat_id, now, msgs);
-    respond_json(200, json!({"reply": "I stopped after too many steps. Try a narrower request.", "pending": pending, "chat": chat}))
+    respond_json(
+        200,
+        json!({"reply": "I stopped after too many steps. Try a narrower request.", "pending": pending, "chat": chat}),
+    )
 }
 
 #[mydia_plugin_sdk::plugin(on_http = handle_http, fill_shelf = shelf::fill)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the plugin macro fixes this Result-returning handler signature"
+)]
 fn on_event(_evt: Event) -> Result<String, String> {
     Ok("{}".into())
 }
@@ -356,12 +480,34 @@ mod tests {
     #[test]
     fn the_page_is_fully_assembled() {
         let html = page_html();
-        for placeholder in ["__APP_CSS__", "__MARKDOWN_JS__", "__CHATS_JS__", "__APP_JS__"] {
-            assert!(!html.contains(placeholder), "{placeholder} left in the page");
+        for placeholder in [
+            "__APP_CSS__",
+            "__MARKDOWN_JS__",
+            "__CHATS_JS__",
+            "__APP_JS__",
+        ] {
+            assert!(
+                !html.contains(placeholder),
+                "{placeholder} left in the page"
+            );
         }
-        assert!(html.contains(".as-composer") && html.contains("const Markdown") && html.contains("const Chats") && html.contains("frame_token"));
-        assert!(html.contains(r#"id="new-chat""#) && html.contains(r#"id="chat-pill""#) && !html.contains(r#"id="reset""#));
-        assert!(!MARKDOWN_JS.contains("</script") && !CHATS_JS.contains("</script") && !APP_JS.contains("</script") && !UI_CSS.contains("</style"));
+        assert!(
+            html.contains(".as-composer")
+                && html.contains("const Markdown")
+                && html.contains("const Chats")
+                && html.contains("frame_token")
+        );
+        assert!(
+            html.contains(r#"id="new-chat""#)
+                && html.contains(r#"id="chat-pill""#)
+                && !html.contains(r#"id="reset""#)
+        );
+        assert!(
+            !MARKDOWN_JS.contains("</script")
+                && !CHATS_JS.contains("</script")
+                && !APP_JS.contains("</script")
+                && !UI_CSS.contains("</style")
+        );
     }
 
     #[test]
@@ -373,7 +519,10 @@ mod tests {
 
     #[test]
     fn now_defaults_to_zero() {
-        assert_eq!(now_of(&json!({"now": 1_790_000_000_000u64})), 1_790_000_000_000);
+        assert_eq!(
+            now_of(&json!({"now": 1_790_000_000_000u64})),
+            1_790_000_000_000
+        );
         assert_eq!(now_of(&json!({"now": "soon"})), 0);
         assert_eq!(now_of(&json!({"now": -5})), 0);
         assert_eq!(now_of(&json!({})), 0);
@@ -382,8 +531,18 @@ mod tests {
     #[test]
     fn models_response_shape() {
         let s = json!({"provider": "OpenAI", "model": "admin-m"});
-        let ok = models_response(&s, Some("user-m"), Ok(vec![models::ModelInfo { id: "a".into(), name: "A".into() }]));
-        assert_eq!(ok, json!({"provider": "OpenAI", "current": "user-m", "locked": false, "models": [{"id": "a", "name": "A"}]}));
+        let ok = models_response(
+            &s,
+            Some("user-m"),
+            Ok(vec![models::ModelInfo {
+                id: "a".into(),
+                name: "A".into(),
+            }]),
+        );
+        assert_eq!(
+            ok,
+            json!({"provider": "OpenAI", "current": "user-m", "locked": false, "models": [{"id": "a", "name": "A"}]})
+        );
 
         let err = models_response(&s, None, Err("boom".into()));
         assert_eq!(err["models"], json!([]));
@@ -400,7 +559,10 @@ mod tests {
     #[test]
     fn confirmed_lists_validated_ids_and_flags() {
         let body = json!({"results": [{"id": ID, "ok": true}, {"id": "abc123", "ok": false, "error": "boom"}]});
-        assert_eq!(outcome_note(Outcome::Confirmed, &body), format!("[host outcome] write {ID}: applied; write abc123: failed"));
+        assert_eq!(
+            outcome_note(Outcome::Confirmed, &body),
+            format!("[host outcome] write {ID}: applied; write abc123: failed")
+        );
     }
 
     #[test]
@@ -411,7 +573,10 @@ mod tests {
             "message": evil,
         });
         let note = outcome_note(Outcome::Confirmed, &body);
-        assert!(!note.contains("Ignore") && !note.contains("delete"), "{note}");
+        assert!(
+            !note.contains("Ignore") && !note.contains("delete"),
+            "{note}"
+        );
         assert_eq!(note, format!("[host outcome] write {ID}: applied"));
 
         let ids = json!({"ids": [ID, evil, {"x": evil}], "note": evil});
@@ -423,13 +588,22 @@ mod tests {
     #[test]
     fn ok_must_be_literally_true() {
         let body = json!({"results": [{"id": ID, "ok": "true"}]});
-        assert_eq!(outcome_note(Outcome::Confirmed, &body), format!("[host outcome] write {ID}: failed"));
+        assert_eq!(
+            outcome_note(Outcome::Confirmed, &body),
+            format!("[host outcome] write {ID}: failed")
+        );
     }
 
     #[test]
     fn a_malformed_body_yields_a_bare_marker() {
-        assert_eq!(outcome_note(Outcome::Confirmed, &json!("text")), "[host outcome] no writes");
-        assert_eq!(outcome_note(Outcome::Denied, &json!({"ids": "x"})), "[host outcome] no writes");
+        assert_eq!(
+            outcome_note(Outcome::Confirmed, &json!("text")),
+            "[host outcome] no writes"
+        );
+        assert_eq!(
+            outcome_note(Outcome::Denied, &json!({"ids": "x"})),
+            "[host outcome] no writes"
+        );
     }
 
     #[test]

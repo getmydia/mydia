@@ -1,6 +1,6 @@
 //! on-event: library refresh after an import, and an immediate push when a
 //! player finishes something. Runs under the 5 s event timeout, so it never
-//! probes candidates or rediscovers (health::quick_base) and never crawls.
+//! probes candidates or rediscovers (`health::quick_base`) and never crawls.
 
 use crate::api;
 use crate::endpoint;
@@ -19,6 +19,10 @@ use serde_json::{json, Value};
 /// event is about. Delivery takes seconds; five minutes absorbs a retry.
 const FINISHED_LOOKBACK_SECONDS: i64 = 300;
 
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "mirrors the WIT handle-event export, which returns a result; every current event kind succeeds"
+)]
 pub fn handle(host: &mut dyn Host, evt: &Event) -> Result<String, String> {
     let meta: Value = serde_json::from_str(&evt.metadata_json).unwrap_or(Value::Null);
     let cfg = PluginConfig::parse(
@@ -43,7 +47,7 @@ pub fn handle(host: &mut dyn Host, evt: &Event) -> Result<String, String> {
     }
 }
 
-/// Native Notifier.notify_all/0 refreshed every section, and the event carries
+/// Native `Notifier.notify_all/0` refreshed every section, and the event carries
 /// only the file's basename, so a path-scoped refresh is not possible.
 fn refresh(host: &mut dyn Host, cfg: &PluginConfig) -> String {
     let result = health::quick_base(host, cfg)
@@ -106,7 +110,7 @@ fn find_row(
                 namespace: "playback_progress".into(),
                 cursor: cursor.clone(),
                 updated_since: Some(since.clone()),
-                limit: Some(crate::api::PAGE_SIZE),
+                limit: Some(api::PAGE_SIZE),
             })
             .ok()?;
         for item in res.items {

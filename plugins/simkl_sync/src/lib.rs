@@ -31,6 +31,11 @@ const DEFAULT_API_BASE: &str = "https://api.simkl.com";
 // ── Handlers ────────────────────────────────────────────────────────────────
 
 #[mydia_plugin_sdk::plugin(on_schedule = on_schedule)]
+#[expect(
+    clippy::needless_pass_by_value,
+    clippy::unnecessary_wraps,
+    reason = "the plugin macro fixes this by-value, Result-returning handler signature"
+)]
 fn on_event(evt: Event) -> Result<String, String> {
     // React only to player-origin finishes. The dispatcher already suppresses
     // our own write-back echoes; skipping non-player origins keeps a sync:* or
@@ -48,12 +53,16 @@ fn on_event(evt: Event) -> Result<String, String> {
     Ok("{}".to_string())
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the plugin macro fixes this by-value handler signature"
+)]
 fn on_schedule(tick: ScheduleTick) -> Result<String, String> {
     let api_base = api_base_from(&tick.config_json);
 
     let conns = match host::connections_list() {
         Ok(c) => c,
-        Err(e) => return Err(format!("connections-list failed: {:?}", e)),
+        Err(e) => return Err(format!("connections-list failed: {e:?}")),
     };
 
     let settings = list_settings_from(&tick.config_json);
@@ -161,8 +170,7 @@ fn list_settings_from(config_json: &str) -> ListSettings {
             .ok()
             .and_then(|v| v.get::<HashMap<String, JsonValue>>().cloned())
             .and_then(|m| m.get(key).and_then(|v| v.get::<String>().cloned()))
-            .map(|s| s == "off")
-            .unwrap_or(false)
+            .is_some_and(|s| s == "off")
     };
 
     ListSettings {
@@ -331,7 +339,7 @@ fn push(
     let to_push: Vec<PushItem> = rows
         .iter()
         .filter(|r| r.watched && r.user_id == conn.user_id)
-        .filter_map(PushItem::from_progress)
+        .map(PushItem::from_progress)
         .filter(|p| !pulled_keys.contains(&p.key))
         .collect();
 
@@ -380,7 +388,7 @@ fn list_library() -> Result<Vec<LibraryItem>, SyncError> {
         };
 
         let result = host::data_list(&req)
-            .map_err(|e| SyncError::Host(format!("data-list library_item: {:?}", e)))?;
+            .map_err(|e| SyncError::Host(format!("data-list library_item: {e:?}")))?;
 
         for item in result.items {
             if let ListItem::LibraryItem(l) = item {
@@ -470,7 +478,7 @@ fn sync_lists(
                         favorited += 1;
                     }
                 }
-                Err(e) => host::log("warn", &format!("ensure-favorite failed: {:?}", e)),
+                Err(e) => host::log("warn", &format!("ensure-favorite failed: {e:?}")),
             }
         }
     }
@@ -514,7 +522,7 @@ fn send(conn: &Connection, req: &OutboundRequest) -> Result<String, SyncError> {
     match host::connection_request(&conn.id, req) {
         Ok(resp) if resp.status == 401 => Err(SyncError::Unauthorized),
         Ok(resp) => Ok(resp.body.unwrap_or_default()),
-        Err(e) => Err(SyncError::Host(format!("{:?}", e))),
+        Err(e) => Err(SyncError::Host(format!("{e:?}"))),
     }
 }
 
@@ -557,12 +565,12 @@ fn list_progress(updated_since: Option<&str>) -> Result<Vec<PlaybackProgress>, S
         let req = ListRequest {
             namespace: "playback_progress".to_string(),
             cursor: cursor.clone(),
-            updated_since: updated_since.map(|s| s.to_string()),
+            updated_since: updated_since.map(ToString::to_string),
             limit: Some(200),
         };
 
         let result = host::data_list(&req)
-            .map_err(|e| SyncError::Host(format!("data-list playback_progress: {:?}", e)))?;
+            .map_err(|e| SyncError::Host(format!("data-list playback_progress: {e:?}")))?;
 
         for item in result.items {
             if let ListItem::PlaybackProgress(p) = item {
@@ -632,7 +640,7 @@ struct PushItem {
 }
 
 impl PushItem {
-    fn from_progress(p: &PlaybackProgress) -> Option<PushItem> {
+    fn from_progress(p: &PlaybackProgress) -> PushItem {
         let (season, episode) = if p.item_type == "episode" {
             (p.season_number, p.episode_number)
         } else {
@@ -641,7 +649,7 @@ impl PushItem {
 
         let key = item_key(p.imdb_id.as_deref(), p.tmdb_id, p.tvdb_id, season, episode);
 
-        Some(PushItem {
+        PushItem {
             imdb: p.imdb_id.clone(),
             tmdb: p.tmdb_id,
             tvdb: p.tvdb_id,
@@ -649,12 +657,16 @@ impl PushItem {
             episode,
             updated_at: p.updated_at.clone(),
             key,
-        })
+        }
     }
 }
 
 /// A stable key over external ids + episode coordinates. Used both as the
 /// pulled-set membership key and the push dedupe key, so the two sides line up.
+#[expect(
+    clippy::similar_names,
+    reason = "imdb, tmdb and tvdb are the three external id providers and differ by one letter"
+)]
 fn item_key(
     imdb: Option<&str>,
     tmdb: Option<i64>,
@@ -692,6 +704,10 @@ struct ListEntry {
 /// An item-level key: the same shape `item_key` produces with no episode
 /// coordinates. Favorites and list membership address a show as a whole, so a
 /// single watched episode must collapse onto the show's key.
+#[expect(
+    clippy::similar_names,
+    reason = "imdb, tmdb and tvdb are the three external id providers and differ by one letter"
+)]
 fn intent_key(imdb: Option<&str>, tmdb: Option<i64>, tvdb: Option<i64>) -> String {
     item_key(imdb, tmdb, tvdb, None, None)
 }
@@ -734,14 +750,17 @@ fn local_intent_set(
 /// numbers elsewhere, so `coerce_i64` stays bidirectional. A structural
 /// mismatch yields an empty list rather than an error, matching
 /// `parse_all_items`.
+#[expect(
+    clippy::similar_names,
+    reason = "imdb, tmdb and tvdb are the three external id providers and differ by one letter"
+)]
 fn parse_mini_list(body: &str, is_show: bool) -> Vec<ListEntry> {
     let json: JsonValue = match body.parse() {
         Ok(j) => j,
         Err(_) => return Vec::new(),
     };
-    let obj = match json.get::<HashMap<String, JsonValue>>() {
-        Some(o) => o,
-        None => return Vec::new(),
+    let Some(obj) = json.get::<HashMap<String, JsonValue>>() else {
+        return Vec::new();
     };
 
     let (array_key, sub_key) = if is_show {
@@ -836,10 +855,14 @@ fn build_history_body(items: &[PushItem]) -> String {
     )
 }
 
+#[expect(
+    clippy::similar_names,
+    reason = "imdb, tmdb and tvdb are the three external id providers and differ by one letter"
+)]
 fn ids_json(imdb: Option<&str>, tmdb: Option<i64>, tvdb: Option<i64>) -> String {
     let mut parts = Vec::new();
     if let Some(i) = imdb {
-        parts.push(format!("\"imdb\":{:?}", i));
+        parts.push(format!("\"imdb\":{i:?}"));
     }
     if let Some(t) = tmdb {
         parts.push(format!("\"tmdb\":{t}"));
@@ -853,7 +876,7 @@ fn ids_json(imdb: Option<&str>, tmdb: Option<i64>, tvdb: Option<i64>) -> String 
 /// Parses `/sync/activities` to the single `all` timestamp used as the cursor.
 fn parse_activities(body: &str) -> Option<String> {
     let json: JsonValue = body.parse().ok()?;
-    let obj = json.get::<std::collections::HashMap<String, JsonValue>>()?;
+    let obj = json.get::<HashMap<String, JsonValue>>()?;
     obj.get("all").and_then(|v| v.get::<String>()).cloned()
 }
 
@@ -885,9 +908,8 @@ fn parse_all_items(body: &str) -> Vec<PulledItem> {
         Ok(j) => j,
         Err(_) => return out,
     };
-    let obj = match json.get::<HashMap<String, JsonValue>>() {
-        Some(o) => o,
-        None => return out,
+    let Some(obj) = json.get::<HashMap<String, JsonValue>>() else {
+        return out;
     };
 
     // Shows and anime share the same nested `show`/`seasons` shape.
@@ -914,6 +936,10 @@ fn parse_all_items(body: &str) -> Vec<PulledItem> {
 /// with a `watched_at` becomes one `PulledItem` carrying the show ids plus the
 /// season/episode coordinates (KTD4). Entries without watched episodes (or no
 /// `seasons`, e.g. when the extended params were not honored) contribute nothing.
+#[expect(
+    clippy::similar_names,
+    reason = "imdb, tmdb and tvdb are the three external id providers and differ by one letter"
+)]
 fn parse_show_entry(value: &JsonValue, out: &mut Vec<PulledItem>) {
     let Some(obj) = value.get::<HashMap<String, JsonValue>>() else {
         return;
@@ -966,6 +992,10 @@ fn parse_show_entry(value: &JsonValue, out: &mut Vec<PulledItem>) {
 
 /// A movie entry: ids live under `movie.ids`; a `completed` status or a present
 /// `last_watched_at` marks it watched (KTD4).
+#[expect(
+    clippy::similar_names,
+    reason = "imdb, tmdb and tvdb are the three external id providers and differ by one letter"
+)]
 fn parse_movie_entry(value: &JsonValue) -> Option<PulledItem> {
     let obj = value.get::<HashMap<String, JsonValue>>()?;
     let ids = sub_ids(obj, "movie")?;
@@ -974,8 +1004,7 @@ fn parse_movie_entry(value: &JsonValue) -> Option<PulledItem> {
     let completed = obj
         .get("status")
         .and_then(|v| v.get::<String>())
-        .map(|s| s == "completed")
-        .unwrap_or(false);
+        .is_some_and(|s| s == "completed");
     let watched_at = obj
         .get("last_watched_at")
         .and_then(|v| v.get::<String>())
@@ -1009,6 +1038,10 @@ fn sub_ids<'a>(
 
 /// Extracts the three external ids from an `ids` object, coercing `tvdb`/`tmdb`
 /// from either string or number form (KTD3).
+#[expect(
+    clippy::similar_names,
+    reason = "imdb, tmdb and tvdb are the three external id providers and differ by one letter"
+)]
 fn extract_ids(ids: &HashMap<String, JsonValue>) -> (Option<String>, Option<i64>, Option<i64>) {
     let imdb = ids.get("imdb").and_then(|v| v.get::<String>()).cloned();
     let tmdb = ids.get("tmdb").and_then(coerce_i64);
@@ -1022,6 +1055,10 @@ fn extract_ids(ids: &HashMap<String, JsonValue>) -> (Option<String>, Option<i64>
 /// does not reintroduce the bug (KTD3).
 fn coerce_i64(v: &JsonValue) -> Option<i64> {
     match v {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "f64 to i64 `as` saturates and maps NaN to 0; Simkl ids are integral and far below 2^53"
+        )]
         JsonValue::Number(n) => Some(*n as i64),
         JsonValue::String(s) => s.trim().parse::<i64>().ok(),
         _ => None,
@@ -1043,7 +1080,7 @@ fn parse_string_array(body: &str) -> Vec<String> {
 }
 
 fn string_array_json(set: &BTreeSet<String>) -> String {
-    let parts: Vec<String> = set.iter().map(|s| format!("{:?}", s)).collect();
+    let parts: Vec<String> = set.iter().map(|s| format!("{s:?}")).collect();
     format!("[{}]", parts.join(","))
 }
 
@@ -1054,7 +1091,7 @@ fn result_json(
     favorited: usize,
     invalid: &[String],
 ) -> String {
-    let ids: Vec<String> = invalid.iter().map(|s| format!("{:?}", s)).collect();
+    let ids: Vec<String> = invalid.iter().map(|s| format!("{s:?}")).collect();
     format!(
         "{{\"pushed\":{pushed},\"pulled\":{pulled},\"listed\":{listed},\
          \"favorited\":{favorited},\"connections_invalid\":[{}]}}",
@@ -1071,7 +1108,7 @@ fn connection_for_user(user_id: &str) -> Option<Connection> {
 
 fn origin_of(evt: &Event) -> Option<String> {
     let json: JsonValue = evt.metadata_json.parse().ok()?;
-    let obj = json.get::<std::collections::HashMap<String, JsonValue>>()?;
+    let obj = json.get::<HashMap<String, JsonValue>>()?;
     obj.get("origin").and_then(|v| v.get::<String>()).cloned()
 }
 
@@ -1387,8 +1424,7 @@ mod tests {
             last_watched_at: None,
             updated_at: "t".into(),
             origin: None,
-        })
-        .unwrap();
+        });
 
         assert_eq!(pulled[0].key(), push.key);
         assert_eq!(pulled[0].key(), "tvdb:555:s1e2");
@@ -1552,10 +1588,10 @@ mod tests {
         // The whole echo guard: nothing in D can appear in the favorite set.
         let d: BTreeSet<String> = ["imdb:tt1", "imdb:tt2"]
             .iter()
-            .map(|s| s.to_string())
+            .map(ToString::to_string)
             .collect();
 
-        let remote = vec![
+        let remote = [
             ListEntry {
                 imdb: Some("tt1".into()),
                 tmdb: None,
@@ -1584,11 +1620,11 @@ mod tests {
 
     #[test]
     fn a_settled_library_writes_nothing() {
-        let d: BTreeSet<String> = ["imdb:tt1"].iter().map(|s| s.to_string()).collect();
-        let p: BTreeSet<String> = ["imdb:tt1"].iter().map(|s| s.to_string()).collect();
+        let d: BTreeSet<String> = ["imdb:tt1"].iter().map(ToString::to_string).collect();
+        let p: BTreeSet<String> = ["imdb:tt1"].iter().map(ToString::to_string).collect();
 
-        assert!(d.iter().filter(|k| !p.contains(*k)).next().is_none());
-        assert!(p.iter().filter(|k| !d.contains(*k)).next().is_none());
+        assert!(d.iter().find(|k| !p.contains(*k)).is_none());
+        assert!(p.iter().find(|k| !d.contains(*k)).is_none());
     }
 
     // ── test builders ────────────────────────────────────────────────────────
@@ -1601,7 +1637,7 @@ mod tests {
             year: None,
             tmdb_id: None,
             tvdb_id: None,
-            imdb_id: imdb.map(|s| s.to_string()),
+            imdb_id: imdb.map(ToString::to_string),
             owned,
             updated_at: "2026-08-11T00:00:00Z".to_string(),
         }
@@ -1615,7 +1651,7 @@ mod tests {
             episode_id: None,
             tmdb_id: None,
             tvdb_id: None,
-            imdb_id: imdb.map(|s| s.to_string()),
+            imdb_id: imdb.map(ToString::to_string),
             season_number: None,
             episode_number: None,
             watched: true,

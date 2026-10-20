@@ -14,7 +14,7 @@ const MAX_LIMIT: i64 = 50;
 const DEFAULT_LIMIT: u32 = 20;
 const MAX_DAYS: i64 = 3650;
 
-/// Title and year per media_item_id; `None` when the lookup failed.
+/// Title and year per `media_item_id`; `None` when the lookup failed.
 type Titles = HashMap<String, Option<(String, Option<u32>)>>;
 
 pub fn definition() -> Value {
@@ -61,7 +61,15 @@ fn is_plugin_origin(origin: &str, slug: &str) -> bool {
 
 pub fn percent(position: Option<u32>, duration: Option<u32>) -> Option<u32> {
     match (position, duration) {
-        (Some(p), Some(d)) if d > 0 => Some(((p as f64 / d as f64) * 100.0).round().min(100.0) as u32),
+        (Some(p), Some(d)) if d > 0 => {
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "the value is rounded and capped to 0.0..=100.0, so it is non-negative and fits u32"
+            )]
+            let pct = ((f64::from(p) / f64::from(d)) * 100.0).round().min(100.0) as u32;
+            Some(pct)
+        }
         _ => None,
     }
 }
@@ -78,12 +86,21 @@ pub fn rfc3339_utc(secs: i64) -> String {
     let mp = (5 * doy + 2) / 153;
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
-    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", rem / 3600, rem % 3600 / 60, rem % 60)
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
 }
 
 pub fn row(p: &PlaybackProgress, titles: &Titles) -> Value {
-    let found = p.media_item_id.as_ref().and_then(|id| titles.get(id)).and_then(|t| t.as_ref());
+    let found = p
+        .media_item_id
+        .as_ref()
+        .and_then(|id| titles.get(id))
+        .and_then(|t| t.as_ref());
     let (title, year) = match found {
         Some((t, y)) => (clip(t, 200), *y),
         None => ("Unknown".to_string(), None),
@@ -100,7 +117,7 @@ pub fn row(p: &PlaybackProgress, titles: &Titles) -> Value {
 
 fn since(days: Option<i64>) -> Option<String> {
     let days = days?;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs() as i64;
+    let now = i64::try_from(SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs()).ok()?;
     Some(rfc3339_utc(now - days * 86_400))
 }
 
@@ -110,7 +127,10 @@ fn resolve(ids: impl Iterator<Item = String>) -> Titles {
         if titles.contains_key(&id) {
             continue;
         }
-        let found = match host::data_read(&DataRequest { namespace: "media_item".into(), id: id.clone() }) {
+        let found = match host::data_read(&DataRequest {
+            namespace: "media_item".into(),
+            id: id.clone(),
+        }) {
             Ok(ReadResult::MediaItem(m)) => Some((m.title, m.year)),
             _ => None,
         };
@@ -120,7 +140,9 @@ fn resolve(ids: impl Iterator<Item = String>) -> Titles {
 }
 
 pub fn run(a: &Value) -> Value {
-    let limit = a["limit"].as_i64().map(|n| n as u32).unwrap_or(DEFAULT_LIMIT);
+    let limit = a["limit"]
+        .as_i64()
+        .map_or(DEFAULT_LIMIT, |n| u32::try_from(n).unwrap_or(DEFAULT_LIMIT));
     let req = ListRequest {
         namespace: "watch_history".into(),
         cursor: None,
@@ -200,7 +222,10 @@ mod tests {
     #[test]
     fn rows_carry_title_status_and_source() {
         let mut titles = HashMap::new();
-        titles.insert("m1".to_string(), Some(("Ember Tide".to_string(), Some(2024u32))));
+        titles.insert(
+            "m1".to_string(),
+            Some(("Ember Tide".to_string(), Some(2024u32))),
+        );
         let mut ep = progress("episode", Some("m1"));
         ep.season_number = Some(2);
         ep.episode_number = Some(4);

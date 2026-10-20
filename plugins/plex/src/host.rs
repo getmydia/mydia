@@ -131,18 +131,17 @@ impl Host for WasmHost {
     }
 
     fn log(&mut self, level: &str, message: &str) {
-        host::log(level, message)
+        host::log(level, message);
     }
 
     fn now(&mut self) -> i64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0)
+            .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
     }
 
     fn elapsed_ms(&mut self) -> u64 {
-        self.start.elapsed().as_millis() as u64
+        u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX)
     }
 }
 

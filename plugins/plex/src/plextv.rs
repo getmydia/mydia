@@ -201,7 +201,7 @@ pub fn home_users(
 ) -> Result<Option<Vec<HomeUser>>, PlexError> {
     let req = request("GET", &format!("{base}/home/users"), plex_headers(), None);
     match send_json::<UsersBody>(host, auth, req) {
-        Ok(UsersBody::Wrapped { users }) | Ok(UsersBody::Bare(users)) => Ok(Some(
+        Ok(UsersBody::Wrapped { users } | UsersBody::Bare(users)) => Ok(Some(
             users
                 .into_iter()
                 .filter_map(|u| u.into_home_user(None))

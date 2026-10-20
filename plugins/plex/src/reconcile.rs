@@ -34,9 +34,8 @@ pub enum Decision {
 }
 
 pub fn resolve(local: &Side, remote: &Side, snapshot: Option<&Side>) -> Decision {
-    let snapshot = match snapshot {
-        None => return baseline(local, remote),
-        Some(s) => s,
+    let Some(snapshot) = snapshot else {
+        return baseline(local, remote);
     };
 
     let local_changed = local.watched != snapshot.watched;
@@ -290,7 +289,7 @@ mod tests {
         for (local, remote) in [(side(true), side(false)), (side(false), side(true))] {
             match resolve(&local, &remote, None) {
                 Decision::Push(c) | Decision::Pull(c) | Decision::RecordOnly(c) => {
-                    assert!(c.watched)
+                    assert!(c.watched);
                 }
                 Decision::Noop => panic!("a baseline always records"),
             }

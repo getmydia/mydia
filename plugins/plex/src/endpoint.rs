@@ -262,7 +262,7 @@ mod tests {
         ServerInfo {
             machine_identifier: Some("m1".into()),
             name: "Den".into(),
-            candidates: candidates.iter().map(|s| s.to_string()).collect(),
+            candidates: candidates.iter().map(ToString::to_string).collect(),
         }
     }
 

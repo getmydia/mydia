@@ -23,16 +23,28 @@ mod time;
 use mydia_plugin_sdk::types::{Event, Health, ScheduleTick, SetupRequest, SetupScreen};
 
 #[mydia_plugin_sdk::plugin(on_schedule = on_schedule, setup = setup, check_health = check_health)]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the plugin macro fixes this by-value handler signature"
+)]
 fn on_event(evt: Event) -> Result<String, String> {
     let mut host = host::WasmHost::new();
     events::handle(&mut host, &evt)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the plugin macro fixes this by-value handler signature"
+)]
 fn on_schedule(tick: ScheduleTick) -> Result<String, String> {
     let mut host = host::WasmHost::new();
     schedule::run(&mut host, &tick.config_json)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the plugin macro fixes this by-value handler signature"
+)]
 fn setup(req: SetupRequest) -> Result<SetupScreen, String> {
     let mut host = host::WasmHost::new();
     setup::run(&mut host, &req)

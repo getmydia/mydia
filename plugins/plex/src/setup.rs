@@ -14,6 +14,7 @@ use mydia_plugin_sdk::types::{
     MappingScreen, RemoteAccount, ScreenBody, SetupField, SetupRequest, SetupScreen,
 };
 use serde::{Deserialize, Serialize};
+use std::fmt::Write;
 
 const POLL_SECONDS: u32 = 2;
 
@@ -349,14 +350,14 @@ fn on_server(host: &mut dyn Host, base: &str, state: &State, input: &str) -> Set
 
     let now = host.now();
     let saved = store::put_json(host, store::SERVER_INFO, &info)
-        .and_then(|_| {
+        .and_then(|()| {
             store::put_json(
                 host,
                 store::ENDPOINT_CURRENT,
                 &serde_json::json!({"url": url, "checked_at": now}),
             )
         })
-        .and_then(|_| store::delete(host, store::SERVER_PENDING));
+        .and_then(|()| store::delete(host, store::SERVER_PENDING));
     if let Err(e) = saved {
         return method_screen(Some(e.message()));
     }
@@ -376,7 +377,7 @@ fn accounts_screen(host: &mut dyn Host, base: &str) -> Result<SetupScreen, PlexE
         _ => (vec![me.clone()], false),
     };
     host.kv_set(store::SERVER_OWNER_ACCOUNT, &me.uuid)
-        .and_then(|_| host.kv_set(store::SERVER_HOME, if has_home { "1" } else { "0" }))
+        .and_then(|()| host.kv_set(store::SERVER_HOME, if has_home { "1" } else { "0" }))
         .map_err(|e| PlexError::Unexpected(format!("store: {e:?}")))?;
 
     let remote: Vec<RemoteAccount> = accounts.iter().map(to_remote).collect();
@@ -457,10 +458,11 @@ fn on_mapping(host: &mut dyn Host, base: &str, input: &str) -> Result<SetupScree
 
     let mut summary = format!("{linked} linked.");
     if !failed.is_empty() {
-        summary.push_str(&format!(
+        let _ = write!(
+            summary,
             " Plex did not issue a profile token for {}; try Edit accounts again later.",
             failed.join(", ")
-        ));
+        );
     }
     Ok(screen("done", ScreenBody::Done(summary), &State::default()))
 }
@@ -549,7 +551,7 @@ mod tests {
         }
     }
 
-    fn choice(screen: &SetupScreen) -> &mydia_plugin_sdk::types::ChoiceScreen {
+    fn choice(screen: &SetupScreen) -> &ChoiceScreen {
         match &screen.body {
             ScreenBody::Choice(c) => c,
             other => panic!("expected choice, got {other:?}"),

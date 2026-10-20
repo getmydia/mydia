@@ -4,6 +4,7 @@ use crate::host::Host;
 use mydia_plugin_sdk::types::{HostError, OutboundRequest};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use std::fmt::Write;
 
 /// Kept identical to the native `PlexOAuth.client_identifier/0`. Existing
 /// installs hold tokens minted under this identifier.
@@ -130,9 +131,11 @@ pub fn encode(s: &str) -> String {
     for b in s.bytes() {
         match b {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char)
+                out.push(b as char);
             }
-            _ => out.push_str(&format!("%{:02X}", b)),
+            _ => {
+                let _ = write!(out, "%{b:02X}");
+            }
         }
     }
     out

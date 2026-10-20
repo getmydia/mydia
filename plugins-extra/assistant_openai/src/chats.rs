@@ -26,11 +26,14 @@ pub fn key(user_id: &str) -> String {
 /// An id as the page or the host issues it: hex digits and dashes. Anything
 /// else is refused, so an id never carries a key separator or free text.
 pub fn valid_id(v: &Value) -> Option<&str> {
-    v.as_str().filter(|s| !s.is_empty() && s.len() <= 36 && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
+    v.as_str().filter(|s| {
+        !s.is_empty() && s.len() <= 36 && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+    })
 }
 
 pub fn decode(raw: Option<String>) -> Vec<Chat> {
-    raw.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    raw.and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
 }
 
 pub fn encode(chats: &[Chat]) -> String {
@@ -39,12 +42,19 @@ pub fn encode(chats: &[Chat]) -> String {
 
 /// The first user message, whitespace collapsed and cut to a line.
 pub fn title_from(messages: &[Value]) -> String {
-    let first = messages.iter().find(|m| m["role"] == "user").and_then(|m| m["content"].as_str()).unwrap_or("");
+    let first = messages
+        .iter()
+        .find(|m| m["role"] == "user")
+        .and_then(|m| m["content"].as_str())
+        .unwrap_or("");
     let tidy = first.split_whitespace().collect::<Vec<_>>().join(" ");
     if tidy.is_empty() {
         UNTITLED.into()
     } else if tidy.chars().count() > MAX_TITLE_CHARS {
-        format!("{}…", tidy.chars().take(MAX_TITLE_CHARS).collect::<String>())
+        format!(
+            "{}…",
+            tidy.chars().take(MAX_TITLE_CHARS).collect::<String>()
+        )
     } else {
         tidy
     }
@@ -58,7 +68,14 @@ pub fn touch(chats: &mut Vec<Chat>, id: &str, messages: &[Value], now: u64) -> V
         Some(i) => chats.remove(i).title,
         None => title_from(messages),
     };
-    chats.insert(0, Chat { id: id.into(), title, updated_at: now });
+    chats.insert(
+        0,
+        Chat {
+            id: id.into(),
+            title,
+            updated_at: now,
+        },
+    );
     let keep = chats.len().min(MAX_CHATS);
     chats.drain(keep..).map(|c| c.id).collect()
 }
@@ -71,7 +88,11 @@ pub fn remove(chats: &mut Vec<Chat>, id: &str) -> bool {
 
 /// The index entry for the conversation stored before chats were listed.
 pub fn adopt(legacy: &[Value]) -> Option<Chat> {
-    (!legacy.is_empty()).then(|| Chat { id: LEGACY_ID.into(), title: title_from(legacy), updated_at: 0 })
+    (!legacy.is_empty()).then(|| Chat {
+        id: LEGACY_ID.into(),
+        title: title_from(legacy),
+        updated_at: 0,
+    })
 }
 
 #[cfg(test)]
@@ -84,14 +105,26 @@ mod tests {
     }
 
     fn chat(id: &str, at: u64) -> Chat {
-        Chat { id: id.into(), title: format!("t-{id}"), updated_at: at }
+        Chat {
+            id: id.into(),
+            title: format!("t-{id}"),
+            updated_at: at,
+        }
     }
 
     #[test]
     fn ids_are_hex_and_dashes_only() {
         assert_eq!(valid_id(&json!(LEGACY_ID)), Some(LEGACY_ID));
         assert_eq!(valid_id(&json!("abc-123")), Some("abc-123"));
-        for bad in [json!(""), json!("a:b"), json!("../x"), json!("g"), json!("a".repeat(37)), json!(7), json!(null)] {
+        for bad in [
+            json!(""),
+            json!("a:b"),
+            json!("../x"),
+            json!("g"),
+            json!("a".repeat(37)),
+            json!(7),
+            json!(null),
+        ] {
             assert_eq!(valid_id(&bad), None, "{bad}");
         }
     }
@@ -106,7 +139,11 @@ mod tests {
 
     #[test]
     fn title_is_the_first_user_message_tidied() {
-        let msgs = vec![json!({"role": "assistant", "content": "hi"}), user("  find\n  short   comedies "), user("second")];
+        let msgs = vec![
+            json!({"role": "assistant", "content": "hi"}),
+            user("  find\n  short   comedies "),
+            user("second"),
+        ];
         assert_eq!(title_from(&msgs), "find short comedies");
         assert_eq!(title_from(&[]), "New chat");
         assert_eq!(title_from(&[user("   ")]), "New chat");
@@ -124,7 +161,14 @@ mod tests {
         let mut list = vec![chat("a", 1)];
         let evicted = touch(&mut list, "b", &[user("hello")], 5);
         assert!(evicted.is_empty());
-        assert_eq!(list[0], Chat { id: "b".into(), title: "hello".into(), updated_at: 5 });
+        assert_eq!(
+            list[0],
+            Chat {
+                id: "b".into(),
+                title: "hello".into(),
+                updated_at: 5
+            }
+        );
         assert_eq!(list[1].id, "a");
     }
 
@@ -132,14 +176,19 @@ mod tests {
     fn touch_bumps_an_existing_chat_and_keeps_its_title() {
         let mut list = vec![chat("a", 3), chat("b", 2)];
         touch(&mut list, "b", &[user("something else")], 9);
-        assert_eq!(list.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["b", "a"]);
+        assert_eq!(
+            list.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            ["b", "a"]
+        );
         assert_eq!(list[0].title, "t-b");
         assert_eq!(list[0].updated_at, 9);
     }
 
     #[test]
     fn touch_evicts_past_the_cap() {
-        let mut list: Vec<Chat> = (0..MAX_CHATS).map(|i| chat(&format!("{i:x}"), 100 - i as u64)).collect();
+        let mut list: Vec<Chat> = (0..MAX_CHATS)
+            .map(|i| chat(&format!("{i:x}"), 100 - i as u64))
+            .collect();
         let last = list.last().unwrap().id.clone();
         let evicted = touch(&mut list, "fff", &[user("new")], 200);
         assert_eq!(evicted, vec![last]);
@@ -157,8 +206,18 @@ mod tests {
 
     #[test]
     fn adopt_names_a_non_empty_legacy_conversation() {
-        let got = adopt(&[user("old question"), json!({"role": "assistant", "content": "old answer"})]);
-        assert_eq!(got, Some(Chat { id: LEGACY_ID.into(), title: "old question".into(), updated_at: 0 }));
+        let got = adopt(&[
+            user("old question"),
+            json!({"role": "assistant", "content": "old answer"}),
+        ]);
+        assert_eq!(
+            got,
+            Some(Chat {
+                id: LEGACY_ID.into(),
+                title: "old question".into(),
+                updated_at: 0
+            })
+        );
         assert_eq!(adopt(&[]), None);
     }
 }

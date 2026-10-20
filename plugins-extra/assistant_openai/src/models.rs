@@ -5,7 +5,7 @@ use crate::tools::clip;
 use serde::Serialize;
 use serde_json::Value;
 
-/// Most models sent to the page; OpenRouter alone lists hundreds.
+/// Most models sent to the page; `OpenRouter` alone lists hundreds.
 pub const MAX_MODELS: usize = 1000;
 const MAX_ID_CHARS: usize = 200;
 const LOCKED: &str = "Admin model only";
@@ -17,7 +17,9 @@ pub struct ModelInfo {
 }
 
 pub fn valid_id(id: &str) -> bool {
-    !id.is_empty() && id.chars().count() <= MAX_ID_CHARS && !id.chars().any(|c| c.is_control() || c.is_whitespace())
+    !id.is_empty()
+        && id.chars().count() <= MAX_ID_CHARS
+        && !id.chars().any(|c| c.is_control() || c.is_whitespace())
 }
 
 pub fn key(user_id: &str) -> String {
@@ -32,7 +34,9 @@ pub fn encode_pick(provider: &str, model: &str) -> String {
 /// The stored model, only when it was picked for this provider. Bare legacy strings and other shapes count as no pick.
 pub fn decode_pick(raw: &str, provider: &str) -> Option<String> {
     let v: Value = serde_json::from_str(raw).ok()?;
-    (v["provider"].as_str() == Some(provider)).then(|| v["model"].as_str().map(str::to_string)).flatten()
+    (v["provider"].as_str() == Some(provider))
+        .then(|| v["model"].as_str().map(str::to_string))
+        .flatten()
 }
 
 pub fn locked(settings: &Value) -> bool {
@@ -59,11 +63,19 @@ pub fn missing_message(settings: &Value) -> &'static str {
 }
 
 /// Parses an OpenAI-shaped `{"data": [{"id", ...}]}` list. Anthropic adds
-/// `display_name`, OpenRouter `name`; Gemini prefixes ids with `models/`.
+/// `display_name`, `OpenRouter` `name`; Gemini prefixes ids with `models/`.
 pub fn parse(status: u16, body: &str) -> Result<Vec<ModelInfo>, String> {
-    let v: Value = serde_json::from_str(body).map_err(|_| format!("The model list answered {status} with something that is not JSON."))?;
+    let v: Value = serde_json::from_str(body).map_err(|_| {
+        format!("The model list answered {status} with something that is not JSON.")
+    })?;
     if !(200..300).contains(&status) {
-        let detail = clip(v["error"]["message"].as_str().or(v["error"].as_str()).unwrap_or("no detail"), 200);
+        let detail = clip(
+            v["error"]["message"]
+                .as_str()
+                .or(v["error"].as_str())
+                .unwrap_or("no detail"),
+            200,
+        );
         return Err(format!("The model list answered {status}: {detail}"));
     }
     let data = v["data"].as_array().ok_or("The model list had no data.")?;
@@ -75,7 +87,10 @@ pub fn parse(status: u16, body: &str) -> Result<Vec<ModelInfo>, String> {
             if !valid_id(&id) {
                 return None;
             }
-            let name = m["name"].as_str().or(m["display_name"].as_str()).map(str::to_string).unwrap_or_else(|| id.clone());
+            let name = m["name"]
+                .as_str()
+                .or(m["display_name"].as_str())
+                .map_or_else(|| id.clone(), str::to_string);
             Some(ModelInfo { id, name })
         })
         .collect();
@@ -93,7 +108,11 @@ mod tests {
     #[test]
     fn parses_openai_shape_sorted_and_deduped() {
         let body = r#"{"object":"list","data":[{"id":"zeta-2"},{"id":"alpha-1"},{"id":"zeta-2"}]}"#;
-        let ids: Vec<String> = parse(200, body).unwrap().into_iter().map(|m| m.id).collect();
+        let ids: Vec<String> = parse(200, body)
+            .unwrap()
+            .into_iter()
+            .map(|m| m.id)
+            .collect();
         assert_eq!(ids, vec!["alpha-1", "zeta-2"]);
     }
 
@@ -101,7 +120,13 @@ mod tests {
     fn uses_name_or_display_name_when_present() {
         let body = r#"{"data":[{"id":"a/x","name":"Model X"},{"id":"y","display_name":"Model Y"},{"id":"z"}]}"#;
         let m = parse(200, body).unwrap();
-        assert_eq!(m[0], ModelInfo { id: "a/x".into(), name: "Model X".into() });
+        assert_eq!(
+            m[0],
+            ModelInfo {
+                id: "a/x".into(),
+                name: "Model X".into()
+            }
+        );
         assert_eq!(m[1].name, "Model Y");
         assert_eq!(m[2].name, "z");
     }
@@ -114,7 +139,11 @@ mod tests {
 
     #[test]
     fn skips_entries_with_unusable_ids() {
-        let m = parse(200, r#"{"data":[{"id":""},{"id":"has space"},{"x":1},{"id":"ok"}]}"#).unwrap();
+        let m = parse(
+            200,
+            r#"{"data":[{"id":""},{"id":"has space"},{"x":1},{"id":"ok"}]}"#,
+        )
+        .unwrap();
         assert_eq!(m.len(), 1);
     }
 
@@ -122,14 +151,23 @@ mod tests {
     fn errors_are_readable() {
         assert!(parse(200, "nope").is_err());
         assert!(parse(200, r#"{"data":"x"}"#).is_err());
-        let e = parse(401, r#"{"error":{"message":"bad key"}}"#).err().unwrap();
+        let e = parse(401, r#"{"error":{"message":"bad key"}}"#)
+            .err()
+            .unwrap();
         assert!(e.contains("401") && e.contains("bad key"), "{e}");
     }
 
     #[test]
     fn the_list_is_capped() {
-        let data: Vec<_> = (0..MAX_MODELS + 10).map(|i| json!({"id": format!("m{i:05}")})).collect();
-        assert_eq!(parse(200, &json!({"data": data}).to_string()).unwrap().len(), MAX_MODELS);
+        let data: Vec<_> = (0..MAX_MODELS + 10)
+            .map(|i| json!({"id": format!("m{i:05}")}))
+            .collect();
+        assert_eq!(
+            parse(200, &json!({"data": data}).to_string())
+                .unwrap()
+                .len(),
+            MAX_MODELS
+        );
     }
 
     #[test]
@@ -148,7 +186,10 @@ mod tests {
         assert_eq!(effective(&open, Some("user-m")).as_deref(), Some("user-m"));
         assert_eq!(effective(&open, None).as_deref(), Some("admin-m"));
         let locked = json!({"model": "admin-m", "model_choice": "Admin model only"});
-        assert_eq!(effective(&locked, Some("user-m")).as_deref(), Some("admin-m"));
+        assert_eq!(
+            effective(&locked, Some("user-m")).as_deref(),
+            Some("admin-m")
+        );
     }
 
     #[test]
@@ -184,14 +225,22 @@ mod tests {
     fn legacy_and_malformed_picks_count_as_none() {
         assert_eq!(decode_pick("gpt-legacy", "OpenAI"), None);
         assert_eq!(decode_pick("{not json", "OpenAI"), None);
-        assert_eq!(decode_pick(r#"{"provider":"OpenAI","model":5}"#, "OpenAI"), None);
+        assert_eq!(
+            decode_pick(r#"{"provider":"OpenAI","model":5}"#, "OpenAI"),
+            None
+        );
         assert_eq!(decode_pick(r#"{"provider":"OpenAI"}"#, "OpenAI"), None);
     }
 
     #[test]
     fn error_detail_falls_back_to_a_plain_string_error() {
-        let e = parse(404, r#"{"error":"model list unavailable"}"#).err().unwrap();
-        assert!(e.contains("404") && e.contains("model list unavailable"), "{e}");
+        let e = parse(404, r#"{"error":"model list unavailable"}"#)
+            .err()
+            .unwrap();
+        assert!(
+            e.contains("404") && e.contains("model list unavailable"),
+            "{e}"
+        );
     }
 
     #[test]
