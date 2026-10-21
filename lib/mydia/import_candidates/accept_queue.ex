@@ -175,6 +175,12 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
   explanation rather than leaving it queued forever. Anything else leaves the
   marker in place, so `remaining` is non-zero and the worker reports failure for
   Oban to retry.
+
+  With `final_attempt: true` (the worker's last Oban attempt) a drain that
+  still has groups queued after its sweeps clears every remaining marker,
+  recording the reason each group last failed for in `queue_error`, and
+  returns `remaining: 0`. Nothing drains a marker after the last attempt, so
+  leaving it set would strand the group in Queued forever.
   """
   @spec drain_accepted(binary(), keyword()) ::
           {:ok,
@@ -192,7 +198,7 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
         opts,
         page_size,
         queued_count(library_path_id, "accept"),
-        %{promoted: 0, failed: 0}
+        %{promoted: 0, failed: 0, reasons: %{}}
       )
 
     Store.broadcast(library_path_id)
@@ -217,7 +223,7 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
 
     cond do
       remaining == 0 ->
-        {:ok, Map.put(acc, :remaining, 0)}
+        {:ok, drain_result(acc, 0)}
 
       remaining < remaining_before ->
         drain_accepted_pages(library_path_id, opts, page_size, remaining, acc)
@@ -226,10 +232,55 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
       # without clearing its marker, so another sweep would fetch the same
       # anchors and fail identically. Stop and let the worker's retry handle
       # it.
+      Keyword.get(opts, :final_attempt, false) ->
+        give_up_queued(library_path_id, acc.reasons)
+        {:ok, drain_result(acc, 0)}
+
       true ->
-        {:ok, Map.put(acc, :remaining, remaining)}
+        {:ok, drain_result(acc, remaining)}
     end
   end
+
+  # `reasons` is bookkeeping for `give_up_queued/2`, not part of the public
+  # result shape.
+  defp drain_result(acc, remaining),
+    do: acc |> Map.delete(:reasons) |> Map.put(:remaining, remaining)
+
+  # The job's last attempt. Nothing will drain an accept marker after this
+  # returns, so every one still set is cleared with the reason its group last
+  # failed for, and the group goes back to review instead of sitting in Queued
+  # forever (#1212). A row with no recorded reason was queued after the sweep
+  # passed its anchor.
+  defp give_up_queued(library_path_id, reasons) do
+    anchors = queued_anchor_keys(library_path_id, "accept", nil, nil)
+
+    Logger.warning("Import retries exhausted, returning queued groups to review",
+      library_path_id: library_path_id,
+      anchor_count: length(anchors)
+    )
+
+    for anchor_key <- anchors do
+      clear_queue_marker(
+        library_path_id,
+        anchor_key,
+        "accept",
+        retry_exhausted_message(Map.get(reasons, anchor_key))
+      )
+    end
+  end
+
+  defp retry_exhausted_message(nil),
+    do: "Import failed after several attempts. Check the server logs."
+
+  defp retry_exhausted_message(reason),
+    do:
+      "Import failed after several attempts: " <>
+        (reason |> short_reason() |> String.slice(0, 120))
+
+  defp short_reason({:metadata_fetch_failed, %ProviderError{message: message}}), do: message
+  defp short_reason({:storage, %Mydia.Storage.Error{kind: kind}}), do: "storage #{kind}"
+  defp short_reason({:raised, %{__exception__: true} = error}), do: Exception.message(error)
+  defp short_reason(reason), do: inspect(reason)
 
   # One full keyset walk over every anchor currently queued for accept,
   # advancing `after_key` past each page regardless of whether its anchors
@@ -275,15 +326,16 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
       {:error, reason} ->
         if terminal_accept_error?(reason) do
           clear_queue_marker(library_path_id, anchor_key, "accept", queue_error_message(reason))
+          %{acc | failed: acc.failed + 1}
         else
           Logger.warning("A queued import group did not promote, leaving it queued for retry",
             library_path_id: library_path_id,
             anchor_key: anchor_key,
             reason: inspect(reason)
           )
-        end
 
-        %{acc | failed: acc.failed + 1}
+          record_failure(acc, anchor_key, reason)
+        end
     end
   rescue
     error ->
@@ -293,8 +345,11 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
         error: Exception.format(:error, error, __STACKTRACE__)
       )
 
-      %{acc | failed: acc.failed + 1}
+      record_failure(acc, anchor_key, {:raised, error})
   end
+
+  defp record_failure(acc, anchor_key, reason),
+    do: %{acc | failed: acc.failed + 1, reasons: Map.put(acc.reasons, anchor_key, reason)}
 
   # Refusals that fail identically on every retry, so the marker is cleared and
   # the reason surfaced instead of burning the retry budget. Anything not named
@@ -333,9 +388,12 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
     |> distinct(true)
     |> order_by([c], asc: c.anchor_key)
     |> select([c], c.anchor_key)
-    |> limit(^limit)
+    |> maybe_limit(limit)
     |> Repo.all()
   end
+
+  defp maybe_limit(query, nil), do: query
+  defp maybe_limit(query, limit), do: limit(query, ^limit)
 
   defp maybe_after_anchor_key(query, nil), do: query
   defp maybe_after_anchor_key(query, key), do: where(query, [c], c.anchor_key > ^key)

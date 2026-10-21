@@ -443,6 +443,41 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       assert String.length(reloaded.queue_error) <= 200
     end
 
+    test "on the final attempt a transient failure clears its marker with the reason" do
+      lp = library_path_fixture(%{type: "series"})
+
+      candidate =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Blocked Show/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
+          title: "Blocked Show",
+          media_type: "tv_show",
+          confidence: 0.95,
+          parsed_info: %{"season" => 1, "episodes" => [1]}
+        })
+        |> queue()
+
+      :ok = Mydia.MetadataStubProvider.fail_fetch_by_ref(Mydia.MetadataStubProvider.series_ref())
+      on_exit(fn -> Mydia.MetadataStubProvider.clear_fetch_by_ref_failure() end)
+
+      opts = [config: Mydia.Metadata.default_relay_config(), allow_episode_creation: true]
+
+      assert {:ok, %{remaining: 1}} = ImportCandidates.drain_accepted(lp.id, opts)
+      assert Repo.get!(ImportCandidate, candidate.id).queued_op == "accept"
+
+      assert {:ok, %{promoted: 0, remaining: 0} = result} =
+               ImportCandidates.drain_accepted(lp.id, [final_attempt: true] ++ opts)
+
+      refute Map.has_key?(result, :reasons)
+
+      reloaded = Repo.get!(ImportCandidate, candidate.id)
+      assert is_nil(reloaded.queued_op)
+      assert reloaded.queue_error =~ "Import failed after several attempts: "
+      assert reloaded.queue_error =~ "stubbed fetch failure"
+    end
+
     test "a library with nothing queued is a no-op" do
       lp = library_path_fixture(%{type: "series"})
 
@@ -459,6 +494,35 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
                ApplyImportCandidates.perform(%Oban.Job{
                  args: %{"library_path_id" => lp.id}
                })
+    end
+
+    test "reports failure for retry before the final attempt and succeeds on it" do
+      lp = library_path_fixture(%{type: "series"})
+
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Blocked Show/s01e01.mkv",
+        provider_type: "tvdb",
+        provider_id: to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
+        title: "Blocked Show",
+        media_type: "tv_show",
+        confidence: 0.95,
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> queue()
+
+      :ok = Mydia.MetadataStubProvider.fail_fetch_by_ref(Mydia.MetadataStubProvider.series_ref())
+      on_exit(fn -> Mydia.MetadataStubProvider.clear_fetch_by_ref_failure() end)
+
+      args = %{"library_path_id" => lp.id}
+
+      assert {:error, _} =
+               ApplyImportCandidates.perform(%Oban.Job{args: args, attempt: 1, max_attempts: 3})
+
+      assert :ok =
+               ApplyImportCandidates.perform(%Oban.Job{args: args, attempt: 3, max_attempts: 3})
+
+      assert ImportCandidates.count_by_status(lp.id, "queued") == 0
     end
   end
 end
