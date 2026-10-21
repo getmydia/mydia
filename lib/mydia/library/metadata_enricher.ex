@@ -563,9 +563,11 @@ defmodule Mydia.Library.MetadataEnricher do
     end
   end
 
+  # Specials included, matching EpisodeSync's refresh. A file under Specials
+  # can only import if its season 0 row exists. New season 0 rows stay
+  # unmonitored: Media.should_monitor_new_episode?/2 never admits a new one.
   defp get_seasons_list(%{seasons: seasons}) when is_list(seasons) do
-    # Filter out season 0 (specials) for now
-    Enum.filter(seasons, fn s -> Map.get(s, :season_number, 0) > 0 end)
+    Enum.filter(seasons, &is_integer(Map.get(&1, :season_number)))
   end
 
   defp get_seasons_list(%{number_of_seasons: num}) when is_integer(num) and num > 0 do

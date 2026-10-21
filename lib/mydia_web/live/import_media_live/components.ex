@@ -397,8 +397,12 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           >
             {disagreement_label(@group)}
           </span>
-          <span :if={@group.queue_error} class="badge badge-warning/20 text-warning badge-xs">
-            {@group.queue_error}
+          <span
+            :if={@group.queue_error}
+            id={"group-queue-error-#{@dom_key}"}
+            class="badge badge-warning/20 text-warning badge-xs"
+          >
+            {group_error_label(@group)}
           </span>
         </div>
 
@@ -468,6 +472,14 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                 >
                   {member_folder(candidate)}
                 </p>
+                <p
+                  :if={candidate.queue_error}
+                  id={"member-error-#{candidate.id}"}
+                  class="flex items-start gap-1 text-[11px] text-warning mt-0.5"
+                >
+                  <.icon name="hero-exclamation-triangle" class="w-3 h-3 mt-px shrink-0" />
+                  <span>{candidate.queue_error}</span>
+                </p>
               </div>
             </div>
 
@@ -500,7 +512,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                       min="0"
                       max="999"
                       phx-debounce="400"
-                      class="join-item input input-xs w-12 text-center font-mono border-0 focus:outline-none"
+                      class="join-item input input-xs w-14 text-center font-mono border-0 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       container_class="contents"
                       aria-label={"Season for #{member_filename(candidate)}"}
                     />
@@ -515,7 +527,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                       min="0"
                       max="9999"
                       phx-debounce="400"
-                      class="join-item input input-xs w-14 text-center font-mono border-0 focus:outline-none"
+                      class="join-item input input-xs w-16 text-center font-mono border-0 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       container_class="contents"
                       aria-label={"Episode for #{member_filename(candidate)}"}
                     />
@@ -679,6 +691,15 @@ defmodule MydiaWeb.ImportMediaLive.Components do
     do: "#{n} conflicting matches"
 
   defp disagreement_label(_), do: nil
+
+  # One shared message is a group-level reason (no match, retries exhausted),
+  # written to every row alike. Different messages are per-file reasons, and
+  # each row shows its own.
+  defp group_error_label(%{distinct_error_count: distinct, error_count: count})
+       when distinct > 1,
+       do: "#{count} files couldn't import"
+
+  defp group_error_label(%{queue_error: error}), do: error
 
   defp member_filename(candidate), do: Path.basename(candidate.relative_path || "")
 

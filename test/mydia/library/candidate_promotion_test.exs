@@ -194,7 +194,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
     reloaded = Repo.get!(ImportCandidate, bad.id)
     assert is_nil(reloaded.queued_op)
     assert is_nil(reloaded.queued_at)
-    assert reloaded.queue_error =~ "Couldn't tell which episode"
+    assert reloaded.queue_error == "No season and episode number. Set them on this row."
   end
 
   defp linked_episode_ids(media_file) do
@@ -312,10 +312,13 @@ defmodule Mydia.Library.CandidatePromotionTest do
       tv_candidate(library_path, "none-group", "Show/a.mkv", %{"season" => nil, "episodes" => []})
 
     b =
-      tv_candidate(library_path, "none-group", "Show/b.mkv", %{"season" => nil, "episodes" => []})
+      tv_candidate(library_path, "none-group", "Show/b.mkv", %{"season" => 1, "episodes" => [99]})
 
-    assert {:error, :unresolved_episode} =
+    assert {:error, {:no_file_imported, entries}} =
              CandidatePromotion.promote_group([a, b], tv_match(show), config: stub_config())
+
+    assert entries |> Enum.map(fn {c, r} -> {c.id, r} end) |> Enum.sort() ==
+             Enum.sort([{a.id, :unresolved_episode}, {b.id, :unresolved_episode}])
 
     assert Repo.get(ImportCandidate, a.id)
     assert Repo.get(ImportCandidate, b.id)
@@ -368,8 +371,13 @@ defmodule Mydia.Library.CandidatePromotionTest do
 
     Events.subscribe()
 
-    assert {:error, {:incompatible_media_type, "movie", "tv_show"}} =
+    assert {:error, {:no_file_imported, entries}} =
              CandidatePromotion.promote_group([first, second], match, config: stub_config())
+
+    assert Enum.map(entries, fn {_candidate, reason} -> reason end) == [
+             {:incompatible_media_type, "movie", "tv_show"},
+             {:incompatible_media_type, "movie", "tv_show"}
+           ]
 
     assert Repo.aggregate(MediaItem, :count) == 0
     assert Repo.aggregate(Episode, :count) == 0

@@ -124,6 +124,8 @@ defmodule Mydia.ImportCandidates.Review do
       media_type: max(c.media_type),
       queued_op: max(c.queued_op),
       queue_error: max(c.queue_error),
+      error_count: count(c.queue_error),
+      distinct_error_count: count(c.queue_error, :distinct),
       returned_count: count(c.returned_at)
     })
   end
@@ -346,6 +348,8 @@ defmodule Mydia.ImportCandidates.Review do
       dismissed?: status == "ignored",
       queued?: status == "queued",
       queue_error: row.queue_error,
+      error_count: row.error_count,
+      distinct_error_count: row.distinct_error_count,
       returned_count: row.returned_count
     }
   end

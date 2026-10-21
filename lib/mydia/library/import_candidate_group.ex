@@ -20,6 +20,10 @@ defmodule Mydia.Library.ImportCandidateGroup do
   carries the message a terminal refusal left behind when a queued accept or
   re-match was cleared without promoting -- see `Mydia.ImportCandidates.drain_accepted/2`.
 
+  `error_count` is how many of the group's rows carry a `queue_error`, and
+  `distinct_error_count` how many different messages they carry. One shared
+  message is a group-level reason; several are per-file reasons.
+
   `returned_count` counts the group's candidates an operator sent back from
   the duplicates page (`Mydia.ImportCandidates.return_to_review/2`). Any
   returned candidate keeps the group out of the ready band and out of "Import
@@ -43,6 +47,8 @@ defmodule Mydia.Library.ImportCandidateGroup do
     :dismissed?,
     :queued?,
     :queue_error,
+    error_count: 0,
+    distinct_error_count: 0,
     returned_count: 0
   ]
 
@@ -62,6 +68,8 @@ defmodule Mydia.Library.ImportCandidateGroup do
           dismissed?: boolean() | nil,
           queued?: boolean() | nil,
           queue_error: String.t() | nil,
+          error_count: non_neg_integer(),
+          distinct_error_count: non_neg_integer(),
           returned_count: non_neg_integer()
         }
 
