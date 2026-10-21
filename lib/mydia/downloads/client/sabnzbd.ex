@@ -119,7 +119,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         version = get_in(body, ["version"]) || "unknown"
 
-        with {:ok, _slots} <- list_queue_items(config) do
+        with :ok <- check_queue_access(config) do
           {:ok, ClientInfo.new(version: version, api_version: "1.0")}
         end
 
@@ -476,6 +476,24 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
 
   defp reject_bad_api_key({:ok, %{body: "API Key" <> _}}), do: {:error, api_key_rejected()}
   defp reject_bad_api_key(result), do: result
+
+  # list_queue_items/1 reads a missing "queue" as an empty one, which suits a
+  # poll but would let a version-only answer pass as proof the key works.
+  defp check_queue_access(config) do
+    params = [apikey: config.api_key, output: "json", mode: "queue", limit: "1"]
+    req = HTTP.new_request(config)
+
+    case req |> HTTP.get(build_api_path(config), params: params) |> reject_bad_api_key() do
+      {:ok, %{status: 200, body: %{"queue" => %{}}}} ->
+        :ok
+
+      {:ok, %{status: status, body: body}} ->
+        {:error, Error.api_error("Unexpected queue response", %{status: status, body: body})}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
 
   defp api_key_rejected do
     Error.authentication_failed(

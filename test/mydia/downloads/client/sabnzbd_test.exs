@@ -167,6 +167,9 @@ defmodule Mydia.Downloads.Client.SabnzbdTest do
   end
 
   describe "URL base handling" do
+    # One body serves both test_connection requests (mode=version, mode=queue).
+    @version_and_queue ~s({"version": "4.3.2", "queue": {"slots": []}})
+
     test "handles custom URL base in configuration" do
       config_with_base = %{@config | url_base: "/sabnzbd"}
       unreachable_config = %{config_with_base | host: "nonexistent.invalid", port: 9999}
@@ -180,7 +183,7 @@ defmodule Mydia.Downloads.Client.SabnzbdTest do
     test "strips a trailing slash from url_base (#765)" do
       bypass = Bypass.open()
       config = %{@config | host: "localhost", port: bypass.port, url_base: "/sabnzbd/"}
-      Mydia.BypassHelpers.stub_exact_json(bypass, "GET", "/sabnzbd/api", ~s({"version": "4.3.2"}))
+      Mydia.BypassHelpers.stub_exact_json(bypass, "GET", "/sabnzbd/api", @version_and_queue)
 
       assert {:ok, %ClientInfo{version: "4.3.2"}} = Sabnzbd.test_connection(config)
     end
@@ -188,7 +191,7 @@ defmodule Mydia.Downloads.Client.SabnzbdTest do
     test "treats a url_base of \"/\" as no base (#765)" do
       bypass = Bypass.open()
       config = %{@config | host: "localhost", port: bypass.port, url_base: "/"}
-      Mydia.BypassHelpers.stub_exact_json(bypass, "GET", "/api", ~s({"version": "4.3.2"}))
+      Mydia.BypassHelpers.stub_exact_json(bypass, "GET", "/api", @version_and_queue)
 
       assert {:ok, %ClientInfo{version: "4.3.2"}} = Sabnzbd.test_connection(config)
     end
@@ -246,6 +249,16 @@ defmodule Mydia.Downloads.Client.SabnzbdTest do
       })
 
       assert {:error, %{type: :authentication_failed}} = Sabnzbd.test_connection(config)
+    end
+
+    test "test_connection rejects a queue answer that carries no queue",
+         %{bypass: bypass, config: config} do
+      respond_by_mode(bypass, %{
+        "version" => {200, %{"version" => "4.3.2"}},
+        "queue" => {200, %{"version" => "4.3.2"}}
+      })
+
+      assert {:error, %{type: :api_error}} = Sabnzbd.test_connection(config)
     end
 
     test "list_torrents reports a rejected key as an authentication failure",
