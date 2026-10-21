@@ -6,14 +6,11 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
   require Logger
 
   alias Mydia.ImportCandidates.{Edits, Review, Store}
+  alias Mydia.Metadata.Provider.Error, as: ProviderError
   alias Mydia.Library.{CandidatePromotion, ImportCandidate, ImportCandidateGroup, SelectionScope}
   alias Mydia.Repo
 
   @queue_anchor_page_size 25
-
-  # Refusals that will fail identically on every retry, so the marker is cleared
-  # and the reason surfaced instead of burning the retry budget.
-  @terminal_accept_errors [:no_match, :conflicting_providers, :local_show, :empty_group]
 
   @doc """
   Queues a selection for import.
@@ -171,7 +168,9 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
   call, which is the only transaction boundary here.
 
   A terminal refusal (no provider match, files matching different titles, a
-  synthetic local show, a group whose rows vanished) clears the marker and
+  synthetic local show, a group whose rows vanished, a path already in the
+  library, an unresolvable episode, a movie/show mismatch, an unusable provider
+  ID, a title the provider no longer has) clears the marker and
   records `queue_error`, returning the group to the pending list with an
   explanation rather than leaving it queued forever. Anything else leaves the
   marker in place, so `remaining` is non-zero and the worker reports failure for
@@ -273,16 +272,16 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
       {:ok, _media_files} ->
         %{acc | promoted: acc.promoted + 1}
 
-      {:error, reason} when reason in @terminal_accept_errors ->
-        clear_queue_marker(library_path_id, anchor_key, "accept", queue_error_message(reason))
-        %{acc | failed: acc.failed + 1}
-
       {:error, reason} ->
-        Logger.warning("A queued import group did not promote, leaving it queued for retry",
-          library_path_id: library_path_id,
-          anchor_key: anchor_key,
-          reason: inspect(reason)
-        )
+        if terminal_accept_error?(reason) do
+          clear_queue_marker(library_path_id, anchor_key, "accept", queue_error_message(reason))
+        else
+          Logger.warning("A queued import group did not promote, leaving it queued for retry",
+            library_path_id: library_path_id,
+            anchor_key: anchor_key,
+            reason: inspect(reason)
+          )
+        end
 
         %{acc | failed: acc.failed + 1}
     end
@@ -296,6 +295,32 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
 
       %{acc | failed: acc.failed + 1}
   end
+
+  # Refusals that fail identically on every retry, so the marker is cleared and
+  # the reason surfaced instead of burning the retry budget. Anything not named
+  # here (storage or relay outages, a candidate edited mid-drain, a raise) is
+  # left queued for Oban to retry. See #1212 for what happens when a
+  # deterministic refusal is missing from this list.
+  defp terminal_accept_error?(reason)
+       when reason in [
+              :no_match,
+              :conflicting_providers,
+              :local_show,
+              :empty_group,
+              :unresolved_episode,
+              :mixed_group
+            ],
+       do: true
+
+  defp terminal_accept_error?({:duplicate_path, _, _}), do: true
+  defp terminal_accept_error?({:incompatible_media_type, _, _}), do: true
+  defp terminal_accept_error?({:invalid_provider_id, _}), do: true
+  defp terminal_accept_error?({:invalid_match_result, _}), do: true
+
+  defp terminal_accept_error?({:metadata_fetch_failed, %ProviderError{type: :not_found}}),
+    do: true
+
+  defp terminal_accept_error?(_reason), do: false
 
   defp queued_anchor_keys(library_path_id, op, limit, after_key) do
     library_path_id
@@ -333,4 +358,24 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
 
   defp queue_error_message(:local_show), do: "Local shows are created directly, not imported."
   defp queue_error_message(:empty_group), do: "No files left to import."
+
+  defp queue_error_message({:duplicate_path, _, _}),
+    do: "A file at this path is already in the library."
+
+  defp queue_error_message(:unresolved_episode),
+    do:
+      "Couldn't tell which episode this file is. Multi-episode files and files " <>
+        "without a season and episode number can't be imported yet."
+
+  defp queue_error_message({:incompatible_media_type, _, _}),
+    do: "This file's type doesn't match the matched title (movie or show)."
+
+  defp queue_error_message(:mixed_group), do: "Files in this group belong to different folders."
+
+  defp queue_error_message({reason, _})
+       when reason in [:invalid_provider_id, :invalid_match_result],
+       do: "The match is missing a usable provider ID. Re-match this group."
+
+  defp queue_error_message({:metadata_fetch_failed, _}),
+    do: "The matched title no longer exists at the provider. Re-match this group."
 end
