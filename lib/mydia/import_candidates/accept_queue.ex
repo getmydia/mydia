@@ -300,8 +300,21 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
       anchor_count: map_size(reasons)
     )
 
-    for {anchor_key, reason} <- reasons do
-      clear_queue_marker(library_path_id, anchor_key, "accept", retry_exhausted_message(reason))
+    # `reasons` maps anchor_key => {reason, attempted_at}. Only rows queued at or
+    # before `attempted_at` are cleared: a later `queued_at` means the operator
+    # cancelled and re-accepted the group mid-drain and a fresh job owns it.
+    # `queued_at` has second precision, so a re-accept within the same second as
+    # the failed attempt's rows is still cleared; that is an accepted limitation.
+    # A nil `attempted_at` (rows gone, or the lookup failed) clears unfiltered, so
+    # a failed lookup can never strand a row.
+    for {anchor_key, {reason, attempted_at}} <- reasons do
+      clear_queue_marker(
+        library_path_id,
+        anchor_key,
+        "accept",
+        retry_exhausted_message(reason),
+        attempted_at
+      )
     end
 
     :ok
@@ -378,7 +391,7 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
             reason: inspect(reason)
           )
 
-          record_failure(acc, anchor_key, reason)
+          record_failure(acc, library_path_id, anchor_key, reason)
         end
     end
   rescue
@@ -389,11 +402,30 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
         error: Exception.format(:error, error, __STACKTRACE__)
       )
 
-      record_failure(acc, anchor_key, {:raised, error})
+      record_failure(acc, library_path_id, anchor_key, {:raised, error})
   end
 
-  defp record_failure(acc, anchor_key, reason),
-    do: %{acc | failed: acc.failed + 1, reasons: Map.put(acc.reasons, anchor_key, reason)}
+  # Stores the reason with the newest `queued_at` among the anchor's accept rows
+  # now, so the final-attempt give-up can tell this attempt's rows from a
+  # re-accept that lands later.
+  defp record_failure(acc, library_path_id, anchor_key, reason) do
+    attempted_at =
+      try do
+        library_path_id
+        |> Review.queued_query("accept")
+        |> where([c], c.anchor_key == ^anchor_key)
+        |> select([c], max(c.queued_at))
+        |> Repo.one()
+      rescue
+        _ -> nil
+      end
+
+    %{
+      acc
+      | failed: acc.failed + 1,
+        reasons: Map.put(acc.reasons, anchor_key, {reason, attempted_at})
+    }
+  end
 
   # Refusals that fail identically on every retry, so the marker is cleared and
   # the reason surfaced instead of burning the retry budget. Anything not named
@@ -448,14 +480,18 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
     |> Repo.aggregate(:count)
   end
 
-  defp clear_queue_marker(library_path_id, anchor_key, op, error) do
+  defp clear_queue_marker(library_path_id, anchor_key, op, error, queued_at_max \\ nil) do
     now = Store.now()
 
     library_path_id
     |> Review.queued_query(op)
     |> where([c], c.anchor_key == ^anchor_key)
+    |> maybe_queued_at_max(queued_at_max)
     |> Repo.update_all(set: [queued_op: nil, queued_at: nil, queue_error: error, updated_at: now])
   end
+
+  defp maybe_queued_at_max(query, nil), do: query
+  defp maybe_queued_at_max(query, max), do: where(query, [c], c.queued_at <= ^max)
 
   defp queue_error_message(:no_match), do: "No provider match to import from."
 

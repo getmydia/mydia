@@ -510,7 +510,8 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       # passed its anchor: it has no entry in the reasons the drain recorded.
       reasons = %{
         failed.anchor_key =>
-          {:metadata_fetch_failed, %Mydia.Metadata.Provider.Error{message: "boom"}}
+          {{:metadata_fetch_failed, %Mydia.Metadata.Provider.Error{message: "boom"}},
+           Repo.get!(ImportCandidate, failed.id).queued_at}
       }
 
       assert :ok = Mydia.ImportCandidates.AcceptQueue.give_up_queued(lp.id, reasons)
@@ -522,14 +523,42 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       assert Repo.get!(ImportCandidate, fresh.id).queued_op == "accept"
     end
 
+    test "leaves a group alone that was cancelled and re-accepted after the failed attempt" do
+      lp = library_path_fixture(%{type: "series"})
+      candidate = queued_series_candidate(lp, "Blocked Show/s01e01.mkv")
+      attempted_at = Repo.get!(ImportCandidate, candidate.id).queued_at
+
+      reasons = %{
+        candidate.anchor_key =>
+          {{:metadata_fetch_failed, %Mydia.Metadata.Provider.Error{message: "boom"}},
+           attempted_at}
+      }
+
+      # Cancel + re-accept while the drain was still running: a fresh job owns
+      # the row now, stamped later than the attempt that failed.
+      candidate
+      |> Ecto.Changeset.change(
+        queued_op: "accept",
+        queued_at: DateTime.add(attempted_at, 60, :second)
+      )
+      |> Repo.update!()
+
+      assert :ok = Mydia.ImportCandidates.AcceptQueue.give_up_queued(lp.id, reasons)
+
+      reloaded = Repo.get!(ImportCandidate, candidate.id)
+      assert reloaded.queued_op == "accept"
+      assert is_nil(reloaded.queue_error)
+    end
+
     test "a provider error with no message still clears with the generic reason" do
       lp = library_path_fixture(%{type: "series"})
       candidate = queued_series_candidate(lp, "Blocked Show/s01e01.mkv")
 
       reasons = %{
         candidate.anchor_key =>
-          {:metadata_fetch_failed,
-           %Mydia.Metadata.Provider.Error{type: :connection_failed, message: nil}}
+          {{:metadata_fetch_failed,
+            %Mydia.Metadata.Provider.Error{type: :connection_failed, message: nil}},
+           Repo.get!(ImportCandidate, candidate.id).queued_at}
       }
 
       assert :ok = Mydia.ImportCandidates.AcceptQueue.give_up_queued(lp.id, reasons)
