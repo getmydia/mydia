@@ -20,6 +20,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   alias Mydia.Metadata.TvProvider
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.ImportMediaLive.{Components, MatchSearch, MatchSearchModal, RunControl}
+  alias MydiaWeb.ImportMediaLive.Expansion
 
   # `phx-value-band` is client-controlled, so the atom it names is looked up
   # rather than converted. An unknown value is a silent no-op because there is
@@ -750,7 +751,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     {:noreply,
      socket
      |> assign(:refresh_scheduled?, false)
-     |> load_groups()
+     |> load_groups(preserve_expansion: true)
      |> refresh_counts()}
   end
 
@@ -943,7 +944,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # switching libraries, or another session's own accept/dismiss (over
   # PubSub) do. So this reloads only the current page of groups; callers
   # that know the counts actually changed also call refresh_counts/1.
-  defp load_groups(socket) do
+  # `preserve_expansion: true` is the PubSub refresh's; see Expansion.apply_page/3.
+  defp load_groups(socket, opts \\ []) do
     library_path_id = socket.assigns.selected_library_path_id
     band = socket.assigns.band
     {status, page_band} = status_for_band(band)
@@ -969,20 +971,13 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> SelectionScope.select_all_matching(filter)
       |> SelectionScope.count()
 
-    # A settled group starts closed, an unsettled one starts open -- same
-    # rule the wizard this page replaced applied per season.
-    expanded =
-      groups
-      |> Enum.reject(&(ImportCandidates.band(&1) == :ready))
-      |> Enum.map(& &1.id)
-      |> MapSet.new()
-
+    # Reads the outgoing `@page_group_ids`, so it runs before they're replaced.
     socket
+    |> Expansion.apply_page(groups, Keyword.get(opts, :preserve_expansion, false))
     |> stream(:groups, groups, reset: true)
     |> assign(:page_group_ids, Enum.map(groups, & &1.id))
     |> assign(:next_cursor, next_cursor)
     |> assign(:matching_count, matching_count)
-    |> assign(:expanded_ids, expanded)
   end
 
   # `:queued` and `:ignored` are statuses, not confidence bands. Neither is a
