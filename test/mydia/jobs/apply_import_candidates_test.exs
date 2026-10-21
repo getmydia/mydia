@@ -486,6 +486,60 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
     end
   end
 
+  describe "final-attempt give-up" do
+    defp queued_series_candidate(lp, path) do
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: path,
+        provider_type: "tvdb",
+        provider_id: to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
+        title: "Blocked Show",
+        media_type: "tv_show",
+        confidence: 0.95,
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> queue()
+    end
+
+    test "clears only anchors with a recorded failure, leaving a mid-drain row queued" do
+      lp = library_path_fixture(%{type: "series"})
+      failed = queued_series_candidate(lp, "Blocked Show/s01e01.mkv")
+      fresh = queued_series_candidate(lp, "Other Folder/s01e01.mkv")
+
+      # `fresh` stands for a row a concurrent accept marked after the sweep
+      # passed its anchor: it has no entry in the reasons the drain recorded.
+      reasons = %{
+        failed.anchor_key =>
+          {:metadata_fetch_failed, %Mydia.Metadata.Provider.Error{message: "boom"}}
+      }
+
+      assert :ok = Mydia.ImportCandidates.AcceptQueue.give_up_queued(lp.id, reasons)
+
+      failed = Repo.get!(ImportCandidate, failed.id)
+      assert is_nil(failed.queued_op)
+      assert failed.queue_error =~ "boom"
+
+      assert Repo.get!(ImportCandidate, fresh.id).queued_op == "accept"
+    end
+
+    test "a provider error with no message still clears with the generic reason" do
+      lp = library_path_fixture(%{type: "series"})
+      candidate = queued_series_candidate(lp, "Blocked Show/s01e01.mkv")
+
+      reasons = %{
+        candidate.anchor_key =>
+          {:metadata_fetch_failed,
+           %Mydia.Metadata.Provider.Error{type: :connection_failed, message: nil}}
+      }
+
+      assert :ok = Mydia.ImportCandidates.AcceptQueue.give_up_queued(lp.id, reasons)
+
+      reloaded = Repo.get!(ImportCandidate, candidate.id)
+      assert is_nil(reloaded.queued_op)
+      assert reloaded.queue_error =~ "Import failed after several attempts"
+    end
+  end
+
   describe "perform/1" do
     test "returns :ok when everything drained" do
       lp = library_path_fixture(%{type: "series"})

@@ -178,8 +178,9 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
 
   With `final_attempt: true` (the worker's last Oban attempt) a drain that
   still has groups queued after its sweeps clears every remaining marker,
-  recording the reason each group last failed for in `queue_error`, and
-  returns `remaining: 0`. Nothing drains a marker after the last attempt, so
+  recording the reason each failed group last failed for in `queue_error`, and
+  returns the count still queued (rows marked mid-drain, which belong to the
+  job that queued them). Nothing drains a marker after the last attempt, so
   leaving it set would strand the group in Queued forever.
   """
   @spec drain_accepted(binary(), keyword()) ::
@@ -234,7 +235,7 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
       # it.
       Keyword.get(opts, :final_attempt, false) ->
         give_up_queued(library_path_id, acc.reasons)
-        {:ok, drain_result(acc, 0)}
+        {:ok, drain_result(acc, queued_count(library_path_id, "accept"))}
 
       true ->
         {:ok, drain_result(acc, remaining)}
@@ -246,38 +247,45 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
   defp drain_result(acc, remaining),
     do: acc |> Map.delete(:reasons) |> Map.put(:remaining, remaining)
 
-  # The job's last attempt. Nothing will drain an accept marker after this
-  # returns, so every one still set is cleared with the reason its group last
+  # The job's last attempt. Nothing will drain these markers after this
+  # returns, so every anchor this drain saw fail is cleared with the reason it
   # failed for, and the group goes back to review instead of sitting in Queued
-  # forever (#1212). A row with no recorded reason was queued after the sweep
-  # passed its anchor.
-  defp give_up_queued(library_path_id, reasons) do
-    anchors = queued_anchor_keys(library_path_id, "accept", nil, nil)
-
+  # forever (#1212). Only anchors with a recorded failure: a row a concurrent
+  # `queue_accept` marked after the sweep passed its anchor belongs to the
+  # fresh job that call enqueued (`unique` excludes :executing), and rejecting
+  # it here would be a spurious failure for an accept nothing has tried yet.
+  #
+  # Public (`@doc false`) only so a test can seed that concurrent row, which
+  # cannot be arranged through the sweep.
+  @doc false
+  def give_up_queued(library_path_id, reasons) do
     Logger.warning("Import retries exhausted, returning queued groups to review",
       library_path_id: library_path_id,
-      anchor_count: length(anchors)
+      anchor_count: map_size(reasons)
     )
 
-    for anchor_key <- anchors do
-      clear_queue_marker(
-        library_path_id,
-        anchor_key,
-        "accept",
-        retry_exhausted_message(Map.get(reasons, anchor_key))
-      )
+    for {anchor_key, reason} <- reasons do
+      clear_queue_marker(library_path_id, anchor_key, "accept", retry_exhausted_message(reason))
     end
+
+    :ok
   end
 
-  defp retry_exhausted_message(nil),
-    do: "Import failed after several attempts. Check the server logs."
+  @retry_exhausted_fallback "Import failed after several attempts. Check the server logs."
 
-  defp retry_exhausted_message(reason),
-    do:
-      "Import failed after several attempts: " <>
-        (reason |> short_reason() |> String.slice(0, 120))
+  # Formatting must never skip the clear: a raise here on the last attempt
+  # would strand the row, which is the bug this exists to prevent.
+  defp retry_exhausted_message(reason) do
+    "Import failed after several attempts: " <>
+      (reason |> short_reason() |> String.slice(0, 120))
+  rescue
+    _ -> @retry_exhausted_fallback
+  end
 
-  defp short_reason({:metadata_fetch_failed, %ProviderError{message: message}}), do: message
+  defp short_reason({:metadata_fetch_failed, %ProviderError{message: message}})
+       when is_binary(message),
+       do: message
+
   defp short_reason({:storage, %Mydia.Storage.Error{kind: kind}}), do: "storage #{kind}"
   defp short_reason({:raised, %{__exception__: true} = error}), do: Exception.message(error)
   defp short_reason(reason), do: inspect(reason)
