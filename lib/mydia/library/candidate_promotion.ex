@@ -473,7 +473,7 @@ defmodule Mydia.Library.CandidatePromotion do
         set: [
           queued_op: nil,
           queued_at: nil,
-          queue_error: QueueErrors.message(reason),
+          queue_error: QueueErrors.file_message(reason, candidate),
           updated_at: now
         ]
       )

@@ -194,7 +194,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
     reloaded = Repo.get!(ImportCandidate, bad.id)
     assert is_nil(reloaded.queued_op)
     assert is_nil(reloaded.queued_at)
-    assert reloaded.queue_error =~ "Couldn't tell which episode"
+    assert reloaded.queue_error == "No season and episode number. Set them on this row."
   end
 
   defp linked_episode_ids(media_file) do

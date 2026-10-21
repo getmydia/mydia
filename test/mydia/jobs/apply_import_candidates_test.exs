@@ -348,7 +348,7 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
 
       reloaded = Repo.get!(ImportCandidate, bad.id)
       assert is_nil(reloaded.queued_op)
-      assert reloaded.queue_error =~ "Couldn't tell which episode"
+      assert reloaded.queue_error == "No season and episode number. Set them on this row."
     end
 
     # Regression for #1212: a multi-episode file parses to two episode numbers,
