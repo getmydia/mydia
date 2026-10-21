@@ -453,6 +453,7 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
               :local_show,
               :empty_group,
               :unresolved_episode,
+              :implausible,
               :mixed_group
             ],
        do: true

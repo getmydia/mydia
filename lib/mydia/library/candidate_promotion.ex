@@ -444,10 +444,10 @@ defmodule Mydia.Library.CandidatePromotion do
     end
   end
 
-  defp file_outcome(_candidate, :implausible), do: {:skipped, :unresolved_episode}
-
+  # `:implausible` is EpisodeMinter refusing a number too far past the show's
+  # known episodes. Like an unresolved episode, it fails the same way every time.
   defp file_outcome(_candidate, reason)
-       when reason == :unresolved_episode or
+       when reason in [:unresolved_episode, :implausible] or
               (is_tuple(reason) and elem(reason, 0) == :incompatible_media_type),
        do: {:skipped, reason}
 

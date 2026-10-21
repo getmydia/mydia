@@ -11,6 +11,7 @@ defmodule Mydia.ImportCandidates.QueueErrorsTest do
              "A file at this path is already in the library."
 
     assert QueueErrors.message(:unresolved_episode) =~ "Couldn't tell which episode"
+    assert QueueErrors.message(:implausible) =~ "far past the show's known episodes"
 
     assert QueueErrors.message({:incompatible_media_type, "movie", "tv_show"}) ==
              "This file's type doesn't match the matched title (movie or show)."

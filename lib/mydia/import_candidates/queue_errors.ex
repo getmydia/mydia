@@ -20,6 +20,11 @@ defmodule Mydia.ImportCandidates.QueueErrors do
     do:
       "Couldn't tell which episode this file is. Check that its name has a season and episode number."
 
+  def message(:implausible),
+    do:
+      "This file's episode number is far past the show's known episodes, " <>
+        "so it wasn't created. Check the file name."
+
   def message({:incompatible_media_type, _, _}),
     do: "This file's type doesn't match the matched title (movie or show)."
 
