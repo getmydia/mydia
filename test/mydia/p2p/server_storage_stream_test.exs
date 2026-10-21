@@ -59,6 +59,7 @@ defmodule Mydia.P2p.ServerStorageStreamTest do
     refute log =~ "Failed to stream"
     assert_received {:p2p, :chunk, _}
     refute_received {:p2p, :finish, _}
+    assert_received {:p2p, :abort, [:res, "s4"]}
   end
 
   for call <- [:header, :chunk, :finish] do
@@ -98,5 +99,41 @@ defmodule Mydia.P2p.ServerStorageStreamTest do
 
     refute_received {:p2p, :chunk, _}
     refute_received {:p2p, :finish, _}
+  end
+
+  test "a read that fails after the header aborts the stream instead of leaving it open", %{
+    source: source
+  } do
+    Process.put(:recording_p2p_chunk_result, {:error, "boom"})
+
+    log =
+      ExUnit.CaptureLog.capture_log([level: :error], fn ->
+        assert Server.stream_storage_file(:res, "s8", source, %HlsRequest{}) == :ok
+      end)
+
+    assert log =~ "Failed to stream storage"
+    assert_received {:p2p, :abort, [:res, "s8"]}
+    refute_received {:p2p, :finish, _}
+  end
+
+  test "an unexpected raise mid-stream aborts the stream and is logged", %{source: source} do
+    Process.put(:recording_p2p_raise, {:chunk, RuntimeError})
+
+    log =
+      ExUnit.CaptureLog.capture_log([level: :error], fn ->
+        assert Server.stream_storage_file(:res, "s9", source, %HlsRequest{}) == :ok
+      end)
+
+    assert log =~ "storage exploded"
+    assert_received {:p2p, :abort, [:res, "s9"]}
+    refute_received {:p2p, :finish, _}
+  end
+
+  test "an abort that raises because the stream is gone is swallowed", %{source: source} do
+    Process.put(:recording_p2p_chunk_result, {:error, "boom"})
+    Process.put(:recording_p2p_raise, :abort)
+
+    assert Server.stream_storage_file(:res, "s10", source, %HlsRequest{}) == :ok
+    assert_received {:p2p, :abort, [:res, "s10"]}
   end
 end

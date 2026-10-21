@@ -841,18 +841,50 @@ defmodule Mydia.P2p.Server do
     # The NIFs raise ArgumentError once the peer has gone and the stream is
     # closed, the same as on the local path.
     try do
-      with "ok" <- @p2p_nif.send_hls_header(resource, stream_id, header),
-           {:ok, _} <- stream_storage_body(resource, stream_id, source, offset, length) do
-        @p2p_nif.finish_hls_stream(resource, stream_id)
-      else
-        {:error, reason} -> log_stream_failure(reason, "storage")
-        other -> log_stream_failure(other, "storage")
+      case @p2p_nif.send_hls_header(resource, stream_id, header) do
+        "ok" ->
+          finish_storage_body(resource, stream_id, source, offset, length)
+
+        other ->
+          log_stream_failure(other, "storage")
       end
     rescue
       e in ArgumentError ->
         Logger.debug("Storage stream closed by peer: #{Exception.message(e)}")
         :ok
+
+      e ->
+        Logger.error("Failed to stream storage: " <> Exception.format(:error, e, __STACKTRACE__))
+        abort_storage_stream(resource, stream_id)
     end
+  end
+
+  defp finish_storage_body(resource, stream_id, source, offset, length) do
+    case stream_storage_body(resource, stream_id, source, offset, length) do
+      {:ok, _} ->
+        @p2p_nif.finish_hls_stream(resource, stream_id)
+
+      {:error, reason} ->
+        log_stream_failure(reason, "storage")
+        abort_storage_stream(resource, stream_id)
+
+      other ->
+        log_stream_failure(other, "storage")
+        abort_storage_stream(resource, stream_id)
+    end
+  end
+
+  # Finishing a stream whose read failed would write the terminator and the
+  # player would keep a short body as complete, and leaving it alone holds the
+  # stream open with the player waiting on bytes that never come. Aborting
+  # resets it, which the player reports as a truncated response. After a failed
+  # chunk write the stream is already gone, so the abort's own failure, or its
+  # ArgumentError, means nothing is left to end.
+  defp abort_storage_stream(resource, stream_id) do
+    @p2p_nif.abort_hls_stream(resource, stream_id)
+    :ok
+  rescue
+    ArgumentError -> :ok
   end
 
   # An empty object has nothing to read, and a ranged read of zero bytes is not
