@@ -314,6 +314,43 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       assert reloaded.queue_error == "A file at this path is already in the library."
     end
 
+    # #1216: one bad file used to hold back every other file in the show.
+    test "a group with one file that can't import imports the rest" do
+      lp = library_path_fixture(%{type: "series"})
+      series_id = to_string(Mydia.MetadataStubProvider.series_tvdb_id())
+
+      [good, bad] =
+        for {path, parsed} <- [
+              {"Wandering Aurora/s01e01.mkv", %{"season" => 1, "episodes" => [1]}},
+              {"Wandering Aurora/s01-bonus.mkv", %{"season" => nil, "episodes" => []}}
+            ] do
+          import_candidate_fixture(%{
+            library_path_id: lp.id,
+            anchor_key: "wandering aurora",
+            relative_path: path,
+            provider_type: "tvdb",
+            provider_id: series_id,
+            title: "Wandering Aurora",
+            media_type: "tv_show",
+            confidence: 0.95,
+            parsed_info: parsed
+          })
+          |> queue()
+        end
+
+      assert {:ok, %{promoted: 1, failed: 0, remaining: 0}} =
+               ImportCandidates.drain_accepted(lp.id,
+                 config: Mydia.Metadata.default_relay_config(),
+                 allow_episode_creation: true
+               )
+
+      refute Repo.get(ImportCandidate, good.id)
+
+      reloaded = Repo.get!(ImportCandidate, bad.id)
+      assert is_nil(reloaded.queued_op)
+      assert reloaded.queue_error =~ "Couldn't tell which episode"
+    end
+
     # Regression for #1212: a multi-episode file parses to two episode numbers,
     # which CandidatePromotion could not attach to one episode, so it sat in
     # Queued through every Oban retry and then forever. It now imports and
