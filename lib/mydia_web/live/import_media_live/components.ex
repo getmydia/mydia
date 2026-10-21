@@ -241,12 +241,18 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
               Clear
             </button>
-            <%!-- The Queued view's groups are already mid-import: Accept, Re-match,
-            Dismiss, Restore and Delete all no-op there (their queries all require either
-            no queued_op or a dismissed_at that a queued group never has), so none
-            of them are offered here -- same reasoning as the Ignored view's own
-            omission of Accept/Re-match/Dismiss above. --%>
+            <%!-- Queued groups are already mid-import, so Accept, Re-match, Dismiss,
+            Restore and Delete all no-op here. Return to review is the one action
+            offered: it lets a group that will not import leave Queued (#1212). --%>
           <% @band == :queued -> %>
+            <button
+              id="cancel-queued-selected"
+              class="btn btn-sm btn-outline"
+              disabled={@count == 0}
+              phx-click="cancel_queued_selected"
+            >
+              <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-1" /> Return to review
+            </button>
             <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
               Clear
             </button>

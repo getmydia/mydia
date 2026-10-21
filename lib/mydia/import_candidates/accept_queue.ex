@@ -6,14 +6,11 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
   require Logger
 
   alias Mydia.ImportCandidates.{Edits, Review, Store}
+  alias Mydia.Metadata.Provider.Error, as: ProviderError
   alias Mydia.Library.{CandidatePromotion, ImportCandidate, ImportCandidateGroup, SelectionScope}
   alias Mydia.Repo
 
   @queue_anchor_page_size 25
-
-  # Refusals that will fail identically on every retry, so the marker is cleared
-  # and the reason surfaced instead of burning the retry budget.
-  @terminal_accept_errors [:no_match, :conflicting_providers, :local_show, :empty_group]
 
   @doc """
   Queues a selection for import.
@@ -87,6 +84,42 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
     |> SelectionScope.new()
     |> SelectionScope.select_all_matching(%{})
     |> queue_accept(exclude_returned: true)
+  end
+
+  @doc """
+  Returns a selection's accept-queued groups to review.
+
+  Only `"accept"` markers are cleared. A re-match always drains itself, and a
+  queued delete may already be removing files, so neither is cancellable here.
+  A group the drain is promoting at that moment still finishes: promotion
+  does not re-check `queued_op`, and the user did ask for the import.
+
+  `returned` counts the distinct groups that held an accept marker, not the
+  selected groups, so a selection mixing in rematch or delete groups does not
+  overstate it.
+  """
+  @spec cancel_accept(SelectionScope.t()) :: {:ok, %{returned: non_neg_integer()}}
+  def cancel_accept(%SelectionScope{} = scope) do
+    now = Store.now()
+
+    accept_queued =
+      scope
+      |> Edits.candidate_query()
+      |> where([c], c.queued_op == "accept")
+
+    returned =
+      accept_queued
+      |> select([c], count(c.anchor_key, :distinct))
+      |> Repo.one()
+
+    {row_count, _} =
+      Repo.update_all(accept_queued,
+        set: [queued_op: nil, queued_at: nil, queue_error: nil, updated_at: now]
+      )
+
+    if row_count > 0, do: Store.broadcast(scope.library_path_id)
+
+    {:ok, %{returned: if(row_count > 0, do: returned, else: 0)}}
   end
 
   # The selected anchors that `accept_group/2` would actually accept, as a
@@ -171,11 +204,20 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
   call, which is the only transaction boundary here.
 
   A terminal refusal (no provider match, files matching different titles, a
-  synthetic local show, a group whose rows vanished) clears the marker and
+  synthetic local show, a group whose rows vanished, a path already in the
+  library, an unresolvable episode, a movie/show mismatch, an unusable provider
+  ID, a title the provider no longer has) clears the marker and
   records `queue_error`, returning the group to the pending list with an
   explanation rather than leaving it queued forever. Anything else leaves the
   marker in place, so `remaining` is non-zero and the worker reports failure for
   Oban to retry.
+
+  With `final_attempt: true` (the worker's last Oban attempt) a drain that
+  still has groups queued after its sweeps clears every remaining marker,
+  recording the reason each failed group last failed for in `queue_error`, and
+  returns the count still queued (rows marked mid-drain, which belong to the
+  job that queued them). Nothing drains a marker after the last attempt, so
+  leaving it set would strand the group in Queued forever.
   """
   @spec drain_accepted(binary(), keyword()) ::
           {:ok,
@@ -193,7 +235,7 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
         opts,
         page_size,
         queued_count(library_path_id, "accept"),
-        %{promoted: 0, failed: 0}
+        %{promoted: 0, failed: 0, reasons: %{}}
       )
 
     Store.broadcast(library_path_id)
@@ -218,7 +260,7 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
 
     cond do
       remaining == 0 ->
-        {:ok, Map.put(acc, :remaining, 0)}
+        {:ok, drain_result(acc, 0)}
 
       remaining < remaining_before ->
         drain_accepted_pages(library_path_id, opts, page_size, remaining, acc)
@@ -227,10 +269,75 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
       # without clearing its marker, so another sweep would fetch the same
       # anchors and fail identically. Stop and let the worker's retry handle
       # it.
+      Keyword.get(opts, :final_attempt, false) ->
+        give_up_queued(library_path_id, acc.reasons)
+        {:ok, drain_result(acc, queued_count(library_path_id, "accept"))}
+
       true ->
-        {:ok, Map.put(acc, :remaining, remaining)}
+        {:ok, drain_result(acc, remaining)}
     end
   end
+
+  # `reasons` is bookkeeping for `give_up_queued/2`, not part of the public
+  # result shape.
+  defp drain_result(acc, remaining),
+    do: acc |> Map.delete(:reasons) |> Map.put(:remaining, remaining)
+
+  # The job's last attempt. Nothing will drain these markers after this
+  # returns, so every anchor this drain saw fail is cleared with the reason it
+  # failed for, and the group goes back to review instead of sitting in Queued
+  # forever (#1212). Only anchors with a recorded failure: a row a concurrent
+  # `queue_accept` marked after the sweep passed its anchor belongs to the
+  # fresh job that call enqueued (`unique` excludes :executing), and rejecting
+  # it here would be a spurious failure for an accept nothing has tried yet.
+  #
+  # Public (`@doc false`) only so a test can seed that concurrent row, which
+  # cannot be arranged through the sweep.
+  @doc false
+  def give_up_queued(library_path_id, reasons) do
+    Logger.warning("Import retries exhausted, returning queued groups to review",
+      library_path_id: library_path_id,
+      anchor_count: map_size(reasons)
+    )
+
+    # `reasons` maps anchor_key => {reason, attempted_at}. Only rows queued at or
+    # before `attempted_at` are cleared: a later `queued_at` means the operator
+    # cancelled and re-accepted the group mid-drain and a fresh job owns it.
+    # `queued_at` has second precision, so a re-accept within the same second as
+    # the failed attempt's rows is still cleared; that is an accepted limitation.
+    # A nil `attempted_at` (rows gone, or the lookup failed) clears unfiltered, so
+    # a failed lookup can never strand a row.
+    for {anchor_key, {reason, attempted_at}} <- reasons do
+      clear_queue_marker(
+        library_path_id,
+        anchor_key,
+        "accept",
+        retry_exhausted_message(reason),
+        attempted_at
+      )
+    end
+
+    :ok
+  end
+
+  @retry_exhausted_fallback "Import failed after several attempts. Check the server logs."
+
+  # Formatting must never skip the clear: a raise here on the last attempt
+  # would strand the row, which is the bug this exists to prevent.
+  defp retry_exhausted_message(reason) do
+    "Import failed after several attempts: " <>
+      (reason |> short_reason() |> String.slice(0, 120))
+  rescue
+    _ -> @retry_exhausted_fallback
+  end
+
+  defp short_reason({:metadata_fetch_failed, %ProviderError{message: message}})
+       when is_binary(message),
+       do: message
+
+  defp short_reason({:storage, %Mydia.Storage.Error{kind: kind}}), do: "storage #{kind}"
+  defp short_reason({:raised, %{__exception__: true} = error}), do: Exception.message(error)
+  defp short_reason(reason), do: inspect(reason)
 
   # One full keyset walk over every anchor currently queued for accept,
   # advancing `after_key` past each page regardless of whether its anchors
@@ -273,18 +380,19 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
       {:ok, _media_files} ->
         %{acc | promoted: acc.promoted + 1}
 
-      {:error, reason} when reason in @terminal_accept_errors ->
-        clear_queue_marker(library_path_id, anchor_key, "accept", queue_error_message(reason))
-        %{acc | failed: acc.failed + 1}
-
       {:error, reason} ->
-        Logger.warning("A queued import group did not promote, leaving it queued for retry",
-          library_path_id: library_path_id,
-          anchor_key: anchor_key,
-          reason: inspect(reason)
-        )
+        if terminal_accept_error?(reason) do
+          clear_queue_marker(library_path_id, anchor_key, "accept", queue_error_message(reason))
+          %{acc | failed: acc.failed + 1}
+        else
+          Logger.warning("A queued import group did not promote, leaving it queued for retry",
+            library_path_id: library_path_id,
+            anchor_key: anchor_key,
+            reason: inspect(reason)
+          )
 
-        %{acc | failed: acc.failed + 1}
+          record_failure(acc, library_path_id, anchor_key, reason)
+        end
     end
   rescue
     error ->
@@ -294,8 +402,60 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
         error: Exception.format(:error, error, __STACKTRACE__)
       )
 
-      %{acc | failed: acc.failed + 1}
+      record_failure(acc, library_path_id, anchor_key, {:raised, error})
   end
+
+  # Stores the reason with the newest `queued_at` among the anchor's accept rows
+  # now, so the final-attempt give-up can tell this attempt's rows from a
+  # re-accept that lands later.
+  defp record_failure(acc, library_path_id, anchor_key, reason) do
+    attempted_at =
+      try do
+        library_path_id
+        |> Review.queued_query("accept")
+        |> where([c], c.anchor_key == ^anchor_key)
+        |> select([c], max(c.queued_at))
+        |> Repo.one()
+      rescue
+        _ -> nil
+      end
+
+    %{
+      acc
+      | failed: acc.failed + 1,
+        reasons: Map.put(acc.reasons, anchor_key, {reason, attempted_at})
+    }
+  end
+
+  # Refusals that fail identically on every retry, so the marker is cleared and
+  # the reason surfaced instead of burning the retry budget. Anything not named
+  # here (storage or relay outages, a candidate edited mid-drain, a raise) is
+  # left queued for Oban to retry. See #1212 for what happens when a
+  # deterministic refusal is missing from this list.
+  defp terminal_accept_error?(reason)
+       when reason in [
+              :no_match,
+              :conflicting_providers,
+              :local_show,
+              :empty_group,
+              :unresolved_episode,
+              :mixed_group
+            ],
+       do: true
+
+  defp terminal_accept_error?({:duplicate_path, _, _}), do: true
+  defp terminal_accept_error?({:incompatible_media_type, _, _}), do: true
+  defp terminal_accept_error?({:invalid_provider_id, _}), do: true
+  defp terminal_accept_error?({:invalid_match_result, _}), do: true
+
+  defp terminal_accept_error?({:metadata_fetch_failed, %ProviderError{type: :not_found}}),
+    do: true
+
+  # A validation failure on the file insert (a movie into a series-only library
+  # path, say) repeats identically on every retry.
+  defp terminal_accept_error?(%Ecto.Changeset{}), do: true
+
+  defp terminal_accept_error?(_reason), do: false
 
   defp queued_anchor_keys(library_path_id, op, limit, after_key) do
     library_path_id
@@ -304,9 +464,12 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
     |> distinct(true)
     |> order_by([c], asc: c.anchor_key)
     |> select([c], c.anchor_key)
-    |> limit(^limit)
+    |> maybe_limit(limit)
     |> Repo.all()
   end
+
+  defp maybe_limit(query, nil), do: query
+  defp maybe_limit(query, limit), do: limit(query, ^limit)
 
   defp maybe_after_anchor_key(query, nil), do: query
   defp maybe_after_anchor_key(query, key), do: where(query, [c], c.anchor_key > ^key)
@@ -317,14 +480,18 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
     |> Repo.aggregate(:count)
   end
 
-  defp clear_queue_marker(library_path_id, anchor_key, op, error) do
+  defp clear_queue_marker(library_path_id, anchor_key, op, error, queued_at_max \\ nil) do
     now = Store.now()
 
     library_path_id
     |> Review.queued_query(op)
     |> where([c], c.anchor_key == ^anchor_key)
+    |> maybe_queued_at_max(queued_at_max)
     |> Repo.update_all(set: [queued_op: nil, queued_at: nil, queue_error: error, updated_at: now])
   end
+
+  defp maybe_queued_at_max(query, nil), do: query
+  defp maybe_queued_at_max(query, max), do: where(query, [c], c.queued_at <= ^max)
 
   defp queue_error_message(:no_match), do: "No provider match to import from."
 
@@ -333,4 +500,49 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
 
   defp queue_error_message(:local_show), do: "Local shows are created directly, not imported."
   defp queue_error_message(:empty_group), do: "No files left to import."
+
+  defp queue_error_message({:duplicate_path, _, _}),
+    do: "A file at this path is already in the library."
+
+  defp queue_error_message(:unresolved_episode),
+    do:
+      "Couldn't tell which episode this file is. Multi-episode files and files " <>
+        "without a season and episode number can't be imported yet."
+
+  defp queue_error_message({:incompatible_media_type, _, _}),
+    do: "This file's type doesn't match the matched title (movie or show)."
+
+  defp queue_error_message(:mixed_group), do: "Files in this group belong to different folders."
+
+  defp queue_error_message({reason, _})
+       when reason in [:invalid_provider_id, :invalid_match_result],
+       do: "The match is missing a usable provider ID. Re-match this group."
+
+  # Only reached for the not_found case: callers format terminal reasons only.
+  defp queue_error_message({:metadata_fetch_failed, _}),
+    do: "The matched title no longer exists at the provider. Re-match this group."
+
+  defp queue_error_message(%Ecto.Changeset{} = changeset) do
+    details =
+      changeset
+      |> Ecto.Changeset.traverse_errors(fn {message, opts} ->
+        Regex.replace(~r"%{(\w+)}", message, fn _, key ->
+          opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+        end)
+      end)
+      |> Enum.flat_map(fn {field, messages} ->
+        Enum.map(messages, &changeset_error_line(field, &1))
+      end)
+      |> Enum.join("; ")
+
+    String.slice("This file can't be added to the library: " <> details, 0, 200)
+  end
+
+  # Foreign keys and :base are internal; their messages read as full sentences.
+  # Other fields get a prefix so "can't be blank" says what is blank.
+  defp changeset_error_line(field, message) do
+    if field == :base or String.ends_with?(to_string(field), "_id"),
+      do: message,
+      else: "#{field} #{message}"
+  end
 end

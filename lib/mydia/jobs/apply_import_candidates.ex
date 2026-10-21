@@ -25,7 +25,11 @@ defmodule Mydia.Jobs.ApplyImportCandidates do
 
   A library with candidates still queued at the end is reported to Oban as a
   failure so `max_attempts` retries it. Terminal refusals do not reach that
-  path; the drain clears their markers and records `queue_error` instead.
+  path; the drain clears their markers and records `queue_error` instead. On
+  the final attempt the drain returns every still-queued group to review with
+  its last failure reason, so the job ends `:ok` rather than being discarded
+  with rows stranded in Queued. Rows marked while that drain ran are left for
+  the job that queued them.
   """
 
   use Oban.Worker,
@@ -36,10 +40,28 @@ defmodule Mydia.Jobs.ApplyImportCandidates do
   alias Mydia.ImportCandidates
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"library_path_id" => library_path_id}}) do
-    case ImportCandidates.drain_accepted(library_path_id, allow_episode_creation: true) do
-      {:ok, %{remaining: 0}} -> :ok
-      {:ok, %{remaining: n}} -> {:error, "#{n} queued candidate(s) did not import"}
+  def perform(%Oban.Job{args: %{"library_path_id" => library_path_id}} = job) do
+    final = final_attempt?(job)
+
+    case ImportCandidates.drain_accepted(library_path_id,
+           allow_episode_creation: true,
+           final_attempt: final
+         ) do
+      {:ok, %{remaining: 0}} ->
+        :ok
+
+      # Rows left after the final attempt's give-up were marked mid-drain and
+      # belong to the fresh job that queued them. Failing here would only get
+      # this one discarded, with nothing left to retry.
+      {:ok, %{remaining: _}} when final ->
+        :ok
+
+      {:ok, %{remaining: n}} ->
+        {:error, "#{n} queued candidate(s) did not import"}
     end
   end
+
+  # A hand-built %Oban.Job{} carries attempt 0 and max_attempts 20 by default,
+  # which reads as "not final", the safe side.
+  defp final_attempt?(%Oban.Job{attempt: attempt, max_attempts: max}), do: attempt >= max
 end

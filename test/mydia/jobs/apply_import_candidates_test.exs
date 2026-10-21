@@ -246,27 +246,19 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
         })
         |> queue()
 
-      # A MediaFile already occupying the queued candidate's path makes
-      # CandidatePromotion's ensure_path_available/1 fail with
-      # {:error, {:duplicate_path, _, _}} -- a transient, non-terminal error
-      # (not in @terminal_accept_errors) that leaves queued_op in place for
-      # retry rather than clearing the marker. An episode-owned file, not a
-      # movie one, since `lp` is a series library path.
-      other_episode = episode_fixture()
-
-      media_file_fixture(%{
-        library_path_id: lp.id,
-        episode_id: other_episode.id,
-        relative_path: stuck.relative_path
-      })
+      # A relay connection failure is transient: the same fetch can succeed on
+      # the next attempt, so the marker stays for Oban's retry. Only the TVDB
+      # series ref fails; the healthy anchor below uses the TMDB ref.
+      :ok = Mydia.MetadataStubProvider.fail_fetch_by_ref(Mydia.MetadataStubProvider.series_ref())
+      on_exit(fn -> Mydia.MetadataStubProvider.clear_fetch_by_ref_failure() end)
 
       healthy =
         import_candidate_fixture(%{
           library_path_id: lp.id,
           anchor_key: "healthy show",
           relative_path: "Healthy Show/s01e01.mkv",
-          provider_type: "tvdb",
-          provider_id: series_id,
+          provider_type: "tmdb",
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tmdb_id()),
           title: "Healthy Show",
           media_type: "tv_show",
           confidence: 0.95,
@@ -288,11 +280,292 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       assert is_nil(reloaded_stuck.queue_error)
     end
 
+    test "a file already in the library at the same path clears its marker" do
+      lp = library_path_fixture(%{type: "series"})
+
+      candidate =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Wandering Aurora/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
+          title: "Wandering Aurora",
+          media_type: "tv_show",
+          confidence: 0.95,
+          parsed_info: %{"season" => 1, "episodes" => [1]}
+        })
+        |> queue()
+
+      media_file_fixture(%{
+        library_path_id: lp.id,
+        episode_id: episode_fixture().id,
+        relative_path: candidate.relative_path
+      })
+
+      assert {:ok, %{promoted: 0, failed: 1, remaining: 0}} =
+               ImportCandidates.drain_accepted(lp.id,
+                 config: Mydia.Metadata.default_relay_config(),
+                 allow_episode_creation: true
+               )
+
+      reloaded = Repo.get!(ImportCandidate, candidate.id)
+      assert is_nil(reloaded.queued_op)
+      assert reloaded.queue_error == "A file at this path is already in the library."
+    end
+
+    # Regression for #1212: a multi-episode file parses to two episode numbers,
+    # which CandidatePromotion cannot attach to one episode. It used to sit in
+    # Queued through every Oban retry and then forever.
+    test "a multi-episode file clears its marker instead of staying queued" do
+      lp = library_path_fixture(%{type: "series"})
+
+      candidate =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Wandering Aurora/s01e01e02.mkv",
+          provider_type: "tvdb",
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
+          title: "Wandering Aurora",
+          media_type: "tv_show",
+          confidence: 0.95,
+          parsed_info: %{"season" => 1, "episodes" => [1, 2]}
+        })
+        |> queue()
+
+      assert {:ok, %{promoted: 0, failed: 1, remaining: 0}} =
+               ImportCandidates.drain_accepted(lp.id,
+                 config: Mydia.Metadata.default_relay_config(),
+                 allow_episode_creation: true
+               )
+
+      reloaded = Repo.get!(ImportCandidate, candidate.id)
+      assert is_nil(reloaded.queued_op)
+      assert reloaded.queue_error =~ "Couldn't tell which episode this file is."
+    end
+
+    test "a match the provider no longer has clears its marker" do
+      lp = library_path_fixture(%{type: "series"})
+
+      candidate =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Vanished Show/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: to_string(Mydia.MetadataStubProvider.missing_id()),
+          title: "Vanished Show",
+          media_type: "tv_show",
+          confidence: 0.95,
+          parsed_info: %{"season" => 1, "episodes" => [1]}
+        })
+        |> queue()
+
+      assert {:ok, %{promoted: 0, failed: 1, remaining: 0}} =
+               ImportCandidates.drain_accepted(lp.id,
+                 config: Mydia.Metadata.default_relay_config(),
+                 allow_episode_creation: true
+               )
+
+      reloaded = Repo.get!(ImportCandidate, candidate.id)
+      assert is_nil(reloaded.queued_op)
+
+      assert reloaded.queue_error ==
+               "The matched title no longer exists at the provider. Re-match this group."
+    end
+
+    # The group's match is built from its first candidate, so a movie file
+    # sharing a folder with an episode resolves to a show it can never attach
+    # to. Members load ordered by path, so the episode's path sorts first.
+    test "a movie file grouped with an episode clears its marker" do
+      lp = library_path_fixture(%{type: "series"})
+      series_id = to_string(Mydia.MetadataStubProvider.series_tvdb_id())
+
+      candidates =
+        for {path, type} <- [
+              {"Wandering Aurora/s01e01.mkv", "tv_show"},
+              {"Wandering Aurora/s02-feature.mkv", "movie"}
+            ] do
+          import_candidate_fixture(%{
+            library_path_id: lp.id,
+            anchor_key: "wandering aurora",
+            relative_path: path,
+            provider_type: "tvdb",
+            provider_id: series_id,
+            title: "Wandering Aurora",
+            media_type: type,
+            confidence: 0.95,
+            parsed_info: %{"season" => 1, "episodes" => [1]}
+          })
+          |> queue()
+        end
+
+      assert {:ok, %{promoted: 0, failed: 1, remaining: 0}} =
+               ImportCandidates.drain_accepted(lp.id,
+                 config: Mydia.Metadata.default_relay_config(),
+                 allow_episode_creation: true
+               )
+
+      for candidate <- candidates do
+        reloaded = Repo.get!(ImportCandidate, candidate.id)
+        assert is_nil(reloaded.queued_op)
+
+        assert reloaded.queue_error ==
+                 "This file's type doesn't match the matched title (movie or show)."
+      end
+    end
+
+    # Regression for #1212: the file insert rejects a movie in a series-only
+    # library path with a changeset error that repeats on every retry.
+    test "a movie in a series library clears its marker with the validation reason" do
+      lp = library_path_fixture(%{type: "series"})
+
+      candidate =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Stub Feature/feature.mkv",
+          provider_type: "tmdb",
+          provider_id: to_string(Mydia.MetadataStubProvider.movie_tmdb_id()),
+          title: "Stub Feature",
+          media_type: "movie",
+          confidence: 0.95
+        })
+        |> queue()
+
+      assert {:ok, %{promoted: 0, failed: 1, remaining: 0}} =
+               ImportCandidates.drain_accepted(lp.id,
+                 config: Mydia.Metadata.default_relay_config(),
+                 allow_episode_creation: true
+               )
+
+      reloaded = Repo.get!(ImportCandidate, candidate.id)
+      assert is_nil(reloaded.queued_op)
+      assert reloaded.queue_error =~ "This file can't be added to the library: "
+      assert reloaded.queue_error =~ "cannot add movies to a library path"
+      assert String.length(reloaded.queue_error) <= 200
+    end
+
+    test "on the final attempt a transient failure clears its marker with the reason" do
+      lp = library_path_fixture(%{type: "series"})
+
+      candidate =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Blocked Show/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
+          title: "Blocked Show",
+          media_type: "tv_show",
+          confidence: 0.95,
+          parsed_info: %{"season" => 1, "episodes" => [1]}
+        })
+        |> queue()
+
+      :ok = Mydia.MetadataStubProvider.fail_fetch_by_ref(Mydia.MetadataStubProvider.series_ref())
+      on_exit(fn -> Mydia.MetadataStubProvider.clear_fetch_by_ref_failure() end)
+
+      opts = [config: Mydia.Metadata.default_relay_config(), allow_episode_creation: true]
+
+      assert {:ok, %{remaining: 1}} = ImportCandidates.drain_accepted(lp.id, opts)
+      assert Repo.get!(ImportCandidate, candidate.id).queued_op == "accept"
+
+      assert {:ok, %{promoted: 0, remaining: 0} = result} =
+               ImportCandidates.drain_accepted(lp.id, [final_attempt: true] ++ opts)
+
+      refute Map.has_key?(result, :reasons)
+
+      reloaded = Repo.get!(ImportCandidate, candidate.id)
+      assert is_nil(reloaded.queued_op)
+      assert reloaded.queue_error =~ "Import failed after several attempts: "
+      assert reloaded.queue_error =~ "stubbed fetch failure"
+    end
+
     test "a library with nothing queued is a no-op" do
       lp = library_path_fixture(%{type: "series"})
 
       assert {:ok, %{promoted: 0, failed: 0, remaining: 0}} =
                ImportCandidates.drain_accepted(lp.id)
+    end
+  end
+
+  describe "final-attempt give-up" do
+    defp queued_series_candidate(lp, path) do
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: path,
+        provider_type: "tvdb",
+        provider_id: to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
+        title: "Blocked Show",
+        media_type: "tv_show",
+        confidence: 0.95,
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> queue()
+    end
+
+    test "clears only anchors with a recorded failure, leaving a mid-drain row queued" do
+      lp = library_path_fixture(%{type: "series"})
+      failed = queued_series_candidate(lp, "Blocked Show/s01e01.mkv")
+      fresh = queued_series_candidate(lp, "Other Folder/s01e01.mkv")
+
+      # `fresh` stands for a row a concurrent accept marked after the sweep
+      # passed its anchor: it has no entry in the reasons the drain recorded.
+      reasons = %{
+        failed.anchor_key =>
+          {{:metadata_fetch_failed, %Mydia.Metadata.Provider.Error{message: "boom"}},
+           Repo.get!(ImportCandidate, failed.id).queued_at}
+      }
+
+      assert :ok = Mydia.ImportCandidates.AcceptQueue.give_up_queued(lp.id, reasons)
+
+      failed = Repo.get!(ImportCandidate, failed.id)
+      assert is_nil(failed.queued_op)
+      assert failed.queue_error =~ "boom"
+
+      assert Repo.get!(ImportCandidate, fresh.id).queued_op == "accept"
+    end
+
+    test "leaves a group alone that was cancelled and re-accepted after the failed attempt" do
+      lp = library_path_fixture(%{type: "series"})
+      candidate = queued_series_candidate(lp, "Blocked Show/s01e01.mkv")
+      attempted_at = Repo.get!(ImportCandidate, candidate.id).queued_at
+
+      reasons = %{
+        candidate.anchor_key =>
+          {{:metadata_fetch_failed, %Mydia.Metadata.Provider.Error{message: "boom"}},
+           attempted_at}
+      }
+
+      # Cancel + re-accept while the drain was still running: a fresh job owns
+      # the row now, stamped later than the attempt that failed.
+      candidate
+      |> Ecto.Changeset.change(
+        queued_op: "accept",
+        queued_at: DateTime.add(attempted_at, 60, :second)
+      )
+      |> Repo.update!()
+
+      assert :ok = Mydia.ImportCandidates.AcceptQueue.give_up_queued(lp.id, reasons)
+
+      reloaded = Repo.get!(ImportCandidate, candidate.id)
+      assert reloaded.queued_op == "accept"
+      assert is_nil(reloaded.queue_error)
+    end
+
+    test "a provider error with no message still clears with the generic reason" do
+      lp = library_path_fixture(%{type: "series"})
+      candidate = queued_series_candidate(lp, "Blocked Show/s01e01.mkv")
+
+      reasons = %{
+        candidate.anchor_key =>
+          {{:metadata_fetch_failed,
+            %Mydia.Metadata.Provider.Error{type: :connection_failed, message: nil}},
+           Repo.get!(ImportCandidate, candidate.id).queued_at}
+      }
+
+      assert :ok = Mydia.ImportCandidates.AcceptQueue.give_up_queued(lp.id, reasons)
+
+      reloaded = Repo.get!(ImportCandidate, candidate.id)
+      assert is_nil(reloaded.queued_op)
+      assert reloaded.queue_error =~ "Import failed after several attempts"
     end
   end
 
@@ -304,6 +577,107 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
                ApplyImportCandidates.perform(%Oban.Job{
                  args: %{"library_path_id" => lp.id}
                })
+    end
+
+    test "reports failure for retry before the final attempt and succeeds on it" do
+      lp = library_path_fixture(%{type: "series"})
+
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Blocked Show/s01e01.mkv",
+        provider_type: "tvdb",
+        provider_id: to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
+        title: "Blocked Show",
+        media_type: "tv_show",
+        confidence: 0.95,
+        parsed_info: %{"season" => 1, "episodes" => [1]}
+      })
+      |> queue()
+
+      :ok = Mydia.MetadataStubProvider.fail_fetch_by_ref(Mydia.MetadataStubProvider.series_ref())
+      on_exit(fn -> Mydia.MetadataStubProvider.clear_fetch_by_ref_failure() end)
+
+      args = %{"library_path_id" => lp.id}
+
+      assert {:error, _} =
+               ApplyImportCandidates.perform(%Oban.Job{args: args, attempt: 1, max_attempts: 3})
+
+      assert :ok =
+               ApplyImportCandidates.perform(%Oban.Job{args: args, attempt: 3, max_attempts: 3})
+
+      assert ImportCandidates.count_by_status(lp.id, "queued") == 0
+    end
+  end
+
+  describe "cancel_queued/1" do
+    test "returns accept-queued rows to pending and leaves other ops alone" do
+      lp = library_path_fixture(%{type: "series"})
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      accepted =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "wandering aurora",
+          relative_path: "Wandering Aurora/s01e01.mkv",
+          queued_op: "accept",
+          queued_at: now,
+          queue_error: "stale message"
+        })
+
+      rematching =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "wandering aurora",
+          relative_path: "Wandering Aurora/s01e02.mkv",
+          queued_op: "rematch",
+          queued_at: now
+        })
+
+      scope =
+        lp.id
+        |> Mydia.Library.SelectionScope.new("queued")
+        |> Mydia.Library.SelectionScope.select_all_matching(%{})
+
+      assert {:ok, %{returned: 1}} = ImportCandidates.cancel_queued(scope)
+
+      reloaded = Repo.get!(ImportCandidate, accepted.id)
+      assert is_nil(reloaded.queued_op)
+      assert is_nil(reloaded.queued_at)
+      assert is_nil(reloaded.queue_error)
+      assert Repo.get!(ImportCandidate, rematching.id).queued_op == "rematch"
+    end
+
+    test "counts only the groups whose accept marker was cleared" do
+      lp = library_path_fixture(%{type: "series"})
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      accepted =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "wandering aurora",
+          relative_path: "Wandering Aurora/s01e01.mkv",
+          queued_op: "accept",
+          queued_at: now
+        })
+
+      deleting =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "midnight harbor",
+          relative_path: "Midnight Harbor/s01e01.mkv",
+          queued_op: "delete",
+          queued_at: now
+        })
+
+      scope =
+        lp.id
+        |> Mydia.Library.SelectionScope.new("queued")
+        |> Mydia.Library.SelectionScope.select_all_matching(%{})
+
+      assert {:ok, %{returned: 1}} = ImportCandidates.cancel_queued(scope)
+
+      assert is_nil(Repo.get!(ImportCandidate, accepted.id).queued_op)
+      assert Repo.get!(ImportCandidate, deleting.id).queued_op == "delete"
     end
   end
 end

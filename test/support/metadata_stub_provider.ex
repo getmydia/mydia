@@ -62,6 +62,7 @@ defmodule Mydia.MetadataStubProvider do
   @fetch_by_id_counts_table :mydia_metadata_stub_fetch_by_id_counts
   @raise_on_fetch_by_id_key {__MODULE__, :raise_on_fetch_by_id}
   @search_failure_key {__MODULE__, :search_failure}
+  @fetch_failure_key {__MODULE__, :fetch_failure}
 
   @doc "TMDB id of the catalog movie."
   def movie_tmdb_id, do: @movie_tmdb_id
@@ -128,6 +129,24 @@ defmodule Mydia.MetadataStubProvider do
   @doc "Clears a search failure installed by `fail_search/0`."
   def clear_search_failure do
     :persistent_term.erase(@search_failure_key)
+    :ok
+  end
+
+  @doc """
+  Makes every `fetch_by_ref/3` call for `media_ref` fail with a connection
+  error until cleared.
+
+  Unlike `raise_on_fetch_by_id/1` this does not consume itself, so a drain that
+  sweeps an anchor more than once sees the same transient failure every time.
+  """
+  def fail_fetch_by_ref(media_ref) do
+    :persistent_term.put(@fetch_failure_key, media_ref)
+    :ok
+  end
+
+  @doc "Clears a failure installed by `fail_fetch_by_ref/1`."
+  def clear_fetch_by_ref_failure do
+    :persistent_term.erase(@fetch_failure_key)
     :ok
   end
 
@@ -217,11 +236,15 @@ defmodule Mydia.MetadataStubProvider do
     count_fetch_by_id_call(ref)
     maybe_raise_on_fetch_by_id(ref)
 
-    case ref do
-      {:tvdb, @series_tvdb_id} -> {:ok, series_metadata()}
-      {:tmdb, @movie_tmdb_id} -> {:ok, movie_metadata()}
-      {:tmdb, @series_tmdb_id} -> {:ok, tmdb_series_metadata()}
-      {_provider, id} -> {:error, Error.not_found("Media not found: #{id}")}
+    if :persistent_term.get(@fetch_failure_key, nil) == ref do
+      {:error, Error.connection_failed("stubbed fetch failure")}
+    else
+      case ref do
+        {:tvdb, @series_tvdb_id} -> {:ok, series_metadata()}
+        {:tmdb, @movie_tmdb_id} -> {:ok, movie_metadata()}
+        {:tmdb, @series_tmdb_id} -> {:ok, tmdb_series_metadata()}
+        {_provider, id} -> {:error, Error.not_found("Media not found: #{id}")}
+      end
     end
   end
 
