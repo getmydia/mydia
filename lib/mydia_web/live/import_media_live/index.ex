@@ -20,6 +20,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   alias Mydia.Metadata.TvProvider
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.ImportMediaLive.{Components, MatchSearch, MatchSearchModal, RunControl}
+  alias MydiaWeb.ImportMediaLive.Expansion
 
   # `phx-value-band` is client-controlled, so the atom it names is looked up
   # rather than converted. An unknown value is a silent no-op because there is
@@ -943,11 +944,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # switching libraries, or another session's own accept/dismiss (over
   # PubSub) do. So this reloads only the current page of groups; callers
   # that know the counts actually changed also call refresh_counts/1.
-  #
-  # `preserve_expansion: true` is for the PubSub refresh, which reloads the
-  # same page under the user's hands (their own episode edit broadcasts too):
-  # a group that was already on the page keeps the open/closed state the user
-  # left it in, and only a group new to the page gets the on-load rule.
+  # `preserve_expansion: true` is the PubSub refresh's; see Expansion.apply_page/3.
   defp load_groups(socket, opts \\ []) do
     library_path_id = socket.assigns.selected_library_path_id
     band = socket.assigns.band
@@ -974,58 +971,13 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       |> SelectionScope.select_all_matching(filter)
       |> SelectionScope.count()
 
-    expanded =
-      if Keyword.get(opts, :preserve_expansion, false) do
-        previous_ids = MapSet.new(socket.assigns.page_group_ids)
-
-        groups
-        |> Enum.filter(fn group ->
-          if MapSet.member?(previous_ids, group.id),
-            do: MapSet.member?(socket.assigns.expanded_ids, group.id),
-            else: expanded_on_load?(group)
-        end)
-        |> MapSet.new(& &1.id)
-      else
-        groups |> Enum.filter(&expanded_on_load?/1) |> MapSet.new(& &1.id)
-      end
-
+    # Reads the outgoing `@page_group_ids`, so it runs before they're replaced.
     socket
+    |> Expansion.apply_page(groups, Keyword.get(opts, :preserve_expansion, false))
     |> stream(:groups, groups, reset: true)
     |> assign(:page_group_ids, Enum.map(groups, & &1.id))
     |> assign(:next_cursor, next_cursor)
     |> assign(:matching_count, matching_count)
-    |> assign(:expanded_ids, expanded)
-    |> reconcile_expanded_group()
-  end
-
-  # A settled group starts closed, an unsettled one starts open -- same
-  # rule the wizard this page replaced applied per season.
-  defp expanded_on_load?(group), do: ImportCandidates.band(group) != :ready
-
-  # The group whose members are loaded must still be on the page and open,
-  # or its member list goes: accepted or dismissed elsewhere, paged past, or
-  # closed by the on-load rule. One that survives gets its members re-read,
-  # since `stream(:groups, ..., reset: true)` re-renders every row and the
-  # `:members` stream would otherwise have nothing to send that row.
-  defp reconcile_expanded_group(socket) do
-    case socket.assigns.expanded_group_id do
-      nil ->
-        socket
-
-      anchor_key ->
-        if MapSet.member?(socket.assigns.expanded_ids, anchor_key) do
-          stream(
-            socket,
-            :members,
-            ImportCandidates.members(socket.assigns.selected_library_path_id, anchor_key),
-            reset: true
-          )
-        else
-          socket
-          |> assign(:expanded_group_id, nil)
-          |> stream(:members, [], reset: true)
-        end
-    end
   end
 
   # `:queued` and `:ignored` are statuses, not confidence bands. Neither is a
