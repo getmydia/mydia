@@ -936,6 +936,98 @@ defmodule Mydia.Library.MetadataEnricherTest do
     end
   end
 
+  # #1212: the first import dropped season 0, so a file in Specials could
+  # never find its episode. EpisodeSync's refresh already fetched it.
+  describe "specials on enrichment" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en", include_adult: false}
+      }
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "season 0 episodes are created, unmonitored", %{bypass: bypass, config: config} do
+      series_id = System.unique_integer([:positive])
+      specials_id = System.unique_integer([:positive])
+      season_one_id = System.unique_integer([:positive])
+
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "Glass Harbor",
+        tvdb_id: series_id,
+        metadata_source: :tvdb,
+        monitored: true,
+        monitor_new_seasons: :all
+      })
+      |> backdate()
+
+      Bypass.stub(bypass, "GET", "/tvdb/series/#{series_id}/extended", fn conn ->
+        respond_json(conn, %{
+          "data" => %{
+            "id" => series_id,
+            "name" => "Glass Harbor",
+            "overview" => "ov",
+            "originalLanguage" => "eng",
+            "firstAired" => "2010-01-01",
+            "genres" => [],
+            "seasons" => [
+              %{
+                "id" => specials_id,
+                "number" => 0,
+                "type" => %{"type" => "official"},
+                "name" => "Specials"
+              },
+              %{
+                "id" => season_one_id,
+                "number" => 1,
+                "type" => %{"type" => "official"},
+                "name" => "Season 1"
+              }
+            ]
+          }
+        })
+      end)
+
+      for {season_id, number, episode_id} <- [
+            {specials_id, 0, System.unique_integer([:positive])},
+            {season_one_id, 1, System.unique_integer([:positive])}
+          ] do
+        Bypass.stub(bypass, "GET", "/tvdb/seasons/#{season_id}/extended", fn conn ->
+          respond_json(conn, %{
+            "data" => %{
+              "number" => number,
+              "episodes" => [
+                %{"id" => episode_id, "seasonNumber" => number, "number" => 3, "name" => "Ep"}
+              ]
+            }
+          })
+        end)
+      end
+
+      Bypass.stub(bypass, "GET", "/tvdb/episodes/:id/extended", fn conn ->
+        respond_json(conn, %{"data" => %{}})
+      end)
+
+      assert {:ok, updated} =
+               MetadataEnricher.enrich(tv_match(series_id, :tvdb, "Glass Harbor"),
+                 config: config,
+                 fetch_episodes: true
+               )
+
+      episodes = Media.list_episodes(Scope.unrestricted(), updated.id)
+      special = Enum.find(episodes, &(&1.season_number == 0))
+
+      assert special.episode_number == 3
+      refute special.monitored
+      assert Enum.any?(episodes, &(&1.season_number == 1 and &1.monitored))
+    end
+  end
+
   # This path runs against items that are already in the library, so it is the
   # one an ordinary rescan takes. Before season_order was threaded here, a
   # rescan of a DVD-ordered show overwrote its metadata blob with the official
