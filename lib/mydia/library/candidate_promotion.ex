@@ -15,6 +15,7 @@ defmodule Mydia.Library.CandidatePromotion do
 
   @spec promote_group([ImportCandidate.t()], map(), keyword()) ::
           {:ok, %{media_files: [MediaFile.t()], skipped: [{binary(), term()}]}}
+          | {:error, {:no_file_imported, [{ImportCandidate.t(), term()}]}}
           | {:error, term()}
   def promote_group([%ImportCandidate{} | _] = candidates, match, opts) do
     config = Keyword.get(opts, :config) || Metadata.default_relay_config()
@@ -454,11 +455,12 @@ defmodule Mydia.Library.CandidatePromotion do
   defp file_outcome(_candidate, %Ecto.Changeset{} = reason), do: {:skipped, reason}
   defp file_outcome(_candidate, reason), do: {:error, reason}
 
-  # Nothing imported means nothing to keep: roll back so no empty show is
-  # created, and let the caller's group-level handling report why.
   defp imported_any(%{media_files: [_ | _]}), do: :ok
-  defp imported_any(%{skipped: [{_candidate, reason} | _]}), do: {:error, reason}
-  defp imported_any(%{dropped: [{_candidate, reason} | _]}), do: {:error, reason}
+
+  # Nothing imported means nothing to keep: roll back so no empty show is
+  # created, and hand every file's reason back so each row can say why.
+  defp imported_any(%{skipped: skipped, dropped: dropped}),
+    do: {:error, {:no_file_imported, Enum.sort_by(skipped ++ dropped, fn {c, _} -> c.id end)}}
 
   # A skipped file goes back to review with its reason in the same transaction
   # as the rest of the group's import. Only accept-queued rows: FileIngest

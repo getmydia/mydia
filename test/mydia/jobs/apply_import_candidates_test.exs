@@ -314,6 +314,46 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       assert reloaded.queue_error == "A file at this path is already in the library."
     end
 
+    # #1212: when nothing in a group imports, each row says why it failed,
+    # not the first file's reason stamped on every row.
+    test "a group where no file imports gives each row its own reason" do
+      lp = library_path_fixture(%{type: "series"})
+      series_id = to_string(Mydia.MetadataStubProvider.series_tvdb_id())
+
+      [unparsed, special] =
+        for {path, parsed} <- [
+              {"Wandering Aurora/bonus.mkv", %{"season" => nil, "episodes" => []}},
+              {"Wandering Aurora/Specials/s00e03.mkv", %{"season" => 0, "episodes" => [3]}}
+            ] do
+          import_candidate_fixture(%{
+            library_path_id: lp.id,
+            anchor_key: "wandering aurora",
+            relative_path: path,
+            provider_type: "tvdb",
+            provider_id: series_id,
+            title: "Wandering Aurora",
+            media_type: "tv_show",
+            confidence: 0.95,
+            parsed_info: parsed
+          })
+          |> queue()
+        end
+
+      assert {:ok, %{promoted: 0, failed: 1, remaining: 0}} =
+               ImportCandidates.drain_accepted(lp.id,
+                 config: Mydia.Metadata.default_relay_config(),
+                 allow_episode_creation: true
+               )
+
+      unparsed = Repo.get!(ImportCandidate, unparsed.id)
+      special = Repo.get!(ImportCandidate, special.id)
+
+      assert is_nil(unparsed.queued_op)
+      assert is_nil(special.queued_op)
+      assert unparsed.queue_error == "No season and episode number. Set them on this row."
+      assert special.queue_error =~ "S00E03 isn't one of this show's specials"
+    end
+
     # #1216: one bad file used to hold back every other file in the show.
     test "a group with one file that can't import imports the rest" do
       lp = library_path_fixture(%{type: "series"})

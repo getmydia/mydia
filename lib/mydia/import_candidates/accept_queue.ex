@@ -397,6 +397,7 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
       {:error, reason} ->
         if terminal_accept_error?(reason) do
           clear_queue_marker(library_path_id, anchor_key, "accept", QueueErrors.message(reason))
+          record_file_errors(reason)
           %{acc | failed: acc.failed + 1}
         else
           Logger.warning("A queued import group did not promote, leaving it queued for retry",
@@ -458,6 +459,7 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
             ],
        do: true
 
+  defp terminal_accept_error?({:no_file_imported, _}), do: true
   defp terminal_accept_error?({:duplicate_path, _, _}), do: true
   defp terminal_accept_error?({:incompatible_media_type, _, _}), do: true
   defp terminal_accept_error?({:invalid_provider_id, _}), do: true
@@ -471,6 +473,22 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
   defp terminal_accept_error?(%Ecto.Changeset{}), do: true
 
   defp terminal_accept_error?(_reason), do: false
+
+  # Runs after the group's marker is cleared, so each row overwrites the group
+  # message with its own reason.
+  defp record_file_errors({:no_file_imported, entries}) do
+    now = Store.now()
+
+    Enum.each(entries, fn {candidate, reason} ->
+      ImportCandidate
+      |> where([c], c.id == ^candidate.id and is_nil(c.queued_op))
+      |> Repo.update_all(
+        set: [queue_error: QueueErrors.file_message(reason, candidate), updated_at: now]
+      )
+    end)
+  end
+
+  defp record_file_errors(_reason), do: :ok
 
   defp queued_anchor_keys(library_path_id, op, limit, after_key) do
     library_path_id

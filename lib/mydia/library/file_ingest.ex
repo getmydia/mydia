@@ -60,6 +60,8 @@ defmodule Mydia.Library.FileIngest do
             {:promoted, media_files}
 
           {:error, reason} ->
+            reason = single_file_reason(reason)
+
             case record_failure(candidate, format_error(reason)) do
               {:ok, _candidate} -> {:error, reason}
               {:error, :candidate_missing} -> {:error, reason}
@@ -269,6 +271,10 @@ defmodule Mydia.Library.FileIngest do
   end
 
   defp now, do: DateTime.utc_now() |> DateTime.truncate(:second)
+
+  # A one-file group that imports nothing reports that file's own reason.
+  defp single_file_reason({:no_file_imported, [{_candidate, reason}]}), do: reason
+  defp single_file_reason(reason), do: reason
 
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason), do: inspect(reason)
