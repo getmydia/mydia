@@ -86,6 +86,30 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
     |> queue_accept(exclude_returned: true)
   end
 
+  @doc """
+  Returns a selection's accept-queued groups to review.
+
+  Only `"accept"` markers are cleared. A re-match always drains itself, and a
+  queued delete may already be removing files, so neither is cancellable here.
+  A group the drain is promoting at that moment still finishes: promotion
+  does not re-check `queued_op`, and the user did ask for the import.
+  """
+  @spec cancel_accept(SelectionScope.t()) :: {:ok, %{returned: non_neg_integer()}}
+  def cancel_accept(%SelectionScope{} = scope) do
+    now = Store.now()
+    group_count = Edits.selected_group_count(scope)
+
+    {row_count, _} =
+      scope
+      |> Edits.candidate_query()
+      |> where([c], c.queued_op == "accept")
+      |> Repo.update_all(set: [queued_op: nil, queued_at: nil, queue_error: nil, updated_at: now])
+
+    if row_count > 0, do: Store.broadcast(scope.library_path_id)
+
+    {:ok, %{returned: if(row_count > 0, do: group_count, else: 0)}}
+  end
+
   # The selected anchors that `accept_group/2` would actually accept, as a
   # grouped subquery of anchor keys. `count(provider_id, :distinct) == 1`
   # subsumes the no-match case as well: SQL counts of a nullable column ignore

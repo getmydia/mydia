@@ -579,4 +579,43 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       assert ImportCandidates.count_by_status(lp.id, "queued") == 0
     end
   end
+
+  describe "cancel_queued/1" do
+    test "returns accept-queued rows to pending and leaves other ops alone" do
+      lp = library_path_fixture(%{type: "series"})
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      accepted =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "wandering aurora",
+          relative_path: "Wandering Aurora/s01e01.mkv",
+          queued_op: "accept",
+          queued_at: now,
+          queue_error: "stale message"
+        })
+
+      rematching =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "wandering aurora",
+          relative_path: "Wandering Aurora/s01e02.mkv",
+          queued_op: "rematch",
+          queued_at: now
+        })
+
+      scope =
+        lp.id
+        |> Mydia.Library.SelectionScope.new("queued")
+        |> Mydia.Library.SelectionScope.select_all_matching(%{})
+
+      assert {:ok, %{returned: 1}} = ImportCandidates.cancel_queued(scope)
+
+      reloaded = Repo.get!(ImportCandidate, accepted.id)
+      assert is_nil(reloaded.queued_op)
+      assert is_nil(reloaded.queued_at)
+      assert is_nil(reloaded.queue_error)
+      assert Repo.get!(ImportCandidate, rematching.id).queued_op == "rematch"
+    end
+  end
 end

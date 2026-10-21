@@ -73,6 +73,7 @@ defmodule Mydia.ImportCandidates do
   defdelegate queue_accept(scope, opts \\ []), to: AcceptQueue
   defdelegate queue_accept_all_matched(library_path_id), to: AcceptQueue
   defdelegate drain_accepted(library_path_id, opts \\ []), to: AcceptQueue
+  defdelegate cancel_queued(scope), to: AcceptQueue, as: :cancel_accept
 
   ## Rematch
 

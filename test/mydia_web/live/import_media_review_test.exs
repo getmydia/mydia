@@ -1160,6 +1160,34 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     refute html =~ "Queued 1 group(s) for import."
   end
 
+  test "Return to review moves a queued group back to the pending list", %{conn: conn} do
+    lp = library_path_fixture()
+
+    candidate =
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Wandering Aurora/s01e01.mkv",
+        provider_type: "tvdb",
+        provider_id: "9001",
+        title: "Wandering Aurora",
+        media_type: "tv_show",
+        confidence: 0.95,
+        queued_op: "accept",
+        queued_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view |> element("#band-queued") |> render_click()
+    render_click(view, "toggle_group", %{"id" => candidate.anchor_key})
+
+    assert has_element?(view, "#cancel-queued-selected")
+    view |> element("#cancel-queued-selected") |> render_click()
+
+    assert is_nil(Repo.reload!(candidate).queued_op)
+    assert ImportCandidates.count_by_status(lp.id, "queued") == 0
+  end
+
   describe "member episode editing" do
     test "renders filename, folder, matched episode badge, and inline S/E inputs", %{conn: conn} do
       lp = library_path_fixture(%{type: "series"})

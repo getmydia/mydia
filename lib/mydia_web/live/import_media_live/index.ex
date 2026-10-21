@@ -453,6 +453,21 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
+  def handle_event("cancel_queued_selected", _params, socket) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      {:ok, %{returned: returned}} = ImportCandidates.cancel_queued(socket.assigns.selection)
+
+      {:noreply,
+       socket
+       |> put_flash(:info, "Returned #{returned} group(s) to review.")
+       |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+       |> load_groups()
+       |> refresh_counts()}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
   # One file straight from its member row. The button's `data-confirm` is the
   # confirmation; the unlink runs in `Jobs.DeleteImportCandidates`, so this only
   # stamps the marker and the row reads "Deleting…" straight away. Deleting
