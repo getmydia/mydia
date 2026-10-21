@@ -1249,6 +1249,84 @@ defmodule MydiaWeb.ImportMediaReviewTest do
       assert reloaded.parsed_info["episodes"] == [8]
     end
 
+    # Regression (#1222): the edit broadcasts, and the deferred refresh that
+    # broadcast schedules used to reapply the on-load rule, which closes a
+    # `:ready` group -- so every episode number typed collapsed the series.
+    test "the group being edited stays open after the deferred refresh", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      [first, second] = seed_group(lp, "my show", %{file_count: 2, title: "My Show"})
+      dom = ImportCandidateGroup.dom_id(fetch_group(lp, "my show"))
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      view |> element("#group-toggle-#{dom}") |> render_click()
+
+      view
+      |> element("#member-form-#{first.id}")
+      |> render_change(%{"candidate_id" => first.id, "season" => "1", "episode" => "4"})
+
+      send(view.pid, :run_deferred_group_refresh)
+
+      assert has_element?(view, "#group-toggle-#{dom} .hero-chevron-down")
+      assert has_element?(view, "#candidate-#{first.id}", "S01E04")
+      assert has_element?(view, "#member-#{second.id}")
+    end
+
+    test "a needs-attention group the user closed stays closed after a refresh", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      seed_group(lp, "attention", %{confidence: 0.7})
+      dom = ImportCandidateGroup.dom_id(fetch_group(lp, "attention"))
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      # Opens on load; the first click makes it the active group, the second
+      # closes it.
+      view |> element("#group-toggle-#{dom}") |> render_click()
+      view |> element("#group-toggle-#{dom}") |> render_click()
+      assert has_element?(view, "#group-toggle-#{dom} .hero-chevron-right")
+
+      send(view.pid, :run_deferred_group_refresh)
+
+      assert has_element?(view, "#group-toggle-#{dom} .hero-chevron-right")
+    end
+
+    test "a group first seen on a refresh still gets the on-load rule", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      seed_group(lp, "initial")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      seed_group(lp, "attention", %{confidence: 0.7})
+      seed_group(lp, "ready", %{confidence: 1.0})
+      send(view.pid, :run_deferred_group_refresh)
+
+      dom_attention = ImportCandidateGroup.dom_id(fetch_group(lp, "attention"))
+      dom_ready = ImportCandidateGroup.dom_id(fetch_group(lp, "ready"))
+      assert has_element?(view, "#group-toggle-#{dom_attention} .hero-chevron-down")
+      assert has_element?(view, "#group-toggle-#{dom_ready} .hero-chevron-right")
+    end
+
+    test "an open group dismissed elsewhere drops its members on the refresh", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      [candidate] = seed_group(lp, "gone")
+      seed_group(lp, "stays")
+      dom = ImportCandidateGroup.dom_id(fetch_group(lp, "gone"))
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      view |> element("#group-toggle-#{dom}") |> render_click()
+      assert has_element?(view, "#member-#{candidate.id}")
+
+      ImportCandidate
+      |> where([c], c.anchor_key == "gone")
+      |> Repo.update_all(set: [dismissed_at: DateTime.utc_now(:second)])
+
+      send(view.pid, :run_deferred_group_refresh)
+
+      refute has_element?(view, "#member-#{candidate.id}")
+      assert :sys.get_state(view.pid).socket.assigns.expanded_group_id == nil
+    end
+
     test "readonly users cannot update member episodes", %{conn: conn} do
       lp = library_path_fixture(%{type: "series"})
       [candidate] = seed_group(lp, "show", %{confidence: 1.0})
