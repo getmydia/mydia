@@ -58,7 +58,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
         parsed_info: %{"type" => "movie"}
       })
 
-    assert {:ok, [%MediaFile{media_item_id: item_id, episode_id: nil}]} =
+    assert {:ok, %{media_files: [%MediaFile{media_item_id: item_id, episode_id: nil}]}} =
              CandidatePromotion.promote_group([candidate], movie_match(movie),
                config: stub_config()
              )
@@ -97,7 +97,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
     refute Repo.exists?(from f in MediaFile, where: f.library_path_id == ^first.library_path_id)
   end
 
-  test "rolls back a file inserted before a later candidate cannot be owned" do
+  test "a file of the wrong media type is skipped while the rest imports" do
     library_path = library_path_fixture(%{type: "mixed"})
     movie = media_item_fixture(%{type: "movie", tmdb_id: 60_305})
 
@@ -125,13 +125,125 @@ defmodule Mydia.Library.CandidatePromotionTest do
         parsed_info: %{"type" => "tv_show", "season" => 1, "episodes" => [1]}
       })
 
-    assert {:error, {:incompatible_media_type, "tv_show", "movie"}} =
+    second_id = second.id
+
+    assert {:ok,
+            %{
+              media_files: [_],
+              skipped: [{^second_id, {:incompatible_media_type, "tv_show", "movie"}}]
+            }} =
              CandidatePromotion.promote_group([first, second], movie_match(movie),
                config: stub_config()
              )
 
-    assert Repo.get(ImportCandidate, first.id)
+    refute Repo.get(ImportCandidate, first.id)
     assert Repo.get(ImportCandidate, second.id)
+  end
+
+  defp tv_candidate(library_path, anchor_key, relative_path, parsed_info, extra \\ %{}) do
+    import_candidate_fixture(
+      Map.merge(
+        %{
+          library_path_id: library_path.id,
+          anchor_key: anchor_key,
+          relative_path: relative_path,
+          media_type: "tv_show",
+          parsed_info: Map.merge(%{"type" => "tv_show"}, parsed_info)
+        },
+        extra
+      )
+    )
+  end
+
+  test "a file that can't import is skipped and the rest of the group imports" do
+    library_path = library_path_fixture(%{type: "series"})
+    show = media_item_fixture(%{type: "tv_show", tvdb_id: 13_960})
+    episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    good =
+      tv_candidate(
+        library_path,
+        "skip-group",
+        "Show/s01e01.mkv",
+        %{"season" => 1, "episodes" => [1]},
+        %{queued_op: "accept", queued_at: now}
+      )
+
+    bad =
+      tv_candidate(
+        library_path,
+        "skip-group",
+        "Show/extra.mkv",
+        %{"season" => nil, "episodes" => []},
+        %{queued_op: "accept", queued_at: now}
+      )
+
+    bad_id = bad.id
+
+    assert {:ok,
+            %{
+              media_files: [%MediaFile{episode_id: episode_id}],
+              skipped: [{^bad_id, :unresolved_episode}]
+            }} =
+             CandidatePromotion.promote_group([good, bad], tv_match(show), config: stub_config())
+
+    assert episode_id == episode.id
+    refute Repo.get(ImportCandidate, good.id)
+
+    reloaded = Repo.get!(ImportCandidate, bad.id)
+    assert is_nil(reloaded.queued_op)
+    assert is_nil(reloaded.queued_at)
+    assert reloaded.queue_error =~ "Couldn't tell which episode"
+  end
+
+  test "a candidate whose path is already in the library drops out of the group" do
+    library_path = library_path_fixture(%{type: "series"})
+    show = media_item_fixture(%{type: "tv_show", tvdb_id: 13_960})
+    e1 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+    e2 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 2})
+
+    dup =
+      tv_candidate(library_path, "dup-group", "Show/s01e01.mkv", %{
+        "season" => 1,
+        "episodes" => [1]
+      })
+
+    fresh =
+      tv_candidate(library_path, "dup-group", "Show/s01e02.mkv", %{
+        "season" => 1,
+        "episodes" => [2]
+      })
+
+    media_file_fixture(%{
+      library_path_id: library_path.id,
+      episode_id: e1.id,
+      relative_path: dup.relative_path
+    })
+
+    assert {:ok, %{media_files: [%MediaFile{episode_id: episode_id}], skipped: []}} =
+             CandidatePromotion.promote_group([dup, fresh], tv_match(show), config: stub_config())
+
+    assert episode_id == e2.id
+    refute Repo.get(ImportCandidate, dup.id)
+    refute Repo.get(ImportCandidate, fresh.id)
+  end
+
+  test "a group where no file can import creates nothing" do
+    library_path = library_path_fixture(%{type: "series"})
+    show = media_item_fixture(%{type: "tv_show", tvdb_id: 13_960})
+
+    a =
+      tv_candidate(library_path, "none-group", "Show/a.mkv", %{"season" => nil, "episodes" => []})
+
+    b =
+      tv_candidate(library_path, "none-group", "Show/b.mkv", %{"season" => nil, "episodes" => []})
+
+    assert {:error, :unresolved_episode} =
+             CandidatePromotion.promote_group([a, b], tv_match(show), config: stub_config())
+
+    assert Repo.get(ImportCandidate, a.id)
+    assert Repo.get(ImportCandidate, b.id)
     refute Repo.exists?(from f in MediaFile, where: f.library_path_id == ^library_path.id)
   end
 
@@ -155,10 +267,11 @@ defmodule Mydia.Library.CandidatePromotionTest do
         anchor_key: "unknown show",
         size: 7,
         discovered_at: DateTime.utc_now() |> DateTime.truncate(:second),
-        media_type: "tv_show",
-        parsed_info: %{"type" => "tv_show", "season" => 1, "episodes" => [1]}
+        media_type: "movie",
+        parsed_info: %{"type" => "movie"}
       })
 
+    # Neither file can import into the matched show, so the group rolls back.
     second =
       import_candidate_with_id!("00000000-0000-4000-8000-000000000012", %{
         library_path_id: library_path.id,
@@ -191,8 +304,8 @@ defmodule Mydia.Library.CandidatePromotionTest do
     assert Repo.get(ImportCandidate, second.id)
 
     # `MetadataEnricher.persist/1` (via `Media.create_media_item/2`) emits a
-    # `media_item.added` event before `insert_files/3` fails on the second
-    # candidate and rolls the whole transaction back. The row above is
+    # `media_item.added` event before `imported_any/1` finds nothing imported
+    # and rolls the whole transaction back. The row above is
     # already proven gone; this proves the broadcast a live subscriber would
     # have seen is gone too, not just delayed.
     refute_receive {:event_created, _event}, 200
@@ -218,7 +331,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
 
     Events.subscribe()
 
-    assert {:ok, [%MediaFile{}]} =
+    assert {:ok, %{media_files: [%MediaFile{}]}} =
              CandidatePromotion.promote_group([candidate], match, config: stub_config())
 
     assert_receive {:event_created, %Event{type: "media_item.added"}}, 500
@@ -272,7 +385,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
         parsed_info: %{"type" => "movie"}
       })
 
-    assert {:ok, [media_file]} =
+    assert {:ok, %{media_files: [media_file]}} =
              CandidatePromotion.promote_group([candidate], movie_match(movie),
                config: stub_config()
              )
@@ -316,7 +429,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
              })
 
     send(worker, {:release_metadata_season_fetch, ref})
-    assert {:ok, [%MediaFile{episode_id: episode_id}]} = Task.await(task, 2_000)
+    assert {:ok, %{media_files: [%MediaFile{episode_id: episode_id}]}} = Task.await(task, 2_000)
     assert episode_id
   end
 
@@ -353,7 +466,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
     assert Enum.sort_by([a, b, c, d], & &1.id) == [a, b, c, d]
     assert Enum.sort_by([a, b, c, d], & &1.relative_path) == [d, c, b, a]
 
-    assert {:ok, media_files} =
+    assert {:ok, %{media_files: media_files}} =
              CandidatePromotion.promote_group([d, c, b, a], movie_match(movie),
                config: stub_config()
              )
@@ -471,7 +584,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
     assert Task.yield(second, 0) == nil
 
     send(first.pid, {:release_ownership, ref})
-    assert {:ok, [_]} = Task.await(first, @ownership_await)
+    assert {:ok, %{media_files: [_]}} = Task.await(first, @ownership_await)
 
     assert_receive {:ownership_boundary, ^second_pid}, @ownership_receive
     send(second.pid, {:release_ownership, ref})
@@ -748,7 +861,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
           parsed_info: %{type: :tv_show, season: 1, episodes: [1]}
         }
 
-        assert {:ok, [file | _]} =
+        assert {:ok, %{media_files: [file | _]}} =
                  CandidatePromotion.promote_group([candidate], match,
                    config: stub_config(),
                    allow_episode_creation: true
