@@ -7,7 +7,7 @@ defmodule Mydia.P2p.ServerStreamFailureLogTest do
 
   import ExUnit.CaptureLog
 
-  alias Mydia.P2p.Server
+  alias Mydia.P2p.HlsResponse
 
   # This test changes the global Logger level, so it cannot run concurrently.
   setup do
@@ -20,7 +20,7 @@ defmodule Mydia.P2p.ServerStreamFailureLogTest do
   test "a player that stopped reading is not an error" do
     log =
       capture_log(fn ->
-        Server.log_stream_failure("peer_stopped: Failed to write chunk data", "file range")
+        HlsResponse.log_stream_failure("peer_stopped: Failed to write chunk data", "file range")
       end)
 
     refute log =~ "[error]"
@@ -32,7 +32,10 @@ defmodule Mydia.P2p.ServerStreamFailureLogTest do
   test "any other failure is an error" do
     log =
       capture_log(fn ->
-        Server.log_stream_failure("Failed to write chunk data: connection lost", "file range")
+        HlsResponse.log_stream_failure(
+          "Failed to write chunk data: connection lost",
+          "file range"
+        )
       end)
 
     assert log =~ "[error]"
