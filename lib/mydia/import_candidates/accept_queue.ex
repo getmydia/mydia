@@ -320,6 +320,10 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
   defp terminal_accept_error?({:metadata_fetch_failed, %ProviderError{type: :not_found}}),
     do: true
 
+  # A validation failure on the file insert (a movie into a series-only library
+  # path, say) repeats identically on every retry.
+  defp terminal_accept_error?(%Ecto.Changeset{}), do: true
+
   defp terminal_accept_error?(_reason), do: false
 
   defp queued_anchor_keys(library_path_id, op, limit, after_key) do
@@ -376,6 +380,31 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
        when reason in [:invalid_provider_id, :invalid_match_result],
        do: "The match is missing a usable provider ID. Re-match this group."
 
+  # Only reached for the not_found case: callers format terminal reasons only.
   defp queue_error_message({:metadata_fetch_failed, _}),
     do: "The matched title no longer exists at the provider. Re-match this group."
+
+  defp queue_error_message(%Ecto.Changeset{} = changeset) do
+    details =
+      changeset
+      |> Ecto.Changeset.traverse_errors(fn {message, opts} ->
+        Regex.replace(~r"%{(\w+)}", message, fn _, key ->
+          opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+        end)
+      end)
+      |> Enum.flat_map(fn {field, messages} ->
+        Enum.map(messages, &changeset_error_line(field, &1))
+      end)
+      |> Enum.join("; ")
+
+    String.slice("This file can't be added to the library: " <> details, 0, 200)
+  end
+
+  # Foreign keys and :base are internal; their messages read as full sentences.
+  # Other fields get a prefix so "can't be blank" says what is blank.
+  defp changeset_error_line(field, message) do
+    if field == :base or String.ends_with?(to_string(field), "_id"),
+      do: message,
+      else: "#{field} #{message}"
+  end
 end

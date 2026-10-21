@@ -374,7 +374,7 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
 
     # The group's match is built from its first candidate, so a movie file
     # sharing a folder with an episode resolves to a show it can never attach
-    # to.
+    # to. Members load ordered by path, so the episode's path sorts first.
     test "a movie file grouped with an episode clears its marker" do
       lp = library_path_fixture(%{type: "series"})
       series_id = to_string(Mydia.MetadataStubProvider.series_tvdb_id())
@@ -382,7 +382,7 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       candidates =
         for {path, type} <- [
               {"Wandering Aurora/s01e01.mkv", "tv_show"},
-              {"Wandering Aurora/feature.mkv", "movie"}
+              {"Wandering Aurora/s02-feature.mkv", "movie"}
             ] do
           import_candidate_fixture(%{
             library_path_id: lp.id,
@@ -411,6 +411,36 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
         assert reloaded.queue_error ==
                  "This file's type doesn't match the matched title (movie or show)."
       end
+    end
+
+    # Regression for #1212: the file insert rejects a movie in a series-only
+    # library path with a changeset error that repeats on every retry.
+    test "a movie in a series library clears its marker with the validation reason" do
+      lp = library_path_fixture(%{type: "series"})
+
+      candidate =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Stub Feature/feature.mkv",
+          provider_type: "tmdb",
+          provider_id: to_string(Mydia.MetadataStubProvider.movie_tmdb_id()),
+          title: "Stub Feature",
+          media_type: "movie",
+          confidence: 0.95
+        })
+        |> queue()
+
+      assert {:ok, %{promoted: 0, failed: 1, remaining: 0}} =
+               ImportCandidates.drain_accepted(lp.id,
+                 config: Mydia.Metadata.default_relay_config(),
+                 allow_episode_creation: true
+               )
+
+      reloaded = Repo.get!(ImportCandidate, candidate.id)
+      assert is_nil(reloaded.queued_op)
+      assert reloaded.queue_error =~ "This file can't be added to the library: "
+      assert reloaded.queue_error =~ "cannot add movies to a library path"
+      assert String.length(reloaded.queue_error) <= 200
     end
 
     test "a library with nothing queued is a no-op" do
