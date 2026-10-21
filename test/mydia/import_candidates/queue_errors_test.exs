@@ -63,6 +63,19 @@ defmodule Mydia.ImportCandidates.QueueErrorsTest do
                "No season and episode number. Set them on this row."
     end
 
+    test "a season with no episode asks only for the episode" do
+      assert QueueErrors.file_message(:unresolved_episode, candidate(2, [])) ==
+               "S02 has no episode number. Set it on this row."
+
+      assert QueueErrors.file_message(:implausible, candidate(2, ["x"])) ==
+               "S02 has no episode number. Set it on this row."
+    end
+
+    test "episodes with no season ask only for the season" do
+      assert QueueErrors.file_message(:unresolved_episode, candidate(nil, [3])) ==
+               "No season number. Set it on this row."
+    end
+
     test "other reasons fall back to message/1" do
       assert QueueErrors.file_message({:duplicate_path, "lp", "a.mkv"}, candidate(1, [1])) ==
                QueueErrors.message({:duplicate_path, "lp", "a.mkv"})

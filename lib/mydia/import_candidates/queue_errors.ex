@@ -66,18 +66,24 @@ defmodule Mydia.ImportCandidates.QueueErrors do
   def file_message(reason, %ImportCandidate{} = candidate)
       when reason in [:implausible, :unresolved_episode] do
     case coordinate(candidate) do
-      nil ->
+      :none ->
         "No season and episode number. Set them on this row."
 
-      {0, label} when reason == :implausible ->
+      {:season_only, season} ->
+        "S#{pad(season)} has no episode number. Set it on this row."
+
+      :episodes_only ->
+        "No season number. Set it on this row."
+
+      {:full, 0, label} when reason == :implausible ->
         "#{label} isn't in this show's specials yet. " <>
           "If the metadata provider lists it, refresh the show and accept again."
 
-      {_season, label} when reason == :implausible ->
+      {:full, _season, label} when reason == :implausible ->
         "#{label} is far past this show's known episodes, so it wasn't created. " <>
           "Check the season and episode."
 
-      {_season, label} ->
+      {:full, _season, label} ->
         "#{label} isn't in this show's episode list."
     end
   end
@@ -87,13 +93,24 @@ defmodule Mydia.ImportCandidates.QueueErrors do
   defp coordinate(%ImportCandidate{parsed_info: %{} = info}) do
     season = Map.get(info, "season")
     episodes = info |> Map.get("episodes") |> List.wrap() |> Enum.uniq()
+    episodes_ok? = episodes != [] and Enum.all?(episodes, &is_integer/1)
 
-    if is_integer(season) and episodes != [] and Enum.all?(episodes, &is_integer/1) do
-      {season, "S#{pad(season)}E#{pad(hd(episodes))}" <> range_suffix(episodes)}
+    cond do
+      is_integer(season) and episodes_ok? ->
+        {:full, season, "S#{pad(season)}E#{pad(hd(episodes))}" <> range_suffix(episodes)}
+
+      is_integer(season) ->
+        {:season_only, season}
+
+      episodes_ok? ->
+        :episodes_only
+
+      true ->
+        :none
     end
   end
 
-  defp coordinate(_candidate), do: nil
+  defp coordinate(_candidate), do: :none
 
   defp range_suffix([_]), do: ""
   defp range_suffix(episodes), do: "-E#{pad(List.last(episodes))}"
