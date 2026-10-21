@@ -56,6 +56,11 @@ pub fn finish_hls_stream(host: &Host, stream_id: String) -> Result<(), String> {
 }
 
 #[cfg(feature = "host")]
+pub fn abort_hls_stream(host: &Host, stream_id: String) -> Result<(), String> {
+    block_on(host.abort_hls_stream(stream_id))
+}
+
+#[cfg(feature = "host")]
 pub fn stream_file_range(
     host: &Host,
     stream_id: String,

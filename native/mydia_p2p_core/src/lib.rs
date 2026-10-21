@@ -249,6 +249,11 @@ enum Command {
         reply: oneshot::Sender<Result<(), String>>,
     },
     #[cfg(feature = "host")]
+    AbortHlsStream {
+        stream_id: String,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    #[cfg(feature = "host")]
     StreamFileRange {
         stream_id: String,
         file_path: String,
@@ -909,6 +914,22 @@ impl Host {
         rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
+    /// Abort an HLS stream the host cannot complete, such as a storage read
+    /// that failed part way. The stream is reset rather than finished, so the
+    /// client's next read errors instead of ending on a short body.
+    #[cfg(feature = "host")]
+    pub async fn abort_hls_stream(&self, stream_id: String) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.cmd_tx
+            .send(Command::AbortHlsStream {
+                stream_id,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| "send_failed".to_string())?;
+        rx.await.map_err(|_| "recv_failed".to_string())?
+    }
+
     /// Stream a file range directly to a QUIC stream.
     /// Reads the file in Rust and writes length-prefixed chunks, avoiding per-chunk NIF overhead.
     /// The stream is finished automatically after all data is written.
@@ -1019,6 +1040,9 @@ enum StreamCmd {
         reply: oneshot::Sender<Result<(), String>>,
     },
     Finish {
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    Abort {
         reply: oneshot::Sender<Result<(), String>>,
     },
 }
@@ -1891,7 +1915,8 @@ async fn dispatch_stream_cmd(hls_registry: &HlsStreamRegistry, stream_id: &str, 
                 StreamCmd::Header { reply, .. }
                 | StreamCmd::Chunk { reply, .. }
                 | StreamCmd::StreamFileRange { reply, .. }
-                | StreamCmd::Finish { reply } => reply,
+                | StreamCmd::Finish { reply }
+                | StreamCmd::Abort { reply } => reply,
             };
             let _ = reply.send(Err(format!("HLS stream not found: {stream_id}")));
         }
@@ -1900,7 +1925,8 @@ async fn dispatch_stream_cmd(hls_registry: &HlsStreamRegistry, stream_id: &str, 
             StreamCmd::Header { reply, .. }
             | StreamCmd::Chunk { reply, .. }
             | StreamCmd::StreamFileRange { reply, .. }
-            | StreamCmd::Finish { reply } => reply,
+            | StreamCmd::Finish { reply }
+            | StreamCmd::Abort { reply } => reply,
         };
         let _ = reply.send(Err(format!("HLS stream not found: {stream_id}")));
     }
@@ -2174,6 +2200,10 @@ async fn handle_command(
             dispatch_stream_cmd(ctx.hls_registry, &stream_id, StreamCmd::Finish { reply }).await;
         }
         #[cfg(feature = "host")]
+        Command::AbortHlsStream { stream_id, reply } => {
+            dispatch_stream_cmd(ctx.hls_registry, &stream_id, StreamCmd::Abort { reply }).await;
+        }
+        #[cfg(feature = "host")]
         Command::StreamFileRange {
             stream_id,
             file_path,
@@ -2322,10 +2352,12 @@ fn stream_write_error(context: &str, e: iroh::endpoint::WriteError) -> String {
     }
 }
 
-/// Application error code a host resets an HLS stream with when its file
-/// reader fails part way. A stream that ends this way carries no zero-length
-/// terminator, so a client's next read errors instead of seeing a short body
-/// that looks complete.
+/// Application error code a host resets an HLS stream with when its reader
+/// fails part way: the Rust file reader in `stream_file_to_quic`, or the host
+/// app's own read (an object-storage file read in Elixir), which aborts the
+/// stream. A stream that ends this way carries no zero-length terminator, so
+/// a client's next read errors instead of seeing a short body that looks
+/// complete.
 #[cfg(feature = "host")]
 const HLS_READER_FAILED: u32 = 1;
 
@@ -2581,6 +2613,15 @@ async fn run_hls_stream_worker(
                     Ok(())
                 };
                 let _ = reply.send(write_res);
+                return;
+            }
+            StreamCmd::Abort { reply } => {
+                hls_registry.lock().await.remove(&stream_id);
+                // Reset instead of finishing: no terminator, so the client's
+                // next read errors.
+                let _ = send.reset(HLS_READER_FAILED.into());
+                tracing::debug!("HLS stream {} aborted", stream_id);
+                let _ = reply.send(Ok(()));
                 return;
             }
         }

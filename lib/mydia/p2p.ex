@@ -89,6 +89,13 @@ defmodule Mydia.P2p do
   def finish_hls_stream(_resource, _stream_id), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc """
+  Abort an HLS stream that cannot be completed, such as a storage read that
+  failed part way. The stream is reset rather than finished, so the client
+  sees a truncated response instead of a short body.
+  """
+  def abort_hls_stream(_resource, _stream_id), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc """
   Stream a file range directly to a QUIC stream.
   Reads the file in Rust and writes length-prefixed chunks, avoiding per-chunk NIF overhead.
   The stream is finished automatically after all data is written.
