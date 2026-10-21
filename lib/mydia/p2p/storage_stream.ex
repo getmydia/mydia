@@ -70,9 +70,14 @@ defmodule Mydia.P2p.StorageStream do
       e in ArgumentError ->
         Logger.debug("Storage stream closed by peer: #{Exception.message(e)}")
         :ok
+    catch
+      # A backend can also exit (a pool checkout or call timeout) or throw;
+      # this clause covers raises too.
+      kind, reason ->
+        Logger.error(
+          "Failed to stream storage: " <> Exception.format(kind, reason, __STACKTRACE__)
+        )
 
-      e ->
-        Logger.error("Failed to stream storage: " <> Exception.format(:error, e, __STACKTRACE__))
         abort_storage_stream(resource, stream_id)
     end
   end

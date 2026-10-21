@@ -129,6 +129,19 @@ defmodule Mydia.P2p.ServerStorageStreamTest do
     refute_received {:p2p, :finish, _}
   end
 
+  test "a backend exit mid-stream aborts the stream and is logged", %{source: source} do
+    Process.put(:recording_p2p_raise, {:chunk, :exit})
+
+    log =
+      ExUnit.CaptureLog.capture_log([level: :error], fn ->
+        assert StorageStream.stream(:res, "s11", source, %HlsRequest{}) == :ok
+      end)
+
+    assert log =~ "storage_exploded"
+    assert_received {:p2p, :abort, [:res, "s11"]}
+    refute_received {:p2p, :finish, _}
+  end
+
   test "an abort that raises because the stream is gone is swallowed", %{source: source} do
     Process.put(:recording_p2p_chunk_result, {:error, "boom"})
     Process.put(:recording_p2p_raise, :abort)
