@@ -5,6 +5,7 @@ defmodule Mydia.Library.CandidatePromotion do
 
   alias Mydia.Accounts.Scope
   alias Mydia.{DB, Metadata, Repo}
+  alias Mydia.ImportCandidates.QueueErrors
   alias Mydia.Library.{EpisodeMinter, ImportCandidate, MediaFile, MetadataEnricher}
   alias Mydia.Media
   alias Mydia.Media.ProviderSwitch
@@ -13,7 +14,8 @@ defmodule Mydia.Library.CandidatePromotion do
   alias Mydia.Subtitles.Sidecars
 
   @spec promote_group([ImportCandidate.t()], map(), keyword()) ::
-          {:ok, [MediaFile.t()]} | {:error, term()}
+          {:ok, %{media_files: [MediaFile.t()], skipped: [{binary(), term()}]}}
+          | {:error, term()}
   def promote_group([%ImportCandidate{} | _] = candidates, match, opts) do
     config = Keyword.get(opts, :config) || Metadata.default_relay_config()
     candidates = Enum.sort_by(candidates, & &1.id)
@@ -22,11 +24,16 @@ defmodule Mydia.Library.CandidatePromotion do
     with :ok <- one_group?(candidates),
          {:ok, preparation} <- MetadataEnricher.prepare(match, config: config),
          preparation = stamp_pin(preparation, hd(candidates)),
-         {:ok, {media_files, media_item}} <-
+         {:ok, {media_files, media_item, skipped}} <-
            commit_group(candidates, snapshot, preparation, opts) do
       MetadataEnricher.finalize(media_item)
       Sidecars.reconcile_all(Repo.preload(media_files, :library_path))
-      {:ok, media_files}
+
+      {:ok,
+       %{
+         media_files: media_files,
+         skipped: Enum.map(skipped, fn {candidate, reason} -> {candidate.id, reason} end)
+       }}
     end
   end
 
@@ -244,9 +251,10 @@ defmodule Mydia.Library.CandidatePromotion do
              :ok <- snapshot_matches?(locked_candidates, snapshot),
              :ok <- one_group?(locked_candidates),
              {:ok, media_item} <- MetadataEnricher.persist(preparation),
-             {:ok, media_files} <- insert_files(locked_candidates, media_item, opts),
-             :ok <- delete_candidates(locked_candidates) do
-          {media_files, media_item}
+             {:ok, outcome} <- insert_files(locked_candidates, media_item, opts),
+             :ok <- imported_any(outcome),
+             :ok <- record_skipped(outcome.skipped) do
+          {outcome.media_files, media_item, outcome.skipped}
         else
           {:error, reason} -> Repo.rollback(reason)
         end
@@ -361,20 +369,115 @@ defmodule Mydia.Library.CandidatePromotion do
     ])
   end
 
+  # Each file runs in its own savepoint, so one that can't import rolls back
+  # alone (on PostgreSQL a failed insert would otherwise abort the whole
+  # transaction) and the rest of the group still imports (#1216).
   defp insert_files(candidates, media_item, opts) do
-    Enum.reduce_while(candidates, {:ok, []}, fn candidate, {:ok, acc} ->
-      with :ok <- ensure_path_available(candidate),
-           {:ok, parent} <- resolve_parent(candidate, media_item, opts),
-           {:ok, media_file} <- insert_file(candidate, parent) do
-        {:cont, {:ok, [media_file | acc]}}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
+    initial = %{media_files: [], skipped: [], dropped: []}
+
+    candidates
+    |> Enum.reduce_while({:ok, initial}, fn candidate, {:ok, acc} ->
+      case promote_file(candidate, media_item, opts) do
+        {:ok, media_file} ->
+          {:cont, {:ok, %{acc | media_files: [media_file | acc.media_files]}}}
+
+        {:dropped, reason} ->
+          {:cont, {:ok, %{acc | dropped: [{candidate, reason} | acc.dropped]}}}
+
+        {:skipped, reason} ->
+          {:cont, {:ok, %{acc | skipped: [{candidate, reason} | acc.skipped]}}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
       end
     end)
     |> case do
-      {:ok, media_files} -> {:ok, Enum.reverse(media_files)}
+      {:ok, acc} -> {:ok, Map.new(acc, fn {key, list} -> {key, Enum.reverse(list)} end)}
       error -> error
     end
+  end
+
+  defp promote_file(candidate, media_item, opts) do
+    result =
+      with_savepoint(fn ->
+        with :ok <- ensure_path_available(candidate),
+             {:ok, parent, extra_episode_ids} <- resolve_parent(candidate, media_item, opts),
+             {:ok, media_file} <- insert_file(candidate, parent),
+             {:ok, _} <- link_extra_episodes(media_file, extra_episode_ids),
+             {:ok, _} <- Repo.delete(candidate) do
+          {:ok, media_file}
+        end
+      end)
+
+    case result do
+      {:ok, media_file} -> {:ok, media_file}
+      {:error, reason} -> file_outcome(candidate, reason)
+    end
+  end
+
+  # A real SQL savepoint. A nested `Repo.transaction/1` that rolls back marks
+  # the enclosing transaction as rolled back too, so it cannot isolate a
+  # failing file. Plain SAVEPOINT statements work on SQLite and PostgreSQL.
+  @savepoint "promote_file"
+
+  defp with_savepoint(fun) do
+    Repo.query!("SAVEPOINT #{@savepoint}")
+
+    case fun.() do
+      {:ok, _} = ok ->
+        Repo.query!("RELEASE SAVEPOINT #{@savepoint}")
+        ok
+
+      {:error, _} = error ->
+        Repo.query!("ROLLBACK TO SAVEPOINT #{@savepoint}")
+        Repo.query!("RELEASE SAVEPOINT #{@savepoint}")
+        error
+    end
+  end
+
+  # The path is already a library file, so this candidate has nothing left to
+  # add. Same rule `attach/3` applies.
+  defp file_outcome(candidate, {:duplicate_path, _, _} = reason) do
+    case Repo.delete(candidate) do
+      {:ok, _} -> {:dropped, reason}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  # `:implausible` is EpisodeMinter refusing a number too far past the show's
+  # known episodes. Like an unresolved episode, it fails the same way every time.
+  defp file_outcome(_candidate, reason)
+       when reason in [:unresolved_episode, :implausible] or
+              (is_tuple(reason) and elem(reason, 0) == :incompatible_media_type),
+       do: {:skipped, reason}
+
+  defp file_outcome(_candidate, %Ecto.Changeset{} = reason), do: {:skipped, reason}
+  defp file_outcome(_candidate, reason), do: {:error, reason}
+
+  # Nothing imported means nothing to keep: roll back so no empty show is
+  # created, and let the caller's group-level handling report why.
+  defp imported_any(%{media_files: [_ | _]}), do: :ok
+  defp imported_any(%{skipped: [{_candidate, reason} | _]}), do: {:error, reason}
+  defp imported_any(%{dropped: [{_candidate, reason} | _]}), do: {:error, reason}
+
+  # A skipped file goes back to review with its reason in the same transaction
+  # as the rest of the group's import. Only accept-queued rows: FileIngest
+  # promotes unqueued candidates and records its own `last_error`.
+  defp record_skipped(skipped) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    Enum.each(skipped, fn {candidate, reason} ->
+      ImportCandidate
+      |> where([c], c.id == ^candidate.id and c.queued_op == "accept")
+      |> Repo.update_all(
+        set: [
+          queued_op: nil,
+          queued_at: nil,
+          queue_error: QueueErrors.message(reason),
+          updated_at: now
+        ]
+      )
+    end)
   end
 
   defp ensure_path_available(candidate) do
@@ -392,14 +495,14 @@ defmodule Mydia.Library.CandidatePromotion do
 
   defp resolve_parent(%ImportCandidate{} = candidate, %{type: "movie"} = item, _opts)
        when candidate.media_type == "movie" do
-    {:ok, %{media_item_id: item.id}}
+    {:ok, %{media_item_id: item.id}, []}
   end
 
   defp resolve_parent(%ImportCandidate{} = candidate, %{type: "tv_show"} = item, opts)
        when candidate.media_type == "tv_show" do
-    with {:ok, season, episode_number} <- target_episode(candidate),
-         {:ok, episode} <- find_or_mint_episode(item, season, episode_number, candidate, opts) do
-      {:ok, %{episode_id: episode.id}}
+    with {:ok, season, numbers} <- target_episode(candidate),
+         {:ok, [primary | extras]} <- resolve_episodes(item, season, numbers, candidate, opts) do
+      {:ok, %{episode_id: primary.id}, Enum.map(extras, & &1.id)}
     end
   end
 
@@ -407,16 +510,31 @@ defmodule Mydia.Library.CandidatePromotion do
     {:error, {:incompatible_media_type, candidate.media_type, item.type}}
   end
 
+  # The first number is the primary episode, the rest are linked through
+  # media_file_episodes. Every number must resolve, so a file is never linked
+  # to part of what it holds.
+  defp resolve_episodes(item, season, numbers, candidate, opts) do
+    numbers
+    |> Enum.reduce_while({:ok, []}, fn number, {:ok, acc} ->
+      case find_or_mint_episode(item, season, number, candidate, opts) do
+        {:ok, episode} -> {:cont, {:ok, [episode | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, episodes} -> {:ok, Enum.reverse(episodes)}
+      error -> error
+    end
+  end
+
   defp target_episode(%ImportCandidate{parsed_info: parsed_info}) do
     parsed_info = parsed_info || %{}
+    season = Map.get(parsed_info, "season")
+    numbers = parsed_info |> Map.get("episodes") |> List.wrap() |> Enum.uniq()
 
-    case {Map.get(parsed_info, "season"), Map.get(parsed_info, "episodes", [])} do
-      {season, [episode_number]} when is_integer(season) and is_integer(episode_number) ->
-        {:ok, season, episode_number}
-
-      _ ->
-        {:error, :unresolved_episode}
-    end
+    if is_integer(season) and numbers != [] and Enum.all?(numbers, &is_integer/1),
+      do: {:ok, season, numbers},
+      else: {:error, :unresolved_episode}
   end
 
   defp find_or_mint_episode(item, season, episode_number, candidate, opts) do

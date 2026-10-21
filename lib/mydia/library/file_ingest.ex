@@ -56,7 +56,7 @@ defmodule Mydia.Library.FileIngest do
         promotion_opts = Keyword.put(opts, :allow_episode_creation, true)
 
         case CandidatePromotion.promote_group([candidate], match, promotion_opts) do
-          {:ok, media_files} ->
+          {:ok, %{media_files: media_files}} ->
             {:promoted, media_files}
 
           {:error, reason} ->

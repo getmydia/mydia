@@ -4,6 +4,7 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
   # relies on it must run synchronously.
   use Mydia.DataCase, async: false
 
+  import Ecto.Query
   import Mydia.MediaFixtures
   import Mydia.MetadataStub
   import Mydia.SettingsFixtures
@@ -313,10 +314,48 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       assert reloaded.queue_error == "A file at this path is already in the library."
     end
 
+    # #1216: one bad file used to hold back every other file in the show.
+    test "a group with one file that can't import imports the rest" do
+      lp = library_path_fixture(%{type: "series"})
+      series_id = to_string(Mydia.MetadataStubProvider.series_tvdb_id())
+
+      [good, bad] =
+        for {path, parsed} <- [
+              {"Wandering Aurora/s01e01.mkv", %{"season" => 1, "episodes" => [1]}},
+              {"Wandering Aurora/s01-bonus.mkv", %{"season" => nil, "episodes" => []}}
+            ] do
+          import_candidate_fixture(%{
+            library_path_id: lp.id,
+            anchor_key: "wandering aurora",
+            relative_path: path,
+            provider_type: "tvdb",
+            provider_id: series_id,
+            title: "Wandering Aurora",
+            media_type: "tv_show",
+            confidence: 0.95,
+            parsed_info: parsed
+          })
+          |> queue()
+        end
+
+      assert {:ok, %{promoted: 1, failed: 0, remaining: 0}} =
+               ImportCandidates.drain_accepted(lp.id,
+                 config: Mydia.Metadata.default_relay_config(),
+                 allow_episode_creation: true
+               )
+
+      refute Repo.get(ImportCandidate, good.id)
+
+      reloaded = Repo.get!(ImportCandidate, bad.id)
+      assert is_nil(reloaded.queued_op)
+      assert reloaded.queue_error =~ "Couldn't tell which episode"
+    end
+
     # Regression for #1212: a multi-episode file parses to two episode numbers,
-    # which CandidatePromotion cannot attach to one episode. It used to sit in
-    # Queued through every Oban retry and then forever.
-    test "a multi-episode file clears its marker instead of staying queued" do
+    # which CandidatePromotion could not attach to one episode, so it sat in
+    # Queued through every Oban retry and then forever. It now imports and
+    # links every episode.
+    test "a multi-episode file imports and links both episodes" do
       lp = library_path_fixture(%{type: "series"})
 
       candidate =
@@ -332,15 +371,24 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
         })
         |> queue()
 
-      assert {:ok, %{promoted: 0, failed: 1, remaining: 0}} =
+      assert {:ok, %{promoted: 1, failed: 0, remaining: 0}} =
                ImportCandidates.drain_accepted(lp.id,
                  config: Mydia.Metadata.default_relay_config(),
                  allow_episode_creation: true
                )
 
-      reloaded = Repo.get!(ImportCandidate, candidate.id)
-      assert is_nil(reloaded.queued_op)
-      assert reloaded.queue_error =~ "Couldn't tell which episode this file is."
+      refute Repo.get(ImportCandidate, candidate.id)
+
+      file =
+        Repo.one!(
+          from f in Mydia.Library.MediaFile,
+            where: f.library_path_id == ^lp.id and f.relative_path == ^candidate.relative_path
+        )
+
+      assert Repo.aggregate(
+               from(l in Mydia.Library.MediaFileEpisode, where: l.media_file_id == ^file.id),
+               :count
+             ) == 2
     end
 
     test "a match the provider no longer has clears its marker" do
@@ -375,7 +423,7 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
     # The group's match is built from its first candidate, so a movie file
     # sharing a folder with an episode resolves to a show it can never attach
     # to. Members load ordered by path, so the episode's path sorts first.
-    test "a movie file grouped with an episode clears its marker" do
+    test "a movie file grouped with an episode is left in review while the episode imports" do
       lp = library_path_fixture(%{type: "series"})
       series_id = to_string(Mydia.MetadataStubProvider.series_tvdb_id())
 
@@ -398,19 +446,20 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
           |> queue()
         end
 
-      assert {:ok, %{promoted: 0, failed: 1, remaining: 0}} =
+      assert {:ok, %{promoted: 1, failed: 0, remaining: 0}} =
                ImportCandidates.drain_accepted(lp.id,
                  config: Mydia.Metadata.default_relay_config(),
                  allow_episode_creation: true
                )
 
-      for candidate <- candidates do
-        reloaded = Repo.get!(ImportCandidate, candidate.id)
-        assert is_nil(reloaded.queued_op)
+      [episode_candidate, movie_candidate] = candidates
+      refute Repo.get(ImportCandidate, episode_candidate.id)
 
-        assert reloaded.queue_error ==
-                 "This file's type doesn't match the matched title (movie or show)."
-      end
+      reloaded = Repo.get!(ImportCandidate, movie_candidate.id)
+      assert is_nil(reloaded.queued_op)
+
+      assert reloaded.queue_error ==
+               "This file's type doesn't match the matched title (movie or show)."
     end
 
     # Regression for #1212: the file insert rejects a movie in a series-only

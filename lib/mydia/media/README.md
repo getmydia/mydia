@@ -523,6 +523,16 @@ mismatch" theory. And `candidate_promotion_test.exs`'s two-candidate test assert
 right one; the only success-path promotion test used a single candidate, leaving
 multi-member promotion success unpinned until `32820f75c` added a regression.
 
+Each file of a group runs inside `commit_group/4` under its own SQL `SAVEPOINT`
+(`with_savepoint/1`, not a nested `Repo.transaction`, whose rollback would mark
+the outer transaction rolled back too). A file that can't import (an
+unresolvable episode, the wrong media type, a validation failure) is rolled back
+alone and returned to review with `queue_error` in the same transaction, and a
+file whose path is already in the library is dropped. If nothing imports, the
+whole transaction rolls back, so no empty show is created (#1216). The savepoint
+is also what keeps a failed insert from aborting the PostgreSQL transaction, so
+this path needs the PostgreSQL suite too.
+
 When touching promotion locking, ownership transactions, or anything under
 `DB.postgres?()` / `DB.sqlite?()`, run the PostgreSQL suite before claiming done.
 A local PostgreSQL is available via devenv.

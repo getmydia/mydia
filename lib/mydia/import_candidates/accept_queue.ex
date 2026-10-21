@@ -5,7 +5,7 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
 
   require Logger
 
-  alias Mydia.ImportCandidates.{Edits, Review, Store}
+  alias Mydia.ImportCandidates.{Edits, QueueErrors, Review, Store}
   alias Mydia.Metadata.Provider.Error, as: ProviderError
   alias Mydia.Library.{CandidatePromotion, ImportCandidate, ImportCandidateGroup, SelectionScope}
   alias Mydia.Repo
@@ -203,10 +203,16 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
   one group still goes to `CandidatePromotion.promote_group/3` in a single
   call, which is the only transaction boundary here.
 
-  A terminal refusal (no provider match, files matching different titles, a
-  synthetic local show, a group whose rows vanished, a path already in the
-  library, an unresolvable episode, a movie/show mismatch, an unusable provider
-  ID, a title the provider no longer has) clears the marker and
+  A group imports the files it can. A file it can't (an unresolvable episode, a
+  movie/show mismatch, a validation failure) returns to review with its reason,
+  and one already in the library drops out. The group counts as promoted when
+  at least one file imported.
+
+  A terminal refusal of the whole group (no provider match, files matching
+  different titles, a synthetic local show, a group whose rows vanished, an
+  unusable provider ID, a title the provider no longer has, or, when no file in
+  it could import, a path already in the library, an unresolvable episode or a
+  movie/show mismatch) clears the marker and
   records `queue_error`, returning the group to the pending list with an
   explanation rather than leaving it queued forever. Anything else leaves the
   marker in place, so `remaining` is non-zero and the worker reports failure for
@@ -377,12 +383,20 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
 
   defp promote_queued_group(library_path_id, anchor_key, group, opts, acc) do
     case accept_group(group, opts) do
-      {:ok, _media_files} ->
+      {:ok, %{skipped: skipped}} ->
+        if skipped != [] do
+          Logger.info("Imported a group, leaving some files in review",
+            library_path_id: library_path_id,
+            anchor_key: anchor_key,
+            skipped: length(skipped)
+          )
+        end
+
         %{acc | promoted: acc.promoted + 1}
 
       {:error, reason} ->
         if terminal_accept_error?(reason) do
-          clear_queue_marker(library_path_id, anchor_key, "accept", queue_error_message(reason))
+          clear_queue_marker(library_path_id, anchor_key, "accept", QueueErrors.message(reason))
           %{acc | failed: acc.failed + 1}
         else
           Logger.warning("A queued import group did not promote, leaving it queued for retry",
@@ -439,6 +453,7 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
               :local_show,
               :empty_group,
               :unresolved_episode,
+              :implausible,
               :mixed_group
             ],
        do: true
@@ -492,57 +507,4 @@ defmodule Mydia.ImportCandidates.AcceptQueue do
 
   defp maybe_queued_at_max(query, nil), do: query
   defp maybe_queued_at_max(query, max), do: where(query, [c], c.queued_at <= ^max)
-
-  defp queue_error_message(:no_match), do: "No provider match to import from."
-
-  defp queue_error_message(:conflicting_providers),
-    do: "Files in this folder match different titles."
-
-  defp queue_error_message(:local_show), do: "Local shows are created directly, not imported."
-  defp queue_error_message(:empty_group), do: "No files left to import."
-
-  defp queue_error_message({:duplicate_path, _, _}),
-    do: "A file at this path is already in the library."
-
-  defp queue_error_message(:unresolved_episode),
-    do:
-      "Couldn't tell which episode this file is. Multi-episode files and files " <>
-        "without a season and episode number can't be imported yet."
-
-  defp queue_error_message({:incompatible_media_type, _, _}),
-    do: "This file's type doesn't match the matched title (movie or show)."
-
-  defp queue_error_message(:mixed_group), do: "Files in this group belong to different folders."
-
-  defp queue_error_message({reason, _})
-       when reason in [:invalid_provider_id, :invalid_match_result],
-       do: "The match is missing a usable provider ID. Re-match this group."
-
-  # Only reached for the not_found case: callers format terminal reasons only.
-  defp queue_error_message({:metadata_fetch_failed, _}),
-    do: "The matched title no longer exists at the provider. Re-match this group."
-
-  defp queue_error_message(%Ecto.Changeset{} = changeset) do
-    details =
-      changeset
-      |> Ecto.Changeset.traverse_errors(fn {message, opts} ->
-        Regex.replace(~r"%{(\w+)}", message, fn _, key ->
-          opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-        end)
-      end)
-      |> Enum.flat_map(fn {field, messages} ->
-        Enum.map(messages, &changeset_error_line(field, &1))
-      end)
-      |> Enum.join("; ")
-
-    String.slice("This file can't be added to the library: " <> details, 0, 200)
-  end
-
-  # Foreign keys and :base are internal; their messages read as full sentences.
-  # Other fields get a prefix so "can't be blank" says what is blank.
-  defp changeset_error_line(field, message) do
-    if field == :base or String.ends_with?(to_string(field), "_id"),
-      do: message,
-      else: "#{field} #{message}"
-  end
 end
