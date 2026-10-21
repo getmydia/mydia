@@ -197,6 +197,81 @@ defmodule Mydia.Library.CandidatePromotionTest do
     assert reloaded.queue_error =~ "Couldn't tell which episode"
   end
 
+  defp linked_episode_ids(media_file) do
+    Repo.all(
+      from l in Mydia.Library.MediaFileEpisode,
+        where: l.media_file_id == ^media_file.id,
+        select: l.episode_id
+    )
+  end
+
+  test "a multi-episode file links every episode it covers" do
+    library_path = library_path_fixture(%{type: "series"})
+    show = media_item_fixture(%{type: "tv_show", tvdb_id: 13_960})
+    e1 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+    e2 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 2})
+
+    candidate =
+      tv_candidate(library_path, "multi-group", "Show/s01e01e02.mkv", %{
+        "season" => 1,
+        "episodes" => [1, 2]
+      })
+
+    assert {:ok, %{media_files: [file], skipped: []}} =
+             CandidatePromotion.promote_group([candidate], tv_match(show), config: stub_config())
+
+    assert file.episode_id == e1.id
+    assert Enum.sort(linked_episode_ids(file)) == Enum.sort([e1.id, e2.id])
+  end
+
+  test "a multi-episode file mints the episodes it covers when creation is allowed" do
+    library_path = library_path_fixture(%{type: "series"})
+    show = media_item_fixture(%{type: "tv_show", tvdb_id: 13_960})
+    episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+    candidate =
+      tv_candidate(library_path, "mint-group", "Show/s01e01e02.mkv", %{
+        "season" => 1,
+        "episodes" => [1, 2]
+      })
+
+    assert {:ok, %{media_files: [file]}} =
+             CandidatePromotion.promote_group([candidate], tv_match(show),
+               config: stub_config(),
+               allow_episode_creation: true
+             )
+
+    assert length(linked_episode_ids(file)) == 2
+  end
+
+  test "a multi-episode file with an episode that can't be found is skipped whole" do
+    library_path = library_path_fixture(%{type: "series"})
+    show = media_item_fixture(%{type: "tv_show", tvdb_id: 13_960})
+    episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+    episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 3})
+
+    multi =
+      tv_candidate(library_path, "partial-group", "Show/s01e01e02.mkv", %{
+        "season" => 1,
+        "episodes" => [1, 2]
+      })
+
+    single =
+      tv_candidate(library_path, "partial-group", "Show/s01e03.mkv", %{
+        "season" => 1,
+        "episodes" => [3]
+      })
+
+    multi_id = multi.id
+
+    assert {:ok, %{media_files: [_], skipped: [{^multi_id, :unresolved_episode}]}} =
+             CandidatePromotion.promote_group([multi, single], tv_match(show),
+               config: stub_config()
+             )
+
+    refute Repo.exists?(from f in MediaFile, where: f.relative_path == ^multi.relative_path)
+  end
+
   test "a candidate whose path is already in the library drops out of the group" do
     library_path = library_path_fixture(%{type: "series"})
     show = media_item_fixture(%{type: "tv_show", tvdb_id: 13_960})

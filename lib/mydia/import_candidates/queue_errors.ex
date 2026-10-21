@@ -18,8 +18,7 @@ defmodule Mydia.ImportCandidates.QueueErrors do
 
   def message(:unresolved_episode),
     do:
-      "Couldn't tell which episode this file is. Multi-episode files and files " <>
-        "without a season and episode number can't be imported yet."
+      "Couldn't tell which episode this file is. Check that its name has a season and episode number."
 
   def message({:incompatible_media_type, _, _}),
     do: "This file's type doesn't match the matched title (movie or show)."

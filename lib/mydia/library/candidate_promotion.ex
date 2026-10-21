@@ -500,9 +500,9 @@ defmodule Mydia.Library.CandidatePromotion do
 
   defp resolve_parent(%ImportCandidate{} = candidate, %{type: "tv_show"} = item, opts)
        when candidate.media_type == "tv_show" do
-    with {:ok, season, episode_number} <- target_episode(candidate),
-         {:ok, episode} <- find_or_mint_episode(item, season, episode_number, candidate, opts) do
-      {:ok, %{episode_id: episode.id}, []}
+    with {:ok, season, numbers} <- target_episode(candidate),
+         {:ok, [primary | extras]} <- resolve_episodes(item, season, numbers, candidate, opts) do
+      {:ok, %{episode_id: primary.id}, Enum.map(extras, & &1.id)}
     end
   end
 
@@ -510,16 +510,31 @@ defmodule Mydia.Library.CandidatePromotion do
     {:error, {:incompatible_media_type, candidate.media_type, item.type}}
   end
 
+  # The first number is the primary episode, the rest are linked through
+  # media_file_episodes. Every number must resolve, so a file is never linked
+  # to part of what it holds.
+  defp resolve_episodes(item, season, numbers, candidate, opts) do
+    numbers
+    |> Enum.reduce_while({:ok, []}, fn number, {:ok, acc} ->
+      case find_or_mint_episode(item, season, number, candidate, opts) do
+        {:ok, episode} -> {:cont, {:ok, [episode | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, episodes} -> {:ok, Enum.reverse(episodes)}
+      error -> error
+    end
+  end
+
   defp target_episode(%ImportCandidate{parsed_info: parsed_info}) do
     parsed_info = parsed_info || %{}
+    season = Map.get(parsed_info, "season")
+    numbers = parsed_info |> Map.get("episodes") |> List.wrap() |> Enum.uniq()
 
-    case {Map.get(parsed_info, "season"), Map.get(parsed_info, "episodes", [])} do
-      {season, [episode_number]} when is_integer(season) and is_integer(episode_number) ->
-        {:ok, season, episode_number}
-
-      _ ->
-        {:error, :unresolved_episode}
-    end
+    if is_integer(season) and numbers != [] and Enum.all?(numbers, &is_integer/1),
+      do: {:ok, season, numbers},
+      else: {:error, :unresolved_episode}
   end
 
   defp find_or_mint_episode(item, season, episode_number, candidate, opts) do

@@ -4,6 +4,7 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
   # relies on it must run synchronously.
   use Mydia.DataCase, async: false
 
+  import Ecto.Query
   import Mydia.MediaFixtures
   import Mydia.MetadataStub
   import Mydia.SettingsFixtures
@@ -314,9 +315,10 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
     end
 
     # Regression for #1212: a multi-episode file parses to two episode numbers,
-    # which CandidatePromotion cannot attach to one episode. It used to sit in
-    # Queued through every Oban retry and then forever.
-    test "a multi-episode file clears its marker instead of staying queued" do
+    # which CandidatePromotion could not attach to one episode, so it sat in
+    # Queued through every Oban retry and then forever. It now imports and
+    # links every episode.
+    test "a multi-episode file imports and links both episodes" do
       lp = library_path_fixture(%{type: "series"})
 
       candidate =
@@ -332,15 +334,24 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
         })
         |> queue()
 
-      assert {:ok, %{promoted: 0, failed: 1, remaining: 0}} =
+      assert {:ok, %{promoted: 1, failed: 0, remaining: 0}} =
                ImportCandidates.drain_accepted(lp.id,
                  config: Mydia.Metadata.default_relay_config(),
                  allow_episode_creation: true
                )
 
-      reloaded = Repo.get!(ImportCandidate, candidate.id)
-      assert is_nil(reloaded.queued_op)
-      assert reloaded.queue_error =~ "Couldn't tell which episode this file is."
+      refute Repo.get(ImportCandidate, candidate.id)
+
+      file =
+        Repo.one!(
+          from f in Mydia.Library.MediaFile,
+            where: f.library_path_id == ^lp.id and f.relative_path == ^candidate.relative_path
+        )
+
+      assert Repo.aggregate(
+               from(l in Mydia.Library.MediaFileEpisode, where: l.media_file_id == ^file.id),
+               :count
+             ) == 2
     end
 
     test "a match the provider no longer has clears its marker" do
