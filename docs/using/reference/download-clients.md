@@ -39,7 +39,7 @@ These fields appear when adding or editing a client in the Admin UI. Not every f
 | Port | Client port | `8080` |
 | Username | Auth username | `admin` |
 | Password | Auth password | `secret` |
-| API Key | API key (SABnzbd, debrid, qBittorrent 5.2+) | `abc123` |
+| API Key | API key (SABnzbd, debrid, qBittorrent 5.2+). For SABnzbd, use the API Key from Config > General, not the NZB Key: the NZB Key can add downloads but cannot read the queue, so progress and imports never update. | `abc123` |
 | Provider | Debrid provider (debrid only) | `real_debrid` |
 | Use SSL | Enable HTTPS | `true` |
 | Category | Default category | `mydia` |

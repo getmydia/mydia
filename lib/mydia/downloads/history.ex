@@ -487,7 +487,7 @@ defmodule Mydia.Downloads.History do
           {client_config.name, {:reachable, torrents_map}}
 
         {:error, error} ->
-          Logger.warning("Failed to fetch torrents from #{client_config.name}: #{inspect(error)}")
+          Logger.warning("Failed to list downloads from #{client_config.name}: #{inspect(error)}")
 
           {client_config.name, :unreachable}
       end

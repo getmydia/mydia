@@ -14,6 +14,11 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
   SABnzbd uses API key authentication passed as a query parameter in all requests.
   The API key can be found in SABnzbd's web interface under Config > General > API Key.
 
+  The NZB Key on the same page is not enough: SABnzbd accepts it for
+  `addurl`/`addfile` only and rejects queue and history reads, so adding works
+  while every status poll fails (#1213). `mode=version` checks no key at all,
+  which is why `test_connection/1` also reads the queue.
+
   ## Configuration
 
   The adapter expects the following configuration:
@@ -110,10 +115,13 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
 
     api_path = build_api_path(config)
 
-    case HTTP.get(req, api_path, params: params) do
+    case req |> HTTP.get(api_path, params: params) |> reject_bad_api_key() do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         version = get_in(body, ["version"]) || "unknown"
-        {:ok, ClientInfo.new(version: version, api_version: "1.0")}
+
+        with {:ok, _slots} <- list_queue_items(config) do
+          {:ok, ClientInfo.new(version: version, api_version: "1.0")}
+        end
 
       {:ok, %{status: status, body: body}} ->
         {:error, Error.api_error("Unexpected response status", %{status: status, body: body})}
@@ -151,7 +159,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
 
     api_path = build_api_path(config)
 
-    case HTTP.get(req, api_path, params: params) do
+    case req |> HTTP.get(api_path, params: params) |> reject_bad_api_key() do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         # SABnzbd returns {"status": true, "nzo_ids": ["SABnzbd_nzo_xxxxx"]}
         case get_in(body, ["nzo_ids"]) do
@@ -221,7 +229,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
         end
       end
 
-    case result do
+    case reject_bad_api_key(result) do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         case get_in(body, ["nzo_ids"]) do
           [nzo_id | _] when is_binary(nzo_id) ->
@@ -330,7 +338,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
 
     api_path = build_api_path(config)
 
-    case HTTP.get(req, api_path, params: params) do
+    case req |> HTTP.get(api_path, params: params) |> reject_bad_api_key() do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         if get_in(body, ["status"]) == true do
           :ok
@@ -361,7 +369,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
 
     api_path = build_api_path(config)
 
-    case HTTP.get(req, api_path, params: params) do
+    case req |> HTTP.get(api_path, params: params) |> reject_bad_api_key() do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         if get_in(body, ["status"]) == true do
           :ok
@@ -401,7 +409,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
 
     api_path = build_api_path(config)
 
-    case HTTP.get(req, api_path, params: params) do
+    case req |> HTTP.get(api_path, params: params) |> reject_bad_api_key() do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         if get_in(body, ["status"]) == true do
           :ok
@@ -441,7 +449,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
 
     api_path = build_api_path(config)
 
-    case HTTP.get(req, api_path, params: params) do
+    case req |> HTTP.get(api_path, params: params) |> reject_bad_api_key() do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         if get_in(body, ["status"]) == true do
           :ok
@@ -458,6 +466,22 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
   end
 
   ## Private Functions
+
+  # A wrong key, or the NZB Key on anything but addurl/addfile, comes back as a
+  # 403, or on older releases as a 200 whose error says "API Key Incorrect".
+  defp reject_bad_api_key({:ok, %{status: 403}}), do: {:error, api_key_rejected()}
+
+  defp reject_bad_api_key({:ok, %{body: %{"error" => "API Key" <> _}}}),
+    do: {:error, api_key_rejected()}
+
+  defp reject_bad_api_key({:ok, %{body: "API Key" <> _}}), do: {:error, api_key_rejected()}
+  defp reject_bad_api_key(result), do: result
+
+  defp api_key_rejected do
+    Error.authentication_failed(
+      "SABnzbd rejected the API key. Use the API Key from SABnzbd's Config > General, not the NZB Key."
+    )
+  end
 
   defp build_api_path(config) do
     # "/sabnzbd/" would otherwise give "/sabnzbd//api" (#765)
@@ -476,7 +500,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
 
     api_path = build_api_path(config)
 
-    case HTTP.get(req, api_path, params: params) do
+    case req |> HTTP.get(api_path, params: params) |> reject_bad_api_key() do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         slots = get_in(body, ["queue", "slots"]) || []
         {:ok, slots}
@@ -501,7 +525,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
 
     api_path = build_api_path(config)
 
-    case HTTP.get(req, api_path, params: params) do
+    case req |> HTTP.get(api_path, params: params) |> reject_bad_api_key() do
       {:ok, %{status: 200, body: body}} when is_map(body) ->
         slots = get_in(body, ["history", "slots"]) || []
         {:ok, slots}
