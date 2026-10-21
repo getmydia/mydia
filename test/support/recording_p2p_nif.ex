@@ -16,16 +16,21 @@ defmodule Mydia.Test.RecordingP2pNif do
 
   def finish_hls_stream(resource, stream_id), do: record(:finish, [resource, stream_id])
 
+  def abort_hls_stream(resource, stream_id), do: record(:abort, [resource, stream_id])
+
   # A test can make a call raise ArgumentError, as the real NIFs do once the
-  # peer has gone, by putting its name (:header, :chunk or :finish) under
-  # `:recording_p2p_raise` in its process dictionary.
+  # peer has gone, by putting its name (:header, :chunk, :finish or :abort) under
+  # `:recording_p2p_raise` in its process dictionary. `{name, exception_module}`
+  # raises that exception instead, and `{name, :exit}` exits the process with
+  # `:storage_exploded`, as a backend does when a call to it times out.
   defp record(name, args) do
     send(Process.whereis(:recording_p2p_nif), {:p2p, name, args})
 
-    if Process.get(:recording_p2p_raise) == name do
-      raise ArgumentError, "stream closed"
+    case Process.get(:recording_p2p_raise) do
+      ^name -> raise ArgumentError, "stream closed"
+      {^name, :exit} -> exit(:storage_exploded)
+      {^name, exception} -> raise exception, "storage exploded"
+      _ -> "ok"
     end
-
-    "ok"
   end
 end

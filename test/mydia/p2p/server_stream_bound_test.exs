@@ -54,7 +54,7 @@ defmodule Mydia.P2p.ServerStreamBoundTest do
   test "starts a handler while the bound has room" do
     log =
       capture_log(fn ->
-        # `:fake_resource` never reaches the NIF: send_hls_error/4 rescues the
+        # `:fake_resource` never reaches the NIF: HlsResponse.send_error/4 rescues the
         # ArgumentError a fake resource raises, which is the same guard that
         # covers a peer disconnecting mid-response.
         assert Server.stream_hls_response(:fake_resource, "stream-with-room", request()) == :ok

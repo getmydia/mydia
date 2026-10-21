@@ -11,6 +11,8 @@ defmodule Mydia.P2p.Server do
   alias Mydia.Accounts.Scope
   alias Mydia.Auth.Guardian
   alias Mydia.P2p
+  alias Mydia.P2p.HlsResponse
+  alias Mydia.P2p.StorageStream
   alias Mydia.RemoteAccess
   alias Mydia.RemoteAccess.DirectUrls
   alias Mydia.RemoteAccess.Pairing
@@ -18,9 +20,6 @@ defmodule Mydia.P2p.Server do
   alias Mydia.Streaming.HlsSession
   alias Mydia.Streaming.SessionFiles
   alias MydiaWeb.Schema.Middleware.Logging, as: GraphQLLogging
-
-  # The chunk NIFs used to feed S3 files from Elixir. Tests swap in a recorder.
-  @p2p_nif Application.compile_env(:mydia, :p2p_nif, Mydia.P2p)
 
   # What a peer is told when handling its request failed unexpectedly.
   #
@@ -357,7 +356,7 @@ defmodule Mydia.P2p.Server do
       stream_hls_response(resource, stream_id, req)
     else
       Logger.info("P2P Request: HLS stream refused, remote access is disabled")
-      send_hls_error(resource, stream_id, 403, "Remote access is disabled")
+      HlsResponse.send_error(resource, stream_id, 403, "Remote access is disabled")
     end
 
     {:noreply, state}
@@ -663,11 +662,11 @@ defmodule Mydia.P2p.Server do
         # 503 rather than a silent drop: the peer can back off and retry, which
         # is the behaviour it already has for a session that is not ready.
         Logger.warning("P2P HLS stream refused: too many streams in flight")
-        send_hls_error(resource, stream_id, 503, "Too many streams in flight")
+        HlsResponse.send_error(resource, stream_id, 503, "Too many streams in flight")
 
       {:error, reason} ->
         Logger.error("P2P HLS stream could not be started: #{inspect(reason)}")
-        send_hls_error(resource, stream_id, 503, "Stream failed to start")
+        HlsResponse.send_error(resource, stream_id, 503, "Stream failed to start")
     end
 
     :ok
@@ -703,7 +702,7 @@ defmodule Mydia.P2p.Server do
       {:error, _reason} ->
         auth_ms = System.monotonic_time(:millisecond) - t0
         Logger.warning("HLS auth failed (auth_ms=#{auth_ms})")
-        send_hls_error(resource, stream_id, 401, "Unauthorized")
+        HlsResponse.send_error(resource, stream_id, 401, "Unauthorized")
     end
   end
 
@@ -724,21 +723,21 @@ defmodule Mydia.P2p.Server do
               {:error, reason} ->
                 log_session_file_error(reason, req.path)
                 {status, message} = session_file_error(reason)
-                send_hls_error(resource, stream_id, status, message)
+                HlsResponse.send_error(resource, stream_id, status, message)
             end
 
           {:error, :timeout} ->
             Logger.warning("HLS session #{req.session_id} not ready after timeout")
-            send_hls_error(resource, stream_id, 503, "Transcoding not ready")
+            HlsResponse.send_error(resource, stream_id, 503, "Transcoding not ready")
 
           {:error, {:session_exit, reason}} ->
             Logger.warning("HLS session #{req.session_id} terminated: #{inspect(reason)}")
-            send_hls_error(resource, stream_id, 503, "Session terminated")
+            HlsResponse.send_error(resource, stream_id, 503, "Session terminated")
         end
 
       {:error, :not_found} ->
         Logger.warning("HLS session not found: #{req.session_id}")
-        send_hls_error(resource, stream_id, 404, "Session not found")
+        HlsResponse.send_error(resource, stream_id, 404, "Session not found")
     end
   end
 
@@ -746,7 +745,7 @@ defmodule Mydia.P2p.Server do
     case authorize_direct_file(scope, file_id) do
       {:error, :not_found} ->
         Logger.warning("Direct stream: media file #{file_id} not found")
-        send_hls_error(resource, stream_id, 404, "Media file not found")
+        HlsResponse.send_error(resource, stream_id, 404, "Media file not found")
 
       {:ok, media_file} ->
         stream_direct_file(resource, stream_id, media_file, user, req)
@@ -757,7 +756,7 @@ defmodule Mydia.P2p.Server do
     case Mydia.Storage.source(media_file) do
       {:error, _} ->
         Logger.warning("Direct stream: cannot resolve path for file #{media_file.id}")
-        send_hls_error(resource, stream_id, 404, "File path not found")
+        HlsResponse.send_error(resource, stream_id, 404, "File path not found")
 
       {:ok, source} ->
         if Mydia.Storage.exists?(source) do
@@ -765,12 +764,12 @@ defmodule Mydia.P2p.Server do
 
           case source.location.kind do
             :local -> stream_hls_file(resource, stream_id, source.path, req)
-            :s3 -> stream_storage_file(resource, stream_id, source, req)
+            :s3 -> StorageStream.stream(resource, stream_id, source, req)
           end
         else
           Logger.warning("Direct stream: file not found at #{Mydia.Storage.redact(source.path)}")
 
-          send_hls_error(resource, stream_id, 404, "File not found on disk")
+          HlsResponse.send_error(resource, stream_id, 404, "File not found on disk")
         end
     end
   end
@@ -793,83 +792,6 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  # Object storage has no path for Rust to open, so the bytes are read in
-  # Elixir and pushed through the chunk NIFs.
-  @doc false
-  def stream_storage_file(resource, stream_id, source, req) do
-    case Mydia.Storage.stat(source) do
-      {:ok, %{size: file_size}} ->
-        push_storage_range(resource, stream_id, source, req, file_size)
-
-      {:error, %Mydia.Storage.Error{kind: :not_found}} ->
-        send_hls_error(resource, stream_id, 404, "Not found")
-
-      {:error, _} ->
-        send_hls_error(resource, stream_id, 502, "Storage unavailable")
-    end
-  end
-
-  defp push_storage_range(resource, stream_id, source, req, file_size) do
-    case parse_range(req.range_start, req.range_end, file_size) do
-      {:full, _} ->
-        send_storage_body(resource, stream_id, source, {200, 0, file_size, nil})
-
-      {:partial, range_start, _range_end, _length} when range_start >= file_size ->
-        send_hls_error(resource, stream_id, 416, "Range not satisfiable")
-
-      {:partial, range_start, range_end, content_length} ->
-        content_range = "bytes #{range_start}-#{range_end}/#{file_size}"
-
-        send_storage_body(
-          resource,
-          stream_id,
-          source,
-          {206, range_start, content_length, content_range}
-        )
-    end
-  end
-
-  defp send_storage_body(resource, stream_id, source, {status, offset, length, content_range}) do
-    header = %P2p.HlsResponseHeader{
-      status: status,
-      content_type: SessionFiles.content_type(source.path),
-      content_length: length,
-      content_range: content_range,
-      cache_control: hls_cache_control(source.path)
-    }
-
-    # The NIFs raise ArgumentError once the peer has gone and the stream is
-    # closed, the same as on the local path.
-    try do
-      with "ok" <- @p2p_nif.send_hls_header(resource, stream_id, header),
-           {:ok, _} <- stream_storage_body(resource, stream_id, source, offset, length) do
-        @p2p_nif.finish_hls_stream(resource, stream_id)
-      else
-        {:error, reason} -> log_stream_failure(reason, "storage")
-        other -> log_stream_failure(other, "storage")
-      end
-    rescue
-      e in ArgumentError ->
-        Logger.debug("Storage stream closed by peer: #{Exception.message(e)}")
-        :ok
-    end
-  end
-
-  # An empty object has nothing to read, and a ranged read of zero bytes is not
-  # a request the storage layer should see.
-  defp stream_storage_body(_resource, _stream_id, _source, _offset, 0), do: {:ok, nil}
-
-  defp stream_storage_body(resource, stream_id, source, offset, length) do
-    Mydia.Storage.stream_range(source, offset, length, nil, fn data, acc ->
-      case @p2p_nif.send_hls_chunk(resource, stream_id, data) do
-        "ok" -> {:ok, acc}
-        # Unwrapped so `log_stream_failure/2` sees the bare `peer_stopped` reason.
-        {:error, reason} -> {:error, reason}
-        other -> {:error, other}
-      end
-    end)
-  end
-
   defp handle_download_stream(resource, stream_id, job_id, scope, req) do
     case lookup_transcode_job(scope, job_id) do
       {:ok, job} ->
@@ -877,11 +799,11 @@ defmodule Mydia.P2p.Server do
 
       {:error, :not_found} ->
         Logger.warning("Download stream: job #{job_id} not found")
-        send_hls_error(resource, stream_id, 404, "Job not found")
+        HlsResponse.send_error(resource, stream_id, 404, "Job not found")
 
       {:error, :not_ready} ->
         Logger.warning("Download stream: job #{job_id} not ready")
-        send_hls_error(resource, stream_id, 503, "Job not ready")
+        HlsResponse.send_error(resource, stream_id, 503, "Job not ready")
     end
   end
 
@@ -976,7 +898,7 @@ defmodule Mydia.P2p.Server do
         basename = Path.basename(file_path)
 
         # Handle range requests
-        case parse_range(req.range_start, req.range_end, file_size) do
+        case HlsResponse.parse_range(req.range_start, req.range_end, file_size) do
           {:full, _} ->
             # Full file request
             send_full_hls_file(resource, stream_id, file_path, file_size, content_type)
@@ -1009,23 +931,12 @@ defmodule Mydia.P2p.Server do
 
       {:error, :enoent} ->
         Logger.debug("HLS file not found: #{file_path}")
-        send_hls_error(resource, stream_id, 404, "Not found")
+        HlsResponse.send_error(resource, stream_id, 404, "Not found")
 
       {:error, reason} ->
         Logger.warning("HLS file error: #{inspect(reason)}")
-        send_hls_error(resource, stream_id, 500, "Internal error")
+        HlsResponse.send_error(resource, stream_id, 500, "Internal error")
     end
-  end
-
-  defp parse_range(nil, nil, file_size), do: {:full, file_size}
-
-  defp parse_range(range_start, range_end, file_size) do
-    # Calculate actual range
-    start_byte = range_start || 0
-    end_byte = min(range_end || file_size - 1, file_size - 1)
-    content_length = end_byte - start_byte + 1
-
-    {:partial, start_byte, end_byte, content_length}
   end
 
   defp send_full_hls_file(resource, stream_id, file_path, file_size, content_type) do
@@ -1037,7 +948,7 @@ defmodule Mydia.P2p.Server do
       content_type: content_type,
       content_length: file_size,
       content_range: nil,
-      cache_control: hls_cache_control(file_path)
+      cache_control: HlsResponse.cache_control(file_path)
     }
 
     case P2p.send_hls_header(resource, stream_id, header) do
@@ -1054,7 +965,7 @@ defmodule Mydia.P2p.Server do
             )
 
           {:error, reason} ->
-            log_stream_failure(reason, "file")
+            HlsResponse.log_stream_failure(reason, "file")
         end
 
       {:error, reason} ->
@@ -1080,7 +991,7 @@ defmodule Mydia.P2p.Server do
       content_type: content_type,
       content_length: content_length,
       content_range: "bytes #{range_start}-#{range_end}/#{file_size}",
-      cache_control: hls_cache_control(file_path)
+      cache_control: HlsResponse.cache_control(file_path)
     }
 
     case P2p.send_hls_header(resource, stream_id, header) do
@@ -1097,7 +1008,7 @@ defmodule Mydia.P2p.Server do
             )
 
           {:error, reason} ->
-            log_stream_failure(reason, "file range")
+            HlsResponse.log_stream_failure(reason, "file range")
         end
 
       {:error, reason} ->
@@ -1105,48 +1016,8 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  # A player closes its stream on every seek and when playback stops, and the
-  # write that fails then carries the `peer_stopped` prefix. That is the normal
-  # end of a transfer nobody wants any more.
-  @doc false
-  def log_stream_failure("peer_stopped" <> _ = reason, what) do
-    Logger.debug("Player stopped reading the #{what}: #{reason}")
-  end
-
-  def log_stream_failure(reason, what) do
-    Logger.error("Failed to stream #{what}: #{inspect(reason)}")
-  end
-
-  defp send_hls_error(resource, stream_id, status, message) do
-    # Send error as header-only response
-    # Wrapped in try/rescue because the P2P stream may already be closed
-    # (e.g. peer disconnected), causing NIF calls to raise ArgumentError
-    header = %P2p.HlsResponseHeader{
-      status: status,
-      content_type: "text/plain",
-      content_length: byte_size(message),
-      content_range: nil,
-      cache_control: nil
-    }
-
-    try do
-      case P2p.send_hls_header(resource, stream_id, header) do
-        "ok" ->
-          P2p.send_hls_chunk(resource, stream_id, message)
-          P2p.finish_hls_stream(resource, stream_id)
-
-        _ ->
-          :ok
-      end
-    rescue
-      e ->
-        Logger.debug("Failed to send HLS error response: #{inspect(e)}")
-        :ok
-    end
-  end
-
   # A body held in memory rather than on disk: the playlist a session
-  # publishes from its segment plan. Same guard as send_hls_error/4, since
+  # publishes from its segment plan. Same guard as HlsResponse.send_error/4, since
   # the peer may already have gone. A range request is ignored and the whole
   # body answered with 200; players do not range a playlist. The chunk
   # framing is a u32 length prefix with no cap, so the body goes as one chunk.
@@ -1156,7 +1027,7 @@ defmodule Mydia.P2p.Server do
       content_type: SessionFiles.content_type(name),
       content_length: byte_size(body),
       content_range: nil,
-      cache_control: hls_cache_control(name)
+      cache_control: HlsResponse.cache_control(name)
     }
 
     try do
@@ -1172,22 +1043,6 @@ defmodule Mydia.P2p.Server do
       e ->
         Logger.debug("Failed to send HLS content: #{inspect(e)}")
         :ok
-    end
-  end
-
-  defp hls_cache_control(path) do
-    case Path.extname(path) do
-      # Playlists should not be cached (may update)
-      ".m3u8" -> "no-cache"
-      # Segments can be cached longer
-      ".ts" -> "max-age=86400"
-      # A subtitle body is stable for the life of the session but not
-      # immutable across sessions, and it is small enough that revalidation
-      # costs nothing. Matches HlsController's cache_control_for/1.
-      ".vtt" -> "no-cache"
-      # A bitmap subtitle copy: stable per source, replaced with the source.
-      ".mks" -> "no-cache"
-      _ -> nil
     end
   end
 

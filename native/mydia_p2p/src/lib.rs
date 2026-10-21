@@ -270,6 +270,25 @@ fn finish_hls_stream(
     }
 }
 
+/// Abort an HLS stream that cannot be completed. The stream is reset, not
+/// finished, so the client sees a truncated response.
+/// Uses `DirtyIo` scheduler because the blocking shim parks the thread until the
+/// async Host call completes.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rustler decodes NIF arguments by value; a ResourceArc cannot be taken by reference"
+)]
+#[rustler::nif(schedule = "DirtyIo")]
+fn abort_hls_stream(
+    resource: ResourceArc<HostResource>,
+    stream_id: String,
+) -> Result<String, rustler::Error> {
+    match blocking::abort_hls_stream(&resource.host, stream_id) {
+        Ok(()) => Ok("ok".to_string()),
+        Err(e) => Err(rustler::Error::Term(Box::new(e))),
+    }
+}
+
 /// Stream a file range directly to a QUIC stream.
 /// Reads the file in Rust and writes length-prefixed chunks, avoiding per-chunk NIF overhead.
 /// The stream is finished automatically after all data is written.

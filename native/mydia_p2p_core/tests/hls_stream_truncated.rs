@@ -210,3 +210,32 @@ async fn a_cancelled_stream_reports_failure() {
     assert_eq!(outcome, Err("cancelled".to_string()));
     events.abort();
 }
+
+/// A host whose own reader (the Elixir storage read) fails after some chunks
+/// aborts the stream. The client must see a failure, not a short body that
+/// looks complete.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_aborted_stream_reports_failure() {
+    let (server, _client, stream_id, response, events) = open_stream().await;
+
+    server
+        .send_hls_chunk(stream_id.clone(), vec![7u8; 1024])
+        .await
+        .expect("send_hls_chunk failed");
+    server
+        .abort_hls_stream(stream_id.clone())
+        .await
+        .expect("abort_hls_stream failed");
+
+    let (received, outcome) = drain(response).await;
+    assert!(received <= 1024, "client received {received} bytes");
+    assert!(
+        outcome.is_err(),
+        "client saw a complete stream: {outcome:?}"
+    );
+
+    // The worker is gone, so a second abort finds nothing.
+    let again = server.abort_hls_stream(stream_id).await;
+    assert!(again.is_err(), "a second abort found the stream: {again:?}");
+    events.abort();
+}
