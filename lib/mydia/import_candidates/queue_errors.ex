@@ -70,8 +70,8 @@ defmodule Mydia.ImportCandidates.QueueErrors do
         "No season and episode number. Set them on this row."
 
       {0, label} when reason == :implausible ->
-        "#{label} isn't one of this show's specials at the metadata provider, " <>
-          "so it can't be imported. Check the season and episode."
+        "#{label} isn't in this show's specials yet. " <>
+          "If the metadata provider lists it, refresh the show and accept again."
 
       {_season, label} when reason == :implausible ->
         "#{label} is far past this show's known episodes, so it wasn't created. " <>
@@ -86,7 +86,7 @@ defmodule Mydia.ImportCandidates.QueueErrors do
 
   defp coordinate(%ImportCandidate{parsed_info: %{} = info}) do
     season = Map.get(info, "season")
-    episodes = info |> Map.get("episodes") |> List.wrap()
+    episodes = info |> Map.get("episodes") |> List.wrap() |> Enum.uniq()
 
     if is_integer(season) and episodes != [] and Enum.all?(episodes, &is_integer/1) do
       {season, "S#{pad(season)}E#{pad(hd(episodes))}" <> range_suffix(episodes)}

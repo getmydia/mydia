@@ -34,8 +34,14 @@ defmodule Mydia.ImportCandidates.QueueErrorsTest do
   describe "file_message/2" do
     test "a special the provider doesn't list names it as a special" do
       assert QueueErrors.file_message(:implausible, candidate(0, [3])) ==
-               "S00E03 isn't one of this show's specials at the metadata provider, " <>
-                 "so it can't be imported. Check the season and episode."
+               "S00E03 isn't in this show's specials yet. " <>
+                 "If the metadata provider lists it, refresh the show and accept again."
+    end
+
+    test "a repeated episode number renders as a single episode" do
+      assert QueueErrors.file_message(:implausible, candidate(0, [1, 1])) ==
+               "S00E01 isn't in this show's specials yet. " <>
+                 "If the metadata provider lists it, refresh the show and accept again."
     end
 
     test "an out-of-range episode names the coordinate" do

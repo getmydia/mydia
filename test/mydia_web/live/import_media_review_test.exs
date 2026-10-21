@@ -1199,7 +1199,8 @@ defmodule MydiaWeb.ImportMediaReviewTest do
           relative_path: "Glass Harbor/Specials/s00e03.mkv",
           title: "Glass Harbor",
           parsed_info: %{"season" => 0, "episodes" => [3]},
-          queue_error: "S00E03 isn't one of this show's specials at the metadata provider."
+          queue_error:
+            "S00E03 isn't in this show's specials yet. If the metadata provider lists it, refresh the show and accept again."
         })
 
       other =

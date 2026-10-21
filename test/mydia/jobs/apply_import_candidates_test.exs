@@ -351,7 +351,7 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       assert is_nil(unparsed.queued_op)
       assert is_nil(special.queued_op)
       assert unparsed.queue_error == "No season and episode number. Set them on this row."
-      assert special.queue_error =~ "S00E03 isn't one of this show's specials"
+      assert special.queue_error =~ "S00E03 isn't in this show's specials yet"
     end
 
     # #1216: one bad file used to hold back every other file in the show.
