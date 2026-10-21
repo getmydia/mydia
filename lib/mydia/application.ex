@@ -162,6 +162,9 @@ defmodule Mydia.Application do
         # lets it read a lingering `executing` job row as an orphan rather than
         # as a healthy job this boot just picked up. Returns :ignore once done.
         Mydia.Jobs.ImportRunReconciler,
+        # Re-enqueues the accept/rematch/delete drains the previous node died
+        # in the middle of. Same position and for the same reason as above.
+        Mydia.Jobs.ImportQueueReconciler,
         {DNSCluster, query: Application.get_env(:mydia, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Mydia.PubSub},
         # Decides which executing jobs the sidebar shows. Uses PubSub, and must
