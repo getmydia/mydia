@@ -409,63 +409,27 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   def handle_event("dismiss_selected", _params, socket) do
-    with :ok <- Authorization.authorize_import_media(socket) do
-      {:ok, count} = ImportCandidates.dismiss(socket.assigns.selection)
-
-      {:noreply,
-       socket
-       |> put_flash(:info, "Dismissed #{count} group(s).")
-       |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-       |> load_groups()
-       |> refresh_counts()}
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
+    run_bulk_action(socket, &ImportCandidates.dismiss/1, fn {:ok, count} ->
+      "Dismissed #{count} group(s)."
+    end)
   end
 
   def handle_event("restore_selected", _params, socket) do
-    with :ok <- Authorization.authorize_import_media(socket) do
-      {:ok, count} = ImportCandidates.restore(socket.assigns.selection)
-
-      {:noreply,
-       socket
-       |> put_flash(:info, "Restored #{count} group(s) to pending.")
-       |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-       |> load_groups()
-       |> refresh_counts()}
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
+    run_bulk_action(socket, &ImportCandidates.restore/1, fn {:ok, count} ->
+      "Restored #{count} group(s) to pending."
+    end)
   end
 
   def handle_event("rematch_selected", _params, socket) do
-    with :ok <- Authorization.authorize_import_media(socket) do
-      {:ok, %{queued: queued}} = ImportCandidates.queue_rematch(socket.assigns.selection)
-
-      {:noreply,
-       socket
-       |> put_flash(:info, "Queued #{queued} group(s) for re-matching.")
-       |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-       |> load_groups()
-       |> refresh_counts()}
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
+    run_bulk_action(socket, &ImportCandidates.queue_rematch/1, fn {:ok, %{queued: queued}} ->
+      "Queued #{queued} group(s) for re-matching."
+    end)
   end
 
   def handle_event("cancel_queued_selected", _params, socket) do
-    with :ok <- Authorization.authorize_import_media(socket) do
-      {:ok, %{returned: returned}} = ImportCandidates.cancel_queued(socket.assigns.selection)
-
-      {:noreply,
-       socket
-       |> put_flash(:info, "Returned #{returned} group(s) to review.")
-       |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
-       |> load_groups()
-       |> refresh_counts()}
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
+    run_bulk_action(socket, &ImportCandidates.cancel_queued/1, fn {:ok, %{returned: returned}} ->
+      "Returned #{returned} group(s) to review."
+    end)
   end
 
   # One file straight from its member row. The button's `data-confirm` is the
@@ -829,6 +793,24 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
     |> load_groups()
     |> refresh_counts()
+  end
+
+  # The shape every bulk button shares: authorize, run the context call on the
+  # selection, flash, clear the selection, reload. `message` pattern-matches the
+  # result, so an unexpected return still crashes rather than flashing nonsense.
+  defp run_bulk_action(socket, action, message) do
+    with :ok <- Authorization.authorize_import_media(socket) do
+      result = action.(socket.assigns.selection)
+
+      {:noreply,
+       socket
+       |> put_flash(:info, message.(result))
+       |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+       |> load_groups()
+       |> refresh_counts()}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
   end
 
   # The skipped count was previously dropped on the floor, so a user who
