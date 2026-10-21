@@ -111,9 +111,13 @@ async fn open_stream() -> (
     (server, client, stream_id, response, events)
 }
 
-/// Reads the stream to its end and returns the byte count.
-async fn drain(response: HlsStreamResponse) -> u64 {
-    let HlsStreamResponse { mut chunk_rx, .. } = response;
+/// Reads the stream to its end and returns the bytes and the outcome.
+async fn drain(response: HlsStreamResponse) -> (u64, Result<(), String>) {
+    let HlsStreamResponse {
+        mut chunk_rx,
+        outcome,
+        ..
+    } = response;
     let mut received = 0u64;
     while let Some(chunk) = tokio::time::timeout(Duration::from_secs(10), chunk_rx.recv())
         .await
@@ -121,7 +125,11 @@ async fn drain(response: HlsStreamResponse) -> u64 {
     {
         received += chunk.len() as u64;
     }
-    received
+    let outcome = tokio::time::timeout(Duration::from_secs(10), outcome)
+        .await
+        .expect("outcome never resolved")
+        .expect("outcome sender dropped without a result");
+    (received, outcome)
 }
 
 /// The file is shorter than the requested range, so the reader fails after
@@ -137,7 +145,7 @@ async fn a_file_shorter_than_the_range_fails() {
         tokio::spawn(async move { server.stream_file_range(stream_id, path, 0, 3 * MIB).await })
     };
 
-    let received = drain(response).await;
+    let (received, outcome) = drain(response).await;
     let result = tokio::time::timeout(Duration::from_secs(10), streaming)
         .await
         .expect("server never returned")
@@ -145,6 +153,10 @@ async fn a_file_shorter_than_the_range_fails() {
     let _ = std::fs::remove_file(&path);
 
     assert!(received < 3 * MIB, "client received {received} bytes");
+    assert!(
+        outcome.is_err(),
+        "client saw a complete stream: {outcome:?}"
+    );
     let err = result.expect_err("server reported a truncated file as sent");
     assert!(
         !err.starts_with(HLS_PEER_STOPPED),
@@ -165,11 +177,36 @@ async fn a_complete_stream_reports_success() {
         tokio::spawn(async move { server.stream_file_range(stream_id, path, 0, LEN).await })
     };
 
-    let received = drain(response).await;
+    let (received, outcome) = drain(response).await;
     let result = streaming.await.expect("streaming task panicked");
     let _ = std::fs::remove_file(&path);
 
     assert_eq!(received, LEN);
+    assert_eq!(outcome, Ok(()));
     result.expect("server failed to finish the file");
+    events.abort();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cancelled_stream_reports_failure() {
+    let (_server, _client, _stream_id, response, events) = open_stream().await;
+    let HlsStreamResponse {
+        mut chunk_rx,
+        cancel,
+        outcome,
+        ..
+    } = response;
+
+    cancel.cancel();
+
+    let next = tokio::time::timeout(Duration::from_secs(2), chunk_rx.recv())
+        .await
+        .expect("cancel left the reader waiting");
+    assert!(next.is_none());
+    let outcome = tokio::time::timeout(Duration::from_secs(2), outcome)
+        .await
+        .expect("outcome never resolved")
+        .expect("outcome sender dropped without a result");
+    assert_eq!(outcome, Err("cancelled".to_string()));
     events.abort();
 }

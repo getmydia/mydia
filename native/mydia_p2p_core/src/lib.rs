@@ -164,7 +164,15 @@ pub struct HlsStreamResponse {
     /// Response header
     pub header: HlsResponseHeader,
     /// Receiver for data chunks. Dropping it ends the stream.
+    ///
+    /// `chunk_rx` closing only means there is no more data. Read `outcome`
+    /// to learn whether the data was complete.
     pub chunk_rx: mpsc::Receiver<Vec<u8>>,
+    /// How the stream ended, sent once the reading task stops: `Ok(())` when
+    /// the server's zero-length terminator arrived (or the consumer dropped
+    /// `chunk_rx`), `Err` when the stream was cut short by a read error,
+    /// a reset, a lost connection or a cancel.
+    pub outcome: oneshot::Receiver<Result<(), String>>,
     /// Ends the stream without dropping `chunk_rx`.
     pub cancel: HlsCancel,
 }
@@ -3026,6 +3034,10 @@ async fn do_send_request(conn: Connection, request: MydiaRequest) -> Result<Mydi
 
 /// Send an HLS streaming request to a connected peer (client-side).
 /// Returns a streaming response with header and channel for chunks.
+#[expect(
+    clippy::too_many_lines,
+    reason = "request, header decode and the spawned reader share timing state; splitting it is a refactor, not part of this fix"
+)]
 async fn do_send_hls_request(
     conn: Connection,
     request: HlsRequest,
@@ -3099,6 +3111,7 @@ async fn do_send_hls_request(
     // Create a channel for streaming chunks
     let (chunk_tx, chunk_rx) = mpsc::channel::<Vec<u8>>(16);
     let (cancel, mut cancel_rx) = HlsCancel::new();
+    let (outcome_tx, outcome) = oneshot::channel::<Result<(), String>>();
     let content_length = header.content_length;
 
     // Spawn a task to read chunks and send them through the channel
@@ -3111,10 +3124,10 @@ async fn do_send_hls_request(
         // `chunk_tx` (nobody pulling). A cancel or a dropped receiver has to
         // end either wait. `Ok(_)` disables the cancel branch when every
         // `HlsCancel` is dropped, which is not a cancel.
-        let cancelled = tokio::select! {
-            () = forward_hls_chunks(&mut recv, &chunk_tx, &mut total_bytes, &mut chunk_count) => false,
-            Ok(_) = cancel_rx.wait_for(|cancelled| *cancelled) => true,
-            () = chunk_tx.closed() => true,
+        let (cancelled, result) = tokio::select! {
+            result = forward_hls_chunks(&mut recv, &chunk_tx, &mut total_bytes, &mut chunk_count) => (false, result),
+            Ok(_) = cancel_rx.wait_for(|cancelled| *cancelled) => (true, Err("cancelled".to_string())),
+            () = chunk_tx.closed() => (true, Err("cancelled".to_string())),
         };
 
         if cancelled {
@@ -3140,42 +3153,62 @@ async fn do_send_hls_request(
             session_id,
             path
         );
+
+        if let Err(reason) = &result {
+            tracing::warn!(
+                "p2p_metrics: hls_stream_incomplete bytes={} content_length={} reason={} session={} path={}",
+                total_bytes,
+                content_length,
+                reason,
+                session_id,
+                path
+            );
+        }
+
+        // Closing `chunk_tx` is what ends the consumer's loop, so the outcome
+        // is sent first and is readable by the time `chunk_rx` closes.
+        let _ = outcome_tx.send(result);
+        drop(chunk_tx);
     });
 
     Ok(HlsStreamResponse {
         header,
         chunk_rx,
+        outcome,
         cancel,
     })
 }
 
 /// Reads length-prefixed chunks off `recv` and forwards them, until the zero
 /// terminator, a read error, or a dropped receiver.
+///
+/// `Ok(())` for the terminator or a dropped receiver (the consumer's choice),
+/// `Err` for a read failure before the terminator.
 async fn forward_hls_chunks(
     recv: &mut RecvStream,
     chunk_tx: &mpsc::Sender<Vec<u8>>,
     total_bytes: &mut u64,
     chunk_count: &mut u32,
-) {
+) -> Result<(), String> {
     loop {
         // Read chunk length
         let mut len_buf = [0u8; 4];
         if let Err(e) = recv.read_exact(&mut len_buf).await {
-            tracing::debug!("HLS chunk read completed or error: {}", e);
-            return;
+            tracing::debug!("HLS chunk length read failed: {}", e);
+            return Err(format!("stream ended before the terminator: {e}"));
         }
         let chunk_len = u32::from_be_bytes(len_buf) as usize;
 
         // Zero length indicates end of stream
         if chunk_len == 0 {
-            return;
+            return Ok(());
         }
 
         // Read the chunk
         let mut chunk_data = vec![0u8; chunk_len];
         if let Err(e) = recv.read_exact(&mut chunk_data).await {
             tracing::error!("Failed to read chunk data: {}", e);
-            return;
+            return Err(format!("failed to read chunk data: {e}"));
         }
 
         *total_bytes += chunk_len as u64;
@@ -3184,7 +3217,7 @@ async fn forward_hls_chunks(
         // Send chunk through channel
         if chunk_tx.send(chunk_data).await.is_err() {
             tracing::debug!("HLS chunk receiver dropped");
-            return;
+            return Ok(());
         }
     }
 }
