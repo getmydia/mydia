@@ -3127,7 +3127,10 @@ async fn do_send_hls_request(
         let (cancelled, result) = tokio::select! {
             result = forward_hls_chunks(&mut recv, &chunk_tx, &mut total_bytes, &mut chunk_count) => (false, result),
             Ok(_) = cancel_rx.wait_for(|cancelled| *cancelled) => (true, Err("cancelled".to_string())),
-            () = chunk_tx.closed() => (true, Err("cancelled".to_string())),
+            // A dropped `chunk_rx` is the consumer's choice, as documented on
+            // `HlsStreamResponse::outcome`, the same as `forward_hls_chunks`
+            // returns when its send fails. Still stops the server.
+            () = chunk_tx.closed() => (true, Ok(())),
         };
 
         if cancelled {
