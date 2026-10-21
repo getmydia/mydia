@@ -53,7 +53,11 @@ defmodule Mydia.ImportCandidates.Requeue do
   rescue
     error ->
       # Boot-time work must never take the application down with it.
-      Logger.error("Could not requeue stranded import queue drains: #{inspect(error)}")
+      Logger.error(
+        "Could not requeue stranded import queue drains: " <>
+          Exception.format(:error, error, __STACKTRACE__)
+      )
+
       {:ok, %{retired: 0, enqueued: 0}}
   end
 
