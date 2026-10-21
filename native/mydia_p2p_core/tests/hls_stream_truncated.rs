@@ -1,0 +1,212 @@
+//! A truncated HLS stream must be reported as a failure on both ends.
+//!
+//! The wire format ends a stream with a zero-length terminator. A server
+//! whose file reader fails must not write it, and a client must tell a
+//! stream that ended with the terminator from one that was cut short.
+
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "integration test crate: helpers outside #[test] fns are test code too"
+)]
+
+use mydia_p2p_core::{
+    Event, HlsRequest, HlsResponseHeader, HlsStreamResponse, Host, HostConfig, HLS_PEER_STOPPED,
+};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+
+const GIB: u64 = 1024 * 1024 * 1024;
+const MIB: u64 = 1024 * 1024;
+
+fn test_config() -> HostConfig {
+    HostConfig {
+        relay_urls: Vec::new(),
+        bind_port: Some(0),
+        keypair_path: None,
+        keypair_bytes: None,
+    }
+}
+
+async fn wait_for_addr(host: &Host) -> String {
+    for _ in 0..100 {
+        let addr = host.get_node_addr().await;
+        if !addr.is_empty() && addr != "null" {
+            return addr;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("host never published an endpoint address");
+}
+
+fn temp_file(name: &str, len: u64) -> PathBuf {
+    let path = std::env::temp_dir().join(format!("{name}-{}.bin", std::process::id()));
+    std::fs::File::create(&path)
+        .and_then(|file| file.set_len(len))
+        .expect("create file");
+    path
+}
+
+/// Connects a client to a server, opens a stream and answers its header.
+/// Returns the server, the client (kept alive by the caller), the server's
+/// stream id, the client's response, and the server's event task.
+async fn open_stream() -> (
+    Arc<Host>,
+    Arc<Host>,
+    String,
+    HlsStreamResponse,
+    tokio::task::JoinHandle<()>,
+) {
+    let (server, server_id) = Host::new(test_config());
+    let (client, _client_id) = Host::new(test_config());
+    let server = Arc::new(server);
+    let client = Arc::new(client);
+
+    let server_addr = wait_for_addr(&server).await;
+    client.dial(server_addr).await.expect("dial failed");
+
+    let (id_tx, id_rx) = tokio::sync::oneshot::channel();
+    let events_host = server.clone();
+    let events = tokio::spawn(async move {
+        let mut id_tx = Some(id_tx);
+        let mut rx = events_host.event_rx.lock().await;
+        while let Some(event) = rx.recv().await {
+            if let Event::HlsStreamRequest { stream_id, .. } = event {
+                if let Some(tx) = id_tx.take() {
+                    let _ = tx.send(stream_id);
+                }
+            }
+        }
+    });
+
+    let request = HlsRequest {
+        session_id: "direct:file-1".to_string(),
+        path: "stream".to_string(),
+        range_start: Some(0),
+        range_end: None,
+        auth_token: None,
+    };
+    let requester = client.clone();
+    let response =
+        tokio::spawn(async move { requester.send_hls_request(server_id, request).await });
+
+    let stream_id = id_rx.await.expect("server never saw the stream");
+    server
+        .send_hls_header(
+            stream_id.clone(),
+            HlsResponseHeader {
+                status: 200,
+                content_type: "video/x-matroska".to_string(),
+                content_length: 8 * GIB,
+                content_range: None,
+                cache_control: None,
+            },
+        )
+        .await
+        .expect("send_hls_header failed");
+
+    let response = response.await.unwrap().expect("send_hls_request failed");
+    (server, client, stream_id, response, events)
+}
+
+/// Reads the stream to its end and returns the bytes and the outcome.
+async fn drain(response: HlsStreamResponse) -> (u64, Result<(), String>) {
+    let HlsStreamResponse {
+        mut chunk_rx,
+        outcome,
+        ..
+    } = response;
+    let mut received = 0u64;
+    while let Some(chunk) = tokio::time::timeout(Duration::from_secs(10), chunk_rx.recv())
+        .await
+        .expect("stream stalled")
+    {
+        received += chunk.len() as u64;
+    }
+    let outcome = tokio::time::timeout(Duration::from_secs(10), outcome)
+        .await
+        .expect("outcome never resolved")
+        .expect("outcome sender dropped without a result");
+    (received, outcome)
+}
+
+/// The file is shorter than the requested range, so the reader fails after
+/// the first chunk. Neither end may treat that as a complete stream.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_file_shorter_than_the_range_fails() {
+    let (server, _client, stream_id, response, events) = open_stream().await;
+    let path = temp_file("hls_stream_short_file", MIB + MIB / 2);
+
+    let streaming = {
+        let server = server.clone();
+        let path = path.to_string_lossy().into_owned();
+        tokio::spawn(async move { server.stream_file_range(stream_id, path, 0, 3 * MIB).await })
+    };
+
+    let (received, outcome) = drain(response).await;
+    let result = tokio::time::timeout(Duration::from_secs(10), streaming)
+        .await
+        .expect("server never returned")
+        .expect("streaming task panicked");
+    let _ = std::fs::remove_file(&path);
+
+    assert!(received < 3 * MIB, "client received {received} bytes");
+    assert!(
+        outcome.is_err(),
+        "client saw a complete stream: {outcome:?}"
+    );
+    let err = result.expect_err("server reported a truncated file as sent");
+    assert!(
+        !err.starts_with(HLS_PEER_STOPPED),
+        "a reader failure is not a peer stop: {err}"
+    );
+    events.abort();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_complete_stream_reports_success() {
+    const LEN: u64 = 2 * MIB + 17;
+    let (server, _client, stream_id, response, events) = open_stream().await;
+    let path = temp_file("hls_stream_complete", LEN);
+
+    let streaming = {
+        let server = server.clone();
+        let path = path.to_string_lossy().into_owned();
+        tokio::spawn(async move { server.stream_file_range(stream_id, path, 0, LEN).await })
+    };
+
+    let (received, outcome) = drain(response).await;
+    let result = streaming.await.expect("streaming task panicked");
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(received, LEN);
+    assert_eq!(outcome, Ok(()));
+    result.expect("server failed to finish the file");
+    events.abort();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cancelled_stream_reports_failure() {
+    let (_server, _client, _stream_id, response, events) = open_stream().await;
+    let HlsStreamResponse {
+        mut chunk_rx,
+        cancel,
+        outcome,
+        ..
+    } = response;
+
+    cancel.cancel();
+
+    let next = tokio::time::timeout(Duration::from_secs(2), chunk_rx.recv())
+        .await
+        .expect("cancel left the reader waiting");
+    assert!(next.is_none());
+    let outcome = tokio::time::timeout(Duration::from_secs(2), outcome)
+        .await
+        .expect("outcome never resolved")
+        .expect("outcome sender dropped without a result");
+    assert_eq!(outcome, Err("cancelled".to_string()));
+    events.abort();
+}

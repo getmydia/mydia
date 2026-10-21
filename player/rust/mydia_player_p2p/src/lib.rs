@@ -23,7 +23,7 @@ use mydia_p2p_core::{
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
@@ -1271,18 +1271,16 @@ impl P2pHost {
                 // and dropping it does not cancel.
                 let HlsStreamResponse {
                     header,
-                    mut chunk_rx,
+                    chunk_rx,
+                    outcome,
                     ..
                 } = stream_response;
 
-                // Collect all chunks into a single buffer
-                // Capacity is only a hint, so a length that does not fit in
-                // `usize` just starts the buffer empty.
-                let mut data =
-                    Vec::with_capacity(usize::try_from(header.content_length).unwrap_or_default());
-                while let Some(chunk) = chunk_rx.recv().await {
-                    data.extend_from_slice(&chunk);
-                }
+                let data = collect_hls_body(header.content_length, chunk_rx, outcome)
+                    .await
+                    .inspect_err(|e| {
+                        tracing::error!("send_hls_request failed for peer {}: {}", peer, e);
+                    })?;
 
                 tracing::info!(
                     "HLS request completed for peer: {}, received {} bytes",
@@ -1299,6 +1297,36 @@ impl P2pHost {
                 Err(anyhow::anyhow!("HLS request failed: {e}"))
             }
         }
+    }
+}
+
+/// Collects a streamed HLS body, failing if the stream was cut short.
+///
+/// `chunk_rx` closing only means no more data; `outcome` says whether the
+/// server's terminator arrived. A short body returned as `Ok` would be served
+/// with a matching `Content-Length` and look complete to the player.
+async fn collect_hls_body(
+    content_length: u64,
+    mut chunk_rx: mpsc::Receiver<Vec<u8>>,
+    outcome: oneshot::Receiver<Result<(), String>>,
+) -> anyhow::Result<Vec<u8>> {
+    // Capacity is only a hint, so a length that does not fit in `usize` just
+    // starts the buffer empty.
+    let mut data = Vec::with_capacity(usize::try_from(content_length).unwrap_or_default());
+    while let Some(chunk) = chunk_rx.recv().await {
+        data.extend_from_slice(&chunk);
+    }
+
+    match outcome.await {
+        Ok(Ok(())) => Ok(data),
+        Ok(Err(reason)) => Err(anyhow::anyhow!(
+            "HLS response truncated after {} bytes: {reason}",
+            data.len()
+        )),
+        Err(_) => Err(anyhow::anyhow!(
+            "HLS response truncated after {} bytes: stream task ended without a result",
+            data.len()
+        )),
     }
 }
 
@@ -1366,8 +1394,52 @@ mod hls_stream_handle_tests {
                 cache_control: None,
             },
             chunk_rx,
+            outcome: oneshot::channel().1,
             cancel,
         })
+    }
+
+    #[test]
+    fn collect_hls_body_returns_the_bytes_when_complete() {
+        runtime::block_on(async {
+            let (tx, rx) = mpsc::channel(4);
+            let (outcome_tx, outcome) = oneshot::channel();
+            tx.send(vec![1, 2]).await.unwrap();
+            tx.send(vec![3]).await.unwrap();
+            drop(tx);
+            outcome_tx.send(Ok(())).unwrap();
+
+            assert_eq!(collect_hls_body(3, rx, outcome).await.unwrap(), [1, 2, 3]);
+        });
+    }
+
+    #[test]
+    fn collect_hls_body_reports_a_failed_stream_as_truncated() {
+        runtime::block_on(async {
+            let (tx, rx) = mpsc::channel(4);
+            let (outcome_tx, outcome) = oneshot::channel();
+            tx.send(vec![1, 2]).await.unwrap();
+            drop(tx);
+            outcome_tx.send(Err("connection lost".to_string())).unwrap();
+
+            let err = collect_hls_body(10, rx, outcome).await.unwrap_err();
+            let msg = err.to_string();
+            assert!(msg.contains("truncated after 2 bytes"), "{msg}");
+            assert!(msg.contains("connection lost"), "{msg}");
+        });
+    }
+
+    #[test]
+    fn collect_hls_body_reports_a_dropped_outcome_as_truncated() {
+        runtime::block_on(async {
+            let (tx, rx) = mpsc::channel::<Vec<u8>>(4);
+            let (outcome_tx, outcome) = oneshot::channel();
+            drop(tx);
+            drop(outcome_tx);
+
+            let err = collect_hls_body(10, rx, outcome).await.unwrap_err();
+            assert!(err.to_string().contains("truncated"), "{err}");
+        });
     }
 
     #[test]
