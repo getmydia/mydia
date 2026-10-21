@@ -617,5 +617,38 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       assert is_nil(reloaded.queue_error)
       assert Repo.get!(ImportCandidate, rematching.id).queued_op == "rematch"
     end
+
+    test "counts only the groups whose accept marker was cleared" do
+      lp = library_path_fixture(%{type: "series"})
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      accepted =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "wandering aurora",
+          relative_path: "Wandering Aurora/s01e01.mkv",
+          queued_op: "accept",
+          queued_at: now
+        })
+
+      deleting =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "midnight harbor",
+          relative_path: "Midnight Harbor/s01e01.mkv",
+          queued_op: "delete",
+          queued_at: now
+        })
+
+      scope =
+        lp.id
+        |> Mydia.Library.SelectionScope.new("queued")
+        |> Mydia.Library.SelectionScope.select_all_matching(%{})
+
+      assert {:ok, %{returned: 1}} = ImportCandidates.cancel_queued(scope)
+
+      assert is_nil(Repo.get!(ImportCandidate, accepted.id).queued_op)
+      assert Repo.get!(ImportCandidate, deleting.id).queued_op == "delete"
+    end
   end
 end
