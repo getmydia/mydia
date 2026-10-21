@@ -1189,6 +1189,63 @@ defmodule MydiaWeb.ImportMediaReviewTest do
   end
 
   describe "member episode editing" do
+    test "a row that couldn't import shows its own reason", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+
+      bad =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "glass harbor",
+          relative_path: "Glass Harbor/Specials/s00e03.mkv",
+          title: "Glass Harbor",
+          parsed_info: %{"season" => 0, "episodes" => [3]},
+          queue_error: "S00E03 isn't one of this show's specials at the metadata provider."
+        })
+
+      other =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "glass harbor",
+          relative_path: "Glass Harbor/bonus.mkv",
+          title: "Glass Harbor",
+          parsed_info: %{"season" => nil, "episodes" => []},
+          queue_error: "No season and episode number. Set them on this row."
+        })
+
+      group = fetch_group(lp, "glass harbor")
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      dom_key = ImportCandidateGroup.dom_id(group)
+      assert has_element?(view, "#group-queue-error-#{dom_key}", "2 files couldn't import")
+
+      view |> element("#group-toggle-#{dom_key}") |> render_click()
+
+      assert has_element?(view, "#member-error-#{bad.id}", "S00E03")
+      assert has_element?(view, "#member-error-#{other.id}", "No season and episode number")
+    end
+
+    test "a group-wide error keeps its text on the header", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+
+      for path <- ["Split Anchor/a.mkv", "Split Anchor/b.mkv"] do
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "split anchor",
+          relative_path: path,
+          queue_error: "Files in this folder match different titles."
+        })
+      end
+
+      group = fetch_group(lp, "split anchor")
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      assert has_element?(
+               view,
+               "#group-queue-error-#{ImportCandidateGroup.dom_id(group)}",
+               "Files in this folder match different titles."
+             )
+    end
+
     test "renders filename, folder, matched episode badge, and inline S/E inputs", %{conn: conn} do
       lp = library_path_fixture(%{type: "series"})
 
