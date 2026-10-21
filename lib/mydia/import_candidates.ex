@@ -23,6 +23,7 @@ defmodule Mydia.ImportCandidates do
     Edits,
     LocalShows,
     Rematch,
+    Requeue,
     Review,
     Store
   }
@@ -86,6 +87,10 @@ defmodule Mydia.ImportCandidates do
   defdelegate queue_delete_candidate(candidate_id), to: Deletion
   defdelegate count_files(scope), to: Deletion
   defdelegate drain_delete(library_path_id, opts \\ []), to: Deletion
+
+  ## Boot repair
+
+  defdelegate requeue_stranded(), to: Requeue
 
   ## Local shows
 
