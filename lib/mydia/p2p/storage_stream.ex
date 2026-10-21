@@ -57,7 +57,10 @@ defmodule Mydia.P2p.StorageStream do
     }
 
     # The NIFs raise ArgumentError once the peer has gone and the stream is
-    # closed, the same as on the local path.
+    # closed, the same as on the local path. The storage backend can raise one
+    # too, so every failure ends in an abort. That is a no-op when the peer
+    # already closed the stream, and the ArgumentError case stays at debug level
+    # because it is usually the peer going away.
     try do
       case @p2p_nif.send_hls_header(resource, stream_id, header) do
         "ok" ->
@@ -69,7 +72,7 @@ defmodule Mydia.P2p.StorageStream do
     rescue
       e in ArgumentError ->
         Logger.debug("Storage stream closed by peer: #{Exception.message(e)}")
-        :ok
+        abort_storage_stream(resource, stream_id)
     catch
       # A backend can also exit (a pool checkout or call timeout) or throw;
       # this clause covers raises too.

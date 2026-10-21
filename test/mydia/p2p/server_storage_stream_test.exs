@@ -101,6 +101,15 @@ defmodule Mydia.P2p.ServerStorageStreamTest do
     refute_received {:p2p, :finish, _}
   end
 
+  test "an ArgumentError after the header aborts the stream too, since the backend can raise one",
+       %{source: source} do
+    Process.put(:recording_p2p_raise, :chunk)
+
+    assert StorageStream.stream(:res, "s7", source, %HlsRequest{}) == :ok
+    assert_received {:p2p, :abort, [:res, "s7"]}
+    refute_received {:p2p, :finish, _}
+  end
+
   test "a read that fails after the header aborts the stream instead of leaving it open", %{
     source: source
   } do
