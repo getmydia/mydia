@@ -2314,6 +2314,13 @@ fn stream_write_error(context: &str, e: iroh::endpoint::WriteError) -> String {
     }
 }
 
+/// Application error code a host resets an HLS stream with when its file
+/// reader fails part way. A stream that ends this way carries no zero-length
+/// terminator, so a client's next read errors instead of seeing a short body
+/// that looks complete.
+#[cfg(feature = "host")]
+const HLS_READER_FAILED: u32 = 1;
+
 /// Stream a file range to a QUIC `SendStream` with length-prefixed chunks.
 /// Uses a bounded channel pipeline: blocking reader → async QUIC writer.
 /// Memory usage is bounded at ~4MB regardless of file size.
@@ -2347,12 +2354,12 @@ async fn stream_file_to_quic(
             Ok(f) => f,
             Err(e) => {
                 tracing::error!("File open error: {}", e);
-                return (0u64, 0u64, 0u32); // io_ms, backpressure_ms, chunks
+                return Err(format!("Failed to open {file_path_owned}: {e}"));
             }
         };
         if let Err(e) = file.seek(SeekFrom::Start(offset)) {
             tracing::error!("Seek error: {}", e);
-            return (0u64, 0u64, 0u32);
+            return Err(format!("Failed to seek {file_path_owned}: {e}"));
         }
 
         // Kept in u64: on a 32-bit target a range over 4 GiB would truncate
@@ -2371,11 +2378,9 @@ async fn stream_file_to_quic(
                 Ok(()) => {}
                 Err(e) => {
                     tracing::error!("Read error: {}", e);
-                    return (
-                        io_nanos / 1_000_000,
-                        backpressure_nanos / 1_000_000,
-                        chunk_count,
-                    );
+                    return Err(format!(
+                        "Failed to read {file_path_owned} after {chunk_count} chunks: {e}"
+                    ));
                 }
             }
             io_nanos += duration_nanos(io_start.elapsed());
@@ -2388,20 +2393,20 @@ async fn stream_file_to_quic(
             if chunk_tx.blocking_send(buf).is_err() {
                 // Receiver dropped (QUIC write failed or stream cancelled)
                 tracing::debug!("stream_file_to_quic: receiver dropped, stopping read");
-                return (
+                return Ok((
                     io_nanos / 1_000_000,
                     backpressure_nanos / 1_000_000,
                     chunk_count,
-                );
+                ));
             }
             backpressure_nanos += duration_nanos(bp_start.elapsed());
         }
         // chunk_tx is dropped here, signalling end of data
-        (
+        Ok((
             io_nanos / 1_000_000,
             backpressure_nanos / 1_000_000,
             chunk_count,
-        )
+        ))
     });
 
     // Async QUIC writer: receives chunks and writes length-prefixed data
@@ -2431,6 +2436,22 @@ async fn stream_file_to_quic(
         write_chunks += 1;
     }
 
+    // `chunk_rx` closes both when the reader is done and when it failed, so
+    // the reader's result is what says whether the stream is complete. Never
+    // write the terminator for a stream that is not.
+    let reader_result = match reader_handle.await {
+        Ok(result) => result,
+        Err(e) => Err(format!("File reader task failed: {e}")),
+    };
+    let (io_ms, backpressure_ms, _reader_chunks) = match reader_result {
+        Ok(metrics) => metrics,
+        Err(reason) => {
+            // Reset instead of finishing: the client's next read errors.
+            let _ = send.reset(HLS_READER_FAILED.into());
+            return Err(reason);
+        }
+    };
+
     // Write zero-length terminator and finish
     let zero_bytes = [0u8; 4];
     send.write_all(&zero_bytes)
@@ -2441,9 +2462,6 @@ async fn stream_file_to_quic(
 
     let total_ms = duration_ms(t0.elapsed());
     let quic_write_ms = quic_write_nanos / 1_000_000;
-
-    // Get reader metrics (should be done by now since chunk_rx is exhausted)
-    let (io_ms, backpressure_ms, _reader_chunks) = reader_handle.await.unwrap_or((0, 0, 0));
 
     let throughput_mbps = throughput_mbps(total_bytes, total_ms);
 
