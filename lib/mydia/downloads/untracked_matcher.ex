@@ -128,7 +128,7 @@ defmodule Mydia.Downloads.UntrackedMatcher do
         adoptable_torrents(client_config, torrents)
 
       {:error, error} ->
-        Logger.warning("Failed to fetch torrents from #{client_config.name}: #{inspect(error)}")
+        Logger.warning("Failed to list downloads from #{client_config.name}: #{inspect(error)}")
         []
     end
   end

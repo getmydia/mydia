@@ -167,6 +167,9 @@ defmodule Mydia.Downloads.Client.SabnzbdTest do
   end
 
   describe "URL base handling" do
+    # One body serves both test_connection requests (mode=version, mode=queue).
+    @version_and_queue ~s({"version": "4.3.2", "queue": {"slots": []}})
+
     test "handles custom URL base in configuration" do
       config_with_base = %{@config | url_base: "/sabnzbd"}
       unreachable_config = %{config_with_base | host: "nonexistent.invalid", port: 9999}
@@ -180,7 +183,7 @@ defmodule Mydia.Downloads.Client.SabnzbdTest do
     test "strips a trailing slash from url_base (#765)" do
       bypass = Bypass.open()
       config = %{@config | host: "localhost", port: bypass.port, url_base: "/sabnzbd/"}
-      Mydia.BypassHelpers.stub_exact_json(bypass, "GET", "/sabnzbd/api", ~s({"version": "4.3.2"}))
+      Mydia.BypassHelpers.stub_exact_json(bypass, "GET", "/sabnzbd/api", @version_and_queue)
 
       assert {:ok, %ClientInfo{version: "4.3.2"}} = Sabnzbd.test_connection(config)
     end
@@ -188,9 +191,95 @@ defmodule Mydia.Downloads.Client.SabnzbdTest do
     test "treats a url_base of \"/\" as no base (#765)" do
       bypass = Bypass.open()
       config = %{@config | host: "localhost", port: bypass.port, url_base: "/"}
-      Mydia.BypassHelpers.stub_exact_json(bypass, "GET", "/api", ~s({"version": "4.3.2"}))
+      Mydia.BypassHelpers.stub_exact_json(bypass, "GET", "/api", @version_and_queue)
 
       assert {:ok, %ClientInfo{version: "4.3.2"}} = Sabnzbd.test_connection(config)
+    end
+  end
+
+  describe "API key rejection (Bypass, #1213)" do
+    # SABnzbd answers mode=version without checking the key at all, and
+    # accepts its NZB Key for addurl/addfile only. Everything else with the
+    # NZB Key (or a wrong key) is a 403, or a 200 carrying an
+    # "API Key Incorrect" error on older releases.
+    setup do
+      bypass = Bypass.open()
+      config = %{@config | host: "localhost", port: bypass.port}
+      {:ok, bypass: bypass, config: config}
+    end
+
+    defp respond_by_mode(bypass, responses) do
+      Bypass.expect(bypass, "GET", "/api", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        {status, body} = Map.fetch!(responses, conn.query_params["mode"])
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(status, Jason.encode!(body))
+      end)
+    end
+
+    test "test_connection succeeds when the key can read the queue",
+         %{bypass: bypass, config: config} do
+      respond_by_mode(bypass, %{
+        "version" => {200, %{"version" => "4.3.2"}},
+        "queue" => {200, %{"queue" => %{"slots" => []}}}
+      })
+
+      assert {:ok, %ClientInfo{version: "4.3.2"}} = Sabnzbd.test_connection(config)
+    end
+
+    test "test_connection rejects a key that cannot read the queue (NZB Key)",
+         %{bypass: bypass, config: config} do
+      respond_by_mode(bypass, %{
+        "version" => {200, %{"version" => "4.3.2"}},
+        "queue" => {403, %{"status" => false, "error" => "API Key Incorrect"}}
+      })
+
+      assert {:error, error} = Sabnzbd.test_connection(config)
+      assert error.type == :authentication_failed
+      assert error.message =~ "NZB Key"
+    end
+
+    test "test_connection rejects an API Key Incorrect body on a 200",
+         %{bypass: bypass, config: config} do
+      respond_by_mode(bypass, %{
+        "version" => {200, %{"version" => "2.3.9"}},
+        "queue" => {200, %{"status" => false, "error" => "API Key Incorrect"}}
+      })
+
+      assert {:error, %{type: :authentication_failed}} = Sabnzbd.test_connection(config)
+    end
+
+    test "test_connection rejects a queue answer that carries no queue",
+         %{bypass: bypass, config: config} do
+      respond_by_mode(bypass, %{
+        "version" => {200, %{"version" => "4.3.2"}},
+        "queue" => {200, %{"version" => "4.3.2"}}
+      })
+
+      assert {:error, %{type: :api_error}} = Sabnzbd.test_connection(config)
+    end
+
+    test "list_torrents reports a rejected key as an authentication failure",
+         %{bypass: bypass, config: config} do
+      respond_by_mode(bypass, %{
+        "queue" => {403, %{"status" => false, "error" => "API Key Incorrect"}}
+      })
+
+      assert {:error, error} = Sabnzbd.list_torrents(config)
+      assert error.type == :authentication_failed
+      assert error.message =~ "Config"
+    end
+
+    test "pause_torrent reports a rejected key as an authentication failure",
+         %{bypass: bypass, config: config} do
+      respond_by_mode(bypass, %{
+        "queue" => {403, %{"status" => false, "error" => "API Key Incorrect"}}
+      })
+
+      assert {:error, %{type: :authentication_failed}} =
+               Sabnzbd.pause_torrent(config, "SABnzbd_nzo_x")
     end
   end
 

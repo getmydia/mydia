@@ -661,6 +661,14 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
 
       refute html =~ "External torrents"
     end
+
+    # The NZB Key adds downloads but cannot read the queue (#1213).
+    test "points SABnzbd users at the API Key, not the NZB Key", %{view: view} do
+      open_new_client_form(view)
+
+      assert change_type(view, "sabnzbd") =~ "not the NZB Key"
+      refute change_type(view, "qbittorrent") =~ "NZB Key"
+    end
   end
 
   describe "Wave-2 Form: Remote seedbox (Test SFTP Connection)" do

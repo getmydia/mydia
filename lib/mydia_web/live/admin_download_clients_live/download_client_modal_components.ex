@@ -259,7 +259,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
                 @download_client_form
               } />
             <% true -> %>
-              <ConnectionFieldsComponents.network_fields download_client_form={@download_client_form} />
+              <ConnectionFieldsComponents.network_fields
+                download_client_form={@download_client_form}
+                selected_type={@selected_type}
+              />
           <% end %>
 
           <%!-- Per-content-type categories. Hidden for blackhole and debrid clients. --%>

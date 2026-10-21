@@ -151,6 +151,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
   end
 
   attr :download_client_form, :any, required: true
+  attr :selected_type, :string, default: nil
 
   def network_fields(assigns) do
     ~H"""
@@ -190,7 +191,17 @@ defmodule MydiaWeb.AdminDownloadClientsLive.ConnectionFieldsComponents do
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <.input field={@download_client_form[:api_key]} type="password" label="API Key" />
+        <%!-- SABnzbd's NZB Key can add downloads but not read the queue (#1213) --%>
+        <.input
+          field={@download_client_form[:api_key]}
+          type="password"
+          label="API Key"
+          hint={
+            if(@selected_type == "sabnzbd",
+              do: "Config > General > API Key in SABnzbd, not the NZB Key"
+            )
+          }
+        />
         <.input
           field={@download_client_form[:url_base]}
           type="text"
