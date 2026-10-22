@@ -222,6 +222,44 @@
               <.radius_picker id="theme-radius-picker" selected={@theme_selection.radius} />
             </div>
 
+            <div class="form-control w-full mt-6" id="time-display-settings">
+              <span class="label-text font-medium">Date &amp; time</span>
+              <p class="text-sm text-base-content/60 mb-3">
+                Times across Mydia are shown in this zone. The server default comes from the
+                <code>TZ</code>
+                setting.
+              </p>
+              <.form for={%{}} id="time-display-form" phx-change="set_time_zone">
+                <.input
+                  type="select"
+                  id="time-zone-select"
+                  name="time_zone"
+                  label="Time zone"
+                  value={UserPreference.time_zone(@preference) || ""}
+                  prompt={"Server default (#{@server_time_zone})"}
+                  options={@time_zone_options}
+                />
+              </.form>
+              <div class="mt-4">
+                <.segmented_control
+                  id="clock-format-picker"
+                  value={UserPreference.clock_format(@preference)}
+                  event="set_clock_format"
+                  param="clock"
+                  label="Clock"
+                  size="md"
+                >
+                  <:option value="auto" label={"Auto (#{clock_label(@time_display)})"} />
+                  <:option value="12" label="12-hour" />
+                  <:option value="24" label="24-hour" />
+                </.segmented_control>
+              </div>
+              <p id="time-display-preview" class="text-sm text-base-content/60 mt-3">
+                Now:
+                <.local_time at={DateTime.utc_now()} format={:datetime} display={@time_display} />
+              </p>
+            </div>
+
             <%= if @player_enabled do %>
               <div class="divider my-2"></div>
 
