@@ -2920,6 +2920,231 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
   end
 
+  describe "existing item folder" do
+    @tag :tmp_dir
+    test "a movie upgrade lands in the movie's existing tagged folder", %{tmp_dir: tmp_dir} do
+      library_path = create_test_library_path(tmp_dir, :movies)
+
+      media_item =
+        media_item_fixture(%{type: "movie", title: "Quiet Harbor", year: 2011, tmdb_id: 90001})
+
+      existing =
+        media_file_fixture(%{
+          media_item_id: media_item.id,
+          library_path_id: library_path.id,
+          relative_path: "Quiet Harbor (2011) {tmdb-90001}/Quiet Harbor.1080p.mkv",
+          resolution: "1080p"
+        })
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "Quiet.Harbor.2011.2160p.mkv"), "new content")
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "ExistingFolderClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "ExistingFolderClient",
+          download_client_id: "existing-folder-1",
+          metadata: %{"upgrade_target_media_file_id" => existing.id}
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      new_file = Library.list_media_files() |> Enum.find(&(&1.id != existing.id))
+      assert Path.dirname(new_file.relative_path) == "Quiet Harbor (2011) {tmdb-90001}"
+    end
+
+    @tag :tmp_dir
+    test "build_destination_path/2 falls back to Title (Year) without a trusted folder",
+         %{tmp_dir: tmp_dir} do
+      library_path = create_test_library_path(tmp_dir, :movies)
+      media_item = media_item_fixture(%{type: "movie", title: "Quiet Harbor", year: 2011})
+
+      media_file_fixture(%{
+        media_item_id: media_item.id,
+        library_path_id: library_path.id,
+        relative_path: "Copper Meadow (2019)/misfiled.mkv"
+      })
+
+      download = download_fixture(%{media_item_id: media_item.id})
+
+      download =
+        Mydia.Downloads.get_download!(download.id,
+          preload: [:media_item, :episode, :library_path]
+        )
+
+      assert MediaImport.build_destination_path(download, library_path) ==
+               Path.join(library_path.path, "Quiet Harbor (2011)")
+    end
+
+    @tag :tmp_dir
+    test "an auto-organized library still keeps the existing folder", %{tmp_dir: tmp_dir} do
+      library_path = create_test_library_path(tmp_dir, :movies)
+
+      {:ok, library_path} =
+        Settings.update_library_path(library_path, %{
+          auto_organize: true,
+          category_paths: %{"movie" => "Films"}
+        })
+
+      media_item =
+        media_item_fixture(%{type: "movie", title: "Quiet Harbor", year: 2011, tmdb_id: 90001})
+
+      media_file_fixture(%{
+        media_item_id: media_item.id,
+        library_path_id: library_path.id,
+        relative_path: "Old Shelf/Quiet Harbor {tmdb-90001}/a.mkv"
+      })
+
+      download = download_fixture(%{media_item_id: media_item.id})
+
+      download =
+        Mydia.Downloads.get_download!(download.id,
+          preload: [:media_item, :episode, :library_path]
+        )
+
+      assert MediaImport.build_destination_path(download, library_path) ==
+               Path.join(library_path.path, "Old Shelf/Quiet Harbor {tmdb-90001}")
+    end
+
+    @tag :tmp_dir
+    test "a TV show's base path and season folder follow the existing layout", %{
+      tmp_dir: tmp_dir
+    } do
+      library_path = create_test_library_path(tmp_dir, :series)
+
+      show =
+        media_item_fixture(%{type: "tv_show", title: "Lantern Bay", year: 2020, tvdb_id: 70001})
+
+      ep = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      media_file_fixture(%{
+        episode_id: ep.id,
+        library_path_id: library_path.id,
+        relative_path: "Lantern Bay (2020) [tvdb-70001]/Season 1/Lantern Bay S01E01.mkv"
+      })
+
+      base = MediaImport.build_series_base_path(show, library_path)
+      assert base == Path.join(library_path.path, "Lantern Bay (2020) [tvdb-70001]")
+      assert MediaImport.season_dir(base, show, library_path, 1) == Path.join(base, "Season 1")
+      assert MediaImport.season_dir(base, show, library_path, 2) == Path.join(base, "Season 02")
+    end
+
+    @tag :tmp_dir
+    test "a TV episode prefers the folder holding its own file when a show is split",
+         %{tmp_dir: tmp_dir} do
+      library_path = create_test_library_path(tmp_dir, :series)
+
+      show =
+        media_item_fixture(%{type: "tv_show", title: "Lantern Bay", year: 2020, tvdb_id: 70001})
+
+      [ep1, ep2, ep3] =
+        for n <- 1..3 do
+          episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: n})
+        end
+
+      media_file_fixture(%{
+        episode_id: ep1.id,
+        library_path_id: library_path.id,
+        relative_path: "Lantern Bay (2020)/Season 1/Lantern Bay S01E01.mkv"
+      })
+
+      for ep <- [ep2, ep3] do
+        media_file_fixture(%{
+          episode_id: ep.id,
+          library_path_id: library_path.id,
+          relative_path:
+            "Lantern Bay [tvdb-70001]/Season 1/Lantern Bay S01E0#{ep.episode_number}.mkv"
+        })
+      end
+
+      assert MediaImport.build_series_base_path(show, library_path, ep1) ==
+               Path.join(library_path.path, "Lantern Bay (2020)")
+
+      assert MediaImport.build_series_base_path(show, library_path, ep2) ==
+               Path.join(library_path.path, "Lantern Bay [tvdb-70001]")
+
+      assert MediaImport.build_series_base_path(show, library_path) ==
+               Path.join(library_path.path, "Lantern Bay [tvdb-70001]")
+    end
+
+    @tag :tmp_dir
+    test "a season pack lands new episodes in the existing Season folder", %{tmp_dir: tmp_dir} do
+      library_path = create_test_library_path(tmp_dir, :series)
+
+      show =
+        media_item_fixture(%{type: "tv_show", title: "Lantern Bay", year: 2020, tvdb_id: 70001})
+
+      ep1 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+      ep2 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 2})
+
+      media_file_fixture(%{
+        episode_id: ep1.id,
+        library_path_id: library_path.id,
+        relative_path: "Lantern Bay (2020) [tvdb-70001]/Season 1/Lantern Bay S01E01.mkv"
+      })
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "Lantern.Bay.S01E02.mkv"), "fake video")
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "ExistingSeasonClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: show.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "ExistingSeasonClient",
+          download_client_id: "existing-season-1",
+          metadata: %{
+            "season_pack" => true,
+            "season_number" => 1,
+            "episode_count" => 1,
+            "episode_ids" => [ep2.id]
+          }
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      new_file = Library.list_media_files() |> Enum.find(&(&1.episode_id == ep2.id))
+      assert new_file
+      assert Path.dirname(new_file.relative_path) == "Lantern Bay (2020) [tvdb-70001]/Season 1"
+    end
+  end
+
   describe "determine_library_path/1 destination stability" do
     test "a newly added alphabetically-first library does not capture an item with existing files" do
       # Reproduces the reported bug: "Cartoons" sorts before "Movies", and
