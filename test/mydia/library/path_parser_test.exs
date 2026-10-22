@@ -233,6 +233,17 @@ defmodule Mydia.Library.PathParserTest do
     end
   end
 
+  describe "external_id_tags/1" do
+    test "returns every tag in order, including repeats of one provider" do
+      assert PathParser.external_id_tags("Quiet Harbor {tmdb-90001} {tmdb-55555}") ==
+               [tmdb: "90001", tmdb: "55555"]
+    end
+
+    test "returns an empty list when untagged" do
+      assert PathParser.external_id_tags("Quiet Harbor (2011)") == []
+    end
+  end
+
   describe "strip_external_ids/1" do
     test "removes every tag" do
       assert PathParser.strip_external_ids("Quiet Harbor (2011) {tmdb-90001} [imdbid-tt1]") ==

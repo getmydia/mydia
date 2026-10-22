@@ -73,6 +73,15 @@ defmodule Mydia.Library.ItemFolders.HomeTest do
       assert Home.find(item, lp) == :none
     end
 
+    test "a folder carrying the item's id and another id of the same provider is rejected", %{
+      lp: lp
+    } do
+      item = movie()
+      movie_file(item, lp, "Quiet Harbor (2011) {tmdb-90001} {tmdb-55555}/a.mkv")
+
+      assert Home.find(item, lp) == :none
+    end
+
     test "a folder whose year contradicts the item's is rejected", %{lp: lp} do
       item = movie()
       movie_file(item, lp, "Quiet Harbor (1987)/Quiet Harbor.mkv")

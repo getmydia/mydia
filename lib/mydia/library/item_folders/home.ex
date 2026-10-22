@@ -102,7 +102,7 @@ defmodule Mydia.Library.ItemFolders.Home do
   end
 
   defp names_item?(name, %MediaItem{} = item) do
-    tags = PathParser.external_ids(name)
+    tags = PathParser.external_id_tags(name)
     own = own_ids(item)
 
     cond do

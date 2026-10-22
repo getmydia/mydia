@@ -161,17 +161,31 @@ defmodule Mydia.Library.PathParser do
   @external_id_tag ~r/[\[{](tmdb|tvdb|imdb)(?:id)?-([^\]}\s]+)[\]}]/i
 
   @doc """
-  The provider ids tagged in a folder or file name.
+  The provider ids tagged in a folder or file name. When a provider is tagged
+  more than once, the first tag wins; use `external_id_tags/1` to see them all.
 
       iex> PathParser.external_ids("Quiet Harbor (2011) {tmdb-90001}")
       %{tmdb: "90001"}
   """
   @spec external_ids(String.t()) :: %{optional(:tmdb | :tvdb | :imdb) => String.t()}
   def external_ids(name) when is_binary(name) do
+    name
+    |> external_id_tags()
+    |> Enum.reduce(%{}, fn {provider, id}, acc -> Map.put_new(acc, provider, id) end)
+  end
+
+  @doc """
+  Every provider id tag in a name, in order, repeats included.
+
+      iex> PathParser.external_id_tags("Quiet Harbor {tmdb-90001} {tmdb-55555}")
+      [tmdb: "90001", tmdb: "55555"]
+  """
+  @spec external_id_tags(String.t()) :: [{:tmdb | :tvdb | :imdb, String.t()}]
+  def external_id_tags(name) when is_binary(name) do
     @external_id_tag
     |> Regex.scan(name)
-    |> Enum.reduce(%{}, fn [_, provider, id], acc ->
-      Map.put_new(acc, provider |> String.downcase() |> String.to_existing_atom(), id)
+    |> Enum.map(fn [_, provider, id] ->
+      {provider |> String.downcase() |> String.to_existing_atom(), id}
     end)
   end
 
