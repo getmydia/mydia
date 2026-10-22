@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/liquid_glass/liquid_geometry.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass/glass_chip.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -11,6 +12,28 @@ Widget _host(Widget chip, {required bool liquid}) => MaterialApp(
     );
 
 void main() {
+  testWidgets('liquid GlassChip is a 34pt capsule with a 44pt target',
+      (tester) async {
+    await tester.pumpWidget(_host(
+      GlassChip(
+          label: const Text('Sort A'), selected: false, onSelected: (_) {}),
+      liquid: true,
+    ));
+    expect(tester.getSize(find.byType(GlassSurface)).height,
+        LiquidGeometry.buttonMedium);
+    expect(tester.getSize(find.byType(GlassChip)).height,
+        greaterThanOrEqualTo(LiquidGeometry.minHitTarget));
+  });
+
+  testWidgets('Frosted chip keeps its Material height', (tester) async {
+    await tester.pumpWidget(_host(
+      GlassChip(
+          label: const Text('Sort A'), selected: false, onSelected: (_) {}),
+      liquid: false,
+    ));
+    expect(tester.getSize(find.byType(ChoiceChip)).height, 48);
+  });
+
   testWidgets('Liquid Glass: a glass capsule that toggles', (tester) async {
     bool? last;
     await tester.pumpWidget(_host(

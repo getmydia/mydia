@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/liquid_glass/liquid_geometry.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass/glass_button.dart';
 import 'package:player/presentation/widgets/glass/glass_interaction.dart';
@@ -25,6 +26,30 @@ Widget _host(VoidCallback? onPressed, {bool liquid = true}) => MaterialApp(
     );
 
 void main() {
+  testWidgets('liquid GlassButton is a 34pt capsule with a 44pt target',
+      (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(_host(() => taps++));
+    expect(tester.getSize(find.byType(GlassSurface)).height,
+        LiquidGeometry.buttonMedium);
+    expect(tester.getSize(find.byType(GlassButton)).height,
+        greaterThanOrEqualTo(LiquidGeometry.minHitTarget));
+    // A tap in the margin above the glass still lands.
+    final glassTop = tester.getTopLeft(find.byType(GlassSurface));
+    await tester.tapAt(glassTop + const Offset(20, -4));
+    expect(taps, 1);
+  });
+
+  testWidgets('an explicit height wins on Liquid Glass', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: _theme(liquid: true),
+      home: Center(
+        child: GlassButton(label: 'x', onPressed: () {}, height: 50),
+      ),
+    ));
+    expect(tester.getSize(find.byType(GlassSurface)).height, 50);
+  });
+
   testWidgets('on Liquid Glass it is a glass capsule that taps by key',
       (tester) async {
     var taps = 0;
@@ -35,7 +60,6 @@ void main() {
     expect(find.text('All episodes'), findsOneWidget);
     await tester.tap(find.byKey(_key));
     expect(taps, 1);
-    expect(tester.getSize(find.byType(GlassSurface)).height, 48);
   });
 
   testWidgets('on Frosted it is the OutlinedButton, keyed', (tester) async {
@@ -45,6 +69,7 @@ void main() {
     expect(find.byType(OutlinedButton), findsOneWidget);
     await tester.tap(find.byKey(_key));
     expect(taps, 1);
+    expect(tester.getSize(find.byType(OutlinedButton)).height, 48);
   });
 
   testWidgets('a null onPressed disables the glass press', (tester) async {

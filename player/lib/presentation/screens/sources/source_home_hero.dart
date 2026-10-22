@@ -13,6 +13,7 @@ import '../../../core/sources/media_source.dart' show ArtworkRequest;
 import '../../../core/sources/source.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
+import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
@@ -356,7 +357,7 @@ class _HeroActions extends StatelessWidget {
       label: secondaryLabel,
       onPressed: onSecondary,
       grouped: grouped,
-      height: glass ? PrimaryPlayButton.height : _height,
+      height: glass ? LiquidGeometry.buttonLarge : _height,
     );
     if (glass) {
       // Play carries a ring gap around its pill; match it so both pills share

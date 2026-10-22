@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/liquid_glass/glass_style.dart';
+import '../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../core/theme/palette.dart';
 import 'focus_highlight.dart';
 import 'glass/glass_interaction.dart';
@@ -35,7 +36,8 @@ class PrimaryPlayButton extends StatefulWidget {
   /// "Play", or "Resume" when the item has saved progress.
   final String label;
 
-  /// The control's height, comfortably above the 48 px touch target.
+  /// The control's height off Liquid Glass, comfortably above the 48 px touch
+  /// target. On it the kit's 50 pt Large button applies.
   static const double height = 48;
 
   /// Space between the pill and its focus ring.
@@ -77,12 +79,11 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
     final foreground = !_enabled
         ? palette.textDisabled
         : (glass ? Colors.white : palette.background);
-    final radius = glass
-        ? const BorderRadius.all(Radius.circular(PrimaryPlayButton.height / 2))
-        : _radius;
+    final height =
+        glass ? LiquidGeometry.buttonLarge : PrimaryPlayButton.height;
+    final radius = glass ? BorderRadius.circular(height / 2) : _radius;
     final ringRadius = glass
-        ? BorderRadius.circular(
-            PrimaryPlayButton.height / 2 + PrimaryPlayButton.ringGap)
+        ? BorderRadius.circular(height / 2 + PrimaryPlayButton.ringGap)
         : _ringRadius;
     final ink = InkWell(
       borderRadius: radius,
@@ -97,7 +98,7 @@ class _PrimaryPlayButtonState extends State<PrimaryPlayButton>
       onTapUp: _enabled && !glass ? (_) => _controller.reverse() : null,
       onTapCancel: _enabled && !glass ? () => _controller.reverse() : null,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: PrimaryPlayButton.height),
+        constraints: BoxConstraints(minHeight: height),
         child: Padding(
           padding: EdgeInsets.symmetric(
             horizontal: widget.iconOnly ? 11 : 22,
