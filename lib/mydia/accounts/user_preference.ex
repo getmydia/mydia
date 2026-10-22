@@ -25,8 +25,11 @@ defmodule Mydia.Accounts.UserPreference do
     "recommendations_expanded" => false,
     "discover_hide_owned" => false,
     "hide_player" => false,
-    "player_banner_dismissed" => false
+    "player_banner_dismissed" => false,
+    "clock_format" => "auto"
   }
+
+  @clock_formats ~w(auto 12 24)
 
   # Valid values for each preference
   @valid_languages ~w(en es fr de it pt ja zh ko ru)
@@ -65,6 +68,19 @@ defmodule Mydia.Accounts.UserPreference do
   def interface_language(%__MODULE__{preferences: prefs}) do
     Map.get(prefs, "interface_language", @defaults["interface_language"])
   end
+
+  @doc "The valid `clock_format` values."
+  def clock_formats, do: @clock_formats
+
+  @doc """
+  The user's display time zone, or nil to use the instance zone (`TZ`).
+  Read through `Mydia.TimeDisplay`, which also drops zones tzdata no longer knows.
+  """
+  def time_zone(%__MODULE__{preferences: prefs}), do: Map.get(prefs || %{}, "time_zone")
+
+  @doc "The user's clock: `\"auto\"`, `\"12\"` or `\"24\"`."
+  def clock_format(%__MODULE__{preferences: prefs}),
+    do: Map.get(prefs || %{}, "clock_format", @defaults["clock_format"])
 
   @doc """
   Gets the theme preference with default fallback.
@@ -273,8 +289,23 @@ defmodule Mydia.Accounts.UserPreference do
     )
     |> validate_preference_value("hide_player", [true, false])
     |> validate_preference_value("player_banner_dismissed", [true, false])
+    |> validate_preference_value("clock_format", @clock_formats)
+    |> validate_time_zone()
     |> validate_home_widgets()
     |> validate_poster_fields()
+  end
+
+  # Same stale-value rule as validate_poster_fields/1: a stored zone tzdata
+  # later drops must not fail unrelated saves, so only a changed value is checked.
+  defp validate_time_zone(changeset) do
+    with prefs when is_map(prefs) <- get_change(changeset, :preferences),
+         value when not is_nil(value) <- Map.get(prefs, "time_zone"),
+         false <- value == Map.get(changeset.data.preferences || %{}, "time_zone"),
+         :error <- Mydia.TimeDisplay.parse_time_zone(value) do
+      add_error(changeset, :preferences, "invalid value for time_zone: #{inspect(value)}")
+    else
+      _ -> changeset
+    end
   end
 
   # Same stale-value rule as validate_poster_fields/1: a stored code that a
