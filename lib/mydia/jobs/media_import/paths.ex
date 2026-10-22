@@ -66,11 +66,11 @@ defmodule Mydia.Jobs.MediaImport.Paths do
 
       # TV episode - always use show folder + season subfolder
       download.episode && download.media_item ->
-        base = build_series_base_path(download.media_item, library_path)
+        base = build_series_base_path(download.media_item, library_path, download)
         season_dir(base, download.media_item, library_path, download.episode.season_number)
 
       download.media_item && download.media_item.type == "tv_show" ->
-        build_series_base_path(download.media_item, library_path)
+        build_series_base_path(download.media_item, library_path, download)
 
       # Unknown - use download title
       true ->
@@ -114,8 +114,18 @@ defmodule Mydia.Jobs.MediaImport.Paths do
   # Helper to build the base path for TV series: the folder the show already
   # uses, else the category-aware generated one.
   @doc false
-  def build_series_base_path(media_item, library_path) do
-    existing_or(media_item, library_path, nil, fn ->
+  def build_series_base_path(media_item, library_path),
+    do: series_base(media_item, library_path, nil)
+
+  # With a download in hand, an upgrade's own folder wins when the show is
+  # split across trusted folders, so it replaces the file where it lives.
+  @doc false
+  def build_series_base_path(media_item, library_path, download) do
+    series_base(media_item, library_path, upgrade_target_id(download))
+  end
+
+  defp series_base(media_item, library_path, prefer_file_id) do
+    existing_or(media_item, library_path, prefer_file_id, fn ->
       if library_path.auto_organize do
         FileOrganizer.destination_path(media_item, library_path)
       else

@@ -3049,6 +3049,48 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
 
     @tag :tmp_dir
+    test "a TV upgrade prefers the folder of the file it replaces when a show is split",
+         %{tmp_dir: tmp_dir} do
+      library_path = create_test_library_path(tmp_dir, :series)
+
+      show =
+        media_item_fixture(%{type: "tv_show", title: "Lantern Bay", year: 2020, tvdb_id: 70001})
+
+      [ep1, ep2, ep3] =
+        for n <- 1..3 do
+          episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: n})
+        end
+
+      target =
+        media_file_fixture(%{
+          episode_id: ep1.id,
+          library_path_id: library_path.id,
+          relative_path: "Lantern Bay (2020)/Season 1/Lantern Bay S01E01.mkv"
+        })
+
+      for ep <- [ep2, ep3] do
+        media_file_fixture(%{
+          episode_id: ep.id,
+          library_path_id: library_path.id,
+          relative_path:
+            "Lantern Bay [tvdb-70001]/Season 1/Lantern Bay S01E0#{ep.episode_number}.mkv"
+        })
+      end
+
+      download =
+        download_fixture(%{
+          media_item_id: show.id,
+          metadata: %{"upgrade_target_media_file_id" => target.id}
+        })
+
+      assert MediaImport.build_series_base_path(show, library_path, download) ==
+               Path.join(library_path.path, "Lantern Bay (2020)")
+
+      assert MediaImport.build_series_base_path(show, library_path) ==
+               Path.join(library_path.path, "Lantern Bay [tvdb-70001]")
+    end
+
+    @tag :tmp_dir
     test "a season pack lands new episodes in the existing Season folder", %{tmp_dir: tmp_dir} do
       library_path = create_test_library_path(tmp_dir, :series)
 
