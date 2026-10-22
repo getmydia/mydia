@@ -3874,6 +3874,13 @@ them.</p>
 <li>Zero duplicate storage space</li>
 <li>Files remain seeding while available in your library</li>
 </ul>
+<p>Two mounts of the same disk are not enough. Docker treats <code>/downloads</code> and
+<code>/media</code> as separate filesystems even when both come from one host drive, so a
+hardlink between them fails and Mydia copies instead. The download client must
+also report paths under the shared mount: if it still saves to <code>/downloads</code>,
+Mydia reads the file through that old mount and copies it.</p>
+<p>When an import is copied rather than hardlinked, the download's details panel on
+the Downloads page says so and explains which of the two cases applies.</p>
 <h2 id="usergroup-identifiers">User/Group Identifiers</h2>
 <p>To avoid permission issues, specify the user <code>PUID</code> and group <code>PGID</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>id<span class="w"> </span>your_user
