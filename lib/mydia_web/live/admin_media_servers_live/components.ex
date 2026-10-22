@@ -9,6 +9,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   Renders the Media Servers tab content: the Plex deprecation banner, the
   Jellyfin servers and the plugin-backed servers.
   """
+  attr :display, Mydia.TimeDisplay, required: true
   attr :media_servers, :list, required: true
   attr :media_server_health, :map, required: true
   attr :last_runs, :map, default: %{}
@@ -31,6 +32,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
       <:row :let={server}>
         <.media_server_row
           server={server}
+          display={@display}
           health={Map.get(@media_server_health, server.id, %{status: :unknown})}
           last_run={Map.get(@last_runs, server.id)}
           link_count={Map.get(@link_counts, server.id, 0)}
@@ -66,6 +68,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
         <:row :let={{plugin, instance}}>
           <PluginInstanceComponents.plugin_instance_row
             plugin={plugin}
+            display={@display}
             instance={instance}
             health={Map.get(@plugin_instance_health, instance.id, %{status: :unknown})}
             last_run={Map.get(@plugin_instance_runs, instance.id)}
@@ -78,6 +81,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     """
   end
 
+  attr :display, Mydia.TimeDisplay, required: true
   attr :server, :map, required: true
   attr :health, :map, required: true
   attr :last_run, :any, default: nil
@@ -142,7 +146,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           {@link_count} {if @link_count == 1, do: "account", else: "accounts"}
         </span>
         <span :if={@health[:checked_at]} class="text-xs text-base-content/50">
-          Checked {Calendar.strftime(@health.checked_at, "%H:%M")}
+          Checked {format(@health.checked_at, :time, @display)}
         </span>
       </:badges>
       <:actions>

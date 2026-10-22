@@ -70,7 +70,7 @@
       </div>
     </div>
 
-    <ListComponents.stats_bar summary={@summary} />
+    <ListComponents.stats_bar summary={@summary} display={@time_display} />
 
     <ListComponents.tab_bar tabs={@tabs} active={@active_tab}>
       <div id="downloads-toolbar" class="flex flex-wrap items-center gap-2 mb-3">
@@ -152,7 +152,10 @@
       >
         <.icon name="hero-clock" class="size-4 shrink-0" />
         <span>
-          {@stale_status.client} is busy, showing status from {status_age(@stale_status.as_of)}.
+          {@stale_status.client} is busy, showing status from {status_age(
+            @stale_status.as_of,
+            @time_display
+          )}.
         </span>
       </div>
 
@@ -457,7 +460,8 @@
                     title="Imported"
                   >
                     <.icon name="hero-check-circle" class="size-3" />{format_relative_time(
-                      download.imported_at
+                      download.imported_at,
+                      @time_display
                     )}
                   </span>
                 <% end %>
@@ -1030,6 +1034,7 @@
       :if={@drawer_download}
       download={@drawer_download}
       tab={ListView.row_kind(@drawer_download)}
+      display={@time_display}
       client_url={@client_urls[@drawer_download.download_client]}
     />
   </div>

@@ -66,6 +66,8 @@ defmodule MydiaWeb.ProfileLive.Index do
         Enum.map(Settings.list_quality_profiles(), &{&1.id, &1.name})
       )
       |> assign(:add_prefs, preference.preferences)
+      |> assign(:time_zone_options, time_zone_options())
+      |> assign(:server_time_zone, Mydia.TimeDisplay.instance_time_zone())
 
     {:ok, socket}
   end
@@ -274,7 +276,47 @@ defmodule MydiaWeb.ProfileLive.Index do
     end
   end
 
+  def handle_event("set_time_zone", %{"time_zone" => zone}, socket) do
+    save_time_display(socket, %{"time_zone" => if(zone == "", do: nil, else: zone)})
+  end
+
+  def handle_event("set_clock_format", %{"clock" => clock}, socket) do
+    save_time_display(socket, %{"clock_format" => clock})
+  end
+
   ## Private Helpers
+
+  defp save_time_display(socket, delta) do
+    case Accounts.update_preference(socket.assigns.preference, delta) do
+      {:ok, preference} ->
+        {:noreply,
+         socket
+         |> assign(:preference, preference)
+         |> assign(:time_display, Mydia.TimeDisplay.for_user(preference))}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not save your date and time settings")}
+    end
+  end
+
+  defp clock_label(%Mydia.TimeDisplay{clock: :h12}), do: "12-hour"
+  defp clock_label(%Mydia.TimeDisplay{clock: :h24}), do: "24-hour"
+
+  # IANA zones grouped by region ("Europe", "America", ...) for <optgroup>s.
+  # Zones without a region prefix, and Etc/*, go under "Other".
+  defp time_zone_options do
+    Tzdata.canonical_zone_list()
+    |> Enum.group_by(fn zone ->
+      case String.split(zone, "/", parts: 2) do
+        [region, _] when region != "Etc" -> region
+        _ -> "Other"
+      end
+    end)
+    |> Enum.sort_by(fn {region, _} -> {region == "Other", region} end)
+    |> Enum.map(fn {region, zones} ->
+      {region, Enum.map(Enum.sort(zones), &{String.replace(&1, "_", " "), &1})}
+    end)
+  end
 
   defp library_options(libraries, types) do
     matching = Enum.filter(libraries, &(&1.type in types))
@@ -325,10 +367,10 @@ defmodule MydiaWeb.ProfileLive.Index do
     end
   end
 
-  defp format_datetime(nil), do: "Never"
+  defp format_datetime(nil, _display), do: "Never"
 
-  defp format_datetime(datetime) do
-    Calendar.strftime(datetime, "%b %d, %Y at %I:%M %p")
+  defp format_datetime(datetime, display) do
+    format(datetime, :datetime, display)
   end
 
   defp upload_error_to_string(:too_large), do: "Image is too large (maximum 5MB)"

@@ -134,7 +134,7 @@
                 </span>
                 <span class="flex items-center gap-1">
                   <.icon name="hero-clock" class="w-3.5 h-3.5" />
-                  {relative_time(event.inserted_at)}
+                  {relative_time(event.inserted_at, @time_display)}
                 </span>
                 <span class="badge badge-sm badge-ghost capitalize">{event.category}</span>
               </div>

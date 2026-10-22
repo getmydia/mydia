@@ -7,6 +7,7 @@
       />
     </:actions>
     <MydiaWeb.AdminIndexersLive.Components.indexers_tab
+      display={@time_display}
       indexers={@indexers}
       indexer_health={@indexer_health}
       library_indexers={@library_indexers}
@@ -22,7 +23,10 @@
       search_stats_window={@search_stats_window}
     />
     <MydiaWeb.AdminIndexersLive.Components.modals {assigns} />
-    <MydiaWeb.AdminIndexersLive.SearchStatsComponents.failures_modal failures={@search_failures} />
+    <MydiaWeb.AdminIndexersLive.SearchStatsComponents.failures_modal
+      failures={@search_failures}
+      display={@time_display}
+    />
     <MydiaWeb.AdminIndexersLive.LoginComponents.login_prompt {assigns} />
   </.admin_page>
 </Layouts.app>

@@ -362,6 +362,19 @@ defmodule Mydia.EventsTest do
       assert length(result) == 4
     end
 
+    test "until is exclusive at the boundary instant" do
+      {:ok, event} = Events.create_event(%{category: "media", type: "media_item.added"})
+      boundary = ~U[2026-10-22 22:00:00Z]
+
+      Repo.update_all(from(e in Event, where: e.id == ^event.id), set: [inserted_at: boundary])
+
+      refute Enum.any?(Events.list_events(until: boundary), &(&1.id == event.id))
+
+      since = DateTime.add(boundary, -1, :day)
+      refute Enum.any?(Events.list_events(since: since, until: boundary), &(&1.id == event.id))
+      assert Enum.any?(Events.list_events(since: boundary), &(&1.id == event.id))
+    end
+
     test "combines multiple filters", %{user_id: user_id} do
       result = Events.list_events(category: "media", actor_type: :user, actor_id: user_id)
       assert length(result) == 2

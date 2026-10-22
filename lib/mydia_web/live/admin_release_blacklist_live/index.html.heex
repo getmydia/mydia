@@ -1,6 +1,7 @@
 <Layouts.app {assigns}>
   <.admin_page page={:release_blacklist} count={@total_count}>
     <MydiaWeb.AdminReleaseBlacklistLive.Components.blacklist_tab
+      display={@time_display}
       rows={@rows}
       total_count={@total_count}
       page={@page}

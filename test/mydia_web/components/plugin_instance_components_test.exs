@@ -8,6 +8,8 @@ defmodule MydiaWeb.PluginInstanceComponentsTest do
   alias Mydia.Plugins.Plugin
   alias MydiaWeb.PluginInstanceComponents
 
+  @display %Mydia.TimeDisplay{time_zone: "Etc/UTC", clock: :h12}
+
   defp plugin, do: %Plugin{slug: "plex", name: "Plex", category: "media_server", setup: true}
 
   defp instance(attrs \\ %{}) do
@@ -29,6 +31,7 @@ defmodule MydiaWeb.PluginInstanceComponentsTest do
 
   defp render_card(attrs) do
     defaults = %{
+      display: @display,
       plugin: plugin(),
       instance: instance(),
       health: %{status: :ok, message: nil, action: nil, checked_at: nil},

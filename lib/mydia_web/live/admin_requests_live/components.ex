@@ -4,7 +4,7 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
 
   import MydiaWeb.MediaRequestComponents,
     only: [
-      format_date: 1,
+      format_date: 2,
       media_type_text: 1,
       poster_src: 1,
       status_badge_class: 1,
@@ -17,6 +17,7 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
 
   attr :requests, :list, required: true
   attr :filter_status, :string, required: true
+  attr :display, Mydia.TimeDisplay, required: true
 
   def requests_tab(assigns) do
     ~H"""
@@ -35,7 +36,7 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
 
     <.admin_list id="requests" items={@requests}>
       <:row :let={request}>
-        <.request_row request={request} />
+        <.request_row request={request} display={@display} />
       </:row>
       <:empty>
         <%= if @filter_status == "pending" do %>
@@ -49,6 +50,7 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
   end
 
   attr :request, MediaRequest, required: true
+  attr :display, Mydia.TimeDisplay, required: true
 
   defp request_row(assigns) do
     assigns =
@@ -97,11 +99,11 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       </:title>
 
       <:descriptor>
-        Requested by {@request.requester.email} on {format_date(@request.inserted_at)}
+        Requested by {@request.requester.email} on {format_date(@request.inserted_at, @display)}
       </:descriptor>
 
       <:details>
-        <.request_outcome request={@request} />
+        <.request_outcome request={@request} display={@display} />
       </:details>
 
       <:badges>
@@ -157,6 +159,7 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
   end
 
   attr :request, MediaRequest, required: true
+  attr :display, Mydia.TimeDisplay, required: true
 
   defp request_outcome(assigns) do
     ~H"""
@@ -165,9 +168,9 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       <div>
         <div>
           <%= if @request.approved_by do %>
-            Approved by {@request.approved_by.email} on {format_date(@request.approved_at)}
+            Approved by {@request.approved_by.email} on {format_date(@request.approved_at, @display)}
           <% else %>
-            Approved automatically on {format_date(@request.approved_at)}
+            Approved automatically on {format_date(@request.approved_at, @display)}
           <% end %>
         </div>
         <div :if={@request.admin_notes} class="text-xs mt-1">
@@ -179,7 +182,7 @@ defmodule MydiaWeb.AdminRequestsLive.Components do
       <.icon name="hero-x-circle" class="w-4 h-4 mt-0.5" />
       <div>
         <div>
-          Rejected by {@request.approved_by.email} on {format_date(@request.rejected_at)}
+          Rejected by {@request.approved_by.email} on {format_date(@request.rejected_at, @display)}
         </div>
         <div :if={@request.rejection_reason} class="text-xs mt-1">
           Reason: {@request.rejection_reason}

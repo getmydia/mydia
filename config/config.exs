@@ -21,6 +21,11 @@ config :mydia,
   generators: [timestamp_type: :utc_datetime],
   database_adapter: database_adapter
 
+# Display time zones for the web UI (Mydia.TimeDisplay). Autoupdate stays off
+# so the app never downloads tz data; the bundled release moves with the dep.
+config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
+config :tzdata, :autoupdate, :disabled
+
 # The build environment, readable at runtime (releases bake config.exs in).
 config :mydia, :env, config_env()
 

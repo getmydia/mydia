@@ -88,6 +88,7 @@ defmodule MydiaWeb do
       import Phoenix.HTML
       # Core UI components
       import MydiaWeb.CoreComponents
+      import MydiaWeb.DateTimeFormat, only: [format: 3, local_time: 1]
       # Library components for media/music/books views
       import MydiaWeb.LibraryComponents
       # Collection components for collection views

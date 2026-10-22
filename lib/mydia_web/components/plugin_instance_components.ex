@@ -12,6 +12,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
   alias Mydia.Plugins.Instance
 
   @doc "One plugin-backed media server as an admin_row/1."
+  attr :display, Mydia.TimeDisplay, required: true
   attr :plugin, :map, required: true
   attr :instance, :map, required: true
   attr :health, :map, required: true
@@ -100,7 +101,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
           {health_label(@health.status)}
         </span>
         <span :if={@health[:checked_at]} class="text-xs text-base-content/50">
-          Checked {Calendar.strftime(@health.checked_at, "%H:%M")}
+          Checked {format(@health.checked_at, :time, @display)}
         </span>
       </:badges>
       <:actions>

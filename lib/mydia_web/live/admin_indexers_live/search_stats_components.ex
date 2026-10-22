@@ -60,6 +60,7 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
     """
   end
 
+  attr :display, Mydia.TimeDisplay, required: true
   attr :failures, :map, default: nil
 
   def failures_modal(assigns) do
@@ -81,7 +82,7 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
           class="flex flex-col gap-0.5"
         >
           <span class="text-xs text-base-content/60">
-            {format_time(row.inserted_at)} · {row.kind} · {row.outcome}
+            {format(row.inserted_at, :datetime, @display)} · {row.kind} · {row.outcome}
           </span>
           <span :if={row.error_message} class="break-words">{row.error_message}</span>
         </li>
@@ -100,6 +101,4 @@ defmodule MydiaWeb.AdminIndexersLive.SearchStatsComponents do
   defp format_ms(nil), do: "n/a"
   defp format_ms(ms) when ms < 1_000, do: "#{ms} ms"
   defp format_ms(ms), do: "#{Float.round(ms / 1_000, 1)} s"
-
-  defp format_time(datetime), do: Calendar.strftime(datetime, "%b %-d, %H:%M UTC")
 end

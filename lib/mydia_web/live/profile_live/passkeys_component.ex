@@ -177,8 +177,8 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
   defp available?(%{supported?: true, relying_party: {:ok, _}}), do: true
   defp available?(_assigns), do: false
 
-  defp format_date(nil), do: "never"
-  defp format_date(datetime), do: Calendar.strftime(datetime, "%b %d, %Y")
+  defp format_date(nil, _display), do: "never"
+  defp format_date(datetime, display), do: format(datetime, :date, display)
 
   @impl true
   def render(assigns) do
@@ -209,8 +209,9 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
           <div class="flex-1 min-w-0">
             <div class="font-medium truncate">{passkey.name}</div>
             <div class="text-xs text-base-content/60">
-              Works at {passkey.rp_id} · Added {format_date(passkey.inserted_at)} · Last used {format_date(
-                passkey.last_used_at
+              Works at {passkey.rp_id} · Added {format_date(passkey.inserted_at, @time_display)} · Last used {format_date(
+                passkey.last_used_at,
+                @time_display
               )}
             </div>
           </div>

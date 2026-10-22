@@ -43,6 +43,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
 
   @docs_url "https://docs.mydia.dev/latest/using/how-to/cardigann-indexers/#using-the-prowlarr-based-engine-experimental"
 
+  attr :display, Mydia.TimeDisplay, required: true
   attr :status, Status, required: true
   attr :cache_bytes, :integer, required: true
   attr :expanded, :boolean, default: false
@@ -156,7 +157,11 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
         </button>
       </div>
 
-      <.transition_panel :if={@status.transition} transition={@status.transition} />
+      <.transition_panel
+        :if={@status.transition}
+        transition={@status.transition}
+        display={@display}
+      />
 
       <p :if={@only_verified != []} id="cardigann-engine-only-verified" class="text-sm opacity-80">
         Only verified on the {other_name(@status.active)} engine: {Enum.join(@only_verified, ", ")}.
@@ -165,6 +170,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
     """
   end
 
+  attr :display, Mydia.TimeDisplay, required: true
   attr :transition, Transition, required: true
 
   defp transition_panel(assigns) do
@@ -177,7 +183,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
             <div>
               <p>{@transition.error}</p>
               <p :if={@transition.next_retry_at} class="text-xs opacity-80">
-                Next attempt at {Calendar.strftime(@transition.next_retry_at, "%H:%M")} UTC.
+                Next attempt at {format(@transition.next_retry_at, :time, @display)}.
               </p>
               <p :if={is_nil(@transition.next_retry_at)} class="text-xs opacity-80">
                 Fix the cause, then switch to Built-in and back to Prowlarr-based to try again.

@@ -167,7 +167,7 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
         <div id="totp-status" class="flex flex-wrap items-center gap-3 mb-4">
           <span class="badge badge-success">On</span>
           <span class="text-sm text-base-content/70">
-            Enabled {Calendar.strftime(@user.totp_enabled_at, "%b %d, %Y")} · {recovery_codes_summary(
+            Enabled {format(@user.totp_enabled_at, :date, @time_display)} · {recovery_codes_summary(
               @remaining
             )}
           </span>

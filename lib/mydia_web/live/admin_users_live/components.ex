@@ -14,6 +14,7 @@ defmodule MydiaWeb.AdminUsersLive.Components do
     """
   end
 
+  attr :display, Mydia.TimeDisplay, required: true
   attr :users, :list, required: true, doc: "maps of %{user, requests_*} from load_users/1"
   attr :current_user, :map, required: true
   attr :search_query, :string, default: ""
@@ -78,7 +79,7 @@ defmodule MydiaWeb.AdminUsersLive.Components do
         </span>
       </:col>
       <:col :let={data} label="Last Login">
-        <span class="text-sm">{format_date(data.user.last_login_at)}</span>
+        <span class="text-sm">{format_date(data.user.last_login_at, @display)}</span>
       </:col>
       <:col :let={data} label="Statistics">
         <.stats_cell data={data} />
@@ -209,8 +210,8 @@ defmodule MydiaWeb.AdminUsersLive.Components do
   defp oidc_user?(%User{oidc_sub: oidc_sub}) when not is_nil(oidc_sub), do: true
   defp oidc_user?(_user), do: false
 
-  defp format_date(nil), do: "Never"
-  defp format_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %d, %Y")
+  defp format_date(nil, _display), do: "Never"
+  defp format_date(%DateTime{} = dt, display), do: format(dt, :date, display)
 
   defp role_badge_class("admin"), do: "badge-error"
   defp role_badge_class("user"), do: "badge-primary"

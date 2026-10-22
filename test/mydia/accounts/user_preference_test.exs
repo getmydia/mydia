@@ -338,4 +338,27 @@ defmodule Mydia.Accounts.UserPreferenceTest do
              }) == []
     end
   end
+
+  describe "time display preferences" do
+    test "getters default to the server zone (nil) and auto" do
+      pref = %UserPreference{preferences: %{}}
+      assert UserPreference.time_zone(pref) == nil
+      assert UserPreference.clock_format(pref) == "auto"
+    end
+
+    test "valid values pass, invalid ones are rejected" do
+      base = %UserPreference{preferences: %{}}
+
+      assert UserPreference.update_preferences_changeset(base, %{
+               "time_zone" => "Europe/Rome",
+               "clock_format" => "24"
+             }).valid?
+
+      assert UserPreference.update_preferences_changeset(base, %{"time_zone" => nil}).valid?
+
+      refute UserPreference.update_preferences_changeset(base, %{"time_zone" => "Mars/Olympus"}).valid?
+
+      refute UserPreference.update_preferences_changeset(base, %{"clock_format" => "13"}).valid?
+    end
+  end
 end

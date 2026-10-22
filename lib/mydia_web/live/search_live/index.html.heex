@@ -363,7 +363,7 @@
                     </div>
                     <%= if result.published_at do %>
                       <span class="text-xs text-base-content/60">
-                        {format_date(result.published_at)}
+                        {format_date(result.published_at, @time_display)}
                       </span>
                     <% end %>
                   </div>
@@ -563,7 +563,10 @@
               <div class="flex items-center gap-2 text-sm">
                 <.icon name="hero-calendar" class="w-5 h-5 text-base-content/50" />
                 <span class="text-base-content/70">Published:</span>
-                <span class="font-semibold">{format_date(@selected_result.published_at)}</span>
+                <span class="font-semibold">{format_date(
+                  @selected_result.published_at,
+                  @time_display
+                )}</span>
               </div>
             <% end %>
             <div class="flex items-center gap-2 text-sm">

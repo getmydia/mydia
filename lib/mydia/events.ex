@@ -156,7 +156,7 @@ defmodule Mydia.Events do
     - `:resource_id` - Filter by resource ID (requires resource_type)
     - `:severity` - Filter by severity level (:info, :warning, :error)
     - `:since` - Filter events after this DateTime
-    - `:until` - Filter events before this DateTime
+    - `:until` - Filter events before this DateTime (exclusive)
     - `:limit` - Maximum number of events to return (default: 50)
     - `:offset` - Number of events to skip (default: 0)
 
@@ -335,10 +335,10 @@ defmodule Mydia.Events do
     do: where(query, [e], e.inserted_at >= ^since)
 
   defp filter_by_date_range(query, nil, until) when not is_nil(until),
-    do: where(query, [e], e.inserted_at <= ^until)
+    do: where(query, [e], e.inserted_at < ^until)
 
   defp filter_by_date_range(query, since, until) do
-    where(query, [e], e.inserted_at >= ^since and e.inserted_at <= ^until)
+    where(query, [e], e.inserted_at >= ^since and e.inserted_at < ^until)
   end
 
   defp apply_pagination(query, opts) do

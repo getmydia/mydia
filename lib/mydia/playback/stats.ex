@@ -82,14 +82,15 @@ defmodule Mydia.Playback.Stats do
     at |> DateTime.add(offset, :second) |> DateTime.to_date()
   end
 
-  # Named-zone conversion needs a tz database, which this project does not
-  # carry and should not add for one chart. The gap between the VM's local and
-  # universal time is the host's current UTC offset, which honours the
-  # container's TZ variable and falls back to 0 when it is unset.
+  # A named zone could be used here now that a tz database is configured
+  # (`Mydia.TimeDisplay.instance_time_zone/0`). This keeps the simpler
+  # approach: the gap between the VM's local and universal time is the host's
+  # current UTC offset, which honours the container's TZ variable and falls
+  # back to 0 when it is unset.
   #
   # Sampled once and applied across the window, so a DST transition inside the
   # window shifts one day boundary by an hour. That is an acceptable trade for
-  # not carrying tzdata.
+  # a single chart.
   @spec local_utc_offset() :: integer()
   def local_utc_offset do
     local = NaiveDateTime.from_erl!(:calendar.local_time())

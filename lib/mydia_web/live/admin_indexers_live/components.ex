@@ -18,6 +18,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   Renders the Indexers tab content.
   Shows both configured indexers (Prowlarr/Jackett) and enabled library indexers.
   """
+  attr :display, Mydia.TimeDisplay, required: true
   attr :indexers, :list, required: true
   attr :indexer_health, :map, required: true
   attr :library_indexers, :list, required: true
@@ -84,6 +85,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
     >
       <CardigannEngineComponents.engine_section
         :if={@cardigann_enabled and @cardigann_engine}
+        display={@display}
         status={@cardigann_engine}
         cache_bytes={@cardigann_cache_bytes}
         expanded={@cardigann_engine_expanded}

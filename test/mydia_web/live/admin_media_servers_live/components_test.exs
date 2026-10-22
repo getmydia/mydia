@@ -12,6 +12,8 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
   alias MydiaWeb.AdminMediaServersLive.Components
   alias MydiaWeb.AdminMediaServersLive.MediaServerModalComponents
 
+  @display %Mydia.TimeDisplay{time_zone: "Etc/UTC", clock: :h12}
+
   defp render_modal(opts) do
     config = Keyword.get(opts, :config, %MediaServerConfig{type: :jellyfin})
 
@@ -48,6 +50,7 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
 
   defp render_tab(servers, health) do
     render_component(&Components.media_servers_tab/1, %{
+      display: @display,
       media_servers: servers,
       media_server_health: health,
       last_runs: %{}
@@ -87,6 +90,7 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
 
       html =
         render_component(&Components.media_servers_tab/1, %{
+          display: @display,
           media_servers: [s],
           media_server_health: %{s.id => %{status: :healthy}},
           link_counts: %{s.id => 3}

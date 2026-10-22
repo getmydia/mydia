@@ -14,6 +14,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
   alias Phoenix.LiveView.JS
 
   attr :summary, Summary, required: true
+  attr :display, Mydia.TimeDisplay, required: true
 
   def stats_bar(assigns) do
     ~H"""
@@ -38,7 +39,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
         <div class="stat-title">Download</div>
         <div class="stat-value text-2xl tabular-nums">{format_speed(@summary.download_speed)}</div>
         <div :if={@summary.stale_as_of} class="stat-desc">
-          as of {format_relative_time(@summary.stale_as_of)}
+          as of {format_relative_time(@summary.stale_as_of, @display)}
         </div>
       </div>
       <div class="stat py-3">
