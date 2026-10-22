@@ -43,20 +43,29 @@ defmodule MydiaWeb.CoreComponents do
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
   attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+
+  attr :dismiss_after, :any,
+    doc: "milliseconds before the flash clears itself, or nil to stay until closed"
+
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
 
   slot :inner_block, doc: "the optional inner block that renders the flash message"
 
   def flash(assigns) do
-    assigns = assign_new(assigns, :id, fn -> "flash-#{assigns.kind}" end)
+    assigns =
+      assigns
+      |> assign_new(:id, fn -> "flash-#{assigns.kind}" end)
+      |> assign_new(:dismiss_after, fn -> default_dismiss_after(assigns.kind) end)
 
     ~H"""
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
+      phx-hook={@dismiss_after && "FlashAutoDismiss"}
+      data-dismiss-after={@dismiss_after}
       role="alert"
-      class="toast toast-top toast-end z-50"
+      class="pointer-events-auto"
       {@rest}
     >
       <div class={[
@@ -78,6 +87,10 @@ defmodule MydiaWeb.CoreComponents do
     </div>
     """
   end
+
+  # Errors stay longer: they tend to be longer and are the ones worth reading.
+  defp default_dismiss_after(:error), do: 10_000
+  defp default_dismiss_after(_kind), do: 5_000
 
   @doc """
   Renders a button with navigation support.
