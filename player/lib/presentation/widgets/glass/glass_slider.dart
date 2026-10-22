@@ -29,6 +29,7 @@ class GlassSlider extends StatefulWidget {
     this.label,
     this.activeColor,
     this.inactiveColor,
+    @visibleForTesting this.debugThumbShape,
   });
 
   final double value;
@@ -42,6 +43,10 @@ class GlassSlider extends StatefulWidget {
   final Color? activeColor;
   final Color? inactiveColor;
 
+  /// Replaces the hidden thumb on Liquid Glass so a test can record where
+  /// Material places its own thumb. Production leaves it null.
+  final SliderComponentShape? debugThumbShape;
+
   @override
   State<GlassSlider> createState() => _GlassSliderState();
 }
@@ -53,6 +58,9 @@ class _GlassSliderState extends State<GlassSlider> {
 
   /// Track height Material falls back to when no theme sets one.
   static const double _defaultTrackHeight = 4;
+
+  /// Knob opacity when `onChanged` is null.
+  static const double _disabledOpacity = 0.5;
 
   bool _dragging = false;
   bool _focused = false;
@@ -112,7 +120,7 @@ class _GlassSliderState extends State<GlassSlider> {
     final theme = SliderTheme.of(context);
     final themed = SliderTheme(
       data: theme.copyWith(
-        thumbShape: SliderComponentShape.noThumb,
+        thumbShape: widget.debugThumbShape ?? SliderComponentShape.noThumb,
         overlayShape: SliderComponentShape.noOverlay,
         padding: const EdgeInsets.symmetric(horizontal: _knobWidth / 2),
       ),
@@ -138,39 +146,51 @@ class _GlassSliderState extends State<GlassSlider> {
     final ring = _focused &&
         FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     // Focus reports from the slider below; this node never takes focus.
+    final enabled = widget.onChanged != null;
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
       onFocusChange: (focused) => setState(() => _focused = focused),
       child: LayoutBuilder(
-        builder: (context, constraints) => Stack(
-          alignment: AlignmentDirectional.centerStart,
-          children: [
-            _slider(
-              context,
-              glass: true,
-              unbounded: !constraints.hasBoundedHeight,
-            ),
-            PositionedDirectional(
-              start: _knobStart(context, constraints.maxWidth),
-              top: 0,
-              bottom: 0,
-              width: _knobWidth,
-              child: ExcludeSemantics(
-                child: IgnorePointer(
-                  child: Center(
-                    child: AnimatedScale(
-                      scale: _dragging ? DepthTokens.liquidPressScale : 1.0,
-                      duration: DepthTokens.liquidPressDuration,
-                      curve: DepthTokens.liquidPressCurve,
-                      child: _Knob(opaque: opaque, ring: ring),
+        builder: (context, constraints) {
+          // Without a bounded width the slider lays out at its own width and
+          // there is no track to place a knob on, so draw the bare slider.
+          final knobPlaced = constraints.hasBoundedWidth;
+          return Stack(
+            alignment: AlignmentDirectional.centerStart,
+            children: [
+              _slider(
+                context,
+                glass: true,
+                unbounded: !constraints.hasBoundedHeight,
+              ),
+              if (knobPlaced)
+                PositionedDirectional(
+                  start: _knobStart(context, constraints.maxWidth),
+                  top: 0,
+                  bottom: 0,
+                  width: _knobWidth,
+                  child: ExcludeSemantics(
+                    child: IgnorePointer(
+                      child: Center(
+                        child: Opacity(
+                          opacity: enabled ? 1.0 : _disabledOpacity,
+                          child: AnimatedScale(
+                            scale: enabled && _dragging
+                                ? DepthTokens.liquidPressScale
+                                : 1.0,
+                            duration: DepthTokens.liquidPressDuration,
+                            curve: DepthTokens.liquidPressCurve,
+                            child: _Knob(opaque: opaque, ring: ring),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }

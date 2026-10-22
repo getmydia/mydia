@@ -86,15 +86,15 @@ void main() {
 
   testWidgets('Liquid Glass: a large text scale grows the bar, no overflow',
       (tester) async {
-    await _pump(tester, liquid: true, textScale: 2.0);
+    await _pump(tester, liquid: true, textScale: 3.0);
     expect(tester.takeException(), isNull);
     expect(
       tester.getSize(find.byType(GlassSurface)).height,
-      greaterThanOrEqualTo(62),
+      greaterThan(62),
     );
     expect(
       tester.getSize(find.byType(NavItem).first).height,
-      greaterThanOrEqualTo(54),
+      greaterThan(54),
     );
   });
 }

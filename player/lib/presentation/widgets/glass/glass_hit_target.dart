@@ -36,7 +36,7 @@ class GlassHitTarget extends StatelessWidget {
   }
 }
 
-/// Lays the glass out at exactly [height] with the parent's width
+/// Lays the glass out at least [height] tall with the parent's width
 /// constraints, centered in an area at least [LiquidGeometry.minHitTarget]
 /// tall. A render object rather than a LayoutBuilder so intrinsic sizing
 /// (IntrinsicWidth in dialogs) keeps working.
@@ -68,8 +68,11 @@ class _RenderHeldHeight extends RenderShiftedBox {
 
   double get _areaHeight => math.max(_height, LiquidGeometry.minHitTarget);
 
+  /// The glass is at least [_height] tall and takes its natural height from
+  /// there, so a label at a large text scale is not clipped. Under a tight
+  /// parent (a 48 pt chip row) the natural height is [_height] at normal text.
   BoxConstraints _childConstraints(BoxConstraints c) =>
-      c.copyWith(minHeight: _height, maxHeight: _height);
+      c.copyWith(minHeight: _height, maxHeight: math.max(_height, c.maxHeight));
 
   @override
   double computeMinIntrinsicWidth(double height) =>
@@ -80,16 +83,19 @@ class _RenderHeldHeight extends RenderShiftedBox {
       child?.getMaxIntrinsicWidth(_height) ?? 0;
 
   @override
-  double computeMinIntrinsicHeight(double width) => _areaHeight;
+  double computeMinIntrinsicHeight(double width) =>
+      math.max(_areaHeight, child?.getMinIntrinsicHeight(width) ?? 0);
 
   @override
-  double computeMaxIntrinsicHeight(double width) => _areaHeight;
+  double computeMaxIntrinsicHeight(double width) =>
+      math.max(_areaHeight, child?.getMaxIntrinsicHeight(width) ?? 0);
 
   @override
   Size computeDryLayout(BoxConstraints constraints) {
     final childSize =
         child?.getDryLayout(_childConstraints(constraints)) ?? Size.zero;
-    return constraints.constrain(Size(childSize.width, _areaHeight));
+    return constraints.constrain(
+        Size(childSize.width, math.max(_areaHeight, childSize.height)));
   }
 
   @override
@@ -100,7 +106,8 @@ class _RenderHeldHeight extends RenderShiftedBox {
       return;
     }
     child.layout(_childConstraints(constraints), parentUsesSize: true);
-    size = constraints.constrain(Size(child.size.width, _areaHeight));
+    size = constraints.constrain(
+        Size(child.size.width, math.max(_areaHeight, child.size.height)));
     (child.parentData! as BoxParentData).offset =
         Offset(0, (size.height - child.size.height) / 2);
   }

@@ -40,6 +40,27 @@ void main() {
     expect(taps, 1);
   });
 
+  testWidgets('a large text scale grows the glass instead of clipping',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: _theme(liquid: true),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2.0),
+        ),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: Center(
+          child: GlassButton(label: 'All episodes', onPressed: () {}),
+        ),
+      ),
+    ));
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byType(GlassSurface)).height,
+        greaterThan(LiquidGeometry.buttonMedium));
+  });
+
   testWidgets('an explicit height wins on Liquid Glass', (tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: _theme(liquid: true),

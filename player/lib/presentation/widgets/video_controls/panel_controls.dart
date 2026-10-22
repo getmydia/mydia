@@ -5,6 +5,8 @@ import 'package:media_kit/media_kit.dart';
 
 import '../../../core/player/video_scaling.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
+import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../glass/glass_slider.dart';
 import 'chrome_top_bar.dart' show scalingIcon, scalingTooltip;
 import 'control_button.dart';
@@ -41,6 +43,13 @@ class VolumeSurface extends StatefulWidget {
   /// (`40 + 72 == 112 <= 122`). Restored to the original 72; trimming it
   /// bought nothing but ~33% less slider travel.
   static const double sliderWidth = 72.0;
+
+  /// The slider's width. The Liquid Glass knob pads the track by half its
+  /// width each side, so the slider grows by the knob width to keep the
+  /// track at [sliderWidth].
+  static double sliderWidthFor(BuildContext context) => GlassStyle.of(context)
+      ? sliderWidth + LiquidGeometry.sliderKnobWidth
+      : sliderWidth;
 
   /// Track height at rest. Matches `ProgressBarSurface`'s own resting track
   /// — this slider used to be a lone 3px hairline at 0.25 alpha, the exact
@@ -88,7 +97,7 @@ class _VolumeSurfaceState extends State<VolumeSurface> {
           onExit: (_) => setState(() => _hovering = false),
           child: SizedBox(
             key: VolumeSurface.sliderKey,
-            width: VolumeSurface.sliderWidth,
+            width: VolumeSurface.sliderWidthFor(context),
             child: TweenAnimationBuilder<double>(
               tween: Tween<double>(
                 end: _hovering

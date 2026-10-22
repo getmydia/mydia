@@ -17,6 +17,7 @@ Widget _host({
   double value = 0.5,
   ValueChanged<double>? onChanged,
   bool reduceTransparency = false,
+  bool enabled = true,
   TextDirection textDirection = TextDirection.ltr,
 }) =>
     MaterialApp(
@@ -29,8 +30,10 @@ Widget _host({
             body: Center(
               child: SizedBox(
                 width: _width,
-                child:
-                    GlassSlider(value: value, onChanged: onChanged ?? (_) {}),
+                child: GlassSlider(
+                  value: value,
+                  onChanged: enabled ? (onChanged ?? (_) {}) : null,
+                ),
               ),
             ),
           ),
@@ -40,6 +43,33 @@ Widget _host({
 
 double _knobCentreX(WidgetTester tester) =>
     tester.getCenter(find.byType(LiquidGlassFilter)).dx;
+
+/// A zero size thumb that records where Material asks it to paint, in global
+/// coordinates.
+class _RecordingThumb extends SliderComponentShape {
+  Offset? center;
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) => Size.zero;
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    this.center = parentBox.localToGlobal(center);
+  }
+}
 
 void main() {
   testWidgets('frosted renders the Material slider and no glass knob',
@@ -209,5 +239,67 @@ void main() {
             of: find.byType(LiquidGlassFilter),
             matching: find.byType(ExcludeSemantics)),
         findsOneWidget);
+  });
+
+  for (final discrete in [false, true]) {
+    testWidgets(
+        'the knob centre equals the thumb centre Material paints '
+        '(${discrete ? 'discrete' : 'continuous'})', (tester) async {
+      final thumb = _RecordingThumb();
+      for (final t in [0.0, 0.25, 0.5, 0.75, 1.0]) {
+        await tester.pumpWidget(MaterialApp(
+          theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: _width,
+                child: GlassSlider(
+                  value: discrete ? 10 + 40 * t : t,
+                  min: discrete ? 10 : 0,
+                  max: discrete ? 50 : 1,
+                  divisions: discrete ? 4 : null,
+                  onChanged: (_) {},
+                  debugThumbShape: thumb,
+                ),
+              ),
+            ),
+          ),
+        ));
+        await tester.pumpAndSettle();
+        expect(thumb.center, isNotNull);
+        expect(_knobCentreX(tester), closeTo(thumb.center!.dx, 0.5),
+            reason: 't=$t');
+      }
+    });
+  }
+
+  testWidgets('a disabled knob is half opaque and does not scale',
+      (tester) async {
+    await tester.pumpWidget(_host(liquid: true, enabled: false));
+    expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, 0.5);
+    expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 1.0);
+    await tester.pumpWidget(_host(liquid: true));
+    expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, 1.0);
+  });
+
+  testWidgets('an unbounded width does not throw or place the knob at infinity',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+      home: Scaffold(
+        body: Align(
+          alignment: Alignment.topLeft,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              height: 48,
+              child: GlassSlider(value: 0.5, onChanged: (_) {}),
+            ),
+          ),
+        ),
+      ),
+    ));
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byType(GlassSlider)).width.isFinite, isTrue);
   });
 }

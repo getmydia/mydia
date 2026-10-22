@@ -164,6 +164,7 @@ class BottomNav extends StatelessWidget {
                           ),
                       ],
                     );
+                    // Nav items must stay intrinsic-safe (no LayoutBuilder).
                     return liquid ? IntrinsicHeight(child: row) : row;
                   },
                 ),

@@ -59,6 +59,28 @@ void main() {
     expect(last, isTrue);
   });
 
+  testWidgets('a large text scale grows the chip glass instead of clipping',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2.0),
+        ),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: Center(
+          child: GlassChip(
+              label: const Text('Sort A'), selected: false, onSelected: (_) {}),
+        ),
+      ),
+    ));
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byType(GlassSurface)).height,
+        greaterThan(LiquidGeometry.buttonMedium));
+  });
+
   testWidgets('a liquid button and chip lay out inside IntrinsicWidth',
       (tester) async {
     await tester.pumpWidget(_host(
