@@ -137,7 +137,9 @@ void main() {
   color += vec3(uInnerGlow * lens * (top + bottom));
 
   // Volume: lighter toward the sides, darker toward the ends, so a capsule
-  // reads as rounded rather than flat.
+  // reads as rounded rather than flat. `ends` uses the straight distance to
+  // the top and bottom edges, not the rounded outline, which is fine because
+  // pixels outside the clip are never seen.
   float sideness = smoothstep(0.4, 1.0, abs(p.x) / max(halfSize.x, 1.0));
   float ends = 1.0 - smoothstep(0.0, max(uEdge, 1.0), halfSize.y - abs(p.y));
   color += vec3(uVolumeSide * sideness);

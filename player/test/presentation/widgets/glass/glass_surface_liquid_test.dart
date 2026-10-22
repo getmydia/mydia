@@ -300,6 +300,24 @@ void main() {
       });
     });
 
+    testWidgets('Reduce Transparency on the frosted style casts no shadow',
+        (tester) async {
+      await tester.pumpWidget(_host(
+        GlassSurface.modal(child: _box),
+        access: const GlassAccessibility(reduceTransparency: true),
+        liquid: false,
+      ));
+      final boxes = tester.widgetList<DecoratedBox>(find.descendant(
+        of: find.byType(GlassSurface),
+        matching: find.byType(DecoratedBox),
+      ));
+      expect(
+        boxes.where((b) =>
+            ((b.decoration as BoxDecoration).boxShadow ?? const []).isNotEmpty),
+        isEmpty,
+      );
+    });
+
     testWidgets('the Liquid Glass setting takes the shader', (tester) async {
       await tester.pumpWidget(
           _host(const GlassSurface.chrome(child: _box), liquid: true));

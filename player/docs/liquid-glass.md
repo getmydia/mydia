@@ -143,7 +143,8 @@ Without the shader, Liquid Glass means the design language on the frosted
 recipe. `GlassSurface.appBar`, `.chrome`, `.sidebar`, `.modal` and
 `.control` then pick the recipe:
 
-- Reduce Transparency on: an opaque fill, no backdrop pass.
+- Reduce Transparency on: an opaque fill, no backdrop pass. On Liquid Glass
+  the opaque fill keeps the profile's shadow.
 - Shader loaded: Liquid Glass, with a stronger tint and a visible rim under
   Increase Contrast.
 - Otherwise: the frosted recipe.
