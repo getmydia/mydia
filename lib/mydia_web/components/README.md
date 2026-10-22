@@ -183,6 +183,11 @@ value a card can claim:
 | Sidebar `div.drawer-side` | 40 |
 | Mobile dock `nav#mobile-dock` | 50 |
 | daisyUI `.modal` | 999 |
+| Flash toasts `#flash-group` | 1000 |
+
+Flash toasts must outrank `.modal`: a connection test inside an edit dialog
+raises its result as a flash, and below 999 the backdrop covers it, so the only
+way to dismiss it was closing the dialog (#1226).
 
 A card that climbed above 40 and 50 would paint over the sidebar during ordinary
 browsing. There is no correct number. Verified in a real browser on
