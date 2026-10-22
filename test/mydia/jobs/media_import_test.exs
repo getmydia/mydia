@@ -3047,6 +3047,64 @@ defmodule Mydia.Jobs.MediaImportTest do
       assert MediaImport.season_dir(base, show, library_path, 1) == Path.join(base, "Season 1")
       assert MediaImport.season_dir(base, show, library_path, 2) == Path.join(base, "Season 02")
     end
+
+    @tag :tmp_dir
+    test "a season pack lands new episodes in the existing Season folder", %{tmp_dir: tmp_dir} do
+      library_path = create_test_library_path(tmp_dir, :series)
+
+      show =
+        media_item_fixture(%{type: "tv_show", title: "Lantern Bay", year: 2020, tvdb_id: 70001})
+
+      ep1 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+      ep2 = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 2})
+
+      media_file_fixture(%{
+        episode_id: ep1.id,
+        library_path_id: library_path.id,
+        relative_path: "Lantern Bay (2020) [tvdb-70001]/Season 1/Lantern Bay S01E01.mkv"
+      })
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      File.write!(Path.join(download_dir, "Lantern.Bay.S01E02.mkv"), "fake video")
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "ExistingSeasonClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: show.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "ExistingSeasonClient",
+          download_client_id: "existing-season-1",
+          metadata: %{
+            "season_pack" => true,
+            "season_number" => 1,
+            "episode_count" => 1,
+            "episode_ids" => [ep2.id]
+          }
+        })
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      new_file = Library.list_media_files() |> Enum.find(&(&1.episode_id == ep2.id))
+      assert new_file
+      assert Path.dirname(new_file.relative_path) == "Lantern Bay (2020) [tvdb-70001]/Season 1"
+    end
   end
 
   describe "determine_library_path/1 destination stability" do

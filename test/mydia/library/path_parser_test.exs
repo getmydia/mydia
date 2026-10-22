@@ -227,6 +227,10 @@ defmodule Mydia.Library.PathParserTest do
     test "no tags" do
       assert PathParser.external_ids("Quiet Harbor (2011)") == %{}
     end
+
+    test "finds a tag in the middle of a name" do
+      assert PathParser.external_ids("Quiet {tmdb-90001} Harbor") == %{tmdb: "90001"}
+    end
   end
 
   describe "strip_external_ids/1" do
@@ -245,6 +249,16 @@ defmodule Mydia.Library.PathParserTest do
                  external_id: "90001",
                  external_provider: :tmdb
                }
+    end
+
+    test "prefers tmdb over tvdb over imdb when several tags are present" do
+      assert %{external_provider: :tmdb, external_id: "90001"} =
+               PathParser.parse_movie_folder(
+                 "Quiet Harbor (2011) {imdb-tt0000123} [tvdb-5] {tmdb-90001}"
+               )
+
+      assert %{external_provider: :tvdb, external_id: "5"} =
+               PathParser.parse_movie_folder("Quiet Harbor (2011) {imdb-tt0000123} [tvdb-5]")
     end
 
     test "reads a tmdbid tag" do

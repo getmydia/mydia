@@ -134,6 +134,26 @@ defmodule Mydia.Library.ItemFolders.HomeTest do
                Home.find(item, lp, prefer_file_id: target.id)
     end
 
+    test ":prefer_file_id in an untrusted folder falls back to the fullest trusted folder", %{
+      lp: lp
+    } do
+      item = movie()
+      target = movie_file(item, lp, "Copper Meadow (2019)/x.mkv")
+      movie_file(item, lp, "Quiet Harbor (2011)/a.mkv")
+      movie_file(item, lp, "Quiet Harbor {tmdb-90001}/a.mkv")
+      movie_file(item, lp, "Quiet Harbor {tmdb-90001}/b.mkv")
+
+      assert {:ok, %{relative: "Quiet Harbor {tmdb-90001}"}} =
+               Home.find(item, lp, prefer_file_id: target.id)
+    end
+
+    test "an imdb tag matches case-insensitively", %{lp: lp} do
+      item = movie(%{imdb_id: "tt0000123"})
+      movie_file(item, lp, "Quiet Harbor {IMDB-TT0000123}/Quiet Harbor.mkv")
+
+      assert {:ok, %{relative: "Quiet Harbor {IMDB-TT0000123}"}} = Home.find(item, lp)
+    end
+
     test "a TV show is found through its episodes' files", %{lp: lp} do
       item = show()
       episode_file(item, lp, "Lantern Bay (2020) [tvdb-70001]/Season 1/Lantern Bay S01E01.mkv", 1)
