@@ -1,11 +1,12 @@
 // The Liquid Glass legibility contract, computed from the tokens.
 //
 // Worst case is the tint after adaptation over a pure-white backdrop: the
-// backdrop luma is 1, so the alpha is the role's adaptive max. Refraction and
-// blur are the identity over a uniform frame, saturation clamps at white,
-// brightness is modelled as a lift of the grey (clamped at white), and the specular only adds light at the rim, away from
-// glyphs. All presets are dark, so white is the worst backdrop. Text holds
-// WCAG SC 1.4.3 (4.5:1), icons and secondary text SC 1.4.11 (3:1).
+// backdrop luma is 1, so the alpha is the role's adaptive max. Refraction
+// and blur are the identity over a uniform frame, saturation clamps at
+// white, brightness is modelled as each profile's lift of the grey
+// (clamped at white), and the specular only adds light at the rim, away
+// from glyphs. All presets are dark, so white is the worst backdrop. Text
+// holds WCAG SC 1.4.3 (4.5:1), icons and secondary text SC 1.4.11 (3:1).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,31 +22,41 @@ const _white = Color(0xFFFFFFFF);
 Color _over(Color base, double alpha) =>
     Color.alphaBlend(base.withValues(alpha: alpha), _white);
 
-Color _grey(double v) => Color.from(
+Color _grey(double v, double lift) => Color.from(
     alpha: 1,
-    red: (v + DepthTokens.liquidBrightness).clamp(0.0, 1.0),
-    green: (v + DepthTokens.liquidBrightness).clamp(0.0, 1.0),
-    blue: (v + DepthTokens.liquidBrightness).clamp(0.0, 1.0));
+    red: (v + lift).clamp(0.0, 1.0),
+    green: (v + lift).clamp(0.0, 1.0),
+    blue: (v + lift).clamp(0.0, 1.0));
 
-Color _overGrey(Color base, double alpha, double v) =>
-    Color.alphaBlend(base.withValues(alpha: alpha), _grey(v));
+Color _overGrey(Color base, double alpha, double v, double lift) =>
+    Color.alphaBlend(base.withValues(alpha: alpha), _grey(v, lift));
 
 void main() {
-  final roles = <String, (Color Function(AmbientTintColors), double, double)>{
+  final roles =
+      <String, (Color Function(AmbientTintColors), double, double, double)>{
     'chrome (ground)': (
       (t) => t.ground,
       DepthTokens.liquidChromeTintOpacity,
-      DepthTokens.liquidChromeAdaptiveMax
+      DepthTokens.liquidChromeAdaptiveMax,
+      DepthTokens.liquidBrightness,
     ),
     'chrome (surface)': (
       (t) => t.surface,
       DepthTokens.liquidChromeTintOpacity,
-      DepthTokens.liquidChromeAdaptiveMax
+      DepthTokens.liquidChromeAdaptiveMax,
+      DepthTokens.liquidBrightness,
+    ),
+    'sidebar': (
+      (t) => t.surface,
+      DepthTokens.liquidChromeTintOpacity,
+      DepthTokens.liquidChromeAdaptiveMax,
+      DepthTokens.liquidPanelBrightness,
     ),
     'modal': (
       (t) => t.surface,
       DepthTokens.liquidModalTintOpacity,
-      DepthTokens.liquidModalAdaptiveMax
+      DepthTokens.liquidModalAdaptiveMax,
+      DepthTokens.liquidPanelBrightness,
     ),
   };
 
@@ -55,7 +66,7 @@ void main() {
 
     group('${preset.name} over pure white', () {
       roles.forEach((name, role) {
-        final (pick, base, max) = role;
+        final (pick, base, max, lift) = role;
         final alpha =
             liquidAdaptiveAlpha(base: base, max: max, backdropLuma: 1.0);
         final bg = _over(pick(tint), alpha);
@@ -105,12 +116,12 @@ void main() {
 
     group('${preset.name} over grey backdrops', () {
       roles.forEach((name, role) {
-        final (pick, base, max) = role;
+        final (pick, base, max, lift) = role;
         test('$name: text 4.5:1 and secondary 3:1 at every grey', () {
           for (final v in greys) {
             final alpha =
                 liquidAdaptiveAlpha(base: base, max: max, backdropLuma: v);
-            final bg = _overGrey(pick(tint), alpha, v);
+            final bg = _overGrey(pick(tint), alpha, v, lift);
             expect(contrastRatio(palette.textPrimary, bg),
                 greaterThanOrEqualTo(4.5),
                 reason: 'text at grey $v');
@@ -127,7 +138,8 @@ void main() {
               base: DepthTokens.liquidControlTintOpacity,
               max: DepthTokens.liquidControlAdaptiveMax,
               backdropLuma: v);
-          final bg = _overGrey(tint.surface, alpha, v);
+          final bg =
+              _overGrey(tint.surface, alpha, v, DepthTokens.liquidBrightness);
           expect(
               contrastRatio(palette.textPrimary, bg), greaterThanOrEqualTo(3.0),
               reason: 'icon at grey $v');
@@ -142,7 +154,8 @@ void main() {
               base: DepthTokens.liquidControlTintOpacity,
               max: DepthTokens.liquidControlAdaptiveMax,
               backdropLuma: v);
-          final bg = _overGrey(tint.surface, alpha, v);
+          final bg =
+              _overGrey(tint.surface, alpha, v, DepthTokens.liquidBrightness);
           expect(contrastRatio(Colors.white, bg), greaterThanOrEqualTo(4.5),
               reason: 'label at grey $v');
         }

@@ -53,6 +53,25 @@ safe area), rounds all four corners at `AppTheme.radiusRail`, and carries the
 rail's rim, shadow and scrim (`FloatingRail.scrimColor`). Without the shader
 it stays a Material drawer flush to the edge.
 
+## Panels
+
+Two profiles (`LiquidGlassProfile`) share the one shader. The **lens** is
+the floating control layer: buttons, chips, badges, the dock pill and the cast
+pill. It bends the backdrop at the rim, fringes red from blue, lights the top
+and bottom edges and glows inside them. The **panel** is for large surfaces:
+`GlassSurface.modal` (dialogs, sheets, popovers, the login cards) and
+`GlassSurface.sidebar` (the floating rail and the drawer). It blurs harder,
+does not bend or fringe, has no bottom light or inner glow, and keeps one soft
+highlight on the top edge with a faint hairline around. Hover and press do not
+light it.
+
+The lens on a 400px dialog reads as polished chrome; Apple's own large panels
+are frosted panes with a discreet edge. Tint and adaptive tint are per surface
+role, not per profile, so the legibility contract holds for both.
+
+The native macOS and iPadOS sidebars are AppKit and UIKit views and never use
+either profile.
+
 ## When it runs
 
 `LiquidGlassSupport.initialize()` runs once at startup. It loads the shader
@@ -66,8 +85,8 @@ setting, gates the design language: glass controls instead of Material ones.
 `GlassSurface` takes the Liquid Glass recipe only when
 `GlassStyle.of(context)` and `LiquidGlassSupport.available` are both true.
 Without the shader, Liquid Glass means the design language on the frosted
-recipe. `GlassSurface.appBar`, `.chrome`, `.modal` and `.control` then pick
-the recipe:
+recipe. `GlassSurface.appBar`, `.chrome`, `.sidebar`, `.modal` and
+`.control` then pick the recipe:
 
 - Reduce Transparency on: an opaque fill, no backdrop pass.
 - Shader loaded: Liquid Glass, with a stronger tint and a visible rim under

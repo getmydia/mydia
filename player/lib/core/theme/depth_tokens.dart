@@ -221,7 +221,9 @@ abstract final class DepthTokens {
   // refraction in a narrow band at the rim, a saturation and brightness lift,
   // and a specular rim lit from above and below. Read by `LiquidGlassUniforms` and
   // `GlassSurface`. Lengths are logical pixels; the uniforms scale them by
-  // the device pixel ratio. Never used by the OSD.
+  // the device pixel ratio. Never used by the OSD. Two profiles read these:
+  // the lens (controls and pills) and the panel (dialogs, sheets and the
+  // floating sidebar); see `LiquidGlassProfile`.
   // ---------------------------------------------------------------------------
 
   /// Blur applied before the shader bends the backdrop.
@@ -262,6 +264,17 @@ abstract final class DepthTokens {
   /// Light added across the edge band on the top and bottom edges: the glass's
   /// thickness.
   static const double liquidInnerGlow = 0.12;
+
+  // Panel profile: dialogs, sheets, popovers and the floating sidebar. A
+  // blurred, translucent pane with one soft highlight along the top edge and
+  // a faint even hairline, no lens at the rim. The constants above are the
+  // lens profile, for controls and pills. See `LiquidGlassProfile`.
+  static const double liquidPanelBlurSigma = 30.0;
+  static const double liquidPanelSaturation = 1.15;
+  static const double liquidPanelBrightness = 0.04;
+  static const double liquidPanelSpecular = 0.45;
+  static const double liquidPanelRimWidth = 1.0;
+  static const double liquidPanelRimHairline = 0.25;
 
   /// Backdrop luma range over which the tint rises from its base alpha to
   /// its adaptive max (smoothstep).

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_uniforms.dart';
 
 void main() {
@@ -94,5 +95,45 @@ void main() {
     expect(a, b);
     expect(a.hashCode, b.hashCode);
     expect(a, isNot(c));
+  });
+
+  test('the panel profile drops the lens and keeps a soft top rim', () {
+    const tint = Color(0x80102030);
+    const u = LiquidGlassUniforms(
+      devicePixelRatio: 2,
+      radius: 20,
+      tint: tint,
+      profile: LiquidGlassProfile.panel,
+    );
+    final f = u.toFloats(const Size(100, 40));
+    expect(f, hasLength(25));
+    expect(f[3], DepthTokens.liquidEdgeBand * 2); // uEdge
+    expect(f[4], 0); // uRefraction
+    expect(f[5], 0); // uDispersion
+    expect(f[6], DepthTokens.liquidPanelSaturation);
+    expect(f[7], DepthTokens.liquidPanelBrightness);
+    expect(f[8], DepthTokens.liquidPanelSpecular);
+    expect(f[9], DepthTokens.liquidPanelRimWidth * 2);
+    expect(f[16], 0); // uInnerGlow
+    expect(f[23], DepthTokens.liquidPanelRimHairline);
+    expect(f[24], 0); // uBottomLight
+  });
+
+  test('the lens profile is the default', () {
+    const u = LiquidGlassUniforms(
+        devicePixelRatio: 1, radius: 8, tint: Color(0xFF000000));
+    expect(u.profile, same(LiquidGlassProfile.lens));
+  });
+
+  test('equality covers the profile', () {
+    const lens = LiquidGlassUniforms(
+        devicePixelRatio: 2, radius: 8, tint: Color(0xFF000000));
+    const panel = LiquidGlassUniforms(
+        devicePixelRatio: 2,
+        radius: 8,
+        tint: Color(0xFF000000),
+        profile: LiquidGlassProfile.panel);
+    expect(lens, isNot(panel));
+    expect(lens.hashCode, isNot(panel.hashCode));
   });
 }

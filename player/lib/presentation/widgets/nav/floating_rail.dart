@@ -197,7 +197,7 @@ class _FloatingRailState extends ConsumerState<FloatingRail> {
                   width: expanded
                       ? Breakpoints.railExpandedWidth
                       : Breakpoints.railCollapsedWidth,
-                  child: GlassSurface.chrome(
+                  child: GlassSurface.sidebar(
                     opacity: highContrast ? 0.96 : (expanded ? 0.92 : 0.8),
                     borderRadius: const BorderRadius.all(
                       Radius.circular(AppTheme.radiusRail),

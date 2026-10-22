@@ -6,6 +6,7 @@ import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/liquid_glass/glass_accessibility.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -33,6 +34,7 @@ void main() {
   final liquidVariants = <String, Widget>{
     'chrome': const GlassSurface.chrome(child: _box),
     'modal': GlassSurface.modal(child: _box),
+    'sidebar': const GlassSurface.sidebar(child: _box),
     'control': GlassSurface.control(
         borderRadius: BorderRadius.circular(24), child: _box),
   };
@@ -79,6 +81,29 @@ void main() {
 
     LiquidGlassFilter filterOf(WidgetTester tester) =>
         tester.widget<LiquidGlassFilter>(find.byType(LiquidGlassFilter));
+
+    testWidgets('modal and sidebar are panels; chrome and control are lenses',
+        (tester) async {
+      await tester.pumpWidget(_host(GlassSurface.modal(child: _box)));
+      expect(filterOf(tester).profile, same(LiquidGlassProfile.panel));
+
+      await tester.pumpWidget(_host(const GlassSurface.sidebar(child: _box)));
+      expect(filterOf(tester).profile, same(LiquidGlassProfile.panel));
+
+      await tester.pumpWidget(_host(const GlassSurface.chrome(child: _box)));
+      expect(filterOf(tester).profile, same(LiquidGlassProfile.lens));
+
+      await tester.pumpWidget(_host(GlassSurface.control(
+          borderRadius: BorderRadius.circular(24), child: _box)));
+      expect(filterOf(tester).profile, same(LiquidGlassProfile.lens));
+    });
+
+    testWidgets('sidebar keeps the chrome tint roles', (tester) async {
+      await tester.pumpWidget(_host(const GlassSurface.sidebar(child: _box)));
+      final f = filterOf(tester);
+      expect(f.tint.a, closeTo(DepthTokens.liquidChromeTintOpacity, 0.002));
+      expect(f.adaptiveTintMax, DepthTokens.liquidChromeAdaptiveMax);
+    });
 
     testWidgets('chrome, modal and control use their adaptive roles',
         (tester) async {

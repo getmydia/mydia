@@ -5,6 +5,7 @@ import '../../core/theme/ambient_tint/ambient_tint.dart';
 import '../../core/theme/depth_tokens.dart';
 import '../../core/theme/liquid_glass/glass_accessibility.dart';
 import '../../core/theme/liquid_glass/glass_style.dart';
+import '../../core/theme/liquid_glass/liquid_glass_profile.dart';
 import '../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../core/theme/palette.dart';
 import 'glass/liquid_glass_filter.dart';
@@ -28,8 +29,8 @@ enum GlassTint { ground, surface }
 /// [DepthTokens] (R2) rather than per-call literals.
 ///
 /// Use the named constructors ([GlassSurface.appBar], [GlassSurface.modal],
-/// [GlassSurface.chrome], [GlassSurface.control], [GlassSurface.hoverOverlay],
-/// [GlassSurface.faux], [GlassSurface.osd]) to
+/// [GlassSurface.chrome], [GlassSurface.sidebar], [GlassSurface.control],
+/// [GlassSurface.hoverOverlay], [GlassSurface.faux], [GlassSurface.osd]) to
 /// reproduce the established visual treatments; the unnamed constructor is
 /// available for bespoke surfaces.
 ///
@@ -38,13 +39,17 @@ enum GlassTint { ground, surface }
 /// rendering pass (uses [BackdropFilter.grouped]). Faux surfaces ignore
 /// [grouped] — there is no backdrop pass to share.
 ///
-/// [GlassSurface.appBar], [GlassSurface.modal] and [GlassSurface.chrome]
-/// follow the ambient tint ([AmbientTint]); faux, hoverOverlay and osd do not.
+/// [GlassSurface.appBar], [GlassSurface.modal], [GlassSurface.chrome] and
+/// [GlassSurface.sidebar] follow the ambient tint ([AmbientTint]); faux,
+/// hoverOverlay and osd do not.
 ///
 /// On Liquid Glass, [GlassSurface.appBar], [GlassSurface.chrome],
-/// [GlassSurface.modal] and [GlassSurface.control] take the Liquid Glass recipe
-/// (`LiquidGlassFilter`) when `LiquidGlassSupport.available`, and an opaque
-/// fill when Reduce Transparency is on. Chrome, modal and control tints adapt
+/// [GlassSurface.sidebar], [GlassSurface.modal] and [GlassSurface.control]
+/// take the Liquid Glass recipe (`LiquidGlassFilter`) when
+/// `LiquidGlassSupport.available`, and an opaque fill when Reduce
+/// Transparency is on. [GlassSurface.modal] and [GlassSurface.sidebar] take
+/// the panel profile (`LiquidGlassProfile.panel`), the rest the lens.
+/// Chrome, sidebar, modal and control tints adapt
 /// to the backdrop up to a per-role maximum ([liquidAdaptiveMax]); a white
 /// prominent control never adapts. The control also casts
 /// [DepthTokens.liquidControlShadow]. The app bar is not glass but Apple's
@@ -92,11 +97,10 @@ class GlassSurface extends StatelessWidget {
   final GlassTint? tint;
   final double tintOpacity;
 
-  /// Tint opacity on the Liquid Glass recipe. Null means
-  /// this surface never takes it: only [GlassSurface.appBar],
-  /// [GlassSurface.chrome], [GlassSurface.modal] and [GlassSurface.control]
-  /// set it, so the OSD, faux and hover overlay are excluded by
-  /// construction.
+  /// Tint opacity on the Liquid Glass recipe. Null means this surface never
+  /// takes it: only [GlassSurface.appBar], [GlassSurface.chrome],
+  /// [GlassSurface.sidebar], [GlassSurface.modal] and [GlassSurface.control]
+  /// set it, so the OSD, faux and hover overlay are excluded by construction.
   final double? liquidTintOpacity;
 
   /// Upper bound the Liquid Glass tint may adapt to; null keeps it fixed.
@@ -105,6 +109,10 @@ class GlassSurface extends StatelessWidget {
   /// Paint the Liquid Glass branch as a scroll edge band (blur plus ground
   /// gradient) instead of the glass shader.
   final bool liquidScrollEdge;
+
+  /// The Liquid Glass material: the lens for controls and pills, the panel
+  /// for dialogs, sheets and the floating sidebar. Ignored off Liquid Glass.
+  final LiquidGlassProfile liquidProfile;
 
   final Widget? child;
 
@@ -124,6 +132,7 @@ class GlassSurface extends StatelessWidget {
     this.liquidTintOpacity,
     this.liquidAdaptiveMax,
     this.liquidScrollEdge = false,
+    this.liquidProfile = LiquidGlassProfile.lens,
     this.child,
   });
 
@@ -148,7 +157,8 @@ class GlassSurface extends StatelessWidget {
         );
 
   /// Modal / sheet glass: modal blur sigma, the ambient surface at the modal
-  /// fill opacity, the palette border @0.2 border, radius 20.
+  /// fill opacity, the palette border @0.2 border, radius 20. Takes the panel
+  /// Liquid Glass profile.
   GlassSurface.modal({
     Key? key,
     BorderRadius? borderRadius,
@@ -161,14 +171,15 @@ class GlassSurface extends StatelessWidget {
           tintOpacity: DepthTokens.modalFillOpacity,
           liquidTintOpacity: DepthTokens.liquidModalTintOpacity,
           liquidAdaptiveMax: DepthTokens.liquidModalAdaptiveMax,
+          liquidProfile: LiquidGlassProfile.panel,
           borderRadius: borderRadius ?? BorderRadius.circular(20),
           paletteBorderAlpha: 0.2,
           grouped: grouped,
           child: child,
         );
 
-  /// Chrome glass that follows the ambient tint: nav rail, bottom bar, cast
-  /// pill and sidebars. Fill is the tint's surface at [opacity].
+  /// Chrome glass that follows the ambient tint: the bottom dock pill and the
+  /// cast pill. Fill is the tint's surface at [opacity].
   const GlassSurface.chrome({
     Key? key,
     double opacity = DepthTokens.chromeFillOpacity,
@@ -184,6 +195,33 @@ class GlassSurface extends StatelessWidget {
           tintOpacity: opacity,
           liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
           liquidAdaptiveMax: DepthTokens.liquidChromeAdaptiveMax,
+          borderRadius: borderRadius,
+          border: border,
+          shadows: shadows,
+          grouped: grouped,
+          child: child,
+        );
+
+  /// The floating sidebar and drawer: [GlassSurface.chrome]'s recipe on the
+  /// panel Liquid Glass profile, so a full-height pane reads as frosted glass
+  /// rather than a lit lens. Keep its tint, opacity and blur in step with
+  /// [GlassSurface.chrome].
+  const GlassSurface.sidebar({
+    Key? key,
+    double opacity = DepthTokens.chromeFillOpacity,
+    BorderRadius borderRadius = BorderRadius.zero,
+    BoxBorder? border,
+    List<BoxShadow> shadows = const <BoxShadow>[],
+    bool grouped = false,
+    Widget? child,
+  }) : this(
+          key: key,
+          blurSigma: DepthTokens.blurChrome,
+          tint: GlassTint.surface,
+          tintOpacity: opacity,
+          liquidTintOpacity: DepthTokens.liquidChromeTintOpacity,
+          liquidAdaptiveMax: DepthTokens.liquidChromeAdaptiveMax,
+          liquidProfile: LiquidGlassProfile.panel,
           borderRadius: borderRadius,
           border: border,
           shadows: shadows,
@@ -387,6 +425,7 @@ class GlassSurface extends StatelessWidget {
               ? null
               : (adaptiveMax + boost).clamp(0.0, 1.0),
           grouped: grouped,
+          profile: liquidProfile,
           // The shader paints the tint; this box only carries the rim
           // and the child.
           child: DecoratedBox(
