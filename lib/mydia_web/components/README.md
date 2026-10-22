@@ -187,7 +187,10 @@ value a card can claim:
 
 Flash toasts must outrank `.modal`: a connection test inside an edit dialog
 raises its result as a flash, and below 999 the backdrop covers it, so the only
-way to dismiss it was closing the dialog (#1226).
+way to dismiss it was closing the dialog (#1226). `add_config_modal` in
+`add_media_components.ex` also uses `z-[1000]`; ties at 1000 resolve by DOM
+order, and `flash_group` renders last in the app layout (`layouts.ex`), so
+toasts paint above that modal too.
 
 A card that climbed above 40 and 50 would paint over the sidebar during ordinary
 browsing. There is no correct number. Verified in a real browser on

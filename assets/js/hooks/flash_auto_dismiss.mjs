@@ -67,8 +67,15 @@ const FlashAutoDismiss = {
       ...clock,
     });
 
-    this.pause = () => this.timer.pause();
-    this.resume = () => this.timer.resume();
+    this.held = false;
+    this.pause = () => {
+      this.held = true;
+      this.timer.pause();
+    };
+    this.resume = () => {
+      this.held = false;
+      this.timer.resume();
+    };
     PAUSE_EVENTS.forEach((type) => this.el.addEventListener(type, this.pause));
     RESUME_EVENTS.forEach((type) => this.el.addEventListener(type, this.resume));
 
@@ -82,6 +89,8 @@ const FlashAutoDismiss = {
     if (!this.timer || this.el.textContent === this.text) return;
     this.text = this.el.textContent;
     this.timer.start();
+    // A toast under the cursor or focus stays held; leaving resumes it.
+    if (this.held) this.timer.pause();
   },
 
   destroyed() {

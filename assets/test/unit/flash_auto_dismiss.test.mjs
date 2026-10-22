@@ -197,6 +197,37 @@ test("updated with new text restarts, unchanged text does not", () => {
   assert.equal(second.executed.length, 1);
 });
 
+test("focus pauses and leaving focus resumes", () => {
+  const clock = fakeClock();
+  const el = fakeElement({ dismissAfter: "5000", text: "Saved" });
+  const { executed } = mountHook(el, clock);
+
+  clock.advance(3000);
+  el.dispatch("focusin");
+  clock.advance(30000);
+  assert.equal(executed.length, 0);
+
+  el.dispatch("focusout");
+  clock.advance(2000);
+  assert.equal(executed.length, 1);
+});
+
+test("a message change while hovered stays paused until the pointer leaves", () => {
+  const clock = fakeClock();
+  const el = fakeElement({ dismissAfter: "5000", text: "Saved" });
+  const { hook, executed } = mountHook(el, clock);
+
+  el.dispatch("mouseenter");
+  el.textContent = "Saved again";
+  hook.updated();
+  clock.advance(30000);
+  assert.equal(executed.length, 0, "held toast must not vanish under the cursor");
+
+  el.dispatch("mouseleave");
+  clock.advance(5000);
+  assert.equal(executed.length, 1);
+});
+
 test("destroyed cancels the timer and removes listeners", () => {
   const clock = fakeClock();
   const el = fakeElement({ dismissAfter: "5000", text: "Saved" });
