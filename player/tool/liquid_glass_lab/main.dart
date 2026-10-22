@@ -204,6 +204,43 @@ class _LabState extends State<_Lab> {
                     DepthTokens.liquidControlTintOpacity,
                     adaptiveMax: DepthTokens.liquidControlAdaptiveMax),
               ),
+              // Clear glass: a slider-style knob (37x24, radius 12) over a
+              // 6pt track, and a 50pt capsule on the lens profile.
+              Positioned(
+                top: 620,
+                left: 40,
+                width: 200,
+                height: 6,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 611,
+                left: 110,
+                width: 37,
+                height: 24,
+                child: _glass(12, const Color(0xFFFFFFFF), 0.0,
+                    profile: LiquidGlassProfile.clear),
+              ),
+              Positioned(
+                top: 650,
+                left: 40,
+                width: 160,
+                height: 50,
+                child: _glass(25, const Color(0xFF101014),
+                    DepthTokens.liquidControlTintOpacity,
+                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax,
+                    child: _label(Icons.play_arrow_rounded, 'Play')),
+              ),
+              _tag(top: 594, left: 40, text: 'clear 37x24'),
+              _tag(top: 706, left: 40, text: 'lens 50pt'),
+              _tag(top: 224, left: 40, text: 'panel'),
+              _tag(top: 124, left: 110, text: 'lens (prominent)'),
+              _tag(top: 124, left: 40, text: 'lens'),
               Positioned(
                 right: 16,
                 bottom: 16,
@@ -239,6 +276,24 @@ class _LabState extends State<_Lab> {
           adaptiveTintMax: adaptiveMax,
           profile: profile,
           child: child,
+        ),
+      );
+
+  Widget _tag({
+    required double top,
+    required double left,
+    required String text,
+  }) =>
+      Positioned(
+        top: top,
+        left: left,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+          color: Colors.black.withValues(alpha: 0.6),
+          child: Text(
+            text,
+            style: const TextStyle(color: Colors.white, fontSize: 10),
+          ),
         ),
       );
 

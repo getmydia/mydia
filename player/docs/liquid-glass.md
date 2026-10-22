@@ -6,15 +6,13 @@ elsewhere, and not offered on Android TV. Native chrome drawn by the iOS and
 macOS Runners (the tab bar and the sidebars) is outside the setting.
 
 With it on, the floating control layer uses a Liquid Glass material
-drawn by our own shader, `shaders/liquid_glass.frag`. It frosts and
-saturates the backdrop (`liquidBlurSigma`, `liquidSaturation`,
-`liquidBrightness`), bends it in a narrow band at the rim (a
-`liquidEdgeBand` of 8 points, cubic falloff, `liquidRefraction` with a little
-`liquidDispersion`), tints it adaptively (lighter over dark content, stronger
-over bright content), adds a soft inner glow along the top and bottom and a
-specular rim lit from above and below (the bottom at `liquidBottomLight` of
-the top) with a `liquidRimHairline` on every edge, and blooms a press glow
-under the pointer. Control glass casts a wide soft drop shadow for depth.
+drawn by our own shader, `shaders/liquid_glass.frag`. Its numbers come from
+`LiquidGlassProfile` (see "Kit mapping"): the shader frosts and saturates the
+backdrop, bends it in an edge band that scales with the corner radius, tints
+it adaptively (lighter over dark content, stronger over bright content), adds
+a specular rim on every edge with a little light across the top and bottom
+and volume shading inside, and blooms a press glow under the pointer. Glass
+casts the profile's drop shadow for depth.
 It is tuned to the iOS 27 look. With the setting off, the app keeps the
 frosted `GlassSurface` recipes and Material controls, and the playback OSD
 (`GlassSurface.osd`) never uses Liquid Glass.
@@ -55,22 +53,78 @@ it stays a Material drawer flush to the edge.
 
 ## Panels
 
-Two profiles (`LiquidGlassProfile`) share the one shader. The **lens** is
+Three profiles (`LiquidGlassProfile`) share the one shader. The **lens** is
 the floating control layer: buttons, chips, badges, the dock pill and the cast
-pill. It bends the backdrop at the rim, fringes red from blue, lights the top
-and bottom edges and glows inside them. The **panel** is for large surfaces:
-`GlassSurface.modal` (dialogs, sheets, popovers, the login cards) and
-`GlassSurface.sidebar` (the floating rail and the drawer). It blurs harder,
-does not bend or fringe, has no bottom light or inner glow, and keeps one soft
-highlight on the top edge with a faint hairline around. Hover and press do not
-light it.
+pill. It bends the backdrop at the rim, lights every edge and shades the
+interior a little. The **panel** is for large surfaces: `GlassSurface.modal`
+(dialogs, sheets, popovers, the login cards) and `GlassSurface.sidebar` (the
+floating rail and the drawer). It blurs harder, washes the backdrop toward a
+dark luminance, and keeps a discreet rim. Hover and press do not light it.
+The **clear** profile is for slider and segmented thumbs: no blur, a faint
+bend.
 
-The lens on a 400px dialog reads as polished chrome; Apple's own large panels
-are frosted panes with a discreet edge. Tint and adaptive tint are per surface
-role, not per profile, so the legibility contract holds for both.
+Panels refract. The edge band is the depth times the corner radius, so a
+panel with a 28pt radius has a wide band, and the distortion (0.3, gentler than
+the lens's 0.4) spreads over it: the bend is soft and wide where the lens's is
+tight. Panels do not fringe colour (dispersion is 0 everywhere, as in the kit)
+and have no inner glow.
+
+Tint and adaptive tint are per surface role, not per profile, so the
+legibility contract holds for all three.
 
 The native macOS and iPadOS sidebars are AppKit and UIKit views and never use
-either profile.
+any profile.
+
+## Kit mapping
+
+The profiles follow Apple's iOS 27 UI Kit, read from its glass layers over
+dark backgrounds. The kit has three glass materials plus a clear one:
+
+| Kit layer | Blur | Saturation | Distortion | Depth | Wash | Shadow | Profile |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Small UI (80x48 capsule) | 6 | 1 | 0.4 | 0.8 | grey 153 at 17%, normal | 0 8 15, black 4% | `lens` |
+| Medium UI (r20) | 30 | 1.2 | 0.3 | 0.9 | grey 25 at 30% normal plus 30% luminosity | 0 18 48, black 45% | none yet |
+| Large UI (r20) | 30 | 1.2 | 0.3 | 0.9 | grey 25 at 50% normal plus 90% luminosity | 0 18 48, black 45% | `panel` |
+| Clear (knob 37x24, segmented thumb) | 0 | 1 | 0.08 | 0.4 | none | none | `clear` |
+
+Small UI is used by buttons, tab bars, toolbars and the edit menu. Large UI is
+used by alerts (r34), sheets (r34), menus (r32) and pickers. The kit sets
+chromatic aberration to 0 on every layer.
+
+Our values:
+
+| Profile | `blurSigma` | `depth` | `distortion` | `saturation` | `brightness` | `lumaTarget` / `lumaMix` | `shadow` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `lens` | 3 | 0.8 | 0.4 | 1.0 | 0.1 | 0 / 0 | 0 8 15, black 4% |
+| `panel` | 15 | 0.9 | 0.3 | 1.2 | 0 | 0.1 / 0.6 | 0 18 48, black 45% |
+| `clear` | 0 | 0.4 | 0.08 | 1.0 | 0.02 | 0 / 0 | 0 2 8, black 15% (ours) |
+
+`blurSigma` is the kit's blur radius halved: a Gaussian sigma is about half
+the radius a design tool shows. The edge band is `depth` times the corner
+radius, capped at half the short side (`LiquidGlassUniforms.edgeBandFor`).
+
+The lens's `brightness` lift stands in for the small grey wash. The panel's
+`lumaTarget` and `lumaMix` stand in for the luminosity wash: a luminosity
+blend keeps the backdrop's hue and takes the fill's luminance, so the shader
+pulls the backdrop's luminance toward `lumaTarget` by `lumaMix` and leaves the
+hue alone. The kit's normal-blend part of the wash is the surface tint, which
+stays per role.
+
+The kit's lighting is off. Its rim is drawn with stacked shadows that show
+through the translucent fill, and the shader's rim terms decode them:
+
+- The hairline ring (spread 0.5, grey 190 on small, spread 0.3, grey 166 on
+  large) is `rimHairline`, a light line on every edge.
+- The side slivers (x of plus and minus 1.25, spread -0.75) are `sideLight`,
+  rim light on the left and right edges relative to the top.
+- The small layer's volume shadows are `volumeSide` and `volumeEnds`. The
+  x of plus and minus 20 shadow (blur 20, spread -30, grey 178) lightens the
+  interior toward the sides; the y of plus and minus 40 shadow (blur 10, spread
+  -40, grey 25) darkens it toward the top and bottom.
+- The large layer's ends band (y of plus and minus 4, blur 8, spread -4,
+  grey 33) is `volumeEnds` on the panel.
+- The large layer's bottom catch-light (white at 20%, y of plus 2, spread
+  -1.2) is `bottomLight`.
 
 ## When it runs
 
@@ -162,8 +216,9 @@ in steps of 0.05 for every preset and role (text 4.5:1, secondary text and
 control icons 3:1, white control labels such as Play and the glass buttons
 4.5:1). A grey's shader luma equals its value, and the brightest nearby luma
 is what the curve takes, so the sweep is the worst case under a glyph. The
-shader lifts the backdrop by `liquidBrightness` before tinting while the tint
-alpha still reads the unlifted luma, so the test lifts each grey the same way.
+shader lifts the backdrop by the profile's `brightness` before tinting while
+the tint alpha still reads the unlifted luma, so the test lifts each grey the
+same way.
 Change the curve in the shader and in `liquidAdaptiveAlpha` together.
 
 ## Running the lab
@@ -215,8 +270,8 @@ widget the call site used before otherwise.
 | `showGlassSheet` | Every in-app bottom sheet | `showModalBottomSheet` with the caller's arguments |
 | `GlassPopoverSurface` | The source picker popover | Elevated Material card |
 
-Control-role glass (`GlassSurface.control`) casts the lens
-profile's shadow (`LiquidGlassProfile.lens.shadow`), so it lifts off the content behind it. The detail
+Control-role glass (`GlassSurface.control`) casts the lens profile's shadow
+(`LiquidGlassProfile.lens.shadow`), so it lifts off the content behind it. The detail
 action row and the season selector use `GlassSurface.control` directly: the
 action row draws circles with `grouped: true` inside one `BackdropGroup`, and
 the season selector draws one capsule behind the selected season while
