@@ -2,17 +2,22 @@ defmodule Mydia.Jobs.MediaImport.Placement do
   @moduledoc false
 
   require Logger
+  alias Mydia.Downloads.{ClientRemoval, ImportCandidates}
   alias Mydia.Library
-  alias Mydia.Library.FileOrganizer
+  alias Mydia.Library.{Dirs, FileOrganizer, MediaFile}
+  alias Mydia.Settings
   alias Mydia.Storage
   alias Mydia.Upgrades
-  alias Mydia.Jobs.MediaImport.{Args, Paths, Records}
+  alias Mydia.Jobs.MediaImport.{Args, Discovery, Paths, Records}
 
   # How many `name.N.ext` variants to try when a destination filename is taken
   # by different content. Deliberately small: more than a handful of distinct
   # files claiming one episode's filename means the parse is wrong, and
   # numbering on forever is what let one bad import fill a disk.
   @max_conflict_suffixes 10
+
+  # Subfolders a release ships with; any other one in a job folder is another job.
+  @job_folder_clutter_dirs ~w(sample samples subs subtitles proof proofs extras featurettes screens screenshots covers)
 
   @doc false
   def import_file_to_destination(file, episode, dest_dir, download, library_path, args) do
@@ -275,7 +280,7 @@ defmodule Mydia.Jobs.MediaImport.Placement do
 
     case FileOrganizer.place_file(source, dest, place_opts) do
       {:ok, action} ->
-        Logger.debug("Placed file", from: source, to: dest, action: action)
+        Logger.info("Placed file", from: source, to: dest, action: action)
         :ok
 
       {:error, reason} ->
@@ -295,6 +300,75 @@ defmodule Mydia.Jobs.MediaImport.Placement do
   @doc false
   def placed_sources(paths, results) do
     for {path, {:ok, %{size: size}}} <- Enum.zip(paths, results), do: {path, size}
+  end
+
+  # Hardlinks are verified after the fact by inode rather than threaded back out
+  # of FileOrganizer: a reused record, an adopted `:exists` destination and a
+  # fresh placement all answer the same question this way.
+  @doc false
+  def placement_summary(paths, results, library_path, %Args{use_hardlinks: true}) do
+    pairs =
+      for {source, {:ok, %MediaFile{relative_path: rel}}} <- Enum.zip(paths, results),
+          is_binary(rel),
+          dest = Path.join(library_path.path, rel),
+          not Storage.s3?(source) and not Storage.s3?(dest),
+          same_size?(source, dest),
+          do: {source, dest}
+
+    case {pairs, Enum.find(pairs, fn {s, d} -> not same_inode?(s, d) end)} do
+      {[], _} ->
+        nil
+
+      {_, nil} ->
+        %{"method" => "hardlink"}
+
+      {_, {s, d}} ->
+        %{
+          "method" => "copy",
+          "reason" => Atom.to_string(FileOrganizer.hardlink_blocker(s, d))
+        }
+    end
+  end
+
+  def placement_summary(_paths, _results, _library_path, %Args{}), do: nil
+
+  @doc false
+  def put_placement(metadata, nil), do: metadata
+  def put_placement(metadata, placement), do: Map.put(metadata, "import_placement", placement)
+
+  # Adds the merged metadata to a download update only when there is a summary.
+  @doc false
+  def attach_placement(attrs, _metadata, nil), do: attrs
+
+  def attach_placement(attrs, metadata, placement),
+    do: Map.put(attrs, :metadata, put_placement(metadata || %{}, placement))
+
+  # The job folder goes only once the import is complete.
+  @doc false
+  def cleanup_sources(placed, args, download, library_type, complete?) do
+    remove_consumed_sources(placed, args, download)
+    if complete?, do: remove_job_folder(placed, args, download, library_type)
+    :ok
+  end
+
+  # A reused record can point at a different release's file; its bytes are not
+  # this source's, so there is nothing to explain.
+  defp same_size?(a, b) do
+    with {:ok, %File.Stat{size: size}} <- File.stat(a),
+         {:ok, %File.Stat{size: ^size}} <- File.stat(b) do
+      true
+    else
+      _ -> false
+    end
+  end
+
+  defp same_inode?(a, b) do
+    with {:ok, %File.Stat{inode: i, major_device: d}} <- File.stat(a),
+         {:ok, %File.Stat{inode: ^i, major_device: ^d}} <- File.stat(b) do
+      true
+    else
+      _ -> false
+    end
   end
 
   # Once the import is recorded, a client that never seeds has no use for the
@@ -327,4 +401,136 @@ defmodule Mydia.Jobs.MediaImport.Placement do
   end
 
   def remove_consumed_sources(_paths, %Args{}, _download), do: :ok
+
+  # A SABnzbd or NZBGet job folder holds only that job's files, so once its
+  # media is placed and removed the leftovers (.nfo, samples) are clutter.
+  # Every guard fails toward keeping the folder; this never raises and never
+  # fails the job.
+  @doc false
+  def remove_job_folder(sources, %Args{} = args, download, library_type) do
+    if job_folder_candidate?(sources, args, download) do
+      # Sources are rewritten through path mappings, so the folder must be too.
+      save_path = Discovery.mapped_path(args.save_path, download.id)
+
+      with :ok <- check_folder_exists(save_path),
+           :ok <- check_sources_inside(sources, save_path),
+           :ok <- check_not_client_root(save_path, download),
+           :ok <- check_no_library_overlap(save_path),
+           :ok <- check_no_unknown_subfolder(sources, save_path),
+           {:ok, files} <- list_job_files(save_path),
+           :ok <- check_no_media_left(files, library_type) do
+        rm_job_folder(save_path, download)
+      else
+        :gone ->
+          :ok
+
+        {:keep, reason} ->
+          Logger.info("Kept job folder",
+            path: save_path,
+            reason: reason,
+            download_id: download.id
+          )
+
+          :ok
+      end
+    else
+      :ok
+    end
+  end
+
+  defp job_folder_candidate?(sources, %Args{move_source: true, save_path: save_path}, download)
+       when is_binary(save_path) and sources != [] do
+    Path.type(save_path) == :absolute and ClientRemoval.job_folder_client?(download)
+  end
+
+  defp job_folder_candidate?(_sources, _args, _download), do: false
+
+  # A folder that is already gone needs nothing, and is not worth a log line.
+  defp check_folder_exists(save_path), do: if(File.dir?(save_path), do: :ok, else: :gone)
+
+  defp check_sources_inside(sources, save_path) do
+    if Enum.all?(sources, fn {path, _size} -> Dirs.inside?(path, save_path) end),
+      do: :ok,
+      else: {:keep, :sources_outside}
+  end
+
+  # The client's configured root holds every job, never just this one.
+  defp check_not_client_root(save_path, download) do
+    if ImportCandidates.shared_download_root?(
+         save_path,
+         ImportCandidates.client_download_directory(download)
+       ),
+       do: {:keep, :client_root},
+       else: :ok
+  end
+
+  # A folder that is, or contains, a library path must never be deleted.
+  defp check_no_library_overlap(save_path) do
+    overlaps? =
+      Settings.list_library_paths()
+      |> Enum.map(& &1.path)
+      |> Enum.filter(&(is_binary(&1) and not String.starts_with?(&1, "s3://")))
+      |> Enum.any?(
+        &(Dirs.normalize(&1) == Dirs.normalize(save_path) or Dirs.inside?(&1, save_path))
+      )
+
+    if overlaps?, do: {:keep, :library_overlap}, else: :ok
+  end
+
+  # `download_directory` is optional, so a shared download root can slip past
+  # the client-root guard. Its other jobs show up as subfolders that hold none
+  # of this import's sources and are not the usual release clutter.
+  defp check_no_unknown_subfolder(sources, save_path) do
+    case File.ls(save_path) do
+      {:ok, names} ->
+        unknown? =
+          names
+          |> Enum.map(&Path.join(save_path, &1))
+          |> Enum.filter(&File.dir?/1)
+          |> Enum.any?(&unknown_subfolder?(&1, sources))
+
+        if unknown?, do: {:keep, :unknown_subfolder}, else: :ok
+
+      {:error, reason} ->
+        {:keep, {:list_failed, reason}}
+    end
+  end
+
+  defp unknown_subfolder?(dir, sources) do
+    String.downcase(Path.basename(dir)) not in @job_folder_clutter_dirs and
+      not Enum.any?(sources, fn {path, _size} -> Dirs.inside?(path, dir) end)
+  end
+
+  defp list_job_files(save_path) do
+    case Discovery.list_files_in_path(save_path) do
+      {:ok, files} -> {:ok, files}
+      {:error, reason} -> {:keep, {:list_failed, reason}}
+    end
+  end
+
+  # Another job's media in the folder (a shared or misreported save path)
+  # shows up as importable files; leave the folder alone then.
+  defp check_no_media_left(files, library_type) do
+    left =
+      files
+      |> Discovery.filter_files_for_library_type(library_type)
+      |> Discovery.filter_extras_and_samples()
+
+    if left == [], do: :ok, else: {:keep, :media_left}
+  end
+
+  defp rm_job_folder(save_path, download) do
+    case File.rm_rf(save_path) do
+      {:ok, _} ->
+        :ok
+
+      {:error, reason, file} ->
+        Logger.warning("Kept job folder",
+          path: save_path,
+          file: file,
+          reason: inspect(reason),
+          download_id: download.id
+        )
+    end
+  end
 end

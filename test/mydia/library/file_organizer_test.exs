@@ -461,4 +461,46 @@ defmodule Mydia.Library.FileOrganizerTest do
       assert File.exists?(src)
     end
   end
+
+  describe "hardlink reporting" do
+    @tag :tmp_dir
+    test "hardlink_blocker/2 says link_refused for two paths on one filesystem", %{
+      tmp_dir: tmp_dir
+    } do
+      source = Path.join(tmp_dir, "a.mkv")
+      File.write!(source, "x")
+      dest = Path.join(tmp_dir, "lib/b.mkv")
+      File.mkdir_p!(Path.dirname(dest))
+      assert FileOrganizer.hardlink_blocker(source, dest) == :link_refused
+    end
+
+    @tag :tmp_dir
+    test "hardlink_blocker/2 says different_filesystems when a side cannot be stat'ed", %{
+      tmp_dir: tmp_dir
+    } do
+      assert FileOrganizer.hardlink_blocker(
+               Path.join(tmp_dir, "missing.mkv"),
+               Path.join(tmp_dir, "b.mkv")
+             ) == :different_filesystems
+    end
+
+    @tag :tmp_dir
+    test "a refused hardlink is logged and the file is copied", %{tmp_dir: tmp_dir} do
+      source = Path.join(tmp_dir, "a.mkv")
+      dest = Path.join(tmp_dir, "lib/a.mkv")
+      File.write!(source, "new bytes")
+      File.mkdir_p!(Path.dirname(dest))
+      # An existing destination makes File.ln/2 fail with :eexist.
+      File.write!(dest, "old")
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:ok, :copy} = FileOrganizer.place_file(source, dest)
+        end)
+
+      assert log =~ "Hardlink failed, copying instead"
+      assert log =~ "eexist"
+      assert File.read!(dest) == "new bytes"
+    end
+  end
 end

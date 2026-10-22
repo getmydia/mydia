@@ -46,6 +46,22 @@ defmodule Mydia.Downloads.ClientRemoval do
 
   def import_consumes_source?(%Download{}), do: false
 
+  @job_folder_types ~w(sabnzbd nzbget)a
+
+  @doc """
+  True when the download's client writes one folder per job (SABnzbd, NZBGet).
+  Debrid is excluded on purpose: its save path may be a shared output folder.
+  False when the client is unknown.
+  """
+  def job_folder_client?(%Download{download_client: name}) when is_binary(name) do
+    case Enum.find(Settings.list_download_client_configs(), &(&1.name == name)) do
+      %{type: type} -> type in @job_folder_types
+      nil -> false
+    end
+  end
+
+  def job_folder_client?(%Download{}), do: false
+
   def removable_state?(state) when state in [:paused, :completed], do: true
   def removable_state?(_), do: false
 

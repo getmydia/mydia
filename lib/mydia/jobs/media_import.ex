@@ -410,7 +410,7 @@ defmodule Mydia.Jobs.MediaImport do
 
   defp do_process_import(download, files, library_path, args) do
     case FileImport.organize_and_import_files(download, files, library_path, args) do
-      {:ok, imported_files, placed_sources} ->
+      {:ok, imported_files, placed_sources, placement} ->
         Logger.info("Successfully imported files",
           download_id: download.id,
           file_count: length(imported_files)
@@ -484,9 +484,18 @@ defmodule Mydia.Jobs.MediaImport do
             end
           end)
 
+        import_update =
+          Placement.attach_placement(import_update, updated_download.metadata, placement)
+
         case Downloads.update_download(updated_download, import_update) do
           {:ok, _updated} ->
-            Placement.remove_consumed_sources(placed_sources, args, download)
+            Placement.cleanup_sources(
+              placed_sources,
+              args,
+              download,
+              library_path.type,
+              not has_unresolved
+            )
 
             # A successful import means whatever this item grabbed was real,
             # so the consecutive-auto-rejection counter that
@@ -601,11 +610,15 @@ defmodule Mydia.Jobs.MediaImport do
       # the failure this import just resolved, forever.
       current_metadata = download.metadata || %{}
 
+      target_paths = Enum.map(target_files, & &1["path"])
+      placement = Placement.placement_summary(target_paths, results, library_path, args)
+
       cleaned_metadata =
         current_metadata
         |> Map.delete("unresolved_files")
         |> Map.delete("import_candidates")
         |> Map.delete("import_candidates_at")
+        |> Placement.put_placement(placement)
 
       case Downloads.update_download(download, %{
              imported_at: DateTime.utc_now(),
@@ -613,13 +626,8 @@ defmodule Mydia.Jobs.MediaImport do
              metadata: cleaned_metadata
            }) do
         {:ok, _updated} ->
-          target_paths = Enum.map(target_files, & &1["path"])
-
-          Placement.remove_consumed_sources(
-            Placement.placed_sources(target_paths, results),
-            args,
-            download
-          )
+          placed = Placement.placed_sources(target_paths, results)
+          Placement.cleanup_sources(placed, args, download, library_path.type, true)
 
         {:error, _changeset} ->
           :ok

@@ -393,8 +393,14 @@ defmodule Mydia.Library.FileOrganizer do
               {:ok, :hardlink}
             end
 
-          {:error, _reason} ->
+          {:error, reason} ->
             # Hardlink failed despite same-filesystem detection — fall back safely.
+            Logger.warning("Hardlink failed, copying instead",
+              source: source,
+              dest: dest,
+              reason: inspect(reason)
+            )
+
             do_fallback(source, dest, fallback)
         end
       else
@@ -571,6 +577,18 @@ defmodule Mydia.Library.FileOrganizer do
         {:error, {:move_failed, reason}}
     end
   end
+
+  @doc """
+  Why a placement that wanted a hardlink ended up copying.
+
+  `:different_filesystems` when the source and the destination's directory sit on
+  different devices (or either cannot be stat'ed). `:link_refused` when they
+  share a device yet `link(2)` still failed, which is what two Docker bind mounts
+  of one disk look like.
+  """
+  @spec hardlink_blocker(String.t(), String.t()) :: :different_filesystems | :link_refused
+  def hardlink_blocker(source, dest),
+    do: if(same_filesystem?(source, dest), do: :link_refused, else: :different_filesystems)
 
   defp same_filesystem?(path1, path2) do
     # path2 might not exist yet, so check its parent directory
