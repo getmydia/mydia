@@ -2,11 +2,13 @@ defmodule Mydia.Jobs.MediaImport.Placement do
   @moduledoc false
 
   require Logger
+  alias Mydia.Downloads.{ClientRemoval, ImportCandidates}
   alias Mydia.Library
-  alias Mydia.Library.{FileOrganizer, MediaFile}
+  alias Mydia.Library.{Dirs, FileOrganizer, MediaFile}
+  alias Mydia.Settings
   alias Mydia.Storage
   alias Mydia.Upgrades
-  alias Mydia.Jobs.MediaImport.{Args, Paths, Records}
+  alias Mydia.Jobs.MediaImport.{Args, Discovery, Paths, Records}
 
   # How many `name.N.ext` variants to try when a destination filename is taken
   # by different content. Deliberately small: more than a handful of distinct
@@ -365,4 +367,74 @@ defmodule Mydia.Jobs.MediaImport.Placement do
   end
 
   def remove_consumed_sources(_paths, %Args{}, _download), do: :ok
+
+  # A SABnzbd or NZBGet job folder holds only that job's files, so once its
+  # media is placed and removed the leftovers (.nfo, samples) are clutter.
+  # Every guard fails toward keeping the folder; this never raises and never
+  # fails the job.
+  @doc false
+  def remove_job_folder(sources, %Args{} = args, download, library_type) do
+    save_path = args.save_path
+
+    with true <- job_folder_candidate?(sources, args, download),
+         true <- all_inside?(sources, save_path),
+         false <- client_root?(save_path, download),
+         false <- library_overlaps?(save_path),
+         {:ok, files} <- Discovery.list_files_in_path(save_path),
+         true <- no_media_left?(files, library_type) do
+      rm_job_folder(save_path, download)
+    else
+      _ -> :ok
+    end
+  end
+
+  defp job_folder_candidate?(sources, %Args{move_source: true, save_path: save_path}, download)
+       when is_binary(save_path) and sources != [] do
+    Path.type(save_path) == :absolute and ClientRemoval.job_folder_client?(download)
+  end
+
+  defp job_folder_candidate?(_sources, _args, _download), do: false
+
+  defp all_inside?(sources, save_path),
+    do: Enum.all?(sources, fn {path, _size} -> Dirs.inside?(path, save_path) end)
+
+  # The client's configured root holds every job, never just this one.
+  defp client_root?(save_path, download) do
+    ImportCandidates.shared_download_root?(
+      save_path,
+      ImportCandidates.client_download_directory(download)
+    )
+  end
+
+  # A folder that is, or contains, a library path must never be deleted.
+  defp library_overlaps?(save_path) do
+    Settings.list_library_paths()
+    |> Enum.map(& &1.path)
+    |> Enum.filter(&(is_binary(&1) and not String.starts_with?(&1, "s3://")))
+    |> Enum.any?(&(&1 == save_path or Dirs.inside?(&1, save_path)))
+  end
+
+  # Another job's media in the folder (a shared or misreported save path)
+  # shows up as importable files; leave the folder alone then.
+  defp no_media_left?(files, library_type) do
+    files
+    |> Discovery.filter_files_for_library_type(library_type)
+    |> Discovery.filter_extras_and_samples()
+    |> Enum.empty?()
+  end
+
+  defp rm_job_folder(save_path, download) do
+    case File.rm_rf(save_path) do
+      {:ok, _} ->
+        :ok
+
+      {:error, reason, file} ->
+        Logger.warning("Kept job folder",
+          path: save_path,
+          file: file,
+          reason: inspect(reason),
+          download_id: download.id
+        )
+    end
+  end
 end

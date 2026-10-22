@@ -1040,6 +1040,8 @@ defmodule Mydia.Jobs.MediaImportTest do
 
       # A later release with the same name but different bytes lands on the
       # destination the first one owns, and the import reuses that record.
+      # The first import removed the (usenet) job folder along with the video.
+      File.mkdir_p!(Path.dirname(video_file))
       File.write!(video_file, "a longer, different fake video")
       {:ok, _} = Mydia.Downloads.update_download(Repo.reload!(download), %{imported_at: nil})
 
@@ -1160,6 +1162,105 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
   end
 
+  describe "usenet job folder cleanup" do
+    alias Mydia.Jobs.MediaImport.{Args, Placement}
+
+    @tag :tmp_dir
+    test "removes the SABnzbd job folder with its stray files", %{tmp_dir: tmp_dir} do
+      {download, job_dir} = job_folder_import!(tmp_dir, :sabnzbd)
+
+      assert {:ok, :imported} = run_job_folder(download, job_dir)
+      refute File.exists?(job_dir)
+      assert [_placed] = Path.wildcard(Path.join(tmp_dir, "library/**/*.mkv"))
+    end
+
+    @tag :tmp_dir
+    test "removes the NZBGet job folder", %{tmp_dir: tmp_dir} do
+      {download, job_dir} = job_folder_import!(tmp_dir, :nzbget)
+
+      assert {:ok, :imported} = run_job_folder(download, job_dir)
+      refute File.exists?(job_dir)
+    end
+
+    @tag :tmp_dir
+    test "keeps the folder for a torrent client", %{tmp_dir: tmp_dir} do
+      {download, job_dir} = job_folder_import!(tmp_dir, :qbittorrent)
+
+      assert {:ok, :imported} = run_job_folder(download, job_dir)
+      assert File.exists?(job_dir)
+      assert File.exists?(Path.join(job_dir, "Quietwater.Harbor.2031.1080p.mkv"))
+    end
+
+    @tag :tmp_dir
+    test "keeps the folder when save_path is the client's download root",
+         %{tmp_dir: tmp_dir} do
+      job_dir = Path.join(tmp_dir, "downloads/Quietwater.Harbor.2031.1080p")
+      {download, ^job_dir} = job_folder_import!(tmp_dir, :sabnzbd, download_directory: job_dir)
+      video = Path.join(job_dir, "Quietwater.Harbor.2031.1080p.mkv")
+      File.rm!(video)
+
+      # The import itself refuses a client root, so exercise the guard directly.
+      args = %Args{move_source: true, save_path: job_dir}
+      assert :ok = Placement.remove_job_folder([{video, 18}], args, download, :movies)
+
+      assert File.exists?(Path.join(job_dir, "release.nfo"))
+    end
+
+    @tag :tmp_dir
+    test "keeps the folder when other media is left in it", %{tmp_dir: tmp_dir} do
+      {download, job_dir} = job_folder_import!(tmp_dir, :sabnzbd)
+      video = Path.join(job_dir, "Quietwater.Harbor.2031.1080p.mkv")
+      other = Path.join(job_dir, "Other.Film.2030.1080p.mkv")
+      File.write!(other, "other")
+      File.rm!(video)
+
+      args = %Args{move_source: true, save_path: job_dir}
+      assert :ok = Placement.remove_job_folder([{video, 18}], args, download, :movies)
+
+      assert File.exists?(job_dir)
+      assert File.exists?(other)
+    end
+
+    @tag :tmp_dir
+    test "ignores a relative save_path", %{tmp_dir: tmp_dir} do
+      {download, job_dir} = job_folder_import!(tmp_dir, :sabnzbd)
+      video = Path.join(job_dir, "Quietwater.Harbor.2031.1080p.mkv")
+
+      args = %Args{move_source: true, save_path: "relative/dir"}
+      assert :ok = Placement.remove_job_folder([{video, 18}], args, download, :movies)
+
+      assert File.exists?(video)
+    end
+
+    @tag :tmp_dir
+    test "keeps a folder that contains a library path", %{tmp_dir: tmp_dir} do
+      {download, job_dir} = job_folder_import!(tmp_dir, :sabnzbd)
+      video = Path.join(job_dir, "Quietwater.Harbor.2031.1080p.mkv")
+      File.rm!(video)
+
+      {:ok, _} =
+        Settings.create_library_path(%{
+          path: Path.join(job_dir, "nested-library"),
+          type: :movies,
+          monitored: true
+        })
+
+      args = %Args{move_source: true, save_path: job_dir}
+      assert :ok = Placement.remove_job_folder([{video, 18}], args, download, :movies)
+
+      assert File.exists?(job_dir)
+    end
+
+    @tag :tmp_dir
+    test "a targeted import removes the job folder", %{tmp_dir: tmp_dir} do
+      {download, [a, b]} = targeted_import!(tmp_dir, :sabnzbd)
+      job_dir = Path.dirname(a.path)
+
+      assert {:ok, :imported} = perform_targeted(download, [a, b], %{"save_path" => job_dir})
+      refute File.exists?(job_dir)
+    end
+  end
+
   describe "targeted import source handling" do
     @tag :tmp_dir
     test "removes every target source once the import succeeds", %{tmp_dir: tmp_dir} do
@@ -1224,12 +1325,69 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
   end
 
-  defp perform_targeted(download, targets) do
-    perform_job(MediaImport, %{
-      "download_id" => download.id,
-      "target_files" => Enum.map(targets, &%{"path" => &1.path, "episode_id" => &1.episode_id}),
-      "use_hardlinks" => false
-    })
+  defp perform_targeted(download, targets, extra_args \\ %{}) do
+    perform_job(
+      MediaImport,
+      Map.merge(
+        %{
+          "download_id" => download.id,
+          "target_files" =>
+            Enum.map(targets, &%{"path" => &1.path, "episode_id" => &1.episode_id}),
+          "use_hardlinks" => false
+        },
+        extra_args
+      )
+    )
+  end
+
+  defp run_job_folder(download, job_dir) do
+    perform_job(MediaImport, %{"download_id" => download.id, "save_path" => job_dir})
+  end
+
+  # A completed movie download from a usenet client whose job folder holds the
+  # video, an .nfo and a Sample subfolder.
+  defp job_folder_import!(tmp_dir, type, opts \\ []) do
+    create_test_library_path(tmp_dir, :movies)
+
+    job_dir = Path.join(tmp_dir, "downloads/Quietwater.Harbor.2031.1080p")
+    File.mkdir_p!(Path.join(job_dir, "Sample"))
+    File.write!(Path.join(job_dir, "Quietwater.Harbor.2031.1080p.mkv"), "fake video content")
+    File.write!(Path.join(job_dir, "release.nfo"), "nfo")
+    File.write!(Path.join(job_dir, "Sample/sample.mkv"), "sample")
+
+    media_item = media_item_fixture(%{type: "movie", title: "Quietwater Harbor", year: 2031})
+    name = "JobClient-#{System.unique_integer([:positive])}"
+
+    attrs = %{
+      name: name,
+      type: type,
+      host: "nonexistent.invalid",
+      port: 9999,
+      username: "test",
+      password: "test",
+      api_key: "test",
+      enabled: true,
+      priority: 1
+    }
+
+    attrs =
+      case Keyword.get(opts, :download_directory) do
+        nil -> attrs
+        dir -> Map.put(attrs, :download_directory, dir)
+      end
+
+    {:ok, _} = Settings.create_download_client_config(attrs)
+
+    download =
+      download_fixture(%{
+        media_item_id: media_item.id,
+        status: "completed",
+        completed_at: DateTime.utc_now(),
+        download_client: name,
+        download_client_id: "job-1"
+      })
+
+    {download, job_dir}
   end
 
   # A completed TV download with two hand-resolved episode files.

@@ -499,6 +499,10 @@ defmodule Mydia.Jobs.MediaImport do
           {:ok, _updated} ->
             Placement.remove_consumed_sources(placed_sources, args, download)
 
+            unless has_unresolved do
+              Placement.remove_job_folder(placed_sources, args, download, library_path.type)
+            end
+
             # A successful import means whatever this item grabbed was real,
             # so the consecutive-auto-rejection counter that
             # Mydia.Jobs.DownloadMonitor keeps must not carry over. Without
@@ -631,11 +635,9 @@ defmodule Mydia.Jobs.MediaImport do
              metadata: cleaned_metadata
            }) do
         {:ok, _updated} ->
-          Placement.remove_consumed_sources(
-            Placement.placed_sources(target_paths, results),
-            args,
-            download
-          )
+          placed = Placement.placed_sources(target_paths, results)
+          Placement.remove_consumed_sources(placed, args, download)
+          Placement.remove_job_folder(placed, args, download, library_path.type)
 
         {:error, _changeset} ->
           :ok

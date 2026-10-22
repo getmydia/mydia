@@ -338,8 +338,9 @@ defmodule Mydia.Downloads.ImportCandidates do
 
   def shared_download_root?(_save_path, _download_root), do: false
 
-  defp client_download_directory(%{download_client: name})
-       when is_binary(name) and name != "" do
+  @doc false
+  def client_download_directory(%{download_client: name})
+      when is_binary(name) and name != "" do
     Settings.list_download_client_configs()
     |> Enum.find(&(&1.name == name))
     |> case do
@@ -348,7 +349,7 @@ defmodule Mydia.Downloads.ImportCandidates do
     end
   end
 
-  defp client_download_directory(_download), do: nil
+  def client_download_directory(_download), do: nil
 
   defp same_dir?(a, b) when is_binary(a) and a != "" and is_binary(b) and b != "",
     do: Path.expand(a) == Path.expand(b)
