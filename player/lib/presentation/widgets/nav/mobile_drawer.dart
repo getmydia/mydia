@@ -67,7 +67,7 @@ class MobileDrawer extends StatelessWidget {
     return Drawer(
       backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(borderRadius: radius),
-      child: GlassSurface.chrome(
+      child: GlassSurface.sidebar(
         borderRadius: radius,
         child: SafeArea(child: content),
       ),
@@ -109,7 +109,7 @@ class MobileDrawer extends StatelessWidget {
             ),
             child: Listener(
               behavior: HitTestBehavior.opaque,
-              child: GlassSurface.chrome(
+              child: GlassSurface.sidebar(
                 borderRadius: const BorderRadius.all(
                     Radius.circular(AppTheme.radiusRail)),
                 border: Border.all(

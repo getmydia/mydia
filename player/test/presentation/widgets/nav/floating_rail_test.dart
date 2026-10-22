@@ -9,7 +9,9 @@ import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/core/theme/palette.dart';
+import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/nav/floating_rail.dart';
 import 'package:player/presentation/widgets/nav/sidebar_content.dart';
 
@@ -728,6 +730,19 @@ void main() {
       expect(_labelOpacity(tester, 'Movies'), 0);
       expect(_scrimOpacity(tester), 0);
     });
+  });
+
+  testWidgets('the rail surface takes the panel Liquid Glass profile',
+      (tester) async {
+    await _pumpRail(tester);
+    expect(
+      find.descendant(
+        of: find.byKey(_railKey),
+        matching: find.byWidgetPredicate((w) =>
+            w is GlassSurface && w.liquidProfile == LiquidGlassProfile.panel),
+      ),
+      findsOneWidget,
+    );
   });
 
   test('expanded fill keeps textSecondary at 4.5:1 over a white backdrop', () {

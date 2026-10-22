@@ -7,6 +7,7 @@ import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -69,6 +70,7 @@ void main() {
     await _openDrawer(tester, liquid: false);
 
     final glass = tester.widget<GlassSurface>(_glass);
+    expect(glass.liquidProfile, same(LiquidGlassProfile.panel));
     expect(
       glass.borderRadius,
       const BorderRadius.horizontal(
@@ -98,6 +100,7 @@ void main() {
     await _openDrawer(tester);
 
     final glass = tester.widget<GlassSurface>(_glass);
+    expect(glass.liquidProfile, same(LiquidGlassProfile.panel));
     expect(
       glass.borderRadius,
       const BorderRadius.all(Radius.circular(AppTheme.radiusRail)),
