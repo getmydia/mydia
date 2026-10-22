@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
 import 'package:player/core/theme/contrast.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_adaptive.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/theme_preset.dart';
@@ -38,25 +39,25 @@ void main() {
       (t) => t.ground,
       DepthTokens.liquidChromeTintOpacity,
       DepthTokens.liquidChromeAdaptiveMax,
-      DepthTokens.liquidBrightness,
+      LiquidGlassProfile.lens.brightness,
     ),
     'chrome (surface)': (
       (t) => t.surface,
       DepthTokens.liquidChromeTintOpacity,
       DepthTokens.liquidChromeAdaptiveMax,
-      DepthTokens.liquidBrightness,
+      LiquidGlassProfile.lens.brightness,
     ),
     'sidebar': (
       (t) => t.surface,
       DepthTokens.liquidChromeTintOpacity,
       DepthTokens.liquidChromeAdaptiveMax,
-      DepthTokens.liquidPanelBrightness,
+      LiquidGlassProfile.panel.brightness,
     ),
     'modal': (
       (t) => t.surface,
       DepthTokens.liquidModalTintOpacity,
       DepthTokens.liquidModalAdaptiveMax,
-      DepthTokens.liquidPanelBrightness,
+      LiquidGlassProfile.panel.brightness,
     ),
   };
 
@@ -138,8 +139,8 @@ void main() {
               base: DepthTokens.liquidControlTintOpacity,
               max: DepthTokens.liquidControlAdaptiveMax,
               backdropLuma: v);
-          final bg =
-              _overGrey(tint.surface, alpha, v, DepthTokens.liquidBrightness);
+          final bg = _overGrey(
+              tint.surface, alpha, v, LiquidGlassProfile.lens.brightness);
           expect(
               contrastRatio(palette.textPrimary, bg), greaterThanOrEqualTo(3.0),
               reason: 'icon at grey $v');
@@ -154,8 +155,8 @@ void main() {
               base: DepthTokens.liquidControlTintOpacity,
               max: DepthTokens.liquidControlAdaptiveMax,
               backdropLuma: v);
-          final bg =
-              _overGrey(tint.surface, alpha, v, DepthTokens.liquidBrightness);
+          final bg = _overGrey(
+              tint.surface, alpha, v, LiquidGlassProfile.lens.brightness);
           expect(contrastRatio(Colors.white, bg), greaterThanOrEqualTo(4.5),
               reason: 'label at grey $v');
         }

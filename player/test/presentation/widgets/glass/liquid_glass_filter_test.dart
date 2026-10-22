@@ -26,8 +26,8 @@ void main() {
     expect(
       (layer! as BackdropFilterLayer).filter,
       ui.ImageFilter.blur(
-        sigmaX: DepthTokens.liquidBlurSigma,
-        sigmaY: DepthTokens.liquidBlurSigma,
+        sigmaX: LiquidGlassProfile.lens.blurSigma,
+        sigmaY: LiquidGlassProfile.lens.blurSigma,
       ),
     );
     // No shader program: no nested lens layer anywhere under the blur.
@@ -167,8 +167,8 @@ void main() {
     expect(
       (render.debugLayer! as BackdropFilterLayer).filter,
       ui.ImageFilter.blur(
-        sigmaX: DepthTokens.liquidPanelBlurSigma,
-        sigmaY: DepthTokens.liquidPanelBlurSigma,
+        sigmaX: LiquidGlassProfile.panel.blurSigma,
+        sigmaY: LiquidGlassProfile.panel.blurSigma,
       ),
     );
     expect(render.uniforms.profile, same(LiquidGlassProfile.panel));

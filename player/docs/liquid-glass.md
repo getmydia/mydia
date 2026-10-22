@@ -146,7 +146,7 @@ smoothstep between `liquidAdaptiveLumaLow` (0.15) and
 
 | Role | Base | Adaptive max |
 | --- | --- | --- |
-| Chrome | `liquidChromeTintOpacity` 0.3 | `liquidChromeAdaptiveMax` 0.9 |
+| Chrome | `liquidChromeTintOpacity` 0.35 | `liquidChromeAdaptiveMax` 0.9 |
 | Modal | `liquidModalTintOpacity` 0.35 | `liquidModalAdaptiveMax` 0.85 |
 | Control | `liquidControlTintOpacity` 0.2 | `liquidControlAdaptiveMax` 0.65 |
 

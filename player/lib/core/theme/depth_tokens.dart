@@ -217,64 +217,18 @@ abstract final class DepthTokens {
   // ---------------------------------------------------------------------------
   // Liquid Glass
   //
-  // The floating control layer's material on Liquid Glass: a frosted blur,
-  // refraction in a narrow band at the rim, a saturation and brightness lift,
-  // and a specular rim lit from above and below. Read by `LiquidGlassUniforms` and
-  // `GlassSurface`. Lengths are logical pixels; the uniforms scale them by
-  // the device pixel ratio. Never used by the OSD. Two profiles read these:
-  // the lens (controls and pills) and the panel (dialogs, sheets and the
-  // floating sidebar); see `LiquidGlassProfile`.
+  // Interaction, tint and size tokens for Liquid Glass, read by
+  // `LiquidGlassUniforms` and `GlassSurface`. Lengths are logical pixels; the
+  // uniforms scale them by the device pixel ratio. Never used by the OSD.
   // ---------------------------------------------------------------------------
 
-  /// Blur applied before the shader bends the backdrop.
-  static const double liquidBlurSigma = 20.0;
-
-  /// Width of the band along the edge where the backdrop is bent.
-  static const double liquidEdgeBand = 8.0;
-
-  /// How far the backdrop is displaced at the very rim.
-  static const double liquidRefraction = 10.0;
-
-  /// Extra displacement of red over blue, as a fraction of the refraction.
-  static const double liquidDispersion = 0.05;
-
-  /// Saturation multiplier for the backdrop (1 leaves it unchanged).
-  static const double liquidSaturation = 1.3;
-
-  /// Brightness added to the backdrop, 0..1.
-  static const double liquidBrightness = 0.07;
-
-  /// Specular rim intensity at rest.
-  static const double liquidSpecular = 0.85;
+  // The material itself (blur, depth, distortion, saturation, rim and volume
+  // light) lives in `LiquidGlassProfile`; only interaction, tint, adaptive,
+  // scroll-edge and size tokens stay here.
 
   /// Extra specular while hovered (macOS) or pressed.
   static const double liquidHoverSpecularBoost = 0.2;
   static const double liquidPressSpecularBoost = 0.35;
-
-  /// Width of the specular rim.
-  static const double liquidRimWidth = 1.5;
-
-  /// Rim light every edge gets, as a fraction of the specular, so the sides
-  /// of a capsule keep a hairline while the top and bottom carry the light.
-  static const double liquidRimHairline = 0.12;
-
-  /// The bottom edge's highlight relative to the top edge's.
-  static const double liquidBottomLight = 0.6;
-
-  /// Light added across the edge band on the top and bottom edges: the glass's
-  /// thickness.
-  static const double liquidInnerGlow = 0.12;
-
-  // Panel profile: dialogs, sheets, popovers and the floating sidebar. A
-  // blurred, translucent pane with one soft highlight along the top edge and
-  // a faint even hairline, no lens at the rim. The constants above are the
-  // lens profile, for controls and pills. See `LiquidGlassProfile`.
-  static const double liquidPanelBlurSigma = 30.0;
-  static const double liquidPanelSaturation = 1.15;
-  static const double liquidPanelBrightness = 0.04;
-  static const double liquidPanelSpecular = 0.45;
-  static const double liquidPanelRimWidth = 1.0;
-  static const double liquidPanelRimHairline = 0.25;
 
   /// Backdrop luma range over which the tint rises from its base alpha to
   /// its adaptive max (smoothstep).
@@ -300,7 +254,7 @@ abstract final class DepthTokens {
   // and icon contrast for every preset over grey backdrops from black to
   // white in steps of 0.05, since the tint is lowest at mid luma. The luma
   // is the brightest nearby, so it is the worst case under a glyph.
-  static const double liquidChromeTintOpacity = 0.3;
+  static const double liquidChromeTintOpacity = 0.35;
   static const double liquidModalTintOpacity = 0.35;
   static const double liquidControlTintOpacity = 0.2;
   static const double liquidChromeAdaptiveMax = 0.9;

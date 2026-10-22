@@ -5,11 +5,13 @@
 // coordinates. The input texture is the blurred backdrop under the surface,
 // with the surface centred in it.
 //
-// Effects: refraction with dispersion in a narrow band at the rim, adaptive
+// Effects: refraction with dispersion in a narrow band at the rim, a
+// luminosity wash (hue kept, luminance pulled toward a target), adaptive
 // tint (the tint alpha rises with the brightest backdrop luma near each
-// pixel), a specular rim lit from above and below with a hairline on every
-// edge, an inner glow along the top and bottom, and a press glow centred on
-// the pointer.
+// pixel), a specular rim lit from above and below with side rims and a
+// hairline on every edge, an inner glow along the top and bottom, volume
+// shading (lighter toward the sides, darker toward the ends), and a press
+// glow centred on the pointer.
 //
 // Refraction maths adapted from liquid_glass_renderer
 // (https://github.com/whynotmake-it/flutter_liquid_glass, MIT).
@@ -44,6 +46,11 @@ uniform float uGlowRadius;  // press glow radius, fraction of the short side
 uniform float uAdaptRadius; // physical px
 uniform float uHairline;    // rim light on every edge, fraction of uSpecular
 uniform float uBottomLight; // bottom highlight relative to the top
+uniform float uSideLight;   // rim light on the left and right, relative to top
+uniform float uVolumeSide;  // interior lift toward the left and right
+uniform float uVolumeEnds;  // interior darkening toward the top and bottom
+uniform float uLumaTarget;  // luminance the backdrop is pulled toward
+uniform float uLumaMix;     // how far (0 keeps the backdrop's luminance)
 
 uniform sampler2D uTexture;
 
@@ -107,6 +114,10 @@ void main() {
   float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
   color = clamp(mix(vec3(luma), color, uSaturation) + vec3(uBrightness),
                 0.0, 1.0);
+  // Luminosity wash (the kit's luminosity-blended fill): keep the hue, pull
+  // the luminance toward uLumaTarget.
+  float l = max(dot(color, vec3(0.2126, 0.7152, 0.0722)), 1e-3);
+  color = clamp(mix(color, color * (uLumaTarget / l), uLumaMix), 0.0, 1.0);
   // Adaptive tint: the base alpha over dark content, rising to uAdaptiveMax
   // over bright content so the label keeps its contrast (mirrored by
   // liquidAdaptiveAlpha in Dart).
@@ -119,10 +130,18 @@ void main() {
   float top = pow(max(-n.y, 0.0), 2.0);
   float bottom = uBottomLight * pow(max(n.y, 0.0), 2.0);
   float rim = 1.0 - smoothstep(uRimWidth * 0.5, uRimWidth * 1.5, inside);
-  color += vec3(uSpecular * (uHairline + top + bottom) * rim);
+  float side = uSideLight * pow(abs(n.x), 2.0);
+  color += vec3(uSpecular * (uHairline + top + bottom + side) * rim);
 
   // Thickness: a soft glow across the edge band along the top and bottom.
   color += vec3(uInnerGlow * lens * (top + bottom));
+
+  // Volume: lighter toward the sides, darker toward the ends, so a capsule
+  // reads as rounded rather than flat.
+  float sideness = smoothstep(0.4, 1.0, abs(p.x) / max(halfSize.x, 1.0));
+  float ends = 1.0 - smoothstep(0.0, max(uEdge, 1.0), halfSize.y - abs(p.y));
+  color += vec3(uVolumeSide * sideness);
+  color -= vec3(uVolumeEnds * ends);
 
   vec2 lightPos = (uLight - vec2(0.5)) * uSurface;
 
