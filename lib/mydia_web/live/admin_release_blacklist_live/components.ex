@@ -4,6 +4,7 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Components do
 
   alias Mydia.Downloads.Client.FailureCategory
 
+  attr :display, Mydia.TimeDisplay, required: true
   attr :rows, :list, required: true
   attr :total_count, :integer, required: true
   attr :page, :integer, required: true
@@ -79,13 +80,15 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Components do
           {reason_label(row.failure_reason)}
         </span>
       </:col>
-      <:col :let={row} label="Added" class="text-xs">{format_datetime(row.inserted_at)}</:col>
+      <:col :let={row} label="Added" class="text-xs">
+        {format_datetime(row.inserted_at, @display)}
+      </:col>
       <:col :let={row} label="Expires" class="text-xs">
         <span class={[
           row.expires_at == nil && "badge badge-error badge-sm",
           row.expires_at != nil && "text-base-content/80"
         ]}>
-          {expires_label(row.expires_at)}
+          {expires_label(row.expires_at, @display)}
         </span>
       </:col>
       <:action :let={row}>
@@ -139,21 +142,21 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Components do
     """
   end
 
-  defp format_datetime(nil), do: "never"
+  defp format_datetime(nil, _display), do: "never"
 
-  defp format_datetime(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
+  defp format_datetime(%DateTime{} = dt, display) do
+    format(dt, :datetime, display)
   end
 
-  defp expires_label(nil), do: "forever"
+  defp expires_label(nil, _display), do: "forever"
 
-  defp expires_label(%DateTime{} = dt) do
+  defp expires_label(%DateTime{} = dt, display) do
     now = DateTime.utc_now()
 
     if DateTime.compare(dt, now) == :lt do
       "expired"
     else
-      format_datetime(dt)
+      format_datetime(dt, display)
     end
   end
 

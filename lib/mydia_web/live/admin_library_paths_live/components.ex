@@ -8,6 +8,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
   @doc """
   Renders the Library Paths tab content.
   """
+  attr :display, Mydia.TimeDisplay, required: true
   attr :library_paths, :list, required: true
   attr :reorganizing_library_ids, :any, default: MapSet.new()
   attr :reclassifying_library_ids, :any, default: MapSet.new()
@@ -17,6 +18,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
     <.admin_list id="library-paths" items={@library_paths}>
       <:row :let={library_path}>
         <.library_path_row
+          display={@display}
           library_path={library_path}
           is_reorganizing={MapSet.member?(@reorganizing_library_ids, library_path.id)}
           is_reclassifying={MapSet.member?(@reclassifying_library_ids, library_path.id)}
@@ -55,6 +57,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
     """
   end
 
+  attr :display, Mydia.TimeDisplay, required: true
   attr :library_path, :map, required: true
   attr :is_reorganizing, :boolean, default: false
   attr :is_reclassifying, :boolean, default: false
@@ -85,7 +88,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
       <:descriptor><span class="font-mono">{@library_path.path}</span></:descriptor>
       <:details :if={@library_path.last_scan_at}>
         <p class="text-xs text-base-content/50">
-          Last scan: {Calendar.strftime(@library_path.last_scan_at, "%Y-%m-%d %H:%M")}
+          Last scan: {format(@library_path.last_scan_at, :datetime, @display)}
         </p>
       </:details>
       <:badges>

@@ -29,6 +29,7 @@
     <%= if @logs do %>
       <MydiaWeb.AdminPluginsLive.LogsModalComponents.logs_modal
         logs={@logs}
+        display={@time_display}
         log_rows={@streams.plugin_logs}
         net_rows={@streams.plugin_net}
       />

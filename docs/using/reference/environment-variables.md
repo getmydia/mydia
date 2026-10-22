@@ -24,7 +24,7 @@ enforce themselves, so any secret produced by the commands above passes.
 |----------|-------------|---------|
 | `PUID` | User ID for file permissions | `1000` |
 | `PGID` | Group ID for file permissions | `1000` |
-| `TZ` | Timezone (e.g., `America/New_York`) | `UTC` |
+| `TZ` | Time zone for the container and the default display zone of the web UI, as an IANA name (e.g., `Europe/Rome`). Each user can override it under Profile, Appearance, Date & time. | `UTC` |
 | `DATABASE_PATH` | Path to SQLite database file | `/config/mydia.db` |
 
 ## Server Configuration

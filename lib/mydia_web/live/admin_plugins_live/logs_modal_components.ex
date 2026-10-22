@@ -9,6 +9,7 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
   Dedicated logs modal: live-tailing activity log, network-request audit, and
   the synthetic-event Test trigger, split across tabs.
   """
+  attr :display, Mydia.TimeDisplay, required: true
   attr :logs, :map, required: true
   attr :log_rows, :any, required: true
   attr :net_rows, :any, required: true
@@ -73,8 +74,11 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
               id={dom_id}
               class={["flex gap-2 items-baseline", log_row_class(log)]}
             >
-              <span class="opacity-40 shrink-0 tabular-nums" title={log_full_time(log.inserted_at)}>
-                {log_time(log.inserted_at)}
+              <span
+                class="opacity-40 shrink-0 tabular-nums"
+                title={log_full_time(log.inserted_at, @display)}
+              >
+                {log_time(log.inserted_at, @display)}
               </span>
               <span class="opacity-50 shrink-0 w-5" title={to_string(log.source)}>
                 {source_tag(log.source)}
@@ -119,7 +123,12 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
                 <tr id="plugin-net-empty" class="hidden only:table-row">
                   <td colspan="7" class="text-base-content/60">No recorded requests.</td>
                 </tr>
-                <.net_row :for={{dom_id, event} <- @net_rows} id={dom_id} event={event} />
+                <.net_row
+                  :for={{dom_id, event} <- @net_rows}
+                  id={dom_id}
+                  event={event}
+                  display={@display}
+                />
               </tbody>
             </table>
           </div>
@@ -181,6 +190,7 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
   end
 
   @doc false
+  attr :display, Mydia.TimeDisplay, required: true
   attr :id, :string, required: true
   attr :event, :map, required: true
 
@@ -191,9 +201,9 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
     <tr id={@id} class={net_row_class(@event)}>
       <td
         class="whitespace-nowrap max-sm:whitespace-normal opacity-60"
-        title={log_full_time(@event.inserted_at)}
+        title={log_full_time(@event.inserted_at, @display)}
       >
-        {log_time(@event.inserted_at)}
+        {log_time(@event.inserted_at, @display)}
       </td>
       <td class="whitespace-nowrap max-sm:hidden">{@meta["method"] || "GET"}</td>
       <td
@@ -253,12 +263,12 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
   defp format_ms(ms) when is_integer(ms), do: "#{ms}ms"
   defp format_ms(_), do: "—"
 
-  # Activity-log timestamp: compact HH:MM:SS for the row, full UTC on hover.
-  defp log_time(%DateTime{} = dt), do: Calendar.strftime(dt, "%H:%M:%S")
-  defp log_time(_), do: ""
+  # Activity-log timestamp: compact time for the row, full date and time on hover.
+  defp log_time(%DateTime{} = dt, display), do: format(dt, :time_seconds, display)
+  defp log_time(_, _display), do: ""
 
-  defp log_full_time(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
-  defp log_full_time(_), do: ""
+  defp log_full_time(%DateTime{} = dt, display), do: format(dt, :datetime_full, display)
+  defp log_full_time(_, _display), do: ""
 
   # Compact source marker for an activity-log line.
   defp source_tag(:guest), do: "log"

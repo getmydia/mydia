@@ -93,7 +93,7 @@ defmodule MydiaWeb.PluginPageLive.Activity do
           <div class="card-body p-4 gap-2">
             <div class="flex items-center justify-between">
               <span class="text-xs text-base-content/60">
-                {Calendar.strftime(hd(batch).inserted_at, "%Y-%m-%d %H:%M")}
+                {format(hd(batch).inserted_at, :datetime, @time_display)}
               </span>
               <button
                 :if={length(batch) > 1 and Enum.any?(batch, &(&1.status == "applied"))}

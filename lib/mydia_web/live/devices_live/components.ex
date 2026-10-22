@@ -8,6 +8,7 @@ defmodule MydiaWeb.DevicesLive.Components do
 
   alias Mydia.RemoteAccess
 
+  attr :display, Mydia.TimeDisplay, required: true
   attr :devices, :list, required: true
   attr :show_all_devices, :boolean, default: false
   attr :show_clear_inactive_modal, :boolean, default: false
@@ -106,7 +107,7 @@ defmodule MydiaWeb.DevicesLive.Components do
                           <% is_nil(device.last_seen_at) -> %>
                             Never connected
                           <% true -> %>
-                            {format_relative_time(device.last_seen_at)}
+                            {format_relative_time(device.last_seen_at, @display)}
                         <% end %>
                       </div>
                     </div>
@@ -312,8 +313,8 @@ defmodule MydiaWeb.DevicesLive.Components do
   def pluralize(1, word), do: "1 #{word}"
   def pluralize(n, word), do: "#{n} #{word}s"
 
-  defp format_datetime(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%b %d, %Y at %I:%M %p")
+  defp format_datetime(%DateTime{} = dt, display) do
+    format(dt, :datetime, display)
   end
 
   defp platform_icon("ios"), do: "hero-device-phone-mobile"
@@ -321,7 +322,7 @@ defmodule MydiaWeb.DevicesLive.Components do
   defp platform_icon("web"), do: "hero-computer-desktop"
   defp platform_icon(_), do: "hero-device-tablet"
 
-  defp format_relative_time(%DateTime{} = dt) do
+  defp format_relative_time(%DateTime{} = dt, display) do
     now = DateTime.utc_now()
     diff_seconds = DateTime.diff(now, dt, :second)
 
@@ -330,7 +331,7 @@ defmodule MydiaWeb.DevicesLive.Components do
       diff_seconds < 3600 -> "#{div(diff_seconds, 60)} min ago"
       diff_seconds < 86400 -> "#{pluralize(div(diff_seconds, 3600), "hour")} ago"
       diff_seconds < 604_800 -> "#{pluralize(div(diff_seconds, 86400), "day")} ago"
-      true -> format_datetime(dt)
+      true -> format_datetime(dt, display)
     end
   end
 end

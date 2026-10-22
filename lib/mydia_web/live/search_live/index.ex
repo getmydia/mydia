@@ -1349,8 +1349,8 @@ defmodule MydiaWeb.SearchLive.Index do
   defp health_color(score) when score >= 0.4, do: "text-warning"
   defp health_color(_), do: "text-error"
 
-  defp format_date(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%b %d, %Y")
+  defp format_date(%DateTime{} = dt, display) do
+    format(dt, :date, display)
   end
 
   # Indexer type helpers for the template

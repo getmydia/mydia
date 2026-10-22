@@ -4,6 +4,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
 
   alias Mydia.Accounts.ApiKey
 
+  attr :display, Mydia.TimeDisplay, required: true
   attr :api_keys, :list, required: true
   attr :env_key_set, :boolean, required: true
 
@@ -25,7 +26,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
     </div>
 
     <.admin_list id="api-keys" items={@api_keys}>
-      <:row :let={key}><.api_key_row key={key} /></:row>
+      <:row :let={key}><.api_key_row key={key} display={@display} /></:row>
       <:empty>No API keys yet. Create one to use the Library API.</:empty>
     </.admin_list>
     """
@@ -40,6 +41,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
     """
   end
 
+  attr :display, Mydia.TimeDisplay, required: true
   attr :key, ApiKey, required: true
 
   defp api_key_row(assigns) do
@@ -50,8 +52,10 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
       <:title>{@key.name}</:title>
       <:descriptor>
         <span class="font-mono">{@key.key_prefix}...</span>
-        · Created {date(@key.inserted_at)} · Last used {date(@key.last_used_at) || "never"} · Expires {date(
-          @key.expires_at
+        · Created {date(@key.inserted_at, @display)} · Last used {date(@key.last_used_at, @display) ||
+          "never"} · Expires {date(
+          @key.expires_at,
+          @display
         ) || "never"}
       </:descriptor>
       <:badges>
@@ -240,6 +244,6 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
     if "admin" in (permissions || []), do: "Library API", else: "Player API"
   end
 
-  defp date(nil), do: nil
-  defp date(%DateTime{} = value), do: Calendar.strftime(value, "%Y-%m-%d")
+  defp date(nil, _display), do: nil
+  defp date(%DateTime{} = value, display), do: format(value, :date, display)
 end

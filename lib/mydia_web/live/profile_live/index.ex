@@ -367,10 +367,10 @@ defmodule MydiaWeb.ProfileLive.Index do
     end
   end
 
-  defp format_datetime(nil), do: "Never"
+  defp format_datetime(nil, _display), do: "Never"
 
-  defp format_datetime(datetime) do
-    Calendar.strftime(datetime, "%b %d, %Y at %I:%M %p")
+  defp format_datetime(datetime, display) do
+    format(datetime, :datetime, display)
   end
 
   defp upload_error_to_string(:too_large), do: "Image is too large (maximum 5MB)"
