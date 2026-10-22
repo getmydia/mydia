@@ -19,7 +19,8 @@ defmodule Mydia.Media.Restrictions do
   Applies a scope's restrictions to a query rooted at `MediaItem`.
   """
   @spec apply(Ecto.Query.t() | module(), Scope.t()) :: Ecto.Query.t()
-  def apply(query, %Scope{allowed_categories: nil, max_content_age: nil}), do: query
+  def apply(query, %Scope{allowed_categories: nil, max_content_age: nil}),
+    do: Ecto.Queryable.to_query(query)
 
   def apply(query, %Scope{} = scope) do
     query
@@ -35,7 +36,8 @@ defmodule Mydia.Media.Restrictions do
   column, so an episode is visible exactly when its show is.
   """
   @spec apply_to_episodes(Ecto.Query.t() | module(), Scope.t()) :: Ecto.Query.t()
-  def apply_to_episodes(query, %Scope{allowed_categories: nil, max_content_age: nil}), do: query
+  def apply_to_episodes(query, %Scope{allowed_categories: nil, max_content_age: nil}),
+    do: Ecto.Queryable.to_query(query)
 
   def apply_to_episodes(query, %Scope{} = scope) do
     from(e in query,

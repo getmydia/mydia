@@ -62,6 +62,13 @@ defmodule Mydia.Media.RestrictionsTest do
     end
   end
 
+  describe "apply/2 and apply_to_episodes/2 with an unrestricted scope" do
+    test "return a real query, not the bare schema module" do
+      assert %Ecto.Query{} = Restrictions.apply(MediaItem, Scope.unrestricted())
+      assert %Ecto.Query{} = Restrictions.apply_to_episodes(Episode, Scope.unrestricted())
+    end
+  end
+
   describe "apply/2 with a category limit" do
     test "keeps only the allowed categories" do
       cartoon = categorized(:cartoon_movie, "G")

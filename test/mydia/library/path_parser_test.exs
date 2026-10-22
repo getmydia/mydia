@@ -210,7 +210,73 @@ defmodule Mydia.Library.PathParserTest do
     end
   end
 
+  describe "external_ids/1" do
+    test "reads brace, bracket and id-suffixed spellings" do
+      assert PathParser.external_ids("Quiet Harbor (2011) {tmdb-90001}") == %{tmdb: "90001"}
+      assert PathParser.external_ids("Quiet Harbor (2011) [tmdb-90001]") == %{tmdb: "90001"}
+      assert PathParser.external_ids("Quiet Harbor (2011) [tmdbid-90001]") == %{tmdb: "90001"}
+      assert PathParser.external_ids("Lantern Bay {tvdb-70001}") == %{tvdb: "70001"}
+      assert PathParser.external_ids("Lantern Bay {imdb-tt0000123}") == %{imdb: "tt0000123"}
+    end
+
+    test "reads several tags and is case-insensitive" do
+      assert PathParser.external_ids("Lantern Bay [TVDBID-70001] {imdb-tt0000123}") ==
+               %{tvdb: "70001", imdb: "tt0000123"}
+    end
+
+    test "no tags" do
+      assert PathParser.external_ids("Quiet Harbor (2011)") == %{}
+    end
+
+    test "finds a tag in the middle of a name" do
+      assert PathParser.external_ids("Quiet {tmdb-90001} Harbor") == %{tmdb: "90001"}
+    end
+  end
+
+  describe "external_id_tags/1" do
+    test "returns every tag in order, including repeats of one provider" do
+      assert PathParser.external_id_tags("Quiet Harbor {tmdb-90001} {tmdb-55555}") ==
+               [tmdb: "90001", tmdb: "55555"]
+    end
+
+    test "returns an empty list when untagged" do
+      assert PathParser.external_id_tags("Quiet Harbor (2011)") == []
+    end
+  end
+
+  describe "strip_external_ids/1" do
+    test "removes every tag" do
+      assert PathParser.strip_external_ids("Quiet Harbor (2011) {tmdb-90001} [imdbid-tt1]") ==
+               "Quiet Harbor (2011)"
+    end
+  end
+
   describe "parse_movie_folder/1" do
+    test "reads a brace tmdb tag" do
+      assert PathParser.parse_movie_folder("Quiet Harbor (2011) {tmdb-90001}") ==
+               %{
+                 title: "Quiet Harbor",
+                 year: 2011,
+                 external_id: "90001",
+                 external_provider: :tmdb
+               }
+    end
+
+    test "prefers tmdb over tvdb over imdb when several tags are present" do
+      assert %{external_provider: :tmdb, external_id: "90001"} =
+               PathParser.parse_movie_folder(
+                 "Quiet Harbor (2011) {imdb-tt0000123} [tvdb-5] {tmdb-90001}"
+               )
+
+      assert %{external_provider: :tvdb, external_id: "5"} =
+               PathParser.parse_movie_folder("Quiet Harbor (2011) {imdb-tt0000123} [tvdb-5]")
+    end
+
+    test "reads a tmdbid tag" do
+      assert PathParser.parse_movie_folder("Quiet Harbor [tmdbid-90001]") ==
+               %{title: "Quiet Harbor", year: nil, external_id: "90001", external_provider: :tmdb}
+    end
+
     test "parses movie folder with year and TMDB ID" do
       result = PathParser.parse_movie_folder("Twister (1996) [tmdb-664]")
 
@@ -374,6 +440,11 @@ defmodule Mydia.Library.PathParserTest do
   end
 
   describe "parse_tv_show_folder/1" do
+    test "reads a brace tvdb tag" do
+      assert PathParser.parse_tv_show_folder("Lantern Bay (2020) {tvdb-70001}") ==
+               %{title: "Lantern Bay", year: 2020, external_id: "70001", external_provider: :tvdb}
+    end
+
     test "parses TV show folder with TVDB ID" do
       result = PathParser.parse_tv_show_folder("Breaking Bad [tvdb-81189]")
 

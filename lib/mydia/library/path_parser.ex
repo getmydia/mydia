@@ -155,26 +155,67 @@ defmodule Mydia.Library.PathParser do
 
   def parse_season_folder(_), do: :error
 
-  # Movie folder pattern: "Movie Title (Year) [provider-id]" or just "Movie Title (Year)"
-  # Captures: 1=title, 2=year (optional), 3=provider (optional), 4=id (optional)
-  # Examples:
-  #   "Twister (1996)" -> title="Twister", year=1996
-  #   "Twister (1996) [tmdb-664]" -> title="Twister", year=1996, provider=tmdb, id=664
-  #   "The Matrix [tmdb-603]" -> title="The Matrix", provider=tmdb, id=603
-  defp movie_folder_pattern do
-    ~r/^(.+?)\s*(?:\((\d{4})\))?\s*(?:\[(tmdb|tvdb|imdb)-([^\]]+)\])?\s*$/i
+  # Library managers tag folders with the provider id in several spellings:
+  # `[tmdb-603]`, `{tmdb-603}`, `[tmdbid-603]`. One pattern reads them all so
+  # the folder parsers and `Mydia.Library.ItemFolders.Home` agree.
+  @external_id_tag ~r/[\[{](tmdb|tvdb|imdb)(?:id)?-([^\]}\s]+)[\]}]/i
+
+  @doc """
+  The provider ids tagged in a folder or file name. When a provider is tagged
+  more than once, the first tag wins; use `external_id_tags/1` to see them all.
+
+      iex> PathParser.external_ids("Quiet Harbor (2011) {tmdb-90001}")
+      %{tmdb: "90001"}
+  """
+  @spec external_ids(String.t()) :: %{optional(:tmdb | :tvdb | :imdb) => String.t()}
+  def external_ids(name) when is_binary(name) do
+    name
+    |> external_id_tags()
+    |> Enum.reduce(%{}, fn {provider, id}, acc -> Map.put_new(acc, provider, id) end)
   end
 
-  # TV show folder pattern: "Show Name (Year) [provider-id]" or just "Show Name [provider-id]"
-  # This pattern is the same as movie_folder_pattern but is used in a TV context
-  # Captures: 1=title, 2=year (optional), 3=provider (optional), 4=id (optional)
-  # Examples:
-  #   "Breaking Bad [tvdb-81189]" -> title="Breaking Bad", provider=tvdb, id=81189
-  #   "The Office (2005) [tmdb-2316]" -> title="The Office", year=2005, provider=tmdb, id=2316
-  #   "Bluey (2018)" -> title="Bluey", year=2018
-  defp tv_show_folder_pattern do
-    ~r/^(.+?)\s*(?:\((\d{4})\))?\s*(?:\[(tmdb|tvdb|imdb)-([^\]]+)\])?\s*$/i
+  @doc """
+  Every provider id tag in a name, in order, repeats included.
+
+      iex> PathParser.external_id_tags("Quiet Harbor {tmdb-90001} {tmdb-55555}")
+      [tmdb: "90001", tmdb: "55555"]
+  """
+  @spec external_id_tags(String.t()) :: [{:tmdb | :tvdb | :imdb, String.t()}]
+  def external_id_tags(name) when is_binary(name) do
+    @external_id_tag
+    |> Regex.scan(name)
+    |> Enum.map(fn [_, provider, id] ->
+      {provider |> String.downcase() |> String.to_existing_atom(), id}
+    end)
   end
+
+  @doc "`name` with every provider id tag removed."
+  @spec strip_external_ids(String.t()) :: String.t()
+  def strip_external_ids(name) when is_binary(name) do
+    @external_id_tag
+    |> Regex.replace(name, " ")
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+  end
+
+  # The folder parsers report one provider id. Prefer tmdb, then tvdb, then
+  # imdb, matching the order the old single-tag regex listed them.
+  defp first_external_id(name) do
+    ids = external_ids(name)
+
+    case Enum.find([:tmdb, :tvdb, :imdb], &Map.has_key?(ids, &1)) do
+      nil -> {nil, nil}
+      provider -> {provider, Map.fetch!(ids, provider)}
+    end
+  end
+
+  # Folder patterns match "Title (Year)" with the year optional. Provider id
+  # tags are removed beforehand by `strip_external_ids/1`.
+  # Examples:
+  #   "Twister (1996)" -> title="Twister", year=1996
+  #   "The Matrix" -> title="The Matrix"
+  defp movie_folder_pattern, do: ~r/^(.+?)\s*(?:\((\d{4})\))?\s*$/i
+  defp tv_show_folder_pattern, do: ~r/^(.+?)\s*(?:\((\d{4})\))?\s*$/i
 
   @doc """
   Extracts movie metadata from a folder name.
@@ -198,12 +239,12 @@ defmodule Mydia.Library.PathParser do
   """
   @spec parse_movie_folder(String.t()) :: map() | nil
   def parse_movie_folder(folder_name) when is_binary(folder_name) do
-    case Regex.run(movie_folder_pattern(), folder_name) do
+    {external_provider, external_id} = first_external_id(folder_name)
+
+    case Regex.run(movie_folder_pattern(), strip_external_ids(folder_name)) do
       [_full, title | rest] ->
         title = String.trim(title)
-
-        # rest can be [year, provider, id], [year], [nil, provider, id], etc.
-        {year, external_provider, external_id} = extract_movie_folder_parts(rest)
+        year = folder_year(rest)
 
         # Only return result if we have at least a title AND (year OR external_id)
         # This avoids false matches on random folder names
@@ -251,12 +292,12 @@ defmodule Mydia.Library.PathParser do
   """
   @spec parse_tv_show_folder(String.t()) :: map() | nil
   def parse_tv_show_folder(folder_name) when is_binary(folder_name) do
-    case Regex.run(tv_show_folder_pattern(), folder_name) do
+    {external_provider, external_id} = first_external_id(folder_name)
+
+    case Regex.run(tv_show_folder_pattern(), strip_external_ids(folder_name)) do
       [_full, title | rest] ->
         title = String.trim(title)
-
-        # rest can be [year, provider, id], [year], [nil, provider, id], etc.
-        {year, external_provider, external_id} = extract_movie_folder_parts(rest)
+        year = folder_year(rest)
 
         # For TV shows, we're more lenient - return result if we have at least a valid title
         # This is because TV show folders might just be "Show Name" with metadata in subfolders
@@ -278,56 +319,15 @@ defmodule Mydia.Library.PathParser do
 
   def parse_tv_show_folder(_), do: nil
 
-  # Extract year, provider, and id from regex captures
-  defp extract_movie_folder_parts([]), do: {nil, nil, nil}
-
-  defp extract_movie_folder_parts([year_str]) do
-    {parse_year(year_str), nil, nil}
-  end
-
-  defp extract_movie_folder_parts([year_str, provider_str, id_str]) do
-    year = parse_year(year_str)
-    {provider, id} = parse_provider_id(provider_str, id_str)
-    {year, provider, id}
-  end
-
-  defp extract_movie_folder_parts([year_str, provider_str]) do
-    {parse_year(year_str), parse_provider(provider_str), nil}
-  end
-
-  defp extract_movie_folder_parts(_), do: {nil, nil, nil}
+  # The year capture is absent from the match when the folder has no "(Year)".
+  defp folder_year([year_str | _]), do: parse_year(year_str)
+  defp folder_year([]), do: nil
 
   defp parse_year(""), do: nil
 
   defp parse_year(year_str) when is_binary(year_str) do
     case Integer.parse(year_str) do
       {year, ""} when year >= 1900 and year <= 2100 -> year
-      _ -> nil
-    end
-  end
-
-  defp parse_provider_id("", _), do: {nil, nil}
-  defp parse_provider_id(_, ""), do: {nil, nil}
-
-  defp parse_provider_id(provider_str, id_str) do
-    provider =
-      case String.downcase(provider_str) do
-        "tmdb" -> :tmdb
-        "tvdb" -> :tvdb
-        "imdb" -> :imdb
-        _ -> nil
-      end
-
-    {provider, id_str}
-  end
-
-  defp parse_provider(""), do: nil
-
-  defp parse_provider(provider_str) do
-    case String.downcase(provider_str) do
-      "tmdb" -> :tmdb
-      "tvdb" -> :tvdb
-      "imdb" -> :imdb
       _ -> nil
     end
   end
