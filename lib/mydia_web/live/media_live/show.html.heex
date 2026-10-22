@@ -411,6 +411,7 @@
           <Components.timeline_section
             timeline_events={@timeline_events}
             expanded={@timeline_expanded}
+            display={@time_display}
           />
         </aside>
       </div>
@@ -436,6 +437,7 @@
       file_details={@file_details}
       file_origin={@file_origin}
       current_user_id={@current_user.id}
+      display={@time_display}
     />
   <% end %>
   <%= if @show_download_cancel_confirm && @download_to_cancel do %>
@@ -445,7 +447,7 @@
     <Modals.download_delete_confirm_modal download_to_delete={@download_to_delete} />
   <% end %>
   <%= if @show_download_details_modal && @download_details do %>
-    <Modals.download_details_modal download_details={@download_details} />
+    <Modals.download_details_modal download_details={@download_details} display={@time_display} />
   <% end %>
   <%= if @show_reidentify_modal do %>
     <Modals.reidentify_modal provider={@reidentify_provider} candidates={@reidentify_candidates} />

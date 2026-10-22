@@ -15,6 +15,7 @@ defmodule MydiaWeb.MediaRequestComponents do
 
   alias Mydia.Media.MediaRequest
   alias Mydia.Metadata.ImageUrl
+  alias MydiaWeb.DateTimeFormat
 
   @placeholder_poster "/images/no-poster.svg"
   @poster_size "w185"
@@ -125,9 +126,11 @@ defmodule MydiaWeb.MediaRequestComponents do
   def status_text("rejected"), do: "Rejected"
   def status_text(_), do: "Unknown"
 
-  @doc "Formats a request timestamp, or \"N/A\" when it is nil."
-  def format_date(nil), do: "N/A"
-  def format_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %d, %Y at %I:%M %p")
+  @doc "Formats a request timestamp in the viewer's display zone, or \"N/A\" when it is nil."
+  def format_date(nil, %Mydia.TimeDisplay{}), do: "N/A"
+
+  def format_date(%DateTime{} = dt, %Mydia.TimeDisplay{} = display),
+    do: DateTimeFormat.format(dt, :datetime, display)
 
   @doc ~S[Human label for a request media type ("tv_show" becomes "Tv show").]
   def media_type_text(media_type) do

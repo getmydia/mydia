@@ -364,7 +364,7 @@ defmodule MydiaWeb.ActivityLive.Index do
     end
   end
 
-  defp relative_time(datetime) do
+  defp relative_time(datetime, display) do
     now = DateTime.utc_now()
     diff = DateTime.diff(now, datetime, :second)
 
@@ -373,7 +373,7 @@ defmodule MydiaWeb.ActivityLive.Index do
       diff < 3600 -> "#{div(diff, 60)} minutes ago"
       diff < 86400 -> "#{div(diff, 3600)} hours ago"
       diff < 604_800 -> "#{div(diff, 86400)} days ago"
-      true -> Calendar.strftime(datetime, "%b %d, %Y")
+      true -> format(datetime, :date, display)
     end
   end
 

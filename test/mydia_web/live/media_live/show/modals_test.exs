@@ -4,6 +4,8 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
   import Phoenix.LiveViewTest
 
   alias MydiaWeb.MediaLive.Show.Modals
+
+  @display %Mydia.TimeDisplay{time_zone: "Etc/UTC", clock: :h12}
   alias Mydia.Library.MediaFile
   alias Mydia.Metadata.Structs.SearchResult
   alias Mydia.Settings.LibraryPath
@@ -43,6 +45,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       # of the display string ("HDR10") Mydia.Library.Hdr.display/1 produces.
       html =
         render_component(&Modals.file_details_modal/1,
+          display: @display,
           file_details: hdr_file(%{hdr_format: :hdr10})
         )
 
@@ -53,6 +56,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     test "a Dolby Vision profile 8 file shows Dolby Vision plus the profile number" do
       html =
         render_component(&Modals.file_details_modal/1,
+          display: @display,
           file_details:
             hdr_file(%{hdr_format: :hdr10, dolby_vision_profile: 8, dolby_vision_bl_compat_id: 1})
         )
@@ -67,6 +71,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       # premium HDR format there is.
       html =
         render_component(&Modals.file_details_modal/1,
+          display: @display,
           file_details:
             hdr_file(%{hdr_format: nil, dolby_vision_profile: 5, dolby_vision_bl_compat_id: 0})
         )
@@ -79,6 +84,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     test "a genuinely SDR file (no base, no DV profile) shows None" do
       html =
         render_component(&Modals.file_details_modal/1,
+          display: @display,
           file_details: hdr_file(%{hdr_format: nil, dolby_vision_profile: nil})
         )
 
@@ -100,7 +106,8 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
         size: nil
       }
 
-      html = render_component(&Modals.file_details_modal/1, file_details: orphaned)
+      html =
+        render_component(&Modals.file_details_modal/1, display: @display, file_details: orphaned)
 
       assert html =~ "Unknown file"
     end
@@ -117,7 +124,11 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
         size: 1_000
       }
 
-      html = render_component(&Modals.file_details_modal/1, file_details: resolvable)
+      html =
+        render_component(&Modals.file_details_modal/1,
+          display: @display,
+          file_details: resolvable
+        )
 
       assert html =~ "/movies/Movie (2020)/movie.mkv"
     end
@@ -140,6 +151,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     test "renders nothing when the file has no known origin" do
       html =
         render_component(&Modals.file_details_modal/1,
+          display: @display,
           file_details: origin_file(),
           file_origin: nil
         )
@@ -156,6 +168,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
       html =
         render_component(&Modals.file_details_modal/1,
+          display: @display,
           file_details: origin_file(),
           file_origin: download
         )
@@ -174,6 +187,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
       html =
         render_component(&Modals.file_details_modal/1,
+          display: @display,
           file_details: origin_file(),
           file_origin: download
         )

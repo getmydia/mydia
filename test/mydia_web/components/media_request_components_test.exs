@@ -6,6 +6,8 @@ defmodule MydiaWeb.MediaRequestComponentsTest do
   alias Mydia.Media.MediaRequest
   alias MydiaWeb.MediaRequestComponents
 
+  @display %Mydia.TimeDisplay{time_zone: "Etc/UTC", clock: :h12}
+
   defp render_card(request, opts \\ []) do
     assigns = Enum.into(opts, %{request: request})
 
@@ -109,7 +111,9 @@ defmodule MydiaWeb.MediaRequestComponentsTest do
   end
 
   test "format_date handles a missing timestamp" do
-    assert MediaRequestComponents.format_date(nil) == "N/A"
-    assert MediaRequestComponents.format_date(~U[2026-08-24 15:04:05Z]) =~ "Aug 24, 2026"
+    assert MediaRequestComponents.format_date(nil, @display) == "N/A"
+
+    assert MediaRequestComponents.format_date(~U[2026-08-24 15:04:05Z], @display) ==
+             "Aug 24, 2026, 3:04 PM"
   end
 end

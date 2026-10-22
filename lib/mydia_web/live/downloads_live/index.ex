@@ -1733,10 +1733,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  defp status_age(%DateTime{} = as_of) do
+  defp status_age(%DateTime{} = as_of, display) do
     seconds = max(DateTime.diff(DateTime.utc_now(), as_of, :second), 0)
 
-    if seconds < 60, do: "#{seconds}s ago", else: format_relative_time(as_of)
+    if seconds < 60, do: "#{seconds}s ago", else: format_relative_time(as_of, display)
   end
 
   # Whether Mydia adopted this download from a client rather than grabbing it

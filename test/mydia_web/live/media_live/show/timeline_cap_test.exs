@@ -17,6 +17,8 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
   alias Mydia.Events
   alias MydiaWeb.MediaLive.Show.Components
 
+  @display %Mydia.TimeDisplay{time_zone: "Etc/UTC", clock: :h12}
+
   defp fake_events(n) do
     for i <- 1..n do
       %{
@@ -34,6 +36,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
     test "renders at most five events when collapsed" do
       html =
         render_component(&Components.timeline_section/1,
+          display: @display,
           timeline_events: fake_events(9),
           expanded: false
         )
@@ -45,6 +48,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
     test "renders every event it was given when expanded" do
       html =
         render_component(&Components.timeline_section/1,
+          display: @display,
           timeline_events: fake_events(9),
           expanded: true
         )
@@ -57,6 +61,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
       # lie on an item with more history than that.
       html =
         render_component(&Components.timeline_section/1,
+          display: @display,
           timeline_events: fake_events(9),
           expanded: false
         )
@@ -67,6 +72,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
     test "the control reads Show less when expanded" do
       html =
         render_component(&Components.timeline_section/1,
+          display: @display,
           timeline_events: fake_events(9),
           expanded: true
         )
@@ -77,6 +83,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
     test "there is no control at all when nothing is hidden" do
       html =
         render_component(&Components.timeline_section/1,
+          display: @display,
           timeline_events: fake_events(5),
           expanded: false
         )
@@ -87,6 +94,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
     test "renders nothing for an item with no events" do
       html =
         render_component(&Components.timeline_section/1,
+          display: @display,
           timeline_events: [],
           expanded: false
         )

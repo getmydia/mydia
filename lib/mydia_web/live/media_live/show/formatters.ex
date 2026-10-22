@@ -6,6 +6,7 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
   """
 
   alias Mydia.Indexers.SearchResult
+  alias MydiaWeb.DateTimeFormat
 
   def format_date(nil), do: "N/A"
 
@@ -45,8 +46,8 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
     end
   end
 
-  def format_absolute_time(timestamp) do
-    Calendar.strftime(timestamp, "%b %d, %Y at %I:%M %p")
+  def format_absolute_time(timestamp, %Mydia.TimeDisplay{} = display) do
+    DateTimeFormat.format(timestamp, :datetime, display)
   end
 
   def format_download_quality(nil), do: "Unknown"
@@ -73,10 +74,10 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
     SearchResult.format_size(result)
   end
 
-  def format_search_date(nil), do: "Unknown"
+  def format_search_date(nil, %Mydia.TimeDisplay{}), do: "Unknown"
 
-  def format_search_date(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%b %d, %Y")
+  def format_search_date(%DateTime{} = dt, %Mydia.TimeDisplay{} = display) do
+    DateTimeFormat.format(dt, :date, display)
   end
 
   def format_metadata_for_display(event) do

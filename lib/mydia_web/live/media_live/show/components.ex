@@ -1169,6 +1169,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   @timeline_visible_count 5
 
   attr :timeline_events, :list, required: true
+  attr :display, Mydia.TimeDisplay, required: true
   attr :expanded, :boolean, default: false
 
   def timeline_section(assigns) do
@@ -1214,7 +1215,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     <span class="font-semibold text-sm truncate" title={event.title}>{event.title}</span>
                     <time
                       class="text-xs text-base-content/50 whitespace-nowrap shrink-0"
-                      title={format_absolute_time(event.timestamp)}
+                      title={format_absolute_time(event.timestamp, @display)}
                     >
                       {format_relative_time_short(event.timestamp)}
                     </time>

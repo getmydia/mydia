@@ -17,6 +17,7 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
 
   attr :download, :map, required: true
   attr :tab, :atom, required: true
+  attr :display, Mydia.TimeDisplay, required: true
   attr :client_url, :string, default: nil
 
   def detail_drawer(assigns) do
@@ -159,9 +160,9 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
                     <span class="font-medium">{label}</span>
                     <span
                       class="tooltip text-base-content/60 ml-1"
-                      data-tip={format_absolute_time(at)}
+                      data-tip={format_absolute_time(at, @display)}
                     >
-                      {format_relative_time(at)}
+                      {format_relative_time(at, @display)}
                     </span>
                   </div>
                   <hr :if={index < length(@events) - 1} />

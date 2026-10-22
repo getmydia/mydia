@@ -6,6 +6,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   use MydiaWeb, :verified_routes
   import MydiaWeb.CoreComponents
   import MydiaWeb.IndexerComponents
+  import MydiaWeb.DateTimeFormat, only: [format: 3]
 
   # Import the formatting and search helper functions
   import MydiaWeb.MediaLive.Show.Formatters
@@ -371,6 +372,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :file_details, :map, required: true
   attr :file_origin, :map, default: nil
   attr :current_user_id, :string, default: nil
+  attr :display, Mydia.TimeDisplay, required: true
 
   def file_details_modal(assigns) do
     ~H"""
@@ -490,10 +492,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               <%= if @file_details.verified_at do %>
                 <span class="text-success">
                   <.icon name="hero-check-circle" class="w-4 h-4 inline" />
-                  Verified on {Calendar.strftime(
-                    @file_details.verified_at,
-                    "%b %d, %Y at %I:%M %p"
-                  )}
+                  Verified on {format(@file_details.verified_at, :datetime, @display)}
                 </span>
               <% else %>
                 <span class="text-warning">
@@ -641,6 +640,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   Download details modal showing comprehensive information about a download.
   """
   attr :download_details, :map, required: true
+  attr :display, Mydia.TimeDisplay, required: true
 
   def download_details_modal(assigns) do
     ~H"""
@@ -715,14 +715,14 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             <div>
               <h4 class="text-sm font-semibold text-base-content/70 mb-2">Added</h4>
               <p class="text-sm">
-                {Calendar.strftime(@download_details.inserted_at, "%b %d, %Y at %I:%M %p")}
+                {format(@download_details.inserted_at, :datetime, @display)}
               </p>
             </div>
             <%= if @download_details.completed_at do %>
               <div>
                 <h4 class="text-sm font-semibold text-base-content/70 mb-2">Completed</h4>
                 <p class="text-sm">
-                  {Calendar.strftime(@download_details.completed_at, "%b %d, %Y at %I:%M %p")}
+                  {format(@download_details.completed_at, :datetime, @display)}
                 </p>
               </div>
             <% end %>
@@ -734,10 +734,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 Estimated Completion
               </h4>
               <p class="text-sm">
-                {Calendar.strftime(
-                  @download_details.estimated_completion,
-                  "%b %d, %Y at %I:%M %p"
-                )}
+                {format(@download_details.estimated_completion, :datetime, @display)}
               </p>
             </div>
           <% end %>

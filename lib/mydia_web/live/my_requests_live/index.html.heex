@@ -83,12 +83,12 @@
             <:details>
               <div class="flex items-center gap-2 text-base-content/70">
                 <.icon name="hero-calendar" class="w-4 h-4" />
-                <span>Requested on {format_date(request.inserted_at)}</span>
+                <span>Requested on {format_date(request.inserted_at, @time_display)}</span>
               </div>
               <div :if={request.status == "approved"} class="flex items-start gap-2 text-success">
                 <.icon name="hero-check-circle" class="w-4 h-4 mt-0.5" />
                 <div>
-                  <div>Approved on {format_date(request.approved_at)}</div>
+                  <div>Approved on {format_date(request.approved_at, @time_display)}</div>
                   <div :if={request.admin_notes} class="text-xs mt-1">
                     Admin notes: {request.admin_notes}
                   </div>
@@ -97,7 +97,7 @@
               <div :if={request.status == "rejected"} class="flex items-start gap-2 text-error">
                 <.icon name="hero-x-circle" class="w-4 h-4 mt-0.5" />
                 <div>
-                  <div>Rejected on {format_date(request.rejected_at)}</div>
+                  <div>Rejected on {format_date(request.rejected_at, @time_display)}</div>
                   <div :if={request.rejection_reason} class="text-xs mt-1">
                     Reason: {request.rejection_reason}
                   </div>
