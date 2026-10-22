@@ -279,6 +279,7 @@ defmodule MydiaWeb.Live.UserAuth do
     socket
     |> assign_player_ui(pref)
     |> assign_theme_selection(pref)
+    |> assign(:time_display, Mydia.TimeDisplay.for_user(pref))
   end
 
   # Player entry-point visibility, read once per mount.
@@ -397,7 +398,10 @@ defmodule MydiaWeb.Live.UserAuth do
   # The profile page keeps its own copy of the preference row and merges later
   # saves into it. Left stale, its next save would write the old theme back.
   defp refresh_preference(%{assigns: %{preference: %Accounts.UserPreference{}}} = socket, pref),
-    do: assign(socket, :preference, pref)
+    do:
+      socket
+      |> assign(:preference, pref)
+      |> assign(:time_display, Mydia.TimeDisplay.for_user(pref))
 
   defp refresh_preference(socket, _pref), do: socket
 
