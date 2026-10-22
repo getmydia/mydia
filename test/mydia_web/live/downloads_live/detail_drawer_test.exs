@@ -79,6 +79,26 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawerTest do
     assert has_element?(view, "#download-detail-import-error")
   end
 
+  test "warns when an import was copied instead of hardlinked", %{conn: conn} do
+    download =
+      queued(%{
+        metadata: %{"import_placement" => %{"method" => "copy", "reason" => "link_refused"}}
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/downloads?download=#{download.id}")
+
+    assert has_element?(view, "#import-placement-warning")
+  end
+
+  test "no placement warning for a hardlinked import", %{conn: conn} do
+    download = queued(%{metadata: %{"import_placement" => %{"method" => "hardlink"}}})
+
+    {:ok, view, _html} = live(conn, ~p"/downloads?download=#{download.id}")
+
+    assert has_element?(view, "#download-detail")
+    refute has_element?(view, "#import-placement-warning")
+  end
+
   test "never renders the download URL", %{conn: conn} do
     download =
       queued(%{download_url: "https://indexer.example.org/api?apikey=SECRETKEY123&t=get"})

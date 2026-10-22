@@ -62,17 +62,19 @@ defmodule Mydia.Jobs.MediaImport.FileImport do
       imported = Enum.reverse(imported)
       unresolved = Enum.reverse(unresolved)
 
-      placed_sources = Placement.placed_sources(Enum.map(files_to_import, & &1.path), results)
+      paths = Enum.map(files_to_import, & &1.path)
+      placed_sources = Placement.placed_sources(paths, results)
+      placement = Placement.placement_summary(paths, results, library_path, args)
 
       cond do
         # All files imported successfully
         unresolved == [] and errors == [] ->
-          {:ok, imported, placed_sources}
+          {:ok, imported, placed_sources, placement}
 
         # Some files imported, some unresolved (partial import)
         unresolved != [] and imported != [] ->
           flag_unresolved_files(download, unresolved)
-          {:ok, imported, placed_sources}
+          {:ok, imported, placed_sources, placement}
 
         # No files imported, all unresolved
         unresolved != [] and imported == [] ->

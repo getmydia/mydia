@@ -3,7 +3,7 @@ defmodule Mydia.Jobs.MediaImport.Placement do
 
   require Logger
   alias Mydia.Library
-  alias Mydia.Library.FileOrganizer
+  alias Mydia.Library.{FileOrganizer, MediaFile}
   alias Mydia.Storage
   alias Mydia.Upgrades
   alias Mydia.Jobs.MediaImport.{Args, Paths, Records}
@@ -275,7 +275,7 @@ defmodule Mydia.Jobs.MediaImport.Placement do
 
     case FileOrganizer.place_file(source, dest, place_opts) do
       {:ok, action} ->
-        Logger.debug("Placed file", from: source, to: dest, action: action)
+        Logger.info("Placed file", from: source, to: dest, action: action)
         :ok
 
       {:error, reason} ->
@@ -295,6 +295,44 @@ defmodule Mydia.Jobs.MediaImport.Placement do
   @doc false
   def placed_sources(paths, results) do
     for {path, {:ok, %{size: size}}} <- Enum.zip(paths, results), do: {path, size}
+  end
+
+  # Hardlinks are verified after the fact by inode rather than threaded back out
+  # of FileOrganizer: a reused record, an adopted `:exists` destination and a
+  # fresh placement all answer the same question this way.
+  @doc false
+  def placement_summary(paths, results, library_path, %Args{use_hardlinks: true}) do
+    pairs =
+      for {source, {:ok, %MediaFile{relative_path: rel}}} <- Enum.zip(paths, results),
+          is_binary(rel),
+          dest = Path.join(library_path.path, rel),
+          not Storage.s3?(source) and not Storage.s3?(dest),
+          do: {source, dest}
+
+    case {pairs, Enum.find(pairs, fn {s, d} -> not same_inode?(s, d) end)} do
+      {[], _} ->
+        nil
+
+      {_, nil} ->
+        %{"method" => "hardlink"}
+
+      {_, {s, d}} ->
+        %{
+          "method" => "copy",
+          "reason" => Atom.to_string(FileOrganizer.hardlink_blocker(s, d))
+        }
+    end
+  end
+
+  def placement_summary(_paths, _results, _library_path, %Args{}), do: nil
+
+  defp same_inode?(a, b) do
+    with {:ok, %File.Stat{inode: i, major_device: d}} <- File.stat(a),
+         {:ok, %File.Stat{inode: ^i, major_device: ^d}} <- File.stat(b) do
+      true
+    else
+      _ -> false
+    end
   end
 
   # Once the import is recorded, a client that never seeds has no use for the

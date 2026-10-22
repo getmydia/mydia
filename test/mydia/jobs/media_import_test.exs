@@ -1074,6 +1074,90 @@ defmodule Mydia.Jobs.MediaImportTest do
 
       assert File.exists?(video_file)
     end
+
+    @tag :tmp_dir
+    test "records a hardlinked import", %{tmp_dir: tmp_dir} do
+      {download, video_file} = fallback_import!(tmp_dir, :qbittorrent)
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => Path.dirname(video_file)
+               })
+
+      assert %{"method" => "hardlink"} = Repo.reload!(download).metadata["import_placement"]
+    end
+
+    @tag :tmp_dir
+    test "records nothing when hardlinks are off", %{tmp_dir: tmp_dir} do
+      {download, video_file} = fallback_import!(tmp_dir, :qbittorrent)
+
+      assert {:ok, :imported} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => Path.dirname(video_file),
+                 "use_hardlinks" => false
+               })
+
+      # use_hardlinks: false means nothing to explain.
+      refute Map.has_key?(Repo.reload!(download).metadata || %{}, "import_placement")
+    end
+  end
+
+  describe "Placement.placement_summary/4" do
+    alias Mydia.Jobs.MediaImport.{Args, Placement}
+    alias Mydia.Library.MediaFile
+    alias Mydia.Settings.LibraryPath
+
+    setup %{tmp_dir: tmp_dir} do
+      source = Path.join(tmp_dir, "source.mkv")
+      dest = Path.join(tmp_dir, "lib/a.mkv")
+      File.mkdir_p!(Path.dirname(dest))
+      File.write!(source, "bytes")
+
+      %{
+        source: source,
+        dest: dest,
+        library_path: %LibraryPath{path: tmp_dir},
+        results: [{:ok, %MediaFile{relative_path: "lib/a.mkv"}}]
+      }
+    end
+
+    test "reports a copy when the library file is a separate inode", ctx do
+      File.cp!(ctx.source, ctx.dest)
+
+      assert %{"method" => "copy", "reason" => "link_refused"} =
+               Placement.placement_summary(
+                 [ctx.source],
+                 ctx.results,
+                 ctx.library_path,
+                 %Args{use_hardlinks: true}
+               )
+    end
+
+    test "reports a hardlink when the inode is shared", ctx do
+      File.ln!(ctx.source, ctx.dest)
+
+      assert %{"method" => "hardlink"} =
+               Placement.placement_summary(
+                 [ctx.source],
+                 ctx.results,
+                 ctx.library_path,
+                 %Args{use_hardlinks: true}
+               )
+    end
+
+    test "is nil when hardlinks are off", ctx do
+      File.cp!(ctx.source, ctx.dest)
+
+      assert nil ==
+               Placement.placement_summary(
+                 [ctx.source],
+                 ctx.results,
+                 ctx.library_path,
+                 %Args{use_hardlinks: false}
+               )
+    end
   end
 
   describe "targeted import source handling" do

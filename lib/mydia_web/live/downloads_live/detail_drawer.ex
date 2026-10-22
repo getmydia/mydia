@@ -103,6 +103,19 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
             </div>
 
             <div
+              :if={copied_placement(@download)}
+              id="import-placement-warning"
+              role="alert"
+              class="alert alert-warning alert-soft items-start"
+            >
+              <.icon name="hero-document-duplicate" class="size-4 mt-0.5" />
+              <div class="min-w-0 text-sm">
+                <p class="font-medium">Copied instead of hardlinked</p>
+                <p class="mt-1">{placement_advice(copied_placement(@download))}</p>
+              </div>
+            </div>
+
+            <div
               :if={@download.removal_error}
               id="download-detail-removal-error"
               role="alert"
@@ -234,6 +247,18 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
   end
 
   # Only the events this download has reached, oldest first.
+  defp copied_placement(%{metadata: %{"import_placement" => %{"method" => "copy"} = p}}), do: p
+  defp copied_placement(_download), do: nil
+
+  defp placement_advice(%{"reason" => "link_refused"}),
+    do:
+      "The download and library folders are on the same disk but reached through different mounts. " <>
+        "Map one parent folder (for example /data) that holds both, and point the download client at the same path."
+
+  defp placement_advice(_),
+    do:
+      "The download and library folders are on different filesystems, so hardlinks are not possible."
+
   defp timeline_events(download) do
     [
       {"grabbed", "Grabbed", download.inserted_at, "hero-arrow-down-tray",

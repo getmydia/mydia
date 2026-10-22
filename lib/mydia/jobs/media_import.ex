@@ -410,7 +410,7 @@ defmodule Mydia.Jobs.MediaImport do
 
   defp do_process_import(download, files, library_path, args) do
     case FileImport.organize_and_import_files(download, files, library_path, args) do
-      {:ok, imported_files, placed_sources} ->
+      {:ok, imported_files, placed_sources, placement} ->
         Logger.info("Successfully imported files",
           download_id: download.id,
           file_count: length(imported_files)
@@ -483,6 +483,17 @@ defmodule Mydia.Jobs.MediaImport do
               Map.put(attrs, :match_status, partial_pack_status)
             end
           end)
+
+        import_update =
+          if placement do
+            Map.put(
+              import_update,
+              :metadata,
+              Map.put(updated_download.metadata || %{}, "import_placement", placement)
+            )
+          else
+            import_update
+          end
 
         case Downloads.update_download(updated_download, import_update) do
           {:ok, _updated} ->
@@ -604,11 +615,15 @@ defmodule Mydia.Jobs.MediaImport do
       # the failure this import just resolved, forever.
       current_metadata = download.metadata || %{}
 
+      target_paths = Enum.map(target_files, & &1["path"])
+      placement = Placement.placement_summary(target_paths, results, library_path, args)
+
       cleaned_metadata =
         current_metadata
         |> Map.delete("unresolved_files")
         |> Map.delete("import_candidates")
         |> Map.delete("import_candidates_at")
+        |> then(&if(placement, do: Map.put(&1, "import_placement", placement), else: &1))
 
       case Downloads.update_download(download, %{
              imported_at: DateTime.utc_now(),
@@ -616,8 +631,6 @@ defmodule Mydia.Jobs.MediaImport do
              metadata: cleaned_metadata
            }) do
         {:ok, _updated} ->
-          target_paths = Enum.map(target_files, & &1["path"])
-
           Placement.remove_consumed_sources(
             Placement.placed_sources(target_paths, results),
             args,
