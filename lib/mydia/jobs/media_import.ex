@@ -485,23 +485,17 @@ defmodule Mydia.Jobs.MediaImport do
           end)
 
         import_update =
-          if placement do
-            Map.put(
-              import_update,
-              :metadata,
-              Map.put(updated_download.metadata || %{}, "import_placement", placement)
-            )
-          else
-            import_update
-          end
+          Placement.attach_placement(import_update, updated_download.metadata, placement)
 
         case Downloads.update_download(updated_download, import_update) do
           {:ok, _updated} ->
-            Placement.remove_consumed_sources(placed_sources, args, download)
-
-            unless has_unresolved do
-              Placement.remove_job_folder(placed_sources, args, download, library_path.type)
-            end
+            Placement.cleanup_sources(
+              placed_sources,
+              args,
+              download,
+              library_path.type,
+              not has_unresolved
+            )
 
             # A successful import means whatever this item grabbed was real,
             # so the consecutive-auto-rejection counter that
@@ -627,7 +621,7 @@ defmodule Mydia.Jobs.MediaImport do
         |> Map.delete("unresolved_files")
         |> Map.delete("import_candidates")
         |> Map.delete("import_candidates_at")
-        |> then(&if(placement, do: Map.put(&1, "import_placement", placement), else: &1))
+        |> Placement.put_placement(placement)
 
       case Downloads.update_download(download, %{
              imported_at: DateTime.utc_now(),
@@ -636,8 +630,7 @@ defmodule Mydia.Jobs.MediaImport do
            }) do
         {:ok, _updated} ->
           placed = Placement.placed_sources(target_paths, results)
-          Placement.remove_consumed_sources(placed, args, download)
-          Placement.remove_job_folder(placed, args, download, library_path.type)
+          Placement.cleanup_sources(placed, args, download, library_path.type, true)
 
         {:error, _changeset} ->
           :ok

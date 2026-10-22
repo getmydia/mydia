@@ -1149,6 +1149,18 @@ defmodule Mydia.Jobs.MediaImportTest do
                )
     end
 
+    test "is nil when the library file is a different release", ctx do
+      File.write!(ctx.dest, "a much longer, unrelated file")
+
+      assert nil ==
+               Placement.placement_summary(
+                 [ctx.source],
+                 ctx.results,
+                 ctx.library_path,
+                 %Args{use_hardlinks: true}
+               )
+    end
+
     test "is nil when hardlinks are off", ctx do
       File.cp!(ctx.source, ctx.dest)
 
@@ -1236,6 +1248,45 @@ defmodule Mydia.Jobs.MediaImportTest do
 
       assert File.exists?(job_dir)
       assert File.exists?(other)
+    end
+
+    @tag :tmp_dir
+    test "keeps a folder holding another job's subfolder", %{tmp_dir: tmp_dir} do
+      {download, job_dir} = job_folder_import!(tmp_dir, :sabnzbd)
+      video = Path.join(job_dir, "Quietwater.Harbor.2031.1080p.mkv")
+      File.rm!(video)
+      notes = Path.join(job_dir, "Other.Job.2029/notes.txt")
+      File.mkdir_p!(Path.dirname(notes))
+      File.write!(notes, "notes")
+
+      args = %Args{move_source: true, save_path: job_dir}
+      assert :ok = Placement.remove_job_folder([{video, 18}], args, download, :movies)
+
+      assert File.exists?(notes)
+    end
+
+    @tag :tmp_dir
+    test "logs why a job folder was kept", %{tmp_dir: tmp_dir} do
+      {download, job_dir} = job_folder_import!(tmp_dir, :sabnzbd)
+      video = Path.join(job_dir, "Quietwater.Harbor.2031.1080p.mkv")
+      File.rm!(video)
+      File.mkdir_p!(Path.join(job_dir, "Other.Job.2029"))
+
+      args = %Args{move_source: true, save_path: job_dir}
+
+      # The test level is :warning and capture_log's level cannot lower it. Only
+      # extra log output can leak into concurrent tests, never a changed result.
+      previous_level = Logger.level()
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: previous_level) end)
+
+      log =
+        ExUnit.CaptureLog.capture_log([level: :info], fn ->
+          assert :ok = Placement.remove_job_folder([{video, 18}], args, download, :movies)
+        end)
+
+      assert log =~ "Kept job folder"
+      assert log =~ "unknown_subfolder"
     end
 
     @tag :tmp_dir
