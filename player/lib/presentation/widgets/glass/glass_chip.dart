@@ -82,8 +82,7 @@ class GlassChip extends StatelessWidget {
                 child: InkWell(
                   borderRadius: radius,
                   splashFactory: NoSplash.splashFactory,
-                  onTap:
-                      onSelected == null ? null : () => onSelected(!selected),
+                  onTap: onTap,
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(minHeight: _height),
                     child: Padding(

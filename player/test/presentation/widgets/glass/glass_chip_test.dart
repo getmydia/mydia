@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/liquid_glass/liquid_geometry.dart';
 import 'package:player/core/theme/palette.dart';
+import 'package:player/presentation/widgets/glass/glass_button.dart';
 import 'package:player/presentation/widgets/glass/glass_chip.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
@@ -56,6 +57,32 @@ void main() {
     final top = tester.getTopLeft(find.byType(GlassSurface));
     await tester.tapAt(top + const Offset(20, -4));
     expect(last, isTrue);
+  });
+
+  testWidgets('a liquid button and chip lay out inside IntrinsicWidth',
+      (tester) async {
+    await tester.pumpWidget(_host(
+      IntrinsicWidth(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            GlassButton(label: 'Cancel', onPressed: () {}),
+            GlassChip(
+                label: const Text('Sort A'),
+                selected: false,
+                onSelected: (_) {}),
+          ],
+        ),
+      ),
+      liquid: true,
+    ));
+    expect(tester.takeException(), isNull);
+    final glass = find.byType(GlassSurface);
+    expect(tester.getSize(glass.at(0)).height, LiquidGeometry.buttonMedium);
+    expect(tester.getSize(glass.at(1)).height, LiquidGeometry.buttonMedium);
+    expect(
+        tester.getSize(glass.at(0)).width, tester.getSize(glass.at(1)).width);
   });
 
   testWidgets('Frosted chip keeps its Material height', (tester) async {

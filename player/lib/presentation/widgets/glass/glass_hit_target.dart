@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 
@@ -22,26 +25,7 @@ class GlassHitTarget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final target = LayoutBuilder(
-      builder: (context, incoming) {
-        // The glass is exactly [height] whatever height the parent forces
-        // (a chip row's SizedBox, say); a tight width still reaches it.
-        final glass = ConstrainedBox(
-          constraints: BoxConstraints(
-            minWidth: incoming.hasTightWidth ? incoming.maxWidth : 0,
-            maxWidth: incoming.maxWidth,
-            minHeight: height,
-            maxHeight: height,
-          ),
-          child: child,
-        );
-        return ConstrainedBox(
-          constraints:
-              const BoxConstraints(minHeight: LiquidGeometry.minHitTarget),
-          child: Center(widthFactor: 1, heightFactor: 1, child: glass),
-        );
-      },
-    );
+    final target = _HeldHeight(height: height, child: child);
     if (onTap == null) return target;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -49,5 +33,75 @@ class GlassHitTarget extends StatelessWidget {
       onTap: onTap,
       child: target,
     );
+  }
+}
+
+/// Lays the glass out at exactly [height] with the parent's width
+/// constraints, centered in an area at least [LiquidGeometry.minHitTarget]
+/// tall. A render object rather than a LayoutBuilder so intrinsic sizing
+/// (IntrinsicWidth in dialogs) keeps working.
+class _HeldHeight extends SingleChildRenderObjectWidget {
+  const _HeldHeight({required this.height, required super.child});
+
+  final double height;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderHeldHeight(height);
+
+  @override
+  void updateRenderObject(
+      BuildContext context, _RenderHeldHeight renderObject) {
+    renderObject.height = height;
+  }
+}
+
+class _RenderHeldHeight extends RenderShiftedBox {
+  _RenderHeldHeight(this._height) : super(null);
+
+  double _height;
+  set height(double value) {
+    if (_height == value) return;
+    _height = value;
+    markNeedsLayout();
+  }
+
+  double get _areaHeight => math.max(_height, LiquidGeometry.minHitTarget);
+
+  BoxConstraints _childConstraints(BoxConstraints c) =>
+      c.copyWith(minHeight: _height, maxHeight: _height);
+
+  @override
+  double computeMinIntrinsicWidth(double height) =>
+      child?.getMinIntrinsicWidth(_height) ?? 0;
+
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      child?.getMaxIntrinsicWidth(_height) ?? 0;
+
+  @override
+  double computeMinIntrinsicHeight(double width) => _areaHeight;
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => _areaHeight;
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final childSize =
+        child?.getDryLayout(_childConstraints(constraints)) ?? Size.zero;
+    return constraints.constrain(Size(childSize.width, _areaHeight));
+  }
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.constrain(Size(0, _areaHeight));
+      return;
+    }
+    child.layout(_childConstraints(constraints), parentUsesSize: true);
+    size = constraints.constrain(Size(child.size.width, _areaHeight));
+    (child.parentData! as BoxParentData).offset =
+        Offset(0, (size.height - child.size.height) / 2);
   }
 }
