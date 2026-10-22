@@ -1,4 +1,7 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsNode;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
@@ -40,6 +43,24 @@ Widget _host({
         ),
       ),
     );
+
+/// The node the Material slider reports its value on: a descendant of the
+/// node `getSemantics` returns for the slider's finder, which is only a
+/// container.
+SemanticsNode _sliderNode(WidgetTester tester) {
+  SemanticsNode? found;
+  bool visit(SemanticsNode node) {
+    if (node.getSemanticsData().value.isNotEmpty) {
+      found = node;
+      return false;
+    }
+    node.visitChildren(visit);
+    return found == null;
+  }
+
+  visit(tester.getSemantics(find.byType(Slider)));
+  return found!;
+}
 
 double _knobCentreX(WidgetTester tester) =>
     tester.getCenter(find.byType(LiquidGlassFilter)).dx;
@@ -239,6 +260,40 @@ void main() {
             of: find.byType(LiquidGlassFilter),
             matching: find.byType(ExcludeSemantics)),
         findsOneWidget);
+  });
+
+  testWidgets('a liquid slider exposes slider semantics with its value',
+      (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_host(liquid: true));
+    expect(
+      _sliderNode(tester),
+      matchesSemantics(
+        isSlider: true,
+        isEnabled: true,
+        hasEnabledState: true,
+        isFocusable: true,
+        value: '50%',
+        increasedValue: '55%',
+        decreasedValue: '45%',
+        hasIncreaseAction: true,
+        hasDecreaseAction: true,
+        hasFocusAction: true,
+        textDirection: TextDirection.ltr,
+      ),
+    );
+    handle.dispose();
+  });
+
+  testWidgets('a disabled liquid slider has no increase or decrease actions',
+      (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_host(liquid: true, enabled: false));
+    final data = _sliderNode(tester).getSemanticsData();
+    expect(data.value, '50%');
+    expect(data.hasAction(SemanticsAction.increase), isFalse);
+    expect(data.hasAction(SemanticsAction.decrease), isFalse);
+    handle.dispose();
   });
 
   for (final discrete in [false, true]) {
