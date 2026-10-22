@@ -5,6 +5,7 @@ defmodule MydiaWeb.Layouts do
   """
   use MydiaWeb, :html
 
+  import MydiaWeb.FlashComponents
   import MydiaWeb.SidebarComponents
 
   alias Mydia.Accounts.Authorization
@@ -352,13 +353,21 @@ defmodule MydiaWeb.Layouts do
 
   def flash_group(assigns) do
     ~H"""
-    <div id={@id} aria-live="polite">
+    <%!-- z-[1000] clears daisyUI's .modal (999) so a toast raised from inside a
+         dialog stays clickable. pointer-events-none keeps the empty, padded
+         container from eating clicks on the header beneath it. --%>
+    <div
+      id={@id}
+      aria-live="polite"
+      class="toast toast-top toast-end z-[1000] pointer-events-none"
+    >
       <.flash kind={:info} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
 
       <.flash
         id="client-error"
         kind={:error}
+        dismiss_after={nil}
         title={gettext("We can't find the internet")}
         phx-disconnected={show(".phx-client-error #client-error") |> JS.remove_attribute("hidden")}
         phx-connected={hide("#client-error") |> JS.set_attribute({"hidden", ""})}
@@ -371,6 +380,7 @@ defmodule MydiaWeb.Layouts do
       <.flash
         id="server-error"
         kind={:error}
+        dismiss_after={nil}
         title={gettext("Something went wrong!")}
         phx-disconnected={show(".phx-server-error #server-error") |> JS.remove_attribute("hidden")}
         phx-connected={hide("#server-error") |> JS.set_attribute({"hidden", ""})}

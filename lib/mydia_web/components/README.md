@@ -183,6 +183,14 @@ value a card can claim:
 | Sidebar `div.drawer-side` | 40 |
 | Mobile dock `nav#mobile-dock` | 50 |
 | daisyUI `.modal` | 999 |
+| Flash toasts `#flash-group` | 1000 |
+
+Flash toasts must outrank `.modal`: a connection test inside an edit dialog
+raises its result as a flash, and below 999 the backdrop covers it, so the only
+way to dismiss it was closing the dialog (#1226). `add_config_modal` in
+`add_media_components.ex` also uses `z-[1000]`; ties at 1000 resolve by DOM
+order, and `flash_group` renders last in the app layout (`layouts.ex`), so
+toasts paint above that modal too.
 
 A card that climbed above 40 and 50 would paint over the sidebar during ordinary
 browsing. There is no correct number. Verified in a real browser on
@@ -252,7 +260,7 @@ it.
 ## <.icon> types class as :string
 
 `MydiaWeb.CoreComponents.icon/1` declares `attr :class, :string, default: "size-4"`
-(`lib/mydia_web/components/core_components.ex:438`). Passing it a class list
+(`lib/mydia_web/components/core_components.ex:404`). Passing it a class list
 compiles and renders correctly but emits a warning on every build:
 
 ```heex
@@ -272,7 +280,7 @@ this only shows up as build noise.
 
 ## <.button> is a passthrough, and raw <button> is the convention
 
-`CoreComponents.button/1` (`lib/mydia_web/components/core_components.ex:96`)
+`CoreComponents.button/1` (`lib/mydia_web/components/core_components.ex:48`)
 declares `attr :class, :string`, so a conditional class list warns exactly as it
 does on `<.icon>`. It also applies its `["btn", variant]` default only via
 `assign_new`, so a call site supplying its own full class string gets a bare
