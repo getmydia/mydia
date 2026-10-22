@@ -46,8 +46,15 @@ export function createDismissTimer({ duration, onExpire, now, setTimer, clearTim
   };
 }
 
-const PAUSE_EVENTS = ["mouseenter", "focusin"];
-const RESUME_EVENTS = ["mouseleave", "focusout"];
+// Each event sets or clears one hold. Hover and focus are tracked apart, so
+// the pointer leaving a toast whose close button still has focus (or the
+// reverse) does not restart the countdown.
+const HOLD_EVENTS = {
+  mouseenter: ["hover", true],
+  mouseleave: ["hover", false],
+  focusin: ["focus", true],
+  focusout: ["focus", false],
+};
 
 const browserClock = {
   now: () => Date.now(),
@@ -67,17 +74,18 @@ const FlashAutoDismiss = {
       ...clock,
     });
 
-    this.held = false;
-    this.pause = () => {
-      this.held = true;
-      this.timer.pause();
-    };
-    this.resume = () => {
-      this.held = false;
-      this.timer.resume();
-    };
-    PAUSE_EVENTS.forEach((type) => this.el.addEventListener(type, this.pause));
-    RESUME_EVENTS.forEach((type) => this.el.addEventListener(type, this.resume));
+    this.holds = new Set();
+    this.listeners = Object.entries(HOLD_EVENTS).map(([type, [hold, on]]) => {
+      const listener = () => {
+        if (on) this.holds.add(hold);
+        else this.holds.delete(hold);
+
+        if (this.holds.size > 0) this.timer.pause();
+        else this.timer.resume();
+      };
+      this.el.addEventListener(type, listener);
+      return [type, listener];
+    });
 
     this.text = this.el.textContent;
     this.timer.start();
@@ -90,14 +98,13 @@ const FlashAutoDismiss = {
     this.text = this.el.textContent;
     this.timer.start();
     // A toast under the cursor or focus stays held; leaving resumes it.
-    if (this.held) this.timer.pause();
+    if (this.holds.size > 0) this.timer.pause();
   },
 
   destroyed() {
     if (!this.timer) return;
     this.timer.cancel();
-    PAUSE_EVENTS.forEach((type) => this.el.removeEventListener(type, this.pause));
-    RESUME_EVENTS.forEach((type) => this.el.removeEventListener(type, this.resume));
+    this.listeners.forEach(([type, listener]) => this.el.removeEventListener(type, listener));
   },
 };
 

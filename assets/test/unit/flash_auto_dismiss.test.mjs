@@ -212,6 +212,38 @@ test("focus pauses and leaving focus resumes", () => {
   assert.equal(executed.length, 1);
 });
 
+test("pointer leaving while focus remains keeps the toast paused", () => {
+  const clock = fakeClock();
+  const el = fakeElement({ dismissAfter: "5000", text: "Saved" });
+  const { executed } = mountHook(el, clock);
+
+  el.dispatch("mouseenter");
+  el.dispatch("focusin");
+  el.dispatch("mouseleave");
+  clock.advance(30000);
+  assert.equal(executed.length, 0, "focused toast must not vanish");
+
+  el.dispatch("focusout");
+  clock.advance(5000);
+  assert.equal(executed.length, 1);
+});
+
+test("focus leaving while the pointer remains keeps the toast paused", () => {
+  const clock = fakeClock();
+  const el = fakeElement({ dismissAfter: "5000", text: "Saved" });
+  const { executed } = mountHook(el, clock);
+
+  el.dispatch("focusin");
+  el.dispatch("mouseenter");
+  el.dispatch("focusout");
+  clock.advance(30000);
+  assert.equal(executed.length, 0, "hovered toast must not vanish");
+
+  el.dispatch("mouseleave");
+  clock.advance(5000);
+  assert.equal(executed.length, 1);
+});
+
 test("a message change while hovered stays paused until the pointer leaves", () => {
   const clock = fakeClock();
   const el = fakeElement({ dismissAfter: "5000", text: "Saved" });
