@@ -412,7 +412,8 @@ defmodule Mydia.Jobs.MediaImport.Placement do
       # Sources are rewritten through path mappings, so the folder must be too.
       save_path = Discovery.mapped_path(args.save_path, download.id)
 
-      with :ok <- check_sources_inside(sources, save_path),
+      with :ok <- check_folder_exists(save_path),
+           :ok <- check_sources_inside(sources, save_path),
            :ok <- check_not_client_root(save_path, download),
            :ok <- check_no_library_overlap(save_path),
            :ok <- check_no_unknown_subfolder(sources, save_path),
@@ -420,6 +421,9 @@ defmodule Mydia.Jobs.MediaImport.Placement do
            :ok <- check_no_media_left(files, library_type) do
         rm_job_folder(save_path, download)
       else
+        :gone ->
+          :ok
+
         {:keep, reason} ->
           Logger.info("Kept job folder",
             path: save_path,
@@ -440,6 +444,9 @@ defmodule Mydia.Jobs.MediaImport.Placement do
   end
 
   defp job_folder_candidate?(_sources, _args, _download), do: false
+
+  # A folder that is already gone needs nothing, and is not worth a log line.
+  defp check_folder_exists(save_path), do: if(File.dir?(save_path), do: :ok, else: :gone)
 
   defp check_sources_inside(sources, save_path) do
     if Enum.all?(sources, fn {path, _size} -> Dirs.inside?(path, save_path) end),

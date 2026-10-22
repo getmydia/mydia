@@ -1266,27 +1266,13 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
 
     @tag :tmp_dir
-    test "logs why a job folder was kept", %{tmp_dir: tmp_dir} do
+    test "does nothing when the job folder is already gone", %{tmp_dir: tmp_dir} do
       {download, job_dir} = job_folder_import!(tmp_dir, :sabnzbd)
       video = Path.join(job_dir, "Quietwater.Harbor.2031.1080p.mkv")
-      File.rm!(video)
-      File.mkdir_p!(Path.join(job_dir, "Other.Job.2029"))
+      File.rm_rf!(job_dir)
 
       args = %Args{move_source: true, save_path: job_dir}
-
-      # The test level is :warning and capture_log's level cannot lower it. Only
-      # extra log output can leak into concurrent tests, never a changed result.
-      previous_level = Logger.level()
-      Logger.configure(level: :info)
-      on_exit(fn -> Logger.configure(level: previous_level) end)
-
-      log =
-        ExUnit.CaptureLog.capture_log([level: :info], fn ->
-          assert :ok = Placement.remove_job_folder([{video, 18}], args, download, :movies)
-        end)
-
-      assert log =~ "Kept job folder"
-      assert log =~ "unknown_subfolder"
+      assert :ok = Placement.remove_job_folder([{video, 18}], args, download, :movies)
     end
 
     @tag :tmp_dir
