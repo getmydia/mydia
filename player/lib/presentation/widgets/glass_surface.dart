@@ -51,9 +51,10 @@ enum GlassTint { ground, surface }
 /// the panel profile (`LiquidGlassProfile.panel`), the rest the lens.
 /// Chrome, sidebar, modal and control tints adapt
 /// to the backdrop up to a per-role maximum ([liquidAdaptiveMax]); a white
-/// prominent control never adapts. The control also casts
-/// [DepthTokens.liquidControlShadow]. The app bar is not glass but Apple's
-/// scroll edge: a plain blur under a ground gradient ([liquidScrollEdge]).
+/// prominent control never adapts. On Liquid Glass a surface with no
+/// [shadows] casts its profile's shadow ([LiquidGlassProfile.shadow]). The
+/// app bar is not glass but Apple's scroll edge: a plain blur under a ground
+/// gradient ([liquidScrollEdge]).
 /// See `player/docs/liquid-glass.md`.
 class GlassSurface extends StatelessWidget {
   /// Gaussian blur sigma applied behind the surface. Ignored when [live] is
@@ -230,8 +231,8 @@ class GlassSurface extends StatelessWidget {
         );
 
   /// A floating control: a circle or capsule over content (back, close,
-  /// cast, Play; the white prominent pill with [prominentColor]). Casts
-  /// [DepthTokens.liquidControlShadow]. Only used on Liquid Glass; the
+  /// cast, Play; the white prominent pill with [prominentColor]). Casts the
+  /// lens shadow on Liquid Glass. Only used on Liquid Glass; the
   /// control widgets render Material elsewhere.
   GlassSurface.control({
     Key? key,
@@ -254,7 +255,6 @@ class GlassSurface extends StatelessWidget {
           liquidAdaptiveMax: prominentColor != null
               ? null
               : DepthTokens.liquidControlAdaptiveMax,
-          shadows: DepthTokens.liquidControlShadow,
           borderRadius: borderRadius,
           grouped: grouped,
           child: child,
@@ -367,17 +367,22 @@ class GlassSurface extends StatelessWidget {
     if (liquidOpacity != null && base != null) {
       final access = GlassAccessibilityScope.of(context);
       if (access.reduceTransparency) {
-        return _withShadow(_solid(base.withValues(alpha: 1), resolvedBorder));
+        return _withShadow(
+            _solid(base.withValues(alpha: 1), resolvedBorder), shadows);
       }
       if (GlassStyle.of(context) && LiquidGlassSupport.available) {
-        return _withShadow(liquidScrollEdge
-            ? _scrollEdge(context, base, access)
-            : _liquid(context, base, liquidOpacity, access));
+        if (liquidScrollEdge) {
+          return _withShadow(_scrollEdge(context, base, access), shadows);
+        }
+        return _withShadow(
+          _liquid(context, base, liquidOpacity, access),
+          shadows.isEmpty ? liquidProfile.shadow : shadows,
+        );
       }
     }
     final fill = fillColor ??
         (gradient != null ? null : base?.withValues(alpha: tintOpacity));
-    return _withShadow(_surface(fill, resolvedBorder));
+    return _withShadow(_surface(fill, resolvedBorder), shadows);
   }
 
   /// The surface's colour before opacity: [fillColor] or the ambient tint.
@@ -477,7 +482,7 @@ class GlassSurface extends StatelessWidget {
     );
   }
 
-  Widget _withShadow(Widget surface) {
+  Widget _withShadow(Widget surface, List<BoxShadow> shadows) {
     if (shadows.isEmpty) return surface;
     return DecoratedBox(
       decoration: BoxDecoration(borderRadius: borderRadius, boxShadow: shadows),

@@ -267,12 +267,6 @@ abstract final class DepthTokens {
   static const double liquidScrollEdgeTopOpacity = 0.8;
   static const double liquidScrollEdgeBottomOpacity = 0.35;
 
-  /// The lift under a floating glass control: wide and soft, the depth cue
-  /// that replaced the darkened edge.
-  static const List<BoxShadow> liquidControlShadow = [
-    BoxShadow(color: Color(0x33000000), blurRadius: 24, offset: Offset(0, 8)),
-  ];
-
   /// The prominent button's white tint (the design system's primary pill).
   static const double liquidProminentTintOpacity = 0.85;
 

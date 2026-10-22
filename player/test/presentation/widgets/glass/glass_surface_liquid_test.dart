@@ -133,19 +133,35 @@ void main() {
       expect(filterOf(tester).adaptiveTintMax, isNull);
     });
 
-    testWidgets('control paints the control shadow', (tester) async {
-      await tester.pumpWidget(_host(GlassSurface.control(
-          borderRadius: BorderRadius.circular(24), child: _box)));
-      final shadowBox = tester.widgetList<DecoratedBox>(find.ancestor(
+    List<BoxShadow>? outerShadow(WidgetTester tester) {
+      final boxes = tester.widgetList<DecoratedBox>(find.ancestor(
         of: find.byType(LiquidGlassFilter),
         matching: find.byType(DecoratedBox),
       ));
-      expect(
-        shadowBox.any((b) =>
-            (b.decoration as BoxDecoration).boxShadow ==
-            DepthTokens.liquidControlShadow),
-        isTrue,
-      );
+      for (final b in boxes) {
+        final shadow = (b.decoration as BoxDecoration).boxShadow;
+        if (shadow != null) return shadow;
+      }
+      return null;
+    }
+
+    testWidgets('a control casts the lens shadow', (tester) async {
+      await tester.pumpWidget(_host(GlassSurface.control(
+          borderRadius: BorderRadius.circular(24), child: _box)));
+      expect(outerShadow(tester), LiquidGlassProfile.lens.shadow);
+    });
+
+    testWidgets('a modal casts the panel shadow', (tester) async {
+      await tester.pumpWidget(_host(GlassSurface.modal(child: _box)));
+      expect(outerShadow(tester), LiquidGlassProfile.panel.shadow);
+    });
+
+    testWidgets('explicit shadows win over the profile shadow', (tester) async {
+      await tester.pumpWidget(_host(const GlassSurface.sidebar(
+        shadows: [BoxShadow(blurRadius: 3)],
+        child: _box,
+      )));
+      expect(outerShadow(tester), const [BoxShadow(blurRadius: 3)]);
     });
 
     testWidgets('Increase Contrast boosts the adaptive max too',

@@ -5,7 +5,9 @@
 // and blur are the identity over a uniform frame, saturation clamps at
 // white, brightness is modelled as each profile's lift of the grey
 // (clamped at white), and the specular only adds light at the rim, away
-// from glyphs. All presets are dark, so white is the worst backdrop. Text
+// from glyphs. The model lifts only, which stays conservative: the shader's
+// luminosity wash only darkens toward 0.1 (the panel's `lumaMix` pulls
+// luminance down), so the real result is never lighter than modelled. All presets are dark, so white is the worst backdrop. Text
 // holds WCAG SC 1.4.3 (4.5:1), icons and secondary text SC 1.4.11 (3:1).
 
 import 'package:flutter/material.dart';
