@@ -40,13 +40,6 @@ class ToastPill extends StatelessWidget {
   static const double _padHorizontal = 16;
   static const double _padVertical = 12;
 
-  /// Two more points above and below, so a single text line lands on
-  /// [liquidMinHeight] and sits centred in the capsule.
-  static const EdgeInsets _liquidPadding = EdgeInsets.symmetric(
-    horizontal: _padHorizontal,
-    vertical: _padVertical + 2,
-  );
-
   static const EdgeInsets _padding = EdgeInsets.symmetric(
     horizontal: _padHorizontal,
     vertical: _padVertical,
@@ -105,7 +98,7 @@ class ToastPill extends StatelessWidget {
                 constraints: BoxConstraints(
                   minHeight: liquid ? liquidMinHeight : 0,
                 ),
-                padding: liquid ? _liquidPadding : _padding,
+                padding: _padding,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

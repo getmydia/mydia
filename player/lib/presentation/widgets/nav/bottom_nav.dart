@@ -115,7 +115,12 @@ class BottomNav extends StatelessWidget {
                     final count = entries.length + (showBackToMydia ? 1 : 0);
                     final compact = count > 0 &&
                         constraints.maxWidth / count < compactItemWidth;
-                    return Row(
+                    final row = Row(
+                      // Liquid Glass: every item is as tall as the tallest, so
+                      // the bar grows with a large text scale.
+                      crossAxisAlignment: liquid
+                          ? CrossAxisAlignment.stretch
+                          : CrossAxisAlignment.center,
                       children: [
                         if (showBackToMydia)
                           Expanded(
@@ -159,6 +164,7 @@ class BottomNav extends StatelessWidget {
                           ),
                       ],
                     );
+                    return liquid ? IntrinsicHeight(child: row) : row;
                   },
                 ),
               ),
@@ -264,8 +270,13 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
             curve: Curves.easeInOut,
             // 12 + 24 + 12 keeps the icon-only item a 48px tap target. On Liquid
             // Glass the item is the kit's 54 tall selection pill instead, and
-            // its content centres in it.
-            height: liquid ? LiquidGeometry.tabSelectionHeight : null,
+            // its content centres in it. 54 is a minimum so a large text scale
+            // grows the item and the bar with it.
+            constraints: liquid
+                ? const BoxConstraints(
+                    minHeight: LiquidGeometry.tabSelectionHeight,
+                  )
+                : null,
             alignment: liquid ? Alignment.center : null,
             padding: EdgeInsets.symmetric(
               horizontal: 4,

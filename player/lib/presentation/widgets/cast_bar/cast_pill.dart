@@ -47,7 +47,12 @@ class CastPill extends StatelessWidget {
                 ? ConstrainedBox(
                     constraints:
                         const BoxConstraints(minHeight: liquidMinHeight),
-                    child: body,
+                    // A Row centres its child in the height the minimum
+                    // forces, so a short state does not sit at the top.
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [Expanded(child: body)],
+                    ),
                   )
                 : body,
           ),

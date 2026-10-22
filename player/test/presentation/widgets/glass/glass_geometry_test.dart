@@ -88,6 +88,19 @@ void main() {
     );
   });
 
+  testWidgets('Liquid Glass: a short cast state centres in the capsule',
+      (tester) async {
+    const key = Key('cast-child');
+    await tester.pumpWidget(_host(
+      const CastPill(child: SizedBox(key: key, width: 100, height: 20)),
+      liquid: true,
+    ));
+    expect(
+      tester.getCenter(find.byKey(key)).dy,
+      tester.getCenter(find.byType(GlassSurface)).dy,
+    );
+  });
+
   testWidgets('Liquid Glass: the cast pill is a capsule', (tester) async {
     await tester.pumpWidget(_host(
       const CastPill(child: SizedBox(width: 200, height: 24)),

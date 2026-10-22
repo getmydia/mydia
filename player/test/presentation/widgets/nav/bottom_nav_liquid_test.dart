@@ -22,13 +22,22 @@ const _movies = SourceNavEntry(
   route: '/s/x/library/movies',
 );
 
-Future<void> _pump(WidgetTester tester, {required bool liquid}) async {
+Future<void> _pump(
+  WidgetTester tester, {
+  required bool liquid,
+  double textScale = 1.0,
+}) async {
   tester.view.physicalSize = const Size(400, 800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(ProviderScope(
     child: MaterialApp(
       theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
       home: Scaffold(
         bottomNavigationBar: BottomNav(
           location: '/s/x',
@@ -73,5 +82,19 @@ void main() {
       BorderRadius.circular(AppTheme.radiusBottomBar),
     );
     expect(tester.getSize(find.byType(GlassSurface)).height, isNot(62));
+  });
+
+  testWidgets('Liquid Glass: a large text scale grows the bar, no overflow',
+      (tester) async {
+    await _pump(tester, liquid: true, textScale: 2.0);
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.byType(GlassSurface)).height,
+      greaterThanOrEqualTo(62),
+    );
+    expect(
+      tester.getSize(find.byType(NavItem).first).height,
+      greaterThanOrEqualTo(54),
+    );
   });
 }
