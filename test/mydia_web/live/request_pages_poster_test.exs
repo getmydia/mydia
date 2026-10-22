@@ -61,6 +61,32 @@ defmodule MydiaWeb.RequestPagesPosterTest do
            )
   end
 
+  test "My Requests loads for an unrestricted guest once a request is approved", %{
+    conn: conn,
+    guest: guest
+  } do
+    {:ok, media_item} =
+      Mydia.Media.create_media_item(
+        Scope.unrestricted(),
+        %{type: "movie", title: "Lantern Harbor", year: 2021},
+        skip_episode_refresh: true
+      )
+
+    request = request_fixture(guest, %{poster_path: "/stub-movie-poster.jpg"})
+
+    request
+    |> Ecto.Changeset.change(
+      status: "approved",
+      approved_at: DateTime.utc_now() |> DateTime.truncate(:second),
+      media_item_id: media_item.id
+    )
+    |> Repo.update!()
+
+    {:ok, view, _html} = live(log_in_user(conn, guest), ~p"/requests")
+
+    assert has_element?(view, ~s(#request-#{request.id}))
+  end
+
   test "a request with no stored poster backfills on first view", %{
     conn: conn,
     admin: admin,
