@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/presentation/widgets/glass/glass_pointer.dart';
 import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
@@ -152,5 +153,42 @@ void main() {
       expect(tester.takeException(), isUnsupportedError);
       expect(blurKey(tester), isNull);
     });
+  });
+
+  testWidgets('the panel profile blurs at its own sigma', (tester) async {
+    await tester.pumpWidget(_host(const LiquidGlassFilter(
+      radius: 20,
+      tint: Color(0xA0000000),
+      profile: LiquidGlassProfile.panel,
+      child: SizedBox(width: 200, height: 120),
+    )));
+    final render =
+        tester.renderObject<RenderLiquidGlass>(find.byType(LiquidGlassFilter));
+    expect(
+      (render.debugLayer! as BackdropFilterLayer).filter,
+      ui.ImageFilter.blur(
+        sigmaX: DepthTokens.liquidPanelBlurSigma,
+        sigmaY: DepthTokens.liquidPanelBlurSigma,
+      ),
+    );
+    expect(render.uniforms.profile, same(LiquidGlassProfile.panel));
+  });
+
+  testWidgets('a panel ignores hover and press', (tester) async {
+    await tester.pumpWidget(_host(const GlassPointer(
+      light: Offset(0.9, 0.1),
+      hovered: true,
+      pressed: true,
+      child: LiquidGlassFilter(
+        radius: 20,
+        tint: Color(0xA0000000),
+        profile: LiquidGlassProfile.panel,
+        child: SizedBox(width: 200, height: 120),
+      ),
+    )));
+    final render =
+        tester.renderObject<RenderLiquidGlass>(find.byType(LiquidGlassFilter));
+    expect(render.uniforms.specularBoost, 0);
+    expect(render.uniforms.glow, 0);
   });
 }

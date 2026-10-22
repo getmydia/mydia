@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../core/theme/depth_tokens.dart';
+import '../../../core/theme/liquid_glass/liquid_glass_profile.dart';
 import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../../core/theme/liquid_glass/liquid_glass_uniforms.dart';
 import 'glass_pointer.dart';
@@ -26,8 +27,13 @@ class LiquidGlassFilter extends SingleChildRenderObjectWidget {
     required this.tint,
     this.adaptiveTintMax,
     this.grouped = false,
+    this.profile = LiquidGlassProfile.lens,
     super.child,
   });
+
+  /// The material: [LiquidGlassProfile.lens] for controls and pills,
+  /// [LiquidGlassProfile.panel] for dialogs, sheets and the sidebar.
+  final LiquidGlassProfile profile;
 
   /// Corner radius, logical pixels.
   final double radius;
@@ -43,7 +49,8 @@ class LiquidGlassFilter extends SingleChildRenderObjectWidget {
   final bool grouped;
 
   LiquidGlassUniforms _uniforms(BuildContext context) {
-    final pointer = GlassPointer.maybeOf(context);
+    // A panel is not pressable: no rim boost, no press glow.
+    final pointer = profile.interactive ? GlassPointer.maybeOf(context) : null;
     final boost = switch (pointer) {
       GlassPointer(pressed: true) => DepthTokens.liquidPressSpecularBoost,
       GlassPointer(hovered: true) => DepthTokens.liquidHoverSpecularBoost,
@@ -57,6 +64,7 @@ class LiquidGlassFilter extends SingleChildRenderObjectWidget {
       specularBoost: boost,
       adaptiveMax: adaptiveTintMax,
       glow: pointer?.pressed == true ? DepthTokens.liquidPressGlow : 0.0,
+      profile: profile,
     );
   }
 
@@ -121,8 +129,8 @@ class RenderLiquidGlass extends RenderProxyBox {
     final backdrop = layer ??= BackdropFilterLayer();
     backdrop
       ..filter = ui.ImageFilter.blur(
-        sigmaX: DepthTokens.liquidBlurSigma,
-        sigmaY: DepthTokens.liquidBlurSigma,
+        sigmaX: _uniforms.profile.blurSigma,
+        sigmaY: _uniforms.profile.blurSigma,
       )
       // A grouped blur reads the group's shared backdrop, and the lens nested
       // in it then no longer finds the surface centred in its input: the rim
