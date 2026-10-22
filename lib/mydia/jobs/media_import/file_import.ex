@@ -312,8 +312,7 @@ defmodule Mydia.Jobs.MediaImport.FileImport do
             # `Complete S01-S03` packs land in the right `Season XX` dirs.
             base_dir = Paths.build_series_base_path(media_item, library_path)
 
-            dest_dir =
-              Path.join(base_dir, "Season #{String.pad_leading("#{file_season}", 2, "0")}")
+            dest_dir = Paths.season_dir(base_dir, media_item, library_path, file_season)
 
             {episode, dest_dir}
           else
@@ -359,8 +358,7 @@ defmodule Mydia.Jobs.MediaImport.FileImport do
             # Build destination path using parsed season info (category-aware)
             base_dir = Paths.build_series_base_path(media_item, library_path)
 
-            dest_dir =
-              Path.join(base_dir, "Season #{String.pad_leading("#{parsed.season}", 2, "0")}")
+            dest_dir = Paths.season_dir(base_dir, media_item, library_path, parsed.season)
 
             {episode, dest_dir}
           else

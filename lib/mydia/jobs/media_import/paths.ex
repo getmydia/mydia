@@ -4,6 +4,7 @@ defmodule Mydia.Jobs.MediaImport.Paths do
   require Logger
   alias Mydia.Settings
   alias Mydia.Library.{FileNamer, FileOrganizer}
+  alias Mydia.Library.ItemFolders.Home
   alias Mydia.Library.TargetResolver
   alias Mydia.Indexers.QualityParser
   alias Mydia.Settings.LibraryPath
@@ -57,50 +58,23 @@ defmodule Mydia.Jobs.MediaImport.Paths do
 
   @doc false
   def build_destination_path(download, library_path) when is_struct(library_path, LibraryPath) do
-    # Use FileOrganizer for category-aware destination paths when auto_organize is enabled
     cond do
-      # Movie with auto_organize enabled
-      download.media_item && download.media_item.type == "movie" && library_path.auto_organize ->
-        FileOrganizer.destination_path(download.media_item, library_path)
+      download.media_item && download.media_item.type == "movie" ->
+        existing_or(download.media_item, library_path, upgrade_target_id(download), fn ->
+          generated_movie_dir(download.media_item, library_path)
+        end)
 
       # TV episode - always use show folder + season subfolder
       download.episode && download.media_item ->
-        # Get base folder (potentially category-aware)
-        base_folder =
-          if library_path.auto_organize do
-            FileOrganizer.destination_path(download.media_item, library_path)
-          else
-            title = sanitize_filename(download.media_item.title)
-            Path.join(library_path.path, title)
-          end
+        base = build_series_base_path(download.media_item, library_path)
+        season_dir(base, download.media_item, library_path, download.episode.season_number)
 
-        season = download.episode.season_number
-        Path.join(base_folder, "Season #{String.pad_leading("#{season}", 2, "0")}")
-
-      # Movie without auto_organize
-      download.media_item && download.media_item.type == "movie" ->
-        title = sanitize_filename(download.media_item.title)
-        year = download.media_item.year
-
-        if year do
-          Path.join([library_path.path, "#{title} (#{year})"])
-        else
-          Path.join([library_path.path, title])
-        end
-
-      # TV show (no specific episode) - use category-aware path if enabled
       download.media_item && download.media_item.type == "tv_show" ->
-        if library_path.auto_organize do
-          FileOrganizer.destination_path(download.media_item, library_path)
-        else
-          title = sanitize_filename(download.media_item.title)
-          Path.join(library_path.path, title)
-        end
+        build_series_base_path(download.media_item, library_path)
 
       # Unknown - use download title
       true ->
-        title = sanitize_filename(download.title)
-        Path.join(library_path.path, title)
+        Path.join(library_path.path, sanitize_filename(download.title))
     end
   end
 
@@ -137,16 +111,57 @@ defmodule Mydia.Jobs.MediaImport.Paths do
     end
   end
 
-  # Helper to build category-aware base path for TV series
+  # Helper to build the base path for TV series: the folder the show already
+  # uses, else the category-aware generated one.
   @doc false
   def build_series_base_path(media_item, library_path) do
+    existing_or(media_item, library_path, nil, fn ->
+      if library_path.auto_organize do
+        FileOrganizer.destination_path(media_item, library_path)
+      else
+        Path.join(library_path.path, sanitize_filename(media_item.title))
+      end
+    end)
+  end
+
+  @doc """
+  The season folder under a show folder: the one the show already uses for
+  this season, else `Season NN`.
+  """
+  def season_dir(base, media_item, library_path, season) do
+    name =
+      Home.season_folder_name(media_item, library_path, base, season) ||
+        "Season #{String.pad_leading("#{season}", 2, "0")}"
+
+    Path.join(base, name)
+  end
+
+  # An item already living in a folder keeps getting its files there
+  # (getmydia/mydia#1237). Relocating it into a category path is the explicit
+  # reorganize action's job, not an import's.
+  defp existing_or(media_item, library_path, prefer_file_id, generate) do
+    case Home.find(media_item, library_path, prefer_file_id: prefer_file_id) do
+      {:ok, folder} -> folder.absolute
+      :none -> generate.()
+    end
+  end
+
+  defp generated_movie_dir(media_item, library_path) do
     if library_path.auto_organize do
       FileOrganizer.destination_path(media_item, library_path)
     else
       title = sanitize_filename(media_item.title)
-      Path.join(library_path.path, title)
+
+      if media_item.year,
+        do: Path.join(library_path.path, "#{title} (#{media_item.year})"),
+        else: Path.join(library_path.path, title)
     end
   end
+
+  defp upgrade_target_id(%{metadata: %{"upgrade_target_media_file_id" => id}}) when is_binary(id),
+    do: id
+
+  defp upgrade_target_id(_download), do: nil
 
   defp sanitize_filename(filename) do
     filename
