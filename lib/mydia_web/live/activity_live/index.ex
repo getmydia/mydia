@@ -3,6 +3,7 @@ defmodule MydiaWeb.ActivityLive.Index do
   alias Mydia.Events
   alias Mydia.Events.Presentation
   alias Mydia.Events.Visibility
+  alias MydiaWeb.ActivityLive.DateFilter
   alias Phoenix.PubSub
 
   @page_size 50
@@ -157,7 +158,13 @@ defmodule MydiaWeb.ActivityLive.Index do
       end
 
     # Only add event if it matches current date filter
-    matches_date = event_matches_date_filter?(event.inserted_at, date_filter)
+    matches_date =
+      DateFilter.matches?(
+        event.inserted_at,
+        date_filter,
+        DateTime.utc_now(),
+        socket.assigns.time_display.time_zone
+      )
 
     socket =
       if feed_visible && viewer_visible && matches_category && matches_date do
@@ -184,7 +191,8 @@ defmodule MydiaWeb.ActivityLive.Index do
     category_filter = socket.assigns.category_filter
     date_filter = socket.assigns.date_filter
 
-    filter_opts = build_filter_opts(category_filter, date_filter)
+    filter_opts =
+      build_filter_opts(category_filter, date_filter, socket.assigns.time_display.time_zone)
 
     # Request one more than page_size to check if there are more results
     events =
@@ -207,7 +215,9 @@ defmodule MydiaWeb.ActivityLive.Index do
     date_filter = socket.assigns.date_filter
     page = socket.assigns.page
 
-    filter_opts = build_filter_opts(category_filter, date_filter)
+    filter_opts =
+      build_filter_opts(category_filter, date_filter, socket.assigns.time_display.time_zone)
+
     offset = page * @page_size
 
     # Request one more than page_size to check if there are more results
@@ -228,7 +238,7 @@ defmodule MydiaWeb.ActivityLive.Index do
     assign(socket, :has_more?, has_more?)
   end
 
-  defp build_filter_opts(category_filter, date_filter) do
+  defp build_filter_opts(category_filter, date_filter, zone) do
     category_opts =
       case category_filter do
         "all" -> []
@@ -236,65 +246,10 @@ defmodule MydiaWeb.ActivityLive.Index do
         category -> [category: category]
       end
 
-    date_opts = date_filter_opts(date_filter)
+    date_opts = DateFilter.opts(date_filter, DateTime.utc_now(), zone)
 
     category_opts ++ date_opts ++ [exclude_types: Presentation.feed_hidden_types()]
   end
-
-  defp date_filter_opts("all"), do: []
-  defp date_filter_opts("today"), do: [since: start_of_day()]
-
-  defp date_filter_opts("yesterday") do
-    [since: start_of_yesterday(), until: end_of_yesterday()]
-  end
-
-  defp date_filter_opts("week"), do: [since: days_ago(7)]
-  defp date_filter_opts("month"), do: [since: days_ago(30)]
-  defp date_filter_opts(_), do: []
-
-  defp start_of_day do
-    DateTime.utc_now()
-    |> DateTime.to_date()
-    |> DateTime.new!(~T[00:00:00], "Etc/UTC")
-  end
-
-  defp start_of_yesterday do
-    DateTime.utc_now()
-    |> DateTime.add(-1, :day)
-    |> DateTime.to_date()
-    |> DateTime.new!(~T[00:00:00], "Etc/UTC")
-  end
-
-  defp end_of_yesterday do
-    DateTime.utc_now()
-    |> DateTime.to_date()
-    |> DateTime.new!(~T[00:00:00], "Etc/UTC")
-  end
-
-  defp days_ago(n) do
-    DateTime.utc_now() |> DateTime.add(-n, :day)
-  end
-
-  defp event_matches_date_filter?(_inserted_at, "all"), do: true
-
-  defp event_matches_date_filter?(inserted_at, "today") do
-    DateTime.compare(inserted_at, start_of_day()) != :lt
-  end
-
-  defp event_matches_date_filter?(inserted_at, "yesterday") do
-    DateTime.compare(inserted_at, start_of_yesterday()) != :lt &&
-      DateTime.compare(inserted_at, end_of_yesterday()) == :lt
-  end
-
-  defp event_matches_date_filter?(inserted_at, "week") do
-    DateTime.compare(inserted_at, days_ago(7)) != :lt
-  end
-
-  defp event_matches_date_filter?(inserted_at, "month") do
-    DateTime.compare(inserted_at, days_ago(30)) != :lt
-  end
-
-  defp event_matches_date_filter?(_inserted_at, _), do: true
 
   ## UI Helpers
 
