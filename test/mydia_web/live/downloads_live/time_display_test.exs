@@ -8,6 +8,8 @@ defmodule MydiaWeb.DownloadsLive.TimeDisplayTest do
   import Mydia.MetadataStub, only: [setup_metadata_stub: 1]
 
   alias Mydia.Accounts
+  alias Mydia.TimeDisplay
+  alias MydiaWeb.DateTimeFormat
 
   setup :setup_metadata_stub
 
@@ -53,8 +55,11 @@ defmodule MydiaWeb.DownloadsLive.TimeDisplayTest do
     {:ok, view, _html} =
       live(log_in_user(conn, admin_user_fixture()), ~p"/downloads?download=#{download.id}")
 
+    display = TimeDisplay.resolve(nil, TimeDisplay.instance_time_zone())
+    expected = DateTimeFormat.format(@instant, :datetime, display)
+
     html = tooltip(view)
-    assert html =~ "12:58 PM"
+    assert html =~ expected
     refute html =~ "UTC"
   end
 end
