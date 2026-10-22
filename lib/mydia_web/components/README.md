@@ -260,7 +260,7 @@ it.
 ## <.icon> types class as :string
 
 `MydiaWeb.CoreComponents.icon/1` declares `attr :class, :string, default: "size-4"`
-(`lib/mydia_web/components/core_components.ex:438`). Passing it a class list
+(`lib/mydia_web/components/core_components.ex:404`). Passing it a class list
 compiles and renders correctly but emits a warning on every build:
 
 ```heex
@@ -280,7 +280,7 @@ this only shows up as build noise.
 
 ## <.button> is a passthrough, and raw <button> is the convention
 
-`CoreComponents.button/1` (`lib/mydia_web/components/core_components.ex:96`)
+`CoreComponents.button/1` (`lib/mydia_web/components/core_components.ex:48`)
 declares `attr :class, :string`, so a conditional class list warns exactly as it
 does on `<.icon>`. It also applies its `["btn", variant]` default only via
 `assign_new`, so a call site supplying its own full class string gets a bare

@@ -61,9 +61,9 @@ defmodule MydiaWeb.FlashComponentsTest do
 
     html =
       rendered_to_string(~H"""
-      <MydiaWeb.CoreComponents.flash kind={:info} dismiss_after={nil}>
+      <MydiaWeb.FlashComponents.flash kind={:info} dismiss_after={nil}>
         Sticky
-      </MydiaWeb.CoreComponents.flash>
+      </MydiaWeb.FlashComponents.flash>
       """)
 
     assert count(html, "#flash-info[phx-hook]") == 0

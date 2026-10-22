@@ -5,6 +5,7 @@ defmodule MydiaWeb.Layouts do
   """
   use MydiaWeb, :html
 
+  import MydiaWeb.FlashComponents
   import MydiaWeb.SidebarComponents
 
   alias Mydia.Accounts.Authorization
