@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
+import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
+import 'glass_hit_target.dart';
 import 'glass_interaction.dart';
 
 /// A text button floating over content (the home hero's secondary action) on
@@ -16,7 +18,7 @@ class GlassButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.icon,
-    this.height = 48,
+    this.height,
     this.buttonKey,
     this.grouped = false,
   });
@@ -24,7 +26,10 @@ class GlassButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
-  final double height;
+
+  /// The control's height. Unset, it is 48 off Liquid Glass and the kit's
+  /// 34 pt Medium button on it; an explicit value wins on both.
+  final double? height;
 
   /// Keys the tappable widget on both paths.
   final Key? buttonKey;
@@ -32,11 +37,14 @@ class GlassButton extends StatelessWidget {
   /// Shares the enclosing `BackdropGroup`'s blur pass (glass path only).
   final bool grouped;
 
+  static const double _frostedHeight = 48;
+
   @override
   Widget build(BuildContext context) {
     final icon = this.icon;
     if (!GlassStyle.of(context)) {
-      final style = OutlinedButton.styleFrom(minimumSize: Size(0, height));
+      final style = OutlinedButton.styleFrom(
+          minimumSize: Size(0, height ?? _frostedHeight));
       return icon == null
           ? OutlinedButton(
               key: buttonKey,
@@ -52,10 +60,11 @@ class GlassButton extends StatelessWidget {
               label: Text(label),
             );
     }
-    final radius = BorderRadius.circular(height / 2);
+    final glassHeight = height ?? LiquidGeometry.buttonMedium;
+    final radius = BorderRadius.circular(glassHeight / 2);
     final foreground =
         onPressed == null ? context.palette.textDisabled : Colors.white;
-    return GlassInteraction(
+    final glass = GlassInteraction(
       enabled: onPressed != null,
       child: GlassSurface.control(
         borderRadius: radius,
@@ -74,7 +83,7 @@ class GlassButton extends StatelessWidget {
               borderRadius: radius,
               splashFactory: NoSplash.splashFactory,
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: height),
+                constraints: BoxConstraints(minHeight: glassHeight),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 22),
                   child: Row(
@@ -103,5 +112,6 @@ class GlassButton extends StatelessWidget {
         ),
       ),
     );
+    return GlassHitTarget(height: glassHeight, onTap: onPressed, child: glass);
   }
 }

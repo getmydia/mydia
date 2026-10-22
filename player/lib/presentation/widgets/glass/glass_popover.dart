@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/depth_tokens.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
+import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 
@@ -24,7 +24,7 @@ class GlassPopoverSurface extends StatelessWidget {
       );
     }
     return GlassSurface.modal(
-      borderRadius: BorderRadius.circular(DepthTokens.liquidPopoverRadius),
+      borderRadius: BorderRadius.circular(LiquidGeometry.menuRadius),
       child: Material(type: MaterialType.transparency, child: child),
     );
   }

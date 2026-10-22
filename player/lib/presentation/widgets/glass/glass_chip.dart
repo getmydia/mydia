@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/liquid_glass/glass_style.dart';
+import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
+import 'glass_hit_target.dart';
 import 'glass_interaction.dart';
 
 /// A toolbar chip (sort, filter) on Liquid Glass: a glass capsule, white
@@ -35,7 +37,7 @@ class GlassChip extends StatelessWidget {
   /// test needs to read the chip widget, since `key` sits on [GlassChip].
   final Key? chipKey;
 
-  static const double _height = 32;
+  static const double _height = LiquidGeometry.buttonMedium;
 
   @override
   Widget build(BuildContext context) {
@@ -61,45 +63,55 @@ class GlassChip extends StatelessWidget {
     final palette = context.palette;
     final foreground = selected ? palette.background : palette.textPrimary;
     const radius = BorderRadius.all(Radius.circular(_height / 2));
-    return Semantics(
-      key: chipKey,
-      button: true,
-      selected: selected,
-      child: GlassInteraction(
-        enabled: onSelected != null,
-        child: GlassSurface.control(
-          borderRadius: radius,
-          prominentColor: selected ? Colors.white : null,
-          grouped: BackdropGroup.of(context) != null,
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
+    final onTap = onSelected == null ? null : () => onSelected(!selected);
+    return GlassHitTarget(
+        height: _height,
+        onTap: onTap,
+        child: Semantics(
+          key: chipKey,
+          button: true,
+          selected: selected,
+          child: GlassInteraction(
+            enabled: onSelected != null,
+            child: GlassSurface.control(
               borderRadius: radius,
-              splashFactory: NoSplash.splashFactory,
-              onTap: onSelected == null ? null : () => onSelected(!selected),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: _height),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Center(
-                    widthFactor: 1,
-                    child: IconTheme.merge(
-                      data: IconThemeData(color: foreground),
-                      child: DefaultTextStyle.merge(
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                              color: foreground,
-                              fontWeight: FontWeight.w600,
-                            ),
-                        child: avatar == null
-                            ? label
-                            : Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  avatar,
-                                  const SizedBox(width: 6),
-                                  label,
-                                ],
-                              ),
+              prominentColor: selected ? Colors.white : null,
+              grouped: BackdropGroup.of(context) != null,
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  borderRadius: radius,
+                  splashFactory: NoSplash.splashFactory,
+                  onTap: onTap,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: _height),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Center(
+                        widthFactor: 1,
+                        heightFactor: 1,
+                        child: IconTheme.merge(
+                          data: IconThemeData(color: foreground),
+                          child: DefaultTextStyle.merge(
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelLarge
+                                ?.copyWith(
+                                  color: foreground,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                            child: avatar == null
+                                ? label
+                                : Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      avatar,
+                                      const SizedBox(width: 6),
+                                      label,
+                                    ],
+                                  ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -107,8 +119,6 @@ class GlassChip extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 }

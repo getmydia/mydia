@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/config/web_config.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
+import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/source_nav.dart';
 import '../focus_highlight.dart';
@@ -79,6 +81,10 @@ class BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final liquid = GlassStyle.of(context);
+    final barRadius = BorderRadius.circular(
+      liquid ? LiquidGeometry.tabBarHeight / 2 : AppTheme.radiusBottomBar,
+    );
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(DockGlass.sideMargin, 0,
@@ -90,15 +96,17 @@ class BottomNav extends StatelessWidget {
             // blurred fill so the pill now reads as true frosted glass over the
             // ambient backdrop instead of a near-opaque surface.
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppTheme.radiusBottomBar),
+              borderRadius: barRadius,
               boxShadow: DockGlass.shadow,
             ),
             child: GlassSurface.chrome(
               opacity: DockGlass.fillOpacity,
-              borderRadius: BorderRadius.circular(AppTheme.radiusBottomBar),
+              borderRadius: barRadius,
               border: DockGlass.border(context.palette),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                padding: liquid
+                    ? const EdgeInsets.all(LiquidGeometry.tabSelectionInset)
+                    : const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 // Every item takes an equal share of the bar, so the row can
                 // never be wider than the bar. Where a share is too narrow for
                 // a label (see [compactItemWidth]) the items drop to icons.
@@ -107,7 +115,12 @@ class BottomNav extends StatelessWidget {
                     final count = entries.length + (showBackToMydia ? 1 : 0);
                     final compact = count > 0 &&
                         constraints.maxWidth / count < compactItemWidth;
-                    return Row(
+                    final row = Row(
+                      // Liquid Glass: every item is as tall as the tallest, so
+                      // the bar grows with a large text scale.
+                      crossAxisAlignment: liquid
+                          ? CrossAxisAlignment.stretch
+                          : CrossAxisAlignment.center,
                       children: [
                         if (showBackToMydia)
                           Expanded(
@@ -151,6 +164,8 @@ class BottomNav extends StatelessWidget {
                           ),
                       ],
                     );
+                    // Nav items must stay intrinsic-safe (no LayoutBuilder).
+                    return liquid ? IntrinsicHeight(child: row) : row;
                   },
                 ),
               ),
@@ -230,6 +245,8 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final liquid = GlassStyle.of(context);
+    final pillRadius = liquid ? LiquidGeometry.tabSelectionHeight / 2 : 12.0;
     final palette = context.palette;
     final effectiveColor = widget.isDisabled
         ? palette.textDisabled
@@ -241,7 +258,7 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
       onActivate: widget.onTap,
       // Matches the pill `BoxDecoration.borderRadius` below: the ring traces
       // that exact rectangle, so the two radii must move together.
-      borderRadius: const BorderRadius.all(Radius.circular(12)),
+      borderRadius: BorderRadius.circular(pillRadius),
       child: GestureDetector(
         onTapDown: _handleTapDown,
         onTapUp: _handleTapUp,
@@ -252,16 +269,25 @@ class _NavItemState extends State<NavItem> with SingleTickerProviderStateMixin {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOut,
-            // 12 + 24 + 12 keeps the icon-only item a 48px tap target.
+            // 12 + 24 + 12 keeps the icon-only item a 48px tap target. On Liquid
+            // Glass the item is the kit's 54 tall selection pill instead, and
+            // its content centres in it. 54 is a minimum so a large text scale
+            // grows the item and the bar with it.
+            constraints: liquid
+                ? const BoxConstraints(
+                    minHeight: LiquidGeometry.tabSelectionHeight,
+                  )
+                : null,
+            alignment: liquid ? Alignment.center : null,
             padding: EdgeInsets.symmetric(
               horizontal: 4,
-              vertical: widget.compact ? 12 : 8,
+              vertical: liquid ? 0 : (widget.compact ? 12 : 8),
             ),
             decoration: BoxDecoration(
               color: widget.isSelected && !widget.isDisabled
                   ? palette.primary.withValues(alpha: 0.12)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(pillRadius),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,

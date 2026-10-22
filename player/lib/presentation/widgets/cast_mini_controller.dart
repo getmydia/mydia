@@ -24,6 +24,7 @@ import 'cast_bar/cast_pill.dart';
 import 'cast_bar/dock_extents.dart';
 import 'cast_subtitle_sheet.dart';
 import 'glass/glass_dialog.dart';
+import 'glass/glass_slider.dart';
 import 'nav/dock_glass.dart';
 import 'toast/toast_obstruction.dart';
 import 'toast/toaster.dart';
@@ -522,7 +523,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                         ?.copyWith(color: palette.textSecondary),
                   ),
                   Expanded(
-                    child: Slider(
+                    child: GlassSlider(
                       key: const Key('cast-bar-scrubber'),
                       value: value,
                       // Null disables the control outright. Leaving it live

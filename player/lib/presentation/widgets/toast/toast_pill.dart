@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 import 'toast_models.dart';
@@ -29,6 +30,12 @@ class ToastPill extends StatelessWidget {
 
   static const BorderRadius _radius =
       BorderRadius.all(Radius.circular(ToastMetrics.radius));
+
+  /// Liquid Glass: a capsule. The pill is held at [liquidMinHeight] so its
+  /// radius is half its height for a single line.
+  static const double liquidMinHeight = 48;
+  static const BorderRadius liquidRadius =
+      BorderRadius.all(Radius.circular(liquidMinHeight / 2));
 
   static const double _padHorizontal = 16;
   static const double _padVertical = 12;
@@ -59,6 +66,8 @@ class ToastPill extends StatelessWidget {
     final palette = context.palette;
     final leading = _leading(palette);
     final action = entry.action;
+    final liquid = GlassStyle.of(context);
+    final shape = liquid ? liquidRadius : _radius;
     return Semantics(
       container: true,
       liveRegion: true,
@@ -68,14 +77,14 @@ class ToastPill extends StatelessWidget {
         child: DecoratedBox(
           // The shadow lives on an outer box because GlassSurface clips its
           // own blurred fill, the same split `BottomNav` uses.
-          decoration: const BoxDecoration(
-            borderRadius: _radius,
+          decoration: BoxDecoration(
+            borderRadius: shape,
             boxShadow: DepthTokens.chrome,
           ),
           child: GlassSurface(
             blurSigma: DepthTokens.blurChrome,
             fillColor: fill(palette),
-            borderRadius: _radius,
+            borderRadius: shape,
             border: Border.all(
               color: DepthTokens.rimColor,
               width: DepthTokens.rimWidth,
@@ -85,48 +94,62 @@ class ToastPill extends StatelessWidget {
             // action button's ink.
             child: Material(
               type: MaterialType.transparency,
-              child: Padding(
+              child: Container(
+                constraints: BoxConstraints(
+                  minHeight: liquid ? liquidMinHeight : 0,
+                ),
                 padding: _padding,
+                // The outer Row centres the content in the height the minimum
+                // forces; it stays as narrow as its content.
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (leading != null) ...[
-                      leading,
-                      const SizedBox(width: 10),
-                    ],
                     Flexible(
-                      child: Text(
-                        entry.message,
-                        maxLines: ToastMetrics.maxLines,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: palette.textPrimary,
-                          fontSize: 14,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (leading != null) ...[
+                            leading,
+                            const SizedBox(width: 10),
+                          ],
+                          Flexible(
+                            child: Text(
+                              entry.message,
+                              maxLines: ToastMetrics.maxLines,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: palette.textPrimary,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          if (action != null) ...[
+                            const SizedBox(width: 12),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                  maxWidth: _maxActionWidth),
+                              child: TextButton(
+                                key: const Key('toast-action'),
+                                onPressed: onAction,
+                                style: TextButton.styleFrom(
+                                  foregroundColor: palette.primary,
+                                  minimumSize: const Size(0, 32),
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 8),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  action.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    if (action != null) ...[
-                      const SizedBox(width: 12),
-                      ConstrainedBox(
-                        constraints:
-                            const BoxConstraints(maxWidth: _maxActionWidth),
-                        child: TextButton(
-                          key: const Key('toast-action'),
-                          onPressed: onAction,
-                          style: TextButton.styleFrom(
-                            foregroundColor: palette.primary,
-                            minimumSize: const Size(0, 32),
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: Text(
-                            action.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),

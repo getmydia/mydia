@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/liquid_geometry.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/glass/glass_interaction.dart';
@@ -16,6 +17,16 @@ Widget _host(VoidCallback? onPressed, {required bool liquid}) => MaterialApp(
     );
 
 void main() {
+  testWidgets('Liquid Glass: a 50pt Large capsule', (tester) async {
+    await tester.pumpWidget(_host(() {}, liquid: true));
+    final size = tester.getSize(find.byKey(PrimaryPlayButton.pillKey));
+    expect(size.height, LiquidGeometry.buttonLarge);
+    expect(size.height, greaterThanOrEqualTo(LiquidGeometry.minHitTarget));
+    final glass =
+        tester.widget<GlassSurface>(find.byKey(PrimaryPlayButton.pillKey));
+    expect(glass.borderRadius, BorderRadius.circular(25));
+  });
+
   testWidgets('Liquid Glass: a neutral glass capsule that plays',
       (tester) async {
     var taps = 0;
@@ -47,5 +58,7 @@ void main() {
     expect(find.byType(GlassSurface), findsNothing);
     final pill = tester.widget<Material>(find.byKey(PrimaryPlayButton.pillKey));
     expect(pill.color, Colors.white);
+    expect(tester.getSize(find.byKey(PrimaryPlayButton.pillKey)).height,
+        PrimaryPlayButton.height);
   });
 }

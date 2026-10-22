@@ -37,8 +37,9 @@ bars, the dock, rail, drawer and cast pill, floating buttons over heroes,
 sheets, dialogs and popovers, the primary Play button, the home hero's
 buttons and episode badge, the detail action row, the "Next Up" badge over
 artwork, and the capsule behind the selected season. Content stays solid:
-settings rows, inline buttons, switches, sliders, and anything repeated per
-item in a scrolling list. Per-card overlays and metadata chips stay solid
+settings rows, inline buttons, switches, and anything repeated per
+item in a scrolling list. A slider's track stays solid, but the scrubber and
+the volume slider carry a clear glass knob on Liquid Glass (`GlassSlider`). Per-card overlays and metadata chips stay solid
 because they repeat in scrolling lists and each glass surface costs two
 backdrop passes. The detail action row and the home hero sit in a
 `BackdropGroup`, but only the frosted fallback shares its blur there (see
@@ -126,6 +127,79 @@ through the translucent fill, and the shader's rim terms decode them:
   grey 33) is `volumeEnds` on the panel.
 - The large layer's bottom catch-light (white at 20%, y of plus 2, spread
   -1.2) is `bottomLight`.
+
+### Geometry
+
+On Liquid Glass the controls take the kit's sizes. Frosted keeps the sizes it
+always had, and every branch sits behind `GlassStyle.of(context)`. The tokens
+live in `LiquidGeometry`.
+
+| Widget | Liquid | Frosted |
+| --- | --- | --- |
+| `GlassButton` | height 34 (kit Medium), capsule; an explicit `height` wins | 48 |
+| `GlassChip` | 34, capsule | unchanged |
+| `PrimaryPlayButton` | 50 (kit Large), capsule; disabled, it falls back to the 48 white pill | unchanged |
+| `GlassDialog` | radius 34 (kit Alerts) | unchanged |
+| `GlassPopover` | radius 32 (kit Menus) | 12 |
+| `GlassSheet` | top radius 34 (kit Sheets) | unchanged |
+| `CastPill` | min height 64 (`kMinInteractiveDimension` plus 2 x padding), radius 32 | radius 18 |
+| `ToastPill` | min height 48, radius 24, one line centred | unchanged |
+| `BottomNav` | bar min 62, selection pill min 54 inset 4 | unchanged |
+| `GlassIconButton` | 44, clamped to the row height minus 2 x 4 inset when the parent is shorter | Material `IconButton`: 40 visual, 48 tap target |
+| `GlassSlider` | clear 37x24 knob (below); the volume slider is widened by the knob so its track stays 72 | plain Material slider |
+
+`FloatingRail` is unchanged. It carries labels, and the kit's vertical tab bar
+does not.
+
+The tab bar grows with the text scale. The selection pill sets only a minimum
+height, and the bar wraps its row in an `IntrinsicHeight`, so larger text makes
+both taller and the inset stays 4.
+
+#### The 44 pt hit target
+
+A 34 pt button is below the 44 pt minimum for a touch target, and padding it
+would make the glass taller than the kit draws it. `GlassHitTarget` keeps the
+two apart: the glass is laid out at its visual height, centred in an area of at
+least `LiquidGeometry.minHitTarget` (44), and a tap in the margin above or below
+fires the same `onTap`. The inner control owns the semantics, so the margin adds
+none. `GlassButton` wraps itself in it, and `GlassChip` uses the same rule.
+
+The widget is a `RenderShiftedBox`, not a `LayoutBuilder`. It passes the
+parent's width constraints through, lets the glass take its natural height from
+34 up (so large text grows it instead of clipping), and answers
+intrinsic queries itself, so it still works under an `IntrinsicWidth` (the
+dialog's button row sizes that way).
+
+#### `GlassSlider`
+
+The kit's slider has no thumb. It has a clear glass knob, 37x24, that sits on
+the track. The Material `Slider` still owns the track and every gesture, with
+`SliderComponentShape.noThumb` and `noOverlay` and a theme padding of half a
+knob each side. The knob is a separate widget in a `Stack` over it:
+
+- It sits at Material's own thumb centre. A rounded track keeps the centre a
+  track radius inside each end, and a discrete slider (`divisions`) travels
+  `trackWidth - trackHeight`, which `_knobStart` mirrors from the Material
+  slider.
+- It is a `PositionedDirectional`, so it follows the slider's text direction
+  and works in RTL.
+- It is wrapped in `IgnorePointer` and `ExcludeSemantics`: the slider below
+  keeps every pointer and accessibility role.
+- It scales up on drag (`DepthTokens.liquidPressScale`), driven by
+  `onChangeStart` and `onChangeEnd`. A disabled slider (`onChanged` null) draws
+  the knob at 0.5 opacity and does not scale.
+- With an unbounded width there is no track to place a knob on, so the bare
+  slider is drawn.
+- It draws the `clear` profile. Under Reduce Transparency, or with no shader, it
+  is an opaque white knob at 0.85.
+- In keyboard highlight mode a focused slider shows the same white ring
+  `FocusHighlight` draws.
+
+The knob cannot be a `SliderComponentShape`. A shape paints on a `Canvas`
+handed to it during the slider's paint, and a backdrop filter is a widget layer
+(`BackdropFilter` with a fragment shader) that has to be hosted in the widget
+tree. A canvas has no way to read what is behind it. So the thumb is hidden and
+the lens is a sibling widget.
 
 ## When it runs
 

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/liquid_glass/liquid_geometry.dart';
 import 'package:player/core/theme/palette.dart';
+import 'package:player/presentation/widgets/glass/glass_button.dart';
 import 'package:player/presentation/widgets/glass/glass_chip.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
@@ -11,6 +13,109 @@ Widget _host(Widget chip, {required bool liquid}) => MaterialApp(
     );
 
 void main() {
+  testWidgets('liquid GlassChip is a 34pt capsule with a 44pt target',
+      (tester) async {
+    await tester.pumpWidget(_host(
+      GlassChip(
+          label: const Text('Sort A'), selected: false, onSelected: (_) {}),
+      liquid: true,
+    ));
+    expect(tester.getSize(find.byType(GlassSurface)).height,
+        LiquidGeometry.buttonMedium);
+    expect(tester.getSize(find.byType(GlassChip)).height,
+        greaterThanOrEqualTo(LiquidGeometry.minHitTarget));
+  });
+
+  testWidgets('in a 48pt chip row the glass is still 34 with a 44pt+ target',
+      (tester) async {
+    bool? last;
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+      home: Scaffold(
+        body: SizedBox(
+          height: 48,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: GlassChip(
+                  label: const Text('Sort A'),
+                  selected: false,
+                  onSelected: (v) => last = v,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ));
+    expect(tester.getSize(find.byType(GlassSurface)).height,
+        LiquidGeometry.buttonMedium);
+    expect(tester.getSize(find.byType(GlassChip)).height,
+        greaterThanOrEqualTo(LiquidGeometry.minHitTarget));
+    final top = tester.getTopLeft(find.byType(GlassSurface));
+    await tester.tapAt(top + const Offset(20, -4));
+    expect(last, isTrue);
+  });
+
+  testWidgets('a large text scale grows the chip glass instead of clipping',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2.0),
+        ),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: Center(
+          child: GlassChip(
+              label: const Text('Sort A'), selected: false, onSelected: (_) {}),
+        ),
+      ),
+    ));
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byType(GlassSurface)).height,
+        greaterThan(LiquidGeometry.buttonMedium));
+  });
+
+  testWidgets('a liquid button and chip lay out inside IntrinsicWidth',
+      (tester) async {
+    await tester.pumpWidget(_host(
+      IntrinsicWidth(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            GlassButton(label: 'Cancel', onPressed: () {}),
+            GlassChip(
+                label: const Text('Sort A'),
+                selected: false,
+                onSelected: (_) {}),
+          ],
+        ),
+      ),
+      liquid: true,
+    ));
+    expect(tester.takeException(), isNull);
+    final glass = find.byType(GlassSurface);
+    expect(tester.getSize(glass.at(0)).height, LiquidGeometry.buttonMedium);
+    expect(tester.getSize(glass.at(1)).height, LiquidGeometry.buttonMedium);
+    expect(
+        tester.getSize(glass.at(0)).width, tester.getSize(glass.at(1)).width);
+  });
+
+  testWidgets('Frosted chip keeps its Material height', (tester) async {
+    await tester.pumpWidget(_host(
+      GlassChip(
+          label: const Text('Sort A'), selected: false, onSelected: (_) {}),
+      liquid: false,
+    ));
+    expect(tester.getSize(find.byType(ChoiceChip)).height, 48);
+  });
+
   testWidgets('Liquid Glass: a glass capsule that toggles', (tester) async {
     bool? last;
     await tester.pumpWidget(_host(
