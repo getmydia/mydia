@@ -60,17 +60,22 @@ defmodule Mydia.Jobs.MediaImport.Paths do
   def build_destination_path(download, library_path) when is_struct(library_path, LibraryPath) do
     cond do
       download.media_item && download.media_item.type == "movie" ->
-        existing_or(download.media_item, library_path, upgrade_target_id(download), fn ->
-          generated_movie_dir(download.media_item, library_path)
-        end)
+        existing_or(
+          download.media_item,
+          library_path,
+          [prefer_file_id: upgrade_target_id(download)],
+          fn ->
+            generated_movie_dir(download.media_item, library_path)
+          end
+        )
 
       # TV episode - always use show folder + season subfolder
       download.episode && download.media_item ->
-        base = build_series_base_path(download.media_item, library_path, download)
+        base = build_series_base_path(download.media_item, library_path, download.episode)
         season_dir(base, download.media_item, library_path, download.episode.season_number)
 
       download.media_item && download.media_item.type == "tv_show" ->
-        build_series_base_path(download.media_item, library_path, download)
+        build_series_base_path(download.media_item, library_path)
 
       # Unknown - use download title
       true ->
@@ -115,17 +120,17 @@ defmodule Mydia.Jobs.MediaImport.Paths do
   # uses, else the category-aware generated one.
   @doc false
   def build_series_base_path(media_item, library_path),
-    do: series_base(media_item, library_path, nil)
+    do: series_base(media_item, library_path, [])
 
-  # With a download in hand, an upgrade's own folder wins when the show is
-  # split across trusted folders, so it replaces the file where it lives.
+  # With the episode being placed, the folder already holding that episode's
+  # file wins when the show is split across trusted folders.
   @doc false
-  def build_series_base_path(media_item, library_path, download) do
-    series_base(media_item, library_path, upgrade_target_id(download))
+  def build_series_base_path(media_item, library_path, episode) do
+    series_base(media_item, library_path, prefer_episode_id: episode && episode.id)
   end
 
-  defp series_base(media_item, library_path, prefer_file_id) do
-    existing_or(media_item, library_path, prefer_file_id, fn ->
+  defp series_base(media_item, library_path, prefer) do
+    existing_or(media_item, library_path, prefer, fn ->
       if library_path.auto_organize do
         FileOrganizer.destination_path(media_item, library_path)
       else
@@ -149,8 +154,8 @@ defmodule Mydia.Jobs.MediaImport.Paths do
   # An item already living in a folder keeps getting its files there
   # (getmydia/mydia#1237). Relocating it into a category path is the explicit
   # reorganize action's job, not an import's.
-  defp existing_or(media_item, library_path, prefer_file_id, generate) do
-    case Home.find(media_item, library_path, prefer_file_id: prefer_file_id) do
+  defp existing_or(media_item, library_path, prefer, generate) do
+    case Home.find(media_item, library_path, prefer) do
       {:ok, folder} -> folder.absolute
       :none -> generate.()
     end

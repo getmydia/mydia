@@ -32,28 +32,33 @@ defmodule Mydia.Library.ItemFolders.Home do
   @doc """
   The trusted folder holding this item's files in `library_path`.
 
-  With `:prefer_file_id` (an upgrade's target file), that file's folder wins
+  With `:prefer_episode_id` (the TV episode being placed), the trusted folder
+  holding that episode's file wins, the fullest one if several do. With
+  `:prefer_file_id` (a movie upgrade's target file), that file's folder wins
   when it is trusted. Otherwise the trusted folder holding the most files
   wins, ties broken by name. `:none` when no folder qualifies.
   """
   @spec find(MediaItem.t(), LibraryPath.t(), keyword()) :: {:ok, Folder.t()} | :none
   def find(%MediaItem{} = item, %LibraryPath{} = library_path, opts \\ []) do
-    prefer = Keyword.get(opts, :prefer_file_id)
+    prefer_file = Keyword.get(opts, :prefer_file_id)
+    prefer_episode = Keyword.get(opts, :prefer_episode_id)
 
     trusted =
       item
       |> files(library_path)
       |> Enum.flat_map(fn file ->
         case ItemFolders.folder_of(file) do
-          %Folder{} = folder -> [{file.id, folder}]
+          %Folder{} = folder -> [{file, folder}]
           nil -> []
         end
       end)
-      |> Enum.filter(fn {_id, folder} -> names_item?(Path.basename(folder.relative), item) end)
+      |> Enum.filter(fn {_file, folder} ->
+        names_item?(Path.basename(folder.relative), item)
+      end)
 
-    case Enum.find(trusted, fn {id, _folder} -> prefer != nil and id == prefer end) do
-      {_id, folder} -> {:ok, folder}
-      nil -> most_files(trusted)
+    with :none <- holding_episode(trusted, prefer_episode),
+         :none <- holding_file(trusted, prefer_file) do
+      most_files(trusted)
     end
   end
 
@@ -138,12 +143,26 @@ defmodule Mydia.Library.ItemFolders.Home do
   defp normalize_id(id) when is_integer(id), do: Integer.to_string(id)
   defp normalize_id(id) when is_binary(id), do: String.downcase(id)
 
+  defp holding_episode(_trusted, nil), do: :none
+
+  defp holding_episode(trusted, episode_id),
+    do: most_files(Enum.filter(trusted, fn {file, _} -> file.episode_id == episode_id end))
+
+  defp holding_file(_trusted, nil), do: :none
+
+  defp holding_file(trusted, file_id) do
+    case Enum.find(trusted, fn {file, _} -> file.id == file_id end) do
+      {_file, folder} -> {:ok, folder}
+      nil -> :none
+    end
+  end
+
   defp most_files([]), do: :none
 
   defp most_files(trusted) do
-    {_id, folder} =
+    {_file, folder} =
       trusted
-      |> Enum.group_by(fn {_id, folder} -> folder.relative end)
+      |> Enum.group_by(fn {_file, folder} -> folder.relative end)
       |> Enum.min_by(fn {relative, group} -> {-length(group), relative} end)
       |> elem(1)
       |> hd()

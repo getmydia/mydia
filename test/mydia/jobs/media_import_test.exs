@@ -3049,7 +3049,7 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
 
     @tag :tmp_dir
-    test "a TV upgrade prefers the folder of the file it replaces when a show is split",
+    test "a TV episode prefers the folder holding its own file when a show is split",
          %{tmp_dir: tmp_dir} do
       library_path = create_test_library_path(tmp_dir, :series)
 
@@ -3061,12 +3061,11 @@ defmodule Mydia.Jobs.MediaImportTest do
           episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: n})
         end
 
-      target =
-        media_file_fixture(%{
-          episode_id: ep1.id,
-          library_path_id: library_path.id,
-          relative_path: "Lantern Bay (2020)/Season 1/Lantern Bay S01E01.mkv"
-        })
+      media_file_fixture(%{
+        episode_id: ep1.id,
+        library_path_id: library_path.id,
+        relative_path: "Lantern Bay (2020)/Season 1/Lantern Bay S01E01.mkv"
+      })
 
       for ep <- [ep2, ep3] do
         media_file_fixture(%{
@@ -3077,14 +3076,11 @@ defmodule Mydia.Jobs.MediaImportTest do
         })
       end
 
-      download =
-        download_fixture(%{
-          media_item_id: show.id,
-          metadata: %{"upgrade_target_media_file_id" => target.id}
-        })
-
-      assert MediaImport.build_series_base_path(show, library_path, download) ==
+      assert MediaImport.build_series_base_path(show, library_path, ep1) ==
                Path.join(library_path.path, "Lantern Bay (2020)")
+
+      assert MediaImport.build_series_base_path(show, library_path, ep2) ==
+               Path.join(library_path.path, "Lantern Bay [tvdb-70001]")
 
       assert MediaImport.build_series_base_path(show, library_path) ==
                Path.join(library_path.path, "Lantern Bay [tvdb-70001]")

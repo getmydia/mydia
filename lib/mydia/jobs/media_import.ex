@@ -570,7 +570,7 @@ defmodule Mydia.Jobs.MediaImport do
           # Build destination path for this episode
           dest_dir =
             if episode && download.media_item do
-              base_dir = Paths.build_series_base_path(download.media_item, library_path, download)
+              base_dir = Paths.build_series_base_path(download.media_item, library_path, episode)
 
               Paths.season_dir(base_dir, download.media_item, library_path, episode.season_number)
             else
@@ -645,7 +645,7 @@ defmodule Mydia.Jobs.MediaImport do
   defdelegate build_destination_path(download, library_path), to: Mydia.Jobs.MediaImport.Paths
   defdelegate build_series_base_path(media_item, library_path), to: Mydia.Jobs.MediaImport.Paths
 
-  defdelegate build_series_base_path(media_item, library_path, download),
+  defdelegate build_series_base_path(media_item, library_path, episode),
     to: Mydia.Jobs.MediaImport.Paths
 
   defdelegate season_dir(base, media_item, library_path, season), to: Mydia.Jobs.MediaImport.Paths

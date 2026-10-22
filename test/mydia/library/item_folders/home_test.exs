@@ -156,6 +156,35 @@ defmodule Mydia.Library.ItemFolders.HomeTest do
                Home.find(item, lp, prefer_file_id: target.id)
     end
 
+    test ":prefer_episode_id picks the folder holding that episode's file", %{lp: lp} do
+      item = show()
+
+      [e1, e2, e3, e4] =
+        for n <- 1..4,
+            do: episode_fixture(%{media_item_id: item.id, season_number: 1, episode_number: n})
+
+      for {ep, dir} <- [
+            {e1, "Lantern Bay (2020)"},
+            {e2, "Lantern Bay [tvdb-70001]"},
+            {e3, "Lantern Bay [tvdb-70001]"}
+          ] do
+        media_file_fixture(%{
+          episode_id: ep.id,
+          library_path_id: lp.id,
+          relative_path: "#{dir}/Season 1/Lantern Bay S01E0#{ep.episode_number}.mkv"
+        })
+      end
+
+      assert {:ok, %{relative: "Lantern Bay (2020)"}} =
+               Home.find(item, lp, prefer_episode_id: e1.id)
+
+      assert {:ok, %{relative: "Lantern Bay [tvdb-70001]"}} =
+               Home.find(item, lp, prefer_episode_id: e2.id)
+
+      assert {:ok, %{relative: "Lantern Bay [tvdb-70001]"}} =
+               Home.find(item, lp, prefer_episode_id: e4.id)
+    end
+
     test "an imdb tag matches case-insensitively", %{lp: lp} do
       item = movie(%{imdb_id: "tt0000123"})
       movie_file(item, lp, "Quiet Harbor {IMDB-TT0000123}/Quiet Harbor.mkv")
