@@ -367,8 +367,12 @@ class GlassSurface extends StatelessWidget {
     if (liquidOpacity != null && base != null) {
       final access = GlassAccessibilityScope.of(context);
       if (access.reduceTransparency) {
+        // The lift outlives the glass: Reduce Transparency keeps the profile
+        // shadow, except on the scroll edge, which casts none.
         return _withShadow(
-            _solid(base.withValues(alpha: 1), resolvedBorder), shadows);
+          _solid(base.withValues(alpha: 1), resolvedBorder),
+          shadows.isEmpty && !liquidScrollEdge ? liquidProfile.shadow : shadows,
+        );
       }
       if (GlassStyle.of(context) && LiquidGlassSupport.available) {
         if (liquidScrollEdge) {

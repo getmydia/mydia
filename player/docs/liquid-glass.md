@@ -215,8 +215,8 @@ widget the call site used before otherwise.
 | `showGlassSheet` | Every in-app bottom sheet | `showModalBottomSheet` with the caller's arguments |
 | `GlassPopoverSurface` | The source picker popover | Elevated Material card |
 
-Control-role glass (`GlassSurface.control`) casts a soft drop shadow,
-`liquidControlShadow`, so it lifts off the content behind it. The detail
+Control-role glass (`GlassSurface.control`) casts the lens
+profile's shadow (`LiquidGlassProfile.lens.shadow`), so it lifts off the content behind it. The detail
 action row and the season selector use `GlassSurface.control` directly: the
 action row draws circles with `grouped: true` inside one `BackdropGroup`, and
 the season selector draws one capsule behind the selected season while
