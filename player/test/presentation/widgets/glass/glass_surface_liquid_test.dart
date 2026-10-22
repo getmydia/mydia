@@ -133,19 +133,35 @@ void main() {
       expect(filterOf(tester).adaptiveTintMax, isNull);
     });
 
-    testWidgets('control paints the control shadow', (tester) async {
+    // The outermost DecoratedBox inside the GlassSurface is its shadow
+    // wrapper, so a host widget's shadow cannot satisfy the check.
+    List<BoxShadow>? outerShadow(WidgetTester tester) {
+      final box = tester.widget<DecoratedBox>(find
+          .descendant(
+            of: find.byType(GlassSurface),
+            matching: find.byType(DecoratedBox),
+          )
+          .first);
+      return (box.decoration as BoxDecoration).boxShadow;
+    }
+
+    testWidgets('a control casts the lens shadow', (tester) async {
       await tester.pumpWidget(_host(GlassSurface.control(
           borderRadius: BorderRadius.circular(24), child: _box)));
-      final shadowBox = tester.widgetList<DecoratedBox>(find.ancestor(
-        of: find.byType(LiquidGlassFilter),
-        matching: find.byType(DecoratedBox),
-      ));
-      expect(
-        shadowBox.any((b) =>
-            (b.decoration as BoxDecoration).boxShadow ==
-            DepthTokens.liquidControlShadow),
-        isTrue,
-      );
+      expect(outerShadow(tester), LiquidGlassProfile.lens.shadow);
+    });
+
+    testWidgets('a modal casts the panel shadow', (tester) async {
+      await tester.pumpWidget(_host(GlassSurface.modal(child: _box)));
+      expect(outerShadow(tester), LiquidGlassProfile.panel.shadow);
+    });
+
+    testWidgets('explicit shadows win over the profile shadow', (tester) async {
+      await tester.pumpWidget(_host(const GlassSurface.sidebar(
+        shadows: [BoxShadow(blurRadius: 3)],
+        child: _box,
+      )));
+      expect(outerShadow(tester), const [BoxShadow(blurRadius: 3)]);
     });
 
     testWidgets('Increase Contrast boosts the adaptive max too',
@@ -204,6 +220,16 @@ void main() {
               .withValues(alpha: DepthTokens.liquidProminentTintOpacity));
     });
 
+    testWidgets('Reduce Transparency keeps the control lift', (tester) async {
+      await tester.pumpWidget(_host(
+        GlassSurface.control(
+            borderRadius: BorderRadius.circular(24), child: _box),
+        access: const GlassAccessibility(reduceTransparency: true),
+      ));
+      expect(find.byType(LiquidGlassFilter), findsNothing);
+      expect(outerShadow(tester), LiquidGlassProfile.lens.shadow);
+    });
+
     testWidgets('Reduce Transparency gives a solid fill, no backdrop',
         (tester) async {
       await tester.pumpWidget(_host(
@@ -212,10 +238,13 @@ void main() {
       ));
       expect(find.byType(LiquidGlassFilter), findsNothing);
       expect(find.byType(BackdropFilter), findsNothing);
-      final box = tester.widget<DecoratedBox>(find.descendant(
-        of: find.byType(GlassSurface),
-        matching: find.byType(DecoratedBox),
-      ));
+      // The shadow wrapper is outermost; the solid fill is the last box.
+      final box = tester.widget<DecoratedBox>(find
+          .descendant(
+            of: find.byType(GlassSurface),
+            matching: find.byType(DecoratedBox),
+          )
+          .last);
       final color = (box.decoration as BoxDecoration).color;
       expect(color?.a, 1.0);
     });
@@ -226,10 +255,13 @@ void main() {
         GlassSurface.modal(child: _box),
         access: const GlassAccessibility(reduceTransparency: true),
       ));
-      final box = tester.widget<DecoratedBox>(find.descendant(
-        of: find.byType(GlassSurface),
-        matching: find.byType(DecoratedBox),
-      ));
+      // The shadow wrapper is outermost; the solid fill is the last box.
+      final box = tester.widget<DecoratedBox>(find
+          .descendant(
+            of: find.byType(GlassSurface),
+            matching: find.byType(DecoratedBox),
+          )
+          .last);
       expect((box.decoration as BoxDecoration).border, isNotNull);
     });
 
@@ -268,6 +300,24 @@ void main() {
       });
     });
 
+    testWidgets('Reduce Transparency on the frosted style casts no shadow',
+        (tester) async {
+      await tester.pumpWidget(_host(
+        GlassSurface.modal(child: _box),
+        access: const GlassAccessibility(reduceTransparency: true),
+        liquid: false,
+      ));
+      final boxes = tester.widgetList<DecoratedBox>(find.descendant(
+        of: find.byType(GlassSurface),
+        matching: find.byType(DecoratedBox),
+      ));
+      expect(
+        boxes.where((b) =>
+            ((b.decoration as BoxDecoration).boxShadow ?? const []).isNotEmpty),
+        isEmpty,
+      );
+    });
+
     testWidgets('the Liquid Glass setting takes the shader', (tester) async {
       await tester.pumpWidget(
           _host(const GlassSurface.chrome(child: _box), liquid: true));
@@ -276,6 +326,22 @@ void main() {
   });
 
   group('when Liquid Glass is not available', () {
+    testWidgets('a liquid-styled control still casts the lens shadow',
+        (tester) async {
+      LiquidGlassSupport.debugOverride = false;
+      await tester.pumpWidget(_host(GlassSurface.control(
+          borderRadius: BorderRadius.circular(24), child: _box)));
+      expect(find.byType(LiquidGlassFilter), findsNothing);
+      final box = tester.widget<DecoratedBox>(find
+          .descendant(
+            of: find.byType(GlassSurface),
+            matching: find.byType(DecoratedBox),
+          )
+          .first);
+      expect((box.decoration as BoxDecoration).boxShadow,
+          LiquidGlassProfile.lens.shadow);
+    });
+
     testWidgets('appBar keeps its frosted recipe', (tester) async {
       await tester.pumpWidget(_host(const GlassSurface.appBar(child: _box)));
       expect(find.byType(LiquidGlassFilter), findsNothing);

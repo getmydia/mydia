@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/core/theme/palette.dart';
 
 void main() {
@@ -119,11 +120,16 @@ void main() {
   });
 
   group('Liquid Glass', () {
-    test('blur, edge, refraction and rim are positive', () {
-      expect(DepthTokens.liquidBlurSigma, greaterThan(0));
-      expect(DepthTokens.liquidEdgeBand, greaterThan(0));
-      expect(DepthTokens.liquidRefraction, greaterThan(0));
-      expect(DepthTokens.liquidRimWidth, greaterThan(0));
+    test('every profile has a positive depth and rim', () {
+      for (final p in [
+        LiquidGlassProfile.lens,
+        LiquidGlassProfile.panel,
+        LiquidGlassProfile.clear,
+      ]) {
+        expect(p.depth, greaterThan(0));
+        expect(p.distortion, greaterThan(0));
+        expect(p.rimWidth, greaterThan(0));
+      }
     });
 
     test('press swells the glass', () {
@@ -132,9 +138,10 @@ void main() {
 
     test('press is brighter than hover', () {
       expect(
-        DepthTokens.liquidSpecular + DepthTokens.liquidPressSpecularBoost,
+        LiquidGlassProfile.lens.specular + DepthTokens.liquidPressSpecularBoost,
         greaterThan(
-          DepthTokens.liquidSpecular + DepthTokens.liquidHoverSpecularBoost,
+          LiquidGlassProfile.lens.specular +
+              DepthTokens.liquidHoverSpecularBoost,
         ),
       );
     });
@@ -163,7 +170,7 @@ void main() {
         DepthTokens.liquidControlAdaptiveMax,
         DepthTokens.liquidAdaptiveLumaLow,
         DepthTokens.liquidAdaptiveLumaHigh,
-        DepthTokens.liquidInnerGlow,
+        LiquidGlassProfile.lens.innerGlow,
         DepthTokens.liquidPressGlow,
         DepthTokens.liquidPressGlowRadius,
         DepthTokens.liquidScrollEdgeTopOpacity,
@@ -179,8 +186,8 @@ void main() {
           greaterThanOrEqualTo(DepthTokens.liquidModalTintOpacity));
       expect(DepthTokens.liquidControlAdaptiveMax,
           greaterThanOrEqualTo(DepthTokens.liquidControlTintOpacity));
-      expect(DepthTokens.liquidRimHairline, inInclusiveRange(0.0, 1.0));
-      expect(DepthTokens.liquidBottomLight, inInclusiveRange(0.0, 1.0));
+      expect(LiquidGlassProfile.lens.rimHairline, inInclusiveRange(0.0, 1.0));
+      expect(LiquidGlassProfile.lens.bottomLight, inInclusiveRange(0.0, 1.0));
       expect(DepthTokens.liquidScrollEdgeBottomOpacity,
           lessThan(DepthTokens.liquidScrollEdgeTopOpacity));
     });

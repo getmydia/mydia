@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -47,15 +48,22 @@ class LiquidGlassUniforms {
   /// The material's shader values.
   final LiquidGlassProfile profile;
 
+  /// The edge band for [p] on a surface of [size] with corner [radius],
+  /// logical pixels: the kit's depth scaled by the corner radius, capped at
+  /// half the short side so a capsule's band never crosses its centre.
+  static double edgeBandFor(LiquidGlassProfile p, double radius, Size size) =>
+      math.min(p.depth * radius, math.min(size.width, size.height) / 2);
+
   List<double> toFloats(Size size) {
     final dpr = devicePixelRatio;
     final p = profile;
+    final band = edgeBandFor(p, radius, size);
     return <double>[
       size.width * dpr,
       size.height * dpr,
       radius * dpr,
-      p.edgeBand * dpr,
-      p.refraction * dpr,
+      band * dpr,
+      p.distortion * band * dpr,
       p.dispersion,
       p.saturation,
       p.brightness,
@@ -76,6 +84,11 @@ class LiquidGlassUniforms {
       DepthTokens.liquidAdaptiveRadius * dpr,
       p.rimHairline,
       p.bottomLight,
+      p.sideLight,
+      p.volumeSide,
+      p.volumeEnds,
+      p.lumaTarget,
+      p.lumaMix,
     ];
   }
 

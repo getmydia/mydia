@@ -9,6 +9,11 @@ import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../../core/theme/liquid_glass/liquid_glass_uniforms.dart';
 import 'glass_pointer.dart';
 
+/// Smallest outer blur sigma, logical px. A zero-sigma blur layer is a no-op
+/// that leaves the nested lens an empty texture (the clear profile rendered
+/// black), and 0.5 is imperceptible.
+const double kLiquidGlassMinBlurSigma = 0.5;
+
 /// The Liquid Glass backdrop: bends, frosts and lights what is behind
 /// [child]. Must sit inside a clip shaped like the surface (`GlassSurface`
 /// puts it in a `ClipRRect`), or the backdrop pass covers the screen.
@@ -127,11 +132,9 @@ class RenderLiquidGlass extends RenderProxyBox {
       return;
     }
     final backdrop = layer ??= BackdropFilterLayer();
+    final sigma = effectiveBlurSigma(_uniforms.profile);
     backdrop
-      ..filter = ui.ImageFilter.blur(
-        sigmaX: _uniforms.profile.blurSigma,
-        sigmaY: _uniforms.profile.blurSigma,
-      )
+      ..filter = ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma)
       // A grouped blur reads the group's shared backdrop, and the lens nested
       // in it then no longer finds the surface centred in its input: the rim
       // and highlights land against the wrong bounds, washing the surface out
@@ -140,6 +143,13 @@ class RenderLiquidGlass extends RenderProxyBox {
       ..backdropKey = LiquidGlassSupport.program == null ? _backdropKey : null;
     context.pushLayer(backdrop, _paintLens, offset);
   }
+
+  /// The outer blur's sigma for [p], never below [kLiquidGlassMinBlurSigma].
+  @visibleForTesting
+  static double effectiveBlurSigma(LiquidGlassProfile p) =>
+      p.blurSigma < kLiquidGlassMinBlurSigma
+          ? kLiquidGlassMinBlurSigma
+          : p.blurSigma;
 
   final LayerHandle<BackdropFilterLayer> _lens = LayerHandle();
 

@@ -5,7 +5,10 @@
 // and blur are the identity over a uniform frame, saturation clamps at
 // white, brightness is modelled as each profile's lift of the grey
 // (clamped at white), and the specular only adds light at the rim, away
-// from glyphs. All presets are dark, so white is the worst backdrop. Text
+// from glyphs. The model lifts only, which stays conservative: the shader's
+// luminosity wash pulls luminance toward 0.1, so over the bright backdrops
+// that set the worst case it only darkens. It can lift near-black, but only
+// up to 0.1 times lumaMix, never above 0.1. All presets are dark, so white is the worst backdrop. Text
 // holds WCAG SC 1.4.3 (4.5:1), icons and secondary text SC 1.4.11 (3:1).
 
 import 'package:flutter/material.dart';
@@ -13,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/ambient_tint/ambient_tint_colors.dart';
 import 'package:player/core/theme/contrast.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_adaptive.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/theme_preset.dart';
@@ -38,25 +42,25 @@ void main() {
       (t) => t.ground,
       DepthTokens.liquidChromeTintOpacity,
       DepthTokens.liquidChromeAdaptiveMax,
-      DepthTokens.liquidBrightness,
+      LiquidGlassProfile.lens.brightness,
     ),
     'chrome (surface)': (
       (t) => t.surface,
       DepthTokens.liquidChromeTintOpacity,
       DepthTokens.liquidChromeAdaptiveMax,
-      DepthTokens.liquidBrightness,
+      LiquidGlassProfile.lens.brightness,
     ),
     'sidebar': (
       (t) => t.surface,
       DepthTokens.liquidChromeTintOpacity,
       DepthTokens.liquidChromeAdaptiveMax,
-      DepthTokens.liquidPanelBrightness,
+      LiquidGlassProfile.panel.brightness,
     ),
     'modal': (
       (t) => t.surface,
       DepthTokens.liquidModalTintOpacity,
       DepthTokens.liquidModalAdaptiveMax,
-      DepthTokens.liquidPanelBrightness,
+      LiquidGlassProfile.panel.brightness,
     ),
   };
 
@@ -138,8 +142,8 @@ void main() {
               base: DepthTokens.liquidControlTintOpacity,
               max: DepthTokens.liquidControlAdaptiveMax,
               backdropLuma: v);
-          final bg =
-              _overGrey(tint.surface, alpha, v, DepthTokens.liquidBrightness);
+          final bg = _overGrey(
+              tint.surface, alpha, v, LiquidGlassProfile.lens.brightness);
           expect(
               contrastRatio(palette.textPrimary, bg), greaterThanOrEqualTo(3.0),
               reason: 'icon at grey $v');
@@ -154,8 +158,8 @@ void main() {
               base: DepthTokens.liquidControlTintOpacity,
               max: DepthTokens.liquidControlAdaptiveMax,
               backdropLuma: v);
-          final bg =
-              _overGrey(tint.surface, alpha, v, DepthTokens.liquidBrightness);
+          final bg = _overGrey(
+              tint.surface, alpha, v, LiquidGlassProfile.lens.brightness);
           expect(contrastRatio(Colors.white, bg), greaterThanOrEqualTo(4.5),
               reason: 'label at grey $v');
         }

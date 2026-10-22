@@ -7,6 +7,7 @@ import 'package:player/core/theme/liquid_glass/liquid_glass_uniforms.dart';
 void main() {
   test('packs uniforms in shader order, scaled to physical pixels', () {
     const tint = Color(0x80102030);
+    const p = LiquidGlassProfile.lens;
     const u = LiquidGlassUniforms(
       devicePixelRatio: 2,
       radius: 20,
@@ -14,23 +15,48 @@ void main() {
       light: Offset(0.5, 1),
       specularBoost: 0.1,
     );
+    final band = LiquidGlassUniforms.edgeBandFor(p, 20, const Size(100, 40));
+    expect(band, p.depth * 20);
     expect(u.toFloats(const Size(100, 40)).sublist(0, 16), [
       200, 80, // uSurface
       40, // uRadius
-      DepthTokens.liquidEdgeBand * 2,
-      DepthTokens.liquidRefraction * 2,
-      DepthTokens.liquidDispersion,
-      DepthTokens.liquidSaturation,
-      DepthTokens.liquidBrightness,
-      DepthTokens.liquidSpecular + 0.1,
-      DepthTokens.liquidRimWidth * 2,
+      band * 2, // uEdge
+      p.distortion * band * 2, // uRefraction
+      p.dispersion,
+      p.saturation,
+      p.brightness,
+      p.specular + 0.1,
+      p.rimWidth * 2,
       0.5, 1, // uLight
       tint.r, tint.g, tint.b, tint.a,
     ]);
   });
 
+  test('edge band is capped at half the short side', () {
+    expect(
+      LiquidGlassUniforms.edgeBandFor(
+          LiquidGlassProfile.panel, 1000, const Size(300, 40)),
+      20,
+    );
+  });
+
+  test('appends the kit lighting terms after the existing uniforms', () {
+    const p = LiquidGlassProfile.panel;
+    const u = LiquidGlassUniforms(
+        devicePixelRatio: 1, radius: 34, tint: Color(0x80000000), profile: p);
+    final floats = u.toFloats(const Size(300, 200));
+    expect(floats.sublist(25), [
+      p.sideLight,
+      p.volumeSide,
+      p.volumeEnds,
+      p.lumaTarget,
+      p.lumaMix,
+    ]);
+  });
+
   test('appends glow, adaptive, press and rim uniforms after the tint', () {
     const tint = Color(0x80102030);
+    const p = LiquidGlassProfile.lens;
     const u = LiquidGlassUniforms(
       devicePixelRatio: 2,
       radius: 20,
@@ -39,17 +65,17 @@ void main() {
       glow: 0.3,
     );
     final floats = u.toFloats(const Size(100, 40));
-    expect(floats, hasLength(25));
-    expect(floats.sublist(16), [
-      DepthTokens.liquidInnerGlow,
+    expect(floats, hasLength(30));
+    expect(floats.sublist(16, 25), [
+      p.innerGlow,
       0.7,
       DepthTokens.liquidAdaptiveLumaLow,
       DepthTokens.liquidAdaptiveLumaHigh,
       0.3,
       DepthTokens.liquidPressGlowRadius,
       DepthTokens.liquidAdaptiveRadius * 2, // uAdaptRadius
-      DepthTokens.liquidRimHairline,
-      DepthTokens.liquidBottomLight,
+      p.rimHairline,
+      p.bottomLight,
     ]);
   });
 
@@ -97,26 +123,25 @@ void main() {
     expect(a, isNot(c));
   });
 
-  test('the panel profile drops the lens and keeps a soft top rim', () {
-    const tint = Color(0x80102030);
+  test('the panel profile refracts but is not interactive', () {
+    const p = LiquidGlassProfile.panel;
     const u = LiquidGlassUniforms(
       devicePixelRatio: 2,
       radius: 20,
-      tint: tint,
-      profile: LiquidGlassProfile.panel,
+      tint: Color(0x80102030),
+      profile: p,
     );
     final f = u.toFloats(const Size(100, 40));
-    expect(f, hasLength(25));
-    expect(f[3], DepthTokens.liquidEdgeBand * 2); // uEdge
-    expect(f[4], 0); // uRefraction
-    expect(f[5], 0); // uDispersion
-    expect(f[6], DepthTokens.liquidPanelSaturation);
-    expect(f[7], DepthTokens.liquidPanelBrightness);
-    expect(f[8], DepthTokens.liquidPanelSpecular);
-    expect(f[9], DepthTokens.liquidPanelRimWidth * 2);
-    expect(f[16], 0); // uInnerGlow
-    expect(f[23], DepthTokens.liquidPanelRimHairline);
-    expect(f[24], 0); // uBottomLight
+    expect(f, hasLength(30));
+    expect(p.distortion, greaterThan(0));
+    expect(p.interactive, isFalse);
+    expect(f[4], greaterThan(0)); // uRefraction
+    expect(f[6], p.saturation);
+    expect(f[7], p.brightness);
+    expect(f[8], p.specular);
+    expect(f[16], p.innerGlow);
+    expect(f[23], p.rimHairline);
+    expect(f[24], p.bottomLight);
   });
 
   test('the lens profile is the default', () {

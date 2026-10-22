@@ -26,8 +26,8 @@ void main() {
     expect(
       (layer! as BackdropFilterLayer).filter,
       ui.ImageFilter.blur(
-        sigmaX: DepthTokens.liquidBlurSigma,
-        sigmaY: DepthTokens.liquidBlurSigma,
+        sigmaX: LiquidGlassProfile.lens.blurSigma,
+        sigmaY: LiquidGlassProfile.lens.blurSigma,
       ),
     );
     // No shader program: no nested lens layer anywhere under the blur.
@@ -43,6 +43,28 @@ void main() {
       }
     }
     expect(nested, isFalse);
+  });
+
+  testWidgets('the clear profile still pushes a non-identity blur layer',
+      (tester) async {
+    await tester.pumpWidget(_host(const LiquidGlassFilter(
+      radius: 12,
+      tint: Color(0xA0000000),
+      profile: LiquidGlassProfile.clear,
+      child: SizedBox(width: 80, height: 40),
+    )));
+    final render =
+        tester.renderObject<RenderLiquidGlass>(find.byType(LiquidGlassFilter));
+    expect(LiquidGlassProfile.clear.blurSigma, 0);
+    expect(RenderLiquidGlass.effectiveBlurSigma(LiquidGlassProfile.clear),
+        kLiquidGlassMinBlurSigma);
+    expect(
+      (render.debugLayer! as BackdropFilterLayer).filter,
+      ui.ImageFilter.blur(
+        sigmaX: kLiquidGlassMinBlurSigma,
+        sigmaY: kLiquidGlassMinBlurSigma,
+      ),
+    );
   });
 
   testWidgets('hover alone gives the hover specular boost', (tester) async {
@@ -167,8 +189,8 @@ void main() {
     expect(
       (render.debugLayer! as BackdropFilterLayer).filter,
       ui.ImageFilter.blur(
-        sigmaX: DepthTokens.liquidPanelBlurSigma,
-        sigmaY: DepthTokens.liquidPanelBlurSigma,
+        sigmaX: LiquidGlassProfile.panel.blurSigma,
+        sigmaY: LiquidGlassProfile.panel.blurSigma,
       ),
     );
     expect(render.uniforms.profile, same(LiquidGlassProfile.panel));
