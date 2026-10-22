@@ -246,7 +246,6 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
     """
   end
 
-  # Only the events this download has reached, oldest first.
   defp copied_placement(%{metadata: %{"import_placement" => %{"method" => "copy"} = p}}), do: p
   defp copied_placement(_download), do: nil
 
@@ -259,6 +258,7 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
     do:
       "The download and library folders are on different filesystems, so hardlinks are not possible."
 
+  # Only the events this download has reached, oldest first.
   defp timeline_events(download) do
     [
       {"grabbed", "Grabbed", download.inserted_at, "hero-arrow-down-tray",
