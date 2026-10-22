@@ -78,7 +78,7 @@ defmodule Mydia.Accounts.UserPreference do
   """
   def time_zone(%__MODULE__{preferences: prefs}), do: Map.get(prefs || %{}, "time_zone")
 
-  @doc "The user's clock: `\"auto\"`, `\"12\"` or `\"24\"`."
+  @doc ~S|The user's clock: `"auto"`, `"12"` or `"24"`.|
   def clock_format(%__MODULE__{preferences: prefs}),
     do: Map.get(prefs || %{}, "clock_format", @defaults["clock_format"])
 
