@@ -6,7 +6,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   import MydiaWeb.MediaLive.Show.Formatters
   import MydiaWeb.Formatters, only: [format_file_size: 1]
   import MydiaWeb.MediaLive.Show.Helpers
-
   import MydiaWeb.MediaLive.Show.AudioTrackComponents, only: [audio_tracks: 1, shorten_codec: 1]
 
   alias MydiaWeb.MediaLive.Show.LibraryComponents
