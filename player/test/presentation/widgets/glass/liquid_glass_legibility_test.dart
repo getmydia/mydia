@@ -1,12 +1,12 @@
 // The Liquid Glass legibility contract, computed from the tokens.
 //
 // Worst case is the tint after adaptation over a pure-white backdrop: the
-// backdrop luma is 1, so the alpha is the role's adaptive max. Refraction and
-// blur are the identity over a uniform frame, saturation clamps at white,
-// brightness is modelled as each profile's lift of the grey (clamped at
-// white), and the specular only adds light at the rim, away from glyphs. All
-// presets are dark, so white is the worst backdrop. Text holds
-// WCAG SC 1.4.3 (4.5:1), icons and secondary text SC 1.4.11 (3:1).
+// backdrop luma is 1, so the alpha is the role's adaptive max. Refraction
+// and blur are the identity over a uniform frame, saturation clamps at
+// white, brightness is modelled as each profile's lift of the grey
+// (clamped at white), and the specular only adds light at the rim, away
+// from glyphs. All presets are dark, so white is the worst backdrop. Text
+// holds WCAG SC 1.4.3 (4.5:1), icons and secondary text SC 1.4.11 (3:1).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

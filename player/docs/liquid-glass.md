@@ -85,9 +85,8 @@ setting, gates the design language: glass controls instead of Material ones.
 `GlassSurface` takes the Liquid Glass recipe only when
 `GlassStyle.of(context)` and `LiquidGlassSupport.available` are both true.
 Without the shader, Liquid Glass means the design language on the frosted
-recipe. `GlassSurface.appBar`, `.chrome`, `.sidebar`, `.modal` and `.control` then
-pick
-the recipe:
+recipe. `GlassSurface.appBar`, `.chrome`, `.sidebar`, `.modal` and
+`.control` then pick the recipe:
 
 - Reduce Transparency on: an opaque fill, no backdrop pass.
 - Shader loaded: Liquid Glass, with a stronger tint and a visible rim under

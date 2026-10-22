@@ -29,8 +29,8 @@ enum GlassTint { ground, surface }
 /// [DepthTokens] (R2) rather than per-call literals.
 ///
 /// Use the named constructors ([GlassSurface.appBar], [GlassSurface.modal],
-/// [GlassSurface.chrome], [GlassSurface.control], [GlassSurface.hoverOverlay],
-/// [GlassSurface.faux], [GlassSurface.osd]) to
+/// [GlassSurface.chrome], [GlassSurface.sidebar], [GlassSurface.control],
+/// [GlassSurface.hoverOverlay], [GlassSurface.faux], [GlassSurface.osd]) to
 /// reproduce the established visual treatments; the unnamed constructor is
 /// available for bespoke surfaces.
 ///
@@ -39,13 +39,17 @@ enum GlassTint { ground, surface }
 /// rendering pass (uses [BackdropFilter.grouped]). Faux surfaces ignore
 /// [grouped] — there is no backdrop pass to share.
 ///
-/// [GlassSurface.appBar], [GlassSurface.modal] and [GlassSurface.chrome]
-/// follow the ambient tint ([AmbientTint]); faux, hoverOverlay and osd do not.
+/// [GlassSurface.appBar], [GlassSurface.modal], [GlassSurface.chrome] and
+/// [GlassSurface.sidebar] follow the ambient tint ([AmbientTint]); faux,
+/// hoverOverlay and osd do not.
 ///
 /// On Liquid Glass, [GlassSurface.appBar], [GlassSurface.chrome],
-/// [GlassSurface.modal] and [GlassSurface.control] take the Liquid Glass recipe
-/// (`LiquidGlassFilter`) when `LiquidGlassSupport.available`, and an opaque
-/// fill when Reduce Transparency is on. Chrome, modal and control tints adapt
+/// [GlassSurface.sidebar], [GlassSurface.modal] and [GlassSurface.control]
+/// take the Liquid Glass recipe (`LiquidGlassFilter`) when
+/// `LiquidGlassSupport.available`, and an opaque fill when Reduce
+/// Transparency is on. [GlassSurface.modal] and [GlassSurface.sidebar] take
+/// the panel profile (`LiquidGlassProfile.panel`), the rest the lens.
+/// Chrome, sidebar, modal and control tints adapt
 /// to the backdrop up to a per-role maximum ([liquidAdaptiveMax]); a white
 /// prominent control never adapts. The control also casts
 /// [DepthTokens.liquidControlShadow]. The app bar is not glass but Apple's
@@ -200,7 +204,8 @@ class GlassSurface extends StatelessWidget {
 
   /// The floating sidebar and drawer: [GlassSurface.chrome]'s recipe on the
   /// panel Liquid Glass profile, so a full-height pane reads as frosted glass
-  /// rather than a lit lens.
+  /// rather than a lit lens. Keep its tint, opacity and blur in step with
+  /// [GlassSurface.chrome].
   const GlassSurface.sidebar({
     Key? key,
     double opacity = DepthTokens.chromeFillOpacity,
