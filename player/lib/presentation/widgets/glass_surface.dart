@@ -93,11 +93,10 @@ class GlassSurface extends StatelessWidget {
   final GlassTint? tint;
   final double tintOpacity;
 
-  /// Tint opacity on the Liquid Glass recipe. Null means
-  /// this surface never takes it: only [GlassSurface.appBar],
-  /// [GlassSurface.chrome], [GlassSurface.sidebar], [GlassSurface.modal] and
-  /// [GlassSurface.control] set it, so the OSD, faux and hover overlay are excluded by
-  /// construction.
+  /// Tint opacity on the Liquid Glass recipe. Null means this surface never
+  /// takes it: only [GlassSurface.appBar], [GlassSurface.chrome],
+  /// [GlassSurface.sidebar], [GlassSurface.modal] and [GlassSurface.control]
+  /// set it, so the OSD, faux and hover overlay are excluded by construction.
   final double? liquidTintOpacity;
 
   /// Upper bound the Liquid Glass tint may adapt to; null keeps it fixed.

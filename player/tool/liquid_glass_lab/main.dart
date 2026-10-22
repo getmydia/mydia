@@ -25,6 +25,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 
@@ -141,9 +142,11 @@ class _LabState extends State<_Lab> {
                 left: 40,
                 width: 320,
                 height: 200,
+                // A dialog: the panel profile.
                 child: _glass(28, const Color(0xFF101014),
                     DepthTokens.liquidModalTintOpacity,
-                    adaptiveMax: DepthTokens.liquidModalAdaptiveMax),
+                    adaptiveMax: DepthTokens.liquidModalAdaptiveMax,
+                    profile: LiquidGlassProfile.panel),
               ),
               // A white strip: the worst case for white labels. Both
               // controls carry a white label so legibility is visible.
@@ -225,6 +228,7 @@ class _LabState extends State<_Lab> {
     Color base,
     double opacity, {
     double? adaptiveMax,
+    LiquidGlassProfile profile = LiquidGlassProfile.lens,
     Widget child = const SizedBox.expand(),
   }) =>
       ClipRRect(
@@ -233,6 +237,7 @@ class _LabState extends State<_Lab> {
           radius: radius,
           tint: base.withValues(alpha: opacity),
           adaptiveTintMax: adaptiveMax,
+          profile: profile,
           child: child,
         ),
       );
