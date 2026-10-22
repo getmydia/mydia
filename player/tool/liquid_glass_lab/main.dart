@@ -223,8 +223,14 @@ class _LabState extends State<_Lab> {
                 left: 110,
                 width: 37,
                 height: 24,
-                child: _glass(12, const Color(0xFFFFFFFF), 0.0,
-                    profile: LiquidGlassProfile.clear),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: LiquidGlassProfile.clear.shadow,
+                  ),
+                  child: _glass(12, const Color(0xFFFFFFFF), 0.0,
+                      profile: LiquidGlassProfile.clear),
+                ),
               ),
               Positioned(
                 top: 650,

@@ -114,10 +114,14 @@ void main() {
   float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
   color = clamp(mix(vec3(luma), color, uSaturation) + vec3(uBrightness),
                 0.0, 1.0);
-  // Luminosity wash (the kit's luminosity-blended fill): keep the hue, pull
-  // the luminance toward uLumaTarget.
-  float l = max(dot(color, vec3(0.2126, 0.7152, 0.0722)), 1e-3);
-  color = clamp(mix(color, color * (uLumaTarget / l), uLumaMix), 0.0, 1.0);
+  // Luminosity wash (the kit's luminosity-blended fill): pull the luminance
+  // toward uLumaTarget, keeping the hue by scaling the colour. Near black
+  // scaling has no hue to keep, so it blends to a neutral grey instead.
+  float l = dot(color, vec3(0.2126, 0.7152, 0.0722));
+  vec3 washed = mix(vec3(uLumaTarget),
+                    color * (uLumaTarget / max(l, 1e-3)),
+                    smoothstep(0.0, 0.05, l));
+  color = clamp(mix(color, washed, uLumaMix), 0.0, 1.0);
   // Adaptive tint: the base alpha over dark content, rising to uAdaptiveMax
   // over bright content so the label keeps its contrast (mirrored by
   // liquidAdaptiveAlpha in Dart).

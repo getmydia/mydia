@@ -364,32 +364,40 @@ class GlassSurface extends StatelessWidget {
             : Border.all(
                 color: context.palette.border.withValues(alpha: alpha),
               ));
+    final cast = _castShadows(context);
     if (liquidOpacity != null && base != null) {
       final access = GlassAccessibilityScope.of(context);
       if (access.reduceTransparency) {
-        // The lift outlives the glass: on Liquid Glass, Reduce Transparency
-        // keeps the profile shadow, except on the scroll edge, which casts
-        // none. The Frosted style keeps `shadows` as passed.
-        final lift =
-            shadows.isEmpty && !liquidScrollEdge && GlassStyle.of(context);
         return _withShadow(
           _solid(base.withValues(alpha: 1), resolvedBorder),
-          lift ? liquidProfile.shadow : shadows,
+          cast,
         );
       }
       if (GlassStyle.of(context) && LiquidGlassSupport.available) {
-        if (liquidScrollEdge) {
-          return _withShadow(_scrollEdge(context, base, access), shadows);
-        }
         return _withShadow(
-          _liquid(context, base, liquidOpacity, access),
-          shadows.isEmpty ? liquidProfile.shadow : shadows,
+          liquidScrollEdge
+              ? _scrollEdge(context, base, access)
+              : _liquid(context, base, liquidOpacity, access),
+          cast,
         );
       }
     }
     final fill = fillColor ??
         (gradient != null ? null : base?.withValues(alpha: tintOpacity));
-    return _withShadow(_surface(fill, resolvedBorder), shadows);
+    return _withShadow(_surface(fill, resolvedBorder), cast);
+  }
+
+  /// The shadows this surface casts. A Liquid Glass styled surface with no
+  /// [shadows] casts its profile's shadow on every branch it can take (glass,
+  /// Reduce Transparency solid, frosted fallback), so the lift survives when
+  /// the glass does not. The scroll edge casts none, and the Frosted style
+  /// keeps [shadows] as passed.
+  List<BoxShadow> _castShadows(BuildContext context) {
+    final lift = shadows.isEmpty &&
+        liquidTintOpacity != null &&
+        !liquidScrollEdge &&
+        GlassStyle.of(context);
+    return lift ? liquidProfile.shadow : shadows;
   }
 
   /// The surface's colour before opacity: [fillColor] or the ambient tint.

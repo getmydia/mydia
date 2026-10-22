@@ -326,6 +326,22 @@ void main() {
   });
 
   group('when Liquid Glass is not available', () {
+    testWidgets('a liquid-styled control still casts the lens shadow',
+        (tester) async {
+      LiquidGlassSupport.debugOverride = false;
+      await tester.pumpWidget(_host(GlassSurface.control(
+          borderRadius: BorderRadius.circular(24), child: _box)));
+      expect(find.byType(LiquidGlassFilter), findsNothing);
+      final box = tester.widget<DecoratedBox>(find
+          .descendant(
+            of: find.byType(GlassSurface),
+            matching: find.byType(DecoratedBox),
+          )
+          .first);
+      expect((box.decoration as BoxDecoration).boxShadow,
+          LiquidGlassProfile.lens.shadow);
+    });
+
     testWidgets('appBar keeps its frosted recipe', (tester) async {
       await tester.pumpWidget(_host(const GlassSurface.appBar(child: _box)));
       expect(find.byType(LiquidGlassFilter), findsNothing);

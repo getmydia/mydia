@@ -7,8 +7,8 @@
 // (clamped at white), and the specular only adds light at the rim, away
 // from glyphs. The model lifts only, which stays conservative: the shader's
 // luminosity wash pulls luminance toward 0.1, so over the bright backdrops
-// that set the worst case it only darkens, and it never lifts anything
-// above 0.1. All presets are dark, so white is the worst backdrop. Text
+// that set the worst case it only darkens. It can lift near-black, but only
+// up to 0.1 times lumaMix, never above 0.1. All presets are dark, so white is the worst backdrop. Text
 // holds WCAG SC 1.4.3 (4.5:1), icons and secondary text SC 1.4.11 (3:1).
 
 import 'package:flutter/material.dart';
