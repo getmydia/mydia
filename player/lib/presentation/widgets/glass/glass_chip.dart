@@ -63,9 +63,10 @@ class GlassChip extends StatelessWidget {
     final palette = context.palette;
     final foreground = selected ? palette.background : palette.textPrimary;
     const radius = BorderRadius.all(Radius.circular(_height / 2));
+    final onTap = onSelected == null ? null : () => onSelected(!selected);
     return GlassHitTarget(
         height: _height,
-        onTap: onSelected == null ? null : () => onSelected(!selected),
+        onTap: onTap,
         child: Semantics(
           key: chipKey,
           button: true,

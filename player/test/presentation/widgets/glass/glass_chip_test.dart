@@ -25,6 +25,39 @@ void main() {
         greaterThanOrEqualTo(LiquidGeometry.minHitTarget));
   });
 
+  testWidgets('in a 48pt chip row the glass is still 34 with a 44pt+ target',
+      (tester) async {
+    bool? last;
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+      home: Scaffold(
+        body: SizedBox(
+          height: 48,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: GlassChip(
+                  label: const Text('Sort A'),
+                  selected: false,
+                  onSelected: (v) => last = v,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ));
+    expect(tester.getSize(find.byType(GlassSurface)).height,
+        LiquidGeometry.buttonMedium);
+    expect(tester.getSize(find.byType(GlassChip)).height,
+        greaterThanOrEqualTo(LiquidGeometry.minHitTarget));
+    final top = tester.getTopLeft(find.byType(GlassSurface));
+    await tester.tapAt(top + const Offset(20, -4));
+    expect(last, isTrue);
+  });
+
   testWidgets('Frosted chip keeps its Material height', (tester) async {
     await tester.pumpWidget(_host(
       GlassChip(
