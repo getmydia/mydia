@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 import 'toast_models.dart';
@@ -30,8 +31,21 @@ class ToastPill extends StatelessWidget {
   static const BorderRadius _radius =
       BorderRadius.all(Radius.circular(ToastMetrics.radius));
 
+  /// Liquid Glass: a capsule. The pill is held at [liquidMinHeight] so its
+  /// radius is half its height for a single line.
+  static const double liquidMinHeight = 48;
+  static const BorderRadius liquidRadius =
+      BorderRadius.all(Radius.circular(liquidMinHeight / 2));
+
   static const double _padHorizontal = 16;
   static const double _padVertical = 12;
+
+  /// Two more points above and below, so a single text line lands on
+  /// [liquidMinHeight] and sits centred in the capsule.
+  static const EdgeInsets _liquidPadding = EdgeInsets.symmetric(
+    horizontal: _padHorizontal,
+    vertical: _padVertical + 2,
+  );
 
   static const EdgeInsets _padding = EdgeInsets.symmetric(
     horizontal: _padHorizontal,
@@ -59,6 +73,8 @@ class ToastPill extends StatelessWidget {
     final palette = context.palette;
     final leading = _leading(palette);
     final action = entry.action;
+    final liquid = GlassStyle.of(context);
+    final shape = liquid ? liquidRadius : _radius;
     return Semantics(
       container: true,
       liveRegion: true,
@@ -68,14 +84,14 @@ class ToastPill extends StatelessWidget {
         child: DecoratedBox(
           // The shadow lives on an outer box because GlassSurface clips its
           // own blurred fill, the same split `BottomNav` uses.
-          decoration: const BoxDecoration(
-            borderRadius: _radius,
+          decoration: BoxDecoration(
+            borderRadius: shape,
             boxShadow: DepthTokens.chrome,
           ),
           child: GlassSurface(
             blurSigma: DepthTokens.blurChrome,
             fillColor: fill(palette),
-            borderRadius: _radius,
+            borderRadius: shape,
             border: Border.all(
               color: DepthTokens.rimColor,
               width: DepthTokens.rimWidth,
@@ -85,8 +101,11 @@ class ToastPill extends StatelessWidget {
             // action button's ink.
             child: Material(
               type: MaterialType.transparency,
-              child: Padding(
-                padding: _padding,
+              child: Container(
+                constraints: BoxConstraints(
+                  minHeight: liquid ? liquidMinHeight : 0,
+                ),
+                padding: liquid ? _liquidPadding : _padding,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

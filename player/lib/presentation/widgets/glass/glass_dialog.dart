@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/depth_tokens.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
+import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
 import '../glass_surface.dart';
 
@@ -139,7 +140,7 @@ class _GlassDialogState extends State<GlassDialog> {
       shadowColor: Colors.transparent,
       elevation: 0,
       child: GlassSurface.modal(
-        borderRadius: BorderRadius.circular(DepthTokens.liquidDialogRadius),
+        borderRadius: BorderRadius.circular(LiquidGeometry.dialogRadius),
         child: Material(
           type: MaterialType.transparency,
           child: ConstrainedBox(

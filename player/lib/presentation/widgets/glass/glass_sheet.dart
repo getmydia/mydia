@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/liquid_glass/glass_style.dart';
+import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/ui/reduced_motion.dart';
 import '../glass_surface.dart';
 import 'glass_emergence.dart';
@@ -42,7 +43,9 @@ Future<T?> showGlassSheet<T>({
     builder: (sheetContext) {
       final route = ModalRoute.of(sheetContext);
       final body = GlassSurface.modal(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(LiquidGeometry.sheetRadius),
+        ),
         child: Material(
           type: MaterialType.transparency,
           child: builder(sheetContext),
