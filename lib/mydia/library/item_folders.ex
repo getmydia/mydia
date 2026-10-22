@@ -52,7 +52,7 @@ defmodule Mydia.Library.ItemFolders do
 
     media_files
     |> Enum.filter(&(is_nil(&1.trashed_at) and is_nil(&1.extra_kind)))
-    |> Enum.flat_map(&anchor_folder/1)
+    |> Enum.flat_map(&List.wrap(folder_of(&1)))
     |> Enum.uniq_by(& &1.absolute)
     |> drop_nested()
     |> Enum.reject(&holds_library_root?(&1, roots))
@@ -294,23 +294,26 @@ defmodule Mydia.Library.ItemFolders do
       not SampleDetector.excluded?(SampleDetector.detect(path))
   end
 
-  defp anchor_folder(%MediaFile{library_path: %LibraryPath{path: root} = library_path} = file)
-       when is_binary(root) do
+  @doc """
+  The folder that names the media this file belongs to, or nil for a file
+  loose in the library root or with no loaded library path.
+  """
+  @spec folder_of(MediaFile.t()) :: Folder.t() | nil
+  def folder_of(%MediaFile{library_path: %LibraryPath{path: root} = library_path} = file)
+      when is_binary(root) do
     with absolute when is_binary(absolute) <- MediaFile.storage_path(file),
          %{anchor_path: relative} when relative != "" <- PathAnchor.anchor_for(absolute, root) do
-      [
-        %Folder{
-          library_path: library_path,
-          relative: relative,
-          absolute: Path.join(root, relative)
-        }
-      ]
+      %Folder{
+        library_path: library_path,
+        relative: relative,
+        absolute: Path.join(root, relative)
+      }
     else
-      _ -> []
+      _ -> nil
     end
   end
 
-  defp anchor_folder(%MediaFile{}), do: []
+  def folder_of(%MediaFile{}), do: nil
 
   defp drop_nested(folders) do
     Enum.reject(folders, fn folder ->
