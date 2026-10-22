@@ -12,9 +12,12 @@ class CastPill extends StatelessWidget {
 
   static const radius = BorderRadius.all(Radius.circular(18));
 
-  /// Liquid Glass: a capsule. The pill is held at [liquidMinHeight] so its
-  /// radius is half its height whatever the state inside it.
-  static const double liquidMinHeight = 56;
+  static const double _padding = 8;
+
+  /// Liquid Glass: a capsule the height of the standard row, a 48 point
+  /// action button (the tallest part of a row) inside [_padding] on both
+  /// sides. The pill is held at that minimum so its radius is half its height.
+  static const double liquidMinHeight = kMinInteractiveDimension + 2 * _padding;
   static const liquidRadius =
       BorderRadius.all(Radius.circular(liquidMinHeight / 2));
 
@@ -29,7 +32,7 @@ class CastPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final liquid = GlassStyle.of(context);
     final shape = liquid ? liquidRadius : radius;
-    final body = Padding(padding: const EdgeInsets.all(8), child: child);
+    final body = Padding(padding: const EdgeInsets.all(_padding), child: child);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: DockGlass.sideMargin),
       child: DecoratedBox(

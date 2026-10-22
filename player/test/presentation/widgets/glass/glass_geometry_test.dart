@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/liquid_glass/liquid_geometry.dart';
 import 'package:player/core/theme/palette.dart';
+import 'package:player/presentation/widgets/cast_bar/cast_bar_parts.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_pill.dart';
 import 'package:player/presentation/widgets/glass/glass_dialog.dart';
 import 'package:player/presentation/widgets/glass/glass_popover.dart';
@@ -101,12 +102,30 @@ void main() {
     );
   });
 
-  testWidgets('Liquid Glass: the cast pill is a capsule', (tester) async {
+  testWidgets('Liquid Glass: a standard cast row is a true capsule',
+      (tester) async {
     await tester.pumpWidget(_host(
-      const CastPill(child: SizedBox(width: 200, height: 24)),
+      SizedBox(
+        width: 400,
+        child: CastPill(
+          child: CastBarRow(
+            leading: const Icon(Icons.cast_connected, size: 34),
+            title: 'Living room',
+            status: 'Playing',
+            dot: CastDot.live,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
       liquid: true,
     ));
     final height = tester.getSize(find.byType(GlassSurface)).height;
+    expect(height, CastPill.liquidMinHeight);
     expect(_radiusOf(tester), BorderRadius.circular(height / 2));
   });
 
@@ -123,6 +142,10 @@ void main() {
         .pumpWidget(_host(const ToastPill(entry: _toast), liquid: true));
     final height = tester.getSize(find.byType(GlassSurface)).height;
     expect(_radiusOf(tester), BorderRadius.circular(height / 2));
+    expect(
+      tester.getCenter(find.text('Saved')).dy,
+      tester.getCenter(find.byType(GlassSurface)).dy,
+    );
   });
 
   testWidgets('Frosted: the toast keeps radius 22', (tester) async {

@@ -99,46 +99,57 @@ class ToastPill extends StatelessWidget {
                   minHeight: liquid ? liquidMinHeight : 0,
                 ),
                 padding: _padding,
+                // The outer Row centres the content in the height the minimum
+                // forces; it stays as narrow as its content.
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (leading != null) ...[
-                      leading,
-                      const SizedBox(width: 10),
-                    ],
                     Flexible(
-                      child: Text(
-                        entry.message,
-                        maxLines: ToastMetrics.maxLines,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: palette.textPrimary,
-                          fontSize: 14,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (leading != null) ...[
+                            leading,
+                            const SizedBox(width: 10),
+                          ],
+                          Flexible(
+                            child: Text(
+                              entry.message,
+                              maxLines: ToastMetrics.maxLines,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: palette.textPrimary,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          if (action != null) ...[
+                            const SizedBox(width: 12),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                  maxWidth: _maxActionWidth),
+                              child: TextButton(
+                                key: const Key('toast-action'),
+                                onPressed: onAction,
+                                style: TextButton.styleFrom(
+                                  foregroundColor: palette.primary,
+                                  minimumSize: const Size(0, 32),
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 8),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  action.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    if (action != null) ...[
-                      const SizedBox(width: 12),
-                      ConstrainedBox(
-                        constraints:
-                            const BoxConstraints(maxWidth: _maxActionWidth),
-                        child: TextButton(
-                          key: const Key('toast-action'),
-                          onPressed: onAction,
-                          style: TextButton.styleFrom(
-                            foregroundColor: palette.primary,
-                            minimumSize: const Size(0, 32),
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: Text(
-                            action.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
