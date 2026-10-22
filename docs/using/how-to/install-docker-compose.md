@@ -213,6 +213,15 @@ Organize your host directory structure:
 - Zero duplicate storage space
 - Files remain seeding while available in your library
 
+Two mounts of the same disk are not enough. Docker treats `/downloads` and
+`/media` as separate filesystems even when both come from one host drive, so a
+hardlink between them fails and Mydia copies instead. The download client must
+also report paths under the shared mount: if it still saves to `/downloads`,
+Mydia reads the file through that old mount and copies it.
+
+When an import is copied rather than hardlinked, the download's details panel on
+the Downloads page says so and explains which of the two cases applies.
+
 ## User/Group Identifiers
 
 To avoid permission issues, specify the user `PUID` and group `PGID`:
