@@ -96,7 +96,7 @@ Our values:
 | Profile | `blurSigma` | `depth` | `distortion` | `saturation` | `brightness` | `lumaTarget` / `lumaMix` | `shadow` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `lens` | 3 | 0.8 | 0.4 | 1.0 | 0.1 | 0 / 0 | 0 8 15, black 4% |
-| `panel` | 15 | 0.9 | 0.3 | 1.2 | 0 | 0.1 / 0.6 | 0 18 48, black 45% |
+| `panel` | 15 | 0.9 | 0.3 | 1.2 | 0 | 0.1 / 0.3 | 0 18 48, black 45% |
 | `clear` | 0 | 0.4 | 0.08 | 1.0 | 0.02 | 0 / 0 | 0 2 8, black 15% (ours) |
 
 `blurSigma` is the kit's blur radius halved: a Gaussian sigma is about half
@@ -108,7 +108,8 @@ The lens's `brightness` lift stands in for the small grey wash. The panel's
 blend keeps the backdrop's hue and takes the fill's luminance, so the shader
 pulls the backdrop's luminance toward `lumaTarget` by `lumaMix` and leaves the
 hue alone. The kit's normal-blend part of the wash is the surface tint, which
-stays per role.
+stays per role. The panel takes the kit's Medium UI luminosity share, since the
+Large share plus our role tint read as an opaque slab.
 
 The kit's lighting is off. Its rim is drawn with stacked shadows that show
 through the translucent fill, and the shader's rim terms decode them:

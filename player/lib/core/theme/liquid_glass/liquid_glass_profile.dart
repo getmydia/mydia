@@ -60,7 +60,9 @@ class LiquidGlassProfile {
 
   /// Large UI in the kit: dialogs, sheets, popovers, menus, the login cards
   /// and the floating sidebar. Kit: blur 30, saturation 1.2, distortion 0.3,
-  /// depth 0.9, a grey 25 luminosity wash, shadow 0 18 48 at 45%.
+  /// depth 0.9, a grey 25 luminosity wash, shadow 0 18 48 at 45%. [lumaMix]
+  /// uses the Medium UI share: the Large share plus our role tint reads as an
+  /// opaque slab.
   static const LiquidGlassProfile panel = LiquidGlassProfile(
     blurSigma: 15,
     depth: 0.9,
@@ -69,7 +71,7 @@ class LiquidGlassProfile {
     saturation: 1.2,
     brightness: 0,
     lumaTarget: 0.1,
-    lumaMix: 0.6,
+    lumaMix: 0.3,
     specular: 0.45,
     rimWidth: 1.0,
     rimHairline: 0.4,

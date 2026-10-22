@@ -45,6 +45,28 @@ void main() {
     expect(nested, isFalse);
   });
 
+  testWidgets('the clear profile still pushes a non-identity blur layer',
+      (tester) async {
+    await tester.pumpWidget(_host(const LiquidGlassFilter(
+      radius: 12,
+      tint: Color(0xA0000000),
+      profile: LiquidGlassProfile.clear,
+      child: SizedBox(width: 80, height: 40),
+    )));
+    final render =
+        tester.renderObject<RenderLiquidGlass>(find.byType(LiquidGlassFilter));
+    expect(LiquidGlassProfile.clear.blurSigma, 0);
+    expect(RenderLiquidGlass.effectiveBlurSigma(LiquidGlassProfile.clear),
+        kLiquidGlassMinBlurSigma);
+    expect(
+      (render.debugLayer! as BackdropFilterLayer).filter,
+      ui.ImageFilter.blur(
+        sigmaX: kLiquidGlassMinBlurSigma,
+        sigmaY: kLiquidGlassMinBlurSigma,
+      ),
+    );
+  });
+
   testWidgets('hover alone gives the hover specular boost', (tester) async {
     await tester.pumpWidget(_host(const GlassPointer(
       hovered: true,
