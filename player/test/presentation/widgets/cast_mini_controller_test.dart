@@ -27,6 +27,7 @@ import 'package:player/presentation/widgets/cast_bar/cast_bar_parts.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_pill.dart';
 import 'package:player/presentation/widgets/cast_bar/dock_extents.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
+import 'package:player/presentation/widgets/glass/glass_slider.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 
 import '../../test_utils/dock_harness.dart' show kDockNavEntries;
@@ -553,7 +554,7 @@ void main() {
     );
 
     final slider =
-        tester.widget<Slider>(find.byKey(const Key('cast-bar-scrubber')));
+        tester.widget<GlassSlider>(find.byKey(const Key('cast-bar-scrubber')));
     expect(slider.onChanged, isNull,
         reason: 'an unknown duration must make the scrubber inert rather than '
             'seeking to fraction * -1s');
@@ -571,7 +572,7 @@ void main() {
     expect(find.textContaining('Reconnecting to'), findsOneWidget);
 
     final slider =
-        tester.widget<Slider>(find.byKey(const Key('cast-bar-scrubber')));
+        tester.widget<GlassSlider>(find.byKey(const Key('cast-bar-scrubber')));
     expect(slider.onChanged, isNull);
 
     for (final key in const [
@@ -671,7 +672,7 @@ void main() {
 
     final sliderFinder = find.byKey(const Key('cast-bar-scrubber'));
     expect(sliderFinder, findsOneWidget);
-    final startValue = tester.widget<Slider>(sliderFinder).value;
+    final startValue = tester.widget<GlassSlider>(sliderFinder).value;
 
     // Press down and drag right, but do not release yet.
     final gesture = await tester.startGesture(tester.getCenter(sliderFinder));
@@ -679,7 +680,7 @@ void main() {
     await gesture.moveBy(const Offset(120, 0));
     await tester.pump();
 
-    final draggedValue = tester.widget<Slider>(sliderFinder).value;
+    final draggedValue = tester.widget<GlassSlider>(sliderFinder).value;
     expect(draggedValue, isNot(closeTo(startValue, 0.01)),
         reason: 'the thumb must follow the drag');
     expect(harness.backend.seeks, isEmpty,
@@ -691,7 +692,7 @@ void main() {
     sessionController.add(initialSession);
     await tester.pump();
 
-    final midDragValue = tester.widget<Slider>(sliderFinder).value;
+    final midDragValue = tester.widget<GlassSlider>(sliderFinder).value;
     expect(midDragValue, draggedValue,
         reason: 'a position event mid-drag must not override the local '
             'drag position');
@@ -731,13 +732,13 @@ void main() {
     await tester.pump();
 
     final sliderFinder = find.byKey(const Key('cast-bar-scrubber'));
-    final startValue = tester.widget<Slider>(sliderFinder).value;
+    final startValue = tester.widget<GlassSlider>(sliderFinder).value;
 
     final gesture = await tester.startGesture(tester.getCenter(sliderFinder));
     await tester.pump();
     await gesture.moveBy(const Offset(120, 0));
     await tester.pump();
-    expect(tester.widget<Slider>(sliderFinder).value,
+    expect(tester.widget<GlassSlider>(sliderFinder).value,
         isNot(closeTo(startValue, 0.01)));
 
     // The session starts catching up while the finger is still down, and the
@@ -750,7 +751,8 @@ void main() {
     sessionController.add(initialSession);
     await tester.pump();
 
-    expect(tester.widget<Slider>(sliderFinder).value, closeTo(startValue, 1e-9),
+    expect(tester.widget<GlassSlider>(sliderFinder).value,
+        closeTo(startValue, 1e-9),
         reason: 'the interrupted drag must not outlive the sync');
     expect(harness.backend.seeks, isEmpty);
   });

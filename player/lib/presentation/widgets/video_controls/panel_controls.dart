@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 
 import '../../../core/player/video_scaling.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../glass/glass_slider.dart';
 import 'chrome_top_bar.dart' show scalingIcon, scalingTooltip;
 import 'control_button.dart';
 
@@ -111,7 +112,7 @@ class _VolumeSurfaceState extends State<VolumeSurface> {
                     thumbColor: Colors.white,
                     overlayColor: Colors.white.withValues(alpha: 0.2),
                   ),
-                  child: Slider(
+                  child: GlassSlider(
                     value: (widget.volume / 100.0).clamp(0.0, 1.0),
                     onChanged: (v) => widget.onVolumeChanged(v * 100.0),
                   ),
