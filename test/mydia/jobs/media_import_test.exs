@@ -1175,6 +1175,23 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
 
     @tag :tmp_dir
+    test "removes the job folder when save_path is reported through a path mapping",
+         %{tmp_dir: tmp_dir} do
+      {download, job_dir} = job_folder_import!(tmp_dir, :sabnzbd)
+
+      {:ok, _} =
+        Settings.create_path_mapping_config(%{
+          remote_prefix: "/remote/usenet",
+          local_prefix: Path.join(tmp_dir, "downloads")
+        })
+
+      assert {:ok, :imported} =
+               run_job_folder(download, "/remote/usenet/Quietwater.Harbor.2031.1080p")
+
+      refute File.exists?(job_dir)
+    end
+
+    @tag :tmp_dir
     test "removes the NZBGet job folder", %{tmp_dir: tmp_dir} do
       {download, job_dir} = job_folder_import!(tmp_dir, :nzbget)
 

@@ -374,9 +374,9 @@ defmodule Mydia.Jobs.MediaImport.Placement do
   # fails the job.
   @doc false
   def remove_job_folder(sources, %Args{} = args, download, library_type) do
-    save_path = args.save_path
-
     with true <- job_folder_candidate?(sources, args, download),
+         # Sources are rewritten through path mappings, so the folder must be too.
+         save_path = Discovery.mapped_path(args.save_path, download.id),
          true <- all_inside?(sources, save_path),
          false <- client_root?(save_path, download),
          false <- library_overlaps?(save_path),
@@ -411,7 +411,9 @@ defmodule Mydia.Jobs.MediaImport.Placement do
     Settings.list_library_paths()
     |> Enum.map(& &1.path)
     |> Enum.filter(&(is_binary(&1) and not String.starts_with?(&1, "s3://")))
-    |> Enum.any?(&(&1 == save_path or Dirs.inside?(&1, save_path)))
+    |> Enum.any?(
+      &(Dirs.normalize(&1) == Dirs.normalize(save_path) or Dirs.inside?(&1, save_path))
+    )
   end
 
   # Another job's media in the folder (a shared or misreported save path)
