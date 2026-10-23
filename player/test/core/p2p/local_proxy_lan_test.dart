@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
+import 'package:player/core/p2p/p2p_service.dart';
 
 /// The call site these tests hold the proxy as. Each test builds its own
 /// service, so one shared identity is enough to stand for "somebody needs
@@ -77,6 +80,27 @@ void main() {
 
       expect(Uri.parse(url).port, service.port);
       if (service.isLanAccessible) expect(url, startsWith(service.lanBaseUrl!));
+    });
+
+    test('a failed LAN bind does not leave the proxy claiming LAN access',
+        () async {
+      if (await LocalProxyService.resolveLanAddress() == null) return;
+      var binds = 0;
+      final service = LocalProxyService(P2pService(), bind: (address, port) {
+        if (++binds == 2) throw const SocketException('no sockets');
+        return HttpServer.bind(address, port);
+      });
+      await service.start(
+          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
+      addTearDown(service.shutdown);
+
+      await expectLater(
+          service.setLanAccess(true), throwsA(isA<SocketException>()));
+      await service.start(
+          owner: Object(), targetPeer: 'peer-1', target: 'macct');
+
+      expect(service.isLanAccessible, isFalse);
+      expect(service.lanBaseUrl, isNull);
     });
 
     test('requests without the token prefix are rejected when LAN-exposed',

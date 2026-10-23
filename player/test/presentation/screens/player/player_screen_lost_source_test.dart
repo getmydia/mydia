@@ -422,4 +422,62 @@ void main() {
       await tester.pump();
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
+
+  testWidgets('a heal to a new port while paused reopens and stays paused',
+      (tester) async {
+    await mockHttpResponse(() async {
+      await _mount(tester, container, decoder);
+      await _playTo75(tester, decoder);
+      await decoder.pause();
+      await tester.pump();
+
+      proxy.healEvents.add(ProxyHeal.reboundNewPort);
+      await tester.pump();
+      await _landReopen(tester, decoder, 2);
+      await tester.pump();
+
+      expect(decoder.opened, hasLength(2));
+      expect(decoder.state.playing, isFalse);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets('a heal during a switch is replayed once the switch ends',
+      (tester) async {
+    final switchStart = Completer<void>();
+    addTearDown(() {
+      if (!switchStart.isCompleted) switchStart.complete();
+    });
+    final streamingContainer = buildPlayerScreenContainer(
+      server: _server(directPlay: false, holdSwitchStart: switchStart),
+      connectionState: HarnessLink.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: proxy,
+    );
+    addTearDown(streamingContainer.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, streamingContainer, decoder);
+      await _playTo75(tester, decoder);
+      final binding =
+          tester.state(find.byType(PlayerScreen)) as RemotePlayerBinding;
+
+      unawaited(binding.seek(const Duration(seconds: 600)));
+      await tester.pump(const Duration(milliseconds: 100));
+      proxy.healEvents.add(ProxyHeal.reboundNewPort);
+      await tester.pump();
+      expect(decoder.opened, hasLength(1));
+
+      switchStart.complete();
+      await _landReopen(tester, decoder, 2);
+      await _landReopen(tester, decoder, 3);
+
+      expect(decoder.opened, hasLength(3));
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
 }

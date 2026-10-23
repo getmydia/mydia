@@ -454,6 +454,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// [_lostSourceWindow] shows the error instead of looping.
   DateTime? _lastLostSourceReopen;
   bool _reopeningLostSource = false;
+
+  /// A new-port heal arrived during a switch; replayed when the switch ends.
+  bool _pendingProxyHeal = false;
   StreamSubscription<ProxyHeal>? _proxyHealSubscription;
 
   static const _lostSourceWindow = Duration(seconds: 30);
@@ -2163,6 +2166,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// missing, or the widget was unmounted or `_playback` had already been
   /// replaced before the new source landed), `true` once it applied.
   Future<bool> _switchSource(PlaybackPlan plan, {required Duration at}) async {
+    try {
+      return await _runSwitchSource(plan, at: at);
+    } finally {
+      // A heal that moved the proxy while this switch was in flight found it
+      // dropped, though the switch may hold a URL from the old port.
+      if (_pendingProxyHeal && mounted && !_reopeningLostSource) {
+        _pendingProxyHeal = false;
+        _onProxyHeal(ProxyHeal.reboundNewPort);
+      }
+    }
+  }
+
+  Future<bool> _runSwitchSource(PlaybackPlan plan,
+      {required Duration at}) async {
     if (_switchingSource) return false;
     final playback = _playback;
     final player = _player;
@@ -3470,13 +3487,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // A heal alone must never produce an error: a source that has not played
     // yet belongs to mpv and the load paths, not to this recovery.
     if (!_playbackAdvanced || _lastGoodPosition == null) return;
-    _reopenLostSource('Media proxy moved to a new port');
+    if (_switchingSource) {
+      _pendingProxyHeal = true;
+      return;
+    }
+    // Only here is the player still loaded, so whether the viewer had paused
+    // is reliable; a lost source cannot say.
+    _reopenLostSource('Media proxy moved to a new port',
+        keepPaused: !_player!.state.playing);
   }
 
   /// Reopens the current file at [_lastGoodPosition] on the same plan, once
   /// per [_lostSourceWindow]; a second loss inside it shows the error page
   /// with its Retry.
-  void _reopenLostSource(String message) {
+  void _reopenLostSource(String message, {bool keepPaused = false}) {
     if (_reopeningLostSource) return;
     // The retained local player is idle while casting; reopening it would
     // start audio under the cast. `_restartLocalPlayback` resumes local
@@ -3510,6 +3534,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     _reopeningLostSource = true;
+    _pendingProxyHeal = false;
     _lastLostSourceReopen = now;
     debugPrint('[PlayerScreen] Reopening after lost source at '
         '${at.inSeconds}s: $message');
@@ -3521,7 +3546,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         final switched = await _switchSource(plan, at: at);
         // False means the switch did nothing, so the dead source is still
         // loaded and the viewer would be left with no error and no player.
-        if (!switched && mounted) _showLostSourceError(message);
+        if (!switched && mounted) {
+          _showLostSourceError(message);
+        } else if (keepPaused && mounted) {
+          // The switch waits for the position to advance, so it always
+          // resumes playback; put the viewer's pause back afterwards.
+          await _player?.pause();
+        }
       } catch (e) {
         debugPrint('[PlayerScreen] Lost-source reopen failed: $e');
         if (!mounted) return;

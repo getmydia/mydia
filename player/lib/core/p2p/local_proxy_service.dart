@@ -547,10 +547,19 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       return;
     }
 
-    final server = await _bind(
-      enabled ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4,
-      0,
-    );
+    final HttpServer server;
+    try {
+      server = await _bind(
+        enabled ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4,
+        0,
+      );
+    } catch (_) {
+      // No listener exists, so the address and token must not claim LAN
+      // access a later loopback [start] would not have.
+      _lanAddress = null;
+      _lanToken = null;
+      rethrow;
+    }
     if (_targets.isEmpty || _server != null) {
       // Torn down while binding, as in [_bindServer], or a resume heal
       // installed a server meanwhile. A heal cannot, because it was awaited
