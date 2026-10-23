@@ -109,8 +109,14 @@ FROM hexpm/elixir:1.20.4-erlang-29.1-alpine-3.24.2@sha256:b6fda8246507074bd84911
 ENV LANG=C.UTF-8
 
 # Install build dependencies
+#
+# cmake is for lazy_html's source fallback. Its precompiled NIF comes from a
+# GitHub release through :httpc, which rejects GitHub's redirect once its
+# headers pass 10 KB ({:header_too_long, {:max, 10240}}), and they did in
+# October 2026. Tailwind has the same problem; see mix mydia.tailwind_install.
 RUN apk add --no-cache \
     build-base \
+    cmake \
     git \
     nodejs \
     npm \
