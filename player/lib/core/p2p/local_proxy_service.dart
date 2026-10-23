@@ -19,6 +19,12 @@ final localProxyServiceProvider = Provider<LocalProxyService>((ref) {
   return service;
 });
 
+/// Opens the listening socket. A seam so tests can make a port unavailable.
+typedef ServerBinder = Future<HttpServer> Function(Object address, int port);
+
+Future<HttpServer> _bindHttpServer(Object address, int port) =>
+    HttpServer.bind(address, port);
+
 /// Local HTTP proxy for streaming HLS media over P2P.
 ///
 /// This service creates a local HTTP server that proxies HLS requests
@@ -59,7 +65,9 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   /// on was closed while it was still opening its source.
   var _sourceCancellations = 0;
 
-  int get port => _server?.port ?? 0;
+  /// The cached port, because a server whose socket the OS reclaimed throws
+  /// when asked for its own.
+  int get port => _server == null ? 0 : _boundPort ?? 0;
 
   @override
   bool get isRunning => _server != null;
@@ -74,9 +82,8 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
   /// Base URL other devices on the LAN can reach, or null when loopback-only.
   String? get lanBaseUrl {
-    final server = _server;
-    if (!isLanAccessible || server == null) return null;
-    return 'http://$_lanAddress:${server.port}/g/$_lanToken';
+    if (!isLanAccessible) return null;
+    return 'http://$_lanAddress:$_boundPort/g/$_lanToken';
   }
 
   /// Prefix applied to every locally built URL.
@@ -84,7 +91,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     if (_server == null) {
       throw StateError('LocalProxyService is not started');
     }
-    return lanBaseUrl ?? 'http://127.0.0.1:${_server!.port}';
+    return lanBaseUrl ?? 'http://127.0.0.1:$_boundPort';
   }
 
   /// Delegates to [_urlBase] rather than reimplementing it: [_urlBase] is
@@ -98,7 +105,11 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   LocalProxyService(
     this._p2p, {
     RangeSpoolSettings spool = const RangeSpoolSettings.platform(),
-  }) : _spoolSettings = spool;
+    ServerBinder bind = _bindHttpServer,
+  })  : _spoolSettings = spool,
+        _bind = bind;
+
+  final ServerBinder _bind;
 
   final RangeSpoolSettings _spoolSettings;
 
@@ -146,6 +157,9 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       rebind = identical(next, rebind) ? null : next;
     }
 
+    // A heal replaces the server, like a rebind.
+    await _healing?.catchError((Object _) => ProxyHeal.healthy);
+
     if (_server != null) return;
 
     // Concurrent starts share one bind; each rolls back only its own claim.
@@ -168,17 +182,14 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   Future<void> _bindServer() async {
     try {
       // Bind to loopback on ephemeral port
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final server = await _bind(InternetAddress.loopbackIPv4, 0);
       if (_targets.isEmpty) {
         // Torn down while binding: nothing wants this server any more.
         await server.close(force: true);
         return;
       }
-      _server = server;
+      _adopt(server);
       debugPrint('[LocalProxy] Started on http://127.0.0.1:${server.port}');
-      server.listen((HttpRequest request) {
-        _handleRequest(request);
-      });
     } finally {
       _binding = null;
     }
@@ -256,7 +267,108 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   HttpServer? _detachServer() {
     final server = _server;
     _server = null;
+    _boundAddress = null;
+    _boundPort = null;
+    _listener = null;
     return server;
+  }
+
+  /// The address and port the current server was bound to, kept because a
+  /// server whose socket the OS reclaimed can no longer report them.
+  Object? _boundAddress;
+  int? _boundPort;
+  StreamSubscription<HttpRequest>? _listener;
+
+  void _adopt(HttpServer server) {
+    _server = server;
+    _boundAddress = server.address;
+    _boundPort = server.port;
+    _listener = server.listen(
+      _handleRequest,
+      onError: (Object e) => debugPrint('[LocalProxy] Listener error: $e'),
+      onDone: () {
+        // Teardown, a LAN rebind and a heal all detach the server before
+        // closing it, so only a listener that died underneath the proxy is
+        // still current here.
+        if (!identical(_server, server)) return;
+        debugPrint('[LocalProxy] Listener closed underneath the proxy');
+        unawaited(healListener());
+      },
+    );
+  }
+
+  final _heals = StreamController<ProxyHeal>.broadcast();
+
+  @override
+  Stream<ProxyHeal> get heals => _heals.stream;
+
+  /// The heal every concurrent [healListener] call shares.
+  Future<ProxyHeal>? _healing;
+
+  @override
+  Future<ProxyHeal> healListener() =>
+      _healing ??= _heal().whenComplete(() => _healing = null);
+
+  Future<ProxyHeal> _heal() async {
+    await _binding?.catchError((Object _) {});
+    await _rebinding?.catchError((Object _) {});
+    final server = _server;
+    final address = _boundAddress;
+    final port = _boundPort;
+    if (server == null || address == null || port == null) {
+      return ProxyHeal.healthy;
+    }
+    if (await _accepting(port)) return ProxyHeal.healthy;
+    // Replaced or torn down while probing: whoever did that owns it now.
+    if (!identical(_server, server)) return ProxyHeal.healthy;
+
+    await _closeServer(_detachServer());
+    var samePort = true;
+    HttpServer fresh;
+    try {
+      fresh = await _bind(address, port);
+    } on SocketException {
+      samePort = false;
+      fresh = await _bind(address, 0);
+    }
+    if (_targets.isEmpty || _server != null) {
+      // Torn down, or replaced by a start, while binding.
+      await fresh.close(force: true);
+      return ProxyHeal.healthy;
+    }
+    _adopt(fresh);
+    final result =
+        samePort ? ProxyHeal.reboundSamePort : ProxyHeal.reboundNewPort;
+    debugPrint('[LocalProxy] Listener lost; rebound on port ${fresh.port} '
+        '(${samePort ? 'same' : 'new'})');
+    _heals.add(result);
+    return result;
+  }
+
+  /// Whether something accepts a connection on [port]. Loopback reaches a
+  /// LAN-exposed (any-address) listener too.
+  static Future<bool> _accepting(int port) async {
+    try {
+      final socket = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        port,
+        timeout: const Duration(seconds: 1),
+      );
+      socket.destroy();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Closes the listening socket underneath the proxy while leaving it
+  /// believing it still serves, which is what iOS does to a suspended app.
+  /// With [notify] false the listener's done event is suppressed, so only
+  /// [healListener] can notice.
+  @visibleForTesting
+  Future<void> debugDropListener({bool notify = false}) async {
+    if (!notify) await _listener?.cancel();
+    await _server?.close(force: true);
   }
 
   /// Closes [server], cancelling the transfers it was carrying.
@@ -404,7 +516,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       return;
     }
 
-    final server = await HttpServer.bind(
+    final server = await _bind(
       enabled ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4,
       0,
     );
@@ -413,8 +525,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       await server.close(force: true);
       return;
     }
-    _server = server;
-    server.listen(_handleRequest);
+    _adopt(server);
 
     debugPrint('[LocalProxy] Rebound (lan=$enabled) on port ${server.port}');
   }

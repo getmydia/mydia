@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
+import 'package:player/core/p2p/media_proxy.dart';
 
 import '../../test_utils/real_http.dart';
 import 'media_proxy_conformance.dart';
@@ -78,6 +79,89 @@ void main() {
         client.close(force: true);
       }
     }
+
+    group('healListener', () {
+      const peer = 'peer';
+
+      test('is healthy while the listener answers', () async {
+        await proxy.start(owner: owner, targetPeer: peer, target: target);
+        expect(await proxy.healListener(), ProxyHeal.healthy);
+      });
+
+      test('is healthy with nothing served', () async {
+        expect(await proxy.healListener(), ProxyHeal.healthy);
+      });
+
+      test('rebinds a reclaimed listener on the same port', () async {
+        await proxy.start(owner: owner, targetPeer: peer, target: target);
+        final port = proxy.port;
+        await proxy.debugDropListener();
+        await expectLater(
+            makeRequest('/nope'), throwsA(isA<SocketException>()));
+
+        expect(await proxy.healListener(), ProxyHeal.reboundSamePort);
+        expect(proxy.port, port);
+        expect((await makeRequest('/nope')).statusCode, 404);
+      });
+
+      test('moves to a new port when the old one is taken', () async {
+        await proxy.shutdown();
+        var calls = 0;
+        proxy = LocalProxyService(p2p, bind: (address, port) {
+          calls++;
+          // The first bind is start's (port 0); a heal's same-port retry fails.
+          if (calls > 1 && port != 0) {
+            throw const SocketException('Address already in use');
+          }
+          return HttpServer.bind(address, port);
+        });
+        await proxy.start(owner: owner, targetPeer: peer, target: target);
+        final events = <ProxyHeal>[];
+        final sub = proxy.heals.listen(events.add);
+        addTearDown(sub.cancel);
+        await proxy.debugDropListener();
+
+        expect(await proxy.healListener(), ProxyHeal.reboundNewPort);
+        expect(proxy.targetBaseUrl(target), contains(':${proxy.port}/'));
+        expect((await makeRequest('/nope')).statusCode, 404);
+        await pumpEventQueue();
+        expect(events, [ProxyHeal.reboundNewPort]);
+      });
+
+      test('concurrent heals share one rebind', () async {
+        await proxy.shutdown();
+        var binds = 0;
+        proxy = LocalProxyService(p2p, bind: (address, port) {
+          binds++;
+          return HttpServer.bind(address, port);
+        });
+        await proxy.start(owner: owner, targetPeer: peer, target: target);
+        await proxy.debugDropListener();
+
+        final results =
+            await Future.wait([proxy.healListener(), proxy.healListener()]);
+        expect(results, everyElement(ProxyHeal.reboundSamePort));
+        expect(binds, 2); // start's bind plus exactly one rebind
+      });
+
+      test('a listener that closes on its own is rebound without being asked',
+          () async {
+        await proxy.start(owner: owner, targetPeer: peer, target: target);
+        final port = proxy.port;
+        await proxy.debugDropListener(notify: true);
+        await pumpEventQueue(times: 50);
+
+        expect(proxy.port, port);
+        expect((await makeRequest('/nope')).statusCode, 404);
+      });
+
+      test('teardown does not trigger a heal', () async {
+        await proxy.start(owner: owner, targetPeer: peer, target: target);
+        await proxy.stop(owner, target: target);
+        await pumpEventQueue(times: 50);
+        expect(proxy.isRunning, isFalse);
+      });
+    });
 
     group('initialization', () {
       test('starts on loopback address', () async {

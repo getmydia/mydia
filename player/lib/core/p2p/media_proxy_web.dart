@@ -49,6 +49,13 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
 
   final P2pService _p2p;
 
+  /// A Service Worker has no socket for the OS to reclaim.
+  @override
+  Future<ProxyHeal> healListener() async => ProxyHeal.healthy;
+
+  @override
+  Stream<ProxyHeal> get heals => const Stream.empty();
+
   web.ServiceWorkerRegistration? _registration;
   String? _targetPeer;
   String? _authToken;

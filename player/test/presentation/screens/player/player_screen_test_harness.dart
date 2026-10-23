@@ -234,6 +234,21 @@ class TrackingLocalProxyService extends Fake
   @override
   int get port => 12345;
 
+  /// Lets a test announce a heal the way the real proxy would after a resume.
+  // The fake lives for one test and a broadcast controller holds no resources.
+  // ignore: close_sinks
+  final healEvents = StreamController<ProxyHeal>.broadcast();
+  int healCalls = 0;
+
+  @override
+  Stream<ProxyHeal> get heals => healEvents.stream;
+
+  @override
+  Future<ProxyHeal> healListener() async {
+    healCalls++;
+    return ProxyHeal.healthy;
+  }
+
   /// The screen logs this when it starts the proxy, and `Fake` throws on any
   /// member it is not given.
   @override
