@@ -593,6 +593,6 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   def status_label("failed"), do: "Failed"
   def status_label(other), do: other
 
-  @doc "Returns the item's live state: \"pending\", \"in_library\" or \"failed\"."
+  @doc ~s(Returns the item's live state: "pending", "in_library" or "failed".)
   def display_status(item), do: ImportListItem.effective_status(item)
 end
