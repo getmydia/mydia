@@ -42,6 +42,10 @@ defmodule MydiaWeb.AdminImportListsLive.ModalComponents do
         :selected_media_type,
         Phoenix.HTML.Form.input_value(assigns.import_list_form, :media_type)
       )
+      |> assign(
+        :selected_library_path_id,
+        Phoenix.HTML.Form.input_value(assigns.import_list_form, :library_path_id)
+      )
 
     ~H"""
     <.admin_modal
@@ -134,7 +138,13 @@ defmodule MydiaWeb.AdminImportListsLive.ModalComponents do
             field={@import_list_form[:library_path_id]}
             type="select"
             label="Library Path (Optional)"
-            options={Index.library_path_options(@library_paths, @selected_media_type)}
+            options={
+              Index.library_path_options(
+                @library_paths,
+                @selected_media_type,
+                @selected_library_path_id
+              )
+            }
             prompt="Select library path..."
           />
 

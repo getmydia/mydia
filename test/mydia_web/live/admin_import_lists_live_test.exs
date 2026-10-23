@@ -232,6 +232,41 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
       refute has_element?(view, "#import-list-form option", series.path)
     end
 
+    test "an unrelated edit keeps a saved library that no longer suits the media type", %{
+      conn: conn
+    } do
+      movies = Mydia.SettingsFixtures.library_path_fixture(%{type: "movies"})
+      series = Mydia.SettingsFixtures.library_path_fixture(%{type: "series"})
+
+      {:ok, list} =
+        Mydia.ImportLists.create_import_list(%{
+          name: "Legacy List #{System.unique_integer([:positive])}",
+          type: "tmdb_trending",
+          media_type: "movie",
+          library_path_id: movies.id
+        })
+
+      list
+      |> Ecto.Changeset.change(library_path_id: series.id)
+      |> Mydia.Repo.update!()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/import-lists")
+
+      view
+      |> element(~s{button[phx-click="edit_import_list"][phx-value-id="#{list.id}"]})
+      |> render_click()
+
+      assert has_element?(view, "#import-list-form option[selected]", series.path)
+
+      view
+      |> form("#import-list-form", import_list: %{name: "Renamed Legacy List"})
+      |> render_submit()
+
+      saved = Mydia.Repo.get!(Mydia.ImportLists.ImportList, list.id)
+      assert saved.name == "Renamed Legacy List"
+      assert saved.library_path_id == series.id
+    end
+
     test "unchecking Enabled, Auto-add and Monitored persists false", %{conn: conn} do
       {:ok, list} =
         Mydia.ImportLists.create_import_list(%{

@@ -559,8 +559,11 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   @doc """
   Library select options for a list of `media_type`: only enabled libraries
   whose type can hold it. With no media type chosen yet, every enabled library.
+  The currently selected library (`current_id`) is always kept, even when it is
+  disabled or no longer suits the media type, so an unrelated edit doesn't
+  clear it.
   """
-  def library_path_options(library_paths, media_type) do
+  def library_path_options(library_paths, media_type, current_id \\ nil) do
     allowed =
       if media_type in ImportList.valid_media_types(),
         do: ImportList.library_types_for(media_type),
@@ -568,8 +571,8 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
 
     options =
       for lp <- library_paths,
-          lp.disabled != true,
-          is_nil(allowed) or lp.type in allowed,
+          lp.id == current_id or
+            (lp.disabled != true and (is_nil(allowed) or lp.type in allowed)),
           do: {lp.path, lp.id}
 
     [{"Default", nil} | options]
