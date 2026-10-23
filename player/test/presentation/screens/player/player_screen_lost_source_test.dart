@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/p2p/media_proxy_factory.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/player_screen_views.dart';
@@ -369,6 +371,52 @@ void main() {
       await tester.pump();
 
       expect(decoder.opened, hasLength(1));
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets(
+      'a lost source or heal while casting leaves the local player alone',
+      (tester) async {
+    final sessions = StreamController<CastSession?>();
+    addTearDown(sessions.close);
+    final castingContainer = buildPlayerScreenContainer(
+      server: _server(),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: proxy,
+      castSessionStream: sessions.stream,
+    );
+    addTearDown(castingContainer.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, castingContainer, decoder);
+      await _playTo75(tester, decoder);
+      final healsBefore = proxy.healCalls;
+
+      sessions.add(const CastSession(
+        device: testDevice,
+        mediaInfo: CastMediaInfo(
+          title: 'The Long Aurora',
+          duration: Duration(seconds: 5400),
+          position: Duration.zero,
+        ),
+        playbackState: CastPlaybackState.playing,
+        connectionState: CastConnectionState.connected,
+      ));
+      await tester.pump();
+      expect(castingContainer.read(isCastingProvider), isTrue);
+
+      decoder.loseSource();
+      proxy.healEvents.add(ProxyHeal.reboundNewPort);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(decoder.opened, hasLength(1));
+      expect(proxy.healCalls, healsBefore);
+      expect(find.byType(PlayerErrorView), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump();

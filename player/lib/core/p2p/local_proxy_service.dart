@@ -292,7 +292,8 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
         // still current here.
         if (!identical(_server, server)) return;
         debugPrint('[LocalProxy] Listener closed underneath the proxy');
-        unawaited(healListener().then<void>((_) {}, onError: (Object e) {
+        unawaited(_healListener(knownClosed: true).then<void>((_) {},
+            onError: (Object e) {
           debugPrint('[LocalProxy] Heal failed: $e');
         }));
       },
@@ -310,8 +311,21 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   /// Throws when no listener can be bound at all. The proxy then holds no
   /// server but keeps its targets, so a later [start] binds afresh.
   @override
-  Future<ProxyHeal> healListener() =>
-      _healing ??= _heal().whenComplete(() => _healing = null);
+  Future<ProxyHeal> healListener() => _healListener();
+
+  /// Set when the listener's done event proved the server closed. Heals share
+  /// one future, so the flag rides along rather than being an argument: a
+  /// resume heal already probing then skips to the rebind instead of trusting
+  /// a probe answered by a process that took the freed port.
+  bool _serverKnownClosed = false;
+
+  Future<ProxyHeal> _healListener({bool knownClosed = false}) {
+    if (knownClosed) _serverKnownClosed = true;
+    return _healing ??= _heal().whenComplete(() {
+      _healing = null;
+      _serverKnownClosed = false;
+    });
+  }
 
   Future<ProxyHeal> _heal() async {
     // No wait on a LAN rebind: [_rebind] waits on this heal before it touches
@@ -323,7 +337,12 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     if (server == null || address == null || port == null) {
       return ProxyHeal.healthy;
     }
-    if (await _accepting(port)) return ProxyHeal.healthy;
+    // A server known to be closed is never probed: its port may already belong
+    // to another process, whose accept would pass for ours. The flag is read
+    // again after the probe in case the done event landed meanwhile.
+    if (!_serverKnownClosed && await _accepting(port) && !_serverKnownClosed) {
+      return ProxyHeal.healthy;
+    }
     // Replaced or torn down while probing: whoever did that owns it now.
     if (!identical(_server, server)) return ProxyHeal.healthy;
 
@@ -527,8 +546,10 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       enabled ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4,
       0,
     );
-    if (_targets.isEmpty) {
-      // Torn down while binding, as in [_bindServer].
+    if (_targets.isEmpty || _server != null) {
+      // Torn down while binding, as in [_bindServer], or a resume heal
+      // installed a server during [resolveLanAddress]; adopting this one too
+      // would leak whichever lost.
       await server.close(force: true);
       return;
     }

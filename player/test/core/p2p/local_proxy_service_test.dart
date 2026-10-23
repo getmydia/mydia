@@ -155,6 +155,36 @@ void main() {
         expect((await makeRequest('/nope')).statusCode, 404);
       });
 
+      test(
+          'a listener known closed is not probed, so a foreign process that '
+          'took its port is not mistaken for the proxy', () async {
+        await proxy.shutdown();
+        ServerSocket? foreign;
+        addTearDown(() async => foreign?.close());
+        final foreignBound = Completer<void>();
+        var binds = 0;
+        proxy = LocalProxyService(p2p, bind: (address, port) async {
+          // Holds the heal's same-port retry until the foreign process owns
+          // the port, so the ordering does not depend on timing.
+          if (++binds > 1) await foreignBound.future;
+          return HttpServer.bind(address, port);
+        });
+        await proxy.start(owner: owner, targetPeer: peer, target: target);
+        final port = proxy.port;
+        final events = <ProxyHeal>[];
+        final sub = proxy.heals.listen(events.add);
+        addTearDown(sub.cancel);
+
+        await proxy.debugDropListener(notify: true);
+        foreign = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
+        foreignBound.complete();
+        await proxy.healListener();
+
+        expect(proxy.port, isNot(port));
+        expect((await makeRequest('/nope')).statusCode, 404);
+        expect(events, [ProxyHeal.reboundNewPort]);
+      });
+
       test('teardown does not trigger a heal', () async {
         await proxy.shutdown();
         var binds = 0;

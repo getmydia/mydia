@@ -3478,6 +3478,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// with its Retry.
   void _reopenLostSource(String message) {
     if (_reopeningLostSource) return;
+    // The retained local player is idle while casting; reopening it would
+    // start audio under the cast. `_restartLocalPlayback` resumes local
+    // playback once casting stops.
+    if (ref.read(isCastingProvider)) {
+      debugPrint('[PlayerScreen] Lost source while casting; '
+          'not reopening the local player');
+      return;
+    }
     // A quality change, seek restart or fallback is already replacing the
     // source and owns the outcome; reopening under it would race it.
     if (_switchingSource) {
