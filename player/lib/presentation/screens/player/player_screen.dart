@@ -1472,6 +1472,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _planInputs = null;
     _lastGoodPosition = null;
     _lastLostSourceReopen = null;
+    _pendingProxyHeal = false;
     // A choice carried by a switch that never landed belongs to the source
     // this load replaces, and a fresh load starts with no choice made.
     _subtitleIntentAcrossSwitch = null;
@@ -3538,24 +3539,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _lastLostSourceReopen = now;
     debugPrint('[PlayerScreen] Reopening after lost source at '
         '${at.inSeconds}s: $message');
+    // Navigation can reuse this State for another file while the heal or the
+    // switch is pending; nothing here may then touch the new file.
+    final gen = _loadGeneration;
     unawaited(() async {
       try {
         // Never reopen against a port that is still dead.
         await _mediaProxy.healListener();
-        if (!mounted) return;
+        if (!_isCurrentLoad(gen)) return;
         final switched = await _switchSource(plan, at: at);
+        if (!_isCurrentLoad(gen)) return;
         // False means the switch did nothing, so the dead source is still
         // loaded and the viewer would be left with no error and no player.
-        if (!switched && mounted) {
+        if (!switched) {
           _showLostSourceError(message);
-        } else if (keepPaused && mounted) {
+        } else if (keepPaused) {
           // The switch waits for the position to advance, so it always
           // resumes playback; put the viewer's pause back afterwards.
           await _player?.pause();
         }
       } catch (e) {
         debugPrint('[PlayerScreen] Lost-source reopen failed: $e');
-        if (!mounted) return;
+        if (!_isCurrentLoad(gen)) return;
         _showLostSourceError(e.toString());
       } finally {
         _reopeningLostSource = false;

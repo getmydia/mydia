@@ -350,10 +350,18 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     var samePort = true;
     HttpServer fresh;
     try {
-      fresh = await _bind(address, port);
-    } on SocketException {
-      samePort = false;
-      fresh = await _bind(address, 0);
+      try {
+        fresh = await _bind(address, port);
+      } on SocketException {
+        samePort = false;
+        fresh = await _bind(address, 0);
+      }
+    } catch (_) {
+      // No listener exists, so the address and token must not claim LAN
+      // access a later loopback [start] would not have; [_rebind] does the same.
+      _lanAddress = null;
+      _lanToken = null;
+      rethrow;
     }
     if (_targets.isEmpty || _server != null) {
       // Torn down, or replaced by a start, while binding.

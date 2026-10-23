@@ -103,6 +103,32 @@ void main() {
       expect(service.lanBaseUrl, isNull);
     });
 
+    test('a failed heal does not leave the proxy claiming LAN access',
+        () async {
+      if (await LocalProxyService.resolveLanAddress() == null) return;
+      var binds = 0;
+      final service = LocalProxyService(P2pService(), bind: (address, port) {
+        // start and the LAN rebind bind; every bind after that fails.
+        if (++binds > 2) throw const SocketException('no sockets');
+        return HttpServer.bind(address, port);
+      });
+      await service.start(
+          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
+      addTearDown(service.shutdown);
+      await service.setLanAccess(true);
+      expect(service.isLanAccessible, isTrue);
+
+      await service.debugDropListener();
+      await expectLater(
+          service.healListener(), throwsA(isA<SocketException>()));
+      binds = 0;
+      await service.start(
+          owner: Object(), targetPeer: 'peer-1', target: 'macct');
+
+      expect(service.isLanAccessible, isFalse);
+      expect(service.lanBaseUrl, isNull);
+    });
+
     test('requests without the token prefix are rejected when LAN-exposed',
         () async {
       final service = LocalProxyService.forTesting();
