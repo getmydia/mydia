@@ -11,6 +11,10 @@
 //                            plus 600 ms, print the result, then exit.
 //   LAB_GRID=true            start with the grid backdrop.
 //   LAB_SCROLL=<pixels>      initial scroll offset of the backdrop.
+//   LAB_SCENE=<grid|artwork|panel>  which scene to draw (default grid).
+//
+// Every LAB_* value can also come from the process environment, which is how
+// `./dev player glass-diff` runs one release build per scene.
 //
 //   xvfb-run -a ./dev flutter run -d linux \
 //     --dart-define=LAB_SNAPSHOT=/tmp/lab.png -t tool/liquid_glass_lab/main.dart
@@ -27,11 +31,22 @@ import 'package:flutter/rendering.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
-import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 
-const String _snapshotPath = String.fromEnvironment('LAB_SNAPSHOT');
-const bool _initialGrid = bool.fromEnvironment('LAB_GRID');
-const String _scrollDefine = String.fromEnvironment('LAB_SCROLL');
+import 'artwork_scene.dart';
+import 'lab_glass.dart';
+
+/// A LAB_* value from the process environment, else from --dart-define.
+String _define(String key, String compiled) =>
+    Platform.environment[key] ?? compiled;
+
+final String _snapshotPath =
+    _define('LAB_SNAPSHOT', const String.fromEnvironment('LAB_SNAPSHOT'));
+final bool _initialGrid =
+    _define('LAB_GRID', const String.fromEnvironment('LAB_GRID')) == 'true';
+final String _scrollDefine =
+    _define('LAB_SCROLL', const String.fromEnvironment('LAB_SCROLL'));
+final String _scene =
+    _define('LAB_SCENE', const String.fromEnvironment('LAB_SCENE'));
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,214 +121,167 @@ class _LabState extends State<_Lab> {
       home: Scaffold(
         body: RepaintBoundary(
           key: _captureKey,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: _Backdrop(grid: _grid, controller: _scroll),
-              ),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 88,
-                child: _glass(0, const Color(0xFF101014),
-                    DepthTokens.liquidChromeTintOpacity,
-                    adaptiveMax: DepthTokens.liquidChromeAdaptiveMax),
-              ),
-              Positioned(
-                top: 140,
-                left: 40,
-                width: 44,
-                height: 44,
-                child: _glass(22, const Color(0xFF101014),
-                    DepthTokens.liquidControlTintOpacity,
-                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax),
-              ),
-              Positioned(
-                top: 140,
-                left: 110,
-                width: 160,
-                height: 48,
-                child: _glass(24, const Color(0xFFFFFFFF),
-                    DepthTokens.liquidProminentTintOpacity),
-              ),
-              Positioned(
-                top: 240,
-                left: 40,
-                width: 320,
-                height: 200,
-                // A dialog: the panel profile.
-                child: _glass(28, const Color(0xFF101014),
-                    DepthTokens.liquidModalTintOpacity,
-                    adaptiveMax: DepthTokens.liquidModalAdaptiveMax,
-                    profile: LiquidGlassProfile.panel),
-              ),
-              // A white strip: the worst case for white labels. Both
-              // controls carry a white label so legibility is visible.
-              const Positioned(
-                top: 470,
-                left: 0,
-                right: 0,
-                height: 120,
-                child: ColoredBox(color: Colors.white),
-              ),
-              Positioned(
-                top: 500,
-                left: 40,
-                width: 120,
-                height: 48,
-                child: _glass(24, const Color(0xFF101014),
-                    DepthTokens.liquidControlTintOpacity,
-                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax,
-                    child: _label(Icons.play_arrow_rounded, 'Play')),
-              ),
-              Positioned(
-                top: 500,
-                left: 190,
-                width: 140,
-                height: 48,
-                child: _glass(24, const Color(0xFF101014),
-                    DepthTokens.liquidControlTintOpacity,
-                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax,
-                    child: _label(Icons.play_arrow_rounded, 'Play')),
-              ),
-              // The app bar's scroll edge band, as `GlassSurface._scrollEdge`
-              // builds it, with two glass chips on its lower part.
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 120,
-                child: _scrollEdgeBand(),
-              ),
-              Positioned(
-                top: 76,
-                left: 16,
-                width: 96,
-                height: 32,
-                child: _glass(16, const Color(0xFF101014),
-                    DepthTokens.liquidControlTintOpacity,
-                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax),
-              ),
-              Positioned(
-                top: 76,
-                left: 124,
-                width: 96,
-                height: 32,
-                child: _glass(16, const Color(0xFF101014),
-                    DepthTokens.liquidControlTintOpacity,
-                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax),
-              ),
-              // Clear glass: a slider-style knob (37x24, radius 12) over a
-              // 6pt track, and a 50pt capsule on the lens profile.
-              Positioned(
-                top: 620,
-                left: 40,
-                width: 200,
-                height: 6,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 611,
-                left: 110,
-                width: 37,
-                height: 24,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: LiquidGlassProfile.clear.shadow,
-                  ),
-                  child: _glass(12, const Color(0xFFFFFFFF), 0.0,
-                      profile: LiquidGlassProfile.clear),
-                ),
-              ),
-              Positioned(
-                top: 650,
-                left: 40,
-                width: 160,
-                height: 50,
-                child: _glass(25, const Color(0xFF101014),
-                    DepthTokens.liquidControlTintOpacity,
-                    adaptiveMax: DepthTokens.liquidControlAdaptiveMax,
-                    child: _label(Icons.play_arrow_rounded, 'Play')),
-              ),
-              _tag(top: 594, left: 40, text: 'clear 37x24'),
-              _tag(top: 706, left: 40, text: 'lens 50pt'),
-              _tag(top: 224, left: 40, text: 'panel'),
-              _tag(top: 124, left: 110, text: 'lens (prominent)'),
-              _tag(top: 124, left: 40, text: 'lens'),
-              Positioned(
-                right: 16,
-                bottom: 16,
-                child: FilledButton(
-                  onPressed: () => setState(() => _grid = !_grid),
-                  child: Text(
-                    LiquidGlassSupport.available
-                        ? 'Shader on: toggle grid'
-                        : 'Shader OFF (frosted): toggle grid',
-                  ),
-                ),
-              ),
-            ],
-          ),
+          child: switch (_scene) {
+            'artwork' => const ArtworkScene(),
+            'panel' => const PanelScene(),
+            _ => _gridScene(),
+          },
         ),
       ),
     );
   }
 
-  Widget _glass(
-    double radius,
-    Color base,
-    double opacity, {
-    double? adaptiveMax,
-    LiquidGlassProfile profile = LiquidGlassProfile.lens,
-    Widget child = const SizedBox.expand(),
-  }) =>
-      ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: LiquidGlassFilter(
-          radius: radius,
-          tint: base.withValues(alpha: opacity),
-          adaptiveTintMax: adaptiveMax,
-          profile: profile,
-          child: child,
-        ),
-      );
-
-  Widget _tag({
-    required double top,
-    required double left,
-    required String text,
-  }) =>
-      Positioned(
-        top: top,
-        left: left,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-          color: Colors.black.withValues(alpha: 0.6),
-          child: Text(
-            text,
-            style: const TextStyle(color: Colors.white, fontSize: 10),
-          ),
-        ),
-      );
-
-  Widget _label(IconData icon, String text) => Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget _gridScene() => Stack(
         children: [
-          Icon(icon, color: Colors.white, size: 22),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
+          Positioned.fill(
+            child: _Backdrop(grid: _grid, controller: _scroll),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 88,
+            child: labGlass(
+                0, const Color(0xFF101014), DepthTokens.liquidChromeTintOpacity,
+                adaptiveMax: DepthTokens.liquidChromeAdaptiveMax),
+          ),
+          Positioned(
+            top: 140,
+            left: 40,
+            width: 44,
+            height: 44,
+            child: labGlass(22, const Color(0xFF101014),
+                DepthTokens.liquidControlTintOpacity,
+                adaptiveMax: DepthTokens.liquidControlAdaptiveMax),
+          ),
+          Positioned(
+            top: 140,
+            left: 110,
+            width: 160,
+            height: 48,
+            child: labGlass(24, const Color(0xFFFFFFFF),
+                DepthTokens.liquidProminentTintOpacity),
+          ),
+          Positioned(
+            top: 240,
+            left: 40,
+            width: 320,
+            height: 200,
+            // A dialog: the panel profile.
+            child: labGlass(
+                28, const Color(0xFF101014), DepthTokens.liquidModalTintOpacity,
+                adaptiveMax: DepthTokens.liquidModalAdaptiveMax,
+                profile: LiquidGlassProfile.panel),
+          ),
+          // A white strip: the worst case for white labels. Both
+          // controls carry a white label so legibility is visible.
+          const Positioned(
+            top: 470,
+            left: 0,
+            right: 0,
+            height: 120,
+            child: ColoredBox(color: Colors.white),
+          ),
+          Positioned(
+            top: 500,
+            left: 40,
+            width: 120,
+            height: 48,
+            child: labGlass(24, const Color(0xFF101014),
+                DepthTokens.liquidControlTintOpacity,
+                adaptiveMax: DepthTokens.liquidControlAdaptiveMax,
+                child: labLabel(Icons.play_arrow_rounded, 'Play')),
+          ),
+          Positioned(
+            top: 500,
+            left: 190,
+            width: 140,
+            height: 48,
+            child: labGlass(24, const Color(0xFF101014),
+                DepthTokens.liquidControlTintOpacity,
+                adaptiveMax: DepthTokens.liquidControlAdaptiveMax,
+                child: labLabel(Icons.play_arrow_rounded, 'Play')),
+          ),
+          // The app bar's scroll edge band, as `GlassSurface._scrollEdge`
+          // builds it, with two glass chips on its lower part.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 120,
+            child: _scrollEdgeBand(),
+          ),
+          Positioned(
+            top: 76,
+            left: 16,
+            width: 96,
+            height: 32,
+            child: labGlass(16, const Color(0xFF101014),
+                DepthTokens.liquidControlTintOpacity,
+                adaptiveMax: DepthTokens.liquidControlAdaptiveMax),
+          ),
+          Positioned(
+            top: 76,
+            left: 124,
+            width: 96,
+            height: 32,
+            child: labGlass(16, const Color(0xFF101014),
+                DepthTokens.liquidControlTintOpacity,
+                adaptiveMax: DepthTokens.liquidControlAdaptiveMax),
+          ),
+          // Clear glass: a slider-style knob (37x24, radius 12) over a
+          // 6pt track, and a 50pt capsule on the lens profile.
+          Positioned(
+            top: 620,
+            left: 40,
+            width: 200,
+            height: 6,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 611,
+            left: 110,
+            width: 37,
+            height: 24,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: LiquidGlassProfile.clear.shadow,
+              ),
+              child: labGlass(12, const Color(0xFFFFFFFF), 0.0,
+                  profile: LiquidGlassProfile.clear),
+            ),
+          ),
+          Positioned(
+            top: 650,
+            left: 40,
+            width: 160,
+            height: 50,
+            child: labGlass(25, const Color(0xFF101014),
+                DepthTokens.liquidControlTintOpacity,
+                adaptiveMax: DepthTokens.liquidControlAdaptiveMax,
+                child: labLabel(Icons.play_arrow_rounded, 'Play')),
+          ),
+          labTag(top: 594, left: 40, text: 'clear 37x24'),
+          labTag(top: 706, left: 40, text: 'lens 50pt'),
+          labTag(top: 224, left: 40, text: 'panel'),
+          labTag(top: 124, left: 110, text: 'lens (prominent)'),
+          labTag(top: 124, left: 40, text: 'lens'),
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FilledButton(
+              onPressed: () => setState(() => _grid = !_grid),
+              child: Text(
+                LiquidGlassSupport.available
+                    ? 'Shader on: toggle grid'
+                    : 'Shader OFF (frosted): toggle grid',
+              ),
             ),
           ),
         ],

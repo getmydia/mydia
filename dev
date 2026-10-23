@@ -13,6 +13,7 @@
 #     .#android-tv, native Nix)
 #   - player macos <build|run>            (host Xcode/CocoaPods/rustup toolchain)
 #   - player flatpak <build|install|run>  (host flatpak + flatpak-builder)
+#   - player glass-diff [--base <ref>]   (Liquid Glass lab, before/after)
 #   - player e2e / e2e-build              (Docker E2E stack, compose.player-e2e.yml)
 #     e2e pulls prebuilt images by default; --build forces local builds
 
@@ -775,6 +776,14 @@ case "$COMMAND" in
                     echo "Output: player/build/macos/Build/Products/Release/Mydia Player.app"
                     echo "Open it with: open 'player/build/macos/Build/Products/Release/Mydia Player.app'"
                 fi
+                ;;
+            glass-diff)
+                # Renders the Liquid Glass lab at the base and from the index
+                # and records the diff the pre-commit gate asks for. Native
+                # like `player flatpak`: it builds a Linux desktop bundle and
+                # runs it under xvfb.
+                shift
+                exec "$ROOT_DIR/scripts/glass-diff.sh" "$@"
                 ;;
             flatpak)
                 # Linux desktop packaging. Native like `player android` and
