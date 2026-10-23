@@ -28,7 +28,7 @@ frosted `GlassSurface` recipes and Material controls, and the playback OSD
 | Render object | `lib/presentation/widgets/glass/liquid_glass_filter.dart` |
 | Press and hover | `lib/presentation/widgets/glass/glass_interaction.dart`, `glass_pointer.dart` |
 | Accessibility flags | `lib/core/theme/liquid_glass/glass_accessibility.dart` |
-| Lab and visual diff | tool/liquid_glass_lab/, scripts/glass-diff.sh |
+| Lab and visual diff | `tool/liquid_glass_lab/`, `scripts/glass-diff.sh` |
 
 ## Where glass goes
 
@@ -111,13 +111,13 @@ previous render (`./dev player glass-diff`), not a target to copy.
 the radius a design tool shows. The edge band is `depth` times the corner
 radius, capped at half the short side (`LiquidGlassUniforms.edgeBandFor`).
 
-The lens's `brightness` lift stands in for the small grey wash. The panel's
-`lumaTarget` and `lumaMix` stand in for the luminosity wash: a luminosity
+The panel's `lumaTarget` and `lumaMix` stand in for the luminosity wash: a luminosity
 blend keeps the backdrop's hue and takes the fill's luminance, so the shader
 pulls the backdrop's luminance toward `lumaTarget` by `lumaMix` and leaves the
 hue alone. The kit's normal-blend part of the wash is the surface tint, which
 stays per role. The panel takes the kit's Medium UI luminosity share, since the
-Large share plus our role tint read as an opaque slab.
+Large share plus our role tint read as an opaque slab. The lens's `brightness`
+lift (0.07) is our tuned frosted value, not the kit's grey wash.
 
 The kit's lighting is off. Its rim is drawn with stacked shadows that show
 through the translucent fill, and the shader's rim terms decode them:
@@ -128,10 +128,10 @@ through the translucent fill, and the shader's rim terms decode them:
   rim light on the left and right edges relative to the top (panel only; the
   lens sets these to 0).
 - The small layer's volume shadows are `volumeSide` and `volumeEnds` (panel
-  only; the lens sets these to 0). The
-  x of plus and minus 20 shadow (blur 20, spread -30, grey 178) lightens the
-  interior toward the sides; the y of plus and minus 40 shadow (blur 10, spread
-  -40, grey 25) darkens it toward the top and bottom.
+  only; the lens sets these to 0). The x of plus and minus 20 shadow (blur 20,
+  spread -30, grey 178) lightens the interior toward the sides; the y of plus
+  and minus 40 shadow (blur 10, spread -40, grey 25) darkens it toward the top
+  and bottom.
 - The large layer's ends band (y of plus and minus 4, blur 8, spread -4,
   grey 33) is `volumeEnds` on the panel.
 - The large layer's bottom catch-light (white at 20%, y of plus 2, spread
@@ -348,7 +348,9 @@ white strip and the scroll edge), `artwork` (the detail screen's controls over
 painted poster-like art) and `panel` (a dialog and the floating sidebar). It
 prints a side-by-side per scene and a changed-pixel count. Both sides run the
 staged lab, so the counts compare like with like; when the base cannot compile
-the staged lab, it falls back to its own lab and writes side-by-sides only.
+the staged lab (or lacks a file it imports), it falls back to its own lab and
+writes side-by-sides only; the before image is then the base's `grid` scene for
+every scene name.
 
 The run records a stamp keyed to the staged glass blobs, under
 `.git/.../glass-diff/<stamp>/`. The `glass-diff` pre-commit hook recomputes the

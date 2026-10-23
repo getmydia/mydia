@@ -181,6 +181,11 @@ ${YELLOW}Player Flatpak (native, uses host flatpak + flatpak-builder):${NC}
   player flatpak clean  Remove build-dir/, staged-repo/ and .flatpak-builder/
                        build/install accept --branch=<name> (default: stable).
 
+${YELLOW}Player Liquid Glass (native, builds the lab as a Linux bundle):${NC}
+  player glass-diff [--base <ref>]
+                       Render the lab at the base and from the index, and
+                       record the diff the pre-commit gate asks for
+
 ${YELLOW}Metadata Relay (Docker + kubectl):${NC}
   relay deploy         Build, push :dev image, and redeploy to k8s
   relay build          Build :dev Docker image only
@@ -1011,7 +1016,7 @@ case "$COMMAND" in
                 ;;
             *)
                 echo -e "${RED}Error: Unknown player command: $1${NC}"
-                echo "Usage: ./dev player <logs|build|setup|shell|restart|e2e|e2e-build|android|macos|flatpak>"
+                echo "Usage: ./dev player <logs|build|setup|shell|restart|e2e|e2e-build|android|macos|flatpak|glass-diff>"
                 exit 1
                 ;;
         esac

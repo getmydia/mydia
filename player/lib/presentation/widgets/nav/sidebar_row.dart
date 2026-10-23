@@ -264,9 +264,9 @@ class _SidebarRowState extends State<SidebarRow> {
                     ),
                   ),
                 ),
-                // A fixed height too: unconstrained, the menu's IconButton
-                // pads itself to 48 and the row grows to 72.
-                // The slot stays reserved for the whole time the row is
+                // The slot has a fixed width and height: unconstrained, the
+                // menu's IconButton pads itself to 48 and the row grows to
+                // 72. It stays reserved for the whole time the row is
                 // editing, even when the caller withholds editingTrailing, so
                 // the row's width never shifts mid-edit.
                 if (trailing != null || widget.isEditing)

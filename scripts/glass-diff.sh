@@ -73,8 +73,12 @@ assemble() {
   mkdir -p "$proj"
   cp "$skel/pubspec.yaml" "$skel/analysis_options.yaml" "$proj/"
   [ -d "$proj/linux" ] || cp -r "$skel/linux" "$proj/"
-  rm -rf "$proj/lib" "$proj/tool" "$proj/shaders"
+  rm -rf "${proj:?}/lib" "${proj:?}/tool" "${proj:?}/shaders"
   mkdir -p "$proj/shaders"
+  if [ ! -f "$src/player/shaders/liquid_glass.frag" ]; then
+    echo "assemble: player/shaders/liquid_glass.frag is missing from $src" >&2
+    return 1
+  fi
   cp "$src/player/shaders/liquid_glass.frag" "$proj/shaders/"
   local -A seen=()
   local queue=("tool/liquid_glass_lab/main.dart")
@@ -84,6 +88,10 @@ assemble() {
     [ -n "${seen[$f]:-}" ] && continue
     seen[$f]=1
     case $f in tool/*) from=$labsrc ;; *) from=$src ;; esac
+    if [ ! -f "$from/player/$f" ]; then
+      echo "assemble: player/$f is missing from $from" >&2
+      return 1
+    fi
     mkdir -p "$proj/$(dirname "$f")"
     cp "$from/player/$f" "$proj/$f"
     dir=$(dirname "$f")
@@ -132,7 +140,10 @@ ensure_skeleton
 export_base
 export_index
 
-assemble "$cache/src-after" "$cache/src-after" "$cache/after"
+if ! assemble "$cache/src-after" "$cache/src-after" "$cache/after"; then
+  echo "error: the staged lab cannot be assembled" >&2
+  exit 1
+fi
 if ! build "$cache/after"; then
   echo "error: the staged lab does not build; see $cache/after/build.log" >&2
   exit 1
@@ -140,14 +151,15 @@ fi
 
 # Both sides run the staged lab, so their layouts match and the pixel diff
 # means something. A base whose glass API the staged lab no longer compiles
-# against falls back to its own lab, side-by-side only.
+# against, or lacks a file it imports, falls back to its own lab,
+# side-by-side only.
 shared_lab=1
-assemble "$cache/src-before" "$cache/src-after" "$cache/before"
-if ! build "$cache/before"; then
+if ! { assemble "$cache/src-before" "$cache/src-after" "$cache/before" &&
+  build "$cache/before"; }; then
   echo "note: the base does not build with the staged lab; using its own lab, no pixel diff" >&2
   shared_lab=0
-  assemble "$cache/src-before" "$cache/src-before" "$cache/before"
-  if ! build "$cache/before"; then
+  if ! { assemble "$cache/src-before" "$cache/src-before" "$cache/before" &&
+    build "$cache/before"; }; then
     echo "error: the base lab does not build; see $cache/before/build.log" >&2
     exit 1
   fi
@@ -155,6 +167,7 @@ fi
 
 summary=()
 for scene in grid artwork panel; do
+  rm -f "$out/$scene-diff.png"
   before_scene=$scene
   [ "$shared_lab" = 1 ] || before_scene=grid
   render "$cache/before" "$before_scene" "$out/$scene-before.png"
@@ -166,7 +179,10 @@ for scene in grid artwork panel; do
   if [ "$shared_lab" = 1 ]; then
     changed=$(im compare -metric AE -fuzz 1% "$out/$scene-before.png" \
       "$out/$scene-after.png" "$out/$scene-diff.png" 2>&1 >/dev/null || true)
-    summary+=("$scene: ${changed%% *} pixels changed")
+    case ${changed%% *} in
+      '' | *[!0-9.]*) summary+=("$scene: compare failed (${changed:-no output})") ;;
+      *) summary+=("$scene: ${changed%% *} pixels changed") ;;
+    esac
   else
     summary+=("$scene: side-by-side only")
   fi
