@@ -405,8 +405,12 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
   /// Closes [server], cancelling the transfers it was carrying.
   Future<void> _closeServer(HttpServer? server) async {
-    await _cancelActiveSources();
-    await server?.close(force: true);
+    try {
+      await _cancelActiveSources();
+    } finally {
+      // A cancel that throws must not leave the detached listener bound.
+      await server?.close(force: true);
+    }
   }
 
   /// Interface name prefixes that are never the address a TV on the sofa can
