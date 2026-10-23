@@ -144,6 +144,38 @@ defmodule Mydia.Jobs.ImportListAutoAddTest do
       assert media_item.title == "Halcyon Fields"
     end
 
+    test "auto-adds into the list's library path" do
+      bypass = Bypass.open()
+      point_relay_at(bypass)
+
+      library = Mydia.SettingsFixtures.library_path_fixture(%{type: "movies"})
+      list = movie_list(%{library_path_id: library.id})
+      tmdb_id = 424_250
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+        body = %{
+          "id" => tmdb_id,
+          "title" => "Lantern Row",
+          "release_date" => "2023-05-05",
+          "credits" => %{"cast" => [], "crew" => []}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      item = pending_item(list, %{tmdb_id: tmdb_id, title: "Lantern Row", year: 2023})
+
+      assert :ok = ImportListAutoAdd.perform(job(%{"import_list_id" => list.id}))
+
+      reloaded = ImportLists.get_import_list_item!(item.id)
+      assert reloaded.status == "added"
+
+      media_item = Mydia.Media.get_media_item!(Scope.unrestricted(), reloaded.media_item_id)
+      assert media_item.library_path_id == library.id
+    end
+
     test "marks the item failed when the metadata fetch fails, and keeps processing the rest" do
       bypass = Bypass.open()
       point_relay_at(bypass)

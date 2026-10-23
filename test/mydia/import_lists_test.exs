@@ -1127,6 +1127,54 @@ defmodule Mydia.ImportListsTest do
       assert {:ok, media_item} = ImportLists.add_item_to_library(item, import_list)
       assert media_item.tmdb_id == Mydia.MetadataStubProvider.series_tmdb_id()
     end
+
+    test "creates the item in the list's library with its quality profile and monitored flag" do
+      library = Mydia.SettingsFixtures.library_path_fixture(%{type: "series"})
+
+      {:ok, import_list} =
+        ImportLists.create_import_list(%{
+          name: "Library Target",
+          type: "tmdb_trending",
+          media_type: "tv_show",
+          monitored: false,
+          library_path_id: library.id
+        })
+
+      {:ok, item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: Mydia.MetadataStubProvider.series_tmdb_id(),
+          title: "Harbour Lights",
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, media_item} = ImportLists.add_item_to_library(item, import_list)
+      assert media_item.library_path_id == library.id
+      refute media_item.monitored
+    end
+
+    test "creates a movie in the list's library" do
+      library = Mydia.SettingsFixtures.library_path_fixture(%{type: "movies"})
+
+      {:ok, import_list} =
+        ImportLists.create_import_list(%{
+          name: "Movie Library Target",
+          type: "tmdb_trending",
+          media_type: "movie",
+          library_path_id: library.id
+        })
+
+      {:ok, item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: Mydia.MetadataStubProvider.movie_tmdb_id(),
+          title: Mydia.MetadataStubProvider.movie_title(),
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, media_item} = ImportLists.add_item_to_library(item, import_list)
+      assert media_item.library_path_id == library.id
+    end
   end
 
   describe "add_all_pending_to_library/1" do
