@@ -76,6 +76,18 @@ defmodule Mydia.ImportLists.ImportListItem do
   def valid_statuses, do: @status_values
 
   @doc """
+  The state an operator sees: `"in_library"` when matching media exists
+  (linked or by TMDB id), `"failed"` for a failed add not in the library,
+  `"pending"` otherwise (including an `"added"` row whose media was deleted).
+  Requires `in_library` to have been computed by the item queries in
+  `Mydia.ImportLists`.
+  """
+  @spec effective_status(t()) :: String.t()
+  def effective_status(%__MODULE__{in_library: true}), do: "in_library"
+  def effective_status(%__MODULE__{status: "failed"}), do: "failed"
+  def effective_status(%__MODULE__{}), do: "pending"
+
+  @doc """
   Returns a human-readable label for a status.
   """
   def status_label("pending"), do: "Pending"

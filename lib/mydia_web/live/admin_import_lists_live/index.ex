@@ -119,6 +119,8 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
     opts =
       case filter do
         "all" -> []
+        # Task 6 rewrites the filter
+        status when status in ["added", "skipped"] -> [status: "in_library"]
         status -> [status: status]
       end
 

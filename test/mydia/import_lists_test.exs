@@ -239,7 +239,7 @@ defmodule Mydia.ImportListsTest do
 
       assert ImportLists.count_import_list_items(import_list) == 3
       assert ImportLists.count_import_list_items(import_list, "pending") == 2
-      assert ImportLists.count_import_list_items(import_list, "added") == 1
+      assert ImportLists.count_import_list_items(import_list, "in_library") == 1
     end
 
     test "get_pending_items/1 returns only pending items", %{import_list: import_list} do
@@ -410,14 +410,14 @@ defmodule Mydia.ImportListsTest do
         )
 
       # Verify item is counted as "added" when media_item exists
-      assert ImportLists.count_import_list_items(import_list, "added") == 1
+      assert ImportLists.count_import_list_items(import_list, "in_library") == 1
       assert ImportLists.count_import_list_items(import_list, "pending") == 0
 
       # Now delete the media item
       {:ok, _, _} = Mydia.Media.delete_media_item(Scope.unrestricted(), media_item)
 
       # After deletion, the item should be treated as "pending" since media is gone
-      assert ImportLists.count_import_list_items(import_list, "added") == 0
+      assert ImportLists.count_import_list_items(import_list, "in_library") == 0
       assert ImportLists.count_import_list_items(import_list, "pending") == 1
 
       # Verify the item is returned by get_pending_items
@@ -1304,6 +1304,100 @@ defmodule Mydia.ImportListsTest do
         })
 
       assert {:ok, 0} = ImportLists.mark_existing_items_in_library(import_list)
+    end
+  end
+
+  describe "library awareness" do
+    setup do
+      {:ok, list} =
+        ImportLists.create_import_list(%{
+          name: "Awareness List",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      %{list: list}
+    end
+
+    defp awareness_item(list, attrs) do
+      {:ok, item} =
+        %{import_list_id: list.id, discovered_at: DateTime.utc_now()}
+        |> Map.merge(attrs)
+        |> ImportLists.create_import_list_item()
+
+      item
+    end
+
+    test "an unlinked item whose tmdb_id is in the library counts as in library", %{list: list} do
+      {:ok, _} =
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Quiet Meridian",
+          year: 2021,
+          tmdb_id: 51_001
+        })
+
+      owned = awareness_item(list, %{tmdb_id: 51_001, title: "Quiet Meridian", year: 2021})
+      fresh = awareness_item(list, %{tmdb_id: 51_002, title: "Lantern Coast", year: 2022})
+
+      assert [%{id: id, in_library: true}] =
+               ImportLists.list_import_list_items(list, status: "in_library")
+
+      assert id == owned.id
+      assert [%{id: fresh_id}] = ImportLists.list_import_list_items(list, status: "to_add")
+      assert fresh_id == fresh.id
+      assert [%{id: ^fresh_id}] = ImportLists.get_pending_items(list)
+      assert ImportLists.count_import_list_items(list, "pending") == 1
+      assert ImportLists.count_import_list_items(list, "in_library") == 1
+      assert ImportLists.count_import_list_items(list) == 2
+    end
+
+    test "a TV show with the same tmdb_id does not mark a movie item", %{list: list} do
+      {:ok, _} =
+        Mydia.Media.create_media_item(
+          Scope.unrestricted(),
+          %{type: "tv_show", title: "Paper Harbour", year: 2020, tmdb_id: 51_010},
+          skip_episode_refresh: true
+        )
+
+      awareness_item(list, %{tmdb_id: 51_010, title: "Paper Harbour", year: 2020})
+
+      assert [%{in_library: false}] = ImportLists.list_import_list_items(list)
+      assert ImportLists.count_import_list_items(list, "pending") == 1
+    end
+
+    test "failed items are to add but not pending", %{list: list} do
+      item = awareness_item(list, %{tmdb_id: 51_020, title: "Glass Orchard", year: 2019})
+      {:ok, _} = ImportLists.mark_item_failed(item, "boom")
+
+      assert [_] = ImportLists.list_import_list_items(list, status: "to_add")
+      assert [] = ImportLists.get_pending_items(list)
+
+      assert [%{status: "failed"} = failed] =
+               ImportLists.list_import_list_items(list, status: "failed")
+
+      assert ImportListItem.effective_status(failed) == "failed"
+    end
+
+    test "an added item whose media was deleted is pending again", %{list: list} do
+      {:ok, media} =
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Copper Tide",
+          year: 2018,
+          tmdb_id: 51_030
+        })
+
+      item = awareness_item(list, %{tmdb_id: 51_030, title: "Copper Tide", year: 2018})
+      {:ok, _} = ImportLists.mark_item_added(item, media.id)
+      assert [%{in_library: true}] = ImportLists.list_import_list_items(list)
+
+      Mydia.Repo.delete!(media)
+
+      assert [reloaded] = ImportLists.list_import_list_items(list)
+      refute reloaded.in_library
+      assert ImportListItem.effective_status(reloaded) == "pending"
+      assert [_] = ImportLists.get_pending_items(list)
     end
   end
 end

@@ -180,16 +180,15 @@ defmodule Mydia.ImportLists do
     limit_val = Keyword.get(opts, :limit)
     offset_val = Keyword.get(opts, :offset, 0)
 
-    # Build query with left join to compute in_library dynamically
     query =
-      from(i in ImportListItem,
-        left_join: m in assoc(i, :media_item),
-        where: i.import_list_id == ^import_list_id,
-        # in_library is true if the media_item still exists
-        select: %{i | in_library: not is_nil(m.id)},
-        order_by: [desc: i.discovered_at]
-      )
-      |> maybe_filter_status_with_library(status)
+      import_list_id
+      |> items_with_library_query()
+      |> select([i, media: m, library_match: lm], %{
+        i
+        | in_library: not is_nil(m.id) or not is_nil(lm.id)
+      })
+      |> order_by([i], desc: i.discovered_at)
+      |> filter_by_effective_status(status)
       |> maybe_preload(opts[:preload])
 
     query =
@@ -212,12 +211,27 @@ defmodule Mydia.ImportLists do
   end
 
   def count_import_list_items_by_id(import_list_id, status \\ nil) do
+    import_list_id
+    |> items_with_library_query()
+    |> filter_by_effective_status(status)
+    |> Repo.aggregate(:count)
+  end
+
+  # Items joined to the library twice: through their own link
+  # (`media_item_id`, set when the list added or linked the title) and by
+  # `(type, tmdb_id)`, which catches media that reached the library any other
+  # way. `media_items` is unique on `(type, tmdb_id)`, so the second join
+  # yields at most one row.
+  defp items_with_library_query(import_list_id) do
     from(i in ImportListItem,
+      join: l in assoc(i, :import_list),
       left_join: m in assoc(i, :media_item),
+      as: :media,
+      left_join: lm in MediaItem,
+      as: :library_match,
+      on: lm.tmdb_id == i.tmdb_id and lm.type == l.media_type,
       where: i.import_list_id == ^import_list_id
     )
-    |> maybe_filter_status_with_library(status)
-    |> Repo.aggregate(:count)
   end
 
   @doc """
@@ -225,6 +239,17 @@ defmodule Mydia.ImportLists do
   """
   def get_pending_items(%ImportList{} = import_list, opts \\ []) do
     list_import_list_items(import_list, Keyword.put(opts, :status, "pending"))
+  end
+
+  # Rows still stored as "pending", regardless of library state. Tasks 2 and 3
+  # of the library-awareness work retire this in favour of get_pending_items/2.
+  defp stored_pending_items(%ImportList{id: id}) do
+    Repo.all(
+      from(i in ImportListItem,
+        where: i.import_list_id == ^id and i.status == "pending",
+        order_by: [desc: i.discovered_at]
+      )
+    )
   end
 
   @doc """
@@ -671,7 +696,7 @@ defmodule Mydia.ImportLists do
   """
   def add_all_pending_to_library(%ImportList{} = import_list) do
     import_list
-    |> get_pending_items()
+    |> stored_pending_items()
     |> Enum.reduce(%{added: 0, skipped: 0, failed: 0}, fn item, acc ->
       update_stats_after_add(acc, add_item_to_library(item, import_list), item.id)
     end)
@@ -774,7 +799,7 @@ defmodule Mydia.ImportLists do
   Returns the count of items updated.
   """
   def mark_existing_items_in_library(%ImportList{} = import_list) do
-    pending_items = get_pending_items(import_list)
+    pending_items = stored_pending_items(import_list)
 
     updated_count =
       Enum.reduce(pending_items, 0, fn item, count ->
@@ -812,22 +837,26 @@ defmodule Mydia.ImportLists do
   defp maybe_filter_media_type(query, media_type),
     do: where(query, [l], l.media_type == ^media_type)
 
-  # Filter by status while considering in_library for "added" and "pending" statuses
-  # This is used when we have a left join to media_items
-  defp maybe_filter_status_with_library(query, nil), do: query
+  # Filters on the state an operator sees (see ImportListItem.effective_status/1).
+  defp filter_by_effective_status(query, status) when status in [nil, "all"], do: query
 
-  # "added" means truly in library (media_item exists)
-  defp maybe_filter_status_with_library(query, "added") do
-    where(query, [i, m], i.status == "added" and not is_nil(m.id))
+  defp filter_by_effective_status(query, "in_library") do
+    where(query, [media: m, library_match: lm], not is_nil(m.id) or not is_nil(lm.id))
   end
 
-  # "pending" means either pending status OR was added but media was removed
-  defp maybe_filter_status_with_library(query, "pending") do
-    where(query, [i, m], i.status == "pending" or (i.status == "added" and is_nil(m.id)))
+  defp filter_by_effective_status(query, "to_add") do
+    where(query, [media: m, library_match: lm], is_nil(m.id) and is_nil(lm.id))
   end
 
-  # For other statuses, just filter by the stored status
-  defp maybe_filter_status_with_library(query, status) do
-    where(query, [i], i.status == ^status)
+  defp filter_by_effective_status(query, "pending") do
+    query
+    |> filter_by_effective_status("to_add")
+    |> where([i], i.status != "failed")
+  end
+
+  defp filter_by_effective_status(query, "failed") do
+    query
+    |> filter_by_effective_status("to_add")
+    |> where([i], i.status == "failed")
   end
 end
