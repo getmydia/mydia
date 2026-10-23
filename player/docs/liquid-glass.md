@@ -28,7 +28,7 @@ frosted `GlassSurface` recipes and Material controls, and the playback OSD
 | Render object | `lib/presentation/widgets/glass/liquid_glass_filter.dart` |
 | Press and hover | `lib/presentation/widgets/glass/glass_interaction.dart`, `glass_pointer.dart` |
 | Accessibility flags | `lib/core/theme/liquid_glass/glass_accessibility.dart` |
-| Lab | `tool/liquid_glass_lab/main.dart` |
+| Lab and visual diff | tool/liquid_glass_lab/, scripts/glass-diff.sh |
 
 ## Where glass goes
 
@@ -299,9 +299,12 @@ Change the curve in the shader and in `liquidAdaptiveAlpha` together.
 
 ## Running the lab
 
-On a Mac, from `player/`:
+On Linux, `./dev player glass-diff` builds and renders the lab for you (see
+"Visual diff"). To drive it interactively on a Mac, from `player/`:
 
     flutter run -d macos -t tool/liquid_glass_lab/main.dart
+
+The manual Linux recipe below is what `scripts/glass-diff.sh` automates.
 
 The player app does not build for Linux desktop without libsecret
 (`flutter_secure_storage`), so on Linux run the lab from a plugin-free
@@ -317,7 +320,36 @@ scratch project:
       flutter run -d linux --dart-define=LAB_SNAPSHOT=/tmp/lab.png
 
 `GDK_SCALE=2` gives a 2x device pixel ratio. Add `LAB_GRID=true` for the
-grid and `LAB_SCROLL=<px>` to scroll the backdrop first.
+grid, `LAB_SCROLL=<px>` to scroll the backdrop first and
+`LAB_SCENE=<grid|artwork|panel>` to pick a scene. Every `LAB_*` value may
+come from the environment as well as `--dart-define`.
+
+## Visual diff
+
+Every commit that stages a Liquid Glass file needs a before/after render of
+that staged content. The glass files are listed in `scripts/glass-paths.sh`:
+the shader, `lib/core/theme/liquid_glass/`, `depth_tokens.dart`,
+`lib/presentation/widgets/glass/`, `glass_surface.dart` and the lab.
+
+    ./dev player glass-diff [--base <ref>]
+
+renders the lab twice, at `--base` (default: the merge base with
+`origin/master`) and from the index, in three scenes: `grid` (flat colour, a
+white strip and the scroll edge), `artwork` (the detail screen's controls over
+painted poster-like art) and `panel` (a dialog and the floating sidebar). It
+prints a side-by-side per scene and a changed-pixel count. Both sides run the
+staged lab, so the counts compare like with like; when the base cannot compile
+the staged lab, it falls back to its own lab and writes side-by-sides only.
+
+The run records a stamp keyed to the staged glass blobs, under
+`.git/.../glass-diff/<stamp>/`. The `glass-diff` pre-commit hook recomputes the
+key and refuses the commit when no stamp exists, so restaging anything means
+rendering again. There is no skip: a refactor's evidence is a zero count.
+
+Look at the images, and put the `artwork` side-by-side in the PR. Unit tests
+cannot see pixels (`flutter test` has no Impeller), and #1232 shipped values
+that matched the iOS 27 kit and looked worse, because nothing compared the
+render against the previous one.
 
 ## Tests
 

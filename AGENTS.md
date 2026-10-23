@@ -59,6 +59,11 @@ Mydia uses a companion service called **metadata-relay**, which is a developer-o
 
 The Flutter player has additional workflow guidance in `player/CLAUDE.md`.
 
+Liquid Glass changes (the shader, `player/lib/core/theme/liquid_glass/`,
+`depth_tokens.dart`, the glass widgets, the lab) need
+`./dev player glass-diff` before committing: a pre-commit hook refuses the
+commit otherwise. See `player/docs/liquid-glass.md`, "Visual diff".
+
 ### Player Android Builds
 
 Android builds use the root flake's `.#android` dev shell (`nix/devShells/flake-module.nix`) which provides Flutter, Android SDK, NDK, and Rust cross-compilation toolchains.
