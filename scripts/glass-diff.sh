@@ -166,6 +166,7 @@ if ! { assemble "$cache/src-before" "$cache/src-after" "$cache/before" &&
 fi
 
 summary=()
+compare_failed=0
 for scene in grid artwork panel; do
   rm -f "$out/$scene-diff.png"
   before_scene=$scene
@@ -180,7 +181,10 @@ for scene in grid artwork panel; do
     changed=$(im compare -metric AE -fuzz 1% "$out/$scene-before.png" \
       "$out/$scene-after.png" "$out/$scene-diff.png" 2>&1 >/dev/null || true)
     case ${changed%% *} in
-      '' | *[!0-9.]*) summary+=("$scene: compare failed (${changed:-no output})") ;;
+      '' | *[!0-9.]*)
+        summary+=("$scene: compare failed (${changed:-no output})")
+        compare_failed=1
+        ;;
       *) summary+=("$scene: ${changed%% *} pixels changed") ;;
     esac
   else
@@ -188,12 +192,16 @@ for scene in grid artwork panel; do
   fi
 done
 
-printf 'base %s\nstamp %s\ncreated %s\nshared_lab %s\n' \
-  "$base_sha" "$stamp" "$(date -Is)" "$shared_lab" >"$out/stamp"
-
 echo
 printf '  %s\n' "${summary[@]}"
 echo
+if [ "$compare_failed" = 1 ]; then
+  # No stamp: the gate must not accept a diff that was never computed.
+  echo "error: a comparison failed; no diff was recorded" >&2
+  exit 1
+fi
+printf 'base %s\nstamp %s\ncreated %s\nshared_lab %s\n' \
+  "$base_sha" "$stamp" "$(date -Is)" "$shared_lab" >"$out/stamp"
 echo "Look at these before committing:"
 for scene in grid artwork panel; do
   echo "  $out/$scene-side.png"

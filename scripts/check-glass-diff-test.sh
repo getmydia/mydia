@@ -31,9 +31,10 @@ run_in_repo() {
 # Writes the stamp glass-diff.sh would write for the current index.
 record='
   . scripts/glass-paths.sh
-  dir="$(git rev-parse --path-format=absolute --git-path "glass-diff/$(glass_stamp .)")"
+  key="$(glass_stamp .)"
+  dir="$(git rev-parse --path-format=absolute --git-path "glass-diff/$key")"
   mkdir -p "$dir"
-  echo recorded > "$dir/stamp"
+  printf "stamp %s\n" "$key" > "$dir/stamp"
 '
 
 stage_glass='
@@ -91,6 +92,19 @@ if run_in_repo bash -c "
   scripts/check-glass-diff.sh
 "; then
   note_failure "restaged glass content should need a new diff"
+fi
+
+# A stamp file that does not carry the key is not a recorded diff.
+if run_in_repo bash -c "
+  set -- one
+  $stage_glass
+  . scripts/glass-paths.sh
+  dir=\"\$(git rev-parse --path-format=absolute --git-path \"glass-diff/\$(glass_stamp .)\")\"
+  mkdir -p \"\$dir\"
+  echo recorded > \"\$dir/stamp\"
+  scripts/check-glass-diff.sh
+"; then
+  note_failure "a stamp without the staged key should fail"
 fi
 
 # A deletion-only commit changes rendering too.

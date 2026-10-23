@@ -15,7 +15,8 @@ fi
 
 stamp="$(glass_stamp "$root")"
 dir="$(git -C "$root" rev-parse --path-format=absolute --git-path "glass-diff/$stamp")"
-if [ -f "$dir/stamp" ]; then
+# glass-diff.sh writes the key into the stamp only after every comparison ran.
+if [ -f "$dir/stamp" ] && grep -Fxq "stamp $stamp" "$dir/stamp"; then
   exit 0
 fi
 

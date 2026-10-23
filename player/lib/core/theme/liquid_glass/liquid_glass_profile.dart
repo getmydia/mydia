@@ -3,12 +3,13 @@ import 'package:flutter/painting.dart';
 
 /// The shader values that differ between Liquid Glass materials.
 ///
-/// The three profiles map to the iOS 27 UI Kit's materials. [lens] is the
-/// kit's Small UI: the floating control layer, with a bent rim, a specular
-/// rim lit from above, below and the sides, and a little volume shading. Large
-/// surfaces take [panel], the kit's Large UI: a heavier blur and a luminosity
-/// wash with a discreet edge. [clear] is the kit's clear glass for slider and
-/// segmented thumbs. Tint and adaptive tint stay per surface.
+/// [lens] is the floating control layer: a frosted blur, a bent rim, and a
+/// specular rim lit from above and below. It keeps the material it had before
+/// the iOS 27 kit mapping, because the kit's Small UI values rendered nearly
+/// clear with a white outline here. Large surfaces take [panel], the kit's
+/// Large UI: a heavier blur and a luminosity wash with a discreet edge.
+/// [clear] is the kit's clear glass for slider and segmented thumbs. Tint and
+/// adaptive tint stay per surface.
 @immutable
 class LiquidGlassProfile {
   const LiquidGlassProfile({
