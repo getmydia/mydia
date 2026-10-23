@@ -93,6 +93,17 @@ if run_in_repo bash -c "
   note_failure "restaged glass content should need a new diff"
 fi
 
+# A deletion-only commit changes rendering too.
+if run_in_repo bash -c "
+  set -- one
+  $stage_glass
+  git commit -q --no-verify -m base
+  git rm -q player/lib/presentation/widgets/glass/glass_button.dart
+  scripts/check-glass-diff.sh
+"; then
+  note_failure "a staged glass deletion without a diff should fail"
+fi
+
 if [ "$fail" -ne 0 ]; then
   exit 1
 fi

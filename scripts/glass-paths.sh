@@ -1,6 +1,6 @@
 # Paths whose staged content changes how Liquid Glass renders. Sourced by
-# check-glass-diff.sh and glass-diff.sh; the `glass-diff` hook's `files`
-# regex in devenv.nix mirrors this list.
+# check-glass-diff.sh and glass-diff.sh. This is the only copy of the list:
+# the `glass-diff` hook in devenv.nix runs on every commit.
 
 # shellcheck disable=SC2034  # used by the scripts that source this file
 GLASS_PATHS=(
