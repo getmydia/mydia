@@ -537,6 +537,14 @@ in
       pass_filenames = false;
       always_run = true;
     };
+    glass-diff = {
+      enable = true;
+      name = "Liquid Glass visual diff";
+      entry = "scripts/check-glass-diff.sh";
+      # Mirrors GLASS_PATHS in scripts/glass-paths.sh.
+      files = "^player/(shaders/liquid_glass\\.frag|lib/core/theme/(liquid_glass/|depth_tokens\\.dart)|lib/presentation/widgets/(glass/|glass_surface\\.dart)|tool/liquid_glass_lab/)";
+      pass_filenames = false;
+    };
   };
 
   # ── Shell-entry banner (R10) ────────────────────────────────────────────────
