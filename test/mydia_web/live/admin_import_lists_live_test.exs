@@ -80,6 +80,43 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
       assert has_element?(view, "#import-list-items-modal")
     end
 
+    test "Add all pending links a title/year match and reports it as added", %{conn: conn} do
+      {:ok, list} =
+        Mydia.ImportLists.create_import_list(%{
+          name: "Add All List #{System.unique_integer([:positive])}",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      {:ok, _media_item} =
+        Mydia.Media.create_media_item(Mydia.Accounts.Scope.unrestricted(), %{
+          type: "movie",
+          title: "Lantern Harbor",
+          year: 2021
+        })
+
+      {:ok, _item} =
+        Mydia.ImportLists.create_import_list_item(%{
+          import_list_id: list.id,
+          tmdb_id: 990_011,
+          title: "Lantern Harbor",
+          year: 2021,
+          discovered_at: DateTime.utc_now()
+        })
+
+      {:ok, view, _} = live(conn, ~p"/admin/import-lists")
+
+      view
+      |> element("#view-import-list-items-#{list.id}")
+      |> render_click()
+
+      view
+      |> element("#add-all-pending-import-list-items")
+      |> render_click()
+
+      assert render(view) =~ "Added 1 items to library"
+    end
+
     test "the nav link is present", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/quality")
 

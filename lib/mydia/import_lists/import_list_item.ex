@@ -3,7 +3,7 @@ defmodule Mydia.ImportLists.ImportListItem do
   Schema for import list items.
 
   An import list item represents a single media item discovered from an import list.
-  Items are tracked from discovery through being added to the library or skipped.
+  Items are tracked from discovery through being added to the library or failed.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -11,7 +11,7 @@ defmodule Mydia.ImportLists.ImportListItem do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @status_values ~w(pending added skipped failed)
+  @status_values ~w(pending added failed)
 
   @type t :: %__MODULE__{
           id: binary(),
@@ -92,7 +92,6 @@ defmodule Mydia.ImportLists.ImportListItem do
   """
   def status_label("pending"), do: "Pending"
   def status_label("added"), do: "Added"
-  def status_label("skipped"), do: "Skipped"
   def status_label("failed"), do: "Failed"
   def status_label(_), do: "Unknown"
 end

@@ -444,16 +444,15 @@ defmodule Mydia.ImportListsTest do
       assert hd(pending_items).in_library == false
     end
 
-    test "mark_item_skipped/2 updates status to skipped with reason", %{import_list: import_list} do
-      {:ok, item} =
-        ImportLists.create_import_list_item(
-          Map.put(@valid_item_attrs, :import_list_id, import_list.id)
+    test "the changeset rejects the retired skipped status", %{import_list: import_list} do
+      changeset =
+        ImportListItem.changeset(
+          %ImportListItem{},
+          Map.merge(@valid_item_attrs, %{import_list_id: import_list.id, status: "skipped"})
         )
 
-      {:ok, updated} = ImportLists.mark_item_skipped(item, "Already in library")
-
-      assert updated.status == "skipped"
-      assert updated.skip_reason == "Already in library"
+      assert "is invalid" in errors_on(changeset).status
+      assert ImportListItem.valid_statuses() == ~w(pending added failed)
     end
 
     test "mark_item_failed/2 updates status to failed with reason", %{import_list: import_list} do
@@ -1010,8 +1009,7 @@ defmodule Mydia.ImportListsTest do
       reloaded = ImportLists.get_import_list_item!(item.id)
       assert reloaded.status == "added"
       assert reloaded.media_item_id == media_item.id
-      # The wasted intermediate skip write (and its stale reason) must not
-      # survive: the final row is honestly "added", not "skipped".
+      # Linking clears any stale reason.
       assert reloaded.skip_reason == nil
     end
 
@@ -1147,13 +1145,16 @@ defmodule Mydia.ImportListsTest do
     test "creates the item in the list's library with its quality profile and monitored flag" do
       library = Mydia.SettingsFixtures.library_path_fixture(%{type: "series"})
 
+      profile = Mydia.SettingsFixtures.quality_profile_fixture()
+
       {:ok, import_list} =
         ImportLists.create_import_list(%{
           name: "Library Target",
           type: "tmdb_trending",
           media_type: "tv_show",
           monitored: false,
-          library_path_id: library.id
+          library_path_id: library.id,
+          quality_profile_id: profile.id
         })
 
       {:ok, item} =
@@ -1166,6 +1167,8 @@ defmodule Mydia.ImportListsTest do
 
       assert {:ok, media_item} = ImportLists.add_item_to_library(item, import_list)
       assert media_item.library_path_id == library.id
+      assert media_item.quality_profile_id == import_list.quality_profile_id
+      assert import_list.quality_profile_id == profile.id
       refute media_item.monitored
     end
 
@@ -1194,7 +1197,7 @@ defmodule Mydia.ImportListsTest do
   end
 
   describe "add_all_pending_to_library/1" do
-    test "reports duplicates as added and totals stats across pending items" do
+    test "totals stats across pending items and leaves items already in the library out" do
       {:ok, import_list} =
         ImportLists.create_import_list(%{
           name: "Test List",
@@ -1267,9 +1270,7 @@ defmodule Mydia.ImportListsTest do
 
       stats = ImportLists.add_all_pending_to_library(import_list)
 
-      assert stats.added == 2
-      assert stats.skipped == 0
-      assert stats.failed == 1
+      assert stats == %{added: 1, failed: 1}
     end
   end
 

@@ -409,33 +409,9 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
     import_list = socket.assigns.selected_list
     stats = ImportLists.add_all_pending_to_library(import_list)
 
-    message =
-      cond do
-        stats.added > 0 and stats.skipped > 0 ->
-          "Added #{stats.added} items, #{stats.skipped} already in library"
-
-        stats.added > 0 ->
-          "Added #{stats.added} items to library"
-
-        stats.skipped > 0 ->
-          "#{stats.skipped} items already in library"
-
-        stats.failed > 0 ->
-          "Failed to add #{stats.failed} items"
-
-        true ->
-          "No pending items to add"
-      end
-
-    socket =
-      if stats.failed > 0 and stats.added == 0 do
-        put_flash(socket, :error, message)
-      else
-        put_flash(socket, :info, message)
-      end
-
     {:noreply,
      socket
+     |> put_add_all_flash(stats)
      |> load_list_items(import_list, socket.assigns.items_filter)
      |> load_data()}
   end
@@ -445,35 +421,26 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
     import_list = ImportLists.get_import_list!(id)
     stats = ImportLists.add_all_pending_to_library(import_list)
 
-    message =
-      cond do
-        stats.added > 0 and stats.skipped > 0 ->
-          "Added #{stats.added} items, #{stats.skipped} already in library"
-
-        stats.added > 0 ->
-          "Added #{stats.added} items to library"
-
-        stats.skipped > 0 ->
-          "#{stats.skipped} items already in library"
-
-        stats.failed > 0 ->
-          "Failed to add #{stats.failed} items"
-
-        true ->
-          "No pending items to add"
-      end
-
-    socket =
-      if stats.failed > 0 and stats.added == 0 do
-        put_flash(socket, :error, message)
-      else
-        put_flash(socket, :info, message)
-      end
-
-    {:noreply, load_data(socket)}
+    {:noreply, socket |> put_add_all_flash(stats) |> load_data()}
   end
 
   ## Helpers
+
+  defp put_add_all_flash(socket, %{added: added, failed: failed}) do
+    cond do
+      added > 0 and failed > 0 ->
+        put_flash(socket, :info, "Added #{added} items to library, #{failed} failed")
+
+      added > 0 ->
+        put_flash(socket, :info, "Added #{added} items to library")
+
+      failed > 0 ->
+        put_flash(socket, :error, "Failed to add #{failed} items")
+
+      true ->
+        put_flash(socket, :info, "Nothing left to add")
+    end
+  end
 
   defp format_changeset_errors(%Ecto.Changeset{} = changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->

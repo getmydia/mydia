@@ -241,17 +241,6 @@ defmodule Mydia.ImportLists do
     list_import_list_items(import_list, Keyword.put(opts, :status, "pending"))
   end
 
-  # Rows still stored as "pending", regardless of library state. Tasks 2 and 3
-  # of the library-awareness work retire this in favour of get_pending_items/2.
-  defp stored_pending_items(%ImportList{id: id}) do
-    Repo.all(
-      from(i in ImportListItem,
-        where: i.import_list_id == ^id and i.status == "pending",
-        order_by: [desc: i.discovered_at]
-      )
-    )
-  end
-
   @doc """
   Gets a single import list item.
   """
@@ -334,18 +323,6 @@ defmodule Mydia.ImportLists do
       status: "added",
       media_item_id: media_item_id,
       skip_reason: nil
-    })
-    |> Repo.update()
-  end
-
-  @doc """
-  Marks an import list item as skipped.
-  """
-  def mark_item_skipped(%ImportListItem{} = item, reason) do
-    item
-    |> ImportListItem.changeset(%{
-      status: "skipped",
-      skip_reason: reason
     })
     |> Repo.update()
   end
@@ -604,12 +581,7 @@ defmodule Mydia.ImportLists do
     end
   end
 
-  # Links the item to the media already in the library. A single write: an
-  # earlier version wrote mark_item_skipped/2 first and mark_item_added/2
-  # right after, which immediately overwrote the skip (mark_item_added/2
-  # clears skip_reason), so the row always ended up "added" anyway. That made
-  # the write pointless and, worse, made the job's own stats (which reported
-  # it as skipped) disagree with what the database actually stored.
+  # Links the item to the media already in the library with a single write.
   defp link_to_existing(item, media_item) do
     {:ok, _} = mark_item_added(item, media_item.id)
     {:ok, media_item}
@@ -688,28 +660,17 @@ defmodule Mydia.ImportLists do
   @doc """
   Adds all pending items from an import list to the library.
 
-  Returns a map with counts: %{added: n, skipped: n, failed: n}
+  Returns a map with counts: %{added: n, failed: n}
   """
   def add_all_pending_to_library(%ImportList{} = import_list) do
     import_list
-    |> stored_pending_items()
-    |> Enum.reduce(%{added: 0, skipped: 0, failed: 0}, fn item, acc ->
-      update_stats_after_add(acc, add_item_to_library(item, import_list), item.id)
+    |> get_pending_items()
+    |> Enum.reduce(%{added: 0, failed: 0}, fn item, acc ->
+      case add_item_to_library(item, import_list) do
+        {:ok, _} -> %{acc | added: acc.added + 1}
+        {:error, _} -> %{acc | failed: acc.failed + 1}
+      end
     end)
-  end
-
-  defp update_stats_after_add(acc, {:ok, _media_item}, item_id) do
-    updated_item = get_import_list_item!(item_id)
-
-    if updated_item.status == "skipped" do
-      %{acc | skipped: acc.skipped + 1}
-    else
-      %{acc | added: acc.added + 1}
-    end
-  end
-
-  defp update_stats_after_add(acc, {:error, _reason}, _item_id) do
-    %{acc | failed: acc.failed + 1}
   end
 
   defp format_changeset_error(%Ecto.Changeset{} = changeset) do

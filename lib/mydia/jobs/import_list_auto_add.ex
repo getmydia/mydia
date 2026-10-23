@@ -51,7 +51,6 @@ defmodule Mydia.Jobs.ImportListAutoAdd do
       Logger.info("[ImportListAutoAdd] Auto-add completed",
         import_list_id: import_list_id,
         added: stats.added,
-        skipped: stats.skipped,
         failed: stats.failed
       )
 
@@ -96,11 +95,9 @@ defmodule Mydia.Jobs.ImportListAutoAdd do
 
   # Note: a pending item that turns out to already be in the library links to
   # the existing media item and counts as :added, same as a freshly created
-  # one (ImportLists.add_item_to_library/2 handles both). Nothing currently
-  # returns :skipped, but the bucket stays in the accumulator so the shape
-  # (and the Logger.info call above that reads stats.skipped) doesn't change.
+  # one (ImportLists.add_item_to_library/2 handles both).
   defp process_pending_items(import_list, pending_items) do
-    Enum.reduce(pending_items, %{added: 0, skipped: 0, failed: 0}, fn item, acc ->
+    Enum.reduce(pending_items, %{added: 0, failed: 0}, fn item, acc ->
       case process_item(import_list, item) do
         :added -> %{acc | added: acc.added + 1}
         :failed -> %{acc | failed: acc.failed + 1}
