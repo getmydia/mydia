@@ -96,9 +96,16 @@ Our values:
 
 | Profile | `blurSigma` | `depth` | `distortion` | `saturation` | `brightness` | `lumaTarget` / `lumaMix` | `shadow` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `lens` | 3 | 0.8 | 0.4 | 1.0 | 0.1 | 0 / 0 | 0 8 15, black 4% |
+| `lens` | 20 | 0.4 | 1.25 | 1.3 | 0.07 | 0 / 0 | 0 8 15, black 4% |
 | `panel` | 15 | 0.9 | 0.3 | 1.2 | 0 | 0.1 / 0.3 | 0 18 48, black 45% |
 | `clear` | 0 | 0.4 | 0.08 | 1.0 | 0.02 | 0 / 0 | 0 2 8, black 15% (ours) |
+
+The lens does not follow the kit. Its Small UI values rendered nearly clear,
+and its side and volume light drew a white outline around every button, so
+the lens keeps the frosted material from before the kit mapping: blur 20, a
+rim lit at the top and bottom (`sideLight` 0, `rimHairline` 0.12) and no
+volume shading. The kit is a starting point to tune by eye against the
+previous render (`./dev player glass-diff`), not a target to copy.
 
 `blurSigma` is the kit's blur radius halved: a Gaussian sigma is about half
 the radius a design tool shows. The edge band is `depth` times the corner
@@ -118,8 +125,10 @@ through the translucent fill, and the shader's rim terms decode them:
 - The hairline ring (spread 0.5, grey 190 on small, spread 0.3, grey 166 on
   large) is `rimHairline`, a light line on every edge.
 - The side slivers (x of plus and minus 1.25, spread -0.75) are `sideLight`,
-  rim light on the left and right edges relative to the top.
-- The small layer's volume shadows are `volumeSide` and `volumeEnds`. The
+  rim light on the left and right edges relative to the top (panel only; the
+  lens sets these to 0).
+- The small layer's volume shadows are `volumeSide` and `volumeEnds` (panel
+  only; the lens sets these to 0). The
   x of plus and minus 20 shadow (blur 20, spread -30, grey 178) lightens the
   interior toward the sides; the y of plus and minus 40 shadow (blur 10, spread
   -40, grey 25) darkens it toward the top and bottom.

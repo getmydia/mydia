@@ -254,7 +254,7 @@ abstract final class DepthTokens {
   // and icon contrast for every preset over grey backdrops from black to
   // white in steps of 0.05, since the tint is lowest at mid luma. The luma
   // is the brightest nearby, so it is the worst case under a glyph.
-  static const double liquidChromeTintOpacity = 0.35;
+  static const double liquidChromeTintOpacity = 0.3;
   static const double liquidModalTintOpacity = 0.35;
   static const double liquidControlTintOpacity = 0.2;
   static const double liquidChromeAdaptiveMax = 0.9;
