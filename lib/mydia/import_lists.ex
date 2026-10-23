@@ -793,32 +793,26 @@ defmodule Mydia.ImportLists do
   end
 
   @doc """
-  Updates import list items to reflect their library status.
+  Links pending items to media already in the library.
 
-  Checks each pending item against the library and marks duplicates as skipped.
-  Returns the count of items updated.
+  Items whose TMDB id matches a library row are already reported as in
+  library by the item queries, so this only has work to do for library rows
+  without a TMDB id, which `check_duplicate/4` matches on title and year.
+  Returns the number of items linked.
   """
-  def mark_existing_items_in_library(%ImportList{} = import_list) do
-    pending_items = stored_pending_items(import_list)
-
-    updated_count =
-      Enum.reduce(pending_items, 0, fn item, count ->
+  @spec link_existing_library_items(ImportList.t()) :: {:ok, non_neg_integer()}
+  def link_existing_library_items(%ImportList{} = import_list) do
+    linked =
+      import_list
+      |> get_pending_items()
+      |> Enum.count(fn item ->
         case check_duplicate(item.tmdb_id, import_list.media_type, item.title, item.year) do
-          {:duplicate, media_item} ->
-            {:ok, _} = mark_item_skipped(item, "Already in library")
-            # Also link to the existing media item
-            item
-            |> ImportListItem.changeset(%{media_item_id: media_item.id})
-            |> Repo.update()
-
-            count + 1
-
-          :not_found ->
-            count
+          {:duplicate, media_item} -> match?({:ok, _}, mark_item_added(item, media_item.id))
+          :not_found -> false
         end
       end)
 
-    {:ok, updated_count}
+    {:ok, linked}
   end
 
   ## Private Functions

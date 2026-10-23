@@ -68,7 +68,7 @@ defmodule Mydia.Jobs.ImportListAutoAddTest do
       assert :ok = ImportListAutoAdd.perform(job(%{"import_list_id" => list.id}))
     end
 
-    test "an item already in the library (matched by tmdb_id) is linked in a single write, never hits the network" do
+    test "an item already in the library by tmdb_id is left alone and reads as in library, never hits the network" do
       list = movie_list()
 
       media_item_fixture(%{type: "movie", title: "Nebula Drift", year: 2022, tmdb_id: 777})
