@@ -116,4 +116,20 @@ void main() {
       expect(audioOutputUnavailable('Audio device init failed'), isFalse);
     });
   });
+
+  group('sourceLost', () {
+    test('matches mpv giving up on a URL', () {
+      expect(
+          sourceLost(
+              'Failed to open http://127.0.0.1:56189/t/a/direct/f/stream.'),
+          isTrue);
+    });
+
+    test('ignores the transient connection errors mpv retries itself', () {
+      expect(
+          sourceLost('tcp: Connection to tcp://127.0.0.1:56189 failed: '
+              'Connection refused'),
+          isFalse);
+    });
+  });
 }

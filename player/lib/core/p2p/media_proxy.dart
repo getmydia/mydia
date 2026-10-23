@@ -1,5 +1,19 @@
 import 'dart:collection';
 
+/// What [MediaProxy.healListener] found.
+enum ProxyHeal {
+  /// The listener was accepting connections, or nothing was being served.
+  healthy,
+
+  /// The listener was gone and is back on the same port: every URL already
+  /// handed out works again.
+  reboundSamePort,
+
+  /// The listener was gone and its port was taken: URLs already handed out
+  /// point at nothing and must be rebuilt.
+  reboundNewPort,
+}
+
 /// Serves media bytes to the platform's video pipeline from a p2p connection.
 ///
 /// Native runs a loopback HTTP server. A browser cannot, so it registers a
@@ -64,6 +78,21 @@ abstract class MediaProxy {
   Future<void> shutdown();
 
   bool get isRunning;
+
+  /// Checks that the listener still accepts connections, and binds it again
+  /// if not.
+  ///
+  /// iOS reclaims a suspended app's listening sockets. The server object
+  /// survives and still reports itself running, but every connection is
+  /// refused, so the app calls this on every resume.
+  ///
+  /// May throw when no listener can be bound at all. The proxy then serves
+  /// nothing but keeps its targets, so a later [start] binds afresh.
+  Future<ProxyHeal> healListener();
+
+  /// Every [healListener] result other than [ProxyHeal.healthy], for holders
+  /// that baked the old port into a URL.
+  Stream<ProxyHeal> get heals;
 
   /// Origin and prefix to build media URLs against, with no trailing slash.
   ///

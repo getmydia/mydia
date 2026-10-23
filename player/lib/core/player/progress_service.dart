@@ -123,6 +123,14 @@ class ProgressService implements ProgressReporter {
     Duration playerDuration,
     StreamTimeline timeline,
   ) {
+    // Zero position against zero duration is mpv with no file loaded: a
+    // failed open or a reload in progress, never real playback. The timeline
+    // would still supply a duration, which is how a dead player once wiped a
+    // resume point by syncing 0.
+    if (playerDuration <= Duration.zero && position == Duration.zero) {
+      return null;
+    }
+
     final duration = timeline.resolveDuration(playerDuration).inSeconds;
     final pos = timeline.toReal(position).inSeconds;
 

@@ -153,6 +153,33 @@ ignores it. There is no control to clear the box: a remembered shape expires
 after 14 days and a stall after an hour, and Original skips both before
 then.
 
+### A source lost mid-playback
+
+Verification judges the source, not the path to it. When the path itself
+goes, the source is reopened as it was. The usual cause is iOS: a suspended
+app has its listening sockets reclaimed, so after a resume the local media
+proxy refuses every request while its `HttpServer` still looks bound. mpv
+retries a refused connection on its own (`tcp: Connection to ... failed`),
+then gives up with `Failed to open <url>.` and unloads the file.
+
+Three pieces cover it:
+
+- `LocalProxyService.healListener()` connects to its own port and, if
+  nothing answers, binds again on the same port, or a new one if that is
+  taken. `app.dart` calls it on every resume; a listener whose stream ends
+  underneath the proxy triggers it too. A rebind on the same port needs
+  nothing else, since mpv's own retry reaches it.
+- `PlayerScreen` treats `Failed to open` after playback has advanced
+  (`sourceLost`), or a heal that moved the port, as a lost source. It reopens
+  the same plan through `_switchSource` at the last position reached while
+  the file was playing, once per 30 seconds; a second loss inside that window
+  shows the error page and its Retry. It logs
+  `[PlayerScreen] Reopening after lost source at <n>s: <message>`.
+- `ProgressService.resolveSync` reports nothing for position 0 with no
+  player duration, which is mpv with no file loaded. The timeline would
+  otherwise supply the duration and sync the dead player's 0 over the resume
+  point.
+
 ## The switch
 
 `PlaybackController.replaceSource` starts the new session, hands the source

@@ -444,6 +444,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// having a hiccup: it never played at all, and a black screen is all the
   /// viewer would otherwise get.
   bool _playbackAdvanced = false;
+
+  /// The last real position reached while the file was actually playing,
+  /// which is where a lost source reopens. Not [_furthestPosition]: that only
+  /// grows, and a viewer who seeks back must not be sent forward again.
+  Duration? _lastGoodPosition;
+
+  /// When the last lost-source reopen started. A second loss inside
+  /// [_lostSourceWindow] shows the error instead of looping.
+  DateTime? _lastLostSourceReopen;
+
+  /// The load generation a lost-source reopen is running for. Owned by its
+  /// generation so a reopen still in flight for the previous file does not
+  /// make the next file's own lost source look already handled.
+  int? _reopeningLostSourceGeneration;
+  bool get _reopeningLostSource =>
+      _reopeningLostSourceGeneration == _loadGeneration;
+
+  /// A new-port heal arrived during a switch; replayed when the switch ends.
+  bool _pendingProxyHeal = false;
+  StreamSubscription<ProxyHeal>? _proxyHealSubscription;
+
+  static const _lostSourceWindow = Duration(seconds: 30);
   bool _isLoading = true;
   String? _error;
 
@@ -1069,6 +1091,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     unawaited(_loadScaling());
     _invalidator = ref.read(invalidatorProvider);
     _mediaProxy = ref.read(mediaProxyProvider);
+    _proxyHealSubscription = _mediaProxy.heals.listen(_onProxyHeal);
     _remoteTargetController = ref.read(remoteTargetControllerProvider);
     _remoteTargetController.attachPlayer(this);
     _nowPlaying = ref.read(nowPlayingPublisherProvider)..claim(this);
@@ -1453,6 +1476,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // narrate its old delivery, for the one about to load.
     _plan = null;
     _planInputs = null;
+    _lastGoodPosition = null;
+    _lastLostSourceReopen = null;
+    _pendingProxyHeal = false;
     // A choice carried by a switch that never landed belongs to the source
     // this load replaces, and a fresh load starts with no choice made.
     _subtitleIntentAcrossSwitch = null;
@@ -2147,6 +2173,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// missing, or the widget was unmounted or `_playback` had already been
   /// replaced before the new source landed), `true` once it applied.
   Future<bool> _switchSource(PlaybackPlan plan, {required Duration at}) async {
+    try {
+      return await _runSwitchSource(plan, at: at);
+    } finally {
+      // A heal that moved the proxy while this switch was in flight found it
+      // dropped, though the switch may hold a URL from the old port.
+      if (_pendingProxyHeal && mounted && !_reopeningLostSource) {
+        _pendingProxyHeal = false;
+        _onProxyHeal(ProxyHeal.reboundNewPort);
+      }
+    }
+  }
+
+  Future<bool> _runSwitchSource(PlaybackPlan plan,
+      {required Duration at}) async {
     if (_switchingSource) return false;
     final playback = _playback;
     final player = _player;
@@ -3403,6 +3443,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _furthestPosition = position;
       _playbackAdvanced = true;
     }
+    if (_playbackAdvanced && player.state.duration > Duration.zero) {
+      _lastGoodPosition = _timeline.toReal(position);
+    }
 
     _segmentSkipper.maybeAutoSkip(
       _timeline.toReal(player.state.position),
@@ -3436,6 +3479,114 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
+  void _showLostSourceError(String message) {
+    setState(() {
+      _error = playbackErrorMessage(message);
+      _isLoading = false;
+    });
+    _remoteTargetController.notifyChanged();
+  }
+
+  void _onProxyHeal(ProxyHeal heal) {
+    // The same port needs nothing: mpv's own reconnect reaches it again.
+    if (heal != ProxyHeal.reboundNewPort || !mounted) return;
+    if (_isDownloadedSource || _player == null) return;
+    // A heal alone must never produce an error: a source that has not played
+    // yet belongs to mpv and the load paths, not to this recovery.
+    if (!_playbackAdvanced || _lastGoodPosition == null) return;
+    if (_switchingSource) {
+      _pendingProxyHeal = true;
+      return;
+    }
+    // Only here is the player still loaded, so whether the viewer had paused
+    // is reliable; a lost source cannot say.
+    _reopenLostSource('Media proxy moved to a new port',
+        keepPaused: !_player!.state.playing);
+  }
+
+  /// Reopens the current file at [_lastGoodPosition] on the same plan, once
+  /// per [_lostSourceWindow]; a second loss inside it shows the error page
+  /// with its Retry.
+  void _reopenLostSource(String message, {bool keepPaused = false}) {
+    if (_reopeningLostSource) return;
+    // A file change in flight has no player to recover and owns the outcome;
+    // an error here would land on the incoming file. `_player` and not
+    // `_playback`: `_switchToFile` nulls it synchronously, while downloaded
+    // playback never has a `_playback` yet must still reach the error path.
+    if (_player == null) return;
+    // The retained local player is idle while casting; reopening it would
+    // start audio under the cast. `_restartLocalPlayback` resumes local
+    // playback once casting stops.
+    if (ref.read(isCastingProvider)) {
+      debugPrint('[PlayerScreen] Lost source while casting; '
+          'not reopening the local player');
+      return;
+    }
+    // A quality change, seek restart or fallback is already replacing the
+    // source and owns the outcome; reopening under it would race it.
+    if (_switchingSource) {
+      debugPrint('[PlayerScreen] Lost source during a switch; '
+          'leaving it to the switch');
+      return;
+    }
+    final plan = _plan;
+    final at = _lastGoodPosition;
+    final last = _lastLostSourceReopen;
+    final now = DateTime.now();
+    if (_isDownloadedSource ||
+        plan == null ||
+        at == null ||
+        (last != null && now.difference(last) < _lostSourceWindow)) {
+      // A downloaded file lands here too, on purpose: a local file has
+      // nothing to reopen through, so the error page and its Retry are the
+      // only recovery.
+      _stopVerification();
+      _showLostSourceError(message);
+      return;
+    }
+
+    _reopeningLostSourceGeneration = _loadGeneration;
+    _pendingProxyHeal = false;
+    _lastLostSourceReopen = now;
+    debugPrint('[PlayerScreen] Reopening after lost source at '
+        '${at.inSeconds}s: $message');
+    // Navigation can reuse this State for another file while the heal or the
+    // switch is pending; nothing here may then touch the new file.
+    final gen = _loadGeneration;
+    unawaited(() async {
+      try {
+        // Never reopen against a port that is still dead.
+        await _mediaProxy.healListener();
+        if (!_isCurrentLoad(gen)) return;
+        final switched = await _switchSource(plan, at: at);
+        if (!_isCurrentLoad(gen)) return;
+        // False means the switch did nothing, so the dead source is still
+        // loaded and the viewer would be left with no error and no player.
+        if (!switched) {
+          _showLostSourceError(message);
+        } else if (keepPaused) {
+          // The switch waits for the position to advance, so it always
+          // resumes playback; put the viewer's pause back afterwards.
+          await _player?.pause();
+        }
+      } catch (e) {
+        debugPrint('[PlayerScreen] Lost-source reopen failed: $e');
+        if (!_isCurrentLoad(gen)) return;
+        _showLostSourceError(e.toString());
+      } finally {
+        if (_reopeningLostSourceGeneration == gen) {
+          _reopeningLostSourceGeneration = null;
+        }
+        // A heal that arrived during this reopen's own switch is dropped, not
+        // replayed: if the switch landed on the new port a replay would hit
+        // the throttle and paint an error over healthy playback, and if its
+        // URL went dead that failure surfaces through the switch's own
+        // failure or a later lost-source error.
+        if (_isCurrentLoad(gen)) _pendingProxyHeal = false;
+      }
+    }());
+  }
+
   /// Surface a playback failure media_kit reported after the media opened.
   ///
   /// Only fatal-looking failures reach the UI: see [_playbackAdvanced] for why
@@ -3457,6 +3608,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (!mounted) return;
     // mpv plays on without sound; neither a fault nor an error page.
     if (audioOutputUnavailable(message)) return;
+
+    // mpv has given up on its URL and unloaded the file: nothing will retry,
+    // and deferring to verification or the mid-playback gate below would
+    // leave a dead player on screen. Typically the proxy's socket was
+    // reclaimed while the app was suspended.
+    if (_playbackAdvanced && sourceLost(message)) {
+      _reopenLostSource(message);
+      return;
+    }
 
     // A direct or copy source reports faults to the policy so it can fall
     // back. Only a fallback that fails reaches the error page.
@@ -4925,6 +5085,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _positionSubscription?.cancel();
     _tracksSubscription?.cancel();
     _errorSubscription?.cancel();
+    unawaited(_proxyHealSubscription?.cancel());
     _nowPlayingSubscription?.cancel();
     unawaited(_cancelMediaSessionSubscriptions());
     _firstFrameSubscription?.cancel();
