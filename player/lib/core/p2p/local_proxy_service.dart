@@ -544,7 +544,15 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     // the caller restarts local playback afterwards. Left unforced, the
     // request in flight against the old port would hang rather than end.
     // Detached before the await for the same reason as [_tearDown].
-    await _closeServer(_detachServer());
+    try {
+      await _closeServer(_detachServer());
+    } catch (_) {
+      // The server is already detached, so no listener backs the address and
+      // token; [_heal] clears them the same way.
+      _lanAddress = null;
+      _lanToken = null;
+      rethrow;
+    }
 
     if (_targets.isEmpty) {
       // Nothing to rebind: there is no proxy running to expose. Drop the

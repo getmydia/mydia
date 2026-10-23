@@ -3582,7 +3582,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // the throttle and paint an error over healthy playback, and if its
         // URL went dead that failure surfaces through the switch's own
         // failure or a later lost-source error.
-        _pendingProxyHeal = false;
+        if (_isCurrentLoad(gen)) _pendingProxyHeal = false;
       }
     }());
   }
