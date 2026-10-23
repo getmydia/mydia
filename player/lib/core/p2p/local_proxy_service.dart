@@ -292,7 +292,9 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
         // still current here.
         if (!identical(_server, server)) return;
         debugPrint('[LocalProxy] Listener closed underneath the proxy');
-        unawaited(healListener());
+        unawaited(healListener().then<void>((_) {}, onError: (Object e) {
+          debugPrint('[LocalProxy] Heal failed: $e');
+        }));
       },
     );
   }
@@ -305,13 +307,16 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   /// The heal every concurrent [healListener] call shares.
   Future<ProxyHeal>? _healing;
 
+  /// Throws when no listener can be bound at all. The proxy then holds no
+  /// server but keeps its targets, so a later [start] binds afresh.
   @override
   Future<ProxyHeal> healListener() =>
       _healing ??= _heal().whenComplete(() => _healing = null);
 
   Future<ProxyHeal> _heal() async {
+    // No wait on a LAN rebind: [_rebind] waits on this heal before it touches
+    // the server, so the two cannot both adopt one.
     await _binding?.catchError((Object _) {});
-    await _rebinding?.catchError((Object _) {});
     final server = _server;
     final address = _boundAddress;
     final port = _boundPort;
@@ -485,6 +490,8 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     // A start that began before this rebind finishes its bind first, so the
     // server it returns with is the one closed below rather than a later one.
     await _binding?.catchError((Object _) {});
+    // A heal replaces the server, so it finishes first.
+    await _healing?.catchError((Object _) => ProxyHeal.healthy);
 
     if (enabled) {
       final address = await resolveLanAddress();

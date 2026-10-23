@@ -156,9 +156,59 @@ void main() {
       });
 
       test('teardown does not trigger a heal', () async {
+        await proxy.shutdown();
+        var binds = 0;
+        proxy = LocalProxyService(p2p, bind: (address, port) {
+          binds++;
+          return HttpServer.bind(address, port);
+        });
+        final events = <ProxyHeal>[];
+        final sub = proxy.heals.listen(events.add);
+        addTearDown(sub.cancel);
         await proxy.start(owner: owner, targetPeer: peer, target: target);
         await proxy.stop(owner, target: target);
         await pumpEventQueue(times: 50);
+
+        expect(proxy.isRunning, isFalse);
+        expect(binds, 1); // start's bind only
+        expect(events, isEmpty);
+      });
+
+      test('a failed heal throws, and a later start binds afresh', () async {
+        await proxy.shutdown();
+        var binds = 0;
+        proxy = LocalProxyService(p2p, bind: (address, port) {
+          binds++;
+          if (binds > 1 && binds < 4) {
+            throw const SocketException('Address already in use');
+          }
+          return HttpServer.bind(address, port);
+        });
+        await proxy.start(owner: owner, targetPeer: peer, target: target);
+        await proxy.debugDropListener();
+
+        await expectLater(
+            proxy.healListener(), throwsA(isA<SocketException>()));
+        expect(proxy.isRunning, isFalse);
+
+        await proxy.start(owner: owner, targetPeer: peer, target: target);
+        expect(binds, 4);
+        expect((await makeRequest('/nope')).statusCode, 404);
+      });
+
+      test(
+          'a listener that dies and cannot be rebound is not an unhandled error',
+          () async {
+        await proxy.shutdown();
+        var binds = 0;
+        proxy = LocalProxyService(p2p, bind: (address, port) {
+          if (++binds > 1) throw const SocketException('no sockets');
+          return HttpServer.bind(address, port);
+        });
+        await proxy.start(owner: owner, targetPeer: peer, target: target);
+        await proxy.debugDropListener(notify: true);
+        await pumpEventQueue(times: 50);
+
         expect(proxy.isRunning, isFalse);
       });
     });

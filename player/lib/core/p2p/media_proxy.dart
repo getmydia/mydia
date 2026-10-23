@@ -85,6 +85,9 @@ abstract class MediaProxy {
   /// iOS reclaims a suspended app's listening sockets. The server object
   /// survives and still reports itself running, but every connection is
   /// refused, so the app calls this on every resume.
+  ///
+  /// May throw when no listener can be bound at all. The proxy then serves
+  /// nothing but keeps its targets, so a later [start] binds afresh.
   Future<ProxyHeal> healListener();
 
   /// Every [healListener] result other than [ProxyHeal.healthy], for holders
