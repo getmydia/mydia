@@ -13,6 +13,7 @@
 #     .#android-tv, native Nix)
 #   - player macos <build|run>            (host Xcode/CocoaPods/rustup toolchain)
 #   - player flatpak <build|install|run>  (host flatpak + flatpak-builder)
+#   - player glass-diff [--base <ref>]   (Liquid Glass lab, before/after)
 #   - player e2e / e2e-build              (Docker E2E stack, compose.player-e2e.yml)
 #     e2e pulls prebuilt images by default; --build forces local builds
 
@@ -179,6 +180,11 @@ ${YELLOW}Player Flatpak (native, uses host flatpak + flatpak-builder):${NC}
   player flatpak smoke  Run the Xvfb smoke test against the installed build
   player flatpak clean  Remove build-dir/, staged-repo/ and .flatpak-builder/
                        build/install accept --branch=<name> (default: stable).
+
+${YELLOW}Player Liquid Glass (native, builds the lab as a Linux bundle):${NC}
+  player glass-diff [--base <ref>]
+                       Render the lab at the base and from the index, and
+                       record the diff the pre-commit gate asks for
 
 ${YELLOW}Metadata Relay (Docker + kubectl):${NC}
   relay deploy         Build, push :dev image, and redeploy to k8s
@@ -776,6 +782,14 @@ case "$COMMAND" in
                     echo "Open it with: open 'player/build/macos/Build/Products/Release/Mydia Player.app'"
                 fi
                 ;;
+            glass-diff)
+                # Renders the Liquid Glass lab at the base and from the index
+                # and records the diff the pre-commit gate asks for. Native
+                # like `player flatpak`: it builds a Linux desktop bundle and
+                # runs it under xvfb.
+                shift
+                exec "$ROOT_DIR/scripts/glass-diff.sh" "$@"
+                ;;
             flatpak)
                 # Linux desktop packaging. Native like `player android` and
                 # `player macos`, for a third reason: flatpak-builder drives
@@ -1002,7 +1016,7 @@ case "$COMMAND" in
                 ;;
             *)
                 echo -e "${RED}Error: Unknown player command: $1${NC}"
-                echo "Usage: ./dev player <logs|build|setup|shell|restart|e2e|e2e-build|android|macos|flatpak>"
+                echo "Usage: ./dev player <logs|build|setup|shell|restart|e2e|e2e-build|android|macos|flatpak|glass-diff>"
                 exit 1
                 ;;
         esac

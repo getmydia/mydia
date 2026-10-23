@@ -144,6 +144,17 @@ void main() {
     expect(f[24], p.bottomLight);
   });
 
+  test('the lens keeps the frosted pre-kit material', () {
+    const p = LiquidGlassProfile.lens;
+    // Frosted, not clear: the kit's blur 3 let backdrop text show through.
+    expect(p.blurSigma, 20);
+    // Lit at the top and bottom only: lit sides drew a white outline.
+    expect(p.sideLight, 0);
+    expect(p.rimHairline, 0.12);
+    expect(p.volumeSide, 0);
+    expect(p.volumeEnds, 0);
+  });
+
   test('the lens profile is the default', () {
     const u = LiquidGlassUniforms(
         devicePixelRatio: 1, radius: 8, tint: Color(0xFF000000));

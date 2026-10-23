@@ -83,6 +83,10 @@ class _SidebarRowState extends State<SidebarRow> {
 
   static const _menuWidth = 36.0;
 
+  /// Row height at text scale 1.0: iOS list density, and the 44pt touch
+  /// target. Larger text grows the row.
+  static const _rowHeight = 44.0;
+
   /// The rail's geometry: a 48x48 icon box with the label beside it. The
   /// selection fill and ring wrap the icon box, which is the part that stays
   /// on screen while the rail is collapsed.
@@ -213,7 +217,8 @@ class _SidebarRowState extends State<SidebarRow> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            constraints: const BoxConstraints(minHeight: _rowHeight),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
               color: widget.isDisabled
                   ? Colors.transparent
@@ -259,12 +264,15 @@ class _SidebarRowState extends State<SidebarRow> {
                     ),
                   ),
                 ),
-                // The slot stays reserved for the whole time the row is
+                // The slot has a fixed width and height: unconstrained, the
+                // menu's IconButton pads itself to 48 and the row grows to
+                // 72. It stays reserved for the whole time the row is
                 // editing, even when the caller withholds editingTrailing, so
                 // the row's width never shifts mid-edit.
                 if (trailing != null || widget.isEditing)
                   SizedBox(
                     width: _menuWidth,
+                    height: _rowHeight,
                     child: Center(child: trailing ?? const SizedBox.shrink()),
                   ),
               ],

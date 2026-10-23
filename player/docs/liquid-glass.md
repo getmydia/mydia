@@ -28,7 +28,7 @@ frosted `GlassSurface` recipes and Material controls, and the playback OSD
 | Render object | `lib/presentation/widgets/glass/liquid_glass_filter.dart` |
 | Press and hover | `lib/presentation/widgets/glass/glass_interaction.dart`, `glass_pointer.dart` |
 | Accessibility flags | `lib/core/theme/liquid_glass/glass_accessibility.dart` |
-| Lab | `tool/liquid_glass_lab/main.dart` |
+| Lab and visual diff | `tool/liquid_glass_lab/`, `scripts/glass-diff.sh` |
 
 ## Where glass goes
 
@@ -96,21 +96,28 @@ Our values:
 
 | Profile | `blurSigma` | `depth` | `distortion` | `saturation` | `brightness` | `lumaTarget` / `lumaMix` | `shadow` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `lens` | 3 | 0.8 | 0.4 | 1.0 | 0.1 | 0 / 0 | 0 8 15, black 4% |
+| `lens` | 20 | 0.4 | 1.25 | 1.3 | 0.07 | 0 / 0 | 0 8 15, black 4% |
 | `panel` | 15 | 0.9 | 0.3 | 1.2 | 0 | 0.1 / 0.3 | 0 18 48, black 45% |
 | `clear` | 0 | 0.4 | 0.08 | 1.0 | 0.02 | 0 / 0 | 0 2 8, black 15% (ours) |
+
+The lens does not follow the kit. Its Small UI values rendered nearly clear,
+and its side and volume light drew a white outline around every button, so
+the lens keeps the frosted material from before the kit mapping: blur 20, a
+rim lit at the top and bottom (`sideLight` 0, `rimHairline` 0.12) and no
+volume shading. The kit is a starting point to tune by eye against the
+previous render (`./dev player glass-diff`), not a target to copy.
 
 `blurSigma` is the kit's blur radius halved: a Gaussian sigma is about half
 the radius a design tool shows. The edge band is `depth` times the corner
 radius, capped at half the short side (`LiquidGlassUniforms.edgeBandFor`).
 
-The lens's `brightness` lift stands in for the small grey wash. The panel's
-`lumaTarget` and `lumaMix` stand in for the luminosity wash: a luminosity
+The panel's `lumaTarget` and `lumaMix` stand in for the luminosity wash: a luminosity
 blend keeps the backdrop's hue and takes the fill's luminance, so the shader
 pulls the backdrop's luminance toward `lumaTarget` by `lumaMix` and leaves the
 hue alone. The kit's normal-blend part of the wash is the surface tint, which
 stays per role. The panel takes the kit's Medium UI luminosity share, since the
-Large share plus our role tint read as an opaque slab.
+Large share plus our role tint read as an opaque slab. The lens's `brightness`
+lift (0.07) is our tuned frosted value, not the kit's grey wash.
 
 The kit's lighting is off. Its rim is drawn with stacked shadows that show
 through the translucent fill, and the shader's rim terms decode them:
@@ -118,11 +125,13 @@ through the translucent fill, and the shader's rim terms decode them:
 - The hairline ring (spread 0.5, grey 190 on small, spread 0.3, grey 166 on
   large) is `rimHairline`, a light line on every edge.
 - The side slivers (x of plus and minus 1.25, spread -0.75) are `sideLight`,
-  rim light on the left and right edges relative to the top.
-- The small layer's volume shadows are `volumeSide` and `volumeEnds`. The
-  x of plus and minus 20 shadow (blur 20, spread -30, grey 178) lightens the
-  interior toward the sides; the y of plus and minus 40 shadow (blur 10, spread
-  -40, grey 25) darkens it toward the top and bottom.
+  rim light on the left and right edges relative to the top (panel only; the
+  lens sets these to 0).
+- The small layer's volume shadows are `volumeSide` and `volumeEnds` (panel
+  only; the lens sets these to 0). The x of plus and minus 20 shadow (blur 20,
+  spread -30, grey 178) lightens the interior toward the sides; the y of plus
+  and minus 40 shadow (blur 10, spread -40, grey 25) darkens it toward the top
+  and bottom.
 - The large layer's ends band (y of plus and minus 4, blur 8, spread -4,
   grey 33) is `volumeEnds` on the panel.
 - The large layer's bottom catch-light (white at 20%, y of plus 2, spread
@@ -276,7 +285,7 @@ smoothstep between `liquidAdaptiveLumaLow` (0.15) and
 
 | Role | Base | Adaptive max |
 | --- | --- | --- |
-| Chrome | `liquidChromeTintOpacity` 0.35 | `liquidChromeAdaptiveMax` 0.9 |
+| Chrome | `liquidChromeTintOpacity` 0.3 | `liquidChromeAdaptiveMax` 0.9 |
 | Modal | `liquidModalTintOpacity` 0.35 | `liquidModalAdaptiveMax` 0.85 |
 | Control | `liquidControlTintOpacity` 0.2 | `liquidControlAdaptiveMax` 0.65 |
 
@@ -299,25 +308,60 @@ Change the curve in the shader and in `liquidAdaptiveAlpha` together.
 
 ## Running the lab
 
-On a Mac, from `player/`:
+On Linux, `./dev player glass-diff` builds and renders the lab for you (see
+"Visual diff"). To drive it interactively on a Mac, from `player/`:
 
     flutter run -d macos -t tool/liquid_glass_lab/main.dart
 
+The manual Linux recipe below is what `scripts/glass-diff.sh` automates.
+
 The player app does not build for Linux desktop without libsecret
 (`flutter_secure_storage`), so on Linux run the lab from a plugin-free
-scratch Flutter project. Copy the lab in as the scratch project's
-`lib/main.dart` (so plain `flutter run` picks it), plus `depth_tokens.dart`,
-`liquid_glass_support.dart`, `liquid_glass_uniforms.dart`,
-`liquid_glass_adaptive.dart`, `contrast.dart`,
-`liquid_glass_filter.dart` and `glass_pointer.dart`, rewrite their imports,
-and register the shader under `flutter: shaders:`. Headless, from the
-scratch project:
+scratch Flutter project. Create it with
+`flutter create --platforms=linux --project-name player`, so the
+`package:player/` imports resolve unchanged. Copy in `tool/liquid_glass_lab/`
+as is, plus every `lib/` file the lab reaches through its imports (the
+`assemble` function in `scripts/glass-diff.sh` walks them for you), and
+register `shaders/liquid_glass.frag` under `flutter: shaders:`. Headless, from
+the scratch project:
 
     xvfb-run -a -s "-screen 0 2560x1800x24" env GDK_SCALE=2 \
-      flutter run -d linux --dart-define=LAB_SNAPSHOT=/tmp/lab.png
+      flutter run -d linux -t tool/liquid_glass_lab/main.dart \
+      --dart-define=LAB_SNAPSHOT=/tmp/lab.png
 
 `GDK_SCALE=2` gives a 2x device pixel ratio. Add `LAB_GRID=true` for the
-grid and `LAB_SCROLL=<px>` to scroll the backdrop first.
+grid, `LAB_SCROLL=<px>` to scroll the backdrop first and
+`LAB_SCENE=<grid|artwork|panel>` to pick a scene. Every `LAB_*` value may
+come from the environment as well as `--dart-define`.
+
+## Visual diff
+
+Every commit that stages a Liquid Glass file needs a before/after render of
+that staged content. The glass files are listed in `scripts/glass-paths.sh`:
+the shader, `lib/core/theme/liquid_glass/`, `depth_tokens.dart`,
+`lib/presentation/widgets/glass/`, `glass_surface.dart` and the lab.
+
+    ./dev player glass-diff [--base <ref>]
+
+renders the lab twice, at `--base` (default: the merge base with
+`origin/master`) and from the index, in three scenes: `grid` (flat colour, a
+white strip and the scroll edge), `artwork` (the detail screen's controls over
+painted poster-like art) and `panel` (a dialog and the floating sidebar). It
+prints a side-by-side per scene and a changed-pixel count. Both sides run the
+staged lab, so the counts compare like with like; when the base cannot compile
+the staged lab (or lacks a file it imports), it falls back to its own lab and
+writes side-by-sides only; the before image is then the base's `grid` scene for
+every scene name.
+
+The run records a stamp keyed to the staged glass blobs, under
+`.git/.../glass-diff/<stamp>/`. The `glass-diff` pre-commit hook recomputes the
+key and refuses the commit when no stamp exists, so restaging anything means
+rendering again. There is no skip: a refactor's evidence is a zero count.
+
+Look at the images, and put the `artwork` side-by-side in the PR. Unit tests
+cannot see pixels (`flutter test` has no Impeller), and #1232 shipped values
+that matched the iOS 27 kit and looked worse, because nothing compared the
+render against the previous one.
 
 ## Tests
 

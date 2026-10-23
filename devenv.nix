@@ -537,6 +537,18 @@ in
       pass_filenames = false;
       always_run = true;
     };
+    glass-diff = {
+      enable = true;
+      name = "Liquid Glass visual diff";
+      entry = "scripts/check-glass-diff.sh";
+      # Runs on every commit, not behind a `files` filter: pre-commit leaves
+      # deleted files out of the list it filters, so a deletion-only commit
+      # would skip the gate. The check reads GLASS_PATHS from
+      # scripts/glass-paths.sh, exits at once when none are staged, and costs
+      # one `git diff --cached`.
+      pass_filenames = false;
+      always_run = true;
+    };
   };
 
   # ── Shell-entry banner (R10) ────────────────────────────────────────────────

@@ -263,6 +263,10 @@ jobs:
       - name: Assert the scratch-docs guard holds its contract
         run: ./scripts/check-no-scratch-docs-test.sh
 
+      # Same for the Liquid Glass visual diff gate.
+      - name: Assert the glass-diff guard holds its contract
+        run: ./scripts/check-glass-diff-test.sh
+
   dependabot-gate:
     name: Check / Dependabot Gate
     runs-on: ubuntu-latest

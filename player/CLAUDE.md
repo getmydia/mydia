@@ -23,7 +23,9 @@ Deeper reference lives alongside this file in `player/docs/`:
   `SidebarContent`'s rows.
 - [liquid-glass.md](docs/liquid-glass.md) - the Liquid Glass material
   setting: the shader, where glass goes, the startup gate, Reduce
-  Transparency and Increase Contrast, the lab, and how tests select it.
+  Transparency and Increase Contrast, the lab, and how tests select it. Any
+  staged Liquid Glass change needs `./dev player glass-diff` before the commit
+  hook lets it through; put the artwork side-by-side in the PR.
 
 ## Project Overview
 

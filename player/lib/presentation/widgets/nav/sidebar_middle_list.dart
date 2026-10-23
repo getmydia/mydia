@@ -75,10 +75,9 @@ class SidebarMiddleList extends StatelessWidget {
   /// too, breaking the "nothing shifts between the two modes" guarantee
   /// `sidebar_row_editing_test.dart` covers.
   ///
-  /// The honest result: this control fills its 36px-wide slot exactly (via
-  /// the padding mechanism above, not this constant), and is at least this
-  /// tall — in practice 48px, since height is the one dimension nothing
-  /// upstream constrains, so Material's own padded minimum applies in full.
+  /// The result: this control fills its 36px-wide slot exactly (via the
+  /// padding mechanism above, not this constant) and is 44px tall, the
+  /// height the row's trailing slot fixes, so it is 36x44.
   static const double _restoreControlTapHeight = 44;
 
   @override
@@ -92,9 +91,8 @@ class SidebarMiddleList extends StatelessWidget {
         itemCount: visible.length,
         itemBuilder: (context, index) {
           final row = visible[index];
-          return Padding(
+          return KeyedSubtree(
             key: ValueKey(row.destination.id),
-            padding: const EdgeInsets.only(bottom: 2),
             child: buildRow(row),
           );
         },
@@ -135,9 +133,8 @@ class SidebarMiddleList extends StatelessWidget {
                 ),
               );
 
-        return Padding(
+        return KeyedSubtree(
           key: ValueKey(row.destination.id),
-          padding: const EdgeInsets.only(bottom: 2),
           child: buildRow(row, editingTrailing: trailing),
         );
       },

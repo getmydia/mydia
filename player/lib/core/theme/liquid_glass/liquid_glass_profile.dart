@@ -3,12 +3,13 @@ import 'package:flutter/painting.dart';
 
 /// The shader values that differ between Liquid Glass materials.
 ///
-/// The three profiles map to the iOS 27 UI Kit's materials. [lens] is the
-/// kit's Small UI: the floating control layer, with a bent rim, a specular
-/// rim lit from above, below and the sides, and a little volume shading. Large
-/// surfaces take [panel], the kit's Large UI: a heavier blur and a luminosity
-/// wash with a discreet edge. [clear] is the kit's clear glass for slider and
-/// segmented thumbs. Tint and adaptive tint stay per surface.
+/// [lens] is the floating control layer: a frosted blur, a bent rim, and a
+/// specular rim lit from above and below. It keeps the material it had before
+/// the iOS 27 kit mapping, because the kit's Small UI values rendered nearly
+/// clear with a white outline here. Large surfaces take [panel], the kit's
+/// Large UI: a heavier blur and a luminosity wash with a discreet edge.
+/// [clear] is the kit's clear glass for slider and segmented thumbs. Tint and
+/// adaptive tint stay per surface.
 @immutable
 class LiquidGlassProfile {
   const LiquidGlassProfile({
@@ -33,25 +34,28 @@ class LiquidGlassProfile {
   });
 
   /// Small UI in the kit: buttons, chips, badges, the dock pill, the cast
-  /// pill. Kit: blur 6, saturation 1, distortion 0.4, depth 0.8, a 17% grey
-  /// wash (the brightness lift), shadow 0 8 15 at 4%.
+  /// pill. The kit's Small UI (blur 6, distortion 0.4, depth 0.8, side and
+  /// volume light) rendered nearly clear with a white outline here, so the
+  /// lens keeps the frosted material it had before the kit mapping: a heavy
+  /// blur, a rim lit at the top and bottom, a faint hairline elsewhere, and
+  /// the kit's shadow. Tune it by eye with `./dev player glass-diff`.
   static const LiquidGlassProfile lens = LiquidGlassProfile(
-    blurSigma: 3,
-    depth: 0.8,
-    distortion: 0.4,
-    dispersion: 0,
-    saturation: 1.0,
-    brightness: 0.1,
+    blurSigma: 20,
+    depth: 0.4,
+    distortion: 1.25,
+    dispersion: 0.05,
+    saturation: 1.3,
+    brightness: 0.07,
     lumaTarget: 0,
     lumaMix: 0,
     specular: 0.85,
-    rimWidth: 1.0,
-    rimHairline: 0.5,
-    sideLight: 0.6,
+    rimWidth: 1.5,
+    rimHairline: 0.12,
+    sideLight: 0,
     bottomLight: 0.6,
-    innerGlow: 0.06,
-    volumeSide: 0.06,
-    volumeEnds: 0.06,
+    innerGlow: 0.12,
+    volumeSide: 0,
+    volumeEnds: 0,
     interactive: true,
     shadow: [
       BoxShadow(color: Color(0x0A000000), blurRadius: 15, offset: Offset(0, 8)),
