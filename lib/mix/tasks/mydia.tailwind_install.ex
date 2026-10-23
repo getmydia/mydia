@@ -45,9 +45,14 @@ defmodule Mix.Tasks.Mydia.TailwindInstall do
 
     case Req.get(url, receive_timeout: 120_000, decode_body: false) do
       {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) ->
+        # Written beside bin_path and renamed into place, so an interrupted
+        # install never leaves a partial binary that the File.exists? check
+        # above would then skip.
         File.mkdir_p!(Path.dirname(bin_path))
-        File.write!(bin_path, body, [:binary])
-        File.chmod!(bin_path, 0o755)
+        tmp_path = bin_path <> ".download"
+        File.write!(tmp_path, body, [:binary])
+        File.chmod!(tmp_path, 0o755)
+        File.rename!(tmp_path, bin_path)
 
       {:ok, %Req.Response{status: status}} ->
         Mix.raise("Couldn't fetch #{url}: HTTP #{status}")
