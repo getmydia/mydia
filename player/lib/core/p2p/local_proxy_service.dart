@@ -525,6 +525,11 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       _lanToken = null;
     }
 
+    // A heal can start while [resolveLanAddress] is awaited and install a
+    // loopback server. Waiting again lets the close below replace it, so the
+    // server bound here is the one [_lanAddress] and [_lanToken] describe.
+    await _healing?.catchError((Object _) => ProxyHeal.healthy);
+
     // Forced for the same reason as [_tearDown]: rebinding on a fresh port
     // invalidates whatever URL the video pipeline is holding regardless, and
     // the caller restarts local playback afterwards. Left unforced, the
@@ -548,8 +553,10 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     );
     if (_targets.isEmpty || _server != null) {
       // Torn down while binding, as in [_bindServer], or a resume heal
-      // installed a server during [resolveLanAddress]; adopting this one too
-      // would leak whichever lost.
+      // installed a server meanwhile. A heal cannot, because it was awaited
+      // above and a heal finding no server returns at once; only a start can,
+      // and it binds for the same targets, so adopting this one too would
+      // leak whichever lost.
       await server.close(force: true);
       return;
     }
