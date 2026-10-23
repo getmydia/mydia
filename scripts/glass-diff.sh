@@ -28,6 +28,9 @@ out="$(git -C "$root" rev-parse --path-format=absolute --git-path "glass-diff/$s
 cache="${XDG_CACHE_HOME:-$HOME/.cache}/mydia/glass-lab/$(basename "$root")"
 skel="$cache/skel"
 mkdir -p "$out" "$cache"
+# A run that fails partway must not leave an earlier run's stamp behind: the
+# gate accepts this content again only once every scene has been compared.
+rm -f "$out/stamp"
 
 # with_tool <binary> <nixpkgs attr> <command...>: run the command, through
 # `nix shell` when the binary is not on PATH (as `player flatpak` does).
