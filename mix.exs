@@ -62,7 +62,7 @@ defmodule Mydia.MixProject do
       # No ignore list: findings are fixed, not listed. See "Dialyzer" in
       # CONTRIBUTING.md.
       dialyzer: [
-        plt_add_apps: [:mix, :ex_unit, :wallaby],
+        plt_add_apps: [:mix, :ex_unit, :wallaby, :tailwind],
         plt_core_path: "priv/plts",
         plt_local_path: "priv/plts"
       ],
@@ -300,9 +300,11 @@ defmodule Mydia.MixProject do
         "absinthe.schema.sdl --schema MydiaWeb.LibrarySchema priv/graphql/library.graphql"
       ],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
-      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["compile", "tailwind mydia", "esbuild mydia"],
+      # mydia.tailwind_install, not tailwind.install: see its moduledoc.
+      "assets.setup": ["mydia.tailwind_install", "esbuild.install --if-missing"],
+      "assets.build": ["compile", "mydia.tailwind_install", "tailwind mydia", "esbuild mydia"],
       "assets.deploy": [
+        "mydia.tailwind_install",
         "tailwind mydia --minify",
         "esbuild mydia --minify",
         "phx.digest"
