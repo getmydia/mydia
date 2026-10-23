@@ -71,8 +71,7 @@ defmodule Mydia.Jobs.ImportListAutoAddTest do
     test "an item already in the library (matched by tmdb_id) is linked in a single write, never hits the network" do
       list = movie_list()
 
-      media_item =
-        media_item_fixture(%{type: "movie", title: "Nebula Drift", year: 2022, tmdb_id: 777})
+      media_item_fixture(%{type: "movie", title: "Nebula Drift", year: 2022, tmdb_id: 777})
 
       item = pending_item(list, %{tmdb_id: 777, title: "Nebula Drift", year: 2022})
 
@@ -87,7 +86,12 @@ defmodule Mydia.Jobs.ImportListAutoAddTest do
       reloaded = ImportLists.get_import_list_item!(item.id)
       assert reloaded.status == "pending"
       assert reloaded.skip_reason == nil
-      assert media_item.id
+      assert reloaded.media_item_id == nil
+
+      assert [%{id: in_library_id}] =
+               ImportLists.list_import_list_items(list, status: "in_library")
+
+      assert in_library_id == item.id
     end
 
     test "an item already in the library matched only via the title+year fallback is linked" do
