@@ -346,10 +346,10 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     // Replaced or torn down while probing: whoever did that owns it now.
     if (!identical(_server, server)) return ProxyHeal.healthy;
 
-    await _closeServer(_detachServer());
     var samePort = true;
     HttpServer fresh;
     try {
+      await _closeServer(_detachServer());
       try {
         fresh = await _bind(address, port);
       } on SocketException {
@@ -520,23 +520,24 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     // A heal replaces the server, so it finishes first.
     await _healing?.catchError((Object _) => ProxyHeal.healthy);
 
+    String? address;
     if (enabled) {
-      final address = await resolveLanAddress();
+      address = await resolveLanAddress();
       if (address == null) {
         debugPrint('[LocalProxy] No LAN interface available; staying loopback');
         return;
       }
-      _lanAddress = address;
-      _lanToken = _generateToken();
-    } else {
-      _lanAddress = null;
-      _lanToken = null;
     }
 
     // A heal can start while [resolveLanAddress] is awaited and install a
     // loopback server. Waiting again lets the close below replace it, so the
     // server bound here is the one [_lanAddress] and [_lanToken] describe.
     await _healing?.catchError((Object _) => ProxyHeal.healthy);
+
+    // Published only now, with no await before the detach, so a heal that
+    // fails and clears the LAN state cannot erase what this rebind just set.
+    _lanAddress = address;
+    _lanToken = enabled ? _generateToken() : null;
 
     // Forced for the same reason as [_tearDown]: rebinding on a fresh port
     // invalidates whatever URL the video pipeline is holding regardless, and

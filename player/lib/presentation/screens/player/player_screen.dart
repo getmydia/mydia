@@ -3503,6 +3503,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// with its Retry.
   void _reopenLostSource(String message, {bool keepPaused = false}) {
     if (_reopeningLostSource) return;
+    // A file change in flight has no source to recover and owns the outcome;
+    // an error here would land on the incoming file.
+    if (_playback == null) return;
     // The retained local player is idle while casting; reopening it would
     // start audio under the cast. `_restartLocalPlayback` resumes local
     // playback once casting stops.
@@ -3564,6 +3567,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _showLostSourceError(e.toString());
       } finally {
         _reopeningLostSource = false;
+        // A heal that arrived during this reopen's own switch was held for
+        // the switch's replay, which this reopen blocked; decide it now
+        // rather than at some unrelated later switch.
+        if (_pendingProxyHeal) {
+          _pendingProxyHeal = false;
+          if (_isCurrentLoad(gen)) _onProxyHeal(ProxyHeal.reboundNewPort);
+        }
       }
     }());
   }
