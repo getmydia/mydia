@@ -453,7 +453,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// When the last lost-source reopen started. A second loss inside
   /// [_lostSourceWindow] shows the error instead of looping.
   DateTime? _lastLostSourceReopen;
-  bool _reopeningLostSource = false;
+
+  /// The load generation a lost-source reopen is running for. Owned by its
+  /// generation so a reopen still in flight for the previous file does not
+  /// make the next file's own lost source look already handled.
+  int? _reopeningLostSourceGeneration;
+  bool get _reopeningLostSource =>
+      _reopeningLostSourceGeneration == _loadGeneration;
 
   /// A new-port heal arrived during a switch; replayed when the switch ends.
   bool _pendingProxyHeal = false;
@@ -3539,7 +3545,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
 
-    _reopeningLostSource = true;
+    _reopeningLostSourceGeneration = _loadGeneration;
     _pendingProxyHeal = false;
     _lastLostSourceReopen = now;
     debugPrint('[PlayerScreen] Reopening after lost source at '
@@ -3568,7 +3574,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (!_isCurrentLoad(gen)) return;
         _showLostSourceError(e.toString());
       } finally {
-        _reopeningLostSource = false;
+        if (_reopeningLostSourceGeneration == gen) {
+          _reopeningLostSourceGeneration = null;
+        }
         // A heal that arrived during this reopen's own switch is dropped, not
         // replayed: if the switch landed on the new port a replay would hit
         // the throttle and paint an error over healthy playback, and if its
