@@ -256,7 +256,6 @@ class SidebarContent extends ConsumerWidget {
                       focusRowId: focusRowId,
                       isEditing: editing,
                     ),
-                    const SizedBox(height: 2),
                   ],
                   Expanded(
                     child: SidebarMiddleList(
@@ -289,7 +288,7 @@ class SidebarContent extends ConsumerWidget {
                       color: palette.divider.withValues(alpha: 0.15),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   for (final destination in trailing) ...[
                     _buildRow(
                       ref: ref,
@@ -299,9 +298,8 @@ class SidebarContent extends ConsumerWidget {
                       focusRowId: focusRowId,
                       isEditing: editing,
                     ),
-                    const SizedBox(height: 2),
                   ],
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),
@@ -321,6 +319,9 @@ class SidebarContent extends ConsumerWidget {
     required List<NavDestination> destinations,
     required bool railLayout,
   }) {
+    // The rail keeps its own rhythm; the full sidebar packs rows at iOS list
+    // density.
+    final gap = railLayout ? 2.0 : 0.0;
     final palette = context.palette;
     final entries = ref.watch(sourceNavEntriesProvider(location));
     final source = ref.watch(currentSourceIdProvider(location));
@@ -388,14 +389,14 @@ class SidebarContent extends ConsumerWidget {
         children: [
           for (final entry in leading) ...[
             buildEntry(entry),
-            const SizedBox(height: 2)
+            SizedBox(height: gap),
           ],
           Expanded(
             child: ListView(
               children: [
                 for (final entry in middle) ...[
                   buildEntry(entry),
-                  const SizedBox(height: 2),
+                  SizedBox(height: gap),
                 ],
                 // Like the header picker: the mobile drawer stays open so
                 // the viewer sees the server's nav replace All servers'.
@@ -428,12 +429,12 @@ class SidebarContent extends ConsumerWidget {
               color: palette.divider.withValues(alpha: 0.15),
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: railLayout ? 8 : 4),
           for (final entry in trailing) ...[
             buildEntry(entry),
-            const SizedBox(height: 2)
+            SizedBox(height: gap),
           ],
-          const SizedBox(height: 16),
+          SizedBox(height: railLayout ? 16 : 8),
         ],
       ),
     );

@@ -92,9 +92,8 @@ class SidebarMiddleList extends StatelessWidget {
         itemCount: visible.length,
         itemBuilder: (context, index) {
           final row = visible[index];
-          return Padding(
+          return KeyedSubtree(
             key: ValueKey(row.destination.id),
-            padding: const EdgeInsets.only(bottom: 2),
             child: buildRow(row),
           );
         },
@@ -135,9 +134,8 @@ class SidebarMiddleList extends StatelessWidget {
                 ),
               );
 
-        return Padding(
+        return KeyedSubtree(
           key: ValueKey(row.destination.id),
-          padding: const EdgeInsets.only(bottom: 2),
           child: buildRow(row, editingTrailing: trailing),
         );
       },
