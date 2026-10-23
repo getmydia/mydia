@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/p2p/media_proxy_factory.dart';
+import 'package:player/core/remote/remote_target_controller.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
@@ -80,8 +81,46 @@ class _Decoder extends PlatformPlayer {
   }
 }
 
-ScriptedMydiaTransport _server() {
+/// Holds every `startStreamingSession` after the first, a switch's, until
+/// [holdSwitchStart] completes, so a test can lose the source mid-switch.
+class _GatedLink extends ScriptedMydiaTransport {
+  _GatedLink(super.handler, {this.holdSwitchStart});
+
+  final Completer<void>? holdSwitchStart;
+  int _sessionStarts = 0;
+
+  @override
+  Future<Map<String, dynamic>> send(
+    String query,
+    Map<String, dynamic> variables, {
+    String? token,
+    String? deviceProfile,
+    Duration? timeout,
+  }) async {
+    if (variables.containsKey('strategy') && ++_sessionStarts > 1) {
+      await holdSwitchStart?.future;
+    }
+    return super.send(query, variables,
+        token: token, deviceProfile: deviceProfile, timeout: timeout);
+  }
+}
+
+ScriptedMydiaTransport _server({
+  bool directPlay = true,
+  Completer<void>? holdSwitchStart,
+}) {
   Object handler(ScriptedRequest request, int index) {
+    if (request.variables.containsKey('strategy')) {
+      return startStreamingSessionResponse(
+        sessionId: 'sess-$index',
+        startPosition: request.variables['startPosition'] as int? ?? 0,
+        duration: 5400,
+        playlistMode: 'WINDOW',
+      );
+    }
+    if (request.variables.containsKey('sessionId')) {
+      return endStreamingSessionResponse();
+    }
     switch (request.operation) {
       case 'MovieDetail':
         return movieDetailResponse(positionSeconds: 0);
@@ -93,7 +132,7 @@ ScriptedMydiaTransport _server() {
         return subtitlePreferenceResponse();
       case 'StreamingCandidates':
         return streamingCandidatesResponse(
-          directPlay: true,
+          directPlay: directPlay,
           duration: 5400,
           height: 1080,
           bitrate: 8000000,
@@ -105,7 +144,7 @@ ScriptedMydiaTransport _server() {
     };
   }
 
-  return ScriptedMydiaTransport(handler);
+  return _GatedLink(handler, holdSwitchStart: holdSwitchStart);
 }
 
 Future<void> _mount(
@@ -260,7 +299,65 @@ void main() {
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
 
-  testWidgets('a lost source before playback started still shows the error',
+  testWidgets('a heal to a new port before playback advanced is ignored',
+      (tester) async {
+    await mockHttpResponse(() async {
+      await _mount(tester, container, decoder);
+      await pumpUntil(
+          tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
+
+      proxy.healEvents.add(ProxyHeal.reboundNewPort);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(decoder.opened, hasLength(1));
+      expect(find.byType(PlayerErrorView), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets('a lost source during a switch is left to the switch',
+      (tester) async {
+    final switchStart = Completer<void>();
+    addTearDown(() {
+      if (!switchStart.isCompleted) switchStart.complete();
+    });
+    final streamingContainer = buildPlayerScreenContainer(
+      server: _server(directPlay: false, holdSwitchStart: switchStart),
+      connectionState: HarnessLink.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: proxy,
+    );
+    addTearDown(streamingContainer.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, streamingContainer, decoder);
+      await _playTo75(tester, decoder);
+      final binding =
+          tester.state(find.byType(PlayerScreen)) as RemotePlayerBinding;
+
+      // A seek past the transcoded window restarts the session, which the
+      // held start keeps in flight.
+      unawaited(binding.seek(const Duration(seconds: 600)));
+      await tester.pump(const Duration(milliseconds: 100));
+      final healsBefore = proxy.healCalls;
+      decoder.loseSource();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(proxy.healCalls, healsBefore,
+          reason: 'the loss must not start a reopen of its own');
+      expect(find.byType(PlayerErrorView), findsNothing);
+
+      switchStart.complete();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets('a lost source before playback started does not reopen',
       (tester) async {
     await mockHttpResponse(() async {
       await _mount(tester, container, decoder);

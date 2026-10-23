@@ -3455,10 +3455,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
+  void _showLostSourceError(String message) {
+    setState(() {
+      _error = playbackErrorMessage(message);
+      _isLoading = false;
+    });
+    _remoteTargetController.notifyChanged();
+  }
+
   void _onProxyHeal(ProxyHeal heal) {
     // The same port needs nothing: mpv's own reconnect reaches it again.
     if (heal != ProxyHeal.reboundNewPort || !mounted) return;
     if (_isDownloadedSource || _player == null) return;
+    // A heal alone must never produce an error: a source that has not played
+    // yet belongs to mpv and the load paths, not to this recovery.
+    if (!_playbackAdvanced || _lastGoodPosition == null) return;
     _reopenLostSource('Media proxy moved to a new port');
   }
 
@@ -3467,6 +3478,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// with its Retry.
   void _reopenLostSource(String message) {
     if (_reopeningLostSource) return;
+    // A quality change, seek restart or fallback is already replacing the
+    // source and owns the outcome; reopening under it would race it.
+    if (_switchingSource) {
+      debugPrint('[PlayerScreen] Lost source during a switch; '
+          'leaving it to the switch');
+      return;
+    }
     final plan = _plan;
     final at = _lastGoodPosition;
     final last = _lastLostSourceReopen;
@@ -3475,12 +3493,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         plan == null ||
         at == null ||
         (last != null && now.difference(last) < _lostSourceWindow)) {
+      // A downloaded file lands here too, on purpose: a local file has
+      // nothing to reopen through, so the error page and its Retry are the
+      // only recovery.
       _stopVerification();
-      setState(() {
-        _error = playbackErrorMessage(message);
-        _isLoading = false;
-      });
-      _remoteTargetController.notifyChanged();
+      _showLostSourceError(message);
       return;
     }
 
@@ -3493,15 +3510,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // Never reopen against a port that is still dead.
         await _mediaProxy.healListener();
         if (!mounted) return;
-        await _switchSource(plan, at: at);
+        final switched = await _switchSource(plan, at: at);
+        // False means the switch did nothing, so the dead source is still
+        // loaded and the viewer would be left with no error and no player.
+        if (!switched && mounted) _showLostSourceError(message);
       } catch (e) {
         debugPrint('[PlayerScreen] Lost-source reopen failed: $e');
         if (!mounted) return;
-        setState(() {
-          _error = playbackErrorMessage(e.toString());
-          _isLoading = false;
-        });
-        _remoteTargetController.notifyChanged();
+        _showLostSourceError(e.toString());
       } finally {
         _reopeningLostSource = false;
       }
