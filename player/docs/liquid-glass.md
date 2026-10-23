@@ -317,16 +317,17 @@ The manual Linux recipe below is what `scripts/glass-diff.sh` automates.
 
 The player app does not build for Linux desktop without libsecret
 (`flutter_secure_storage`), so on Linux run the lab from a plugin-free
-scratch Flutter project. Copy the lab in as the scratch project's
-`lib/main.dart` (so plain `flutter run` picks it), plus `depth_tokens.dart`,
-`liquid_glass_support.dart`, `liquid_glass_uniforms.dart`,
-`liquid_glass_adaptive.dart`, `contrast.dart`,
-`liquid_glass_filter.dart` and `glass_pointer.dart`, rewrite their imports,
-and register the shader under `flutter: shaders:`. Headless, from the
-scratch project:
+scratch Flutter project. Create it with
+`flutter create --platforms=linux --project-name player`, so the
+`package:player/` imports resolve unchanged. Copy in `tool/liquid_glass_lab/`
+as is, plus every `lib/` file the lab reaches through its imports (the
+`assemble` function in `scripts/glass-diff.sh` walks them for you), and
+register `shaders/liquid_glass.frag` under `flutter: shaders:`. Headless, from
+the scratch project:
 
     xvfb-run -a -s "-screen 0 2560x1800x24" env GDK_SCALE=2 \
-      flutter run -d linux --dart-define=LAB_SNAPSHOT=/tmp/lab.png
+      flutter run -d linux -t tool/liquid_glass_lab/main.dart \
+      --dart-define=LAB_SNAPSHOT=/tmp/lab.png
 
 `GDK_SCALE=2` gives a 2x device pixel ratio. Add `LAB_GRID=true` for the
 grid, `LAB_SCROLL=<px>` to scroll the backdrop first and
