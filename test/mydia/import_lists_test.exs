@@ -91,6 +91,22 @@ defmodule Mydia.ImportListsTest do
       assert import_list.sync_interval == 360
     end
 
+    test "rejects a library path whose type does not suit the media type" do
+      series = Mydia.SettingsFixtures.library_path_fixture(%{type: "series"})
+
+      assert {:error, changeset} =
+               ImportLists.create_import_list(Map.put(@valid_attrs, :library_path_id, series.id))
+
+      assert "is not a movies library" in errors_on(changeset).library_path_id
+    end
+
+    test "accepts a mixed library for either media type" do
+      mixed = Mydia.SettingsFixtures.library_path_fixture(%{type: "mixed"})
+
+      assert {:ok, _} =
+               ImportLists.create_import_list(Map.put(@valid_attrs, :library_path_id, mixed.id))
+    end
+
     test "create_import_list/1 with invalid data returns error changeset" do
       assert {:error, %Ecto.Changeset{}} = ImportLists.create_import_list(@invalid_attrs)
     end

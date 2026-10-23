@@ -102,6 +102,24 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
              )
     end
 
+    test "the library path select only offers libraries that suit the media type", %{conn: conn} do
+      movies = Mydia.SettingsFixtures.library_path_fixture(%{type: "movies"})
+      series = Mydia.SettingsFixtures.library_path_fixture(%{type: "series"})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/import-lists")
+
+      view
+      |> element("button[phx-click='new_import_list']")
+      |> render_click()
+
+      view
+      |> form("#import-list-form", import_list: %{type: "tmdb_trending", media_type: "movie"})
+      |> render_change()
+
+      assert has_element?(view, "#import-list-form option", movies.path)
+      refute has_element?(view, "#import-list-form option", series.path)
+    end
+
     test "unchecking Enabled, Auto-add and Monitored persists false", %{conn: conn} do
       {:ok, list} =
         Mydia.ImportLists.create_import_list(%{

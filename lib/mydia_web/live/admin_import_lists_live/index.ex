@@ -588,6 +588,25 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
     Enum.map(ImportList.valid_media_types(), &{media_type_label(&1), &1})
   end
 
+  @doc """
+  Library select options for a list of `media_type`: only enabled libraries
+  whose type can hold it. With no media type chosen yet, every enabled library.
+  """
+  def library_path_options(library_paths, media_type) do
+    allowed =
+      if media_type in ImportList.valid_media_types(),
+        do: ImportList.library_types_for(media_type),
+        else: nil
+
+    options =
+      for lp <- library_paths,
+          lp.disabled != true,
+          is_nil(allowed) or lp.type in allowed,
+          do: {lp.path, lp.id}
+
+    [{"Default", nil} | options]
+  end
+
   defp media_type_label("movie"), do: "Movies"
   defp media_type_label("tv_show"), do: "TV Shows"
   defp media_type_label(other), do: other
