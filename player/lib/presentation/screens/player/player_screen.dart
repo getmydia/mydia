@@ -3567,13 +3567,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _showLostSourceError(e.toString());
       } finally {
         _reopeningLostSource = false;
-        // A heal that arrived during this reopen's own switch was held for
-        // the switch's replay, which this reopen blocked; decide it now
-        // rather than at some unrelated later switch.
-        if (_pendingProxyHeal) {
-          _pendingProxyHeal = false;
-          if (_isCurrentLoad(gen)) _onProxyHeal(ProxyHeal.reboundNewPort);
-        }
+        // A heal that arrived during this reopen's own switch is dropped, not
+        // replayed: if the switch landed on the new port a replay would hit
+        // the throttle and paint an error over healthy playback, and if its
+        // URL went dead that failure surfaces through the switch's own
+        // failure or a later lost-source error.
+        _pendingProxyHeal = false;
       }
     }());
   }
