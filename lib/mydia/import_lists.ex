@@ -682,8 +682,6 @@ defmodule Mydia.ImportLists do
     |> Enum.map_join("; ", fn {field, errors} -> "#{field}: #{Enum.join(errors, ", ")}" end)
   end
 
-  defp format_changeset_error(_), do: "Unknown error"
-
   ## Duplicate Detection
 
   @doc """
