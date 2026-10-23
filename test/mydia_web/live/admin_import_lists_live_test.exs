@@ -74,10 +74,85 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
       assert has_element?(view, "#import-list-items-filter")
 
       view
-      |> element(~s{#import-list-items-filter button[phx-value-status="pending"]})
+      |> element(~s{#import-list-items-filter button[phx-value-status="all"]})
       |> render_click()
 
       assert has_element?(view, "#import-list-items-modal")
+    end
+
+    defp owned_list_fixture(tmdb_ids_owned, tmdb_ids_fresh) do
+      {:ok, list} =
+        Mydia.ImportLists.create_import_list(%{
+          name: "Library Aware #{System.unique_integer([:positive])}",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      build = fn tmdb_id ->
+        {:ok, item} =
+          Mydia.ImportLists.create_import_list_item(%{
+            import_list_id: list.id,
+            tmdb_id: tmdb_id,
+            title: "Title #{tmdb_id}",
+            year: 2020,
+            discovered_at: DateTime.utc_now()
+          })
+
+        item
+      end
+
+      for id <- tmdb_ids_owned do
+        {:ok, _} =
+          Mydia.Media.create_media_item(Mydia.Accounts.Scope.unrestricted(), %{
+            type: "movie",
+            title: "Owned Title #{id}",
+            year: 2020,
+            tmdb_id: id
+          })
+      end
+
+      {list, Enum.map(tmdb_ids_owned, build), Enum.map(tmdb_ids_fresh, build)}
+    end
+
+    test "the items modal hides library titles by default and shows them under In library",
+         %{conn: conn} do
+      {list, [owned], [fresh]} = owned_list_fixture([880_001], [880_002])
+
+      {:ok, view, _} = live(conn, ~p"/admin/import-lists")
+
+      view |> element("#view-import-list-items-#{list.id}") |> render_click()
+
+      assert has_element?(view, "#import-list-item-#{fresh.id}")
+      refute has_element?(view, "#import-list-item-#{owned.id}")
+
+      view
+      |> element(~s{#import-list-items-filter button[phx-value-status="in_library"]})
+      |> render_click()
+
+      assert has_element?(view, "#import-list-item-#{owned.id}")
+      refute has_element?(view, "#import-list-item-#{fresh.id}")
+
+      assert view
+             |> element("#import-list-item-#{owned.id} .badge")
+             |> render() =~ "In library"
+
+      refute has_element?(
+               view,
+               "#import-list-item-#{owned.id} button[phx-click=add_item_to_library]"
+             )
+    end
+
+    test "a list whose items are all owned shows the all-owned state", %{conn: conn} do
+      {list, [_owned], []} = owned_list_fixture([880_011], [])
+
+      {:ok, view, _} = live(conn, ~p"/admin/import-lists")
+
+      assert view |> element("#import-list-#{list.id}") |> render() =~ "all in library"
+
+      view |> element("#view-import-list-items-#{list.id}") |> render_click()
+
+      assert has_element?(view, "#import-list-items-all-owned")
+      refute has_element?(view, "#add-all-pending-import-list-items")
     end
 
     test "Add all pending links a title/year match and reports it as added", %{conn: conn} do
