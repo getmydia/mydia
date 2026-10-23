@@ -127,6 +127,34 @@ defmodule Mydia.Jobs.ImportListSyncTest do
       assert Enum.all?(items, &(&1.status == "pending"))
     end
 
+    test "links fetched items to library rows without a tmdb_id by title and year" do
+      bypass = Bypass.open()
+      list = tmdb_trending_list(bypass)
+
+      {:ok, media} =
+        Mydia.Media.create_media_item(Mydia.Accounts.Scope.unrestricted(), %{
+          type: "movie",
+          title: "Saltmarsh Signal",
+          year: 2017
+        })
+
+      stub_trending(bypass, [
+        %{"id" => 52_001, "title" => "Saltmarsh Signal", "release_date" => "2017-03-09"},
+        %{"id" => 52_002, "title" => "Glass Horizon", "release_date" => "2021-11-20"}
+      ])
+
+      assert :ok = ImportListSync.perform(job(%{"import_list_id" => list.id}))
+
+      items = ImportLists.list_import_list_items(list)
+      linked = Enum.find(items, &(&1.tmdb_id == 52_001))
+      other = Enum.find(items, &(&1.tmdb_id == 52_002))
+
+      assert linked.in_library
+      assert linked.media_item_id == media.id
+      refute other.in_library
+      assert ImportLists.count_import_list_items(list, "pending") == 1
+    end
+
     test "broadcasts new-item stats on the first sync and updated-item stats on a re-sync" do
       bypass = Bypass.open()
       list = tmdb_trending_list(bypass)

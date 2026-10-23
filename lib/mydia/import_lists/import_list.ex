@@ -9,6 +9,8 @@ defmodule Mydia.ImportLists.ImportList do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Mydia.Settings.LibraryPath
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -106,6 +108,7 @@ defmodule Mydia.ImportLists.ImportList do
     |> validate_inclusion(:media_type, @media_type_values)
     |> validate_inclusion(:sync_interval, @sync_interval_values)
     |> validate_media_type_compatibility()
+    |> validate_library_path_type()
     |> validate_list_url()
     |> store_list_url_in_config()
     |> maybe_add_unique_constraint()
@@ -133,6 +136,33 @@ defmodule Mydia.ImportLists.ImportList do
       )
     end
   end
+
+  @doc "Library types an import list of `media_type` may target."
+  @spec library_types_for(String.t()) :: [atom()]
+  def library_types_for("movie"), do: LibraryPath.movie_library_types()
+  def library_types_for("tv_show"), do: LibraryPath.series_library_types()
+
+  # Runs when either side of the pairing changes, so switching an existing
+  # list from movies to TV re-checks the library it already points at.
+  defp validate_library_path_type(changeset) do
+    library_path_id = get_field(changeset, :library_path_id)
+    media_type = get_field(changeset, :media_type)
+    changed? = changed?(changeset, :library_path_id) or changed?(changeset, :media_type)
+
+    cond do
+      not changed? or is_nil(library_path_id) or media_type not in @media_type_values ->
+        changeset
+
+      Mydia.Settings.library_path_exists_as_type?(library_path_id, library_types_for(media_type)) ->
+        changeset
+
+      true ->
+        add_error(changeset, :library_path_id, library_type_error(media_type))
+    end
+  end
+
+  defp library_type_error("movie"), do: "is not a movies library"
+  defp library_type_error("tv_show"), do: "is not a TV library"
 
   defp compatible_media_types_label(type) do
     type

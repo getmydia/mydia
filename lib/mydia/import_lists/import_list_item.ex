@@ -3,7 +3,7 @@ defmodule Mydia.ImportLists.ImportListItem do
   Schema for import list items.
 
   An import list item represents a single media item discovered from an import list.
-  Items are tracked from discovery through being added to the library or skipped.
+  Items are tracked from discovery through being added to the library or failed.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -11,7 +11,7 @@ defmodule Mydia.ImportLists.ImportListItem do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @status_values ~w(pending added skipped failed)
+  @status_values ~w(pending added failed)
 
   @type t :: %__MODULE__{
           id: binary(),
@@ -76,11 +76,22 @@ defmodule Mydia.ImportLists.ImportListItem do
   def valid_statuses, do: @status_values
 
   @doc """
+  The state an operator sees: `"in_library"` when matching media exists
+  (linked or by TMDB id), `"failed"` for a failed add not in the library,
+  `"pending"` otherwise (including an `"added"` row whose media was deleted).
+  Requires `in_library` to have been computed by the item queries in
+  `Mydia.ImportLists`.
+  """
+  @spec effective_status(t()) :: String.t()
+  def effective_status(%__MODULE__{in_library: true}), do: "in_library"
+  def effective_status(%__MODULE__{status: "failed"}), do: "failed"
+  def effective_status(%__MODULE__{}), do: "pending"
+
+  @doc """
   Returns a human-readable label for a status.
   """
   def status_label("pending"), do: "Pending"
   def status_label("added"), do: "Added"
-  def status_label("skipped"), do: "Skipped"
   def status_label("failed"), do: "Failed"
   def status_label(_), do: "Unknown"
 end

@@ -180,16 +180,15 @@ defmodule Mydia.ImportLists do
     limit_val = Keyword.get(opts, :limit)
     offset_val = Keyword.get(opts, :offset, 0)
 
-    # Build query with left join to compute in_library dynamically
     query =
-      from(i in ImportListItem,
-        left_join: m in assoc(i, :media_item),
-        where: i.import_list_id == ^import_list_id,
-        # in_library is true if the media_item still exists
-        select: %{i | in_library: not is_nil(m.id)},
-        order_by: [desc: i.discovered_at]
-      )
-      |> maybe_filter_status_with_library(status)
+      import_list_id
+      |> items_with_library_query()
+      |> select([i, media: m, library_match: lm], %{
+        i
+        | in_library: not is_nil(m.id) or not is_nil(lm.id)
+      })
+      |> order_by([i], desc: i.discovered_at)
+      |> filter_by_effective_status(status)
       |> maybe_preload(opts[:preload])
 
     query =
@@ -212,12 +211,27 @@ defmodule Mydia.ImportLists do
   end
 
   def count_import_list_items_by_id(import_list_id, status \\ nil) do
+    import_list_id
+    |> items_with_library_query()
+    |> filter_by_effective_status(status)
+    |> Repo.aggregate(:count)
+  end
+
+  # Items joined to the library twice: through their own link
+  # (`media_item_id`, set when the list added or linked the title) and by
+  # `(type, tmdb_id)`, which catches media that reached the library any other
+  # way. `media_items` is unique on `(type, tmdb_id)`, so the second join
+  # yields at most one row.
+  defp items_with_library_query(import_list_id) do
     from(i in ImportListItem,
+      join: l in assoc(i, :import_list),
       left_join: m in assoc(i, :media_item),
+      as: :media,
+      left_join: lm in MediaItem,
+      as: :library_match,
+      on: lm.tmdb_id == i.tmdb_id and lm.type == l.media_type,
       where: i.import_list_id == ^import_list_id
     )
-    |> maybe_filter_status_with_library(status)
-    |> Repo.aggregate(:count)
   end
 
   @doc """
@@ -309,18 +323,6 @@ defmodule Mydia.ImportLists do
       status: "added",
       media_item_id: media_item_id,
       skip_reason: nil
-    })
-    |> Repo.update()
-  end
-
-  @doc """
-  Marks an import list item as skipped.
-  """
-  def mark_item_skipped(%ImportListItem{} = item, reason) do
-    item
-    |> ImportListItem.changeset(%{
-      status: "skipped",
-      skip_reason: reason
     })
     |> Repo.update()
   end
@@ -574,70 +576,61 @@ defmodule Mydia.ImportLists do
   """
   def add_item_to_library(%ImportListItem{} = item, %ImportList{} = import_list) do
     case check_duplicate(item.tmdb_id, import_list.media_type, item.title, item.year) do
-      {:duplicate, media_item} ->
-        handle_duplicate_item(item, media_item)
-
-      :not_found ->
-        fetch_and_create_media_item(item, import_list)
+      {:duplicate, media_item} -> link_to_existing(item, media_item)
+      :not_found -> create_from_tmdb(item, import_list)
     end
   end
 
-  # Links the item to the media already in the library. A single write: an
-  # earlier version wrote mark_item_skipped/2 first and mark_item_added/2
-  # right after, which immediately overwrote the skip (mark_item_added/2
-  # clears skip_reason), so the row always ended up "added" anyway. That made
-  # the write pointless and, worse, made the job's own stats (which reported
-  # it as skipped) disagree with what the database actually stored.
-  defp handle_duplicate_item(item, media_item) do
+  # Links the item to the media already in the library with a single write.
+  defp link_to_existing(item, media_item) do
     {:ok, _} = mark_item_added(item, media_item.id)
     {:ok, media_item}
   end
 
-  defp fetch_and_create_media_item(item, import_list) do
-    config = Mydia.Metadata.default_relay_config()
+  # Import lists carry TMDB ids regardless of media type: `item.tmdb_id`
+  # always names a TMDB catalog entry, never a TVDB one.
+  defp create_from_tmdb(item, import_list) do
+    opts = [
+      monitored: import_list.monitored,
+      quality_profile_id: import_list.quality_profile_id,
+      library_path_id: import_list.library_path_id
+    ]
+
     media_type = normalize_media_type(import_list.media_type)
 
-    # Import lists carry TMDB ids regardless of media type: `item.tmdb_id`
-    # always names a TMDB catalog entry, never a TVDB one.
-    case Mydia.Metadata.fetch_by_ref(config, {:tmdb, item.tmdb_id}, media_type: media_type) do
-      {:ok, metadata} ->
-        create_media_from_metadata(item, import_list, metadata)
+    case Mydia.Media.Add.from_provider(
+           Scope.system(),
+           {:tmdb, item.tmdb_id},
+           media_type,
+           nil,
+           opts
+         ) do
+      {:ok, media_item} ->
+        {:ok, _} = mark_item_added(item, media_item.id)
+        maybe_add_to_target_collection(import_list, media_item)
+        {:ok, media_item}
 
-      {:error, reason} ->
+      {:error, {:already_in_library, media_item}} ->
+        link_to_existing(item, media_item)
+
+      {:error, {:metadata, reason}} ->
         mark_item_failed(item, "Failed to fetch metadata")
         {:error, reason}
+
+      {:error, {:changeset, changeset}} ->
+        message = format_changeset_error(changeset)
+        mark_item_failed(item, message)
+        {:error, message}
+
+      {:error, :restricted} ->
+        mark_item_failed(item, "Not permitted to add this title")
+        {:error, :restricted}
     end
   end
 
   defp normalize_media_type("movie"), do: :movie
   defp normalize_media_type("tv_show"), do: :tv_show
   defp normalize_media_type(mt), do: mt
-
-  defp create_media_from_metadata(item, import_list, metadata) do
-    attrs = %{
-      type: import_list.media_type,
-      title: metadata.title,
-      original_title: metadata.original_title,
-      year: metadata.year,
-      tmdb_id: item.tmdb_id,
-      imdb_id: metadata.imdb_id,
-      metadata: metadata,
-      monitored: import_list.monitored,
-      quality_profile_id: import_list.quality_profile_id
-    }
-
-    case Mydia.Media.create_media_item(Scope.system(), attrs) do
-      {:ok, media_item} ->
-        mark_item_added(item, media_item.id)
-        maybe_add_to_target_collection(import_list, media_item)
-        {:ok, media_item}
-
-      {:error, changeset} ->
-        error_msg = format_changeset_error(changeset)
-        mark_item_failed(item, error_msg)
-        {:error, error_msg}
-    end
-  end
 
   # Adds media item to target collection if configured
   defp maybe_add_to_target_collection(%ImportList{target_collection_id: nil}, _media_item),
@@ -667,28 +660,17 @@ defmodule Mydia.ImportLists do
   @doc """
   Adds all pending items from an import list to the library.
 
-  Returns a map with counts: %{added: n, skipped: n, failed: n}
+  Returns a map with counts: %{added: n, failed: n}
   """
   def add_all_pending_to_library(%ImportList{} = import_list) do
     import_list
     |> get_pending_items()
-    |> Enum.reduce(%{added: 0, skipped: 0, failed: 0}, fn item, acc ->
-      update_stats_after_add(acc, add_item_to_library(item, import_list), item.id)
+    |> Enum.reduce(%{added: 0, failed: 0}, fn item, acc ->
+      case add_item_to_library(item, import_list) do
+        {:ok, _} -> %{acc | added: acc.added + 1}
+        {:error, _} -> %{acc | failed: acc.failed + 1}
+      end
     end)
-  end
-
-  defp update_stats_after_add(acc, {:ok, _media_item}, item_id) do
-    updated_item = get_import_list_item!(item_id)
-
-    if updated_item.status == "skipped" do
-      %{acc | skipped: acc.skipped + 1}
-    else
-      %{acc | added: acc.added + 1}
-    end
-  end
-
-  defp update_stats_after_add(acc, {:error, _reason}, _item_id) do
-    %{acc | failed: acc.failed + 1}
   end
 
   defp format_changeset_error(%Ecto.Changeset{} = changeset) do
@@ -699,8 +681,6 @@ defmodule Mydia.ImportLists do
     end)
     |> Enum.map_join("; ", fn {field, errors} -> "#{field}: #{Enum.join(errors, ", ")}" end)
   end
-
-  defp format_changeset_error(_), do: "Unknown error"
 
   ## Duplicate Detection
 
@@ -768,32 +748,26 @@ defmodule Mydia.ImportLists do
   end
 
   @doc """
-  Updates import list items to reflect their library status.
+  Links pending items to media already in the library.
 
-  Checks each pending item against the library and marks duplicates as skipped.
-  Returns the count of items updated.
+  Items whose TMDB id matches a library row are already reported as in
+  library by the item queries, so this only has work to do for library rows
+  without a TMDB id, which `check_duplicate/4` matches on title and year.
+  Returns the number of items linked.
   """
-  def mark_existing_items_in_library(%ImportList{} = import_list) do
-    pending_items = get_pending_items(import_list)
-
-    updated_count =
-      Enum.reduce(pending_items, 0, fn item, count ->
+  @spec link_existing_library_items(ImportList.t()) :: {:ok, non_neg_integer()}
+  def link_existing_library_items(%ImportList{} = import_list) do
+    linked =
+      import_list
+      |> get_pending_items()
+      |> Enum.count(fn item ->
         case check_duplicate(item.tmdb_id, import_list.media_type, item.title, item.year) do
-          {:duplicate, media_item} ->
-            {:ok, _} = mark_item_skipped(item, "Already in library")
-            # Also link to the existing media item
-            item
-            |> ImportListItem.changeset(%{media_item_id: media_item.id})
-            |> Repo.update()
-
-            count + 1
-
-          :not_found ->
-            count
+          {:duplicate, media_item} -> match?({:ok, _}, mark_item_added(item, media_item.id))
+          :not_found -> false
         end
       end)
 
-    {:ok, updated_count}
+    {:ok, linked}
   end
 
   ## Private Functions
@@ -812,22 +786,26 @@ defmodule Mydia.ImportLists do
   defp maybe_filter_media_type(query, media_type),
     do: where(query, [l], l.media_type == ^media_type)
 
-  # Filter by status while considering in_library for "added" and "pending" statuses
-  # This is used when we have a left join to media_items
-  defp maybe_filter_status_with_library(query, nil), do: query
+  # Filters on the state an operator sees (see ImportListItem.effective_status/1).
+  defp filter_by_effective_status(query, status) when status in [nil, "all"], do: query
 
-  # "added" means truly in library (media_item exists)
-  defp maybe_filter_status_with_library(query, "added") do
-    where(query, [i, m], i.status == "added" and not is_nil(m.id))
+  defp filter_by_effective_status(query, "in_library") do
+    where(query, [media: m, library_match: lm], not is_nil(m.id) or not is_nil(lm.id))
   end
 
-  # "pending" means either pending status OR was added but media was removed
-  defp maybe_filter_status_with_library(query, "pending") do
-    where(query, [i, m], i.status == "pending" or (i.status == "added" and is_nil(m.id)))
+  defp filter_by_effective_status(query, "to_add") do
+    where(query, [media: m, library_match: lm], is_nil(m.id) and is_nil(lm.id))
   end
 
-  # For other statuses, just filter by the stored status
-  defp maybe_filter_status_with_library(query, status) do
-    where(query, [i], i.status == ^status)
+  defp filter_by_effective_status(query, "pending") do
+    query
+    |> filter_by_effective_status("to_add")
+    |> where([i], i.status != "failed")
+  end
+
+  defp filter_by_effective_status(query, "failed") do
+    query
+    |> filter_by_effective_status("to_add")
+    |> where([i], i.status == "failed")
   end
 end

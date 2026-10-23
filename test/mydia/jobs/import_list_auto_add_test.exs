@@ -68,11 +68,10 @@ defmodule Mydia.Jobs.ImportListAutoAddTest do
       assert :ok = ImportListAutoAdd.perform(job(%{"import_list_id" => list.id}))
     end
 
-    test "an item already in the library (matched by tmdb_id) is linked in a single write, never hits the network" do
+    test "an item already in the library by tmdb_id is left alone and reads as in library, never hits the network" do
       list = movie_list()
 
-      media_item =
-        media_item_fixture(%{type: "movie", title: "Nebula Drift", year: 2022, tmdb_id: 777})
+      media_item_fixture(%{type: "movie", title: "Nebula Drift", year: 2022, tmdb_id: 777})
 
       item = pending_item(list, %{tmdb_id: 777, title: "Nebula Drift", year: 2022})
 
@@ -81,14 +80,18 @@ defmodule Mydia.Jobs.ImportListAutoAddTest do
       # tracker (see test/test_helper.exs), not silently succeed.
       assert :ok = ImportListAutoAdd.perform(job(%{"import_list_id" => list.id}))
 
+      # Items already in the library are no longer "pending" (see
+      # ImportLists.get_pending_items/2), so the job leaves them alone.
+      # Linking them is the job of the sync-time reconciliation (later task).
       reloaded = ImportLists.get_import_list_item!(item.id)
-      assert reloaded.status == "added"
-      assert reloaded.media_item_id == media_item.id
-      # The wasted intermediate skip write must be gone: mark_item_skipped/2
-      # followed immediately by mark_item_added/2 always ended up "added"
-      # anyway, so the row is honestly added, not "skipped" with the write
-      # thrown away.
+      assert reloaded.status == "pending"
       assert reloaded.skip_reason == nil
+      assert reloaded.media_item_id == nil
+
+      assert [%{id: in_library_id}] =
+               ImportLists.list_import_list_items(list, status: "in_library")
+
+      assert in_library_id == item.id
     end
 
     test "an item already in the library matched only via the title+year fallback is linked" do
@@ -141,6 +144,38 @@ defmodule Mydia.Jobs.ImportListAutoAddTest do
       assert media_item.title == "Halcyon Fields"
     end
 
+    test "auto-adds into the list's library path" do
+      bypass = Bypass.open()
+      point_relay_at(bypass)
+
+      library = Mydia.SettingsFixtures.library_path_fixture(%{type: "movies"})
+      list = movie_list(%{library_path_id: library.id})
+      tmdb_id = 424_250
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+        body = %{
+          "id" => tmdb_id,
+          "title" => "Lantern Row",
+          "release_date" => "2023-05-05",
+          "credits" => %{"cast" => [], "crew" => []}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      item = pending_item(list, %{tmdb_id: tmdb_id, title: "Lantern Row", year: 2023})
+
+      assert :ok = ImportListAutoAdd.perform(job(%{"import_list_id" => list.id}))
+
+      reloaded = ImportLists.get_import_list_item!(item.id)
+      assert reloaded.status == "added"
+
+      media_item = Mydia.Media.get_media_item!(Scope.unrestricted(), reloaded.media_item_id)
+      assert media_item.library_path_id == library.id
+    end
+
     test "marks the item failed when the metadata fetch fails, and keeps processing the rest" do
       bypass = Bypass.open()
       point_relay_at(bypass)
@@ -176,7 +211,7 @@ defmodule Mydia.Jobs.ImportListAutoAddTest do
       assert reloaded_working.status == "added"
     end
 
-    test "only processes pending items, leaving already-added or skipped items alone" do
+    test "only processes pending items, leaving already-added items alone" do
       list = movie_list()
 
       already_added_media = media_item_fixture(%{type: "movie", title: "Old News", year: 2020})
@@ -190,19 +225,9 @@ defmodule Mydia.Jobs.ImportListAutoAddTest do
           media_item_id: already_added_media.id
         })
 
-      already_skipped =
-        pending_item(list, %{
-          tmdb_id: 2,
-          title: "Ignored",
-          year: 2021,
-          status: "skipped",
-          skip_reason: "manual"
-        })
-
       assert :ok = ImportListAutoAdd.perform(job(%{"import_list_id" => list.id}))
 
       assert ImportLists.get_import_list_item!(already_added.id).status == "added"
-      assert ImportLists.get_import_list_item!(already_skipped.id).status == "skipped"
     end
   end
 end

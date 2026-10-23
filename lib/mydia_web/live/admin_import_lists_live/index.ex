@@ -9,6 +9,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
 
   alias Mydia.ImportLists
   alias Mydia.ImportLists.ImportList
+  alias Mydia.ImportLists.ImportListItem
   alias Mydia.Settings
   alias Mydia.Collections
   alias Mydia.Jobs.ImportListSync
@@ -31,7 +32,8 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
        |> assign(:selected_list, nil)
        |> assign(:import_list_form, nil)
        |> assign(:items, [])
-       |> assign(:items_filter, "all")
+       |> assign(:items_filter, "to_add")
+       |> assign(:items_total, 0)
        |> assign(:syncing_list_id, nil)
        |> load_data()}
     else
@@ -116,16 +118,13 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   end
 
   defp load_list_items(socket, import_list, filter) do
-    opts =
-      case filter do
-        "all" -> []
-        status -> [status: status]
-      end
+    opts = if filter == "all", do: [], else: [status: filter]
 
     items = ImportLists.list_import_list_items(import_list, opts)
 
     socket
     |> assign(:items, items)
+    |> assign(:items_total, ImportLists.count_import_list_items(import_list))
     |> assign(:items_filter, filter)
   end
 
@@ -348,7 +347,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
      socket
      |> assign(:show_import_list_items_modal, true)
      |> assign(:selected_list, import_list)
-     |> load_list_items(import_list, "all")}
+     |> load_list_items(import_list, "to_add")}
   end
 
   @impl true
@@ -407,33 +406,9 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
     import_list = socket.assigns.selected_list
     stats = ImportLists.add_all_pending_to_library(import_list)
 
-    message =
-      cond do
-        stats.added > 0 and stats.skipped > 0 ->
-          "Added #{stats.added} items, #{stats.skipped} already in library"
-
-        stats.added > 0 ->
-          "Added #{stats.added} items to library"
-
-        stats.skipped > 0 ->
-          "#{stats.skipped} items already in library"
-
-        stats.failed > 0 ->
-          "Failed to add #{stats.failed} items"
-
-        true ->
-          "No pending items to add"
-      end
-
-    socket =
-      if stats.failed > 0 and stats.added == 0 do
-        put_flash(socket, :error, message)
-      else
-        put_flash(socket, :info, message)
-      end
-
     {:noreply,
      socket
+     |> put_add_all_flash(stats)
      |> load_list_items(import_list, socket.assigns.items_filter)
      |> load_data()}
   end
@@ -443,35 +418,26 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
     import_list = ImportLists.get_import_list!(id)
     stats = ImportLists.add_all_pending_to_library(import_list)
 
-    message =
-      cond do
-        stats.added > 0 and stats.skipped > 0 ->
-          "Added #{stats.added} items, #{stats.skipped} already in library"
-
-        stats.added > 0 ->
-          "Added #{stats.added} items to library"
-
-        stats.skipped > 0 ->
-          "#{stats.skipped} items already in library"
-
-        stats.failed > 0 ->
-          "Failed to add #{stats.failed} items"
-
-        true ->
-          "No pending items to add"
-      end
-
-    socket =
-      if stats.failed > 0 and stats.added == 0 do
-        put_flash(socket, :error, message)
-      else
-        put_flash(socket, :info, message)
-      end
-
-    {:noreply, load_data(socket)}
+    {:noreply, socket |> put_add_all_flash(stats) |> load_data()}
   end
 
   ## Helpers
+
+  defp put_add_all_flash(socket, %{added: added, failed: failed}) do
+    cond do
+      added > 0 and failed > 0 ->
+        put_flash(socket, :info, "Added #{added} items to library, #{failed} failed")
+
+      added > 0 ->
+        put_flash(socket, :info, "Added #{added} items to library")
+
+      failed > 0 ->
+        put_flash(socket, :error, "Failed to add #{failed} items")
+
+      true ->
+        put_flash(socket, :info, "Nothing left to add")
+    end
+  end
 
   defp format_changeset_errors(%Ecto.Changeset{} = changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
@@ -505,13 +471,18 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
 
   def item_count_badge(import_list) do
     total = ImportLists.count_import_list_items(import_list)
-    pending = ImportLists.count_import_list_items(import_list, "pending")
+    to_add = ImportLists.count_import_list_items(import_list, "pending")
 
-    # Don't show pending count for auto-add lists since they'll be added automatically
-    if pending > 0 and not import_list.auto_add do
-      "#{pending} pending / #{total} total"
-    else
-      "#{total} items"
+    cond do
+      total > 0 and ImportLists.count_import_list_items(import_list, "in_library") == total ->
+        "#{total} items, all in library"
+
+      # Auto-add lists add their pending items themselves, so no to-add count there
+      to_add > 0 and not import_list.auto_add ->
+        "#{to_add} to add / #{total} total"
+
+      true ->
+        "#{total} items"
     end
   end
 
@@ -524,21 +495,20 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   end
 
   def group_items_by_status(items) do
-    # Sort items by effective status: pending first, then added, then skipped, then failed
-    status_order = %{"pending" => 0, "added" => 1, "skipped" => 2, "failed" => 3}
+    # Sort items by effective status: pending first, then failed, then in library
+    status_order = %{"pending" => 0, "failed" => 1, "in_library" => 2}
 
     Enum.sort_by(items, fn item ->
       effective_status = display_status(item)
-      {Map.get(status_order, effective_status, 4), item.discovered_at}
+      {Map.get(status_order, effective_status, 3), item.discovered_at}
     end)
   end
 
   def status_explanation(status) do
     case status do
       "pending" -> "Waiting to be added to library"
-      "added" -> "Successfully added to your library"
-      "skipped" -> "Skipped (already in library or manually skipped)"
-      "failed" -> "Failed to add (click to retry)"
+      "in_library" -> "Already in your library"
+      "failed" -> "Failed to add (reset to retry)"
       _ -> ""
     end
   end
@@ -586,6 +556,28 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
     Enum.map(ImportList.valid_media_types(), &{media_type_label(&1), &1})
   end
 
+  @doc """
+  Library select options for a list of `media_type`: only enabled libraries
+  whose type can hold it. With no media type chosen yet, every enabled library.
+  The currently selected library (`current_id`) is always kept, even when it is
+  disabled or no longer suits the media type, so an unrelated edit doesn't
+  clear it.
+  """
+  def library_path_options(library_paths, media_type, current_id \\ nil) do
+    allowed =
+      if media_type in ImportList.valid_media_types(),
+        do: ImportList.library_types_for(media_type),
+        else: nil
+
+    options =
+      for lp <- library_paths,
+          lp.id == current_id or
+            (lp.disabled != true and (is_nil(allowed) or lp.type in allowed)),
+          do: {lp.path, lp.id}
+
+    [{"Default", nil} | options]
+  end
+
   defp media_type_label("movie"), do: "Movies"
   defp media_type_label("tv_show"), do: "TV Shows"
   defp media_type_label(other), do: other
@@ -595,24 +587,15 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   def media_type_icon(_), do: "hero-queue-list"
 
   def status_badge_class("pending"), do: "badge-warning"
-  def status_badge_class("added"), do: "badge-success"
-  def status_badge_class("skipped"), do: "badge-ghost"
+  def status_badge_class("in_library"), do: "badge-success"
   def status_badge_class("failed"), do: "badge-error"
   def status_badge_class(_), do: "badge-ghost"
 
-  @doc """
-  Returns the display status for an item, considering whether it's actually in the library.
+  def status_label("pending"), do: "Pending"
+  def status_label("in_library"), do: "In library"
+  def status_label("failed"), do: "Failed"
+  def status_label(other), do: other
 
-  If an item was marked as "added" but the media_item no longer exists (was removed),
-  we show it as "pending" so the user can re-add it.
-  """
-  def display_status(item) do
-    # If status is "added" but not in library, treat as pending
-    if item.status == "added" and not item.in_library do
-      "pending"
-    else
-      # Otherwise use the stored status
-      item.status
-    end
-  end
+  @doc ~s(Returns the item's live state: "pending", "in_library" or "failed".)
+  def display_status(item), do: ImportListItem.effective_status(item)
 end

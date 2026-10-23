@@ -58,6 +58,8 @@ defmodule Mydia.Jobs.ImportListSync do
          :ok <- check_enabled(import_list),
          {:ok, items} <- fetch_items(import_list),
          {:ok, stats} <- process_items(import_list, items) do
+      link_library_matches(import_list)
+
       # Mark sync success
       {:ok, _} = ImportLists.mark_sync_success(import_list)
 
@@ -162,6 +164,24 @@ defmodule Mydia.Jobs.ImportListSync do
       true ->
         {:error, "Unsupported import list type: #{import_list.type}"}
     end
+  end
+
+  # Best-effort: a failure here must not turn a good sync into a failed one.
+  defp link_library_matches(import_list) do
+    {:ok, linked} = ImportLists.link_existing_library_items(import_list)
+
+    if linked > 0 do
+      Logger.info("[ImportListSync] Linked items already in library",
+        import_list_id: import_list.id,
+        linked: linked
+      )
+    end
+  rescue
+    error ->
+      Logger.warning("[ImportListSync] Linking library matches failed",
+        import_list_id: import_list.id,
+        error: Exception.message(error)
+      )
   end
 
   defp process_items(%ImportList{} = import_list, items) do

@@ -6,14 +6,14 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
 
   @status_legend [
     {"badge-warning", "Pending = Waiting to add"},
-    {"badge-success", "Added = In library"},
-    {"badge-ghost", "Skipped = Already exists"},
+    {"badge-success", "In library = Already in your library"},
     {"badge-error", "Failed = Error occurred"}
   ]
 
   attr :selected_list, :any, required: true
   attr :items, :list, required: true
   attr :items_filter, :string, required: true
+  attr :total_count, :integer, required: true
 
   def import_list_items_modal(assigns) do
     assigns = assign(assigns, :status_legend, @status_legend)
@@ -41,10 +41,9 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
           param="status"
           label="Filter items by status"
         >
+          <:option value="to_add" label="To add" />
+          <:option value="in_library" label="In library" />
           <:option value="all" label="All" />
-          <:option value="pending" label="Pending" />
-          <:option value="added" label="Added" />
-          <:option value="skipped" label="Skipped" />
         </.segmented_control>
 
         <button
@@ -57,26 +56,32 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
         </button>
       </div>
 
-      <%= if @items == [] do %>
-        <div id="import-list-items-empty" class="alert">
-          <.icon name="hero-information-circle" class="w-5 h-5" />
-          <span>
-            No items found. {if @items_filter != "all",
-              do: "Try a different filter or ",
-              else: ""}Sync the list to fetch items.
-          </span>
-        </div>
-      <% else %>
-        <div
-          id="import-list-items"
-          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:overflow-y-auto sm:max-h-[50vh]"
-        >
-          <.item_tile
-            :for={item <- Index.group_items_by_status(@items)}
-            item={item}
-            media_type={@selected_list.media_type}
-          />
-        </div>
+      <%= cond do %>
+        <% @items != [] -> %>
+          <div
+            id="import-list-items"
+            class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:overflow-y-auto sm:max-h-[50vh]"
+          >
+            <.item_tile
+              :for={item <- Index.group_items_by_status(@items)}
+              item={item}
+              media_type={@selected_list.media_type}
+            />
+          </div>
+        <% @items_filter == "to_add" and @total_count > 0 -> %>
+          <div id="import-list-items-all-owned" class="alert alert-success">
+            <.icon name="hero-check-circle" class="w-5 h-5" />
+            <span>Everything on this list is already in your library.</span>
+          </div>
+        <% true -> %>
+          <div id="import-list-items-empty" class="alert">
+            <.icon name="hero-information-circle" class="w-5 h-5" />
+            <span>
+              No items found. {if @items_filter != "all",
+                do: "Try a different filter or ",
+                else: ""}Sync the list to fetch items.
+            </span>
+          </div>
       <% end %>
 
       <:actions>
@@ -122,20 +127,13 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
             class={["badge badge-sm tooltip tooltip-left", Index.status_badge_class(@status)]}
             data-tip={Index.status_explanation(@status)}
           >
-            {@status}
+            {Index.status_label(@status)}
           </span>
         </div>
       </div>
       <div class="p-2">
         <h4 class="font-medium text-xs line-clamp-2" title={@item.title}>{@item.title}</h4>
         <p class="text-xs text-base-content/60">{@item.year || "Unknown year"}</p>
-        <p
-          :if={@status == "skipped" and @item.skip_reason}
-          class="text-xs text-warning truncate"
-          title={@item.skip_reason}
-        >
-          {@item.skip_reason}
-        </p>
         <p
           :if={@status == "failed" and @item.skip_reason}
           class="text-xs text-error truncate"
@@ -153,7 +151,7 @@ defmodule MydiaWeb.AdminImportListsLive.ItemsComponents do
             <.icon name="hero-plus" class="w-3 h-3" /> Add
           </button>
           <button
-            :if={@status in ["skipped", "failed"]}
+            :if={@status == "failed"}
             phx-click="reset_item"
             phx-value-id={@item.id}
             class="btn btn-ghost btn-xs flex-1"

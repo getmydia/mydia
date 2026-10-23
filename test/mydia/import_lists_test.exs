@@ -91,6 +91,22 @@ defmodule Mydia.ImportListsTest do
       assert import_list.sync_interval == 360
     end
 
+    test "rejects a library path whose type does not suit the media type" do
+      series = Mydia.SettingsFixtures.library_path_fixture(%{type: "series"})
+
+      assert {:error, changeset} =
+               ImportLists.create_import_list(Map.put(@valid_attrs, :library_path_id, series.id))
+
+      assert "is not a movies library" in errors_on(changeset).library_path_id
+    end
+
+    test "accepts a mixed library for either media type" do
+      mixed = Mydia.SettingsFixtures.library_path_fixture(%{type: "mixed"})
+
+      assert {:ok, _} =
+               ImportLists.create_import_list(Map.put(@valid_attrs, :library_path_id, mixed.id))
+    end
+
     test "create_import_list/1 with invalid data returns error changeset" do
       assert {:error, %Ecto.Changeset{}} = ImportLists.create_import_list(@invalid_attrs)
     end
@@ -239,7 +255,7 @@ defmodule Mydia.ImportListsTest do
 
       assert ImportLists.count_import_list_items(import_list) == 3
       assert ImportLists.count_import_list_items(import_list, "pending") == 2
-      assert ImportLists.count_import_list_items(import_list, "added") == 1
+      assert ImportLists.count_import_list_items(import_list, "in_library") == 1
     end
 
     test "get_pending_items/1 returns only pending items", %{import_list: import_list} do
@@ -410,14 +426,14 @@ defmodule Mydia.ImportListsTest do
         )
 
       # Verify item is counted as "added" when media_item exists
-      assert ImportLists.count_import_list_items(import_list, "added") == 1
+      assert ImportLists.count_import_list_items(import_list, "in_library") == 1
       assert ImportLists.count_import_list_items(import_list, "pending") == 0
 
       # Now delete the media item
       {:ok, _, _} = Mydia.Media.delete_media_item(Scope.unrestricted(), media_item)
 
       # After deletion, the item should be treated as "pending" since media is gone
-      assert ImportLists.count_import_list_items(import_list, "added") == 0
+      assert ImportLists.count_import_list_items(import_list, "in_library") == 0
       assert ImportLists.count_import_list_items(import_list, "pending") == 1
 
       # Verify the item is returned by get_pending_items
@@ -428,16 +444,15 @@ defmodule Mydia.ImportListsTest do
       assert hd(pending_items).in_library == false
     end
 
-    test "mark_item_skipped/2 updates status to skipped with reason", %{import_list: import_list} do
-      {:ok, item} =
-        ImportLists.create_import_list_item(
-          Map.put(@valid_item_attrs, :import_list_id, import_list.id)
+    test "the changeset rejects the retired skipped status", %{import_list: import_list} do
+      changeset =
+        ImportListItem.changeset(
+          %ImportListItem{},
+          Map.merge(@valid_item_attrs, %{import_list_id: import_list.id, status: "skipped"})
         )
 
-      {:ok, updated} = ImportLists.mark_item_skipped(item, "Already in library")
-
-      assert updated.status == "skipped"
-      assert updated.skip_reason == "Already in library"
+      assert "is invalid" in errors_on(changeset).status
+      assert ImportListItem.valid_statuses() == ~w(pending added failed)
     end
 
     test "mark_item_failed/2 updates status to failed with reason", %{import_list: import_list} do
@@ -994,8 +1009,7 @@ defmodule Mydia.ImportListsTest do
       reloaded = ImportLists.get_import_list_item!(item.id)
       assert reloaded.status == "added"
       assert reloaded.media_item_id == media_item.id
-      # The wasted intermediate skip write (and its stale reason) must not
-      # survive: the final row is honestly "added", not "skipped".
+      # Linking clears any stale reason.
       assert reloaded.skip_reason == nil
     end
 
@@ -1127,10 +1141,63 @@ defmodule Mydia.ImportListsTest do
       assert {:ok, media_item} = ImportLists.add_item_to_library(item, import_list)
       assert media_item.tmdb_id == Mydia.MetadataStubProvider.series_tmdb_id()
     end
+
+    test "creates the item in the list's library with its quality profile and monitored flag" do
+      library = Mydia.SettingsFixtures.library_path_fixture(%{type: "series"})
+
+      profile = Mydia.SettingsFixtures.quality_profile_fixture()
+
+      {:ok, import_list} =
+        ImportLists.create_import_list(%{
+          name: "Library Target",
+          type: "tmdb_trending",
+          media_type: "tv_show",
+          monitored: false,
+          library_path_id: library.id,
+          quality_profile_id: profile.id
+        })
+
+      {:ok, item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: Mydia.MetadataStubProvider.series_tmdb_id(),
+          title: "Harbour Lights",
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, media_item} = ImportLists.add_item_to_library(item, import_list)
+      assert media_item.library_path_id == library.id
+      assert media_item.quality_profile_id == import_list.quality_profile_id
+      assert import_list.quality_profile_id == profile.id
+      refute media_item.monitored
+    end
+
+    test "creates a movie in the list's library" do
+      library = Mydia.SettingsFixtures.library_path_fixture(%{type: "movies"})
+
+      {:ok, import_list} =
+        ImportLists.create_import_list(%{
+          name: "Movie Library Target",
+          type: "tmdb_trending",
+          media_type: "movie",
+          library_path_id: library.id
+        })
+
+      {:ok, item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: Mydia.MetadataStubProvider.movie_tmdb_id(),
+          title: Mydia.MetadataStubProvider.movie_title(),
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, media_item} = ImportLists.add_item_to_library(item, import_list)
+      assert media_item.library_path_id == library.id
+    end
   end
 
   describe "add_all_pending_to_library/1" do
-    test "reports duplicates as added and totals stats across pending items" do
+    test "totals stats across pending items and leaves items already in the library out" do
       {:ok, import_list} =
         ImportLists.create_import_list(%{
           name: "Test List",
@@ -1203,14 +1270,12 @@ defmodule Mydia.ImportListsTest do
 
       stats = ImportLists.add_all_pending_to_library(import_list)
 
-      assert stats.added == 2
-      assert stats.skipped == 0
-      assert stats.failed == 1
+      assert stats == %{added: 1, failed: 1}
     end
   end
 
-  describe "mark_existing_items_in_library/1" do
-    test "marks pending items already in the library as skipped and links them" do
+  describe "link_existing_library_items/1" do
+    setup do
       {:ok, import_list} =
         ImportLists.create_import_list(%{
           name: "Test List",
@@ -1218,7 +1283,43 @@ defmodule Mydia.ImportListsTest do
           media_type: "movie"
         })
 
-      {:ok, media_item} =
+      %{import_list: import_list}
+    end
+
+    test "links a pending item to a library row without a tmdb_id by title and year", %{
+      import_list: import_list
+    } do
+      {:ok, media} =
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Saltmarsh Signal",
+          year: 2017
+        })
+
+      {:ok, item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: 52_001,
+          title: "Saltmarsh Signal",
+          year: 2017,
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, 1} = ImportLists.link_existing_library_items(import_list)
+
+      reloaded = ImportLists.get_import_list_item!(item.id)
+      assert reloaded.status == "added"
+      assert reloaded.media_item_id == media.id
+      assert reloaded.skip_reason == nil
+
+      assert Enum.any?(
+               ImportLists.list_import_list_items(import_list, status: "in_library"),
+               &(&1.id == item.id)
+             )
+    end
+
+    test "does not count items already matched by tmdb_id", %{import_list: import_list} do
+      {:ok, _media} =
         Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Nebula Drift",
@@ -1226,7 +1327,7 @@ defmodule Mydia.ImportListsTest do
           tmdb_id: 777
         })
 
-      {:ok, matching_item} =
+      {:ok, item} =
         ImportLists.create_import_list_item(%{
           import_list_id: import_list.id,
           tmdb_id: 777,
@@ -1235,66 +1336,14 @@ defmodule Mydia.ImportListsTest do
           discovered_at: DateTime.utc_now()
         })
 
-      {:ok, unmatched_item} =
-        ImportLists.create_import_list_item(%{
-          import_list_id: import_list.id,
-          tmdb_id: 778,
-          title: "Something Else",
-          year: 2023,
-          discovered_at: DateTime.utc_now()
-        })
-
-      assert {:ok, 1} = ImportLists.mark_existing_items_in_library(import_list)
-
-      reloaded_matching = ImportLists.get_import_list_item!(matching_item.id)
-      assert reloaded_matching.status == "skipped"
-      assert reloaded_matching.skip_reason == "Already in library"
-      assert reloaded_matching.media_item_id == media_item.id
-
-      reloaded_unmatched = ImportLists.get_import_list_item!(unmatched_item.id)
-      assert reloaded_unmatched.status == "pending"
+      assert {:ok, 0} = ImportLists.link_existing_library_items(import_list)
+      assert ImportLists.get_import_list_item!(item.id).media_item_id == nil
     end
 
-    test "matches via the title+year fallback for library items with no tmdb_id" do
-      {:ok, import_list} =
-        ImportLists.create_import_list(%{
-          name: "Test List",
-          type: "tmdb_trending",
-          media_type: "movie"
-        })
-
-      {:ok, media_item} =
-        Mydia.Media.create_media_item(Scope.unrestricted(), %{
-          type: "movie",
-          title: "Silverback Station",
-          year: 2019
-        })
-
+    test "returns 0 and leaves the item unchanged when nothing matches", %{
+      import_list: import_list
+    } do
       {:ok, item} =
-        ImportLists.create_import_list_item(%{
-          import_list_id: import_list.id,
-          tmdb_id: 9001,
-          title: "Silverback Station",
-          year: 2019,
-          discovered_at: DateTime.utc_now()
-        })
-
-      assert {:ok, 1} = ImportLists.mark_existing_items_in_library(import_list)
-
-      reloaded = ImportLists.get_import_list_item!(item.id)
-      assert reloaded.status == "skipped"
-      assert reloaded.media_item_id == media_item.id
-    end
-
-    test "returns 0 when no pending items match the library" do
-      {:ok, import_list} =
-        ImportLists.create_import_list(%{
-          name: "Test List",
-          type: "tmdb_trending",
-          media_type: "movie"
-        })
-
-      {:ok, _item} =
         ImportLists.create_import_list_item(%{
           import_list_id: import_list.id,
           tmdb_id: 42,
@@ -1303,7 +1352,105 @@ defmodule Mydia.ImportListsTest do
           discovered_at: DateTime.utc_now()
         })
 
-      assert {:ok, 0} = ImportLists.mark_existing_items_in_library(import_list)
+      assert {:ok, 0} = ImportLists.link_existing_library_items(import_list)
+
+      reloaded = ImportLists.get_import_list_item!(item.id)
+      assert reloaded.status == "pending"
+      assert reloaded.media_item_id == nil
+    end
+  end
+
+  describe "library awareness" do
+    setup do
+      {:ok, list} =
+        ImportLists.create_import_list(%{
+          name: "Awareness List",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      %{list: list}
+    end
+
+    defp awareness_item(list, attrs) do
+      {:ok, item} =
+        %{import_list_id: list.id, discovered_at: DateTime.utc_now()}
+        |> Map.merge(attrs)
+        |> ImportLists.create_import_list_item()
+
+      item
+    end
+
+    test "an unlinked item whose tmdb_id is in the library counts as in library", %{list: list} do
+      {:ok, _} =
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Quiet Meridian",
+          year: 2021,
+          tmdb_id: 51_001
+        })
+
+      owned = awareness_item(list, %{tmdb_id: 51_001, title: "Quiet Meridian", year: 2021})
+      fresh = awareness_item(list, %{tmdb_id: 51_002, title: "Lantern Coast", year: 2022})
+
+      assert [%{id: id, in_library: true}] =
+               ImportLists.list_import_list_items(list, status: "in_library")
+
+      assert id == owned.id
+      assert [%{id: fresh_id}] = ImportLists.list_import_list_items(list, status: "to_add")
+      assert fresh_id == fresh.id
+      assert [%{id: ^fresh_id}] = ImportLists.get_pending_items(list)
+      assert ImportLists.count_import_list_items(list, "pending") == 1
+      assert ImportLists.count_import_list_items(list, "in_library") == 1
+      assert ImportLists.count_import_list_items(list) == 2
+    end
+
+    test "a TV show with the same tmdb_id does not mark a movie item", %{list: list} do
+      {:ok, _} =
+        Mydia.Media.create_media_item(
+          Scope.unrestricted(),
+          %{type: "tv_show", title: "Paper Harbour", year: 2020, tmdb_id: 51_010},
+          skip_episode_refresh: true
+        )
+
+      awareness_item(list, %{tmdb_id: 51_010, title: "Paper Harbour", year: 2020})
+
+      assert [%{in_library: false}] = ImportLists.list_import_list_items(list)
+      assert ImportLists.count_import_list_items(list, "pending") == 1
+    end
+
+    test "failed items are to add but not pending", %{list: list} do
+      item = awareness_item(list, %{tmdb_id: 51_020, title: "Glass Orchard", year: 2019})
+      {:ok, _} = ImportLists.mark_item_failed(item, "boom")
+
+      assert [_] = ImportLists.list_import_list_items(list, status: "to_add")
+      assert [] = ImportLists.get_pending_items(list)
+
+      assert [%{status: "failed"} = failed] =
+               ImportLists.list_import_list_items(list, status: "failed")
+
+      assert ImportListItem.effective_status(failed) == "failed"
+    end
+
+    test "an added item whose media was deleted is pending again", %{list: list} do
+      {:ok, media} =
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Copper Tide",
+          year: 2018,
+          tmdb_id: 51_030
+        })
+
+      item = awareness_item(list, %{tmdb_id: 51_030, title: "Copper Tide", year: 2018})
+      {:ok, _} = ImportLists.mark_item_added(item, media.id)
+      assert [%{in_library: true}] = ImportLists.list_import_list_items(list)
+
+      Mydia.Repo.delete!(media)
+
+      assert [reloaded] = ImportLists.list_import_list_items(list)
+      refute reloaded.in_library
+      assert ImportListItem.effective_status(reloaded) == "pending"
+      assert [_] = ImportLists.get_pending_items(list)
     end
   end
 end
