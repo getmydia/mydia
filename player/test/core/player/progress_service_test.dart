@@ -74,5 +74,27 @@ void main() {
         isNull,
       );
     });
+
+    test(
+        'reports nothing for a player with no file loaded, even when the '
+        'timeline knows the duration (regression: a failed reopen synced 0)',
+        () {
+      const timeline = StreamTimeline(totalDuration: Duration(seconds: 1370));
+
+      expect(
+        ProgressService.resolveSync(Duration.zero, Duration.zero, timeline),
+        isNull,
+      );
+    });
+
+    test('still reports position 0 from a loaded file', () {
+      const timeline = StreamTimeline(totalDuration: Duration(seconds: 1370));
+
+      final progress = ProgressService.resolveSync(
+          Duration.zero, const Duration(seconds: 1370), timeline);
+
+      expect(progress, isNotNull);
+      expect(progress!.positionSeconds, 0);
+    });
   });
 }
