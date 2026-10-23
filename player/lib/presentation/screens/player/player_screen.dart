@@ -3503,9 +3503,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// with its Retry.
   void _reopenLostSource(String message, {bool keepPaused = false}) {
     if (_reopeningLostSource) return;
-    // A file change in flight has no source to recover and owns the outcome;
-    // an error here would land on the incoming file.
-    if (_playback == null) return;
+    // A file change in flight has no player to recover and owns the outcome;
+    // an error here would land on the incoming file. `_player` and not
+    // `_playback`: `_switchToFile` nulls it synchronously, while downloaded
+    // playback never has a `_playback` yet must still reach the error path.
+    if (_player == null) return;
     // The retained local player is idle while casting; reopening it would
     // start audio under the cast. `_restartLocalPlayback` resumes local
     // playback once casting stops.
