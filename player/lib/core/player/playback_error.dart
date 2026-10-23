@@ -66,6 +66,14 @@ const String _noAudioOutput = 'audio device -> no sound';
 bool audioOutputUnavailable(String raw) =>
     raw.toLowerCase().contains(_noAudioOutput);
 
+/// Whether [raw] is mpv giving up on opening its URL for good.
+///
+/// mpv retries a refused connection on its own and reports each attempt as
+/// `tcp: ...`; only after those run out does it report this, at which point
+/// it has unloaded the file and nothing will retry again.
+bool sourceLost(String raw) =>
+    raw.trim().toLowerCase().startsWith(_openFailure);
+
 /// A viewer-facing sentence for a raw media_kit error string.
 ///
 /// Falls through to the raw text for anything unrecognised. Showing an ugly
