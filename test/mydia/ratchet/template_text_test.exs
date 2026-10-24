@@ -63,6 +63,18 @@ defmodule Mydia.Ratchet.TemplateTextTest do
     assert TemplateText.count(~S|<p>Open in Plex</p>|) == 1
   end
 
+  # The tokenizer hands comments and the doctype back as ordinary text tokens.
+  test "HTML comments and the doctype are not counted" do
+    assert TemplateText.count("<!-- Hello -->") == 0
+    assert TemplateText.count("<!DOCTYPE html>") == 0
+    assert TemplateText.count("<!-- a --><p>Real</p>") == 1
+    assert TemplateText.count("<p>Hi <!-- note --> there</p>") == 1
+  end
+
+  test "the root layout has no untranslated text" do
+    assert TemplateText.count_file("lib/mydia_web/components/layouts/root.html.heex") == 0
+  end
+
   test "count_file/1 sums every ~H in an .ex file" do
     path = Path.join(System.tmp_dir!(), "tt_#{System.unique_integer([:positive])}.ex")
 

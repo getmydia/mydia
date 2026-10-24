@@ -6,7 +6,8 @@ defmodule Mydia.Ratchet.TemplateText do
   never counted, so `gettext(...)` calls are free.
 
   Skipped: `<script>`, `<style>` and `phx-no-curly-interpolation` elements,
-  HTML entities, and text made only of the proper nouns in `@proper_nouns`.
+  HTML comments, the doctype, HTML entities, and text made only of the proper
+  nouns in `@proper_nouns`.
 
   Uses `Phoenix.LiveView.TagEngine.Parser.tokenize/2`, which is internal to
   LiveView; `Mydia.Ratchet.TemplateTextTest` pins its shape.
@@ -22,9 +23,12 @@ defmodule Mydia.Ratchet.TemplateText do
                    Prowlarr Jackett qBittorrent Transmission Deluge rTorrent SABnzbd NZBGet
                    TorBox Real-Debrid AllDebrid OIDC TOTP HLS)
 
+  # The tokenizer returns HTML comments and the doctype as plain text tokens,
+  # sometimes sharing one with real text, so they are stripped as noise.
   @noise Regex.compile!(
-           "&[#\\w]+;|\\b(?:#{Enum.map_join(@proper_nouns, "|", &Regex.escape/1)})\\b",
-           "u"
+           "<!--.*?-->|(?i:<!doctype[^>]*>)|&[#\\w]+;|" <>
+             "\\b(?:#{Enum.map_join(@proper_nouns, "|", &Regex.escape/1)})\\b",
+           "us"
          )
 
   @spec count_file(Path.t()) :: non_neg_integer()
