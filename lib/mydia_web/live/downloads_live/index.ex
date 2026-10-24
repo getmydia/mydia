@@ -1,14 +1,12 @@
 defmodule MydiaWeb.DownloadsLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Downloads
-  alias Mydia.Downloads.AutoRejectCap
   alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.ImportCandidates
   alias Mydia.Downloads.StallDetector
   alias Mydia.Library.Structs.Quality
-  alias Mydia.Library
   alias Mydia.Media
   alias Mydia.Settings
   alias Phoenix.PubSub
@@ -20,6 +18,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.DownloadsLive.ListComponents
   alias MydiaWeb.DownloadsLive.ListView
   alias MydiaWeb.DownloadsLive.Retry
+  alias MydiaWeb.DownloadsLive.Rows
   alias MydiaWeb.DownloadsLive.Sorting
   alias MydiaWeb.DownloadsLive.Summary
   alias MydiaWeb.DownloadsLive.Paths
@@ -1104,7 +1103,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
         downloads = get_current_downloads(socket)
 
         socket
-        |> assign(:stale_status, stale_status(downloads))
+        |> assign(:stale_status, Rows.stale_status(downloads))
         |> stream(:downloads, downloads, reset: true)
         |> assign(:stream_ids, Enum.map(downloads, & &1.id))
     end
@@ -1324,8 +1323,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       all_downloads
       |> Enum.drop(offset)
       |> Enum.take(@items_per_page)
-      |> annotate_rematch_eligibility()
-      |> annotate_auto_reject_cap()
+      |> Rows.annotate()
 
     has_more = length(all_downloads) > offset + @items_per_page
 
@@ -1333,34 +1331,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
     reset? = page == 0
 
     socket
-    |> assign(:stale_status, stale_status(all_downloads))
+    |> assign(:stale_status, Rows.stale_status(all_downloads))
     |> assign(:has_more, has_more)
     |> assign(:downloads_empty?, reset? and paginated_downloads == [])
     |> then(fn socket ->
       if reset?,
-        do: stream_page(socket, paginated_downloads),
+        do: Rows.stream_page(socket, paginated_downloads),
         else: stream(socket, :downloads, paginated_downloads)
     end)
-  end
-
-  # Page 0 of the Downloads list. A stream reset detaches every row, and a
-  # click pressed across that detach never fires (issue #1257), so rows that
-  # kept their order are patched in place and only gone rows are deleted.
-  defp stream_page(socket, rows) do
-    ids = Enum.map(rows, & &1.id)
-
-    socket =
-      case ListView.stream_plan(socket.assigns.stream_ids, ids) do
-        {:update, removed_ids} ->
-          removed_ids
-          |> Enum.reduce(socket, &stream_delete_by_dom_id(&2, :downloads, "downloads-#{&1}"))
-          |> stream(:downloads, rows)
-
-        :reset ->
-          stream(socket, :downloads, rows, reset: true)
-      end
-
-    assign(socket, :stream_ids, ids)
   end
 
   # Finds the open drawer's download in `all` (fetching it when nil). A
@@ -1392,8 +1370,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       download ->
         [download] =
           [download]
-          |> annotate_rematch_eligibility()
-          |> annotate_auto_reject_cap()
+          |> Rows.annotate()
           |> enrich_path_mapping_suggestions()
 
         assign(socket, :drawer_download, download)
@@ -1409,7 +1386,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
     socket
     |> assign(:selected_ids, MapSet.intersection(socket.assigns.selected_ids, visible_ids))
-    |> assign(:stale_status, stale_status(all_downloads))
+    |> assign(:stale_status, Rows.stale_status(all_downloads))
     |> assign(:has_more, false)
     |> assign(:downloads_empty?, shown == [])
     |> assign(:selectable_issues?, Enum.any?(shown, &Issue.selectable?/1))
@@ -1684,41 +1661,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> ListView.rows_for_view(socket.assigns.view)
     |> ListView.filter(socket.assigns.filters)
     |> Sorting.sort(socket.assigns.sort_by)
-    |> annotate_rematch_eligibility()
-    |> annotate_auto_reject_cap()
-  end
-
-  # Stamps `rematch_eligible?` on imported rows: a row is eligible only when it
-  # resolves to exactly one non-trashed imported file. Packs resolve to several
-  # files and can't be re-matched as a unit, so the action stays hidden for them
-  # even though their `match_status` is nil. In-flight rows don't offer the
-  # action, so they are left nil and cost no query.
-  defp annotate_rematch_eligibility(downloads) do
-    imported_ids = for %{imported_at: at, id: id} <- downloads, not is_nil(at), do: id
-
-    counts =
-      if imported_ids == [],
-        do: %{},
-        else: Library.count_imported_files_by_download(imported_ids)
-
-    Enum.map(downloads, fn
-      %{imported_at: nil} = download -> download
-      download -> %{download | rematch_eligible?: Map.get(counts, download.id, 0) == 1}
-    end)
-  end
-
-  # Stamps `auto_reject_capped?` so a stalled row whose title has used up its
-  # automatic rejections says so, instead of counting down to a removal that
-  # DownloadMonitor will not make. One query for the whole page.
-  defp annotate_auto_reject_cap(downloads) do
-    capped =
-      downloads
-      |> Enum.map(& &1.media_item_id)
-      |> AutoRejectCap.exhausted_ids()
-
-    Enum.map(downloads, fn download ->
-      %{download | auto_reject_capped?: MapSet.member?(capped, download.media_item_id)}
-    end)
+    |> Rows.annotate()
   end
 
   # View helpers
@@ -1786,18 +1729,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
       DateTime.add(download.stalled_since, StallDetector.escalation_minutes(grace) * 60, :second)
 
     max(DateTime.diff(deadline, DateTime.utc_now(), :second), 0)
-  end
-
-  # The oldest last-known status among the rows about to render, when a client
-  # was too busy to answer the page's bounded poll. nil when every row is live.
-  defp stale_status(downloads) do
-    downloads
-    |> Enum.filter(& &1.status_as_of)
-    |> Enum.min_by(& &1.status_as_of, DateTime, fn -> nil end)
-    |> case do
-      nil -> nil
-      row -> %{client: row.download_client, as_of: row.status_as_of}
-    end
   end
 
   defp status_age(%DateTime{} = as_of, display) do
