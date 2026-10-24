@@ -100,6 +100,22 @@ defmodule MydiaWeb.Features.ThirdPartyPluginStoreTest do
     # The source ships 2.0.0, and the store offers it as an update from itself.
     :ok = PluginStoreFixture.publish(store, %{@manifest | "version" => "2.0.0"}, wasm)
 
+    # The install's toast sits over the header's Browse store button until it
+    # times out, so wait until nothing covers the button.
+    eventually(
+      fn ->
+        uncovered? =
+          eval_js(session, """
+          var b = document.querySelector("#browse-store");
+          var r = b.getBoundingClientRect();
+          return b.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+          """)
+
+        if uncovered?, do: {:ok, true}, else: :error
+      end,
+      description: "the install toast to clear #browse-store"
+    )
+
     session
     |> click(Query.css("#browse-store"))
     |> click(Query.css("#install-#{row}", text: "Update to v2.0.0"))
