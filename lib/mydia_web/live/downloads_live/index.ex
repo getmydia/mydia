@@ -1327,7 +1327,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
     has_more = length(all_downloads) > offset + @items_per_page
 
-    # Determine if we need to append or reset stream
+    # Page 0 goes through Rows.stream_page; later pages append.
     reset? = page == 0
 
     socket

@@ -1162,7 +1162,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       refute has_element?(view, "#downloads-#{gone.id}")
     end
 
-    test "a refresh with unchanged rows does not reset the stream", %{conn: conn} do
+    test "a refresh records the page-0 ids on screen", %{conn: conn} do
       a = grabbing_download("Fictional Lantern Bay")
       b = grabbing_download("Fictional Copper Hollow")
 
@@ -1172,6 +1172,23 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       ids = :sys.get_state(view.pid).socket.assigns.stream_ids
       assert Enum.sort(ids) == Enum.sort([a.id, b.id])
+    end
+
+    test "a sort change shows the new order and a refresh keeps it", %{conn: conn} do
+      grabbing_download("Fictional Alder Reach")
+      grabbing_download("Fictional Birch Reach")
+      titles = ["Fictional Alder Reach", "Fictional Birch Reach"]
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      html = view |> element("#downloads-sort-form") |> render_change(%{"sort_by" => "name_asc"})
+      assert order_in(html, titles) == titles
+
+      html = view |> element("#downloads-sort-form") |> render_change(%{"sort_by" => "name_desc"})
+      assert order_in(html, titles) == Enum.reverse(titles)
+
+      send(view.pid, :refresh_progress)
+      assert order_in(render(view), titles) == Enum.reverse(titles)
     end
 
     test "a burst of download updates becomes one reload", %{conn: conn} do
