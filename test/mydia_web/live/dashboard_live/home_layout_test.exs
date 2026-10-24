@@ -99,6 +99,46 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
       assert Enum.at(updated_widgets, 1) == first
     end
 
+    test "reorder_home_widgets persists the requested order", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+
+      {:ok, _} =
+        Accounts.put_home_widgets(user, [:library_stats, :quick_actions, :recently_added])
+
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      render_hook(view, "reorder_home_widgets", %{
+        "keys" => ["recently_added", "library_stats", "quick_actions"]
+      })
+
+      expected = [:recently_added, :library_stats, :quick_actions]
+      assert :sys.get_state(view.pid).socket.assigns.home_widgets == expected
+      assert Accounts.home_widgets(user) == expected
+    end
+
+    test "reorder_home_widgets cannot make a hidden widget visible", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      render_hook(view, "reorder_home_widgets", %{
+        "keys" => ["episodes", "quick_actions", "library_stats"]
+      })
+
+      assert Accounts.home_widgets(user) == [:quick_actions, :library_stats]
+    end
+
+    test "reorder_home_widgets ignores malformed params", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      render_hook(view, "reorder_home_widgets", %{"keys" => "quick_actions"})
+      render_hook(view, "reorder_home_widgets", %{})
+
+      assert Accounts.home_widgets(user) == [:library_stats, :quick_actions]
+    end
+
     test "reset_home_widgets resets preferences to defaults", %{conn: conn} do
       user = user_fixture(%{role: "admin"})
       {:ok, _} = Accounts.put_home_widgets(user, [:library_stats])

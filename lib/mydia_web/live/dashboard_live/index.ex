@@ -479,6 +479,25 @@ defmodule MydiaWeb.DashboardLive.Index do
     end
   end
 
+  def handle_event("reorder_home_widgets", %{"keys" => keys}, socket) when is_list(keys) do
+    current = socket.assigns.home_widgets
+    new_widgets = HomeLayout.reorder(current, keys)
+
+    if new_widgets == current do
+      {:noreply, socket}
+    else
+      case Accounts.put_home_widgets(socket.assigns.current_user, new_widgets) do
+        {:ok, _pref} ->
+          {:noreply, assign(socket, :home_widgets, new_widgets)}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Could not save your Home layout.")}
+      end
+    end
+  end
+
+  def handle_event("reorder_home_widgets", _params, socket), do: {:noreply, socket}
+
   def handle_event("reset_home_widgets", _params, socket) do
     user = socket.assigns.current_user
 
