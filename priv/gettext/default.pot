@@ -36,3 +36,34 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "close"
 msgstr ""
+
+#: lib/mydia_web/live/profile_live/index.ex:303
+#, elixir-autogen, elixir-format
+msgid "Automatic (browser language)"
+msgstr ""
+
+#: lib/mydia_web/live/profile_live/index.html.heex:230
+#, elixir-autogen, elixir-format
+msgid "Automatic follows your browser. Percentages show how much of Mydia is translated; the rest stays in English."
+msgstr ""
+
+#: lib/mydia_web/live/profile_live/index.ex:296
+#, elixir-autogen, elixir-format
+msgid "Could not save your language"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/language_components.ex:93
+#: lib/mydia_web/live/profile_live/index.html.heex:239
+#, elixir-autogen, elixir-format
+msgid "Interface language"
+msgstr ""
+
+#: lib/mydia_web/live/profile_live/index.html.heex:228
+#, elixir-autogen, elixir-format
+msgid "Language"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/language_components.ex:97
+#, elixir-autogen, elixir-format
+msgid "Used when a user picks Automatic and their browser asks for no language Mydia has."
+msgstr ""
