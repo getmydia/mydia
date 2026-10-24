@@ -435,5 +435,209 @@
   "settingsDiagnosticsCodeCopied": "Code copied",
   "@settingsDiagnosticsCodeCopied": {
     "description": "Toast after the report code was copied."
+  },
+  "loginRelaySaved": "Custom relay URL saved",
+  "@loginRelaySaved": {
+    "description": "Toast on the sign-in screen after a custom relay address was saved in Advanced Settings. The relay is the service that introduces the player to the Mydia server."
+  },
+  "loginRelayResetDone": "Relay URL reset to default",
+  "@loginRelayResetDone": {
+    "description": "Toast on the sign-in screen after Advanced Settings was saved with the default relay address."
+  },
+  "loginInvalidQr": "Invalid QR code. Please scan a Mydia pairing code.",
+  "@loginInvalidQr": {
+    "description": "Toast while the camera scanner is open and it read a QR code that is not a Mydia pairing code."
+  },
+  "loginScanQrCode": "Scan QR Code",
+  "@loginScanQrCode": {
+    "description": "Title of the camera scanner overlay, and the scan button on phones."
+  },
+  "loginScanQrWithCamera": "Scan QR Code with Camera",
+  "@loginScanQrWithCamera": {
+    "description": "Scan button on desktop and web, where the camera is less obvious than on a phone."
+  },
+  "loginScanQrInstructions": "Point your camera at the QR code shown on your Mydia server",
+  "@loginScanQrInstructions": {
+    "description": "Instructions under the camera preview of the QR scanner."
+  },
+  "loginAddServerTitle": "Add a Mydia server",
+  "@loginAddServerTitle": {
+    "description": "Heading of the sign-in screen when adding another server or signing in again, instead of the app name."
+  },
+  "loginTagline": "Stream your media library",
+  "@loginTagline": {
+    "description": "Tagline under the app name on the sign-in screen."
+  },
+  "loginDirectSubtitle": "Sign in directly with your server credentials",
+  "@loginDirectSubtitle": {
+    "description": "Subtitle of the sign-in card while the Direct Server tab (address, username, password) is selected."
+  },
+  "loginTvPairSubtitle": "Pair with your server using claim code",
+  "@loginTvPairSubtitle": {
+    "description": "Subtitle of the sign-in card on a TV while the Quick Pair tab is selected. A claim code is the short code the Mydia server shows for pairing a device."
+  },
+  "loginPairSubtitle": "Pair with your server using QR code or claim code",
+  "@loginPairSubtitle": {
+    "description": "Subtitle of the sign-in card on phones and desktops while the Quick Pair tab is selected."
+  },
+  "loginNetworkSettingsTooltip": "Relay & Network Settings",
+  "@loginNetworkSettingsTooltip": {
+    "description": "Tooltip of the gear button that opens Advanced Settings on the sign-in screen."
+  },
+  "loginTvStepOpenMydia": "Open Mydia on phone or PC",
+  "@loginTvStepOpenMydia": {
+    "description": "First step of the pairing instructions on a TV: open the Mydia web app on another device."
+  },
+  "loginTvStepOpenDevices": "Go to Settings → Devices → Pair device",
+  "@loginTvStepOpenDevices": {
+    "description": "Second step of the pairing instructions on a TV: the path to the pairing page in the Mydia web app."
+  },
+  "loginTvStepEnterCode": "Enter the 6-character code below",
+  "@loginTvStepEnterCode": {
+    "description": "Third step of the pairing instructions on a TV: type the code with the on-screen keypad."
+  },
+  "loginConnect": "Connect",
+  "@loginConnect": {
+    "description": "Button that pairs with the server using the entered claim code."
+  },
+  "loginClear": "Clear",
+  "@loginClear": {
+    "description": "Button on a TV that empties the claim code typed so far."
+  },
+  "loginConnectTitle": "Connect to Server",
+  "@loginConnectTitle": {
+    "description": "Heading of the sign-in card on phones and desktops."
+  },
+  "loginQuickPair": "Quick Pair",
+  "@loginQuickPair": {
+    "description": "Tab that pairs with a claim code or QR code. Also named in the relay help text in Advanced Settings."
+  },
+  "loginDirectServer": "Direct Server",
+  "@loginDirectServer": {
+    "description": "Tab that signs in with a server address, username and password."
+  },
+  "loginServerUrlLabel": "Server URL",
+  "@loginServerUrlLabel": {
+    "description": "Label of the server address field."
+  },
+  "loginServerUrlRequired": "Please enter a server URL",
+  "@loginServerUrlRequired": {
+    "description": "Error under the server address field when it is empty."
+  },
+  "loginServerUrlScheme": "URL must start with http:// or https://",
+  "@loginServerUrlScheme": {
+    "description": "Error under the server address field when it does not start with http:// or https://. Keep both prefixes as they are."
+  },
+  "loginUsernameLabel": "Username",
+  "@loginUsernameLabel": {
+    "description": "Label of the username field."
+  },
+  "loginUsernameRequired": "Please enter a username",
+  "@loginUsernameRequired": {
+    "description": "Error under the username field when it is empty."
+  },
+  "loginPasswordLabel": "Password",
+  "@loginPasswordLabel": {
+    "description": "Label of the password field."
+  },
+  "loginPasswordRequired": "Please enter a password",
+  "@loginPasswordRequired": {
+    "description": "Error under the password field when it is empty."
+  },
+  "loginTotpTitle": "Two-factor authentication",
+  "@loginTotpTitle": {
+    "description": "Heading of the step that asks for a two-factor code after the password was accepted."
+  },
+  "loginTotpBody": "Enter the 6-digit code from your authenticator app, or one of your recovery codes.",
+  "@loginTotpBody": {
+    "description": "Explanation under the two-factor heading."
+  },
+  "loginTotpCodeLabel": "Authentication code",
+  "@loginTotpCodeLabel": {
+    "description": "Label of the two-factor code field."
+  },
+  "loginTotpVerify": "Verify",
+  "@loginTotpVerify": {
+    "description": "Button that submits the two-factor code."
+  },
+  "loginPasteClaimCode": "Paste claim code",
+  "@loginPasteClaimCode": {
+    "description": "Tooltip of the button that pastes a claim code from the clipboard."
+  },
+  "loginSignIn": "Sign in",
+  "@loginSignIn": {
+    "description": "Button that signs in with the server address, username and password."
+  },
+  "loginP2pReady": "P2P Ready",
+  "@loginP2pReady": {
+    "description": "Footer status when the peer-to-peer connection to the relay is up."
+  },
+  "loginP2pConnecting": "Connecting...",
+  "@loginP2pConnecting": {
+    "description": "Footer status while the peer-to-peer connection to the relay is being set up."
+  },
+  "loginEncrypted": "End-to-end encrypted",
+  "@loginEncrypted": {
+    "description": "Footer note that the connection to the server is end-to-end encrypted."
+  },
+  "loginAdvancedSettings": "Advanced Settings",
+  "@loginAdvancedSettings": {
+    "description": "Title of the relay settings panel opened from the gear button on the sign-in screen."
+  },
+  "loginCloseAdvancedSettings": "Close advanced settings",
+  "@loginCloseAdvancedSettings": {
+    "description": "Tooltip of the close button of the Advanced Settings panel."
+  },
+  "loginRelayUrlLabel": "Relay URL",
+  "@loginRelayUrlLabel": {
+    "description": "Label above the relay address field in Advanced Settings."
+  },
+  "loginRelayUrlHelp": "Change this if using a custom or self-hosted P2P relay server. Both your Mydia server and Mydia Player must be connected to the exact same relay for Quick Pair to work.",
+  "@loginRelayUrlHelp": {
+    "description": "Help text above the relay address field in Advanced Settings. Quick Pair is the pairing tab of the sign-in screen."
+  },
+  "loginRelayResetTooltip": "Reset to default",
+  "@loginRelayResetTooltip": {
+    "description": "Tooltip of the button that puts the default relay address back into the field."
+  },
+  "loginRelayCustomInUse": "Using custom relay URL",
+  "@loginRelayCustomInUse": {
+    "description": "Note under the relay field when a custom relay address is saved."
+  },
+  "loginSave": "Save",
+  "@loginSave": {
+    "description": "Button that saves the relay address in Advanced Settings."
+  },
+  "startupAlreadyRunningTitle": "Mydia Player is already running",
+  "@startupAlreadyRunningTitle": {
+    "description": "Heading of the screen shown at launch when another window of the app holds its data."
+  },
+  "startupAlreadyRunningMessage": "Another window of Mydia Player is already open on this computer. Quit it, then reopen this one.",
+  "@startupAlreadyRunningMessage": {
+    "description": "Explanation under the already-running heading."
+  },
+  "startupGenericTitle": "Mydia Player couldn't start",
+  "@startupGenericTitle": {
+    "description": "Heading of the screen shown when the app fails to start. Raw error text is shown below it untranslated."
+  },
+  "startupGenericMessage": "Something went wrong while starting the app.",
+  "@startupGenericMessage": {
+    "description": "Explanation under the failed-to-start heading."
+  },
+  "startupSendReport": "Send report",
+  "@startupSendReport": {
+    "description": "Button on the failed-to-start screen that sends a crash report to the developers."
+  },
+  "startupSendingReport": "Sending report",
+  "@startupSendingReport": {
+    "description": "Label of the report button while the report is being sent."
+  },
+  "startupReportSent": "Report sent",
+  "@startupReportSent": {
+    "description": "Label of the report button after the report was sent."
+  },
+  "startupReportFailed": "Couldn't send. Try again",
+  "@startupReportFailed": {
+    "description": "Label of the report button after sending failed. Pressing it tries again."
   }
 }

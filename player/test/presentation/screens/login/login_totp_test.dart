@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/login/login_controller.dart';
 import 'package:player/presentation/screens/login_screen.dart';
 
@@ -76,7 +77,11 @@ Widget _buildTestWidget(LoginController controller) => ProviderScope(
             .overrideWithValue(AuthService(storage: MockAuthStorage())),
         loginControllerProvider.overrideWith(() => controller),
       ],
-      child: const MaterialApp(home: LoginScreen()),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: LoginScreen(),
+      ),
     );
 
 /// Both the credential form and the code form live behind the Direct Server

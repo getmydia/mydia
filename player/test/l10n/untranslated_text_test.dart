@@ -10,6 +10,8 @@ import 'untranslated_text_scanner.dart';
 const convertedPaths = <String>[
   'lib/presentation/screens/settings',
   'lib/presentation/widgets/language_picker.dart',
+  'lib/presentation/screens/login_screen.dart',
+  'lib/core/startup/startup_error_app.dart',
 ];
 
 void main() {
