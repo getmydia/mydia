@@ -1111,4 +1111,97 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       refute_enqueued(worker: Mydia.Jobs.MediaRematch)
     end
   end
+
+  describe "refreshing the queue" do
+    defp grabbing_download(title) do
+      media_item = media_item_fixture(%{title: title})
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        title: "#{title}.1080p",
+        download_client: nil,
+        download_client_id: nil
+      })
+    end
+
+    # Stream inserts re-render a row from scratch, and LiveView keys id-less
+    # component roots by a client-generated id that changes on every insert,
+    # so without stable ids these containers are rebuilt on each refresh and
+    # the buttons inside are detached mid-click (issue #1257).
+    test "row action containers carry stable ids", %{conn: conn} do
+      download = grabbing_download("Fictional Lantern Bay")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      assert has_element?(view, "#row-actions-#{download.id}")
+      assert has_element?(view, "#row-action-strip-#{download.id} #row-cancel-#{download.id}")
+    end
+
+    test "the cancel confirmation names the download", %{conn: conn} do
+      download = grabbing_download("Fictional Lantern Bay")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      assert view
+             |> element("#row-cancel-#{download.id}")
+             |> render() =~ ~s(data-confirm="Cancel Fictional Lantern Bay?")
+    end
+
+    test "a row removed between refreshes disappears and the others stay", %{conn: conn} do
+      keep = grabbing_download("Fictional Lantern Bay")
+      gone = grabbing_download("Fictional Copper Hollow")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      assert has_element?(view, "#downloads-#{keep.id}")
+      assert has_element?(view, "#downloads-#{gone.id}")
+
+      Repo.delete!(Repo.get!(Download, gone.id))
+      send(view.pid, :refresh_progress)
+
+      assert has_element?(view, "#downloads-#{keep.id}")
+      refute has_element?(view, "#downloads-#{gone.id}")
+    end
+
+    test "a refresh records the page-0 ids on screen", %{conn: conn} do
+      a = grabbing_download("Fictional Lantern Bay")
+      b = grabbing_download("Fictional Copper Hollow")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      send(view.pid, :refresh_progress)
+      render(view)
+
+      ids = :sys.get_state(view.pid).socket.assigns.stream_ids
+      assert Enum.sort(ids) == Enum.sort([a.id, b.id])
+    end
+
+    test "a sort change shows the new order and a refresh keeps it", %{conn: conn} do
+      grabbing_download("Fictional Alder Reach")
+      grabbing_download("Fictional Birch Reach")
+      titles = ["Fictional Alder Reach", "Fictional Birch Reach"]
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      html = view |> element("#downloads-sort-form") |> render_change(%{"sort_by" => "name_asc"})
+      assert order_in(html, titles) == titles
+
+      html = view |> element("#downloads-sort-form") |> render_change(%{"sort_by" => "name_desc"})
+      assert order_in(html, titles) == Enum.reverse(titles)
+
+      send(view.pid, :refresh_progress)
+      assert order_in(render(view), titles) == Enum.reverse(titles)
+    end
+
+    test "a burst of download updates becomes one reload", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      fresh = grabbing_download("Fictional Ember Coast")
+
+      for _ <- 1..3, do: send(view.pid, {:download_updated, fresh.id})
+      refute has_element?(view, "#downloads-#{fresh.id}")
+      assert :sys.get_state(view.pid).socket.assigns.reload_pending
+
+      send(view.pid, :reload_downloads)
+      assert has_element?(view, "#downloads-#{fresh.id}")
+      refute :sys.get_state(view.pid).socket.assigns.reload_pending
+    end
+  end
 end

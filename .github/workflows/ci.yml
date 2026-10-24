@@ -56,8 +56,11 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend == 'true' }}
+      # A PR that changes only translation catalogs (in practice, every Weblate
+      # PR) runs the `translations` job instead of the backend suite.
+      backend: ${{ github.event_name != 'pull_request' || (steps.filter.outputs.backend == 'true' && !(steps.catalogs.outputs.po == 'true' && steps.catalogs.outputs.non_po == 'false')) }}
       rust: ${{ github.event_name != 'pull_request' || steps.filter.outputs.rust == 'true' }}
+      translations: ${{ github.event_name == 'pull_request' && steps.catalogs.outputs.po == 'true' && steps.catalogs.outputs.non_po == 'false' }}
     steps:
       - name: Detect relevant changes
         id: filter
@@ -113,6 +116,23 @@ jobs:
               - 'devenv.lock'
               - '.github/workflows/ci.yml'
               - '.github/actions/setup-devenv/**'
+
+      # With `every`, a file counts toward a filter only when it matches all of
+      # the filter's patterns, so `non_po` is true when any changed file is not
+      # a translation catalog. The default `some` quantifier cannot express
+      # that, hence a second filter step.
+      - name: Detect translation-only changes
+        id: catalogs
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          predicate-quantifier: every
+          filters: |
+            po:
+              - 'priv/gettext/**/*.po'
+            non_po:
+              - '**'
+              - '!priv/gettext/**/*.po'
 
   # Shell-only guards over files outside the Elixir tree (Dockerfile,
   # devenv.nix, player/flatpak, player/appimage). They need no Nix and take
@@ -658,13 +678,55 @@ jobs:
           path: tmp/wallaby_screenshots/
           retention-days: 7
 
+  # A `.po` change can break only what these cover: a catalog that fails to
+  # compile, a translation that drops or renames a placeholder, a bad
+  # Plural-Forms header, and locale resolution. None of it depends on the
+  # database adapter, so one SQLite runner checks it in place of the backend
+  # suite. `.pot` changes come from code changes and still run everything.
+  translations:
+    name: Translations
+    needs: changes
+    if: needs.changes.outputs.translations == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
+        with:
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skip-push: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+
+      - name: Catalog tests under devenv
+        run: |
+          devenv shell -- bash <<'DEVENV'
+          set -euo pipefail
+          export MIX_ENV=test
+          mix local.hex --force --if-missing
+          mix local.rebar --force --if-missing
+          mix deps.get
+          mix compile --warnings-as-errors
+          mix ecto.create
+          mix ecto.migrate
+          mix test --warnings-as-errors \
+            test/mydia_web/gettext_po_test.exs \
+            test/mydia_web/gettext_plural_test.exs \
+            test/mydia/locale_test.exs \
+            test/mydia/locale/catalog_test.exs \
+            test/mydia_web/locale_integration_test.exs
+          DEVENV
+
   # Required contexts live on these aggregators, never on gated jobs: a job
   # skipped by `if:` concludes `skipped`, and whether the ruleset counts that as
   # passing is configuration-dependent (.github/ci-flakes.md). These always run
   # and conclude success or failure. `Guards` enforces the always() condition.
   test:
     name: Test
-    needs: [changes, guards, lint, test-sqlite]
+    needs: [changes, guards, lint, test-sqlite, translations]
     if: always()
     permissions: {}
     runs-on: ubuntu-latest

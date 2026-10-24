@@ -283,4 +283,42 @@ defmodule MydiaWeb.DownloadsLive.ListViewTest do
       assert ListView.to_params(filters) == [kind: :import_failed]
     end
   end
+
+  describe "stream_plan/2" do
+    test "an unknown previous state resets" do
+      assert ListView.stream_plan(nil, ["a", "b"]) == :reset
+    end
+
+    test "the same ids in the same order update in place" do
+      assert ListView.stream_plan(["a", "b", "c"], ["a", "b", "c"]) == {:update, []}
+    end
+
+    test "a removed row is deleted without a reset" do
+      assert ListView.stream_plan(["a", "b", "c"], ["a", "c"]) == {:update, ["b"]}
+    end
+
+    test "rows added after every kept row are appended without a reset" do
+      assert ListView.stream_plan(["a", "b"], ["a", "b", "c"]) == {:update, []}
+    end
+
+    test "a removal plus an append still updates in place" do
+      assert ListView.stream_plan(["a", "b"], ["b", "c"]) == {:update, ["a"]}
+    end
+
+    test "a row inserted before a kept row resets" do
+      assert ListView.stream_plan(["a", "b"], ["c", "a", "b"]) == :reset
+    end
+
+    test "a reorder resets" do
+      assert ListView.stream_plan(["a", "b", "c"], ["b", "a", "c"]) == :reset
+    end
+
+    test "an empty screen takes any rows without a reset" do
+      assert ListView.stream_plan([], ["a"]) == {:update, []}
+    end
+
+    test "every row gone deletes them all" do
+      assert ListView.stream_plan(["a", "b"], []) == {:update, ["a", "b"]}
+    end
+  end
 end
