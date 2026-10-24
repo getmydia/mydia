@@ -146,7 +146,12 @@
         >
           <div class="flex-1">
             <span class="font-semibold">
-              {pgettext("selection count", "%{count} selected", count: MapSet.size(@selected_ids))}
+              {pngettext(
+                "selection count",
+                "%{count} selected",
+                "%{count} selected",
+                MapSet.size(@selected_ids)
+              )}
             </span>
           </div>
           <div class="join">
@@ -654,7 +659,9 @@
               <div class="list-col-grow">
                 <div class="font-medium text-sm truncate">{torrent.title}</div>
                 <div class="text-xs opacity-60 flex items-center gap-1.5 mt-0.5">
-                  <span class="badge badge-xs badge-ghost">{torrent.status}</span>
+                  <span class="badge badge-xs badge-ghost">
+                    {ListView.torrent_status_label(torrent.status)}
+                  </span>
                   <span>{torrent.client_name}</span>
                   <%= if torrent.status in [:downloading, :seeding] do %>
                     <span>•</span>
@@ -714,9 +721,10 @@
         phx-submit="clear_completed"
       >
         <p class="text-base-content/80">
-          {gettext(
-            "This clears %{count} completed download(s) from the queue and removes them from the download client.",
-            count: @clearable_count
+          {ngettext(
+            "This clears %{count} completed download from the queue and removes it from the download client.",
+            "This clears %{count} completed downloads from the queue and removes them from the download client.",
+            @clearable_count
           )}
         </p>
         <label class="label cursor-pointer justify-start gap-3 mt-4">
@@ -733,9 +741,10 @@
         </label>
         <p :if={@delete_files} class="text-error text-sm mt-2 flex items-center gap-1">
           <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-          {gettext(
-            "This permanently deletes files for %{count} download(s) from disk. This cannot be undone.",
-            count: @clearable_count
+          {ngettext(
+            "This permanently deletes files for %{count} download from disk. This cannot be undone.",
+            "This permanently deletes files for %{count} downloads from disk. This cannot be undone.",
+            @clearable_count
           )}
         </p>
       </form>

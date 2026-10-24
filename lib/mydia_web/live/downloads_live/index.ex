@@ -451,7 +451,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
        socket
        |> assign(:selected_ids, MapSet.new())
        |> assign(:selection_mode, false)
-       |> put_flash(:info, gettext("%{count} item(s) retried", count: success_count))
+       |> put_flash(
+         :info,
+         ngettext("%{count} item retried", "%{count} items retried", success_count)
+       )
        |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -488,7 +491,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
        socket
        |> assign(:selected_ids, MapSet.new())
        |> assign(:selection_mode, false)
-       |> put_flash(:info, gettext("Removing %{count} download(s)", count: success_count))
+       |> put_flash(
+         :info,
+         ngettext("Removing %{count} download", "Removing %{count} downloads", success_count)
+       )
        |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -538,11 +544,17 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
       message =
         if delete_files do
-          gettext("Clearing %{count} completed download(s) and deleting their files from disk",
-            count: count
+          ngettext(
+            "Clearing %{count} completed download and deleting its files from disk",
+            "Clearing %{count} completed downloads and deleting their files from disk",
+            count
           )
         else
-          gettext("Clearing %{count} completed download(s)", count: count)
+          ngettext(
+            "Clearing %{count} completed download",
+            "Clearing %{count} completed downloads",
+            count
+          )
         end
 
       {:noreply,
@@ -878,7 +890,11 @@ defmodule MydiaWeb.DownloadsLive.Index do
                |> assign(:match_files_error, nil)
                |> put_flash(
                  :info,
-                 gettext("Import queued for %{count} file(s)", count: length(mappings))
+                 ngettext(
+                   "Import queued for %{count} file",
+                   "Import queued for %{count} files",
+                   length(mappings)
+                 )
                )
                |> load_downloads()}
 
@@ -984,8 +1000,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
        # alike, and the banner it came from says so too.
        |> put_flash(
          :info,
-         gettext("Cleared %{count} download(s) referencing '%{client}'",
-           count: count,
+         ngettext(
+           "Cleared %{count} download referencing '%{client}'",
+           "Cleared %{count} downloads referencing '%{client}'",
+           count,
            client: client_name
          )
        )
@@ -1176,15 +1194,29 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  defp batch_message(:retried, count, 0), do: gettext("%{count} retried", count: count)
+  defp batch_message(:retried, count, 0),
+    do: ngettext("%{count} retried", "%{count} retried", count)
 
   defp batch_message(:retried, count, skipped),
-    do: gettext("%{count} retried, %{skipped} skipped", count: count, skipped: skipped)
+    do:
+      ngettext(
+        "%{count} retried, %{skipped} skipped",
+        "%{count} retried, %{skipped} skipped",
+        count,
+        skipped: skipped
+      )
 
-  defp batch_message(:dismissed, count, 0), do: gettext("%{count} dismissed", count: count)
+  defp batch_message(:dismissed, count, 0),
+    do: ngettext("%{count} dismissed", "%{count} dismissed", count)
 
   defp batch_message(:dismissed, count, skipped),
-    do: gettext("%{count} dismissed, %{skipped} skipped", count: count, skipped: skipped)
+    do:
+      ngettext(
+        "%{count} dismissed, %{skipped} skipped",
+        "%{count} dismissed, %{skipped} skipped",
+        count,
+        skipped: skipped
+      )
 
   # Clears the selection and flashes the tally, with a skipped suffix when
   # some rows were left alone.

@@ -183,6 +183,14 @@ defmodule MydiaWeb.ActivityLive.Index do
   defp chip_label("plugin"), do: gettext("Plugins")
   defp chip_label("errors"), do: gettext("Errors")
 
+  defp category_label("media"), do: pgettext("event category", "media")
+  defp category_label("downloads"), do: pgettext("event category", "downloads")
+  defp category_label("search"), do: pgettext("event category", "search")
+  defp category_label("system"), do: pgettext("event category", "system")
+  defp category_label("playback"), do: pgettext("event category", "playback")
+  defp category_label("plugin"), do: pgettext("event category", "plugin")
+  defp category_label(other), do: other
+
   # The badge is only rendered for non-info severities.
   defp severity_label(:error), do: pgettext("severity", "error")
   defp severity_label(:warning), do: pgettext("severity", "warning")

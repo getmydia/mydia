@@ -30,7 +30,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
         <div class="stat-title">{pgettext("download", "Active")}</div>
         <div class="stat-value text-2xl tabular-nums">{@summary.active}</div>
         <div :if={@summary.stalled > 0} id="downloads-stats-stalled" class="stat-desc text-warning">
-          {gettext("%{count} stalled", count: @summary.stalled)}
+          {ngettext("%{count} stalled", "%{count} stalled", @summary.stalled)}
         </div>
         <div :if={@summary.stalled == 0} class="stat-desc">{gettext("in the queue")}</div>
       </div>

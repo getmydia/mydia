@@ -38,6 +38,15 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   def status_label("grabbing"), do: pgettext("download", "Grabbing…")
   def status_label(other), do: String.capitalize(other)
 
+  @torrent_statuses ~w(downloading seeding paused queued stalled completed checking)
+
+  @doc "Badge text for a client torrent's status atom; unknown values show as they are."
+  @spec torrent_status_label(atom() | String.t()) :: String.t()
+  def torrent_status_label(status) do
+    status = to_string(status)
+    if status in @torrent_statuses, do: status_label(status), else: status
+  end
+
   @doc """
   The search and filter state from URL params. `scope` is `{tab, view}`: the
   status chips only exist in the Active view of the Downloads tab, so `status`

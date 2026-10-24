@@ -8,7 +8,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
   import MydiaWeb.DownloadsLive.Format
   import MydiaWeb.Formatters
 
-  alias MydiaWeb.DownloadsLive.{Issue, IssueList, ListComponents}
+  alias MydiaWeb.DownloadsLive.{Issue, IssueList, ListComponents, ListView}
   alias MydiaWeb.Live.Components.LibrarySearchForm
 
   attr :counts, :map, required: true
@@ -148,7 +148,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
           <% end %>
           <%= if @issue.torrent do %>
             <span :if={@issue.torrent.status} class="badge badge-xs badge-ghost">
-              {@issue.torrent.status}
+              {ListView.torrent_status_label(@issue.torrent.status)}
             </span>
             <span
               :if={@issue.torrent.status in [:downloading, :seeding]}
@@ -407,9 +407,10 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
           client back on.
         --%>
         <div class="font-semibold">
-          {gettext(
-            "%{count} download(s) reference '%{client}', which Mydia is no longer tracking",
-            count: @group.count,
+          {ngettext(
+            "%{count} download references '%{client}', which Mydia is no longer tracking",
+            "%{count} downloads reference '%{client}', which Mydia is no longer tracking",
+            @group.count,
             client: @group.download_client
           )}
         </div>
@@ -426,9 +427,10 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
         phx-click="clear_removed_client"
         phx-value-client={@group.download_client}
         data-confirm={
-          gettext(
-            "Clear %{count} download(s) from '%{client}'? This removes the records from Mydia only.",
-            count: @group.count,
+          ngettext(
+            "Clear %{count} download from '%{client}'? This removes the record from Mydia only.",
+            "Clear %{count} downloads from '%{client}'? This removes the records from Mydia only.",
+            @group.count,
             client: @group.download_client
           )
         }

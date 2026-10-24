@@ -81,7 +81,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
                 • {probe_label(candidate["probe"])}
               </span>
               <span :if={candidate["skip_reason"]}>
-                • {gettext("skipped: %{reason}", reason: skip_label(candidate["skip_reason"]))}
+                • {skip_label(candidate["skip_reason"])}
               </span>
             </div>
           </div>
@@ -350,8 +350,12 @@ defmodule MydiaWeb.DownloadsLive.Components do
     end
   end
 
-  defp skip_label("not_video_extension"), do: gettext("unsupported file type for this library")
-  defp skip_label(reason) when is_binary(reason), do: reason
+  defp skip_label("not_video_extension"),
+    do: gettext("skipped: unsupported file type for this library")
+
+  defp skip_label(reason) when is_binary(reason),
+    do: gettext("skipped: %{reason}", reason: reason)
+
   defp skip_label(_reason), do: nil
 
   defp probe_label(%{"status" => "media", "detail" => detail}),

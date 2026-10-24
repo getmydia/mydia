@@ -69,8 +69,8 @@ defmodule MydiaWeb.DownloadsLive.RemovedClientBannerTest do
     assert has_element?(view, "#removed-client-sab-old")
 
     # Each banner reports its own group's size, not the total.
-    assert has_element?(view, "#removed-client-qbit-old", "2 download(s)")
-    assert has_element?(view, "#removed-client-sab-old", "1 download(s)")
+    assert has_element?(view, "#removed-client-qbit-old", "2 downloads reference")
+    assert has_element?(view, "#removed-client-sab-old", "1 download references")
   end
 
   test "does not call a merely disabled client removed", %{conn: conn} do
