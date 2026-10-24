@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 2, assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3, connected?: 1]
 
@@ -37,8 +39,11 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
        |> assign(find_file_target: target, find_file_query: "", find_file_runs: %{})
        |> refresh()}
     else
-      {:unauthorized, socket} -> {:noreply, socket}
-      :error -> {:noreply, put_flash(socket, :error, "That episode is not on this page")}
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, gettext("That episode is not on this page"))}
     end
   end
 
@@ -81,7 +86,10 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
              :media_item,
              load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
            )
-           |> put_flash(:info, "Attached #{Path.basename(media_file.relative_path)}")}
+           |> put_flash(
+             :info,
+             gettext("Attached %{file}", file: Path.basename(media_file.relative_path))
+           )}
 
         {:error, reason} ->
           {:noreply, socket |> put_flash(:error, error_message(reason)) |> refresh()}
@@ -139,7 +147,7 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
       run.status == :failed ->
         socket
         |> drop_run(run)
-        |> put_flash(:error, "Scan failed: #{run.error}")
+        |> put_flash(:error, gettext("Scan failed: %{error}", error: run.error))
 
       true ->
         drop_run(socket, run)
@@ -196,18 +204,21 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
   defp library_name(library_path_id) do
     library_path_id |> Settings.get_library_path!() |> LibraryPath.display_name()
   rescue
-    Ecto.NoResultsError -> "a removed library"
+    Ecto.NoResultsError -> gettext("a removed library")
   end
 
-  defp error_message({:duplicate_path, _, _}), do: "That file was just taken by another item"
-  defp error_message({:candidate_missing, _}), do: "That file was just taken by another item"
+  defp error_message({:duplicate_path, _, _}),
+    do: gettext("That file was just taken by another item")
+
+  defp error_message({:candidate_missing, _}),
+    do: gettext("That file was just taken by another item")
 
   defp error_message({:incompatible_media_type, _}),
-    do: "That file is not the right kind for this item"
+    do: gettext("That file is not the right kind for this item")
 
-  defp error_message(:file_missing), do: "That file is no longer on disk"
-  defp error_message(:queued), do: "That file is already being imported or deleted"
-  defp error_message({:library_path_missing, _}), do: "That file's library is gone"
+  defp error_message(:file_missing), do: gettext("That file is no longer on disk")
+  defp error_message(:queued), do: gettext("That file is already being imported or deleted")
+  defp error_message({:library_path_missing, _}), do: gettext("That file's library is gone")
 
   defp error_message(%Ecto.Changeset{} = changeset) do
     details =
@@ -217,8 +228,8 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
         "#{field} #{Enum.join(List.wrap(msgs), ", ")}"
       end)
 
-    "Could not attach: #{details}"
+    gettext("Could not attach: %{details}", details: details)
   end
 
-  defp error_message(_reason), do: "Could not attach that file"
+  defp error_message(_reason), do: gettext("Could not attach that file")
 end

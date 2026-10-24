@@ -6,6 +6,8 @@ defmodule MydiaWeb.MediaLive.Show.RenameEvents do
   sends toggles, which `RenameSelection` checks against the previews.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3, start_async: 3]
   import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 2]
@@ -64,9 +66,23 @@ defmodule MydiaWeb.MediaLive.Show.RenameEvents do
 
     message =
       cond do
-        error_count == 0 -> "Successfully renamed #{success_count} file(s)"
-        success_count == 0 -> "Failed to rename all files"
-        true -> "Renamed #{success_count} file(s), #{error_count} failed"
+        error_count == 0 ->
+          ngettext(
+            "Successfully renamed %{count} file",
+            "Successfully renamed %{count} files",
+            success_count
+          )
+
+        success_count == 0 ->
+          gettext("Failed to rename all files")
+
+        true ->
+          ngettext(
+            "Renamed %{count} file, %{failed} failed",
+            "Renamed %{count} files, %{failed} failed",
+            success_count,
+            failed: error_count
+          )
       end
 
     flash_type = if error_count > 0, do: :warning, else: :info
@@ -87,7 +103,10 @@ defmodule MydiaWeb.MediaLive.Show.RenameEvents do
     {:noreply,
      socket
      |> assign(:renaming_files, false)
-     |> put_flash(:error, "Failed to rename files: #{inspect(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Failed to rename files: %{reason}", reason: inspect(reason))
+     )}
   end
 
   def handle_rename_files_async({:exit, reason}, socket) do
@@ -96,7 +115,7 @@ defmodule MydiaWeb.MediaLive.Show.RenameEvents do
     {:noreply,
      socket
      |> assign(:renaming_files, false)
-     |> put_flash(:error, "File rename failed unexpectedly")}
+     |> put_flash(:error, gettext("File rename failed unexpectedly"))}
   end
 
   defp update_selection(socket, fun) do

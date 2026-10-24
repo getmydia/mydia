@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.SegmentEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3]
 
@@ -54,7 +56,10 @@ defmodule MydiaWeb.MediaLive.Show.SegmentEvents do
       {:noreply,
        socket
        |> assign_segment_status(media_item)
-       |> put_flash(:info, "Season #{season_number} queued for segment re-analysis")}
+       |> put_flash(
+         :info,
+         gettext("Season %{number} queued for segment re-analysis", number: season_number)
+       )}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end

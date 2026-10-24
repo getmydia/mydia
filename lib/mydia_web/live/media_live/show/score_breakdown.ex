@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
   ratio rather than against a fixed scale.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   alias Phoenix.LiveView.JS
 
@@ -179,14 +180,14 @@ defmodule MydiaWeb.MediaLive.Show.ScoreBreakdown do
   names the content.
   """
   attr :id, :string, required: true
-  attr :title, :string, default: "Score breakdown"
+  attr :title, :string, default: nil
   attr :class, :any, default: nil
   slot :inner_block, required: true
 
   def score_panel(assigns) do
     ~H"""
     <div id={@id} class={["hidden mt-2 rounded-box bg-base-200 p-3", @class]}>
-      <h4 class="text-sm font-semibold mb-2">{@title}</h4>
+      <h4 class="text-sm font-semibold mb-2">{@title || gettext("Score breakdown")}</h4>
       <div class="space-y-1.5 text-xs">
         {render_slot(@inner_block)}
       </div>

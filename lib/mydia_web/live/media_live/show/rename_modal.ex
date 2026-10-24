@@ -23,12 +23,12 @@ defmodule MydiaWeb.MediaLive.Show.RenameModal do
       <div class="modal-box max-w-4xl max-h-[85vh] flex flex-col p-0">
         <div class="sticky top-0 z-10 bg-base-100 border-b border-base-300 px-4 py-3">
           <div class="flex items-center justify-between gap-4">
-            <h3 class="text-lg font-bold">Rename Files</h3>
+            <h3 class="text-lg font-bold">{gettext("Rename Files")}</h3>
             <button
               type="button"
               phx-click="hide_rename_modal"
               class="btn btn-ghost btn-xs btn-circle"
-              aria-label="Close"
+              aria-label={gettext("Close")}
             >
               <.icon name="hero-x-mark" class="w-4 h-4" />
             </button>
@@ -39,8 +39,12 @@ defmodule MydiaWeb.MediaLive.Show.RenameModal do
           <%= if @rename_previews == [] do %>
             <div class="flex flex-col items-center justify-center py-12 text-center">
               <.icon name="hero-exclamation-circle" class="w-12 h-12 text-base-content/20 mb-3" />
-              <h3 class="text-lg font-semibold text-base-content/70 mb-1">No Files to Rename</h3>
-              <p class="text-sm text-base-content/50">There are no media files to rename.</p>
+              <h3 class="text-lg font-semibold text-base-content/70 mb-1">
+                {gettext("No Files to Rename")}
+              </h3>
+              <p class="text-sm text-base-content/50">
+                {gettext("There are no media files to rename.")}
+              </p>
             </div>
           <% else %>
             <div class="space-y-3">
@@ -57,12 +61,12 @@ defmodule MydiaWeb.MediaLive.Show.RenameModal do
         <div class="sticky bottom-0 bg-base-100 border-t border-base-300 px-4 py-2">
           <%= if @rename_previews == [] do %>
             <button type="button" phx-click="hide_rename_modal" class="btn btn-ghost btn-sm">
-              Close
+              {gettext("Close")}
             </button>
           <% else %>
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div class="flex items-center gap-3 text-xs text-base-content/70">
-                <span id="rename-selected-count">{@selected_count} selected</span>
+                <span id="rename-selected-count">{gettext("%{count} selected", count: @selected_count)}</span>
                 <button
                   type="button"
                   id="rename-select-all"
@@ -70,7 +74,7 @@ defmodule MydiaWeb.MediaLive.Show.RenameModal do
                   class="link link-hover"
                   disabled={@renaming_files}
                 >
-                  Select all
+                  {gettext("Select all")}
                 </button>
                 <button
                   type="button"
@@ -79,7 +83,7 @@ defmodule MydiaWeb.MediaLive.Show.RenameModal do
                   class="link link-hover"
                   disabled={@renaming_files}
                 >
-                  Clear
+                  {pgettext("selection", "Clear")}
                 </button>
               </div>
               <div class="flex gap-2">
@@ -89,7 +93,7 @@ defmodule MydiaWeb.MediaLive.Show.RenameModal do
                   class="btn btn-ghost btn-sm"
                   disabled={@renaming_files}
                 >
-                  Cancel
+                  {gettext("Cancel")}
                 </button>
                 <button
                   type="button"
@@ -99,9 +103,9 @@ defmodule MydiaWeb.MediaLive.Show.RenameModal do
                   disabled={@renaming_files or @selected_count == 0}
                 >
                   <%= if @renaming_files do %>
-                    <span class="loading loading-spinner loading-xs"></span> Renaming...
+                    <span class="loading loading-spinner loading-xs"></span> {gettext("Renaming...")}
                   <% else %>
-                    <.icon name="hero-check" class="w-4 h-4" /> Rename
+                    <.icon name="hero-check" class="w-4 h-4" /> {gettext("Rename")}
                   <% end %>
                 </button>
               </div>
@@ -136,7 +140,11 @@ defmodule MydiaWeb.MediaLive.Show.RenameModal do
         class="flex items-center gap-2 px-1 py-1 text-xs text-base-content/50"
       >
         <span class="badge badge-ghost badge-sm font-semibold">S{@season}</span>
-        All {length(@previews)} files already match
+        {ngettext(
+          "%{count} file already matches",
+          "All %{count} files already match",
+          length(@previews)
+        )}
       </div>
       <label
         :if={not is_nil(@season) and @changed_count > 0}
@@ -152,8 +160,9 @@ defmodule MydiaWeb.MediaLive.Show.RenameModal do
         />
         <span class="badge badge-primary badge-sm font-semibold">S{@season}</span>
         <span class="text-xs text-base-content/70">
-          {@picked} of {@changed_count} selected<%= if @unchanged_count > 0 do %>
-            · {@unchanged_count} unchanged
+          {gettext("%{picked} of %{total} selected", picked: @picked, total: @changed_count)}
+          <%= if @unchanged_count > 0 do %>
+            · {gettext("%{count} unchanged", count: @unchanged_count)}
           <% end %>
         </span>
       </label>
@@ -184,7 +193,7 @@ defmodule MydiaWeb.MediaLive.Show.RenameModal do
           phx-value-file-id={@preview.file_id}
         />
       <% else %>
-        <span class="badge badge-ghost badge-xs">Same</span>
+        <span class="badge badge-ghost badge-xs">{gettext("Same")}</span>
       <% end %>
       <div class="flex-1 min-w-0">
         <div class="font-mono text-base-content/60 truncate" title={@preview.current_filename}>

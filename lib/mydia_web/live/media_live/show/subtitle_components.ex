@@ -133,7 +133,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
             phx-value-media-file-id={@media_file_id}
             phx-value-track-ref={@track.track_id}
             phx-value-delta="-100"
-            title="Show subtitles 100 ms earlier"
+            title={gettext("Show subtitles 100 ms earlier")}
           >
             <.icon name="hero-minus" class="w-3 h-3" />
           </button>
@@ -144,7 +144,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
             value={@track.offset_ms}
             step="50"
             class="input input-xs input-bordered join-item w-20 text-center"
-            aria-label="Subtitle offset in milliseconds"
+            aria-label={gettext("Subtitle offset in milliseconds")}
           />
 
           <button
@@ -154,7 +154,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
             phx-value-media-file-id={@media_file_id}
             phx-value-track-ref={@track.track_id}
             phx-value-delta="100"
-            title="Show subtitles 100 ms later"
+            title={gettext("Show subtitles 100 ms later")}
           >
             <.icon name="hero-plus" class="w-3 h-3" />
           </button>
@@ -169,9 +169,9 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
           phx-click="resync_subtitle"
           phx-value-media-file-id={@media_file_id}
           phx-value-track-ref={@track.track_id}
-          title="Auto-sync this subtitle to the audio"
+          title={gettext("Auto-sync this subtitle to the audio")}
         >
-          <.icon name="hero-arrow-path" class="w-3 h-3" /> Auto-sync
+          <.icon name="hero-arrow-path" class="w-3 h-3" /> {gettext("Auto-sync")}
         </button>
 
         <% resync_message = resync_label(@track[:resync_state]) %>
@@ -189,8 +189,8 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
             class="btn btn-ghost btn-xs text-error"
             phx-click="delete_subtitle"
             phx-value-subtitle-id={@track.track_id}
-            data-confirm="Delete this subtitle file?"
-            title="Delete subtitle"
+            data-confirm={gettext("Delete this subtitle file?")}
+            title={gettext("Delete subtitle")}
           >
             <.icon name="hero-trash" class="w-4 h-4" />
           </button>
@@ -200,17 +200,17 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
     """
   end
 
-  defp origin_label(:embedded), do: "Embedded"
-  defp origin_label(:provider), do: "Downloaded"
-  defp origin_label(:sidecar), do: "Sidecar"
-  defp origin_label(:upload), do: "Uploaded"
+  defp origin_label(:embedded), do: pgettext("subtitle origin", "Embedded")
+  defp origin_label(:provider), do: pgettext("subtitle origin", "Downloaded")
+  defp origin_label(:sidecar), do: pgettext("subtitle origin", "Sidecar")
+  defp origin_label(:upload), do: pgettext("subtitle origin", "Uploaded")
   # `origin` is a database column value threaded through a plain map, not a
   # changeset-validated struct, by the time it reaches this component. The
   # extractor already normalizes anything it does not recognize to
   # `:provider` (see `Mydia.Subtitles.Extractor.origin_atom/1`), but this
   # clause exists so a row still renders instead of raising if that mapping
   # is ever missed for some path.
-  defp origin_label(_other), do: "Unknown"
+  defp origin_label(_other), do: gettext("Unknown")
 
   defp origin_class(:embedded), do: "badge-ghost"
   defp origin_class(:provider), do: "badge-info"
@@ -223,13 +223,13 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
   # forced or foreign-only tracks, where the manual stepper is the right tool.
   # The catch-all clause covers `nil` (never attempted) and any future state
   # this UI does not yet know how to phrase; either way, nothing renders.
-  defp resync_label("ok"), do: "Synced automatically"
-  defp resync_label("already_synced"), do: "Already in sync"
-  defp resync_label("low_confidence"), do: "Could not match the audio confidently"
-  defp resync_label("implausible"), do: "Result was out of range"
-  defp resync_label("no_audio"), do: "No readable audio track"
-  defp resync_label("too_few_cues"), do: "Too few subtitle lines to match reliably"
-  defp resync_label("no_cues"), do: "No readable subtitle timings"
-  defp resync_label("failed"), do: "Re-sync failed"
+  defp resync_label("ok"), do: gettext("Synced automatically")
+  defp resync_label("already_synced"), do: gettext("Already in sync")
+  defp resync_label("low_confidence"), do: gettext("Could not match the audio confidently")
+  defp resync_label("implausible"), do: gettext("Result was out of range")
+  defp resync_label("no_audio"), do: gettext("No readable audio track")
+  defp resync_label("too_few_cues"), do: gettext("Too few subtitle lines to match reliably")
+  defp resync_label("no_cues"), do: gettext("No readable subtitle timings")
+  defp resync_label("failed"), do: gettext("Re-sync failed")
   defp resync_label(_other), do: nil
 end

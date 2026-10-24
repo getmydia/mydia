@@ -7,6 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
   slice of it.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
   import MydiaWeb.CoreComponents
   import MydiaWeb.MediaLive.Show.ScoreBreakdown
 
@@ -35,7 +36,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
         <div class="bg-base-100 border-b border-base-300 p-4 sm:p-6">
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
-              <h3 class="text-xl sm:text-2xl font-bold">Subtitles</h3>
+              <h3 class="text-xl sm:text-2xl font-bold">{gettext("Subtitles")}</h3>
               <p
                 class="text-sm text-base-content/70 truncate mt-1"
                 title={MediaFile.display_path(@media_file)}
@@ -47,7 +48,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
               type="button"
               phx-click="close_subtitle_manage"
               class="btn btn-ghost btn-sm btn-circle shrink-0"
-              aria-label="Close"
+              aria-label={gettext("Close")}
             >
               <.icon name="hero-x-mark" class="w-6 h-6" />
             </button>
@@ -57,7 +58,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
         <div id="subtitle-manage-body" class="flex-1 overflow-y-auto p-4 sm:p-6">
           <%= if @tracks == [] do %>
             <p class="text-sm text-base-content/60 italic">
-              No subtitle tracks for this file yet.
+              {gettext("No subtitle tracks for this file yet.")}
             </p>
           <% else %>
             <div>
@@ -78,7 +79,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
             phx-value-media-file-id={@media_file.id}
             class="btn btn-primary btn-sm btn-block sm:w-auto sm:flex-1"
           >
-            <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Search
+            <.icon name="hero-magnifying-glass" class="w-4 h-4" /> {pgettext("search", "Search")}
           </button>
           <button
             id="subtitle-manage-upload"
@@ -87,7 +88,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
             phx-value-media-file-id={@media_file.id}
             class="btn btn-sm btn-block sm:w-auto sm:flex-1"
           >
-            <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Upload
+            <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> {gettext("Upload")}
           </button>
           <button
             id="subtitle-manage-rescan"
@@ -96,7 +97,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
             phx-value-media-file-id={@media_file.id}
             class="btn btn-ghost btn-sm btn-block sm:w-auto sm:flex-1"
           >
-            <.icon name="hero-arrow-path" class="w-4 h-4" /> Rescan
+            <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Rescan")}
           </button>
         </div>
       </div>
@@ -142,7 +143,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
         <div class="bg-base-100 border-b border-base-300 p-4 sm:p-6">
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
-              <h3 class="text-xl sm:text-2xl font-bold">Search Subtitles</h3>
+              <h3 class="text-xl sm:text-2xl font-bold">{gettext("Search Subtitles")}</h3>
               <p
                 class="text-sm text-base-content/70 truncate mt-1"
                 title={MediaFile.display_path(@media_file)}
@@ -154,7 +155,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
               type="button"
               phx-click="close_subtitle_search_modal"
               class="btn btn-ghost btn-sm btn-circle shrink-0"
-              aria-label="Close"
+              aria-label={gettext("Close")}
             >
               <.icon name="hero-x-mark" class="w-6 h-6" />
             </button>
@@ -167,12 +168,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
             phx-change="update_subtitle_languages"
             class="flex flex-wrap items-center gap-2"
           >
-            <div class="filter" role="group" aria-label="Subtitle languages">
+            <div class="filter" role="group" aria-label={gettext("Subtitle languages")}>
               <button
                 type="button"
                 class="btn btn-sm btn-square filter-reset"
                 phx-click="clear_subtitle_languages"
-                aria-label="Clear selected languages"
+                aria-label={gettext("Clear selected languages")}
               >
                 ×
               </button>
@@ -211,8 +212,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                 |> JS.toggle(to: "#subtitle-language-fewer-label", display: "inline")
               }
             >
-              <span id="subtitle-language-more-label">+{length(@more_languages)} more</span>
-              <span id="subtitle-language-fewer-label" class="hidden">Show fewer</span>
+              <span id="subtitle-language-more-label">
+                {gettext("+%{count} more", count: length(@more_languages))}
+              </span>
+              <span id="subtitle-language-fewer-label" class="hidden">{gettext("Show fewer")}</span>
               <.icon name="hero-chevron-down" class="w-4 h-4" />
             </button>
 
@@ -225,9 +228,9 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
               disabled={@subtitle_search_state == :searching or @selected_languages == []}
             >
               <%= if @subtitle_search_state == :searching do %>
-                <span class="loading loading-spinner loading-sm"></span> Searching
+                <span class="loading loading-spinner loading-sm"></span> {gettext("Searching")}
               <% else %>
-                <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Search
+                <.icon name="hero-magnifying-glass" class="w-4 h-4" /> {pgettext("search", "Search")}
               <% end %>
             </button>
           </form>
@@ -238,10 +241,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
               <div class="flex flex-col items-center justify-center py-16 text-center">
                 <.icon name="hero-language" class="w-16 h-16 text-base-content/20 mb-4" />
                 <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-                  Choose one or more languages
+                  {gettext("Choose one or more languages")}
                 </h3>
                 <p class="text-base-content/50 max-w-sm">
-                  Then run a search to see what your providers have for this file.
+                  {gettext("Then run a search to see what your providers have for this file.")}
                 </p>
               </div>
             <% :searching -> %>
@@ -252,7 +255,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
               <div class="alert alert-error">
                 <.icon name="hero-exclamation-circle" class="w-5 h-5 shrink-0" />
                 <div class="flex-1">
-                  <div class="font-medium">Search failed</div>
+                  <div class="font-medium">{gettext("Search failed")}</div>
                   <div class="text-sm opacity-80">{search_error_message(reason)}</div>
                 </div>
                 <button
@@ -261,7 +264,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                   class="btn btn-sm"
                   disabled={@selected_languages == []}
                 >
-                  Retry
+                  {gettext("Retry")}
                 </button>
               </div>
             <% :loaded -> %>
@@ -271,20 +274,22 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                   <div class="flex flex-col items-center justify-center py-16 text-center">
                     <.icon name="hero-cog-6-tooth" class="w-16 h-16 text-base-content/20 mb-4" />
                     <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-                      No subtitle providers configured
+                      {gettext("No subtitle providers configured")}
                     </h3>
                     <p class="text-base-content/50 max-w-sm mb-4">
-                      Add a provider before searching. Nothing is enabled and healthy right now.
+                      {gettext(
+                        "Add a provider before searching. Nothing is enabled and healthy right now."
+                      )}
                     </p>
                     <.link navigate="/admin/subtitle-providers" class="btn btn-primary btn-sm">
-                      Configure providers
+                      {gettext("Configure providers")}
                     </.link>
                   </div>
                 <% @subtitle_search_results == [] and Enum.all?(@subtitle_providers, & &1.error) -> %>
                   <div class="alert alert-error">
                     <.icon name="hero-exclamation-circle" class="w-5 h-5 shrink-0" />
                     <div class="flex-1">
-                      <div class="font-medium">Every provider failed</div>
+                      <div class="font-medium">{gettext("Every provider failed")}</div>
                       <ul class="text-sm opacity-80 mt-1">
                         <li :for={provider <- @subtitle_providers}>
                           {provider.name}: {provider.error}
@@ -297,7 +302,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                       class="btn btn-sm"
                       disabled={@selected_languages == []}
                     >
-                      Retry
+                      {gettext("Retry")}
                     </button>
                   </div>
                 <% @subtitle_search_results == [] -> %>
@@ -311,10 +316,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                       class="w-16 h-16 text-base-content/20 mb-4"
                     />
                     <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-                      No subtitles found
+                      {gettext("No subtitles found")}
                     </h3>
                     <p class="text-base-content/50 max-w-sm">
-                      Your providers answered but had nothing for this file. Try more languages.
+                      {gettext(
+                        "Your providers answered but had nothing for this file. Try more languages."
+                      )}
                     </p>
                   </div>
                 <% true -> %>
@@ -341,14 +348,16 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                               {result.provider_name}
                             </span>
                             <span :if={result.moviehash_match} class="badge badge-success badge-sm">
-                              Exact match
+                              {gettext("Exact match")}
                             </span>
                             <div
                               :if={result.hearing_impaired}
                               class="tooltip"
-                              data-tip="Includes hearing impaired captions"
+                              data-tip={gettext("Includes hearing impaired captions")}
                             >
-                              <span class="badge badge-outline badge-sm">HI</span>
+                              <span class="badge badge-outline badge-sm">
+                                {pgettext("hearing impaired abbreviation", "HI")}
+                              </span>
                             </div>
                             <.score_trigger
                               id={"subtitle-score-badge-#{index}"}
@@ -357,9 +366,9 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                                 "badge badge-sm cursor-pointer",
                                 score_badge_class(result.score)
                               ]}
-                              title="Show score breakdown"
+                              title={gettext("Show score breakdown")}
                             >
-                              Score {result.score}
+                              {gettext("Score %{score}", score: result.score)}
                             </.score_trigger>
                           </div>
                           <.score_panel id={"subtitle-score-breakdown-#{index}"}>
@@ -375,7 +384,11 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                           <div class="text-xs text-base-content/60 mt-1 flex gap-3">
                             <span :if={result.rating}>★ {result.rating}/10</span>
                             <span :if={result.download_count}>
-                              {result.download_count} downloads
+                              {ngettext(
+                                "%{count} download",
+                                "%{count} downloads",
+                                result.download_count
+                              )}
                             </span>
                           </div>
                         </div>
@@ -390,7 +403,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                           <%= if @downloading_subtitle_index == index do %>
                             <span class="loading loading-spinner loading-xs"></span>
                           <% else %>
-                            <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Download
+                            <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> {gettext("Download")}
                           <% end %>
                         </button>
                       </div>
@@ -420,7 +433,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
     ~H"""
     <div id="subtitle-upload-modal" class="modal modal-open">
       <div class="modal-box max-w-lg">
-        <h3 class="font-bold text-lg mb-1">Upload a subtitle</h3>
+        <h3 class="font-bold text-lg mb-1">{gettext("Upload a subtitle")}</h3>
         <p class="text-sm opacity-60 mb-4 truncate" title={MediaFile.display_path(@media_file)}>
           {MediaFile.display_name(@media_file)}
         </p>
@@ -431,7 +444,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
           phx-change="validate_subtitle_upload"
         >
           <label class="form-control w-full mb-4">
-            <div class="label"><span class="label-text">Language</span></div>
+            <div class="label"><span class="label-text">{gettext("Language")}</span></div>
             <select name="language" class="select select-bordered w-full">
               <option
                 :for={{code, label} <- MydiaWeb.Languages.all()}
@@ -446,11 +459,11 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
           <div class="flex gap-4 mb-4">
             <label class="label cursor-pointer gap-2">
               <input type="checkbox" name="forced" class="checkbox checkbox-sm" />
-              <span class="label-text">Forced</span>
+              <span class="label-text">{gettext("Forced")}</span>
             </label>
             <label class="label cursor-pointer gap-2">
               <input type="checkbox" name="hearing_impaired" class="checkbox checkbox-sm" />
-              <span class="label-text">Hearing impaired</span>
+              <span class="label-text">{gettext("Hearing impaired")}</span>
             </label>
           </div>
 
@@ -467,7 +480,9 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
               accept=".srt,.ass,.ssa,.vtt"
               class="file-input file-input-bordered w-full"
             />
-            <p class="text-xs opacity-60 mt-2">SRT, ASS, SSA or VTT, up to 2 MB</p>
+            <p class="text-xs opacity-60 mt-2">
+              {gettext("SRT, ASS, SSA or VTT, up to 2 MB")}
+            </p>
           </div>
 
           <div :for={entry <- @uploads.subtitle.entries} class="mb-2">
@@ -489,9 +504,9 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
 
           <div class="modal-action">
             <button type="button" class="btn btn-ghost" phx-click="close_subtitle_upload">
-              Cancel
+              {gettext("Cancel")}
             </button>
-            <button type="submit" class="btn btn-primary">Upload</button>
+            <button type="submit" class="btn btn-primary">{gettext("Upload")}</button>
           </div>
         </form>
       </div>
@@ -500,13 +515,13 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
     """
   end
 
-  defp upload_error_message(:too_large), do: "That file is larger than 2 MB"
+  defp upload_error_message(:too_large), do: gettext("That file is larger than 2 MB")
 
   defp upload_error_message(:not_accepted),
-    do: "Only .srt, .ass, .ssa and .vtt files are accepted"
+    do: gettext("Only .srt, .ass, .ssa and .vtt files are accepted")
 
-  defp upload_error_message(:too_many_files), do: "Upload one file at a time"
-  defp upload_error_message(_), do: "That file could not be accepted"
+  defp upload_error_message(:too_many_files), do: gettext("Upload one file at a time")
+  defp upload_error_message(_), do: gettext("That file could not be accepted")
 
   # Partial-failure warning banner shared by the "results found" and "healthy
   # zero-hit" branches of the loaded subtitle search state, so a provider that
@@ -520,7 +535,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
       <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
       <div class="flex-1">
         <div class="text-sm font-medium">
-          {length(@failed)} of {@total} providers failed
+          {gettext("%{failed} of %{total} providers failed",
+            failed: length(@failed),
+            total: @total
+          )}
         </div>
         <ul class="text-xs opacity-80 mt-1">
           <li :for={provider <- @failed}>{provider.name}: {provider.error}</li>
@@ -534,16 +552,16 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
   # are the top-level ones search_candidates/2 can actually return, which
   # would otherwise reach the user as raw atoms.
   defp search_error_message(:media_file_not_found),
-    do: "That file is no longer in the library."
+    do: gettext("That file is no longer in the library.")
 
   defp search_error_message(:insufficient_search_criteria),
-    do: "This file has no hash or metadata IDs to search with."
+    do: gettext("This file has no hash or metadata IDs to search with.")
 
   defp search_error_message(:crashed),
-    do: "The search failed unexpectedly. Check the server logs for details."
+    do: gettext("The search failed unexpectedly. Check the server logs for details.")
 
   defp search_error_message(_reason),
-    do: "The search could not be completed. Check the server logs for details."
+    do: gettext("The search could not be completed. Check the server logs for details.")
 
   # The release block's ceiling moves with how much the file's own name
   # reveals. A name with no audio token, the very common bare naming like

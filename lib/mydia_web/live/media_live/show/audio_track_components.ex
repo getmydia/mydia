@@ -56,11 +56,11 @@ defmodule MydiaWeb.MediaLive.Show.AudioTrackComponents do
             class={["inline-flex items-baseline gap-1", commentary? && "opacity-60"]}
             title={audio_track_title(track)}
           >
-            <span>{StreamInfo.audio_label(track) || "Unknown"}</span>
+            <span>{StreamInfo.audio_label(track) || gettext("Unknown")}</span>
             <span :if={@show_language? && track.language} class="uppercase opacity-70">
               {track.language}
             </span>
-            <span :if={commentary?} class="italic">commentary</span>
+            <span :if={commentary?} class="italic">{gettext("commentary")}</span>
           </span>
         <% end %>
       <% end %>
