@@ -346,7 +346,7 @@ defmodule MydiaWeb.DevicesLive.Components do
         gettext("just now")
 
       diff_seconds < 3600 ->
-        ngettext("%{count} minute ago", "%{count} minutes ago", div(diff_seconds, 60))
+        ngettext("%{count} min ago", "%{count} min ago", div(diff_seconds, 60))
 
       diff_seconds < 86400 ->
         ngettext("%{count} hour ago", "%{count} hours ago", div(diff_seconds, 3600))

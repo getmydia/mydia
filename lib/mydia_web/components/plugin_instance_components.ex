@@ -295,5 +295,5 @@ defmodule MydiaWeb.PluginInstanceComponents do
 
   defp link_status_label(:active), do: pgettext("plugin instance", "Active")
   defp link_status_label(:error), do: gettext("Needs attention")
-  defp link_status_label(_), do: pgettext("monitoring", "Paused")
+  defp link_status_label(_), do: pgettext("plugin instance", "Paused")
 end

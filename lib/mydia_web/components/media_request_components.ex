@@ -134,8 +134,8 @@ defmodule MydiaWeb.MediaRequestComponents do
     do: DateTimeFormat.format(dt, :datetime, display)
 
   @doc ~S[Human label for a request media type ("tv_show" becomes "Tv show").]
-  def media_type_text("movie"), do: pgettext("media type", "Movie")
-  def media_type_text("tv_show"), do: pgettext("media type", "Tv show")
+  def media_type_text("movie"), do: gettext("Movie")
+  def media_type_text("tv_show"), do: gettext("TV Show")
 
   def media_type_text(media_type) do
     media_type
