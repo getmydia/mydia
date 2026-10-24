@@ -1111,4 +1111,44 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       refute_enqueued(worker: Mydia.Jobs.MediaRematch)
     end
   end
+
+  describe "refreshing the queue" do
+    defp grabbing_download(title) do
+      media_item = media_item_fixture(%{title: title})
+
+      download_fixture(%{
+        media_item_id: media_item.id,
+        title: "#{title}.1080p",
+        download_client: nil,
+        download_client_id: nil
+      })
+    end
+
+    test "a row removed between refreshes disappears and the others stay", %{conn: conn} do
+      keep = grabbing_download("Fictional Lantern Bay")
+      gone = grabbing_download("Fictional Copper Hollow")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      assert has_element?(view, "#downloads-#{keep.id}")
+      assert has_element?(view, "#downloads-#{gone.id}")
+
+      Repo.delete!(Repo.get!(Download, gone.id))
+      send(view.pid, :refresh_progress)
+
+      assert has_element?(view, "#downloads-#{keep.id}")
+      refute has_element?(view, "#downloads-#{gone.id}")
+    end
+
+    test "a refresh with unchanged rows does not reset the stream", %{conn: conn} do
+      a = grabbing_download("Fictional Lantern Bay")
+      b = grabbing_download("Fictional Copper Hollow")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      send(view.pid, :refresh_progress)
+      render(view)
+
+      ids = :sys.get_state(view.pid).socket.assigns.stream_ids
+      assert Enum.sort(ids) == Enum.sort([a.id, b.id])
+    end
+  end
 end

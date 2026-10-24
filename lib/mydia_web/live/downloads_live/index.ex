@@ -61,6 +61,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:selected_ids, MapSet.new())
      |> assign(:selection_mode, false)
      |> assign(:page, 0)
+     # Page-0 row ids on screen; nil when unknown, which forces a stream reset.
+     |> assign(:stream_ids, nil)
      |> assign(:has_more, true)
      # Clear-completed modal state
      |> assign(:show_clear_modal, false)
@@ -140,6 +142,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     socket =
       socket
       |> assign(:page, 0)
+      |> assign(:stream_ids, nil)
       |> assign(:selected_ids, MapSet.new())
       |> assign(:selection_mode, false)
       |> assign(:search_open_for, nil)
@@ -225,6 +228,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      socket
      |> assign(:sort_by, sort_by)
      |> assign(:page, 0)
+     |> assign(:stream_ids, nil)
      |> load_downloads()}
   end
 
@@ -549,6 +553,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       {:noreply,
        socket
        |> update(:page, &(&1 + 1))
+       |> assign(:stream_ids, nil)
        |> load_downloads()}
     else
       {:noreply, socket}
@@ -559,6 +564,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:noreply,
      socket
      |> assign(:page, 0)
+     |> assign(:stream_ids, nil)
      |> assign(:client_urls, client_urls())
      |> load_downloads()}
   end
@@ -1083,6 +1089,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
         socket
         |> assign(:stale_status, stale_status(downloads))
         |> stream(:downloads, downloads, reset: true)
+        |> assign(:stream_ids, Enum.map(downloads, & &1.id))
     end
   end
 
@@ -1312,7 +1319,31 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:stale_status, stale_status(all_downloads))
     |> assign(:has_more, has_more)
     |> assign(:downloads_empty?, reset? and paginated_downloads == [])
-    |> stream(:downloads, paginated_downloads, reset: reset?)
+    |> then(fn socket ->
+      if reset?,
+        do: stream_page(socket, paginated_downloads),
+        else: stream(socket, :downloads, paginated_downloads)
+    end)
+  end
+
+  # Page 0 of the Downloads list. A stream reset detaches every row, and a
+  # click pressed across that detach never fires (issue #1257), so rows that
+  # kept their order are patched in place and only gone rows are deleted.
+  defp stream_page(socket, rows) do
+    ids = Enum.map(rows, & &1.id)
+
+    socket =
+      case ListView.stream_plan(socket.assigns.stream_ids, ids) do
+        {:update, removed_ids} ->
+          removed_ids
+          |> Enum.reduce(socket, &stream_delete_by_dom_id(&2, :downloads, "downloads-#{&1}"))
+          |> stream(:downloads, rows)
+
+        :reset ->
+          stream(socket, :downloads, rows, reset: true)
+      end
+
+    assign(socket, :stream_ids, ids)
   end
 
   # Finds the open drawer's download in `all` (fetching it when nil). A
