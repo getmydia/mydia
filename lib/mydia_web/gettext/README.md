@@ -9,8 +9,9 @@ Weblate (see `TRANSLATING.md`). This file is for developers writing UI code.
 - The msgid is the English text: `{gettext("Library")}`.
 - One msgid per whole sentence. Never build a sentence from translated pieces.
 - Values go in bindings: `gettext("Added %{title}", title: @title)`.
-- Counts use `ngettext("1 file", "%{count} files", @count)`. `count` is bound
-  automatically.
+- Counts use `ngettext("%{count} file", "%{count} files", @count)`. `count` is bound
+  automatically. Keep `%{count}` in the singular too: some languages use the
+  singular form for 21, 31 and so on.
 - Ambiguous short words take a context: `pgettext("tv", "Season")`.
 - Inline markup inside a sentence: use a binding with plain text. Split a
   sentence only around a link or button, translating each piece as a whole

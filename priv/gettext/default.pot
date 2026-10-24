@@ -488,24 +488,10 @@ msgstr ""
 msgid "Your browser does not support video playback."
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:613
-#, elixir-autogen, elixir-format
-msgid "and 1 earlier release"
-msgid_plural "and %{count} earlier releases"
-msgstr[0] ""
-msgstr[1] ""
-
 #: lib/mydia_web/live/profile_live/index.html.heex:123
 #, elixir-autogen, elixir-format
 msgid "%{size} bytes"
 msgstr ""
-
-#: lib/mydia_web/live/profile_live/two_factor_component.ex:158
-#, elixir-autogen, elixir-format
-msgid "1 recovery code left"
-msgid_plural "%{count} recovery codes left"
-msgstr[0] ""
-msgstr[1] ""
 
 #: lib/mydia_web/live/profile_live/index.ex:329
 #: lib/mydia_web/live/profile_live/index.html.heex:300
@@ -1381,3 +1367,17 @@ msgstr ""
 msgctxt "divider between login options"
 msgid "OR"
 msgstr ""
+
+#: lib/mydia_web/live/profile_live/two_factor_component.ex:158
+#, elixir-autogen, elixir-format
+msgid "%{count} recovery code left"
+msgid_plural "%{count} recovery codes left"
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/mydia_web/components/layouts.ex:613
+#, elixir-autogen, elixir-format
+msgid "and %{count} earlier release"
+msgid_plural "and %{count} earlier releases"
+msgstr[0] ""
+msgstr[1] ""

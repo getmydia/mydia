@@ -43,7 +43,7 @@ msgstr "cerrar"
 msgid "Automatic (browser language)"
 msgstr "Automático (idioma del navegador)"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:250
+#: lib/mydia_web/live/profile_live/index.html.heex:252
 #, elixir-autogen, elixir-format
 msgid "Automatic follows your browser. Percentages show how much of Mydia is translated; the rest stays in English."
 msgstr "Automático sigue el idioma de tu navegador. Los porcentajes indican cuánto de Mydia está traducido; el resto se queda en inglés."
@@ -54,12 +54,12 @@ msgid "Could not save your language"
 msgstr "No se pudo guardar tu idioma"
 
 #: lib/mydia_web/live/admin_settings_live/language_components.ex:93
-#: lib/mydia_web/live/profile_live/index.html.heex:259
+#: lib/mydia_web/live/profile_live/index.html.heex:261
 #, elixir-autogen, elixir-format
 msgid "Interface language"
 msgstr "Idioma de la interfaz"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:248
+#: lib/mydia_web/live/profile_live/index.html.heex:249
 #, elixir-autogen, elixir-format
 msgid "Language"
 msgstr "Idioma"
@@ -144,7 +144,7 @@ msgid "Calendar"
 msgstr "Calendario"
 
 #: lib/mydia_web/components/video_player_components.ex:476
-#: lib/mydia_web/live/profile_live/index.html.heex:530
+#: lib/mydia_web/live/profile_live/index.html.heex:532
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:292
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:304
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:318
@@ -190,7 +190,7 @@ msgid "Dark theme"
 msgstr "Tema oscuro"
 
 #: lib/mydia_web/components/sidebar_components.ex:186
-#: lib/mydia_web/live/profile_live/index.html.heex:464
+#: lib/mydia_web/live/profile_live/index.html.heex:466
 #, elixir-autogen, elixir-format
 msgid "Devices"
 msgstr "Dispositivos"
@@ -259,7 +259,7 @@ msgid "Install app"
 msgstr "Instalar la app"
 
 #: lib/mydia_web/components/sidebar_components.ex:177
-#: lib/mydia_web/live/profile_live/index.html.heex:446
+#: lib/mydia_web/live/profile_live/index.html.heex:448
 #, elixir-autogen, elixir-format
 msgid "Integrations"
 msgstr "Integraciones"
@@ -344,7 +344,7 @@ msgstr "Reproducir/Pausar"
 
 #: lib/mydia_web/components/layouts.ex:172
 #: lib/mydia_web/components/layouts.ex:575
-#: lib/mydia_web/live/profile_live/index.html.heex:312
+#: lib/mydia_web/live/profile_live/index.html.heex:314
 #, elixir-autogen, elixir-format
 msgid "Player"
 msgstr "Reproductor"
@@ -488,33 +488,19 @@ msgstr "Novedades"
 msgid "Your browser does not support video playback."
 msgstr "Tu navegador no admite la reproducción de video."
 
-#: lib/mydia_web/components/layouts.ex:613
-#, elixir-autogen, elixir-format
-msgid "and 1 earlier release"
-msgid_plural "and %{count} earlier releases"
-msgstr[0] "y 1 versión anterior"
-msgstr[1] "y %{count} versiones anteriores"
-
 #: lib/mydia_web/live/profile_live/index.html.heex:123
 #, elixir-autogen, elixir-format
 msgid "%{size} bytes"
 msgstr "%{size} bytes"
 
-#: lib/mydia_web/live/profile_live/two_factor_component.ex:158
-#, elixir-autogen, elixir-format
-msgid "1 recovery code left"
-msgid_plural "%{count} recovery codes left"
-msgstr[0] "Queda 1 código de recuperación"
-msgstr[1] "Quedan %{count} códigos de recuperación"
-
 #: lib/mydia_web/live/profile_live/index.ex:329
-#: lib/mydia_web/live/profile_live/index.html.heex:298
+#: lib/mydia_web/live/profile_live/index.html.heex:300
 #, elixir-autogen, elixir-format
 msgid "12-hour"
 msgstr "12 horas"
 
 #: lib/mydia_web/live/profile_live/index.ex:330
-#: lib/mydia_web/live/profile_live/index.html.heex:299
+#: lib/mydia_web/live/profile_live/index.html.heex:301
 #, elixir-autogen, elixir-format
 msgid "24-hour"
 msgstr "24 horas"
@@ -529,7 +515,7 @@ msgstr "Código de 6 dígitos"
 msgid "Account Info"
 msgstr "Información de la cuenta"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:336
+#: lib/mydia_web/live/profile_live/index.html.heex:338
 #, elixir-autogen, elixir-format
 msgid "Add Defaults"
 msgstr "Añadir valores por defecto"
@@ -545,7 +531,7 @@ msgstr "Añadir una passkey"
 msgid "Adding a passkey needs a browser that supports them and a secure (https) address for Mydia."
 msgstr "Para añadir una passkey necesitas un navegador compatible y una dirección segura (https) para Mydia."
 
-#: lib/mydia_web/live/profile_live/index.html.heex:372
+#: lib/mydia_web/live/profile_live/index.html.heex:374
 #, elixir-autogen, elixir-format
 msgid "All seasons"
 msgstr "Todas las temporadas"
@@ -576,7 +562,7 @@ msgstr "Código de autenticación"
 msgid "Authentication code or recovery code"
 msgstr "Código de autenticación o de recuperación"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:296
+#: lib/mydia_web/live/profile_live/index.html.heex:298
 #, elixir-autogen, elixir-format
 msgid "Auto (%{format})"
 msgstr "Auto (%{format})"
@@ -601,13 +587,13 @@ msgstr "Avatar eliminado"
 msgid "Cancel upload"
 msgstr "Cancelar la subida"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:420
-#: lib/mydia_web/live/profile_live/index.html.heex:493
+#: lib/mydia_web/live/profile_live/index.html.heex:422
+#: lib/mydia_web/live/profile_live/index.html.heex:495
 #, elixir-autogen, elixir-format
 msgid "Change Password"
 msgstr "Cambiar la contraseña"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:412
+#: lib/mydia_web/live/profile_live/index.html.heex:414
 #, elixir-autogen, elixir-format
 msgid "Change your password to keep your account secure."
 msgstr "Cambia tu contraseña para mantener tu cuenta segura."
@@ -617,22 +603,22 @@ msgstr "Cambia tu contraseña para mantener tu cuenta segura."
 msgid "Choose how Mydia looks. System follows your device, using your light theme by day and your dark theme by night."
 msgstr "Elige el aspecto de Mydia. Sistema sigue a tu dispositivo: usa tu tema claro de día y tu tema oscuro de noche."
 
-#: lib/mydia_web/live/profile_live/index.html.heex:291
+#: lib/mydia_web/live/profile_live/index.html.heex:293
 #, elixir-autogen, elixir-format
 msgid "Clock"
 msgstr "Reloj"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:524
+#: lib/mydia_web/live/profile_live/index.html.heex:526
 #, elixir-autogen, elixir-format
 msgid "Confirm New Password"
 msgstr "Confirmar la nueva contraseña"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:468
+#: lib/mydia_web/live/profile_live/index.html.heex:470
 #, elixir-autogen, elixir-format
 msgid "Connect a player to your account, or download one for your device."
 msgstr "Conecta un reproductor a tu cuenta o descarga uno para tu dispositivo."
 
-#: lib/mydia_web/live/profile_live/index.html.heex:450
+#: lib/mydia_web/live/profile_live/index.html.heex:452
 #, elixir-autogen, elixir-format
 msgid "Connect third-party plugins to sync your watch history."
 msgstr "Conecta plugins de terceros para sincronizar tu historial de reproducción."
@@ -648,7 +634,7 @@ msgstr "Esquinas"
 msgid "Could not save your date and time settings"
 msgstr "No se pudieron guardar tus ajustes de fecha y hora"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:512
+#: lib/mydia_web/live/profile_live/index.html.heex:514
 #, elixir-autogen, elixir-format
 msgid "Current Password"
 msgstr "Contraseña actual"
@@ -672,7 +658,7 @@ msgstr "La contraseña actual no es correcta"
 msgid "Dark"
 msgstr "Oscuro"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:267
+#: lib/mydia_web/live/profile_live/index.html.heex:269
 #, elixir-autogen, elixir-format
 msgid "Date & time"
 msgstr "Fecha y hora"
@@ -713,7 +699,7 @@ msgstr "Activada el %{date}"
 msgid "Failed to update the player setting"
 msgstr "No se pudo actualizar el ajuste del reproductor"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:373
+#: lib/mydia_web/live/profile_live/index.html.heex:375
 #, elixir-autogen, elixir-format
 msgid "First season"
 msgstr "Primera temporada"
@@ -723,7 +709,7 @@ msgstr "Primera temporada"
 msgid "Follow your browser's prompt to create the passkey."
 msgstr "Sigue las indicaciones de tu navegador para crear la passkey."
 
-#: lib/mydia_web/live/profile_live/index.html.heex:374
+#: lib/mydia_web/live/profile_live/index.html.heex:376
 #, elixir-autogen, elixir-format
 msgid "Future only"
 msgstr "Solo las futuras"
@@ -733,7 +719,7 @@ msgstr "Solo las futuras"
 msgid "Generate"
 msgstr "Generar"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:322
+#: lib/mydia_web/live/profile_live/index.html.heex:324
 #, elixir-autogen, elixir-format
 msgid "Hide the player"
 msgstr "Ocultar el reproductor"
@@ -780,12 +766,12 @@ msgstr "Claro"
 msgid "Local"
 msgstr "Local"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:471
+#: lib/mydia_web/live/profile_live/index.html.heex:473
 #, elixir-autogen, elixir-format
 msgid "Manage Devices"
 msgstr "Gestionar dispositivos"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:453
+#: lib/mydia_web/live/profile_live/index.html.heex:455
 #, elixir-autogen, elixir-format
 msgid "Manage Integrations"
 msgstr "Gestionar integraciones"
@@ -795,12 +781,12 @@ msgstr "Gestionar integraciones"
 msgid "Manage your account and customize your experience"
 msgstr "Gestiona tu cuenta y personaliza tu experiencia"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:380
+#: lib/mydia_web/live/profile_live/index.html.heex:382
 #, elixir-autogen, elixir-format
 msgid "Monitored on add"
 msgstr "Monitorizar al añadir"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:351
+#: lib/mydia_web/live/profile_live/index.html.heex:353
 #, elixir-autogen, elixir-format
 msgid "Movie library"
 msgstr "Biblioteca de películas"
@@ -820,7 +806,7 @@ msgstr "El nombre debe tener entre 1 y 100 caracteres"
 msgid "Never"
 msgstr "Nunca"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:518
+#: lib/mydia_web/live/profile_live/index.html.heex:520
 #, elixir-autogen, elixir-format
 msgid "New Password"
 msgstr "Nueva contraseña"
@@ -831,18 +817,18 @@ msgstr "Nueva contraseña"
 msgid "New recovery codes"
 msgstr "Nuevos códigos de recuperación"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:382
-#: lib/mydia_web/live/profile_live/index.html.heex:388
+#: lib/mydia_web/live/profile_live/index.html.heex:384
+#: lib/mydia_web/live/profile_live/index.html.heex:390
 #, elixir-autogen, elixir-format
 msgid "No"
 msgstr "No"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:375
+#: lib/mydia_web/live/profile_live/index.html.heex:377
 #, elixir-autogen, elixir-format
 msgid "None"
 msgstr "Ninguna"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:303
+#: lib/mydia_web/live/profile_live/index.html.heex:305
 #, elixir-autogen, elixir-format
 msgid "Now:"
 msgstr "Ahora:"
@@ -867,7 +853,7 @@ msgstr "Solo se puede subir una imagen a la vez"
 msgid "OpenID Connect (SSO)"
 msgstr "OpenID Connect (SSO)"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:339
+#: lib/mydia_web/live/profile_live/index.html.heex:341
 #, elixir-autogen, elixir-format
 msgid "Override what happens when you add a movie or TV show. Leave a field on \"Use server default\" to follow the instance-wide setting."
 msgstr "Cambia lo que ocurre al añadir una película o una serie. Deja un campo en «Usar el valor del servidor» para seguir el ajuste de toda la instancia."
@@ -900,7 +886,7 @@ msgstr "Perfil y preferencias"
 msgid "Profile updated successfully"
 msgstr "Perfil actualizado correctamente"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:363
+#: lib/mydia_web/live/profile_live/index.html.heex:365
 #, elixir-autogen, elixir-format
 msgid "Quality profile"
 msgstr "Perfil de calidad"
@@ -971,22 +957,22 @@ msgstr "Escanea el código con una app como Aegis, 2FAS o 1Password, o introduce
 msgid "Scan with your authenticator"
 msgstr "Escanea con tu app de autenticación"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:386
+#: lib/mydia_web/live/profile_live/index.html.heex:388
 #, elixir-autogen, elixir-format
 msgid "Search for a release on add"
 msgstr "Buscar una versión al añadir"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:369
+#: lib/mydia_web/live/profile_live/index.html.heex:371
 #, elixir-autogen, elixir-format
 msgid "Season monitoring"
 msgstr "Monitorización de temporadas"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:398
+#: lib/mydia_web/live/profile_live/index.html.heex:400
 #, elixir-autogen, elixir-format
 msgid "Security"
 msgstr "Seguridad"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:281
+#: lib/mydia_web/live/profile_live/index.html.heex:283
 #, elixir-autogen, elixir-format
 msgid "Server default (%{zone})"
 msgstr "Valor del servidor (%{zone})"
@@ -1024,12 +1010,12 @@ msgstr "Suaves"
 msgid "System"
 msgstr "Sistema"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:357
+#: lib/mydia_web/live/profile_live/index.html.heex:359
 #, elixir-autogen, elixir-format
 msgid "TV library"
 msgstr "Biblioteca de series"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:314
+#: lib/mydia_web/live/profile_live/index.html.heex:316
 #, elixir-autogen, elixir-format
 msgid "Takes the player shortcuts out of the sidebar, the mobile dock and the dashboard. Play buttons on movies and episodes keep working, and the player itself stays available if you open it directly."
 msgstr "Quita los accesos al reproductor de la barra lateral, de la barra móvil y del panel. Los botones de reproducir de películas y episodios siguen funcionando, y el reproductor sigue disponible si lo abres directamente."
@@ -1049,12 +1035,12 @@ msgstr "La solicitud de la passkey se ha cancelado o ha caducado."
 msgid "This device already has a passkey for this account"
 msgstr "Este dispositivo ya tiene una passkey para esta cuenta"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:279
+#: lib/mydia_web/live/profile_live/index.html.heex:281
 #, elixir-autogen, elixir-format
 msgid "Time zone"
 msgstr "Zona horaria"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:269
+#: lib/mydia_web/live/profile_live/index.html.heex:271
 #, elixir-autogen, elixir-format
 msgid "Times across Mydia are shown in this zone. The server default comes from the %{tz} setting."
 msgstr "Las horas en todo Mydia se muestran en esta zona. El valor del servidor proviene del ajuste %{tz}."
@@ -1104,7 +1090,7 @@ msgstr "Autenticación en dos pasos desactivada."
 msgid "Unacceptable file type. Please upload a JPG, PNG, WebP, or GIF."
 msgstr "Tipo de archivo no admitido. Sube un JPG, PNG, WebP o GIF."
 
-#: lib/mydia_web/live/profile_live/index.html.heex:533
+#: lib/mydia_web/live/profile_live/index.html.heex:535
 #, elixir-autogen, elixir-format
 msgid "Update Password"
 msgstr "Actualizar la contraseña"
@@ -1131,13 +1117,13 @@ msgstr "Nombre de usuario"
 msgid "Works at %{site} · Added %{added} · Last used %{last_used}"
 msgstr "Funciona en %{site} · Añadida el %{added} · Último uso %{last_used}"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:382
-#: lib/mydia_web/live/profile_live/index.html.heex:388
+#: lib/mydia_web/live/profile_live/index.html.heex:384
+#: lib/mydia_web/live/profile_live/index.html.heex:390
 #, elixir-autogen, elixir-format
 msgid "Yes"
 msgstr "Sí"
 
-#: lib/mydia_web/live/profile_live/index.html.heex:405
+#: lib/mydia_web/live/profile_live/index.html.heex:407
 #, elixir-autogen, elixir-format
 msgid "Your account is managed through your SSO provider. Password changes are not available."
 msgstr "Tu cuenta se gestiona a través de tu proveedor de SSO. No se puede cambiar la contraseña desde aquí."
@@ -1381,3 +1367,17 @@ msgstr "o"
 msgctxt "divider between login options"
 msgid "OR"
 msgstr "O"
+
+#: lib/mydia_web/live/profile_live/two_factor_component.ex:158
+#, elixir-autogen, elixir-format
+msgid "%{count} recovery code left"
+msgid_plural "%{count} recovery codes left"
+msgstr[0] "Queda %{count} código de recuperación"
+msgstr[1] "Quedan %{count} códigos de recuperación"
+
+#: lib/mydia_web/components/layouts.ex:613
+#, elixir-autogen, elixir-format
+msgid "and %{count} earlier release"
+msgid_plural "and %{count} earlier releases"
+msgstr[0] "y %{count} versión anterior"
+msgstr[1] "y %{count} versiones anteriores"

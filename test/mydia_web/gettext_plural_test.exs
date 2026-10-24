@@ -6,7 +6,7 @@ defmodule MydiaWeb.GettextPluralTest do
       Gettext.with_locale(MydiaWeb.Gettext, "es", fn ->
         Gettext.ngettext(
           MydiaWeb.Gettext,
-          "1 recovery code left",
+          "%{count} recovery code left",
           "%{count} recovery codes left",
           n
         )

@@ -155,7 +155,7 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
   defp rate_limited_message, do: gettext("Too many login attempts. Please try again later.")
 
   defp recovery_codes_summary(remaining) do
-    ngettext("1 recovery code left", "%{count} recovery codes left", remaining)
+    ngettext("%{count} recovery code left", "%{count} recovery codes left", remaining)
   end
 
   @impl true

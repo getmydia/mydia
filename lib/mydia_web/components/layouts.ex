@@ -610,6 +610,6 @@ defmodule MydiaWeb.Layouts do
   end
 
   defp earlier_releases_label(count) do
-    ngettext("and 1 earlier release", "and %{count} earlier releases", count)
+    ngettext("and %{count} earlier release", "and %{count} earlier releases", count)
   end
 end
