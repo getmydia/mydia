@@ -67,7 +67,7 @@ defmodule Mydia.Media.AvailabilityStatus do
   The release date `for_movie/4` takes, read from an item's metadata. Nil when
   the item has no metadata or the metadata has no release date.
   """
-  @spec release_date(%{metadata: map() | nil}) :: Date.t() | nil
+  @spec release_date(Mydia.Media.MediaItem.t()) :: Date.t() | nil
   def release_date(%{metadata: %{release_date: %Date{} = date}}), do: date
   def release_date(_item), do: nil
 
