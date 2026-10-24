@@ -173,10 +173,31 @@ jobs:
             relay:
               - 'metadata-relay/**'
 
+      # A PR that changes only translation catalogs (every Weblate PR) skips
+      # this job. The player talks to the server in English, and ci.yml's
+      # `Translations` job compiles and tests the catalogs. This narrows the
+      # run decision only, not `relevant`, so the invariant above still holds.
+      # With `every`, `non_po` is true when any changed file is not a catalog.
+      - name: Detect translation-only changes
+        id: catalogs
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v4
+        with:
+          predicate-quantifier: every
+          filters: |
+            po:
+              - 'priv/gettext/**/*.po'
+            non_po:
+              - '**'
+              - '!priv/gettext/**/*.po'
+
       - name: Decide whether to run
         id: should
         run: |
-          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.relevant }}" = "true" ]; then
+          if [ "${{ steps.catalogs.outputs.po }}" = "true" ] && [ "${{ steps.catalogs.outputs.non_po }}" = "false" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Only translation catalogs changed; skipping E2E build."
+          elif [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ steps.filter.outputs.relevant }}" = "true" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"

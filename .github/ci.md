@@ -486,6 +486,16 @@ whole Elixir suite and still goes green. Any new top-level input to the build,
 such as a new directory the compile reads or a new version pin file, must be
 added to `backend` in the same PR.
 
+A third output, `translations`, is true on a PR whose every changed file is a
+`priv/gettext/**/*.po` catalog, which in practice means a Weblate PR. It forces
+`backend` false and runs the `Translations` job instead: compile with warnings
+as errors, then the catalog, plural and locale tests, on one SQLite runner in a
+few minutes rather than the full suite's hour of runner time. `Test` needs it,
+so a failure there blocks the merge. `.pot` templates are not covered by this
+filter, because they change with the code. `ci-player-e2e.yml` skips its run on
+the same condition: the player talks to the server in English, and a catalog
+that fails to compile is caught here first.
+
 `Guards` is outside the gate and runs on every PR. It checks Dockerfile,
 `devenv.nix`, flatpak and appimage files rather than Elixir, needs no Nix and
 takes seconds. `Lint` holds what used to precede the tests in the old `Test`
