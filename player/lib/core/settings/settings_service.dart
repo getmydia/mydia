@@ -26,6 +26,7 @@ class SettingsService {
   static const _updateTrackKey = 'update_track';
   static const _themePresetKey = 'theme_preset';
   static const _glassMaterialKey = 'glass_material';
+  static const _localeKey = 'interface_locale';
 
   /// Get the default quality setting.
   Future<String> getDefaultQuality() async {
@@ -132,11 +133,26 @@ class SettingsService {
     await _storage.write(_glassMaterialKey, material.name);
   }
 
+  /// The interface language this device uses, as a language tag, or null to
+  /// follow the device. Device-level like the theme preset, so
+  /// [clearSettings] leaves it alone. Validation belongs to `LocaleSetting`.
+  Future<String?> getLocaleCode() async => _storage.read(_localeKey);
+
+  /// Set the interface language; null returns to the device language.
+  Future<void> setLocaleCode(String? code) async {
+    if (code == null) {
+      await _storage.delete(_localeKey);
+    } else {
+      await _storage.write(_localeKey, code);
+    }
+  }
+
   /// Clear all settings.
   ///
   /// Deletes an explicit list of keys, not everything in storage. Device-level
   /// choices are deliberately left out of that list: [_updateTrackKey]
-  /// [_themePresetKey] and [_glassMaterialKey] survive a clear for that reason,
+  /// [_themePresetKey], [_glassMaterialKey] and [_localeKey] survive a clear
+  /// for that reason,
   /// as does the Diagnostics choice in `DiagnosticsSettings`.
   Future<void> clearSettings() async {
     await Future.wait([
