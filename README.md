@@ -177,6 +177,8 @@ dashboard above switches with your GitHub theme.
 
 See the [Development Guide](https://docs.mydia.dev/latest/contributing/setup/) for details.
 
+Want Mydia in your language? See [TRANSLATING.md](TRANSLATING.md) to help translate the interface.
+
 ### Documentation
 
 Docs are built with [MkDocs](https://www.mkdocs.org/) and [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/). Requires [uv](https://docs.astral.sh/uv/).

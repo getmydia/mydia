@@ -1,6 +1,8 @@
 defmodule MydiaWeb.PlaybackLive.Show do
   use MydiaWeb, :live_view
 
+  import MydiaWeb.VideoPlayerComponents
+
   on_mount {MydiaWeb.PlayerHooks, :require_player}
 
   alias Mydia.Media

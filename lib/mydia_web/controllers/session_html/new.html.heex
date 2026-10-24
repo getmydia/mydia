@@ -1,9 +1,9 @@
 <div class="flex min-h-screen items-center justify-center bg-base-200">
   <div class="card w-full max-w-md bg-base-100 shadow-xl">
     <div class="card-body">
-      <h2 class="card-title text-2xl font-bold">Sign In</h2>
+      <h2 id="login-heading" class="card-title text-2xl font-bold">{gettext("Sign In")}</h2>
       <p class="text-sm text-base-content/70 mb-4">
-        Sign in with your username and password.
+        {gettext("Sign in with your username and password.")}
       </p>
 
       <%!-- Display flash messages --%>
@@ -20,7 +20,7 @@
       <.form for={@changeset} action={~p"/auth/local/login"} id="login-form">
         <div class="form-control">
           <label class="label" for="user_username">
-            <span class="label-text">Username</span>
+            <span class="label-text">{gettext("Username")}</span>
           </label>
           <input
             type="text"
@@ -35,7 +35,7 @@
 
         <div class="form-control mt-4">
           <label class="label" for="user_password">
-            <span class="label-text">Password</span>
+            <span class="label-text">{gettext("Password")}</span>
           </label>
           <input
             type="password"
@@ -48,7 +48,7 @@
 
         <div class="form-control mt-6">
           <button type="submit" class="btn btn-primary w-full">
-            Log In
+            {gettext("Log In")}
           </button>
         </div>
       </.form>
@@ -60,19 +60,19 @@
         data-options-url={~p"/auth/passkey/options"}
         data-login-url={~p"/auth/passkey/login"}
       >
-        <div class="divider text-xs text-base-content/60">or</div>
+        <div class="divider text-xs text-base-content/60">{gettext("or")}</div>
         <button type="button" id="passkey-login" class="btn btn-outline w-full">
-          <.icon name="hero-finger-print" class="size-5" /> Sign in with a passkey
+          <.icon name="hero-finger-print" class="size-5" /> {gettext("Sign in with a passkey")}
         </button>
         <p id="passkey-login-error" class="hidden text-error text-sm mt-2" role="alert"></p>
       </div>
 
       <%= if @oidc_configured do %>
-        <div class="divider">OR</div>
+        <div class="divider">{pgettext("divider between login options", "OR")}</div>
 
         <div class="text-center">
           <a href="/auth/oidc" class="btn btn-outline btn-secondary w-full">
-            Log in with OIDC
+            {gettext("Log in with OIDC")}
           </a>
         </div>
       <% end %>

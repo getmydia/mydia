@@ -361,4 +361,34 @@ defmodule Mydia.Accounts.UserPreferenceTest do
       refute UserPreference.update_preferences_changeset(base, %{"clock_format" => "13"}).valid?
     end
   end
+
+  describe "interface_language" do
+    test "defaults to auto" do
+      assert UserPreference.interface_language(%UserPreference{preferences: %{}}) == "auto"
+    end
+
+    test "accepts auto and available locales, rejects others" do
+      for value <- ["auto", "en", "es"] do
+        cs =
+          UserPreference.changeset(%UserPreference{}, %{
+            preferences: %{"interface_language" => value}
+          })
+
+        assert cs.valid?, "expected #{value} to be valid"
+      end
+
+      cs =
+        UserPreference.changeset(%UserPreference{}, %{
+          preferences: %{"interface_language" => "xx"}
+        })
+
+      refute cs.valid?
+    end
+
+    test "a stored locale that is no longer available does not block other saves" do
+      pref = %UserPreference{preferences: %{"interface_language" => "ko"}}
+      cs = UserPreference.update_preferences_changeset(pref, %{"theme" => "dark"})
+      assert cs.valid?
+    end
+  end
 end

@@ -11,12 +11,6 @@ defmodule MydiaWeb.ProfileLive.Index do
   alias Mydia.Settings.LibraryPath
   alias MydiaWeb.Formatters
 
-  @themes [
-    {"System", "system", "hero-computer-desktop"},
-    {"Light", "light", "hero-sun"},
-    {"Dark", "dark", "hero-moon"}
-  ]
-
   @add_pref_keys ~w(
     add_movie_library_path_id
     add_series_library_path_id
@@ -49,7 +43,8 @@ defmodule MydiaWeb.ProfileLive.Index do
       |> assign(:password_error, nil)
       # Preferences
       |> assign(:preference, preference)
-      |> assign(:themes, @themes)
+      |> assign(:language_options, language_options())
+      |> assign(:themes, themes())
       |> assign(:light_themes, Themes.light())
       |> assign(:dark_themes, Themes.dark())
       # Add defaults
@@ -76,7 +71,7 @@ defmodule MydiaWeb.ProfileLive.Index do
   def handle_params(_params, url, socket) do
     {:noreply,
      socket
-     |> assign(:page_title, "Profile & Preferences")
+     |> assign(:page_title, gettext("Profile & Preferences"))
      |> assign(:page_url, url)}
   end
 
@@ -119,7 +114,7 @@ defmodule MydiaWeb.ProfileLive.Index do
          socket
          |> assign(:current_user, updated_user)
          |> assign(:profile_form, to_form(Accounts.change_profile(updated_user)))
-         |> put_flash(:info, "Avatar removed")}
+         |> put_flash(:info, gettext("Avatar removed"))}
 
       {:error, changeset} ->
         {:noreply, assign(socket, :profile_form, to_form(changeset))}
@@ -172,7 +167,7 @@ defmodule MydiaWeb.ProfileLive.Index do
            socket
            |> assign(:current_user, updated_user)
            |> assign(:profile_form, to_form(Accounts.change_profile(updated_user)))
-           |> put_flash(:info, "Profile updated successfully")}
+           |> put_flash(:info, gettext("Profile updated successfully"))}
 
         {:error, changeset} ->
           {:noreply, assign(socket, :profile_form, to_form(changeset))}
@@ -223,10 +218,10 @@ defmodule MydiaWeb.ProfileLive.Index do
          |> assign(:show_password_modal, false)
          |> assign(:password_form, to_form(password_changeset(), as: :password))
          |> assign(:password_error, nil)
-         |> put_flash(:info, "Password changed successfully")}
+         |> put_flash(:info, gettext("Password changed successfully"))}
 
       {:error, :invalid_password} ->
-        {:noreply, assign(socket, :password_error, "Current password is incorrect")}
+        {:noreply, assign(socket, :password_error, gettext("Current password is incorrect"))}
 
       {:error, changeset} ->
         {:noreply, assign(socket, :password_form, to_form(changeset, as: :password))}
@@ -269,7 +264,7 @@ defmodule MydiaWeb.ProfileLive.Index do
            |> assign(:hide_player, hidden)}
 
         {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Failed to update the player setting")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to update the player setting"))}
       end
     else
       {:noreply, socket}
@@ -284,7 +279,38 @@ defmodule MydiaWeb.ProfileLive.Index do
     save_time_display(socket, %{"clock_format" => clock})
   end
 
+  # A full reload, not a re-render: the root layout (<html lang>, sidebar) is
+  # outside this LiveView and only re-renders on an HTTP request.
+  def handle_event("set_interface_language", %{"interface_language" => code}, socket) do
+    case Accounts.update_preference(socket.assigns.preference, %{"interface_language" => code}) do
+      {:ok, _preference} ->
+        {:noreply, redirect(socket, to: ~p"/profile")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, gettext("Could not save your language"))}
+    end
+  end
+
   ## Private Helpers
+
+  defp themes do
+    [
+      {gettext("System"), "system", "hero-computer-desktop"},
+      {gettext("Light"), "light", "hero-sun"},
+      {gettext("Dark"), "dark", "hero-moon"}
+    ]
+  end
+
+  defp language_options do
+    auto = {gettext("Automatic (browser language)"), "auto"}
+
+    [auto | Enum.map(Mydia.Locale.available(), &{language_label(&1), &1.code})]
+  end
+
+  defp language_label(%Mydia.Locale.Info{code: "en", native_name: name}), do: name
+
+  defp language_label(%Mydia.Locale.Info{native_name: name, completion: c}),
+    do: "#{name} · #{round(c * 100)}%"
 
   defp save_time_display(socket, delta) do
     case Accounts.update_preference(socket.assigns.preference, delta) do
@@ -292,15 +318,16 @@ defmodule MydiaWeb.ProfileLive.Index do
         {:noreply,
          socket
          |> assign(:preference, preference)
-         |> assign(:time_display, Mydia.TimeDisplay.for_user(preference))}
+         |> assign(:time_display, Mydia.TimeDisplay.for_user(preference, socket.assigns.locale))}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not save your date and time settings")}
+        {:noreply,
+         put_flash(socket, :error, gettext("Could not save your date and time settings"))}
     end
   end
 
-  defp clock_label(%Mydia.TimeDisplay{clock: :h12}), do: "12-hour"
-  defp clock_label(%Mydia.TimeDisplay{clock: :h24}), do: "24-hour"
+  defp clock_label(%Mydia.TimeDisplay{clock: :h12}), do: gettext("12-hour")
+  defp clock_label(%Mydia.TimeDisplay{clock: :h24}), do: gettext("24-hour")
 
   # IANA zones grouped by region ("Europe", "America", ...) for <optgroup>s.
   # Zones without a region prefix, and Etc/*, go under "Other".
@@ -343,7 +370,7 @@ defmodule MydiaWeb.ProfileLive.Index do
     |> Ecto.Changeset.validate_required([:current_password, :new_password, :confirm_password])
     |> Ecto.Changeset.validate_length(:new_password,
       min: 8,
-      message: "must be at least 8 characters"
+      message: gettext("must be at least 8 characters")
     )
     |> validate_password_confirmation()
   end
@@ -353,7 +380,11 @@ defmodule MydiaWeb.ProfileLive.Index do
     confirm_password = Ecto.Changeset.get_change(changeset, :confirm_password)
 
     if new_password && confirm_password && new_password != confirm_password do
-      Ecto.Changeset.add_error(changeset, :confirm_password, "does not match new password")
+      Ecto.Changeset.add_error(
+        changeset,
+        :confirm_password,
+        gettext("does not match new password")
+      )
     else
       changeset
     end
@@ -361,25 +392,27 @@ defmodule MydiaWeb.ProfileLive.Index do
 
   defp auth_type(user) do
     if Accounts.oidc_user?(user) do
-      "OpenID Connect (SSO)"
+      gettext("OpenID Connect (SSO)")
     else
-      "Local"
+      gettext("Local")
     end
   end
 
-  defp format_datetime(nil, _display), do: "Never"
+  defp format_datetime(nil, _display), do: gettext("Never")
 
   defp format_datetime(datetime, display) do
     format(datetime, :datetime, display)
   end
 
-  defp upload_error_to_string(:too_large), do: "Image is too large (maximum 5MB)"
-  defp upload_error_to_string(:too_many_files), do: "Only one image can be uploaded at a time"
+  defp upload_error_to_string(:too_large), do: gettext("Image is too large (maximum 5MB)")
+
+  defp upload_error_to_string(:too_many_files),
+    do: gettext("Only one image can be uploaded at a time")
 
   defp upload_error_to_string(:not_accepted),
-    do: "Unacceptable file type. Please upload a JPG, PNG, WebP, or GIF."
+    do: gettext("Unacceptable file type. Please upload a JPG, PNG, WebP, or GIF.")
 
-  defp upload_error_to_string(other), do: "Upload error: #{inspect(other)}"
+  defp upload_error_to_string(other), do: gettext("Upload error: %{error}", error: inspect(other))
 
   defp external_avatar_url(value) when is_binary(value) do
     if String.starts_with?(value, "/generated/avatars/") do

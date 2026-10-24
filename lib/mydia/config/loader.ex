@@ -254,7 +254,8 @@ defmodule Mydia.Config.Loader do
       database: load_database_env(),
       auth: load_auth_env(),
       media: load_media_env(),
-      metadata: load_metadata_env(),
+      metadata: Mydia.Config.Env.MetadataEnv.load(),
+      ui: Mydia.Config.Env.UiEnv.load(),
       downloads: load_downloads_env(),
       upgrades: load_upgrades_env(),
       streaming: load_streaming_env(),
@@ -342,11 +343,6 @@ defmodule Mydia.Config.Loader do
       System.get_env("TRASH_RETENTION_DAYS"),
       &parse_integer/1
     )
-  end
-
-  defp load_metadata_env do
-    %{}
-    |> put_if_present(:language, System.get_env("METADATA_LANGUAGE"))
   end
 
   defp load_downloads_env do

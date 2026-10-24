@@ -1,0 +1,22 @@
+msgid ""
+msgstr ""
+"Language: de\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Library"
+msgstr "Bibliothek"
+
+msgid "Settings"
+msgstr ""
+
+#, fuzzy
+msgid "Profile"
+msgstr "Profil"
+
+msgid "One file"
+msgid_plural "%{count} files"
+msgstr[0] "Eine Datei"
+msgstr[1] "%{count} Dateien"
+
+#~ msgid "Old"
+#~ msgstr "Alt"

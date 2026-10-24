@@ -5,6 +5,8 @@ defmodule MydiaWeb.Live.UserAuth do
   Provides `on_mount` hooks for LiveViews to authenticate users
   and assign current_user to the socket.
   """
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component
   import Phoenix.LiveView
 
@@ -22,6 +24,7 @@ defmodule MydiaWeb.Live.UserAuth do
   - `:maybe_authenticated` - Loads user if present, but doesn't require it
   - `{:ensure_role, role}` - Requires user to have a specific role
   - `:load_navigation_data` - Loads counts for navigation sidebar/layout
+  - `:put_locale` - Sets the locale from the session for LiveViews outside the authenticated sessions
 
   Usage in LiveView:
       on_mount {MydiaWeb.Live.UserAuth, :ensure_authenticated}
@@ -92,7 +95,11 @@ defmodule MydiaWeb.Live.UserAuth do
     end
   end
 
-  def on_mount(:load_navigation_data, _params, _session, socket) do
+  def on_mount(:put_locale, _params, session, socket) do
+    {:cont, put_locale(socket, nil, session)}
+  end
+
+  def on_mount(:load_navigation_data, _params, session, socket) do
     # Subscribe to job status updates for real-time sidebar indicator
     if connected?(socket) do
       Mydia.Jobs.Broadcaster.subscribe()
@@ -155,7 +162,7 @@ defmodule MydiaWeb.Live.UserAuth do
       |> assign(:show_feedback_modal, false)
       |> assign(:feedback_form, build_feedback_form(%{}))
       |> assign_changelog_notice()
-      |> assign_preference_state()
+      |> assign_preference_state(session)
       |> attach_hook(:changelog_hook, :handle_event, &handle_changelog_event/3)
       |> attach_hook(:theme_hook, :handle_event, &handle_theme_event/3)
       |> attach_hook(:jobs_status_hook, :handle_info, &handle_jobs_status/2)
@@ -216,17 +223,14 @@ defmodule MydiaWeb.Live.UserAuth do
         {:ok, _result} ->
           {:halt,
            socket
-           |> put_flash(:info, "Thanks, feedback sent.")
+           |> put_flash(:info, gettext("Thanks, feedback sent."))
            |> assign(:show_feedback_modal, false)
            |> assign(:feedback_form, build_feedback_form(%{}))}
 
         {:error, {:rate_limited, retry_after}} ->
           {:halt,
            socket
-           |> put_flash(
-             :error,
-             "Feedback is rate limited. Try again #{retry_after_text(retry_after)}."
-           )
+           |> put_flash(:error, rate_limited_message(retry_after))
            |> assign(:feedback_form, build_feedback_form(feedback_params))}
 
         {:error, :service_unavailable} ->
@@ -234,14 +238,14 @@ defmodule MydiaWeb.Live.UserAuth do
            socket
            |> put_flash(
              :error,
-             "Feedback service is temporarily unavailable. Please try again later."
+             gettext("Feedback service is temporarily unavailable. Please try again later.")
            )
            |> assign(:feedback_form, build_feedback_form(feedback_params))}
 
         {:error, _reason} ->
           {:halt,
            socket
-           |> put_flash(:error, "Could not send feedback. Please try again later.")
+           |> put_flash(:error, gettext("Could not send feedback. Please try again later."))
            |> assign(:feedback_form, build_feedback_form(feedback_params))}
       end
     else
@@ -268,18 +272,31 @@ defmodule MydiaWeb.Live.UserAuth do
   end
 
   # The preference row is loaded once per mount for the signed-in user and
-  # shared by everything that reads it.
-  defp assign_preference_state(socket) do
+  # shared by everything that reads it. The locale comes first: TimeDisplay's
+  # automatic clock depends on it.
+  defp assign_preference_state(socket, session) do
     pref =
       case socket.assigns do
         %{current_user: %Mydia.Accounts.User{} = user} -> Accounts.get_user_preference!(user)
         _ -> nil
       end
 
+    socket = put_locale(socket, pref, session)
+
     socket
     |> assign_player_ui(pref)
     |> assign_theme_selection(pref)
-    |> assign(:time_display, Mydia.TimeDisplay.for_user(pref))
+    |> assign(:time_display, Mydia.TimeDisplay.for_user(pref, socket.assigns.locale))
+  end
+
+  # LiveView processes do not inherit the HTTP request's Gettext locale. The
+  # session carries the browser locale from MydiaWeb.Plugs.Locale; the
+  # preference, when it names an available locale, wins over it.
+  defp put_locale(socket, pref, session) do
+    preference = if pref, do: Accounts.UserPreference.interface_language(pref)
+    locale = Mydia.Locale.with_preference(preference, session["locale"])
+    Gettext.put_locale(MydiaWeb.Gettext, locale)
+    assign(socket, :locale, locale)
   end
 
   # Player entry-point visibility, read once per mount.
@@ -401,7 +418,7 @@ defmodule MydiaWeb.Live.UserAuth do
     do:
       socket
       |> assign(:preference, pref)
-      |> assign(:time_display, Mydia.TimeDisplay.for_user(pref))
+      |> assign(:time_display, Mydia.TimeDisplay.for_user(pref, socket.assigns[:locale] || "en"))
 
   defp refresh_preference(socket, _pref), do: socket
 
@@ -432,14 +449,24 @@ defmodule MydiaWeb.Live.UserAuth do
     end)
   end
 
-  defp retry_after_text(nil), do: "later"
+  # One whole sentence per variant: the time phrase cannot be translated apart
+  # from the sentence it sits in.
+  defp rate_limited_message(nil), do: gettext("Feedback is rate limited. Try again later.")
 
-  defp retry_after_text(seconds) when is_integer(seconds) and seconds < 60,
-    do: "in #{seconds} seconds"
+  defp rate_limited_message(seconds) when is_integer(seconds) and seconds < 60 do
+    ngettext(
+      "Feedback is rate limited. Try again in %{count} second.",
+      "Feedback is rate limited. Try again in %{count} seconds.",
+      seconds
+    )
+  end
 
-  defp retry_after_text(seconds) when is_integer(seconds) do
-    minutes = max(div(seconds, 60), 1)
-    "in about #{minutes} minutes"
+  defp rate_limited_message(seconds) when is_integer(seconds) do
+    ngettext(
+      "Feedback is rate limited. Try again in about %{count} minute.",
+      "Feedback is rate limited. Try again in about %{count} minutes.",
+      max(div(seconds, 60), 1)
+    )
   end
 
   # Get a MapSet of library types that have at least one enabled library path

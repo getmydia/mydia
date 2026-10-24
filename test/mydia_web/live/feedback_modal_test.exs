@@ -174,6 +174,42 @@ defmodule MydiaWeb.FeedbackModalTest do
     refute html =~ ~s(<dialog id="feedback-modal" class="modal" open)
   end
 
+  for {retry_after, expected} <- [
+        {"1", "Try again in 1 second."},
+        {"30", "Try again in 30 seconds."},
+        {"60", "Try again in about 1 minute."},
+        {"180", "Try again in about 3 minutes."}
+      ] do
+    @retry_after retry_after
+    @expected expected
+
+    test "rate limit with retry-after #{retry_after} reads #{expected}", %{conn: conn} do
+      bypass = Bypass.open()
+      System.put_env("METADATA_RELAY_URL", endpoint_url(bypass))
+      stub_dashboard_requests(bypass)
+
+      Bypass.expect_once(bypass, "POST", "/feedback", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", @retry_after)
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(429, Jason.encode!(%{error: "Too many requests"}))
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      view
+      |> element("#user-menu-feedback")
+      |> render_click()
+
+      html =
+        view
+        |> form("#feedback-form", %{feedback: %{type: "bug", message: "Keep this draft"}})
+        |> render_submit()
+
+      assert html =~ @expected
+    end
+  end
+
   test "rate limit preserves the draft", %{conn: conn} do
     bypass = Bypass.open()
     System.put_env("METADATA_RELAY_URL", endpoint_url(bypass))

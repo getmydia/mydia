@@ -46,6 +46,7 @@ defmodule Mydia.Config.LoaderTest do
         "MOVIES_PATH",
         "TV_PATH",
         "METADATA_LANGUAGE",
+        "DEFAULT_UI_LANGUAGE",
         "LOG_LEVEL",
         "OBAN_POLL_INTERVAL",
         "MAX_TRANSCODE_HEIGHT",
@@ -263,6 +264,14 @@ defmodule Mydia.Config.LoaderTest do
       System.put_env("METADATA_LANGUAGE", "pt-BR")
       {:ok, config} = Loader.load(config_file: "nonexistent.yml")
       assert config.metadata.language == "pt-BR"
+    end
+
+    test "ui default_locale defaults to en and is overridden by DEFAULT_UI_LANGUAGE" do
+      assert Mydia.Config.Schema.defaults().ui.default_locale == "en"
+
+      System.put_env("DEFAULT_UI_LANGUAGE", "es")
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml", sources: [:env])
+      assert config.ui.default_locale == "es"
     end
 
     test "ignores the removed LIBRARY_PATH_<N>_QUALITY_PROFILE_ID variable" do

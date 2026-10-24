@@ -9,6 +9,7 @@ defmodule MydiaWeb.SidebarComponents do
   plain muted numbers, not badges.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
 
@@ -88,13 +89,13 @@ defmodule MydiaWeb.SidebarComponents do
       >
         <div class="flex items-center gap-2 text-sm font-medium mb-1">
           <span class="loading loading-spinner loading-xs text-primary"></span>
-          <span>Running Jobs</span>
+          <span>{gettext("Running Jobs")}</span>
           <span class="badge badge-primary badge-xs">{length(@executing_jobs)}</span>
         </div>
         <ul class="text-xs opacity-70 space-y-0.5 pl-5">
           <li :for={job <- Enum.take(@executing_jobs, 3)} class="truncate">{job.worker_name}</li>
           <li :if={length(@executing_jobs) > 3} class="text-primary">
-            +{length(@executing_jobs) - 3} more...
+            {gettext("+%{count} more...", count: length(@executing_jobs) - 3)}
           </li>
         </ul>
       </.link>
@@ -123,7 +124,7 @@ defmodule MydiaWeb.SidebarComponents do
           id="sidebar-user-menu"
           tabindex="0"
           role="button"
-          aria-label="Account menu"
+          aria-label={gettext("Account menu")}
           class="btn btn-ghost w-full justify-start gap-3 h-auto py-2"
         >
           <div class="avatar avatar-placeholder">
@@ -131,7 +132,7 @@ defmodule MydiaWeb.SidebarComponents do
               <img
                 :if={@current_user.avatar_url}
                 src={@current_user.avatar_url}
-                alt="Avatar"
+                alt={gettext("Avatar")}
                 class="w-full h-full object-cover"
               />
               <span :if={!@current_user.avatar_url} class="text-xs">
@@ -164,7 +165,7 @@ defmodule MydiaWeb.SidebarComponents do
                 navigate={~p"/profile"}
                 class={[nav_active?(@current_path, "/profile", false) && "menu-active"]}
               >
-                <.icon name="hero-user-circle" class="w-4 h-4" /> Profile
+                <.icon name="hero-user-circle" class="w-4 h-4" /> {gettext("Profile")}
               </.link>
             </li>
             <li>
@@ -173,7 +174,7 @@ defmodule MydiaWeb.SidebarComponents do
                 navigate={~p"/integrations"}
                 class={[nav_active?(@current_path, "/integrations", false) && "menu-active"]}
               >
-                <.icon name="hero-puzzle-piece" class="w-4 h-4" /> Integrations
+                <.icon name="hero-puzzle-piece" class="w-4 h-4" /> {gettext("Integrations")}
               </.link>
             </li>
             <li :if={Mydia.Player.enabled?()}>
@@ -182,7 +183,7 @@ defmodule MydiaWeb.SidebarComponents do
                 navigate={~p"/devices"}
                 class={[nav_active?(@current_path, "/devices", false) && "menu-active"]}
               >
-                <.icon name="hero-device-phone-mobile" class="w-4 h-4" /> Devices
+                <.icon name="hero-device-phone-mobile" class="w-4 h-4" /> {gettext("Devices")}
               </.link>
             </li>
             <%!-- phx-update="ignore": the hook removes `hidden` client-side, and
@@ -195,7 +196,7 @@ defmodule MydiaWeb.SidebarComponents do
               phx-update="ignore"
             >
               <button type="button" id="user-menu-install-button">
-                <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Install app
+                <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> {gettext("Install app")}
               </button>
             </li>
           </ul>
@@ -203,20 +204,22 @@ defmodule MydiaWeb.SidebarComponents do
           <div class="my-1 border-t border-base-content/10"></div>
 
           <div class="flex items-center justify-between gap-2 px-3 py-1.5">
-            <span class="text-sm">Theme</span>
+            <span class="text-sm">{gettext("Theme")}</span>
             <MydiaWeb.Layouts.theme_toggle id="theme-toggle-account" />
           </div>
 
           <ul class="menu w-full p-0">
             <li>
               <.link id="user-menu-changelog" navigate={~p"/changelog"}>
-                <.icon name="hero-sparkles" class="w-4 h-4" /> What's new
-                <span :if={@changelog_notice} class="badge badge-primary badge-xs">New</span>
+                <.icon name="hero-sparkles" class="w-4 h-4" /> {gettext("What's new")}
+                <span :if={@changelog_notice} class="badge badge-primary badge-xs">
+                  {gettext("New")}
+                </span>
               </.link>
             </li>
             <li :if={@feedback_enabled?}>
               <button type="button" id="user-menu-feedback" phx-click="open_feedback_modal">
-                <.icon name="hero-chat-bubble-left-right" class="w-4 h-4" /> Send feedback
+                <.icon name="hero-chat-bubble-left-right" class="w-4 h-4" /> {gettext("Send feedback")}
               </button>
             </li>
           </ul>
@@ -226,7 +229,7 @@ defmodule MydiaWeb.SidebarComponents do
           <ul class="menu w-full p-0">
             <li>
               <a href="/auth/logout" class="text-error">
-                <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Log out
+                <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> {gettext("Log out")}
               </a>
             </li>
           </ul>

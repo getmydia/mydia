@@ -341,6 +341,9 @@ jobs:
             exit 1
           fi
           mix credo --strict
+          # Fails when a gettext call changed without regenerating priv/gettext/*.pot.
+          # Translators never edit .po by hand here: Weblate merges them.
+          mix gettext.extract --check-up-to-date
           # Blocks new complexity, nesting and module-size debt relative to the
           # merge base. See "Ratchets" in CONTRIBUTING.md.
           mix mydia.ratchet --from-git-merge-base origin/master

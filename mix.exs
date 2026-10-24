@@ -314,6 +314,7 @@ defmodule Mydia.MixProject do
         "deps.unlock --unused",
         "format --check-formatted",
         "credo --strict",
+        "gettext.extract --check-up-to-date",
         "mydia.ratchet",
         "test --warnings-as-errors"
       ]

@@ -21,5 +21,5 @@ defmodule MydiaWeb.Gettext do
 
   See the [Gettext Docs](https://hexdocs.pm/gettext) for detailed usage.
   """
-  use Gettext.Backend, otp_app: :mydia
+  use Gettext.Backend, otp_app: :mydia, plural_forms: MydiaWeb.Gettext.Plural
 end

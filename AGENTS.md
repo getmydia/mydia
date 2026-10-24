@@ -366,6 +366,7 @@ Read the relevant one before working in that area:
 | `test/README.md` | running the suite, and the traps where passing is the bug |
 | `lib/mydia_web/schema/README.md` | the GraphQL contract and the Rust SDL parity gate |
 | `lib/mydia_web/components/README.md` | daisyUI, core components, CSS |
+| `lib/mydia_web/gettext/README.md` | translating the web UI: conventions, locale resolution, catalog checks |
 | `lib/mydia/metadata/README.md` | what TVDB and TMDB actually send |
 | `lib/mydia/streaming/README.md` | where codec data lives, streaming candidates |
 | `lib/mydia/storage/README.md` | the storage seam, S3 libraries, presigned-URL redaction, writes, multipart and the in-bucket trash |

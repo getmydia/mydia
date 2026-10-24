@@ -1,0 +1,6 @@
+msgid ""
+msgstr ""
+"Language: de\n"
+
+msgid "can't be blank"
+msgstr "darf nicht leer sein"

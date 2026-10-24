@@ -70,6 +70,7 @@ defmodule Mydia.Settings.ConfigSetting do
     :auth,
     :media,
     :metadata,
+    :ui,
     :downloads,
     :streaming,
     :notifications,
