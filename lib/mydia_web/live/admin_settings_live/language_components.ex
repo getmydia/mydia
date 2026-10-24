@@ -87,6 +87,20 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
           >
             <.metadata_language_control setting={@settings["metadata.language"]} />
           </.language_row>
+
+          <.language_row
+            id="language-row-ui"
+            label={gettext("Interface language")}
+            key="ui.default_locale"
+            source={@settings["ui.default_locale"].source}
+            description={
+              gettext(
+                "Used when a user picks Automatic and their browser asks for no language Mydia has."
+              )
+            }
+          >
+            <.ui_language_control setting={@settings["ui.default_locale"]} />
+          </.language_row>
         </div>
       </.form>
     </.admin_section>
@@ -333,6 +347,25 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
       disabled={@setting.source == :env}
       class="input input-sm input-bordered w-full sm:w-44 font-mono"
     />
+    """
+  end
+
+  attr :setting, :map, required: true
+
+  defp ui_language_control(assigns) do
+    assigns = assign(assigns, :locales, Mydia.Locale.available())
+
+    ~H"""
+    <select
+      id="language-ui-language"
+      name="ui_language"
+      disabled={@setting.source == :env}
+      class="select select-sm select-bordered w-full sm:w-44"
+    >
+      <option :for={l <- @locales} value={l.code} selected={l.code == @setting.value}>
+        {l.native_name}
+      </option>
+    </select>
     """
   end
 end

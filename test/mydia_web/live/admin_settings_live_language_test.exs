@@ -28,6 +28,32 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
     view |> element("#language-settings-form") |> render_change(params)
   end
 
+  describe "interface language" do
+    test "lists available locales and saves the instance default", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      assert has_element?(view, "#language-ui-language option[value='es']")
+
+      html = change(view, %{"ui_language" => "es"})
+
+      assert html =~ "Setting updated successfully"
+      setting = Settings.get_config_setting_by_key("ui.default_locale")
+      assert setting.value == "es"
+      assert setting.category == :ui
+      assert Mydia.Config.get().ui.default_locale == "es"
+      assert Mydia.Locale.instance_default() == "es"
+    end
+
+    test "an unavailable locale is rejected without a write", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      html = change(view, %{"ui_language" => "xx"})
+
+      assert html =~ "Invalid value for ui.default_locale"
+      assert Settings.get_config_setting_by_key("ui.default_locale") == nil
+    end
+  end
+
   describe "download audio" do
     test "saves its row and applies without a restart", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/settings")

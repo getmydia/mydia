@@ -92,7 +92,12 @@ defmodule Mydia.Locale do
 
   @doc "The instance default from `ui.default_locale`, or `\"en\"`."
   @spec instance_default() :: String.t()
-  def instance_default, do: "en"
+  def instance_default do
+    case Mydia.Config.get() do
+      %{ui: %{default_locale: code}} when is_binary(code) and code != "" -> code
+      _ -> "en"
+    end
+  end
 
   @doc "Picks the request's locale. See the moduledoc for the order."
   @spec resolve(String.t() | nil, String.t() | nil, String.t() | nil, [String.t()]) ::

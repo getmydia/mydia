@@ -27,7 +27,8 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
     "streaming.prefer_default_audio_track" => "PREFER_DEFAULT_AUDIO_TRACK",
     "downloads.subtitle_language" => "DOWNLOAD_SUBTITLE_LANGUAGE",
     "streaming.subtitle_language" => "SUBTITLE_PLAYBACK_LANGUAGE",
-    "metadata.language" => "METADATA_LANGUAGE"
+    "metadata.language" => "METADATA_LANGUAGE",
+    "ui.default_locale" => "DEFAULT_UI_LANGUAGE"
   }
 
   # The name downloads.subtitle_language shipped under while it lived in the
@@ -57,12 +58,16 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
       "streaming.prefer_default_audio_track" => config.streaming.prefer_default_audio_track,
       "downloads.subtitle_language" => config.downloads.subtitle_language || [],
       "streaming.subtitle_language" => config.streaming.subtitle_language || [],
-      "metadata.language" => config.metadata.language
+      "metadata.language" => config.metadata.language,
+      "ui.default_locale" => ui_default_locale(config)
     }
     |> Map.new(fn {key, value} ->
       {key, %{value: value, source: source_for(key, db_settings)}}
     end)
   end
+
+  defp ui_default_locale(%{ui: %{default_locale: code}}) when is_binary(code), do: code
+  defp ui_default_locale(_config), do: "en"
 
   # The layer a key's value comes from, for its badge and its edit lock. A key
   # whose variable was renamed counts as environment-controlled under either
@@ -194,6 +199,12 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
       else: [{"metadata.language", :invalid}]
   end
 
+  defp parse({"ui_language", code}, _params) when is_binary(code) do
+    if Mydia.Locale.available?(code),
+      do: [{"ui.default_locale", code}],
+      else: [{"ui.default_locale", :invalid}]
+  end
+
   defp parse({"playback_audio", %{"preferred" => preferred} = pair}, _params)
        when is_binary(preferred) and preferred != "" do
     fallback = Map.get(pair, "fallback", "")
@@ -272,4 +283,5 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
   defp category("downloads." <> _), do: :downloads
   defp category("streaming." <> _), do: :streaming
   defp category("metadata." <> _), do: :metadata
+  defp category("ui." <> _), do: :ui
 end

@@ -53,6 +53,7 @@ defmodule Mydia.Config.Schema do
           auth: __MODULE__.Auth.t() | nil,
           media: __MODULE__.Media.t() | nil,
           metadata: __MODULE__.Metadata.t() | nil,
+          ui: __MODULE__.Ui.t() | nil,
           downloads: __MODULE__.Downloads.t() | nil,
           upgrades: __MODULE__.Upgrades.t() | nil,
           streaming: __MODULE__.Streaming.t() | nil,
@@ -130,6 +131,15 @@ defmodule Mydia.Config.Schema do
       # Language sent to TMDB/TVDB through metadata-relay. Accepts ISO 639-1
       # codes ("de") or BCP 47 language tags ("de-DE", "pt-BR").
       field :language, :string, default: "en-US"
+    end
+
+    embeds_one :ui, Ui, on_replace: :update, primary_key: false do
+      @type t :: %__MODULE__{}
+      # Interface language for requests whose user and browser name no
+      # translated locale. A gettext code (`es`, `pt_BR`); an untranslated code
+      # is accepted here and skipped by Mydia.Locale.resolve/4, so a YAML value
+      # naming a language whose translation was dropped never blocks boot.
+      field :default_locale, :string, default: "en"
     end
 
     embeds_one :downloads, Downloads, on_replace: :update, primary_key: false do
@@ -480,6 +490,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:auth, with: &auth_changeset/2)
     |> cast_embed(:media, with: &media_changeset/2)
     |> cast_embed(:metadata, with: &metadata_changeset/2)
+    |> cast_embed(:ui, with: &ui_changeset/2)
     |> cast_embed(:downloads, with: &downloads_changeset/2)
     |> cast_embed(:upgrades, with: &upgrades_changeset/2)
     |> cast_embed(:streaming, with: &streaming_changeset/2)
@@ -575,6 +586,13 @@ defmodule Mydia.Config.Schema do
     |> cast(attrs, [:language])
     |> validate_required([:language])
     |> validate_length(:language, min: 2, max: 16)
+  end
+
+  defp ui_changeset(schema, attrs) do
+    schema
+    |> cast(attrs, [:default_locale])
+    |> validate_required([:default_locale])
+    |> validate_length(:default_locale, min: 2, max: 16)
   end
 
   defp downloads_changeset(schema, attrs) do
@@ -1046,6 +1064,7 @@ defmodule Mydia.Config.Schema do
       auth: %__MODULE__.Auth{},
       media: %__MODULE__.Media{},
       metadata: %__MODULE__.Metadata{},
+      ui: %__MODULE__.Ui{},
       downloads: %__MODULE__.Downloads{},
       upgrades: %__MODULE__.Upgrades{},
       streaming: %__MODULE__.Streaming{},
