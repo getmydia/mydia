@@ -9,6 +9,8 @@ defmodule MydiaWeb.FirstTimeSetupLive.Index do
   """
   use MydiaWeb, :live_view
 
+  on_mount {MydiaWeb.Live.UserAuth, :put_locale}
+
   alias Mydia.Accounts
   alias Mydia.Auth.Guardian
 

@@ -1,5 +1,8 @@
 <!DOCTYPE html>
-<html lang="en" {theme_html_attrs(assigns[:theme_selection])}>
+<html
+  lang={Mydia.Locale.html_lang(assigns[:locale] || "en")}
+  {theme_html_attrs(assigns[:theme_selection])}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />

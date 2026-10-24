@@ -5,6 +5,7 @@ defmodule MydiaWeb.Router do
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
+    plug MydiaWeb.Plugs.Locale
     plug MydiaWeb.Plugs.GridDensityCookie
     plug :fetch_live_flash
     plug :put_root_layout, html: {MydiaWeb.Layouts, :root}
@@ -42,6 +43,7 @@ defmodule MydiaWeb.Router do
   # Authentication pipeline - verifies JWT tokens from session or header
   pipeline :auth do
     plug MydiaWeb.Plugs.AuthPipeline
+    plug MydiaWeb.Plugs.UserLocale
   end
 
   # Require authenticated user
