@@ -12,6 +12,7 @@ defmodule Mydia.LibraryApi.RevisionClockTest do
   use Mydia.DataCase, async: false
 
   import Ecto.Query
+  import Mydia.MediaFixtures
 
   alias Mydia.LibraryApi.{MediaItemRevision, RevisionClock, RevisionClockState}
   alias Mydia.Repo
@@ -62,6 +63,41 @@ defmodule Mydia.LibraryApi.RevisionClockTest do
 
     # A second sweep on the same day has nothing left to do.
     assert {:ok, 0} = RevisionClock.catch_up(@today)
+  end
+
+  defp movie_released(title, release_date) do
+    media_item_fixture(%{type: "movie", title: title, metadata: %{release_date: release_date}})
+  end
+
+  test "marks movies whose release date crossed the watermark" do
+    crossed = movie_released("Lantern Harbor", ~D[2026-09-05])
+    crossed_today = movie_released("Quiet Orchard", @today)
+    on_watermark = movie_released("Paper Meridian", @watermark)
+    future = movie_released("Tidewater Hymn", ~D[2026-09-13])
+
+    crossed_before = marker!(crossed.id).revision
+    crossed_today_before = marker!(crossed_today.id).revision
+    on_watermark_before = marker!(on_watermark.id).revision
+    future_before = marker!(future.id).revision
+
+    assert {:ok, 2} = RevisionClock.catch_up(@today)
+
+    assert marker!(crossed.id).revision > crossed_before
+    assert marker!(crossed_today.id).revision > crossed_today_before
+    assert marker!(on_watermark.id).revision == on_watermark_before
+    assert marker!(future.id).revision == future_before
+  end
+
+  test "a show and a movie crossing together are both marked and counted" do
+    show = show_with_episode(~D[2026-09-05])
+    movie = movie_released("Amber Cartography", ~D[2026-09-06])
+    show_before = marker!(show.id).revision
+    movie_before = marker!(movie.id).revision
+
+    assert {:ok, 2} = RevisionClock.catch_up(@today)
+
+    assert marker!(show.id).revision > show_before
+    assert marker!(movie.id).revision > movie_before
   end
 
   test "a failure after marking rolls back both the markers and the watermark" do

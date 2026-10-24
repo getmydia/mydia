@@ -2,11 +2,12 @@ defmodule Mydia.LibraryApi.RevisionClock do
   @moduledoc """
   The clock-derived availability catch-up.
 
-  A show's Library API availability is derived from its episodes' `air_date`, so
-  `UPCOMING` becomes `AVAILABLE` at a UTC date boundary with no row written for
-  the revision triggers to observe. This module is the only thing that advances
-  those markers: it names every show whose episode crossed the watermark and
-  hands the ids to `Mydia.LibraryApi.RevisionFeed.mark_live/1`, which applies the
+  A show's Library API availability is derived from its episodes' `air_date`, and
+  a movie's from its `metadata.release_date`, so `UPCOMING` becomes `AVAILABLE`
+  (or `MISSING`) at a UTC date boundary with no row written for the revision
+  triggers to observe. This module is the only thing that advances those
+  markers: it names every show whose episode and every movie whose release date
+  crossed the watermark and hands the ids to `Mydia.LibraryApi.RevisionFeed.mark_live/1`, which applies the
   same database-allocated, greater-revision upsert the triggers use.
 
   The watermark and the markers move in one transaction, so a crash cannot leave
@@ -26,13 +27,14 @@ defmodule Mydia.LibraryApi.RevisionClock do
   alias Mydia.LibraryApi.RevisionClockState
   alias Mydia.LibraryApi.RevisionFeed
   alias Mydia.Media.Episode
+  alias Mydia.Media.MediaItem
   alias Mydia.Repo
 
   @doc """
   Advances the watermark to `today`, marking every show whose episode air date
-  crossed into or before it.
+  and every movie whose release date crossed into or before it.
 
-  Returns `{:ok, count}` with the number of distinct shows marked, or `0` when the
+  Returns `{:ok, count}` with the number of distinct shows and movies marked, or `0` when the
   watermark is already at or past `today`. `{:error, reason}` means the whole
   transaction rolled back, so neither the markers nor the watermark changed.
 
@@ -52,7 +54,7 @@ defmodule Mydia.LibraryApi.RevisionClock do
         state = Repo.one!(state_query)
 
         if Date.compare(state.last_processed_date, today) == :lt do
-          ids = crossed_show_ids(state.last_processed_date, today)
+          ids = crossed_item_ids(state.last_processed_date, today)
           :ok = RevisionFeed.mark_live(ids)
           after_mark_hook(opts)
 
@@ -70,16 +72,30 @@ defmodule Mydia.LibraryApi.RevisionClock do
   end
 
   # Distinct shows with at least one episode whose air date falls strictly after
-  # the watermark and no later than today. False-positive delivery (a show marked
-  # for an air date a consumer happens not to care about) is acceptable; a missed
-  # date is not, so both bounds are inclusive of the intended day.
-  defp crossed_show_ids(from_date, today) do
-    Episode
-    |> where([e], not is_nil(e.media_item_id))
-    |> where([e], e.air_date > ^from_date and e.air_date <= ^today)
-    |> select([e], e.media_item_id)
-    |> distinct(true)
-    |> Repo.all()
+  # the watermark and no later than today, plus movies whose release date does.
+  # False-positive delivery (an item marked for a date a consumer happens not to
+  # care about) is acceptable; a missed date is not, so both bounds are inclusive
+  # of the intended day.
+  defp crossed_item_ids(from_date, today) do
+    show_ids =
+      Episode
+      |> where([e], not is_nil(e.media_item_id))
+      |> where([e], e.air_date > ^from_date and e.air_date <= ^today)
+      |> select([e], e.media_item_id)
+      |> distinct(true)
+      |> Repo.all()
+
+    release_window =
+      DB.json_date_between(:metadata, "$.release_date", Date.add(from_date, 1), today)
+
+    movie_ids =
+      MediaItem
+      |> where([m], m.type == "movie")
+      |> where(^release_window)
+      |> select([m], m.id)
+      |> Repo.all()
+
+    Enum.uniq(show_ids ++ movie_ids)
   end
 
   defp after_mark_hook(opts) do
