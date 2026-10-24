@@ -371,8 +371,12 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
   """
   def download_actions(assigns) do
     ~H"""
-    <div :if={@tab in [:queue, :completed]} class={["flex items-center gap-2 shrink-0", @class]}>
-      <.row_actions>
+    <div
+      :if={@tab in [:queue, :completed]}
+      id={"#{@context}-actions-#{@download.id}"}
+      class={["flex items-center gap-2 shrink-0", @class]}
+    >
+      <.row_actions id={"#{@context}-action-strip-#{@download.id}"}>
         <.row_action
           :if={@context == "row"}
           id={"download-details-#{@download.id}"}
@@ -398,6 +402,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
             phx-click="pause_download"
             phx-value-id={@download.id}
           />
+          <%!-- Named: rows shift as others are removed, so the click can land on a neighbour. --%>
           <.row_action
             id={"#{@context}-cancel-#{@download.id}"}
             icon="hero-x-mark"
@@ -405,7 +410,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
             destructive
             phx-click="cancel_download"
             phx-value-id={@download.id}
-            data-confirm="Cancel this download?"
+            data-confirm={"Cancel #{ListView.display_title(@download)}?"}
           />
         <% else %>
           <.row_action

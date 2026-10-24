@@ -380,6 +380,18 @@ dropdown beside the join the same way. The dropdown sits beside the join inside
 one `flex items-center gap-2 ml-auto sm:ml-2` wrapper, never inside the join,
 and each menu button blurs itself on click so the menu closes.
 
+**Row actions inside a stream.** A click is lost whenever the element under the
+press is detached before the mouse comes back up, and a refreshing stream
+detaches more than it looks like (issue #1257). `stream(..., reset: true)`
+detaches every row. A plain re-insert keeps the row but rebuilds every id-less
+function-component root inside it, because LiveView keys those by a
+`data-phx-id` the client mints afresh for each insert; keyed buttons are then
+moved into the new container. So inside a stream: refresh without resetting
+when the order holds (`DownloadsLive.Rows.stream_page/2`), give the action
+wrapper and `<.row_actions id=...>` stable ids, and leave button icons to the
+`app.css` rule that turns off their pointer events, so the press lands on the
+button rather than a span that is about to be replaced.
+
 **Tables.** A page with many rows and several columns (jobs, release
 blacklist, users) uses `<.admin_table id rows row_id>` with `:col`, `:action`
 and `:empty` slots: the same empty state and the same row actions.

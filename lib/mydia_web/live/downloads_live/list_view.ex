@@ -219,6 +219,26 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   @spec progress_indeterminate?(map()) :: boolean()
   def progress_indeterminate?(download), do: download.status in ["queued", "checking"]
 
+  @doc """
+  How a page-0 refresh should reach the `:downloads` stream.
+
+  A stream reset makes LiveView detach and re-attach every row, and a click
+  whose press spans that detach never fires (issue #1257). So a refresh resets
+  only when it must: `{:update, removed_ids}` when the rows still on screen keep
+  their relative order and every new row comes after them (the caller deletes
+  `removed_ids` and re-inserts the rest in place), `:reset` otherwise. `nil`
+  means the screen's contents are unknown and always resets.
+  """
+  @spec stream_plan([String.t()] | nil, [String.t()]) :: {:update, [String.t()]} | :reset
+  def stream_plan(nil, _new_ids), do: :reset
+
+  def stream_plan(previous_ids, new_ids) do
+    new_set = MapSet.new(new_ids)
+    {kept, removed} = Enum.split_with(previous_ids, &MapSet.member?(new_set, &1))
+
+    if Enum.take(new_ids, length(kept)) == kept, do: {:update, removed}, else: :reset
+  end
+
   @metadata_struct_keys ~w(size seeders leechers quality season_pack season_number download_protocol)
 
   @doc """
