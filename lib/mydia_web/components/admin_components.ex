@@ -200,7 +200,6 @@ defmodule MydiaWeb.AdminComponents do
           id="admin-page-switcher-trigger"
           tabindex="0"
           role="button"
-          aria-haspopup="menu"
           class="flex items-center gap-2 h-10 px-4 font-medium cursor-pointer bg-base-100 border border-base-300 border-b-0 rounded-t-box focus-visible:outline-2 focus-visible:outline-primary"
         >
           <.icon name={@nav_page.icon} class="size-4" />

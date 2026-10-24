@@ -274,7 +274,9 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     # -mb-px lets the trigger cover the panel's top border, so the two read as one.
     assert count(html, ~s(nav#admin-page-switcher .dropdown[class~="-mb-px"])) == 1
     assert count(html, "#admin-page-switcher-trigger.btn") == 0
-    assert count(html, ~s(#admin-page-switcher-trigger[aria-haspopup="menu"])) == 1
+    # The popup is a list of navigation links, not an ARIA menu, so the trigger
+    # must not announce one.
+    assert count(html, "#admin-page-switcher-trigger[aria-haspopup]") == 0
 
     assert count(
              html,
