@@ -26,7 +26,9 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
       <div :if={is_nil(@library_path)} class="alert alert-info">
         <.icon name="hero-information-circle" class="w-5 h-5 shrink-0" />
         <span>
-          There is no movie or TV library to import yet. Add one under Settings, then come back.
+          {gettext(
+            "There is no movie or TV library to import yet. Add one under Settings, then come back."
+          )}
         </span>
       </div>
 
@@ -36,7 +38,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
             <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
               <span class="loading loading-spinner loading-md" />
             </div>
-            <h2 class="text-2xl font-bold">Scanning library</h2>
+            <h2 class="text-2xl font-bold">{gettext("Scanning library")}</h2>
             <p class="text-sm text-base-content/60 mt-1 truncate" title={@library_path.path}>
               {LibraryPath.display_name(@library_path)}
             </p>
@@ -66,7 +68,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
       <input type="hidden" name="library_path_id" value={@library_path.id} />
 
       <div class="flex-1 min-w-0">
-        <h2 class="text-lg font-bold">Scan this library</h2>
+        <h2 class="text-lg font-bold">{gettext("Scan this library")}</h2>
         <p class="text-xs text-base-content/60 mt-1 truncate" title={@library_path.path}>
           {LibraryPath.display_name(@library_path)}
         </p>
@@ -86,12 +88,12 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
         <%!-- No whitespace-nowrap: on a phone this one line was wider than
              the screen and dragged the whole page sideways (#1189). --%>
         <span class="text-sm font-medium">
-          Automatically import confident matches in this run
+          {gettext("Automatically import confident matches in this run")}
         </span>
       </label>
 
       <.button id="start-run-button" type="submit" variant="primary">
-        <.icon name="hero-play" class="w-4 h-4 mr-1.5" /> Start scan
+        <.icon name="hero-play" class="w-4 h-4 mr-1.5" /> {gettext("Start scan")}
       </.button>
     </.form>
     """
@@ -106,7 +108,9 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
         <div class="flex items-center gap-2.5">
           <span class="loading loading-spinner loading-sm text-primary" />
           <span class="font-semibold text-base">{phase_label(@run.phase)}</span>
-          <span :if={@run.status == :stopping} class="badge badge-warning badge-sm">Stopping</span>
+          <span :if={@run.status == :stopping} class="badge badge-warning badge-sm">
+            {gettext("Stopping")}
+          </span>
         </div>
       </div>
 
@@ -125,7 +129,7 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
           disabled={@run.status == :stopping}
           class="btn btn-sm btn-outline btn-warning"
         >
-          <.icon name="hero-stop" class="w-4 h-4 mr-1" /> Stop and keep progress
+          <.icon name="hero-stop" class="w-4 h-4 mr-1" /> {gettext("Stop and keep progress")}
         </.button>
       </div>
     </div>
@@ -165,15 +169,15 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
     """
   end
 
-  defp phase_label(:scanning), do: "Finding files"
-  defp phase_label(:matching), do: "Identifying files"
-  defp phase_label(:finished), do: "Finished"
+  defp phase_label(:scanning), do: gettext("Finding files")
+  defp phase_label(:matching), do: gettext("Identifying files")
+  defp phase_label(:finished), do: gettext("Finished")
 
-  defp outcome_label(:failed), do: "Scan failed"
-  defp outcome_label(:stopped), do: "Scan stopped"
+  defp outcome_label(:failed), do: gettext("Scan failed")
+  defp outcome_label(:stopped), do: gettext("Scan stopped")
 
-  defp error_label(:failed), do: "Error details"
-  defp error_label(_status), do: "What happened"
+  defp error_label(:failed), do: gettext("Error details")
+  defp error_label(_status), do: gettext("What happened")
 
   defp outcome_alert_class(:failed), do: "alert-error"
   defp outcome_alert_class(:stopped), do: "alert-warning"

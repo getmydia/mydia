@@ -33,10 +33,10 @@ defmodule MydiaWeb.Live.Components.DisambiguationModalComponent do
         <div id="disambiguation-dialog" class="modal modal-open">
           <div class="modal-box max-w-4xl">
             <h3 class="font-bold text-lg mb-4">
-              Multiple Matches Found
+              {gettext("Multiple Matches Found")}
             </h3>
             <p class="text-sm text-base-content/70 mb-4">
-              We found multiple metadata matches. Please select the correct one:
+              {gettext("We found multiple metadata matches. Please select the correct one:")}
             </p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto">
               <%= for match <- @matches do %>
@@ -83,7 +83,7 @@ defmodule MydiaWeb.Live.Components.DisambiguationModalComponent do
                             </p>
                           <% end %>
                           <%= if is_selecting do %>
-                            <span class="badge badge-sm badge-primary">Adding...</span>
+                            <span class="badge badge-sm badge-primary">{gettext("Adding...")}</span>
                           <% end %>
                         </div>
                         <%= if Map.get(match, :overview) do %>
@@ -103,7 +103,7 @@ defmodule MydiaWeb.Live.Components.DisambiguationModalComponent do
                 phx-click={@on_cancel}
                 disabled={@selecting_match_id != nil}
               >
-                Cancel
+                {gettext("Cancel")}
               </button>
             </div>
           </div>

@@ -106,7 +106,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                  aria-label carries its accessible name. --%>
             <button
               phx-click="close_details"
-              aria-label="Close"
+              aria-label={gettext("Close")}
               class="btn btn-circle btn-ghost btn-sm absolute top-4 right-4 z-10 bg-base-100/50 hover:bg-base-100"
             >
               <.icon name="hero-x-mark" class="w-5 h-5" />
@@ -188,7 +188,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                             class="btn btn-disabled"
                             title={Mydia.Media.restricted_message()}
                           >
-                            <.icon name="hero-lock-closed" class="w-4 h-4" /> Not available
+                            <.icon name="hero-lock-closed" class="w-4 h-4" /> {gettext(
+                              "Not available"
+                            )}
                           </button>
                           <p class="text-xs text-white/70 w-full">
                             {Mydia.Media.restricted_message()}
@@ -202,9 +204,12 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                             class="btn btn-primary"
                           >
                             <%= if Map.get(@item, :request_status) do %>
-                              <.icon name="hero-check" class="w-4 h-4" /> Requested
+                              <.icon name="hero-check" class="w-4 h-4" /> {gettext("Requested")}
                             <% else %>
-                              <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
+                              <.icon name="hero-paper-airplane" class="w-4 h-4" /> {pgettext(
+                                "media request",
+                                "Request"
+                              )}
                             <% end %>
                           </button>
                         <% true -> %>
@@ -213,12 +218,12 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                               phx-click={@add_event}
                               phx-value-ref={@item_ref}
                               phx-value-media_type={media_type_string(@item)}
-                              aria-label="Add to Library"
+                              aria-label={gettext("Add to Library")}
                               class="btn btn-primary join-item"
                             >
                               <.icon name="hero-plus" class="w-4 h-4" />
-                              <span class="sm:hidden">Add</span>
-                              <span class="hidden sm:inline">Add to Library</span>
+                              <span class="sm:hidden">{pgettext("add to library", "Add")}</span>
+                              <span class="hidden sm:inline">{gettext("Add to Library")}</span>
                             </button>
                             <.library_picker_button
                               ref={@item_ref}
@@ -231,7 +236,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                     <% else %>
                       <.link navigate={library_path(@item)} class="btn btn-ghost">
                         <.icon name="hero-arrow-right" class="w-4 h-4" />
-                        Go to {media_type_label(@item)}
+                        {go_to_label(@item)}
                       </.link>
                     <% end %>
                     <%!-- Only for an item opened from a plugin shelf: the same
@@ -245,7 +250,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                         phx-value-rating="up"
                         class="btn btn-sm bg-base-100/60 hover:bg-base-100 hover:text-success"
                       >
-                        <.icon name="hero-hand-thumb-up" class="w-4 h-4" /> Seen it, liked it
+                        <.icon name="hero-hand-thumb-up" class="w-4 h-4" /> {gettext(
+                          "Seen it, liked it"
+                        )}
                       </button>
                       <button
                         id="detail-shelf-down"
@@ -255,7 +262,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                         phx-value-rating="down"
                         class="btn btn-sm bg-base-100/60 hover:bg-base-100 hover:text-error"
                       >
-                        <.icon name="hero-hand-thumb-down" class="w-4 h-4" /> Not for me
+                        <.icon name="hero-hand-thumb-down" class="w-4 h-4" /> {gettext("Not for me")}
                       </button>
                     <% end %>
                   <% end %>
@@ -270,21 +277,23 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
               <%= if @loading do %>
                 <div class="flex items-center justify-center py-12">
                   <span class="loading loading-spinner loading-lg"></span>
-                  <span class="ml-3 text-base-content/70">Loading details...</span>
+                  <span class="ml-3 text-base-content/70">
+                    {gettext("Loading details...")}
+                  </span>
                 </div>
               <% else %>
                 <div class="space-y-6">
                   <%!-- Trailer --%>
                   <%= if first_trailer(@metadata) do %>
                     <div>
-                      <h3 class="text-lg font-semibold mb-3">Trailer</h3>
+                      <h3 class="text-lg font-semibold mb-3">{gettext("Trailer")}</h3>
                       <div class="aspect-video rounded-lg overflow-hidden bg-base-300">
                         <iframe
                           src={
                             Video.youtube_embed_url(first_trailer(@metadata)) <>
                               "?rel=0&modestbranding=1"
                           }
-                          title="Trailer"
+                          title={gettext("Trailer")}
                           class="w-full h-full"
                           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                           allowfullscreen
@@ -296,7 +305,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                   <%!-- Synopsis --%>
                   <%= if overview(@item, @metadata) do %>
                     <div>
-                      <h3 class="text-lg font-semibold mb-2">Synopsis</h3>
+                      <h3 class="text-lg font-semibold mb-2">{gettext("Synopsis")}</h3>
                       <p class="text-base-content/80 leading-relaxed">
                         {overview(@item, @metadata)}
                       </p>
@@ -306,7 +315,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                   <%!-- Cast --%>
                   <%= if cast(@metadata) != [] do %>
                     <div>
-                      <h3 class="text-lg font-semibold mb-3">Cast</h3>
+                      <h3 class="text-lg font-semibold mb-3">{gettext("Cast")}</h3>
                       <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
                         <%= for member <- Enum.take(cast(@metadata), 6) do %>
                           <div class="text-center">
@@ -347,7 +356,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
 
         <%!-- Backdrop --%>
         <div class="modal-backdrop bg-black/70">
-          <button type="button" phx-click="close_details">close</button>
+          <button type="button" phx-click="close_details">{gettext("close")}</button>
         </div>
       <% end %>
     </dialog>
@@ -455,11 +464,11 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
     end
   end
 
-  defp media_type_label(item) do
+  defp go_to_label(item) do
     case item.media_type do
-      :movie -> "Movie"
-      :tv_show -> "Show"
-      _ -> "Movie"
+      :movie -> gettext("Go to Movie")
+      :tv_show -> gettext("Go to Show")
+      _ -> gettext("Go to Movie")
     end
   end
 
@@ -478,18 +487,21 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
     mins = rem(minutes, 60)
 
     cond do
-      hours > 0 and mins > 0 -> "#{hours}h #{mins}m"
-      hours > 0 -> "#{hours}h"
-      true -> "#{mins}m"
+      hours > 0 and mins > 0 ->
+        pgettext("runtime", "%{hours}h %{mins}m", hours: hours, mins: mins)
+
+      hours > 0 ->
+        pgettext("runtime", "%{hours}h", hours: hours)
+
+      true ->
+        pgettext("runtime", "%{mins}m", mins: mins)
     end
   end
 
   defp format_runtime(_), do: nil
 
-  defp format_seasons(1), do: "1 season"
-
   defp format_seasons(count) when is_integer(count) and count > 0 do
-    "#{count} seasons"
+    ngettext("%{count} season", "%{count} seasons", count)
   end
 
   defp format_seasons(_), do: nil

@@ -6,6 +6,7 @@ defmodule MydiaWeb.Live.Components.LibrarySearchForm do
   Used in the Issues tab to manually match unmatched downloads.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
   alias Mydia.Metadata.ImageUrl
   import MydiaWeb.CoreComponents
 
@@ -14,9 +15,13 @@ defmodule MydiaWeb.Live.Components.LibrarySearchForm do
   attr :on_search, :string, required: true
   attr :on_select, :string, required: true
   attr :download_id, :string, required: true
-  attr :placeholder, :string, default: "Search library..."
+  # nil falls back to a translated "Search library..." at render time: an attr
+  # default is evaluated at compile time, before any locale is set.
+  attr :placeholder, :string, default: nil
 
   def library_search_form(assigns) do
+    assigns = assign(assigns, :placeholder, assigns.placeholder || gettext("Search library..."))
+
     ~H"""
     <div class="relative mt-2">
       <form id={"library-search-form-#{@download_id}"} phx-change={@on_search}>
@@ -64,7 +69,7 @@ defmodule MydiaWeb.Live.Components.LibrarySearchForm do
                     <span class="text-xs text-base-content/60">{item.year}</span>
                   <% end %>
                   <span class="badge badge-xs badge-outline">
-                    {if item.type == "tv_show", do: "TV", else: "Movie"}
+                    {if item.type == "tv_show", do: gettext("TV"), else: gettext("Movie")}
                   </span>
                 </div>
               </div>

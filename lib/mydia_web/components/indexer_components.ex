@@ -9,6 +9,7 @@ defmodule MydiaWeb.IndexerComponents do
   """
 
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [button: 1, icon: 1]
 
@@ -85,8 +86,16 @@ defmodule MydiaWeb.IndexerComponents do
             name="hero-check-circle"
             class="w-4 h-4 shrink-0 text-success"
           />
-          <span :if={@searching} class="sr-only">Searching indexers</span>
-          <span>{@total_results} results · {@done}/{@total} indexers</span>
+          <span :if={@searching} class="sr-only">{gettext("Searching indexers")}</span>
+          <span>
+            {ngettext(
+              "%{count} result · %{done}/%{total} indexers",
+              "%{count} results · %{done}/%{total} indexers",
+              @total_results,
+              done: @done,
+              total: @total
+            )}
+          </span>
           <span
             :if={@cardigann && @cardigann.installed > 0}
             id="indexer-search-cardigann"
@@ -94,13 +103,15 @@ defmodule MydiaWeb.IndexerComponents do
           >
             {CardigannSummary.label(@cardigann)}
           </span>
-          <span :if={@failed > 0} class="badge badge-sm badge-error">{@failed} failed</span>
+          <span :if={@failed > 0} class="badge badge-sm badge-error">
+            {ngettext("%{count} failed", "%{count} failed", @failed)}
+          </span>
           <span
             :if={@paused > 0}
             id="indexer-search-paused-count"
             class="badge badge-sm badge-warning"
           >
-            {@paused} paused
+            {ngettext("%{count} paused", "%{count} paused", @paused)}
           </span>
           <progress
             :if={@searching}
@@ -143,7 +154,7 @@ defmodule MydiaWeb.IndexerComponents do
                 phx-click={@retry_event}
                 phx-value-id={row.indexer_id}
               >
-                Retry
+                {gettext("Retry")}
               </.button>
 
               <div
@@ -152,7 +163,11 @@ defmodule MydiaWeb.IndexerComponents do
                 class="basis-full flex flex-wrap items-center gap-2 pl-6 text-xs text-warning"
               >
                 <.icon name="hero-pause-circle" class="w-4 h-4 shrink-0" />
-                <span>Skipped by Prowlarr (paused after failures): {paused_list(row.paused)}</span>
+                <span>
+                  {gettext("Skipped by Prowlarr (paused after failures): %{indexers}",
+                    indexers: paused_list(row.paused)
+                  )}
+                </span>
                 <.button
                   :if={@retest_paused_event}
                   type="button"
@@ -161,7 +176,7 @@ defmodule MydiaWeb.IndexerComponents do
                   phx-click={@retest_paused_event}
                   phx-value-id={row.indexer_id}
                 >
-                  Retest &amp; search again
+                  {gettext("Retest & search again")}
                 </.button>
               </div>
             </li>
@@ -180,23 +195,29 @@ defmodule MydiaWeb.IndexerComponents do
     |> Enum.sort_by(& &1.indexer)
   end
 
-  defp status_label(%IndexerProgress{status: :pending}), do: "searching..."
+  defp status_label(%IndexerProgress{status: :pending}), do: gettext("searching...")
 
   defp status_label(%IndexerProgress{status: :ok} = row),
-    do: "#{row.result_count} results · #{row.duration_ms}ms"
+    do:
+      ngettext(
+        "%{count} result · %{duration}ms",
+        "%{count} results · %{duration}ms",
+        row.result_count || 0,
+        duration: row.duration_ms
+      )
 
-  defp status_label(%IndexerProgress{status: :timeout}), do: "timed out"
-  defp status_label(%IndexerProgress{status: :error} = row), do: row.error || "failed"
+  defp status_label(%IndexerProgress{status: :timeout}), do: gettext("timed out")
+  defp status_label(%IndexerProgress{status: :error} = row), do: row.error || gettext("failed")
 
   @doc ~S(Time left on a Prowlarr pause, coarsest unit: "<1m", "12m", "3h", "1d".)
   def paused_remaining(%DateTime{} = till, now \\ DateTime.utc_now()) do
     seconds = DateTime.diff(till, now, :second)
 
     cond do
-      seconds < 60 -> "<1m"
-      seconds < 3_600 -> "#{div(seconds, 60)}m"
-      seconds < 86_400 -> "#{div(seconds, 3_600)}h"
-      true -> "#{div(seconds, 86_400)}d"
+      seconds < 60 -> pgettext("pause time left", "<1m")
+      seconds < 3_600 -> pgettext("pause time left", "%{minutes}m", minutes: div(seconds, 60))
+      seconds < 86_400 -> pgettext("pause time left", "%{hours}h", hours: div(seconds, 3_600))
+      true -> pgettext("pause time left", "%{days}d", days: div(seconds, 86_400))
     end
   end
 
@@ -210,11 +231,21 @@ defmodule MydiaWeb.IndexerComponents do
 
   @doc "\"Amber Tracker (12m left), Birch Tracker (3h left)\""
   def paused_list(paused) do
-    Enum.map_join(paused, ", ", &"#{&1.name} (#{paused_remaining(&1.disabled_till)} left)")
+    Enum.map_join(paused, ", ", fn pause ->
+      gettext("%{name} (%{remaining} left)",
+        name: pause.name,
+        remaining: paused_remaining(pause.disabled_till)
+      )
+    end)
   end
 
-  def paused_heading(1), do: "1 indexer paused by Prowlarr"
-  def paused_heading(count), do: "#{count} indexers paused by Prowlarr"
+  def paused_heading(count) do
+    ngettext(
+      "%{count} indexer paused by Prowlarr",
+      "%{count} indexers paused by Prowlarr",
+      count
+    )
+  end
 
   @doc """
   Flash kind and text for the result of
@@ -223,7 +254,7 @@ defmodule MydiaWeb.IndexerComponents do
   "Recovered" is claimed only when the re-read after the tests no longer lists
   the indexer as paused, so the flash never contradicts the status beside it.
   """
-  def retest_flash({:ok, %{outcomes: []}}), do: {:info, "No paused indexers to retest"}
+  def retest_flash({:ok, %{outcomes: []}}), do: {:info, gettext("No paused indexers to retest")}
 
   def retest_flash({:ok, %{outcomes: outcomes} = result}) do
     still_paused = result |> Map.get(:paused, []) |> MapSet.new(& &1.id)
@@ -235,15 +266,21 @@ defmodule MydiaWeb.IndexerComponents do
     {kind, Enum.map_join(texts, ". ", &elem(&1, 1))}
   end
 
-  def retest_flash({:error, reason}), do: {:error, "Retest failed: #{reason}"}
+  def retest_flash({:error, reason}),
+    do: {:error, gettext("Retest failed: %{reason}", reason: reason)}
 
   defp retest_outcome_text({indexer, :ok}, still_paused) do
     if MapSet.member?(still_paused, indexer.id),
       do:
-        {:still_paused, "#{indexer.name} passed its test but Prowlarr still lists it as paused"},
-      else: {:recovered, "#{indexer.name} recovered"}
+        {:still_paused,
+         gettext("%{name} passed its test but Prowlarr still lists it as paused",
+           name: indexer.name
+         )},
+      else: {:recovered, gettext("%{name} recovered", name: indexer.name)}
   end
 
   defp retest_outcome_text({indexer, {:error, message}}, _still_paused),
-    do: {:failing, "#{indexer.name} still failing: #{message}"}
+    do:
+      {:failing,
+       gettext("%{name} still failing: %{message}", name: indexer.name, message: message)}
 end

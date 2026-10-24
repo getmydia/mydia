@@ -91,7 +91,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
     socket =
       socket
-      |> assign(:page_title, "Import Media")
+      |> assign(:page_title, gettext("Import Media"))
       |> assign(:library_paths, library_paths)
       # The start form offers only what the coordinator can actually import.
       # `@library_paths` deliberately keeps every path so a run left on a
@@ -206,7 +206,8 @@ defmodule MydiaWeb.ImportMediaLive.Index do
            |> assign(:scan_complete_run_id, nil)}
 
         {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "That library is already being imported.")}
+          {:noreply,
+           put_flash(socket, :error, gettext("That library is already being imported."))}
       end
     else
       {:unauthorized, socket} ->
@@ -238,7 +239,12 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         {:noreply, socket}
 
       {:error, :active_run} ->
-        {:noreply, put_flash(socket, :error, "Stop this library's scan before clearing results.")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Stop this library's scan before clearing results.")
+         )}
     end
   end
 
@@ -250,8 +256,12 @@ defmodule MydiaWeb.ImportMediaLive.Index do
        socket
        |> queue_result(ImportCandidates.queue_accept_all_matched(library_path_id))}
     else
-      {:unauthorized, socket} -> {:noreply, socket}
-      nil -> {:noreply, put_flash(socket, :error, "Select a library before importing results.")}
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      nil ->
+        {:noreply,
+         put_flash(socket, :error, gettext("Select a library before importing results."))}
     end
   end
 
@@ -411,25 +421,37 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   def handle_event("dismiss_selected", _params, socket) do
     run_bulk_action(socket, &ImportCandidates.dismiss/1, fn {:ok, count} ->
-      "Dismissed #{count} group(s)."
+      ngettext("Dismissed %{count} group.", "Dismissed %{count} groups.", count)
     end)
   end
 
   def handle_event("restore_selected", _params, socket) do
     run_bulk_action(socket, &ImportCandidates.restore/1, fn {:ok, count} ->
-      "Restored #{count} group(s) to pending."
+      ngettext(
+        "Restored %{count} group to pending.",
+        "Restored %{count} groups to pending.",
+        count
+      )
     end)
   end
 
   def handle_event("rematch_selected", _params, socket) do
     run_bulk_action(socket, &ImportCandidates.queue_rematch/1, fn {:ok, %{queued: queued}} ->
-      "Queued #{queued} group(s) for re-matching."
+      ngettext(
+        "Queued %{count} group for re-matching.",
+        "Queued %{count} groups for re-matching.",
+        queued
+      )
     end)
   end
 
   def handle_event("cancel_queued_selected", _params, socket) do
     run_bulk_action(socket, &ImportCandidates.cancel_queued/1, fn {:ok, %{returned: returned}} ->
-      "Returned #{returned} group(s) to review."
+      ngettext(
+        "Returned %{count} group to review.",
+        "Returned %{count} groups to review.",
+        returned
+      )
     end)
   end
 
@@ -444,15 +466,23 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         {:ok, candidate} ->
           {:noreply,
            socket
-           |> put_flash(:info, "Deleting #{Path.basename(candidate.relative_path)}.")
+           |> put_flash(
+             :info,
+             gettext("Deleting %{filename}.", filename: Path.basename(candidate.relative_path))
+           )
            |> refresh_expanded_members()
            |> refresh_counts()}
 
         {:error, :not_found} ->
-          {:noreply, put_flash(socket, :info, "That file is no longer pending.")}
+          {:noreply, put_flash(socket, :info, gettext("That file is no longer pending."))}
 
         {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Could not queue the delete: #{inspect(reason)}")}
+          {:noreply,
+           put_flash(
+             socket,
+             :error,
+             gettext("Could not queue the delete: %{reason}", reason: inspect(reason))
+           )}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -565,10 +595,16 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
           message =
             if remaining > 0 do
-              "Created #{item.title} and linked #{linked} of #{total} files. " <>
-                "#{remaining} had no episode number."
+              ngettext(
+                "Created %{title} and linked %{linked} of %{count} file. %{remaining} had no episode number.",
+                "Created %{title} and linked %{linked} of %{count} files. %{remaining} had no episode number.",
+                total,
+                title: item.title,
+                linked: linked,
+                remaining: remaining
+              )
             else
-              "Created #{item.title} from the folder name."
+              gettext("Created %{title} from the folder name.", title: item.title)
             end
 
           {:noreply,
@@ -583,10 +619,16 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         # already-handled row, not a system failure. Say so plainly rather
         # than the generic error message below.
         {:error, :already_created} ->
-          {:noreply, put_flash(socket, :info, "That show was already created from this folder.")}
+          {:noreply,
+           put_flash(socket, :info, gettext("That show was already created from this folder."))}
 
         {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Could not create the show: #{inspect(reason)}")}
+          {:noreply,
+           put_flash(
+             socket,
+             :error,
+             gettext("Could not create the show: %{reason}", reason: inspect(reason))
+           )}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -611,12 +653,12 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         {:ok, count} when count > 0 ->
           {:noreply,
            socket
-           |> put_flash(:info, "Restored to pending.")
+           |> put_flash(:info, gettext("Restored to pending."))
            |> load_groups()
            |> refresh_counts()}
 
         {:ok, 0} ->
-          {:noreply, put_flash(socket, :info, "That group is no longer ignored.")}
+          {:noreply, put_flash(socket, :info, gettext("That group is no longer ignored."))}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -635,7 +677,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   def handle_event("open_match_search", %{"id" => anchor_key}, socket) do
     case ImportCandidates.get_group(socket.assigns.selected_library_path_id, anchor_key) do
       nil ->
-        {:noreply, put_flash(socket, :error, "That group is no longer available.")}
+        {:noreply, put_flash(socket, :error, gettext("That group is no longer available."))}
 
       group ->
         {:noreply, MatchSearch.open(socket, group)}
@@ -678,7 +720,11 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
         {_, nil} ->
           {:noreply,
-           put_flash(socket, :error, "That result is no longer available. Search again.")}
+           put_flash(
+             socket,
+             :error,
+             gettext("That result is no longer available. Search again.")
+           )}
 
         {%{anchor_key: anchor_key}, result} ->
           apply_selected_match(socket, anchor_key, result)
@@ -765,14 +811,18 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     cond do
       path_id != socket.assigns.selected_library_path_id ->
         {:unsupported_type,
-         put_flash(socket, :error, "Select that library before starting its scan.")}
+         put_flash(socket, :error, gettext("Select that library before starting its scan."))}
 
       Enum.any?(socket.assigns.importable_library_paths, &(&1.id == path_id)) ->
         :ok
 
       true ->
         {:unsupported_type,
-         put_flash(socket, :error, "Only movie, TV and mixed libraries can be imported.")}
+         put_flash(
+           socket,
+           :error,
+           gettext("Only movie, TV and mixed libraries can be imported.")
+         )}
     end
   end
 
@@ -781,11 +831,15 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # dismissed candidates -- naming that explicitly is what keeps a reviewer
   # from reading "Cleared" as "every decision I made is gone".
   defp cleared_message(%{candidates: 0}) do
-    "Nothing to clear. Dismissed decisions are preserved."
+    gettext("Nothing to clear. Dismissed decisions are preserved.")
   end
 
   defp cleared_message(%{candidates: candidates}) do
-    "Cleared #{candidates} scan result(s). Dismissed decisions are preserved."
+    ngettext(
+      "Cleared %{count} scan result. Dismissed decisions are preserved.",
+      "Cleared %{count} scan results. Dismissed decisions are preserved.",
+      candidates
+    )
   end
 
   defp queue_result(socket, {:ok, %{queued: queued, skipped: skipped}}) do
@@ -819,13 +873,26 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # no account of the rest. The wording stays generic because a skip covers
   # three distinct causes and the flash has no room to distinguish them; the
   # per-group reason lands on the row as queue_error.
-  defp queue_message(queued, 0), do: "Queued #{queued} group(s) for import."
+  defp queue_message(queued, 0),
+    do:
+      ngettext("Queued %{count} group for import.", "Queued %{count} groups for import.", queued)
 
   defp queue_message(0, skipped),
-    do: "Nothing queued. #{skipped} group(s) have nothing to import from."
+    do:
+      ngettext(
+        "Nothing queued. %{count} group has nothing to import from.",
+        "Nothing queued. %{count} groups have nothing to import from.",
+        skipped
+      )
 
   defp queue_message(queued, skipped),
-    do: "Queued #{queued} group(s) for import. #{skipped} skipped, nothing to import from."
+    do:
+      ngettext(
+        "Queued %{count} group for import. %{skipped} skipped, nothing to import from.",
+        "Queued %{count} groups for import. %{skipped} skipped, nothing to import from.",
+        queued,
+        skipped: skipped
+      )
 
   defp show_outcome(socket, run) do
     socket =
@@ -1075,7 +1142,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       0 ->
         socket
         |> assign(:delete_confirm, nil)
-        |> put_flash(:info, "Nothing in the selection can be deleted.")
+        |> put_flash(:info, gettext("Nothing in the selection can be deleted."))
 
       files ->
         assign(socket, :delete_confirm, %{
@@ -1094,7 +1161,14 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       {:ok, %{files: queued}} ->
         socket
         |> assign(:delete_confirm, nil)
-        |> put_flash(:info, "Deleting #{queued} file(s) in the background.")
+        |> put_flash(
+          :info,
+          ngettext(
+            "Deleting %{count} file in the background.",
+            "Deleting %{count} files in the background.",
+            queued
+          )
+        )
         |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
         |> load_groups()
         |> refresh_counts()
@@ -1103,14 +1177,19 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         socket
         |> put_flash(
           :error,
-          "The selection changed since you confirmed. Check the new count before deleting."
+          gettext(
+            "The selection changed since you confirmed. Check the new count before deleting."
+          )
         )
         |> open_delete_confirm(scope)
 
       {:error, reason} ->
         socket
         |> assign(:delete_confirm, nil)
-        |> put_flash(:error, "Could not queue the delete: #{inspect(reason)}")
+        |> put_flash(
+          :error,
+          gettext("Could not queue the delete: %{reason}", reason: inspect(reason))
+        )
     end
   end
 
@@ -1122,7 +1201,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         {:noreply,
          socket
          |> assign(:match_search, nil)
-         |> put_flash(:info, "Updated the match for this group.")
+         |> put_flash(:info, gettext("Updated the match for this group."))
          |> load_groups()
          |> refresh_counts()}
 
@@ -1130,7 +1209,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         {:noreply,
          socket
          |> assign(:match_search, nil)
-         |> put_flash(:error, "That group is no longer available.")
+         |> put_flash(:error, gettext("That group is no longer available."))
          |> load_groups()
          |> refresh_counts()}
     end

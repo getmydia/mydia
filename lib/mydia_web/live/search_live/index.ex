@@ -22,11 +22,13 @@ defmodule MydiaWeb.SearchLive.Index do
   require Logger
 
   # Library type options for the filter
-  @library_type_options [
-    {:all, "All Types"},
-    {:movies, "Movies"},
-    {:series, "TV Series"}
-  ]
+  defp library_type_options do
+    [
+      {:all, gettext("All Types")},
+      {:movies, gettext("Movies")},
+      {:series, gettext("TV Series")}
+    ]
+  end
 
   @impl true
   def mount(_params, _session, socket) do
@@ -62,7 +64,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Search Media")
+     |> assign(:page_title, gettext("Search Media"))
      |> assign(:search_query, "")
      |> assign(:searching, false)
      |> assign(:min_seeders, 0)
@@ -70,7 +72,6 @@ defmodule MydiaWeb.SearchLive.Index do
      |> assign(:min_size_gb, nil)
      |> assign(:quality_filter, nil)
      |> assign(:library_type_filter, :all)
-     |> assign(:library_type_options, @library_type_options)
      |> assign(:sort_by, :quality)
      |> assign(:results_empty?, false)
      |> assign(:indexer_errors, [])
@@ -370,7 +371,7 @@ defmodule MydiaWeb.SearchLive.Index do
          socket
          |> assign(:show_retry_modal, false)
          |> finish_pending()
-         |> put_flash(:error, "Cannot retry: missing release information")}
+         |> put_flash(:error, gettext("Cannot retry: missing release information"))}
       end
     end)
   end
@@ -458,7 +459,10 @@ defmodule MydiaWeb.SearchLive.Index do
         {:noreply,
          socket
          |> close_download_modal()
-         |> put_flash(:error, "Another release is still being added. Try again when it finishes.")}
+         |> put_flash(
+           :error,
+           gettext("Another release is still being added. Try again when it finishes.")
+         )}
 
       {:error, :unknown_library} ->
         {:noreply,
@@ -522,7 +526,9 @@ defmodule MydiaWeb.SearchLive.Index do
          socket
          |> put_flash(
            :info,
-           "#{title} added to library and download started. View in Downloads queue."
+           gettext("%{title} added to library and download started. View in Downloads queue.",
+             title: title
+           )
          )}
 
       {:error, :duplicate_download} ->
@@ -530,14 +536,20 @@ defmodule MydiaWeb.SearchLive.Index do
 
         {:noreply,
          socket
-         |> put_flash(:info, "#{title} added to library. Download already in progress.")}
+         |> put_flash(
+           :info,
+           gettext("%{title} added to library. Download already in progress.", title: title)
+         )}
 
       {:error, :already_have_files} ->
         Logger.info("Skipping download - media files already exist")
 
         {:noreply,
          socket
-         |> put_flash(:info, "#{title} added to library. You already have these files.")}
+         |> put_flash(
+           :info,
+           gettext("%{title} added to library. You already have these files.", title: title)
+         )}
 
       {:error, :no_clients_configured} ->
         Logger.warning("Cannot initiate download - no download clients configured")
@@ -546,7 +558,10 @@ defmodule MydiaWeb.SearchLive.Index do
          socket
          |> put_flash(
            :warning,
-           "#{title} added to library, but no download clients are configured. Please configure a download client in settings."
+           gettext(
+             "%{title} added to library, but no download clients are configured. Please configure a download client in settings.",
+             title: title
+           )
          )}
 
       {:error, {:client_not_found, client_name}} ->
@@ -556,7 +571,10 @@ defmodule MydiaWeb.SearchLive.Index do
          socket
          |> put_flash(
            :error,
-           "#{title} added to library, but download client '#{client_name}' not found."
+           gettext("%{title} added to library, but download client '%{client}' not found.",
+             title: title,
+             client: client_name
+           )
          )}
 
       {:error, {:client_error, error}} ->
@@ -566,7 +584,10 @@ defmodule MydiaWeb.SearchLive.Index do
          socket
          |> put_flash(
            :error,
-           "#{title} added to library, but download failed: #{format_client_error(error)}"
+           gettext("%{title} added to library, but download failed: %{reason}",
+             title: title,
+             reason: format_client_error(error)
+           )
          )}
 
       {:error, reason} ->
@@ -576,7 +597,10 @@ defmodule MydiaWeb.SearchLive.Index do
          socket
          |> put_flash(
            :error,
-           "#{title} added to library, but download failed: #{inspect(reason)}"
+           gettext("%{title} added to library, but download failed: %{reason}",
+             title: title,
+             reason: inspect(reason)
+           )
          )}
     end
   end
@@ -674,7 +698,7 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> assign(:searching, false)
-     |> put_flash(:error, "Search failed: #{inspect(reason)}")}
+     |> put_flash(:error, gettext("Search failed: %{reason}", reason: inspect(reason)))}
   end
 
   def handle_async(:search, {:exit, reason}, socket) do
@@ -683,7 +707,7 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> assign(:searching, false)
-     |> put_flash(:error, "Search failed unexpectedly")}
+     |> put_flash(:error, gettext("Search failed unexpectedly"))}
   end
 
   # Results already arrived through the :indexer_progress messages; the final
@@ -701,12 +725,18 @@ defmodule MydiaWeb.SearchLive.Index do
   # actionable state.
   def handle_async({:retry, indexer_id}, {:ok, {:error, reason}}, socket) do
     Logger.error("Indexer retry failed: #{inspect(reason)}")
-    {:noreply, restore_retry_error(socket, indexer_id, "Retry failed: #{inspect(reason)}")}
+
+    {:noreply,
+     restore_retry_error(
+       socket,
+       indexer_id,
+       gettext("Retry failed: %{reason}", reason: inspect(reason))
+     )}
   end
 
   def handle_async({:retry, indexer_id}, {:exit, reason}, socket) do
     Logger.error("Indexer retry crashed: #{inspect(reason)}")
-    {:noreply, restore_retry_error(socket, indexer_id, "Retry failed unexpectedly")}
+    {:noreply, restore_retry_error(socket, indexer_id, gettext("Retry failed unexpectedly"))}
   end
 
   def handle_async(
@@ -737,7 +767,7 @@ defmodule MydiaWeb.SearchLive.Index do
     case reason do
       :parse_failed ->
         # Show manual search modal for parse failures
-        release_title = socket.assigns.pending_release_title || "Unknown"
+        release_title = socket.assigns.pending_release_title || gettext("Unknown")
 
         {:noreply,
          socket
@@ -749,7 +779,7 @@ defmodule MydiaWeb.SearchLive.Index do
 
       :no_metadata_match ->
         # Also show manual search modal for no matches
-        release_title = socket.assigns.pending_release_title || "Unknown"
+        release_title = socket.assigns.pending_release_title || gettext("Unknown")
 
         {:noreply,
          socket
@@ -758,7 +788,7 @@ defmodule MydiaWeb.SearchLive.Index do
          |> assign(:manual_search_media_type, socket.assigns.pending_media_type || :movie)
          |> assign(:failed_release_title, release_title)
          |> assign(:manual_search_query, ReleaseAdd.extract_search_hint(release_title))
-         |> put_flash(:error, "Could not find matching media automatically")}
+         |> put_flash(:error, gettext("Could not find matching media automatically"))}
 
       {:metadata_error, msg} ->
         # Show retry modal for metadata errors
@@ -766,7 +796,7 @@ defmodule MydiaWeb.SearchLive.Index do
          socket
          |> clear_spinner()
          |> assign(:show_retry_modal, true)
-         |> assign(:retry_error_message, "Metadata provider error: #{msg}")}
+         |> assign(:retry_error_message, metadata_error_message(msg))}
 
       _ ->
         {:noreply,
@@ -782,7 +812,7 @@ defmodule MydiaWeb.SearchLive.Index do
     {:noreply,
      socket
      |> finish_pending()
-     |> put_flash(:error, "Failed to add to library unexpectedly")}
+     |> put_flash(:error, gettext("Failed to add to library unexpectedly"))}
   end
 
   def handle_async(:finalize_add_to_library, {:ok, {:ok, media_item, status}}, socket) do
@@ -816,7 +846,7 @@ defmodule MydiaWeb.SearchLive.Index do
      socket
      |> assign(:selecting_match_id, nil)
      |> clear_spinner()
-     |> put_flash(:error, "Failed to add to library unexpectedly")}
+     |> put_flash(:error, gettext("Failed to add to library unexpectedly"))}
   end
 
   def handle_async(:manual_metadata_search, {:ok, {:ok, results}}, socket) do
@@ -830,7 +860,8 @@ defmodule MydiaWeb.SearchLive.Index do
   def handle_async(:manual_metadata_search, {:ok, {:error, reason}}, socket) do
     Logger.error("Manual metadata search failed: #{inspect(reason)}")
 
-    {:noreply, put_flash(socket, :error, "Search failed: #{inspect(reason)}")}
+    {:noreply,
+     put_flash(socket, :error, gettext("Search failed: %{reason}", reason: inspect(reason)))}
   end
 
   # The manual path used to add the item and never grab the release.
@@ -865,7 +896,7 @@ defmodule MydiaWeb.SearchLive.Index do
      socket
      |> assign(:selecting_match_id, nil)
      |> finish_pending()
-     |> put_flash(:error, "Failed to add to library unexpectedly")}
+     |> put_flash(:error, gettext("Failed to add to library unexpectedly"))}
   end
 
   ## Private Functions
@@ -892,7 +923,16 @@ defmodule MydiaWeb.SearchLive.Index do
   defp add_to_library_error_message(:restricted), do: Media.restricted_message()
 
   defp add_to_library_error_message(reason),
-    do: "Failed to add to library: #{inspect(reason)}"
+    do: gettext("Failed to add to library: %{reason}", reason: inspect(reason))
+
+  defp metadata_error_message(:search_failed),
+    do: gettext("Metadata provider error: Search failed")
+
+  defp metadata_error_message(:fetch_failed),
+    do: gettext("Metadata provider error: Failed to fetch details")
+
+  defp metadata_error_message(msg),
+    do: gettext("Metadata provider error: %{message}", message: msg)
 
   # Map.replace_lazy/3 for the same reason handle_event("retry_indexer", ...)
   # uses it: an id that is not already in the map must be a clean no-op, never
@@ -926,7 +966,12 @@ defmodule MydiaWeb.SearchLive.Index do
 
     if download?,
       do: socket,
-      else: put_flash(socket, :info, "#{media_item.title} added to library")
+      else:
+        put_flash(
+          socket,
+          :info,
+          gettext("%{title} added to library", title: media_item.title)
+        )
   end
 
   defp finish_pending(socket) do
@@ -964,8 +1009,8 @@ defmodule MydiaWeb.SearchLive.Index do
   defp parse_media_type("tv_show"), do: {:ok, :tv_show}
   defp parse_media_type(_value), do: :error
 
-  defp download_type_label(:movie), do: "Movies"
-  defp download_type_label(:tv_show), do: "TV Series"
+  defp download_type_label(:movie), do: gettext("Movies")
+  defp download_type_label(:tv_show), do: gettext("TV Series")
 
   # Only types with a library to land in are offered. With no detected type
   # and exactly one type available, that one is chosen for the user. A
@@ -1362,20 +1407,20 @@ defmodule MydiaWeb.SearchLive.Index do
   defp indexer_type_label(:prowlarr), do: "Prowlarr"
   defp indexer_type_label(:jackett), do: "Jackett"
   defp indexer_type_label(:newznab), do: "Newznab"
-  defp indexer_type_label(:public), do: "Public"
+  defp indexer_type_label(:public), do: pgettext("indexer type", "Public")
   defp indexer_type_label(type), do: to_string(type)
 
   defp format_client_error(error) when is_binary(error), do: error
   defp format_client_error(error), do: inspect(error)
 
   # Helper to get library type label for display
-  defp library_type_label(:movies), do: "Movies"
-  defp library_type_label(:series), do: "TV Series"
-  defp library_type_label(:unknown), do: "Unknown"
+  defp library_type_label(:movies), do: gettext("Movies")
+  defp library_type_label(:series), do: gettext("TV Series")
+  defp library_type_label(:unknown), do: gettext("Unknown")
 
-  defp type_source_hint(:title), do: "Guessed from release title"
-  defp type_source_hint(:category), do: "From indexer category"
-  defp type_source_hint(:none), do: "Type could not be detected"
+  defp type_source_hint(:title), do: gettext("Guessed from release title")
+  defp type_source_hint(:category), do: gettext("From indexer category")
+  defp type_source_hint(:none), do: gettext("Type could not be detected")
 
   # Helper to get library type icon
   defp library_type_icon(:movies), do: "hero-film"

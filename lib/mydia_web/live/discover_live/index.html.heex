@@ -2,9 +2,11 @@
   <div id="discover-page" class="space-y-5 md:space-y-6">
     <%!-- Header --%>
     <div>
-      <h1 class="text-3xl font-bold">Discover</h1>
+      <h1 class="text-3xl font-bold">{gettext("Discover")}</h1>
       <p class="text-base-content/70 mt-1">
-        Find new {if @media_type == :movie, do: "movies", else: "TV shows"} to add to your library
+        {if @media_type == :movie,
+          do: gettext("Find new movies to add to your library"),
+          else: gettext("Find new TV shows to add to your library")}
       </p>
     </div>
 
@@ -22,19 +24,21 @@
               value={@search_query}
               placeholder={
                 if @media_type == :movie,
-                  do: "Search for a movie to add",
-                  else: "Search for a show to add"
+                  do: gettext("Search for a movie to add"),
+                  else: gettext("Search for a show to add")
               }
               aria-label={
                 if @media_type == :movie,
-                  do: "Search for a movie to add",
-                  else: "Search for a show to add"
+                  do: gettext("Search for a movie to add"),
+                  else: gettext("Search for a show to add")
               }
               class="grow"
               autocomplete="off"
             />
           </label>
-          <button type="submit" class="btn btn-sm btn-primary">Search</button>
+          <button type="submit" class="btn btn-sm btn-primary">
+            {pgettext("search", "Search")}
+          </button>
         </form>
 
         <%!-- Media type toggle + category tabs --%>
@@ -45,10 +49,10 @@
               value={@media_type}
               event="switch_media_type"
               param="type"
-              label="Media type"
+              label={gettext("Media type")}
             >
-              <:option value="movie" label="Movies" icon="hero-film" />
-              <:option value="tv_show" label="TV Shows" icon="hero-tv" />
+              <:option value="movie" label={gettext("Movies")} icon="hero-film" />
+              <:option value="tv_show" label={gettext("TV Shows")} icon="hero-tv" />
             </.segmented_control>
 
             <.grid_density_toggle id="discover-density-toggle" density={@grid_density} />
@@ -62,20 +66,20 @@
                 class="toggle toggle-sm toggle-primary"
               />
               <span class={["text-sm", !@hide_owned && "text-base-content/50"]}>
-                Hide in library
+                {gettext("Hide in library")}
               </span>
             </label>
           </div>
 
           <%= if @search_mode do %>
             <div id="discover-search-chip" class="badge badge-lg gap-2">
-              Results for "{@search_query}"
+              {gettext("Results for \"%{query}\"", query: @search_query)}
               <button
                 id="discover-search-clear"
                 type="button"
                 phx-click="clear_search"
                 class="btn btn-ghost btn-xs btn-circle"
-                aria-label="Clear search"
+                aria-label={gettext("Clear search")}
               >
                 <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
               </button>
@@ -110,7 +114,9 @@
                   phx-value-category="discover"
                   class={["tab tab-sm gap-1", @category == :discover && "tab-active"]}
                 >
-                  <.icon name="hero-adjustments-horizontal" class="w-3.5 h-3.5" /> Custom
+                  <.icon name="hero-adjustments-horizontal" class="w-3.5 h-3.5" /> {gettext(
+                    "Custom"
+                  )}
                 </button>
               </div>
 
@@ -123,7 +129,7 @@
                 <.icon
                   name={if(@home_country, do: "hero-map-pin", else: "hero-plus")}
                   class="w-4 h-4"
-                /> Your country
+                /> {gettext("Your country")}
               </button>
             </div>
           <% end %>
@@ -135,7 +141,7 @@
               id="discover-see-all-back"
               patch={~p"/discover?#{%{"type" => @media_type, "category" => "home"}}"}
               class="btn btn-sm btn-ghost"
-            ><.icon name="hero-arrow-left" class="w-4 h-4" /> Back</.link><h2
+            ><.icon name="hero-arrow-left" class="w-4 h-4" /> {gettext("Back")}</.link><h2
               id="discover-see-all-title"
               class="text-lg font-semibold"
             >
@@ -153,7 +159,7 @@
           >
             <div class="join">
               <select name="genre" class="select select-bordered select-sm join-item">
-                <option value="">All Genres</option>
+                <option value="">{gettext("All Genres")}</option>
                 <%= for genre <- @genres do %>
                   <option
                     value={genre.id}
@@ -165,7 +171,7 @@
               </select>
 
               <select name="language" class="select select-bordered select-sm join-item">
-                <option value="">All Languages</option>
+                <option value="">{gettext("All Languages")}</option>
                 <%= for {code, name} <- @languages do %>
                   <option value={code} selected={@selected_language == code}>
                     {name}
@@ -176,33 +182,37 @@
                 id="discover-year-from"
                 name="year_from"
                 class="select select-bordered select-sm join-item"
-                aria-label="From year"
+                aria-label={gettext("From year")}
               >
-                <option value="">From: any</option>
+                <option value="">{gettext("From: any")}</option>
                 <%= for year <- Date.utc_today().year..1900//-1 do %>
-                  <option value={year} selected={@year_from == year}>From {year}</option>
+                  <option value={year} selected={@year_from == year}>
+                    {gettext("From %{year}", year: year)}
+                  </option>
                 <% end %>
               </select>
               <select
                 id="discover-year-to"
                 name="year_to"
                 class="select select-bordered select-sm join-item"
-                aria-label="To year"
+                aria-label={gettext("To year")}
               >
-                <option value="">To: any</option>
+                <option value="">{gettext("To: any")}</option>
                 <%= for year <- Date.utc_today().year..1900//-1 do %>
-                  <option value={year} selected={@year_to == year}>To {year}</option>
+                  <option value={year} selected={@year_to == year}>
+                    {gettext("To %{year}", year: year)}
+                  </option>
                 <% end %>
               </select>
 
               <select name="rating" class="select select-bordered select-sm join-item">
-                <option value="">Any Rating</option>
+                <option value="">{gettext("Any Rating")}</option>
                 <%= for rating <- [9, 8, 7, 6, 5] do %>
                   <option
                     value={rating}
                     selected={@min_rating != nil && round(@min_rating) == rating}
                   >
-                    {rating}+ Stars
+                    {gettext("%{rating}+ Stars", rating: rating)}
                   </option>
                 <% end %>
               </select>
@@ -254,9 +264,13 @@
             <.icon name="hero-exclamation-triangle" class="w-10 h-10 text-error" />
           </div>
           <div class="text-center">
-            <p class="text-lg font-medium text-base-content/80">Unable to load results</p>
+            <p class="text-lg font-medium text-base-content/80">
+              {gettext("Unable to load results")}
+            </p>
             <p class="text-sm text-base-content/50 mt-1">
-              The metadata service is temporarily unavailable. Try a curated list instead.
+              {gettext(
+                "The metadata service is temporarily unavailable. Try a curated list instead."
+              )}
             </p>
           </div>
         </div>
@@ -269,7 +283,7 @@
             <.icon name="hero-lock-closed" class="w-10 h-10 text-base-content/40" />
           </div>
           <p class="text-lg font-medium text-base-content/80">
-            Nothing here is available for your account.
+            {gettext("Nothing here is available for your account.")}
           </p>
         </div>
       <% @visible_items == [] -> %>
@@ -278,12 +292,14 @@
             <.icon name="hero-magnifying-glass" class="w-10 h-10 text-base-content/40" />
           </div>
           <div class="text-center">
-            <p class="text-lg font-medium text-base-content/80">No results found</p>
+            <p class="text-lg font-medium text-base-content/80">
+              {gettext("No results found")}
+            </p>
             <p class="text-sm text-base-content/50 mt-1">
-              Try adjusting your filters or search terms
+              {gettext("Try adjusting your filters or search terms")}
             </p>
             <p :if={@hide_owned} class="text-sm text-base-content/50 mt-1">
-              Titles already in your library are hidden.
+              {gettext("Titles already in your library are hidden.")}
             </p>
           </div>
         </div>
@@ -323,14 +339,14 @@
                 id="discover-load-more-error"
                 class="flex items-center gap-3 text-sm text-base-content/60"
               >
-                Couldn't load more results.
+                {gettext("Couldn't load more results.")}
                 <button
                   id="discover-load-more-retry"
                   type="button"
                   class="btn btn-ghost btn-sm"
                   phx-click="load_more"
                 >
-                  <.icon name="hero-arrow-path" class="w-4 h-4" /> Retry
+                  <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Retry")}
                 </button>
               </div>
             <% @has_more -> %>

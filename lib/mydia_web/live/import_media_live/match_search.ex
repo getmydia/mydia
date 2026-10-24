@@ -11,6 +11,8 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearch do
   set.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [start_async: 3]
 
@@ -164,5 +166,5 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearch do
     %{state | results: [], searching: false, error: search_failed()}
   end
 
-  defp search_failed, do: "Search failed. Try again."
+  defp search_failed, do: gettext("Search failed. Try again.")
 end

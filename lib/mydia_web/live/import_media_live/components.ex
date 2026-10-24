@@ -9,6 +9,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   """
 
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
   import MydiaWeb.CoreComponents
 
   alias Mydia.Library.ImportCandidateGroup
@@ -68,7 +69,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         <span
           :if={path.id in @active_library_ids}
           class="loading loading-spinner loading-xs text-primary"
-          aria-label="Scan in progress"
+          aria-label={gettext("Scan in progress")}
         />
         <span class={[
           "badge badge-sm",
@@ -109,13 +110,13 @@ defmodule MydiaWeb.ImportMediaLive.Components do
       <div class="filter flex items-center gap-1.5 flex-wrap">
         <label
           :for={
-            {band, id, label} <- [
-              {:all, "band-all", "All"},
-              {:ready, "band-ready", "Ready"},
-              {:needs_attention, "band-needs-attention", "Needs attention"},
-              {:no_match, "band-no-match", "No match"},
-              {:queued, "band-queued", "Queued"},
-              {:ignored, "band-ignored", "Ignored"}
+            {band, id} <- [
+              {:all, "band-all"},
+              {:ready, "band-ready"},
+              {:needs_attention, "band-needs-attention"},
+              {:no_match, "band-no-match"},
+              {:queued, "band-queued"},
+              {:ignored, "band-ignored"}
             ]
           }
           id={id}
@@ -137,7 +138,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             phx-click="select_band"
             phx-value-band={band}
           />
-          {label}
+          {band_chip_label(band)}
           <span class={[
             "badge badge-sm font-semibold",
             if(@band == band, do: "badge-primary-content text-primary", else: "badge-ghost")
@@ -157,7 +158,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             type="text"
             name="q"
             value={@search}
-            placeholder="Search folder…"
+            placeholder={gettext("Search folder…")}
             phx-debounce="300"
             class="input input-sm input-bordered pl-9 w-full sm:w-64"
           />
@@ -169,6 +170,13 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   defp count_for(counts, :all), do: counts.total
   defp count_for(counts, band), do: Map.get(counts, band, 0)
+
+  defp band_chip_label(:all), do: pgettext("import band", "All")
+  defp band_chip_label(:ready), do: pgettext("import band", "Ready")
+  defp band_chip_label(:needs_attention), do: pgettext("import band", "Needs attention")
+  defp band_chip_label(:no_match), do: pgettext("import band", "No match")
+  defp band_chip_label(:queued), do: pgettext("import band", "Queued")
+  defp band_chip_label(:ignored), do: pgettext("import band", "Ignored")
 
   @doc """
   The selection toolbar: how many groups are selected, a shortcut to select
@@ -198,7 +206,9 @@ defmodule MydiaWeb.ImportMediaLive.Components do
     >
       <div class="flex items-center gap-2.5 flex-wrap">
         <.icon name="hero-check-circle" class="w-5 h-5 shrink-0" />
-        <span class="font-medium text-sm">{@count} group(s) selected</span>
+        <span class="font-medium text-sm">
+          {ngettext("%{count} group selected", "%{count} groups selected", @count)}
+        </span>
 
         <button
           :if={@page_count > 0 and @count < @page_count}
@@ -206,7 +216,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           class="btn btn-xs btn-ghost underline hover:no-underline"
           phx-click="select_current_page"
         >
-          Select page ({@page_count})
+          {gettext("Select page (%{count})", count: @page_count)}
         </button>
 
         <button
@@ -215,7 +225,11 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           class="btn btn-xs btn-ghost underline hover:no-underline"
           phx-click="select_all_matching"
         >
-          Select all {@matching_count} matching this filter
+          {ngettext(
+            "Select all %{count} matching this filter",
+            "Select all %{count} matching this filter",
+            @matching_count
+          )}
         </button>
       </div>
 
@@ -228,7 +242,11 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               disabled={@count == 0}
               phx-click="restore_selected"
             >
-              <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-1" /> Restore {@count}
+              <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-1" /> {ngettext(
+                "Restore %{count}",
+                "Restore %{count}",
+                @count
+              )}
             </button>
             <button
               id="delete-selected"
@@ -236,10 +254,10 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               disabled={@count == 0}
               phx-click="confirm_delete_selected"
             >
-              <.icon name="hero-trash" class="w-4 h-4 mr-1" /> Delete files
+              <.icon name="hero-trash" class="w-4 h-4 mr-1" /> {gettext("Delete files")}
             </button>
             <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
-              Clear
+              {pgettext("selection", "Clear")}
             </button>
             <%!-- Queued groups are already mid-import, so Accept, Re-match, Dismiss,
             Restore and Delete all no-op here. Return to review is the one action
@@ -251,10 +269,10 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               disabled={@count == 0}
               phx-click="cancel_queued_selected"
             >
-              <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-1" /> Return to review
+              <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-1" /> {gettext("Return to review")}
             </button>
             <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
-              Clear
+              {pgettext("selection", "Clear")}
             </button>
           <% true -> %>
             <button
@@ -263,7 +281,11 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               disabled={@count == 0}
               phx-click="accept_selected"
             >
-              <.icon name="hero-check" class="w-4 h-4 mr-1" /> Accept {@count}
+              <.icon name="hero-check" class="w-4 h-4 mr-1" /> {ngettext(
+                "Accept %{count}",
+                "Accept %{count}",
+                @count
+              )}
             </button>
             <button
               id="rematch-selected"
@@ -271,7 +293,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               disabled={@count == 0}
               phx-click="rematch_selected"
             >
-              <.icon name="hero-arrow-path" class="w-4 h-4 mr-1" /> Re-match
+              <.icon name="hero-arrow-path" class="w-4 h-4 mr-1" /> {gettext("Re-match")}
             </button>
             <button
               id="dismiss-selected"
@@ -279,7 +301,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               disabled={@count == 0}
               phx-click="dismiss_selected"
             >
-              Dismiss
+              {gettext("Dismiss")}
             </button>
             <button
               id="delete-selected"
@@ -287,10 +309,10 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               disabled={@count == 0}
               phx-click="confirm_delete_selected"
             >
-              <.icon name="hero-trash" class="w-4 h-4 mr-1" /> Delete files
+              <.icon name="hero-trash" class="w-4 h-4 mr-1" /> {gettext("Delete files")}
             </button>
             <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
-              Clear
+              {pgettext("selection", "Clear")}
             </button>
         <% end %>
       </div>
@@ -334,7 +356,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           type="checkbox"
           class="checkbox checkbox-primary checkbox-sm shrink-0"
           checked={@selected}
-          aria-label={"Select #{@group.display_title}"}
+          aria-label={gettext("Select %{title}", title: @group.display_title)}
           phx-click="toggle_group"
           phx-value-id={@group.anchor_key}
         />
@@ -354,7 +376,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             {@group.display_title}
           </span>
           <span class="badge badge-ghost badge-sm shrink-0 font-normal">
-            {@group.file_count} file{if @group.file_count == 1, do: "", else: "s"}
+            {ngettext("%{count} file", "%{count} files", @group.file_count || 0)}
           </span>
         </button>
 
@@ -365,12 +387,15 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           :if={Map.get(@group, :returned_count, 0) > 0}
           id={"group-returned-#{@dom_key}"}
           class="badge badge-sm badge-info badge-outline shrink-0"
-          title="Sent back from the duplicates page. Never imported automatically."
+          title={gettext("Sent back from the duplicates page. Never imported automatically.")}
         >
-          Returned
+          {gettext("Returned")}
         </span>
         <span :if={@group.queued?} class="badge badge-sm badge-info gap-1 shrink-0">
-          <.icon name="hero-arrow-path" class="w-3 h-3 animate-spin" /> Queued
+          <.icon name="hero-arrow-path" class="w-3 h-3 animate-spin" /> {pgettext(
+            "import band",
+            "Queued"
+          )}
         </span>
       </div>
 
@@ -387,8 +412,9 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             id={"group-provider-badge-#{@dom_key}"}
             class="badge badge-warning badge-xs"
           >
-            From {provider_label(@group.provider_type)} · not found on {provider_label(
-              @library_provider
+            {gettext("From %{provider} · not found on %{library_provider}",
+              provider: provider_label(@group.provider_type),
+              library_provider: provider_label(@library_provider)
             )}
           </span>
           <span
@@ -414,7 +440,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             phx-value-id={@group.anchor_key}
           >
             <.icon name="hero-pencil-square" class="w-3.5 h-3.5 mr-1 opacity-70" />
-            {if @band == :no_match, do: "Identify", else: "Change match"}
+            {if @band == :no_match, do: gettext("Identify"), else: gettext("Change match")}
           </button>
           <button
             :if={@band == :no_match}
@@ -424,7 +450,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             phx-value-id={@group.anchor_key}
           >
             <.icon name="hero-folder-plus" class="w-3.5 h-3.5 mr-1 opacity-70" />
-            Create show from folder
+            {gettext("Create show from folder")}
           </button>
         </div>
       </div>
@@ -488,7 +514,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                 id={"member-deleting-#{candidate.id}"}
                 class="badge badge-xs badge-error badge-outline gap-1 shrink-0 self-end sm:self-center"
               >
-                <.icon name="hero-arrow-path" class="w-3 h-3 animate-spin" /> Deleting…
+                <.icon name="hero-arrow-path" class="w-3 h-3 animate-spin" /> {gettext("Deleting…")}
               </span>
             <% else %>
               <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
@@ -514,7 +540,9 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                       phx-debounce="400"
                       class="join-item input input-xs w-14 text-center font-mono border-0 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       container_class="contents"
-                      aria-label={"Season for #{member_filename(candidate)}"}
+                      aria-label={
+                        gettext("Season for %{filename}", filename: member_filename(candidate))
+                      }
                     />
                     <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
                       E
@@ -529,7 +557,9 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                       phx-debounce="400"
                       class="join-item input input-xs w-16 text-center font-mono border-0 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       container_class="contents"
-                      aria-label={"Episode for #{member_filename(candidate)}"}
+                      aria-label={
+                        gettext("Episode for %{filename}", filename: member_filename(candidate))
+                      }
                     />
                   </div>
                 </form>
@@ -541,11 +571,15 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                   type="button"
                   id={"delete-member-#{candidate.id}"}
                   class="btn btn-xs btn-ghost btn-square text-error/70 hover:text-error hover:bg-error/10 transition-colors"
-                  title="Delete from disk"
-                  aria-label={"Delete #{member_filename(candidate)}"}
+                  title={gettext("Delete from disk")}
+                  aria-label={gettext("Delete %{filename}", filename: member_filename(candidate))}
                   phx-click="delete_member"
                   phx-value-candidate_id={candidate.id}
-                  data-confirm={"Permanently delete #{member_filename(candidate)} from disk? This cannot be undone."}
+                  data-confirm={
+                    gettext("Permanently delete %{filename} from disk? This cannot be undone.",
+                      filename: member_filename(candidate)
+                    )
+                  }
                 >
                   <.icon name="hero-trash" class="w-3.5 h-3.5" />
                 </button>
@@ -578,7 +612,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           type="checkbox"
           class="checkbox checkbox-primary checkbox-sm shrink-0"
           checked={@selected}
-          aria-label={"Select #{@group.display_title}"}
+          aria-label={gettext("Select %{title}", title: @group.display_title)}
           phx-click="toggle_group"
           phx-value-id={@group.anchor_key}
         />
@@ -586,7 +620,9 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
             <span class="font-semibold text-sm truncate opacity-70">{@group.display_title}</span>
-            <span class="badge badge-ghost badge-sm shrink-0">{@group.file_count} files</span>
+            <span class="badge badge-ghost badge-sm shrink-0">
+              {ngettext("%{count} file", "%{count} files", @group.file_count || 0)}
+            </span>
           </div>
           <p class="text-xs text-base-content/50 truncate mt-0.5">{suggestion_line(@group)}</p>
         </div>
@@ -598,7 +634,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         phx-click="restore_group"
         phx-value-id={@group.anchor_key}
       >
-        <.icon name="hero-arrow-uturn-left" class="w-3.5 h-3.5 mr-1" /> Restore
+        <.icon name="hero-arrow-uturn-left" class="w-3.5 h-3.5 mr-1" /> {gettext("Restore")}
       </button>
     </div>
     """
@@ -621,51 +657,73 @@ defmodule MydiaWeb.ImportMediaLive.Components do
       <:title>
         <div class="flex items-center gap-2">
           <.icon name="hero-trash" class="w-5 h-5 text-error" />
-          <span>Delete files from disk</span>
+          <span>{gettext("Delete files from disk")}</span>
         </div>
       </:title>
 
       <p :if={@state} id="delete-files-summary" class="text-sm">
-        Permanently delete {plural(@state.files, "file")} in {plural(@state.groups, "group")} from disk? This cannot be undone.
+        {delete_summary(@state.files, @state.groups)}
       </p>
 
       <:actions>
-        <button class="btn btn-ghost" phx-click="cancel_delete_selected">Cancel</button>
+        <button class="btn btn-ghost" phx-click="cancel_delete_selected">
+          {gettext("Cancel")}
+        </button>
         <button
           id="confirm-delete-files"
           class="btn btn-error"
           phx-click="delete_selected"
-          phx-disable-with="Deleting…"
+          phx-disable-with={gettext("Deleting…")}
         >
-          <.icon name="hero-trash" class="w-4 h-4" /> Delete files
+          <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Delete files")}
         </button>
       </:actions>
     </.modal>
     """
   end
 
-  defp plural(1, word), do: "1 #{word}"
-  defp plural(count, word), do: "#{count} #{word}s"
+  # Two counts in one sentence: one whole-sentence msgid per group form, with
+  # the file count driving the plural.
+  defp delete_summary(files, 1) do
+    ngettext(
+      "Permanently delete %{count} file in 1 group from disk? This cannot be undone.",
+      "Permanently delete %{count} files in 1 group from disk? This cannot be undone.",
+      files
+    )
+  end
+
+  defp delete_summary(files, groups) do
+    ngettext(
+      "Permanently delete %{count} file in %{groups} groups from disk? This cannot be undone.",
+      "Permanently delete %{count} files in %{groups} groups from disk? This cannot be undone.",
+      files,
+      groups: groups
+    )
+  end
 
   defp band_class(:ready), do: "badge-success"
   defp band_class(:needs_attention), do: "badge-warning"
   defp band_class(:no_match), do: "badge-error"
 
-  defp band_label(:ready), do: "ready"
-  defp band_label(:needs_attention), do: "needs attention"
-  defp band_label(:no_match), do: "no match"
+  defp band_label(:ready), do: pgettext("import band badge", "ready")
+  defp band_label(:needs_attention), do: pgettext("import band badge", "needs attention")
+  defp band_label(:no_match), do: pgettext("import band badge", "no match")
 
-  defp suggestion_line(%{provider_id: nil}), do: "No provider match"
+  defp suggestion_line(%{provider_id: nil}), do: gettext("No provider match")
 
   # A provider id with no title: rows staged before `stage_item_file/3` wrote
   # the show's title, and the leftovers `create_local_show/2` stamps local.
   # Both used to render an arrow pointing at nothing.
   defp suggestion_line(%{provider_type: "local", suggested_title: title})
        when title in [nil, ""],
-       do: "→ Local show"
+       do: gettext("→ Local show")
 
   defp suggestion_line(%{suggested_title: title} = group) when title in [nil, ""],
-    do: "→ #{provider_label(group.provider_type)} #{group.provider_id}"
+    do:
+      gettext("→ %{provider} %{id}",
+        provider: provider_label(group.provider_type),
+        id: group.provider_id
+      )
 
   defp suggestion_line(group) do
     year = if group.suggested_year, do: " (#{group.suggested_year})", else: ""
@@ -678,7 +736,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   defp cross_provider?(_group, _library_provider), do: false
 
-  defp provider_label(provider), do: TvProvider.label(provider) || "Provider"
+  defp provider_label(provider), do: TvProvider.label(provider) || gettext("Provider")
 
   # `ImportCandidateGroup` carries no persisted evidence trail (unlike the old
   # `ImportGroup.evidence` column) -- `provider_count` is the one disagreement
@@ -688,7 +746,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   # `Mydia.ImportCandidates.group_query/2`), so the badge explains why an
   # otherwise-matched-looking group still needs a look.
   defp disagreement_label(%{provider_count: n}) when is_integer(n) and n > 1,
-    do: "#{n} conflicting matches"
+    do: ngettext("%{count} conflicting match", "%{count} conflicting matches", n)
 
   defp disagreement_label(_), do: nil
 
@@ -696,8 +754,8 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   # written to every row alike. Different messages are per-file reasons, and
   # each row shows its own.
   defp group_error_label(%{distinct_error_count: distinct, error_count: count})
-       when distinct > 1,
-       do: "#{count} files couldn't import"
+       when distinct > 1 and is_integer(count),
+       do: ngettext("%{count} file couldn't import", "%{count} files couldn't import", count)
 
   defp group_error_label(%{queue_error: error}), do: error
 
@@ -744,7 +802,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         {true, "E#{String.pad_leading(to_string(episode), 2, "0")}"}
 
       true ->
-        {false, "No episode"}
+        {false, gettext("No episode")}
     end
   end
 end

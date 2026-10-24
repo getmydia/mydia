@@ -24,9 +24,9 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
       <div :if={not @has_services} id="discover-services-prompt" class="card bg-base-200 mb-6">
         <div class="card-body flex-row items-center justify-between gap-4 py-4">
           <div>
-            <h2 class="font-semibold">Pick your streaming services</h2>
+            <h2 class="font-semibold">{gettext("Pick your streaming services")}</h2>
             <p class="text-sm text-base-content/60">
-              See the latest titles on the services you subscribe to.
+              {gettext("See the latest titles on the services you subscribe to.")}
             </p>
           </div>
           <button
@@ -34,7 +34,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
             class="btn btn-primary btn-sm"
             phx-click="open_country_settings"
           >
-            Pick services
+            {gettext("Pick services")}
           </button>
         </div>
       </div>
@@ -54,7 +54,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
               }
               class="btn btn-sm btn-ghost"
             >
-              See all <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
+              {gettext("See all")} <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
             </.link>
           </div>
           <%= case row.status do %>
@@ -63,19 +63,19 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
             <% :error -> %>
               <div class="alert">
                 <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-warning" />
-                <span>Could not load this row.</span>
+                <span>{gettext("Could not load this row.")}</span>
                 <button
                   id={"discover-row-#{param}-retry"}
                   class="btn btn-sm"
                   phx-click="retry_regional_row"
                   phx-value-source={param}
                 >
-                  Retry
+                  {gettext("Retry")}
                 </button>
               </div>
             <% :ok when items == [] -> %>
               <p id={"discover-row-#{param}-empty"} class="text-sm text-base-content/60 py-4">
-                Nothing here right now.
+                {gettext("Nothing here right now.")}
               </p>
             <% :ok -> %>
               <.media_rail
@@ -111,9 +111,11 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
       phx-key="Escape"
     >
       <div class="modal-box max-w-2xl">
-        <h3 id="discover-country-settings-title" class="font-bold text-lg">Your country</h3>
+        <h3 id="discover-country-settings-title" class="font-bold text-lg">
+          {gettext("Your country")}
+        </h3>
         <p class="text-sm text-base-content/60 mt-1">
-          See what is in cinemas and on your streaming services where you live.
+          {gettext("See what is in cinemas and on your streaming services where you live.")}
         </p>
         <form
           id="discover-country-settings-form"
@@ -122,9 +124,15 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
           class="mt-4 space-y-4"
         >
           <label class="fieldset">
-            <span class="fieldset-legend">Country</span>
-            <select name="country" class="select select-bordered w-full" aria-label="Country">
-              <option value="" selected={is_nil(@settings.country)}>Pick a country</option>
+            <span class="fieldset-legend">{gettext("Country")}</span>
+            <select
+              name="country"
+              class="select select-bordered w-full"
+              aria-label={gettext("Country")}
+            >
+              <option value="" selected={is_nil(@settings.country)}>
+                {gettext("Pick a country")}
+              </option>
               <option
                 :for={{code, name} <- @countries}
                 value={code}
@@ -136,19 +144,19 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
           </label>
 
           <div :if={@settings.country} id="discover-country-settings-services">
-            <span class="fieldset-legend">Streaming services</span>
+            <span class="fieldset-legend">{gettext("Streaming services")}</span>
             <%= case @settings.status do %>
               <% :error -> %>
                 <div class="alert alert-warning">
                   <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-                  <span>Could not load the services for this country.</span>
+                  <span>{gettext("Could not load the services for this country.")}</span>
                   <button
                     id="discover-country-settings-retry"
                     type="button"
                     class="btn btn-sm"
                     phx-click="retry_country_settings"
                   >
-                    Retry
+                    {gettext("Retry")}
                   </button>
                 </div>
               <% :ok -> %>
@@ -178,7 +186,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
               class="btn btn-ghost text-error mr-auto"
               phx-click="remove_home_country"
             >
-              Remove
+              {gettext("Remove")}
             </button>
             <button
               id="discover-country-settings-cancel"
@@ -186,7 +194,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
               class="btn btn-ghost"
               phx-click="close_country_settings"
             >
-              Cancel
+              {gettext("Cancel")}
             </button>
             <button
               id="discover-country-settings-save"
@@ -194,7 +202,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
               class="btn btn-primary"
               disabled={is_nil(@settings.country)}
             >
-              Save
+              {gettext("Save")}
             </button>
           </div>
         </form>
