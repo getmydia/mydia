@@ -134,13 +134,16 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # A new tab or view resets the sort: a view-specific sort (ratio on
   # Imported) is not an option in the next view.
   defp reset_list(socket, scope_changed?) do
-    # Any list change clears the selection: a batch action must not reach rows
-    # the new tab, view or filters hide.
+    # Any list change clears the selection and closes the inline library
+    # search: neither may reach rows the new tab, view or filters hide.
     socket =
       socket
       |> assign(:page, 0)
       |> assign(:selected_ids, MapSet.new())
       |> assign(:selection_mode, false)
+      |> assign(:search_open_for, nil)
+      |> assign(:library_search_value, "")
+      |> assign(:library_search_results, [])
 
     if scope_changed?, do: assign(socket, :sort_by, @default_sort), else: socket
   end
@@ -1385,11 +1388,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   # Stream rows are not re-rendered when an assign changes, so the inline
   # library search (open state, query, results) re-inserts the torrent rows it
-  # affects. Only needs-matching rows carry the search.
+  # affects. Only needs-matching rows carry the search. Rows the filters hide
+  # stay out: stream_insert would append them.
   defp refresh_issue_rows(%{assigns: %{active_tab: :issues}} = socket, ids) do
     socket.assigns.scan.needs_matching
     |> Enum.filter(&(&1.id in ids))
     |> IssueList.build([])
+    |> IssueList.filter(socket.assigns.filters)
     |> Enum.reduce(socket, &stream_insert(&2, :issues, &1))
   end
 

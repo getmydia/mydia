@@ -118,6 +118,41 @@ defmodule MydiaWeb.DownloadsLive.IssuesListLiveTest do
     assert has_element?(view, "#issues-t1 #library-search-form-t1")
   end
 
+  test "opening Match never brings back a row the filters hide", %{conn: conn} do
+    torrent = fn id, title ->
+      %ExternalTorrent{
+        id: id,
+        client_name: "qbit",
+        client_id: "hash-#{id}",
+        title: title,
+        kind: :needs_matching,
+        status: :downloading,
+        progress: 40.0,
+        suggestions: []
+      }
+    end
+
+    :ok =
+      ExternalTorrents.put(%{
+        ExternalScan.empty()
+        | needs_matching: [
+            torrent.("t1", "Fictional.Salt.Meridian.S01E01"),
+            torrent.("t2", "Fictional.Copper.Lantern.S01E01")
+          ]
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")
+    view |> element("#issue-match-t1") |> render_click()
+
+    view |> element("#downloads-filter-form") |> render_change(%{"q" => "Copper"})
+    refute has_element?(view, "#issues-t1")
+
+    view |> element("#issue-match-t2") |> render_click()
+
+    refute has_element?(view, "#issues-t1")
+    assert has_element?(view, "#issues-t2 #library-search-form-t2")
+  end
+
   test "the Issues tab badge counts every issue", %{conn: conn} do
     seed_import_failure_and_missing()
 
