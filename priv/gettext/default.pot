@@ -32,6 +32,7 @@ msgstr ""
 msgid "We can't find the internet"
 msgstr ""
 
+#: lib/mydia_web/components/core_components.ex:555
 #: lib/mydia_web/components/flash_components.ex:67
 #, elixir-autogen, elixir-format
 msgid "close"
@@ -67,3 +68,411 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "Used when a user picks Automatic and their browser asks for no language Mydia has."
 msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:767
+#, elixir-autogen, elixir-format
+msgid "%{category} (Auto-detected)"
+msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:764
+#, elixir-autogen, elixir-format
+msgid "%{category} (Manual override)"
+msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:652
+#, elixir-autogen, elixir-format
+msgid "%{duration} left"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:486
+#, elixir-autogen, elixir-format
+msgid "%{seconds}s"
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:98
+#, elixir-autogen, elixir-format
+msgid "+%{count} more..."
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:127
+#, elixir-autogen, elixir-format
+msgid "Account menu"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:265
+#, elixir-autogen, elixir-format
+msgid "Acquisition"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:302
+#, elixir-autogen, elixir-format
+msgid "Activity"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:211
+#: lib/mydia_web/components/layouts.ex:212
+#, elixir-autogen, elixir-format
+msgid "Add section"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:308
+#, elixir-autogen, elixir-format
+msgid "Admin"
+msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:756
+#: lib/mydia_web/components/core_components.ex:759
+#, elixir-autogen, elixir-format
+msgid "Anime"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:290
+#: lib/mydia_web/components/video_player_components.ex:308
+#, elixir-autogen, elixir-format
+msgid "Auto"
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:135
+#, elixir-autogen, elixir-format
+msgid "Avatar"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:251
+#, elixir-autogen, elixir-format
+msgid "Calendar"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:476
+#, elixir-autogen, elixir-format
+msgid "Cancel"
+msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:757
+#: lib/mydia_web/components/core_components.ex:760
+#, elixir-autogen, elixir-format
+msgid "Cartoon"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:151
+#, elixir-autogen, elixir-format
+msgid "Close sidebar"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:245
+#, elixir-autogen, elixir-format
+msgid "Collections"
+msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:616
+#, elixir-autogen, elixir-format
+msgid "Continue"
+msgstr ""
+
+#: lib/mydia_web/live/user_auth.ex:248
+#, elixir-autogen, elixir-format
+msgid "Could not send feedback. Please try again later."
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:488
+#, elixir-autogen, elixir-format
+msgid "Dark theme"
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:186
+#, elixir-autogen, elixir-format
+msgid "Devices"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:192
+#: lib/mydia_web/components/layouts.ex:543
+#, elixir-autogen, elixir-format
+msgid "Discover"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:134
+#, elixir-autogen, elixir-format
+msgid "Dismiss"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:275
+#: lib/mydia_web/components/layouts.ex:565
+#, elixir-autogen, elixir-format
+msgid "Downloads"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:377
+#, elixir-autogen, elixir-format
+msgid "Error loading video"
+msgstr ""
+
+#: lib/mydia_web/live/user_auth.ex:457
+#, elixir-autogen, elixir-format
+msgid "Feedback is rate limited. Try again in %{seconds} seconds."
+msgstr ""
+
+#: lib/mydia_web/live/user_auth.ex:462
+#, elixir-autogen, elixir-format
+msgid "Feedback is rate limited. Try again in about %{minutes} minutes."
+msgstr ""
+
+#: lib/mydia_web/live/user_auth.ex:454
+#, elixir-autogen, elixir-format
+msgid "Feedback is rate limited. Try again later."
+msgstr ""
+
+#: lib/mydia_web/live/user_auth.ex:241
+#, elixir-autogen, elixir-format
+msgid "Feedback service is temporarily unavailable. Please try again later."
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:184
+#: lib/mydia_web/components/layouts.ex:536
+#, elixir-autogen, elixir-format
+msgid "Home"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:283
+#, elixir-autogen, elixir-format
+msgid "Import"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:296
+#, elixir-autogen, elixir-format
+msgid "Import Lists"
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:199
+#, elixir-autogen, elixir-format
+msgid "Install app"
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:177
+#, elixir-autogen, elixir-format
+msgid "Integrations"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:205
+#, elixir-autogen, elixir-format
+msgid "Library"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:478
+#, elixir-autogen, elixir-format
+msgid "Light theme"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:362
+#, elixir-autogen, elixir-format
+msgid "Loading..."
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:232
+#, elixir-autogen, elixir-format
+msgid "Log out"
+msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:755
+#, elixir-autogen, elixir-format
+msgid "Movie"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:221
+#: lib/mydia_web/components/layouts.ex:558
+#, elixir-autogen, elixir-format
+msgid "Movies"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:163
+#, elixir-autogen, elixir-format
+msgid "Mute/Unmute"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:200
+#, elixir-autogen, elixir-format
+msgid "My Requests"
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:216
+#, elixir-autogen, elixir-format
+msgid "New"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:119
+#, elixir-autogen, elixir-format
+msgid "New in Mydia v%{version}"
+msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:701
+#, elixir-autogen, elixir-format
+msgid "No profile"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:248
+#: lib/mydia_web/components/video_player_components.ex:267
+#, elixir-autogen, elixir-format
+msgid "Normal"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:169
+#, elixir-autogen, elixir-format
+msgid "Open Player"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:469
+#, elixir-autogen, elixir-format
+msgid "Play Now"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:107
+#, elixir-autogen, elixir-format
+msgid "Play/Pause"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:172
+#: lib/mydia_web/components/layouts.ex:575
+#, elixir-autogen, elixir-format
+msgid "Player"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:484
+#, elixir-autogen, elixir-format
+msgid "Playing in"
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:168
+#, elixir-autogen, elixir-format
+msgid "Profile"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:287
+#, elixir-autogen, elixir-format
+msgid "Quality"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:551
+#, elixir-autogen, elixir-format
+msgid "Requests"
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:92
+#, elixir-autogen, elixir-format
+msgid "Running Jobs"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:269
+#, elixir-autogen, elixir-format
+msgid "Search"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:127
+#, elixir-autogen, elixir-format
+msgid "See what's new"
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:222
+#, elixir-autogen, elixir-format
+msgid "Send feedback"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:220
+#, elixir-autogen, elixir-format
+msgid "Settings"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:427
+#, elixir-autogen, elixir-format
+msgid "Skip Credits"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:406
+#, elixir-autogen, elixir-format
+msgid "Skip Intro"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:118
+#, elixir-autogen, elixir-format
+msgid "Skip backward 10 seconds"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:140
+#, elixir-autogen, elixir-format
+msgid "Skip forward 10 seconds"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:245
+#, elixir-autogen, elixir-format
+msgid "Speed"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:468
+#, elixir-autogen, elixir-format
+msgid "System theme"
+msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:758
+#: lib/mydia_web/components/layouts.ex:560
+#, elixir-autogen, elixir-format
+msgid "TV"
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:229
+#, elixir-autogen, elixir-format
+msgid "TV Shows"
+msgstr ""
+
+#: lib/mydia_web/live/user_auth.ex:226
+#, elixir-autogen, elixir-format
+msgid "Thanks, feedback sent."
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:207
+#, elixir-autogen, elixir-format
+msgid "Theme"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:339
+#, elixir-autogen, elixir-format
+msgid "Toggle Fullscreen"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:384
+#, elixir-autogen, elixir-format
+msgid "Try Again"
+msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:761
+#, elixir-autogen, elixir-format
+msgid "Unknown"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:451
+#, elixir-autogen, elixir-format
+msgid "Up Next"
+msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:704
+#, elixir-autogen, elixir-format
+msgid "Use default (%{name})"
+msgstr ""
+
+#: lib/mydia_web/components/core_components.ex:623
+#, elixir-autogen, elixir-format
+msgid "Watched"
+msgstr ""
+
+#: lib/mydia_web/components/sidebar_components.ex:214
+#, elixir-autogen, elixir-format
+msgid "What's new"
+msgstr ""
+
+#: lib/mydia_web/components/video_player_components.ex:72
+#, elixir-autogen, elixir-format
+msgid "Your browser does not support video playback."
+msgstr ""
+
+#: lib/mydia_web/components/layouts.ex:613
+#, elixir-autogen, elixir-format
+msgid "and 1 earlier release"
+msgid_plural "and %{count} earlier releases"
+msgstr[0] ""
+msgstr[1] ""

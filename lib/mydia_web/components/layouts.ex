@@ -85,7 +85,7 @@ defmodule MydiaWeb.Layouts do
       <input id="main-drawer" type="checkbox" class="drawer-toggle" phx-update="ignore" />
 
       <div class="drawer-content flex flex-col">
-        <!-- Mobile header with menu button -->
+        <%!-- Mobile header with menu button --%>
         <header
           id="mobile-header"
           class="lg:hidden sticky top-0 z-30 navbar pt-[calc(0.5rem+env(safe-area-inset-top,0px))] bg-base-300/95 backdrop-blur border-b border-base-content/10"
@@ -103,10 +103,10 @@ defmodule MydiaWeb.Layouts do
           </div>
         </header>
 
-        <!-- Main content area. The bottom padding clears the floating mobile
+        <%!-- Main content area. The bottom padding clears the floating mobile
              dock (shown below lg) plus the home-indicator inset. It is set
              apart from the other sides because `sm:p-4`/`md:p-6` used to
-             override it, leaving 16-24px under the dock on tablets (#1189). -->
+             override it, leaving 16-24px under the dock on tablets (#1189). --%>
         <main class="flex-1 px-3 pt-3 sm:px-4 sm:pt-4 md:px-6 md:pt-6 lg:p-8 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
           <div
             :if={@changelog_notice}
@@ -116,7 +116,7 @@ defmodule MydiaWeb.Layouts do
             <div class="flex items-center gap-2 flex-1">
               <.icon name="hero-sparkles" class="w-5 h-5 shrink-0" />
               <span>
-                New in Mydia v{@changelog_notice.version}
+                {gettext("New in Mydia v%{version}", version: @changelog_notice.version)}
                 <span :if={@changelog_notice.older_count > 0} class="opacity-70">
                   {earlier_releases_label(@changelog_notice.older_count)}
                 </span>
@@ -124,14 +124,14 @@ defmodule MydiaWeb.Layouts do
             </div>
             <div class="flex items-center gap-2">
               <.link navigate={~p"/changelog"} class="btn btn-sm btn-neutral">
-                See what's new
+                {gettext("See what's new")}
               </.link>
               <button
                 id="changelog-dismiss"
                 type="button"
                 phx-click="dismiss_changelog"
                 class="btn btn-sm btn-ghost btn-square"
-                aria-label="Dismiss"
+                aria-label={gettext("Dismiss")}
               >
                 <.icon name="hero-x-mark" class="w-4 h-4" />
               </button>
@@ -146,12 +146,12 @@ defmodule MydiaWeb.Layouts do
         />
       </div>
 
-      <!-- Sidebar -->
+      <%!-- Sidebar --%>
       <div class="drawer-side z-40">
-        <label for="main-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+        <label for="main-drawer" aria-label={gettext("Close sidebar")} class="drawer-overlay"></label>
 
         <aside class="flex flex-col w-64 h-full bg-base-300">
-          <!-- Logo and branding -->
+          <%!-- Logo and branding --%>
           <div
             id="sidebar-brand"
             class="px-4 pb-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] border-b border-base-300"
@@ -166,22 +166,22 @@ defmodule MydiaWeb.Layouts do
                 id="sidebar-player-link"
                 href="/player"
                 class="btn btn-primary btn-sm gap-1.5 rounded-full shadow-sm hover:shadow-md transition-shadow"
-                title="Open Player"
+                title={gettext("Open Player")}
               >
                 <.icon name="hero-play-solid" class="w-4 h-4" />
-                <span class="text-sm font-semibold">Player</span>
+                <span class="text-sm font-semibold">{gettext("Player")}</span>
               </a>
             </div>
           </div>
 
-          <!-- Navigation menu -->
+          <%!-- Navigation menu --%>
           <nav class="flex-1 min-h-0 overflow-y-auto">
             <ul class="menu w-full space-y-1 px-2 py-4">
               <.nav_item
                 id="nav-home"
                 path="/"
                 icon="hero-home"
-                label="Home"
+                label={gettext("Home")}
                 current_path={@current_path}
                 exact
               />
@@ -189,7 +189,7 @@ defmodule MydiaWeb.Layouts do
                 id="nav-discover"
                 path="/discover"
                 icon="hero-sparkles"
-                label="Discover"
+                label={gettext("Discover")}
                 current_path={@current_path}
               />
               <.nav_item
@@ -197,19 +197,19 @@ defmodule MydiaWeb.Layouts do
                 id="nav-my-requests"
                 path="/requests"
                 icon="hero-queue-list"
-                label="My Requests"
+                label={gettext("My Requests")}
                 current_path={@current_path}
                 exact
               />
 
-              <.nav_title id="nav-title-library" label="Library">
+              <.nav_title id="nav-title-library" label={gettext("Library")}>
                 <:action>
                   <.link
                     id="nav-add-section"
                     navigate={~p"/sections/new"}
                     class="btn btn-ghost btn-xs btn-square"
-                    aria-label="Add section"
-                    title="Add section"
+                    aria-label={gettext("Add section")}
+                    title={gettext("Add section")}
                   >
                     <.icon name="hero-plus" class="w-4 h-4" />
                   </.link>
@@ -218,7 +218,7 @@ defmodule MydiaWeb.Layouts do
               <.nav_item
                 path="/movies"
                 icon="hero-film"
-                label="Movies"
+                label={gettext("Movies")}
                 current_path={@current_path}
                 count={@movie_count}
                 count_id="nav-movie-count"
@@ -226,7 +226,7 @@ defmodule MydiaWeb.Layouts do
               <.nav_item
                 path="/tv"
                 icon="hero-tv"
-                label="TV Shows"
+                label={gettext("TV Shows")}
                 current_path={@current_path}
                 count={@tv_show_count}
                 count_id="nav-tv-count"
@@ -242,13 +242,13 @@ defmodule MydiaWeb.Layouts do
               <.nav_item
                 path="/collections"
                 icon="hero-folder"
-                label="Collections"
+                label={gettext("Collections")}
                 current_path={@current_path}
               />
               <.nav_item
                 path="/calendar"
                 icon="hero-calendar"
-                label="Calendar"
+                label={gettext("Calendar")}
                 current_path={@current_path}
               />
 
@@ -262,17 +262,17 @@ defmodule MydiaWeb.Layouts do
               />
 
               <%= if Authorization.can_update_media?(@current_user) do %>
-                <.nav_title id="nav-title-acquisition" label="Acquisition" />
+                <.nav_title id="nav-title-acquisition" label={gettext("Acquisition")} />
                 <.nav_item
                   path="/search"
                   icon="hero-magnifying-glass"
-                  label="Search"
+                  label={gettext("Search")}
                   current_path={@current_path}
                 />
                 <.nav_item
                   path="/downloads"
                   icon="hero-arrow-down-tray"
-                  label="Downloads"
+                  label={gettext("Downloads")}
                   current_path={@current_path}
                   badge={@downloads_count}
                   badge_id="nav-downloads-badge"
@@ -280,7 +280,7 @@ defmodule MydiaWeb.Layouts do
                 <.nav_item
                   path="/import"
                   icon="hero-inbox-stack"
-                  label="Import"
+                  label={gettext("Import")}
                   current_path={@current_path}
                   badge={@import_candidate_group_count}
                   badge_id="nav-import-badge"
@@ -293,19 +293,19 @@ defmodule MydiaWeb.Layouts do
                   id="nav-import-lists"
                   path={~p"/admin/import-lists"}
                   icon="hero-arrow-down-on-square-stack"
-                  label="Import Lists"
+                  label={gettext("Import Lists")}
                   current_path={@current_path}
                 />
                 <.nav_item
                   path="/activity"
                   icon="hero-clock"
-                  label="Activity"
+                  label={gettext("Activity")}
                   current_path={@current_path}
                 />
               <% end %>
 
               <%= if Authorization.is_admin?(@current_user) do %>
-                <.nav_title id="nav-title-admin" label="Admin" />
+                <.nav_title id="nav-title-admin" label={gettext("Admin")} />
                 <.admin_nav
                   current_path={@current_path}
                   pending_requests_count={@pending_requests_count}
@@ -465,7 +465,7 @@ defmodule MydiaWeb.Layouts do
         type="button"
         phx-click="set_theme_mode"
         phx-value-mode="system"
-        title="System theme"
+        title={gettext("System theme")}
       >
         <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
@@ -475,7 +475,7 @@ defmodule MydiaWeb.Layouts do
         type="button"
         phx-click="set_theme_mode"
         phx-value-mode="light"
-        title="Light theme"
+        title={gettext("Light theme")}
       >
         <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
@@ -485,7 +485,7 @@ defmodule MydiaWeb.Layouts do
         type="button"
         phx-click="set_theme_mode"
         phx-value-mode="dark"
-        title="Dark theme"
+        title={gettext("Dark theme")}
       >
         <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
@@ -529,12 +529,18 @@ defmodule MydiaWeb.Layouts do
       >
       </div>
 
-      <.dock_link path="/" current_path={@current_path} icon="hero-home" label="Home" exact />
+      <.dock_link
+        path="/"
+        current_path={@current_path}
+        icon="hero-home"
+        label={gettext("Home")}
+        exact
+      />
       <.dock_link
         path="/discover"
         current_path={@current_path}
         icon="hero-sparkles"
-        label="Discover"
+        label={gettext("Discover")}
       />
 
       <%= if @current_user && @current_user.role == "guest" do %>
@@ -542,21 +548,21 @@ defmodule MydiaWeb.Layouts do
           path="/requests"
           current_path={@current_path}
           icon="hero-queue-list"
-          label="Requests"
+          label={gettext("Requests")}
         />
       <% else %>
         <.dock_link
           path="/movies"
           current_path={@current_path}
           icon="hero-film"
-          label="Movies"
+          label={gettext("Movies")}
         />
-        <.dock_link path="/tv" current_path={@current_path} icon="hero-tv" label="TV" />
+        <.dock_link path="/tv" current_path={@current_path} icon="hero-tv" label={gettext("TV")} />
         <.dock_link
           path="/downloads"
           current_path={@current_path}
           icon="hero-arrow-down-tray"
-          label="Downloads"
+          label={gettext("Downloads")}
         />
         <a
           :if={!@hide_player and Mydia.Player.enabled?()}
@@ -566,7 +572,7 @@ defmodule MydiaWeb.Layouts do
           class="flex flex-col items-center justify-center min-w-[52px] py-1.5 rounded-xl text-primary hover:bg-primary/10 transition-[color,opacity] duration-300 ease-in-out relative z-10"
         >
           <.icon name="hero-play-circle-solid" class="size-5" />
-          <span class="text-[10px] mt-0.5 opacity-70">Player</span>
+          <span class="text-[10px] mt-0.5 opacity-70">{gettext("Player")}</span>
         </a>
       <% end %>
     </nav>
@@ -603,6 +609,7 @@ defmodule MydiaWeb.Layouts do
     """
   end
 
-  defp earlier_releases_label(1), do: "and 1 earlier release"
-  defp earlier_releases_label(count), do: "and #{count} earlier releases"
+  defp earlier_releases_label(count) do
+    ngettext("and 1 earlier release", "and %{count} earlier releases", count)
+  end
 end

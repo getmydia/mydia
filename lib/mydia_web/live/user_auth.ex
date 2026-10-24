@@ -5,6 +5,8 @@ defmodule MydiaWeb.Live.UserAuth do
   Provides `on_mount` hooks for LiveViews to authenticate users
   and assign current_user to the socket.
   """
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component
   import Phoenix.LiveView
 
@@ -221,17 +223,14 @@ defmodule MydiaWeb.Live.UserAuth do
         {:ok, _result} ->
           {:halt,
            socket
-           |> put_flash(:info, "Thanks, feedback sent.")
+           |> put_flash(:info, gettext("Thanks, feedback sent."))
            |> assign(:show_feedback_modal, false)
            |> assign(:feedback_form, build_feedback_form(%{}))}
 
         {:error, {:rate_limited, retry_after}} ->
           {:halt,
            socket
-           |> put_flash(
-             :error,
-             "Feedback is rate limited. Try again #{retry_after_text(retry_after)}."
-           )
+           |> put_flash(:error, rate_limited_message(retry_after))
            |> assign(:feedback_form, build_feedback_form(feedback_params))}
 
         {:error, :service_unavailable} ->
@@ -239,14 +238,14 @@ defmodule MydiaWeb.Live.UserAuth do
            socket
            |> put_flash(
              :error,
-             "Feedback service is temporarily unavailable. Please try again later."
+             gettext("Feedback service is temporarily unavailable. Please try again later.")
            )
            |> assign(:feedback_form, build_feedback_form(feedback_params))}
 
         {:error, _reason} ->
           {:halt,
            socket
-           |> put_flash(:error, "Could not send feedback. Please try again later.")
+           |> put_flash(:error, gettext("Could not send feedback. Please try again later."))
            |> assign(:feedback_form, build_feedback_form(feedback_params))}
       end
     else
@@ -450,14 +449,17 @@ defmodule MydiaWeb.Live.UserAuth do
     end)
   end
 
-  defp retry_after_text(nil), do: "later"
+  # One whole sentence per variant: the time phrase cannot be translated apart
+  # from the sentence it sits in.
+  defp rate_limited_message(nil), do: gettext("Feedback is rate limited. Try again later.")
 
-  defp retry_after_text(seconds) when is_integer(seconds) and seconds < 60,
-    do: "in #{seconds} seconds"
+  defp rate_limited_message(seconds) when is_integer(seconds) and seconds < 60 do
+    gettext("Feedback is rate limited. Try again in %{seconds} seconds.", seconds: seconds)
+  end
 
-  defp retry_after_text(seconds) when is_integer(seconds) do
+  defp rate_limited_message(seconds) when is_integer(seconds) do
     minutes = max(div(seconds, 60), 1)
-    "in about #{minutes} minutes"
+    gettext("Feedback is rate limited. Try again in about %{minutes} minutes.", minutes: minutes)
   end
 
   # Get a MapSet of library types that have at least one enabled library path
