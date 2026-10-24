@@ -12,6 +12,7 @@ Deeper reference lives alongside this file in `player/docs/`:
   GraphQL strings skip schema validation.
 - [riverpod.md](docs/riverpod.md) - writes from `dispose`, post-await `ref`, and
   testing a throwing notifier.
+- [l10n.md](docs/l10n.md) - translating the player: ARB messages, the language setting, and converting a screen.
 - [packaging.md](docs/packaging.md) - Windows, iOS and fastlane.
 - [playback.md](docs/playback.md) - who decides direct play, copy or
   transcode, how a source is verified and replaced, and the failure memory.
