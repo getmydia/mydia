@@ -279,7 +279,7 @@ defmodule MydiaWeb.Live.UserAuth do
     socket
     |> assign_player_ui(pref)
     |> assign_theme_selection(pref)
-    |> assign(:time_display, Mydia.TimeDisplay.for_user(pref))
+    |> assign(:time_display, Mydia.TimeDisplay.for_user(pref, "en"))
   end
 
   # Player entry-point visibility, read once per mount.
@@ -401,7 +401,7 @@ defmodule MydiaWeb.Live.UserAuth do
     do:
       socket
       |> assign(:preference, pref)
-      |> assign(:time_display, Mydia.TimeDisplay.for_user(pref))
+      |> assign(:time_display, Mydia.TimeDisplay.for_user(pref, "en"))
 
   defp refresh_preference(socket, _pref), do: socket
 

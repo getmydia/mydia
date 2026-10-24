@@ -20,36 +20,36 @@ defmodule Mydia.TimeDisplayTest do
     end
   end
 
-  describe "resolve/2" do
+  describe "resolve/3" do
     test "nil preference uses the instance zone and a 12-hour clock" do
-      assert TimeDisplay.resolve(nil, "Europe/Rome") ==
+      assert TimeDisplay.resolve(nil, "Europe/Rome", "en") ==
                %TimeDisplay{time_zone: "Europe/Rome", clock: :h12}
     end
 
     test "the user's zone overrides the instance zone" do
       pref = %UserPreference{preferences: %{"time_zone" => "Asia/Tokyo"}}
-      assert TimeDisplay.resolve(pref, "Europe/Rome").time_zone == "Asia/Tokyo"
+      assert TimeDisplay.resolve(pref, "Europe/Rome", "en").time_zone == "Asia/Tokyo"
     end
 
     test "a stored zone tzdata does not know falls back to the instance zone" do
       pref = %UserPreference{preferences: %{"time_zone" => "Gone/Zone"}}
-      assert TimeDisplay.resolve(pref, "Europe/Rome").time_zone == "Europe/Rome"
+      assert TimeDisplay.resolve(pref, "Europe/Rome", "en").time_zone == "Europe/Rome"
     end
 
-    test "auto clock follows the interface language" do
-      en = %UserPreference{preferences: %{"interface_language" => "en"}}
-      it = %UserPreference{preferences: %{"interface_language" => "it"}}
-      assert TimeDisplay.resolve(en, "Etc/UTC").clock == :h12
-      assert TimeDisplay.resolve(it, "Etc/UTC").clock == :h24
-      assert TimeDisplay.resolve(%UserPreference{preferences: %{}}, "Etc/UTC").clock == :h12
+    test "auto clock follows the resolved locale" do
+      pref = %UserPreference{preferences: %{}}
+      assert TimeDisplay.resolve(pref, "Etc/UTC", "en").clock == :h12
+      assert TimeDisplay.resolve(pref, "Etc/UTC", "it").clock == :h24
+      assert TimeDisplay.resolve(nil, "Etc/UTC", "de").clock == :h24
+      assert TimeDisplay.resolve(nil, "Etc/UTC", "en").clock == :h12
     end
 
-    test "an explicit clock wins over the language" do
-      pref = %UserPreference{preferences: %{"interface_language" => "en", "clock_format" => "24"}}
-      assert TimeDisplay.resolve(pref, "Etc/UTC").clock == :h24
+    test "an explicit clock wins over the locale" do
+      pref = %UserPreference{preferences: %{"clock_format" => "24"}}
+      assert TimeDisplay.resolve(pref, "Etc/UTC", "en").clock == :h24
 
-      pref = %UserPreference{preferences: %{"interface_language" => "de", "clock_format" => "12"}}
-      assert TimeDisplay.resolve(pref, "Etc/UTC").clock == :h12
+      pref = %UserPreference{preferences: %{"clock_format" => "12"}}
+      assert TimeDisplay.resolve(pref, "Etc/UTC", "de").clock == :h12
     end
   end
 

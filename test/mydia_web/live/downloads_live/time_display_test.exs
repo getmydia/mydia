@@ -55,7 +55,7 @@ defmodule MydiaWeb.DownloadsLive.TimeDisplayTest do
     {:ok, view, _html} =
       live(log_in_user(conn, admin_user_fixture()), ~p"/downloads?download=#{download.id}")
 
-    display = TimeDisplay.resolve(nil, TimeDisplay.instance_time_zone())
+    display = TimeDisplay.resolve(nil, TimeDisplay.instance_time_zone(), "en")
     expected = DateTimeFormat.format(@instant, :datetime, display)
 
     html = tooltip(view)

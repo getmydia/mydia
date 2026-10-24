@@ -5,7 +5,8 @@ defmodule Mydia.TimeDisplay do
   The zone is the user's `time_zone` preference when it is set and still known
   to tzdata, otherwise the instance zone from the `TZ` env var, otherwise UTC.
   The clock is the user's `clock_format` preference; `"auto"` gives a 12-hour
-  clock for English and a 24-hour clock for every other interface language.
+  clock when the resolved interface locale is English and a 24-hour clock
+  otherwise.
   """
 
   require Logger
@@ -64,29 +65,27 @@ defmodule Mydia.TimeDisplay do
     end
   end
 
-  @doc "Resolves the display settings for a user (nil when signed out)."
-  @spec for_user(UserPreference.t() | nil) :: t()
-  def for_user(pref), do: resolve(pref, instance_time_zone())
+  @doc "Resolves the display settings for a user (nil when signed out) in `locale`."
+  @spec for_user(UserPreference.t() | nil, String.t()) :: t()
+  def for_user(pref, locale), do: resolve(pref, instance_time_zone(), locale)
 
-  @doc "Pure form of `for_user/1`, with the instance zone passed in."
-  @spec resolve(UserPreference.t() | nil, String.t()) :: t()
-  def resolve(%UserPreference{} = pref, instance_zone) do
+  @doc "Pure form of `for_user/2`, with the instance zone passed in."
+  @spec resolve(UserPreference.t() | nil, String.t(), String.t()) :: t()
+  def resolve(%UserPreference{} = pref, instance_zone, locale) do
     zone =
       case parse_time_zone(UserPreference.time_zone(pref)) do
         {:ok, zone} -> zone
         :error -> instance_zone
       end
 
-    %__MODULE__{time_zone: zone, clock: clock(pref)}
+    %__MODULE__{time_zone: zone, clock: clock(UserPreference.clock_format(pref), locale)}
   end
 
-  def resolve(nil, instance_zone), do: %__MODULE__{time_zone: instance_zone, clock: :h12}
+  def resolve(nil, instance_zone, locale),
+    do: %__MODULE__{time_zone: instance_zone, clock: clock("auto", locale)}
 
-  defp clock(pref) do
-    case UserPreference.clock_format(pref) do
-      "12" -> :h12
-      "24" -> :h24
-      _ -> if UserPreference.interface_language(pref) == "en", do: :h12, else: :h24
-    end
-  end
+  defp clock("12", _locale), do: :h12
+  defp clock("24", _locale), do: :h24
+  defp clock(_auto, "en"), do: :h12
+  defp clock(_auto, _locale), do: :h24
 end

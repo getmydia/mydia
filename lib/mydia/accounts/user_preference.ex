@@ -19,7 +19,7 @@ defmodule Mydia.Accounts.UserPreference do
   # Default preference values
   @defaults %{
     "metadata_language" => "en",
-    "interface_language" => "en",
+    "interface_language" => "auto",
     "theme" => "system",
     "close_manual_search_after_grab" => false,
     "recommendations_expanded" => false,
@@ -275,7 +275,7 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_theme_slot("dark_theme", :dark)
     |> validate_theme_radius()
     |> validate_preference_value("metadata_language", @valid_languages)
-    |> validate_preference_value("interface_language", @valid_languages)
+    |> validate_interface_language()
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
     |> validate_preference_value("recommendations_expanded", [true, false])
     |> validate_preference_value("discover_hide_owned", [true, false])
@@ -293,6 +293,24 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_time_zone()
     |> validate_home_widgets()
     |> validate_poster_fields()
+  end
+
+  # Same stale-value rule as validate_time_zone/1: a locale whose translation a
+  # later release drops must not fail unrelated saves. Mydia.Locale treats it
+  # as "auto". Only a new or changed value is checked.
+  defp validate_interface_language(changeset) do
+    with prefs when is_map(prefs) <- get_change(changeset, :preferences),
+         value when not is_nil(value) <- Map.get(prefs, "interface_language"),
+         false <- value == Map.get(changeset.data.preferences || %{}, "interface_language"),
+         false <- value == "auto" or Mydia.Locale.available?(value) do
+      add_error(
+        changeset,
+        :preferences,
+        "invalid value for interface_language: #{inspect(value)}"
+      )
+    else
+      _ -> changeset
+    end
   end
 
   # Same stale-value rule as validate_poster_fields/1: a stored zone tzdata

@@ -292,7 +292,7 @@ defmodule MydiaWeb.ProfileLive.Index do
         {:noreply,
          socket
          |> assign(:preference, preference)
-         |> assign(:time_display, Mydia.TimeDisplay.for_user(preference))}
+         |> assign(:time_display, Mydia.TimeDisplay.for_user(preference, "en"))}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Could not save your date and time settings")}
