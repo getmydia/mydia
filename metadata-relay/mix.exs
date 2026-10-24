@@ -52,12 +52,18 @@ defmodule MetadataRelay.MixProject do
       test: ["test"],
       "assets.setup": [
         "cmd --cd assets npm ci",
-        "tailwind.install --if-missing",
+        # relay.tailwind_install, not tailwind.install: see its moduledoc.
+        "relay.tailwind_install",
         "esbuild.install --if-missing"
       ],
-      "assets.build": ["tailwind metadata_relay", "esbuild metadata_relay"],
+      "assets.build": [
+        "relay.tailwind_install",
+        "tailwind metadata_relay",
+        "esbuild metadata_relay"
+      ],
       "assets.deploy": [
         "cmd --cd assets npm ci",
+        "relay.tailwind_install",
         "tailwind metadata_relay --minify",
         "esbuild metadata_relay --minify",
         "phx.digest"
