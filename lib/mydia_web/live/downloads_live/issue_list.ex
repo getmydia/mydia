@@ -31,6 +31,8 @@ defmodule MydiaWeb.DownloadsLive.IssueList do
   The issue a download represents, or nil. The first matching rule wins: an
   unresolved match outranks everything, and a removal still pending outranks
   the failure that preceded it, since it is what the user must resolve first.
+  A client error on a download that already imported is not an issue:
+  retrying it would re-grab the release.
   """
   @spec kind(map()) :: Issue.kind() | nil
   def kind(download) do
@@ -38,7 +40,7 @@ defmodule MydiaWeb.DownloadsLive.IssueList do
       download.match_status == "unresolved_files" -> :unresolved
       not is_nil(download.removal_error) -> :removal_failed
       not is_nil(download.import_failed_at) -> :import_failed
-      download.status == "failed" -> :download_failed
+      download.status == "failed" and is_nil(download.imported_at) -> :download_failed
       download.status == "missing" -> :missing
       true -> nil
     end

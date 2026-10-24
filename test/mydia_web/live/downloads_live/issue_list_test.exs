@@ -12,6 +12,7 @@ defmodule MydiaWeb.DownloadsLive.IssueListTest do
         title: "Fictional.Salt.Meridian.2031.1080p.WEB-DL-FICTGRP",
         status: "completed",
         match_status: nil,
+        imported_at: nil,
         import_failed_at: nil,
         import_last_error: nil,
         import_retry_count: 0,
@@ -62,6 +63,11 @@ defmodule MydiaWeb.DownloadsLive.IssueListTest do
       assert IssueList.kind(download(status: "failed")) == :download_failed
       assert IssueList.kind(download(status: "missing")) == :missing
       assert IssueList.kind(download(status: "downloading")) == nil
+    end
+
+    test "an imported download that later reports a client error is not an issue" do
+      assert IssueList.kind(download(status: "failed", imported_at: ~U[2026-10-01 00:00:00Z])) ==
+               nil
     end
   end
 

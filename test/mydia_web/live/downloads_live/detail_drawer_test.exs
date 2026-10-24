@@ -216,6 +216,21 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawerTest do
              |> Enum.count() == 1
     end
 
+    test "is absent once the failure is cleared, though the stale reason remains", %{conn: conn} do
+      download =
+        queued(%{
+          status: "completed",
+          import_failed_at: nil,
+          import_failure_reason: "path_mapping_mismatch",
+          import_last_error: "Mydia can't access the download path: /gone."
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues&download=#{download.id}")
+
+      assert has_element?(view, "#download-detail-import-error")
+      refute has_element?(view, "#drawer-path-mapping")
+    end
+
     test "is absent for other import failures", %{conn: conn} do
       download =
         queued(%{

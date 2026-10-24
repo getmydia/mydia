@@ -104,7 +104,10 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
             </div>
 
             <.path_mapping_block
-              :if={@download.import_failure_reason == "path_mapping_mismatch"}
+              :if={
+                @download.import_failed_at &&
+                  @download.import_failure_reason == "path_mapping_mismatch"
+              }
               download={@download}
             />
 
@@ -242,7 +245,7 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
   # Why a path-mapping failure happened and how to fix it: the suggested
   # mapping with a one-click apply when one was found, a link to the Path
   # Mappings page otherwise. `path_mapping_suggestion` is set by the Index's
-  # enrichment, which runs on the Issues tab only.
+  # enrichment, which runs for every non-external drawer.
   attr :download, :map, required: true
 
   defp path_mapping_block(assigns) do
