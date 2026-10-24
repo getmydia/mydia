@@ -105,12 +105,13 @@ defmodule MydiaWeb.AdminListComponents do
     """
   end
 
+  attr :id, :string, default: nil, doc: "a stable DOM id; needed inside streams"
   slot :inner_block, required: true
 
   @doc "The row's action strip: a join of row_action/1 buttons, right-aligned on mobile."
   def row_actions(assigns) do
     ~H"""
-    <div class="join ml-auto sm:ml-2">{render_slot(@inner_block)}</div>
+    <div id={@id} class="join ml-auto sm:ml-2">{render_slot(@inner_block)}</div>
     """
   end
 

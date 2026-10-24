@@ -246,7 +246,9 @@ defmodule MydiaWeb.DownloadsLive.IssuesListLiveTest do
         |> Ecto.Changeset.change(import_failed_at: nil, import_last_error: nil)
         |> Mydia.Repo.update()
 
-      send(view.pid, {:download_updated, failed.id})
+      # The reload a download_updated message debounces into, sent directly so
+      # no stray timer reloads the list again mid-test.
+      send(view.pid, :reload_downloads)
       render(view)
 
       view |> element("#downloads-batch-dismiss") |> render_click()

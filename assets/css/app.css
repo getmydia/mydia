@@ -88,6 +88,14 @@
   display: contents;
 }
 
+/* Icons inside buttons are decorative. LiveView rebuilds an <.icon> span
+   inside a streamed row on every update, and a press that starts on a span
+   that is then detached never becomes a click (issue #1257). Letting the
+   press land on the button itself keeps it attached. */
+:where(.btn, .menu) [class*="hero-"] {
+  pointer-events: none;
+}
+
 /* Alpine.js x-cloak - prevents flash of unstyled content */
 [x-cloak] {
   display: none !important;

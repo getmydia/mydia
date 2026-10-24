@@ -25,7 +25,7 @@ Start it from the Weblate project page ("Start new translation"). It appears in
 Mydia's language picker in the first release after its first translations are
 merged.
 
-## Reviewing the Spanish seed
+## Reviewing the seed translations
 
-The Spanish translation was machine-drafted to test the pipeline. Native
-speakers: please review it on Weblate.
+The Spanish and Brazilian Portuguese translations were machine-drafted. Native
+speakers: please review them on Weblate.
