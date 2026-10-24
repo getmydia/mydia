@@ -3,5 +3,17 @@
   "appLoading": "Loading...",
   "@appLoading": {
     "description": "Shown under a spinner while saved sources load at startup."
+  },
+  "settingsLanguageTitle": "Language",
+  "@settingsLanguageTitle": {
+    "description": "Title of the Appearance settings row and of the language picker dialog."
+  },
+  "settingsLanguageSubtitle": "Interface language on this device",
+  "@settingsLanguageSubtitle": {
+    "description": "Subtitle of the language row in Appearance settings. The choice is stored per device."
+  },
+  "settingsLanguageSystemDefault": "System default",
+  "@settingsLanguageSystemDefault": {
+    "description": "Language picker option (and the row's value) that follows the device language instead of a fixed one."
   }
 }

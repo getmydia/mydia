@@ -24,6 +24,7 @@ import '../../../widgets/hls_quality_selector.dart';
 import '../../../widgets/glass/glass_dialog.dart';
 import '../settings_controller.dart';
 import 'glass_material_row.dart';
+import 'language_row.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 import 'subtitle_size_row.dart';
@@ -337,7 +338,7 @@ class VersionFooter extends StatelessWidget {
   }
 }
 
-/// Device-level look: the theme preset and the glass material.
+/// Device-level look: the language, the theme preset and the glass material.
 class AppearanceSettingsSection extends StatelessWidget {
   const AppearanceSettingsSection({super.key});
 
@@ -345,6 +346,7 @@ class AppearanceSettingsSection extends StatelessWidget {
   Widget build(BuildContext context) => SettingsSection(
         label: 'Appearance',
         children: [
+          const LanguageSettingsRow(),
           const ThemePresetSettingsRow(),
           // Conditional here so a TV does not get a divider above nothing.
           if (GlassMaterial.liquid.isAvailableOn(defaultTargetPlatform))

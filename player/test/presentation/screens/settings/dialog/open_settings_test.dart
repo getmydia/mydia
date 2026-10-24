@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/node_registration_providers.dart';
@@ -139,6 +140,8 @@ void main() {
                 info: null, verdict: CompatibilityVerdict.unknown)),
       ],
       child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
         routerConfig: router,
       ),

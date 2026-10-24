@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/build_channel.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_service.dart';
@@ -230,6 +231,8 @@ Future<void> _pump(
           coreSettingsServiceProvider.overrideWithValue(coreSettingsService),
       ],
       child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
         routerConfig: GoRouter(
           initialLocation: '/settings',

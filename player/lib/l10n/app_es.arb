@@ -1,4 +1,7 @@
 {
   "@@locale": "es",
-  "appLoading": "Cargando..."
+  "appLoading": "Cargando...",
+  "settingsLanguageTitle": "Idioma",
+  "settingsLanguageSubtitle": "Idioma de la interfaz en este dispositivo",
+  "settingsLanguageSystemDefault": "Predeterminado del sistema"
 }

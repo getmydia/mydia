@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
 import 'package:player/core/downloads/collection_auto_sync.dart';
 import 'package:player/core/downloads/orphan_download_sweep.dart';
@@ -206,6 +207,8 @@ void main() {
                 info: null, verdict: CompatibilityVerdict.unknown)),
       ],
       child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
         routerConfig: router,
       ),

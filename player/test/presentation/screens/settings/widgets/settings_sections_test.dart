@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/remote/node_registration_providers.dart';
 import 'package:player/core/remote/registration_status.dart';
 import 'package:player/core/remote/remote_control_settings.dart';
@@ -98,6 +99,8 @@ Future<void> _pumpSection(
         ),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: SingleChildScrollView(child: child)),
       ),
     ),
