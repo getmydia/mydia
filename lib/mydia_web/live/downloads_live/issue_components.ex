@@ -170,14 +170,14 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
                 :for={suggestion <- @issue.torrent.suggestions}
                 id={"adopt-#{@issue.torrent.id}-#{suggestion.media_item_id}"}
                 type="button"
-                class="btn btn-xs btn-outline btn-primary h-auto min-h-6 whitespace-normal text-left"
+                class="btn btn-xs btn-outline btn-primary h-auto min-h-6 max-w-full whitespace-normal text-left"
                 phx-click="adopt_suggestion"
                 phx-value-torrent_id={@issue.torrent.id}
                 phx-value-media_item_id={suggestion.media_item_id}
                 title={suggestion.match_reason}
               >
-                <span class="line-clamp-2 break-words">{suggestion.title}</span>
-                <span class="badge badge-xs ml-1">
+                <span class="line-clamp-2 min-w-0 break-words">{suggestion.title}</span>
+                <span class="badge badge-xs ml-1 shrink-0">
                   {Float.round(suggestion.confidence * 100, 0)}%
                 </span>
               </button>
