@@ -39,23 +39,40 @@ defmodule Mydia.Media.AvailabilityStatus do
         }
 
   @doc """
-  Availability of a movie from its version file count and whether a download is active.
+  Availability of a movie from its version file count, whether a download is
+  active, and its release date.
+
+  A movie with nothing on disk and nothing downloading is upcoming until its
+  release date passes, then missing. A nil release date counts as released, so
+  catalogue entries with no date never drop out of missing.
 
   `Mydia.Media.get_media_status/1` counts these from preloads and
   `Mydia.Media.LibraryListing` counts them in SQL. Both call this, so the two can
   never classify the same movie differently.
   """
-  @spec for_movie(non_neg_integer(), boolean(), boolean()) :: t()
-  def for_movie(file_count, downloading?, monitored) do
+  @spec for_movie(non_neg_integer(), boolean(), Date.t() | nil, boolean()) :: t()
+  def for_movie(file_count, downloading?, release_date, monitored) do
     state =
       cond do
         file_count > 0 -> :downloaded
         downloading? -> :downloading
+        unreleased?(release_date) -> :upcoming
         true -> :missing
       end
 
     %__MODULE__{state: state, monitored: monitored, file_count: file_count}
   end
+
+  @doc """
+  The release date `for_movie/4` takes, read from an item's metadata. Nil when
+  the item has no metadata or the metadata has no release date.
+  """
+  @spec release_date(%{metadata: map() | nil}) :: Date.t() | nil
+  def release_date(%{metadata: %{release_date: %Date{} = date}}), do: date
+  def release_date(_item), do: nil
+
+  defp unreleased?(nil), do: false
+  defp unreleased?(%Date{} = date), do: Date.compare(date, Date.utc_today()) == :gt
 
   @doc """
   Availability of a show from its episode counts.

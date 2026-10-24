@@ -619,6 +619,7 @@ defmodule Mydia.Media.Items do
     AvailabilityStatus.for_movie(
       length(media_item.media_files),
       Enum.any?(media_item.downloads, &download_active?/1),
+      AvailabilityStatus.release_date(media_item),
       media_item.monitored
     )
   end

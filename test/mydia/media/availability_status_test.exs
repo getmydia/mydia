@@ -73,20 +73,51 @@ defmodule Mydia.Media.AvailabilityStatusTest do
     end
   end
 
-  describe "for_movie/3" do
+  describe "for_movie/4" do
+    @future Date.add(Date.utc_today(), 60)
+
     test "a file wins over an active download" do
       assert %AvailabilityStatus{state: :downloaded, monitored: true, file_count: 2} =
-               AvailabilityStatus.for_movie(2, true, true)
+               AvailabilityStatus.for_movie(2, true, nil, true)
     end
 
     test "an active download with no file is downloading" do
       assert %AvailabilityStatus{state: :downloading, monitored: false, file_count: 0} =
-               AvailabilityStatus.for_movie(0, true, false)
+               AvailabilityStatus.for_movie(0, true, nil, false)
     end
 
     test "nothing on disk and nothing downloading is missing" do
       assert %AvailabilityStatus{state: :missing, file_count: 0} =
-               AvailabilityStatus.for_movie(0, false, true)
+               AvailabilityStatus.for_movie(0, false, nil, true)
+    end
+
+    test "a movie released in the past with nothing on disk is missing" do
+      assert AvailabilityStatus.for_movie(0, false, ~D[2020-06-01], true).state == :missing
+    end
+
+    test "a movie releasing today with nothing on disk is missing" do
+      assert AvailabilityStatus.for_movie(0, false, Date.utc_today(), true).state == :missing
+    end
+
+    test "a movie not yet released with nothing on disk is upcoming" do
+      assert AvailabilityStatus.for_movie(0, false, @future, true).state == :upcoming
+    end
+
+    test "a file or a download still wins over a future release date" do
+      assert AvailabilityStatus.for_movie(1, false, @future, true).state == :downloaded
+      assert AvailabilityStatus.for_movie(0, true, @future, true).state == :downloading
+    end
+  end
+
+  describe "release_date/1" do
+    test "reads the release date from the item's metadata" do
+      item = %Mydia.Media.MediaItem{metadata: %{release_date: ~D[2031-01-02]}}
+
+      assert AvailabilityStatus.release_date(item) == ~D[2031-01-02]
+    end
+
+    test "is nil when the item has no metadata" do
+      assert AvailabilityStatus.release_date(%Mydia.Media.MediaItem{metadata: nil}) == nil
     end
   end
 

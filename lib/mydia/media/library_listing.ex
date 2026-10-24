@@ -8,7 +8,7 @@ defmodule Mydia.Media.LibraryListing do
   episode, file or download row is loaded. A show with 400 episodes costs the
   same as a show with 4.
 
-  Availability goes through `AvailabilityStatus.for_movie/3` and
+  Availability goes through `AvailabilityStatus.for_movie/4` and
   `AvailabilityStatus.for_series/3`, the functions `Media.get_media_status/1`
   also uses, so a row's badge agrees with every other place that reports an
   item's status.
@@ -170,6 +170,7 @@ defmodule Mydia.Media.LibraryListing do
         AvailabilityStatus.for_movie(
           files.file_count,
           MapSet.member?(downloading, item.id),
+          AvailabilityStatus.release_date(item),
           item.monitored
         ),
       resolutions: files.resolutions,

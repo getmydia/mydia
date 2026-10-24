@@ -67,6 +67,28 @@ defmodule Mydia.Media.LibraryListingTest do
       assert assert_parity(movie, user).status.state == :missing
     end
 
+    test "a movie not yet released", %{user: user} do
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Harbinger Bay",
+          metadata: %{release_date: Date.add(Date.utc_today(), 90)}
+        })
+
+      assert assert_parity(movie, user).status.state == :upcoming
+    end
+
+    test "a movie already released with nothing on disk", %{user: user} do
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Weathered Sill",
+          metadata: %{release_date: ~D[2019-04-12]}
+        })
+
+      assert assert_parity(movie, user).status.state == :missing
+    end
+
     test "a show with no episodes", %{user: user} do
       show = media_item_fixture(%{type: "tv_show", title: "Pending Harbor"})
 
@@ -406,6 +428,18 @@ defmodule Mydia.Media.LibraryListingTest do
 
       assert titles(page(user, progress: :downloaded)) == ["Filed Away"]
       assert titles(page(user, progress: :missing)) == ["Still Wanted"]
+    end
+
+    test "the progress filter finds upcoming movies", %{user: user} do
+      media_item_fixture(%{
+        title: "Unopened Letter",
+        metadata: %{release_date: Date.add(Date.utc_today(), 30)}
+      })
+
+      media_item_fixture(%{title: "Opened Letter", metadata: %{release_date: ~D[2018-01-01]}})
+
+      assert titles(page(user, progress: :upcoming)) == ["Unopened Letter"]
+      assert titles(page(user, progress: :missing)) == ["Opened Letter"]
     end
 
     test "title, year and rating sorts", %{user: user} do
