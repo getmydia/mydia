@@ -403,32 +403,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   def handle_event("batch_retry", _params, %{assigns: %{active_tab: :issues}} = socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
-      # Only import and download failures have a retry. The kind comes from the
-      # rows the last load classified, the same rows the operator selected.
-      {retryable, skipped} =
-        socket.assigns.selected_ids
-        |> Enum.map(&{&1, retry_kind(socket.assigns.rows_by_id[&1])})
-        |> Enum.split_with(fn {_id, kind} -> kind in [:import_failed, :download_failed] end)
-
-      ok =
-        Enum.count(retryable, fn {id, kind} ->
-          case Downloads.get_download(id, preload: [:media_item, :episode]) do
-            nil -> false
-            download -> retried?(fn -> retry_issue(kind, download) end)
-          end
-        end)
-
-      message =
-        if skipped == [],
-          do: "#{ok} retried",
-          else: "#{ok} retried, #{length(skipped)} skipped"
-
-      {:noreply,
-       socket
-       |> assign(:selected_ids, MapSet.new())
-       |> assign(:selection_mode, false)
-       |> put_flash(:info, message)
-       |> load_downloads()}
+      {ok, skipped} = retry_issue_rows(socket)
+      {:noreply, finish_issue_batch(socket, "#{ok} retried", skipped)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -509,32 +485,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # Dismiss. A row already gone is skipped rather than counted.
   def handle_event("batch_dismiss", _params, %{assigns: %{active_tab: :issues}} = socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
-      # Only rows the last load still classified as issues are dismissed; a row
-      # that was resolved since is left alone and counted as skipped.
-      {dismissable, skipped} =
-        Enum.split_with(socket.assigns.selected_ids, fn id ->
-          not is_nil(retry_kind(socket.assigns.rows_by_id[id]))
-        end)
-
-      dismissed =
-        Enum.count(dismissable, fn id ->
-          case Downloads.get_download(id) do
-            nil -> false
-            download -> match?({:ok, _}, Downloads.dismiss_download(download))
-          end
-        end)
-
-      message =
-        if skipped == [],
-          do: "#{dismissed} dismissed",
-          else: "#{dismissed} dismissed, #{length(skipped)} skipped"
-
-      {:noreply,
-       socket
-       |> assign(:selected_ids, MapSet.new())
-       |> assign(:selection_mode, false)
-       |> put_flash(:info, message)
-       |> load_downloads()}
+      {dismissed, skipped} = dismiss_issue_rows(socket)
+      {:noreply, finish_issue_batch(socket, "#{dismissed} dismissed", skipped)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -1150,6 +1102,56 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp retry_kind(nil), do: nil
   defp retry_kind(row), do: IssueList.kind(row)
+
+  # Only import and download failures have a retry. The kind comes from the
+  # rows the last load classified, the same rows the operator selected.
+  # Returns `{retried_count, skipped_count}`.
+  defp retry_issue_rows(socket) do
+    {retryable, skipped} =
+      socket.assigns.selected_ids
+      |> Enum.map(&{&1, retry_kind(socket.assigns.rows_by_id[&1])})
+      |> Enum.split_with(fn {_id, kind} -> kind in [:import_failed, :download_failed] end)
+
+    {Enum.count(retryable, &retry_issue_row/1), length(skipped)}
+  end
+
+  defp retry_issue_row({id, kind}) do
+    case Downloads.get_download(id, preload: [:media_item, :episode]) do
+      nil -> false
+      download -> retried?(fn -> retry_issue(kind, download) end)
+    end
+  end
+
+  # Only rows the last load still classified as issues are dismissed; a row
+  # that was resolved since is left alone and counted as skipped.
+  # Returns `{dismissed_count, skipped_count}`.
+  defp dismiss_issue_rows(socket) do
+    {dismissable, skipped} =
+      Enum.split_with(socket.assigns.selected_ids, fn id ->
+        not is_nil(retry_kind(socket.assigns.rows_by_id[id]))
+      end)
+
+    {Enum.count(dismissable, &dismiss_issue_row/1), length(skipped)}
+  end
+
+  defp dismiss_issue_row(id) do
+    case Downloads.get_download(id) do
+      nil -> false
+      download -> match?({:ok, _}, Downloads.dismiss_download(download))
+    end
+  end
+
+  # Clears the selection and flashes the tally, with a skipped suffix when
+  # some rows were left alone.
+  defp finish_issue_batch(socket, tally, skipped) do
+    message = if skipped == 0, do: tally, else: "#{tally}, #{skipped} skipped"
+
+    socket
+    |> assign(:selected_ids, MapSet.new())
+    |> assign(:selection_mode, false)
+    |> put_flash(:info, message)
+    |> load_downloads()
+  end
 
   # A retry that raises (a client adapter blowing up mid-grab) counts as not
   # retried rather than crashing the batch.
