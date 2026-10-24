@@ -47,6 +47,17 @@ defmodule Mydia.Ratchet.TemplateTextTest do
     assert TemplateText.count(src) == 1
   end
 
+  test "a same-name element nested in a skipped one does not end the skip early" do
+    src = ~S|<div phx-no-curly-interpolation><div>x</div> trailing</div>|
+    assert TemplateText.count(src) == 0
+    assert TemplateText.count(src <> "<p>After</p>") == 1
+  end
+
+  test "invalid templates count 0 without raising" do
+    assert TemplateText.count("<div") == 0
+    assert TemplateText.count("<%= if %>") == 0
+  end
+
   test "allowlisted proper nouns and entities alone are not counted" do
     assert TemplateText.count(~S|<p>Mydia</p><p>TMDB · TVDB</p><p>&nbsp;</p>|) == 0
     assert TemplateText.count(~S|<p>Open in Plex</p>|) == 1

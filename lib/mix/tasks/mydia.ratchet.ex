@@ -16,6 +16,7 @@ defmodule Mix.Tasks.Mydia.Ratchet do
   use Mix.Task
 
   alias Mydia.Ratchet
+  alias Mydia.Ratchet.TemplateText
 
   @shortdoc "Blocks new complexity, nesting, module-size and untranslated-text debt"
 
@@ -123,7 +124,7 @@ defmodule Mix.Tasks.Mydia.Ratchet do
     root
     |> Path.join("lib/mydia_web/**/*.{ex,heex}")
     |> Path.wildcard()
-    |> Map.new(&{Path.relative_to(&1, root), Mydia.Ratchet.TemplateText.count_file(&1)})
+    |> Map.new(&{Path.relative_to(&1, root), TemplateText.count_file(&1)})
   end
 
   defp short(sha), do: String.slice(sha, 0, 12)

@@ -40,26 +40,41 @@ defmodule Mydia.Ratchet.TemplateText do
 
   @spec count(binary()) :: non_neg_integer()
   def count(source) do
+    case EEx.tokenize(source) do
+      {:ok, _tokens} -> count_tokens(source)
+      # A template the compiler would reject anyway. Not this check's concern.
+      {:error, _message, _meta} -> 0
+    end
+  end
+
+  # Only an invalid template counts as 0. Any other failure (a changed
+  # tokenizer API, a bug in step/2) must raise so the gate cannot pass silently.
+  defp count_tokens(source) do
     source
     |> Parser.tokenize(tag_handler: Phoenix.LiveView.HTMLEngine, file: "nofile")
-    |> Enum.reduce({0, []}, &step/2)
+    |> Enum.reduce({0, nil}, &step/2)
     |> elem(0)
   rescue
-    # A template the compiler would reject anyway. Not this check's concern.
-    _ -> 0
+    Phoenix.LiveView.TagEngine.Tokenizer.ParseError -> 0
   end
 
-  # The accumulator is {count, stack of open skipped tag names}.
-  defp step({:close, _type, name, _meta}, {n, [name | rest]}), do: {n, rest}
-  defp step(_token, {n, [_ | _] = skipping}), do: {n, skipping}
+  # The accumulator is {count, nil | {skipped tag name, nesting depth}}.
+  defp step({:close, _type, name, _meta}, {n, {name, 1}}), do: {n, nil}
+  defp step({:close, _type, name, _meta}, {n, {name, depth}}), do: {n, {name, depth - 1}}
 
-  defp step({type, name, attrs, meta}, {n, []}) when type in @tag_types do
+  defp step({type, name, _attrs, meta}, {n, {name, depth}} = acc) when type in @tag_types do
+    if meta[:closing] in [:self, :void], do: acc, else: {n, {name, depth + 1}}
+  end
+
+  defp step(_token, {_n, {_name, _depth}} = skipping), do: skipping
+
+  defp step({type, name, attrs, meta}, {n, nil}) when type in @tag_types do
     if skip?(name, attrs) and meta[:closing] not in [:self, :void],
-      do: {n, [name]},
-      else: {n + Enum.count(attrs, &counted_attr?/1), []}
+      do: {n, {name, 1}},
+      else: {n + Enum.count(attrs, &counted_attr?/1), nil}
   end
 
-  defp step({:text, text, _meta}, {n, []}), do: {n + if(words?(text), do: 1, else: 0), []}
+  defp step({:text, text, _meta}, {n, nil}), do: {n + if(words?(text), do: 1, else: 0), nil}
   defp step(_token, acc), do: acc
 
   defp skip?(name, attrs),
