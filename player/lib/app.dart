@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'l10n/l10n.dart';
 import 'core/build_channel.dart';
 import 'core/app_menu/app_menu_channel.dart';
 import 'core/app_menu/now_playing.dart';
@@ -540,14 +541,21 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         debugShowCheckedModeBanner: false,
         scrollBehavior: const AppScrollBehavior(),
         theme: theme,
-        home: const Scaffold(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
           body: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Loading...', style: TextStyle(color: Colors.white)),
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Builder(
+                  builder: (context) => Text(
+                    context.l10n.appLoading,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
               ],
             ),
           ),
@@ -564,6 +572,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       scrollBehavior: const AppScrollBehavior(),
       theme: theme,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: router,
       // Float the cast mini controller above every route. `CastBarLayer`
       // documents what mounting it out here costs the bar.

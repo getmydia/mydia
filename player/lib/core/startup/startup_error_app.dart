@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/l10n.dart';
 import '../theme/app_theme.dart';
 import '../crash_reporting/startup_report_controller.dart';
 
@@ -58,6 +59,9 @@ class StartupErrorApp extends StatelessWidget {
       title: 'Mydia Player',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
+      // Follows the device locale: no settings exist yet at this point.
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: Center(
           child: Padding(

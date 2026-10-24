@@ -1,0 +1,7 @@
+{
+  "@@locale": "en",
+  "appLoading": "Loading...",
+  "@appLoading": {
+    "description": "Shown under a spinner while saved sources load at startup."
+  }
+}
