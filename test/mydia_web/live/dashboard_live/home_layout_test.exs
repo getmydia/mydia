@@ -139,6 +139,50 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
       assert Accounts.home_widgets(user) == [:library_stats, :quick_actions]
     end
 
+    test "reorder_home_widgets replies with the saved order", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+      view |> element("#edit-home-btn") |> render_click()
+
+      view
+      |> element("#edit-home-visible")
+      |> render_hook("reorder_home_widgets", %{"keys" => ["quick_actions", "library_stats"]})
+
+      assert_reply(view, %{keys: ["quick_actions", "library_stats"]})
+    end
+
+    test "reorder_home_widgets replies with visible keys only when a hidden one is named", %{
+      conn: conn
+    } do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+      view |> element("#edit-home-btn") |> render_click()
+
+      view
+      |> element("#edit-home-visible")
+      |> render_hook("reorder_home_widgets", %{
+        "keys" => ["episodes", "quick_actions", "library_stats"]
+      })
+
+      assert_reply(view, %{keys: ["quick_actions", "library_stats"]})
+    end
+
+    test "move_home_widget at the list edge replies with the unchanged order", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+      view |> element("#edit-home-btn") |> render_click()
+
+      view
+      |> element("#edit-home-visible")
+      |> render_hook("move_home_widget", %{"key" => "library_stats", "direction" => "up"})
+
+      assert_reply(view, %{keys: ["library_stats", "quick_actions"]})
+      assert Accounts.home_widgets(user) == [:library_stats, :quick_actions]
+    end
+
     test "visible widgets render as a sortable list with drag handles", %{conn: conn} do
       user = user_fixture(%{role: "user"})
       {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])

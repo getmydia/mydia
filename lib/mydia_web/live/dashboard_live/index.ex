@@ -459,44 +459,26 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   def handle_event("move_home_widget", %{"key" => raw_key, "direction" => dir_str}, socket) do
-    user = socket.assigns.current_user
     direction = if dir_str == "up", do: :up, else: :down
 
     case HomeLayout.to_key(raw_key) do
       nil ->
-        {:noreply, socket}
+        reply_home_order(socket)
 
       key ->
-        new_widgets = HomeLayout.move(socket.assigns.home_widgets, key, direction)
-
-        case Accounts.put_home_widgets(user, new_widgets) do
-          {:ok, _pref} ->
-            {:noreply, assign(socket, :home_widgets, new_widgets)}
-
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Could not save your Home layout.")}
-        end
+        socket
+        |> save_home_order(HomeLayout.move(socket.assigns.home_widgets, key, direction))
+        |> reply_home_order()
     end
   end
 
   def handle_event("reorder_home_widgets", %{"keys" => keys}, socket) when is_list(keys) do
-    current = socket.assigns.home_widgets
-    new_widgets = HomeLayout.reorder(current, keys)
-
-    if new_widgets == current do
-      {:noreply, socket}
-    else
-      case Accounts.put_home_widgets(socket.assigns.current_user, new_widgets) do
-        {:ok, _pref} ->
-          {:noreply, assign(socket, :home_widgets, new_widgets)}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Could not save your Home layout.")}
-      end
-    end
+    socket
+    |> save_home_order(HomeLayout.reorder(socket.assigns.home_widgets, keys))
+    |> reply_home_order()
   end
 
-  def handle_event("reorder_home_widgets", _params, socket), do: {:noreply, socket}
+  def handle_event("reorder_home_widgets", _params, socket), do: reply_home_order(socket)
 
   def handle_event("reset_home_widgets", _params, socket) do
     user = socket.assigns.current_user
@@ -759,6 +741,25 @@ defmodule MydiaWeb.DashboardLive.Index do
     socket = cancel_health_refresh(socket)
     ref = Process.send_after(self(), :refresh_health, 60_000)
     assign(socket, :health_timer_ref, ref)
+  end
+
+  # Persists a new widget order. An unchanged order skips the write; a failed
+  # save keeps the old assigns and flashes.
+  defp save_home_order(socket, new_widgets) do
+    if new_widgets == socket.assigns.home_widgets do
+      socket
+    else
+      case Accounts.put_home_widgets(socket.assigns.current_user, new_widgets) do
+        {:ok, _pref} -> assign(socket, :home_widgets, new_widgets)
+        {:error, _} -> put_flash(socket, :error, "Could not save your Home layout.")
+      end
+    end
+  end
+
+  # The reply carries the authoritative saved order so the client can resync
+  # rows it moved itself (LiveView sends no diff when assigns did not change).
+  defp reply_home_order(socket) do
+    {:reply, %{keys: Enum.map(socket.assigns.home_widgets, &Atom.to_string/1)}, socket}
   end
 
   defp cancel_health_refresh(socket) do

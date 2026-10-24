@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { keyDirection, orderedKeys } from "../../js/hooks/home_widget_sort.mjs";
+import { keyDirection, orderedKeys, sameOrder } from "../../js/hooks/home_widget_sort.mjs";
 
 test("maps ArrowUp and ArrowDown to move directions", () => {
   assert.equal(keyDirection({ key: "ArrowUp" }), "up");
@@ -25,4 +25,10 @@ test("reads data-key from rows in DOM order", () => {
     },
   };
   assert.deepEqual(orderedKeys(container), ["episodes", "library_stats"]);
+});
+
+test("sameOrder compares keys by position", () => {
+  assert.equal(sameOrder(["a", "b"], ["a", "b"]), true);
+  assert.equal(sameOrder(["a", "b"], ["b", "a"]), false);
+  assert.equal(sameOrder(["a"], ["a", "b"]), false);
 });
