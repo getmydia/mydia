@@ -29,6 +29,12 @@ export function sameOrder(a, b) {
   return a.length === b.length && a.every((key, index) => key === b[index]);
 }
 
+// Moving the row node drops focus to the body. Anything else focused by the
+// time the reply lands is where the user went, so it is left alone.
+export function focusLeftAlone(active, handle) {
+  return !active || active === handle || active === active.ownerDocument?.body;
+}
+
 const HomeWidgetSort = {
   mounted() {
     this.sortable = Sortable.create(this.el, {
@@ -53,7 +59,7 @@ const HomeWidgetSort = {
       const key = handle.closest("[data-key]").dataset.key;
       this.pushEvent("move_home_widget", { key, direction }, (reply) => {
         this.syncOrder(reply);
-        this.focusHandle(key);
+        if (focusLeftAlone(document.activeElement, handle)) this.focusHandle(key);
       });
     };
     this.el.addEventListener("keydown", this.onKeydown);

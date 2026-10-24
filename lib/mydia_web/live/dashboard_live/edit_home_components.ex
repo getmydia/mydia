@@ -33,6 +33,7 @@ defmodule MydiaWeb.DashboardLive.EditHomeComponents do
               class="flex items-center p-3 rounded-lg bg-base-200/50 border border-base-content/10 gap-3"
             >
               <button
+                id={"edit-home-handle-#{widget.key}"}
                 type="button"
                 data-drag-handle
                 class="btn btn-ghost btn-xs btn-square shrink-0 cursor-grab active:cursor-grabbing touch-none"

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { keyDirection, orderedKeys, sameOrder } from "../../js/hooks/home_widget_sort.mjs";
+import { focusLeftAlone, keyDirection, orderedKeys, sameOrder } from "../../js/hooks/home_widget_sort.mjs";
 
 test("maps ArrowUp and ArrowDown to move directions", () => {
   assert.equal(keyDirection({ key: "ArrowUp" }), "up");
@@ -31,4 +31,16 @@ test("sameOrder compares keys by position", () => {
   assert.equal(sameOrder(["a", "b"], ["a", "b"]), true);
   assert.equal(sameOrder(["a", "b"], ["b", "a"]), false);
   assert.equal(sameOrder(["a"], ["a", "b"]), false);
+});
+
+test("focusLeftAlone restores focus only when the user has not moved it", () => {
+  const body = {};
+  const doc = { body };
+  body.ownerDocument = doc;
+  const handle = { ownerDocument: doc };
+  const elsewhere = { ownerDocument: doc };
+  assert.equal(focusLeftAlone(null, handle), true);
+  assert.equal(focusLeftAlone(body, handle), true);
+  assert.equal(focusLeftAlone(handle, handle), true);
+  assert.equal(focusLeftAlone(elsewhere, handle), false);
 });

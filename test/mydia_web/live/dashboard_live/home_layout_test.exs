@@ -194,12 +194,12 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
 
       assert has_element?(
                view,
-               "#edit-home-visible > #edit-home-widget-library_stats[data-key='library_stats'] button[data-drag-handle]"
+               "#edit-home-visible > #edit-home-widget-library_stats[data-key='library_stats'] button#edit-home-handle-library_stats[data-drag-handle]"
              )
 
       assert has_element?(
                view,
-               "#edit-home-visible > #edit-home-widget-quick_actions[data-key='quick_actions'] button[data-drag-handle]"
+               "#edit-home-visible > #edit-home-widget-quick_actions[data-key='quick_actions'] button#edit-home-handle-quick_actions[data-drag-handle]"
              )
 
       refute has_element?(view, "#edit-home-modal button[phx-value-direction]")
