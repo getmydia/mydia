@@ -139,6 +139,9 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
   attr :clients, :list, required: true
   attr :show_status?, :boolean, required: true
 
+  slot :extra,
+    doc: "Extra controls rendered last inside the form, so their inputs submit with the filter"
+
   def filter_bar(assigns) do
     assigns = assign(assigns, :status_options, ListView.status_options())
 
@@ -221,6 +224,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
           checked={@filters.status == value}
         />
       </div>
+      {render_slot(@extra)}
     </form>
     """
   end
