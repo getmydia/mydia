@@ -131,7 +131,7 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
 
   test "episode monitored, title and air_date changes advance the owning show" do
     show = insert(:tv_show)
-    episode = insert(:episode, media_item: show, monitored: true)
+    episode = insert(:episode, media_item: show, monitored: true, air_date: ~D[2020-01-01])
 
     listed = marker!(show.id)
     assert [%{monitored: true, has_file: false}] = view!(show.id).episodes

@@ -24,29 +24,39 @@ defmodule Mydia.Media.AvailabilityStatus do
   @typedoc """
   Episode counts for one scope of a show: every episode, or only the monitored ones.
 
-  `downloaded` counts episodes with at least one version file, `downloading` those
-  with an active download, `upcoming` those whose air date is after today.
+  `expected` counts episodes the show can be expected to have: those that have
+  aired (air date on or before today) plus any that already have a version file,
+  so an episode grabbed before its listed date still counts. Future and undated
+  episodes without a file are left out until they air. `downloaded` counts
+  episodes with at least one version file, so it never exceeds `expected`.
+  `downloading` counts those with an active download.
   """
   @type episode_counts :: %{
           total: non_neg_integer(),
+          expected: non_neg_integer(),
           downloaded: non_neg_integer(),
-          downloading: non_neg_integer(),
-          upcoming: non_neg_integer()
+          downloading: non_neg_integer()
         }
 
   @doc """
-  Availability of a movie from its version file count and whether a download is active.
+  Availability of a movie from its version file count, whether a download is
+  active, and its release date.
+
+  A movie with nothing on disk and nothing downloading is upcoming until its
+  release date passes, then missing. A nil release date counts as released, so
+  catalogue entries with no date never drop out of missing.
 
   `Mydia.Media.get_media_status/1` counts these from preloads and
   `Mydia.Media.LibraryListing` counts them in SQL. Both call this, so the two can
   never classify the same movie differently.
   """
-  @spec for_movie(non_neg_integer(), boolean(), boolean()) :: t()
-  def for_movie(file_count, downloading?, monitored) do
+  @spec for_movie(non_neg_integer(), boolean(), Date.t() | nil, boolean()) :: t()
+  def for_movie(file_count, downloading?, release_date, monitored) do
     state =
       cond do
         file_count > 0 -> :downloaded
         downloading? -> :downloading
+        unreleased?(release_date) -> :upcoming
         true -> :missing
       end
 
@@ -54,10 +64,25 @@ defmodule Mydia.Media.AvailabilityStatus do
   end
 
   @doc """
+  The release date `for_movie/4` takes, read from an item's metadata. Nil when
+  the item has no metadata or the metadata has no release date.
+  """
+  @spec release_date(Mydia.Media.MediaItem.t()) :: Date.t() | nil
+  def release_date(%{metadata: %{release_date: %Date{} = date}}), do: date
+  def release_date(_item), do: nil
+
+  defp unreleased?(nil), do: false
+  defp unreleased?(%Date{} = date), do: Date.compare(date, Date.utc_today()) == :gt
+
+  @doc """
   Availability of a show from its episode counts.
 
   Episodes are classified over the monitored ones when there are any, and over every
   episode when there are none, so the x/y counts always have a meaningful denominator.
+
+  Only expected episodes are counted toward the x/y total, so an airing show that
+  has every aired episode reads as downloaded, not partial. A show with episodes
+  but none expected yet is upcoming.
 
   A monitored show with every episode unmonitored is not chasing anything, so it
   renders muted. A show with no episodes at all is a different case: nothing
@@ -70,9 +95,9 @@ defmodule Mydia.Media.AvailabilityStatus do
 
     state =
       cond do
-        scope.total > 0 and scope.downloaded == scope.total -> :downloaded
+        scope.expected > 0 and scope.downloaded == scope.expected -> :downloaded
         scope.downloading > 0 -> :downloading
-        scope.total > 0 and scope.upcoming == scope.total -> :upcoming
+        scope.total > 0 and scope.expected == 0 -> :upcoming
         scope.downloaded > 0 -> :partial
         true -> :missing
       end
@@ -81,7 +106,7 @@ defmodule Mydia.Media.AvailabilityStatus do
       state: state,
       monitored: show_monitored and (all.total == 0 or monitored.total > 0),
       downloaded: scope.downloaded,
-      total: scope.total
+      total: scope.expected
     }
   end
 

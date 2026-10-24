@@ -12,6 +12,13 @@ defmodule MydiaWeb.MediaLive.Index.ListingParamsTest do
     refute ListingParams.filtered?(%ListingParams{})
   end
 
+  test "upcoming is a valid progress filter" do
+    parsed = ListingParams.parse(%{"progress" => "upcoming"}, [])
+
+    assert parsed.progress == :upcoming
+    assert ListingParams.to_query(parsed) == [{"progress", "upcoming"}]
+  end
+
   test "valid params round-trip through the query string" do
     params = %{
       "q" => "harbor",

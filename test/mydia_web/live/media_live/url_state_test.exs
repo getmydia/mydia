@@ -68,6 +68,23 @@ defmodule MydiaWeb.MediaLive.UrlStateTest do
     assert has_element?(view, "select[name=sort_by] option[value=title_desc][selected]")
   end
 
+  test "the upcoming progress filter shows only unreleased items", %{conn: conn} do
+    soon =
+      media_item_fixture(%{
+        type: "movie",
+        title: "Pale Horizon",
+        metadata: %{release_date: Date.add(Date.utc_today(), 45)}
+      })
+
+    out = media_item_fixture(%{type: "movie", title: "Worn Compass"})
+
+    {:ok, view, _html} = live(conn, ~p"/movies?progress=upcoming")
+
+    assert has_element?(view, "#media_items-#{soon.id}")
+    refute has_element?(view, "#media_items-#{out.id}")
+    assert has_element?(view, "select[name=progress] option[value=upcoming][selected]")
+  end
+
   test "invalid params fall back to defaults", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/movies?progress=bogus&sort=nope&shown=abc")
 

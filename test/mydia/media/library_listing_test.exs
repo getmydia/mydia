@@ -67,6 +67,28 @@ defmodule Mydia.Media.LibraryListingTest do
       assert assert_parity(movie, user).status.state == :missing
     end
 
+    test "a movie not yet released", %{user: user} do
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Harbinger Bay",
+          metadata: %{release_date: Date.add(Date.utc_today(), 90)}
+        })
+
+      assert assert_parity(movie, user).status.state == :upcoming
+    end
+
+    test "a movie already released with nothing on disk", %{user: user} do
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Weathered Sill",
+          metadata: %{release_date: ~D[2019-04-12]}
+        })
+
+      assert assert_parity(movie, user).status.state == :missing
+    end
+
     test "a show with no episodes", %{user: user} do
       show = media_item_fixture(%{type: "tv_show", title: "Pending Harbor"})
 
@@ -90,7 +112,7 @@ defmodule Mydia.Media.LibraryListingTest do
     test "a partly monitored show", %{user: user} do
       show = media_item_fixture(%{type: "tv_show", title: "Half Signal"})
       watched = episode_fixture(%{media_item_id: show.id, monitored: true})
-      episode_fixture(%{media_item_id: show.id, monitored: true})
+      episode_fixture(%{media_item_id: show.id, monitored: true, air_date: ~D[2020-01-01]})
       ignored = episode_fixture(%{media_item_id: show.id, monitored: false})
       media_file_fixture(%{episode_id: watched.id})
       media_file_fixture(%{episode_id: ignored.id})
@@ -117,6 +139,58 @@ defmodule Mydia.Media.LibraryListingTest do
       episode_fixture(%{media_item_id: show.id, monitored: false, air_date: ~D[2020-02-02]})
 
       assert assert_parity(show, user).status.state == :upcoming
+    end
+
+    test "an airing show with every aired episode on disk", %{user: user} do
+      show = media_item_fixture(%{type: "tv_show", title: "Lamplit Shoals"})
+      today = Date.utc_today()
+      aired = episode_fixture(%{media_item_id: show.id, air_date: Date.add(today, -14)})
+      airs_today = episode_fixture(%{media_item_id: show.id, air_date: today})
+      episode_fixture(%{media_item_id: show.id, air_date: Date.add(today, 7)})
+      media_file_fixture(%{episode_id: aired.id})
+      media_file_fixture(%{episode_id: airs_today.id})
+
+      row = assert_parity(show, user)
+      assert row.status.state == :downloaded
+      assert {row.status.downloaded, row.status.total} == {2, 2}
+      assert row.episode_count == 3
+    end
+
+    test "an episode on disk before its air date counts as downloaded", %{user: user} do
+      show = media_item_fixture(%{type: "tv_show", title: "Early Tidewater"})
+      today = Date.utc_today()
+      aired = episode_fixture(%{media_item_id: show.id, air_date: Date.add(today, -3)})
+      early = episode_fixture(%{media_item_id: show.id, air_date: Date.add(today, 5)})
+      media_file_fixture(%{episode_id: aired.id})
+      media_file_fixture(%{episode_id: early.id})
+
+      row = assert_parity(show, user)
+      assert row.status.state == :downloaded
+      assert {row.status.downloaded, row.status.total} == {2, 2}
+    end
+
+    test "a show with only undated and future episodes", %{user: user} do
+      show = media_item_fixture(%{type: "tv_show", title: "Unwritten Reach"})
+      episode_fixture(%{media_item_id: show.id, air_date: nil})
+      episode_fixture(%{media_item_id: show.id, air_date: Date.add(Date.utc_today(), 40)})
+
+      row = assert_parity(show, user)
+      assert row.status.state == :upcoming
+      assert row.status.total == 0
+    end
+
+    test "a partly downloaded airing show leaves future episodes out of its total",
+         %{user: user} do
+      show = media_item_fixture(%{type: "tv_show", title: "Drift Lantern"})
+      today = Date.utc_today()
+      have = episode_fixture(%{media_item_id: show.id, air_date: Date.add(today, -20)})
+      episode_fixture(%{media_item_id: show.id, air_date: Date.add(today, -10)})
+      episode_fixture(%{media_item_id: show.id, air_date: Date.add(today, 10)})
+      media_file_fixture(%{episode_id: have.id})
+
+      row = assert_parity(show, user)
+      assert row.status.state == :partial
+      assert {row.status.downloaded, row.status.total} == {1, 2}
     end
 
     test "a show with an active episode download beside an errored one", %{user: user} do
@@ -354,6 +428,18 @@ defmodule Mydia.Media.LibraryListingTest do
 
       assert titles(page(user, progress: :downloaded)) == ["Filed Away"]
       assert titles(page(user, progress: :missing)) == ["Still Wanted"]
+    end
+
+    test "the progress filter finds upcoming movies", %{user: user} do
+      media_item_fixture(%{
+        title: "Unopened Letter",
+        metadata: %{release_date: Date.add(Date.utc_today(), 30)}
+      })
+
+      media_item_fixture(%{title: "Opened Letter", metadata: %{release_date: ~D[2018-01-01]}})
+
+      assert titles(page(user, progress: :upcoming)) == ["Unopened Letter"]
+      assert titles(page(user, progress: :missing)) == ["Opened Letter"]
     end
 
     test "title, year and rating sorts", %{user: user} do

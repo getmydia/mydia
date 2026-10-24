@@ -167,12 +167,13 @@ What the contract guarantees:
   the item's aggregate change time, which on upgrade is the migration instant for
   every existing item until it next changes.
 - **Some availability changes have no database write behind them.** `status.state`
-  compares episode air dates with the current UTC date, so a show can leave
-  `UPCOMING` at a UTC date boundary with nothing written to the database. A
-  sweep marks the affected shows and they arrive as ordinary live changes, a
-  little after the boundary rather than at it. Expect a show to appear with no
-  child write, and re-read the whole selection from every live change instead of
-  merging only the fields you believe changed.
+  compares episode air dates, and a movie's release date, with the current UTC
+  date, so a show can leave `UPCOMING` (and a movie can move from `UPCOMING` to
+  `MISSING`) at a UTC date boundary with nothing written to the database. A
+  sweep marks the affected shows and movies and they arrive as ordinary live
+  changes, a little after the boundary rather than at it. Expect an item to
+  appear with no child write, and re-read the whole selection from every live
+  change instead of merging only the fields you believe changed.
 - **There is no push channel.** The endpoint answers requests only, so poll on the
   interval your consumers need; each page is a plain indexed read.
 
