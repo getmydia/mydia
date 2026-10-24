@@ -28,6 +28,10 @@ defmodule MydiaWeb.Features.AdminMobileCardsTest do
     """)
   end
 
+  defp tab_count(session) do
+    eval_js(session, ~s|return document.querySelectorAll("nav#admin-page-tabs > a").length;|)
+  end
+
   defp tab_rows(session) do
     eval_js(session, """
     var tabs = document.querySelectorAll("nav#admin-page-tabs > a");
@@ -83,6 +87,7 @@ defmodule MydiaWeb.Features.AdminMobileCardsTest do
     assert style(session, "nav#admin-page-switcher", "display") == "none"
     refute style(session, "nav#admin-page-tabs", "display") == "none"
     assert style(session, ~s|#admin-tab-quality span[class*="hero-"]|, "display") == "none"
+    assert tab_count(session) == 9
     assert tab_rows(session) == 1
   end
 
@@ -91,8 +96,15 @@ defmodule MydiaWeb.Features.AdminMobileCardsTest do
     resize(session, 1536, 900)
     visit_liveview(session, "/admin/indexers")
 
+    refute style(session, "nav#admin-page-tabs", "display") == "none"
+
     # The tab is a flex container, so the icon's inline-block computes to block.
-    refute style(session, ~s|#admin-tab-quality span[class*="hero-"]|, "display") == "none"
+    assert style(session, ~s|#admin-tab-quality span[class*="hero-"]|, "display") in [
+             "block",
+             "inline-block"
+           ]
+
+    assert tab_count(session) == 9
     assert tab_rows(session) == 1
   end
 end
