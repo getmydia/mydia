@@ -1,7 +1,7 @@
 defmodule Mix.Tasks.Mydia.Ratchet do
   @moduledoc """
-  Fails when the current branch adds complexity, nesting or module size relative to
-  its merge base.
+  Fails when the current branch adds complexity, nesting, module size or untranslated
+  template text (`Mydia.Ratchet.TemplateText`) relative to its merge base.
 
   ## Usage
 
@@ -17,7 +17,7 @@ defmodule Mix.Tasks.Mydia.Ratchet do
 
   alias Mydia.Ratchet
 
-  @shortdoc "Blocks new complexity, nesting and module-size debt"
+  @shortdoc "Blocks new complexity, nesting, module-size and untranslated-text debt"
 
   @switches [from_git_merge_base: :string]
   @config_file ".credo.ratchet.exs"
@@ -48,13 +48,17 @@ defmodule Mix.Tasks.Mydia.Ratchet do
 
     size_regressions = Ratchet.size_regressions(line_counts(File.cwd!()), line_counts(tmp_dir))
 
+    text_regressions =
+      Ratchet.text_regressions(text_counts(File.cwd!()), text_counts(tmp_dir))
+
     Enum.each(issue_regressions, &Mix.shell().error(Ratchet.format_issue(&1)))
     Enum.each(size_regressions, &Mix.shell().error(Ratchet.format_size_regression(&1)))
+    Enum.each(text_regressions, &Mix.shell().error(Ratchet.format_text_regression(&1)))
 
-    case length(issue_regressions) + length(size_regressions) do
+    case length(issue_regressions) + length(size_regressions) + length(text_regressions) do
       0 ->
         Mix.shell().info(
-          "ratchet: no new complexity, nesting or size debt since #{short(base_sha)}"
+          "ratchet: no new complexity, nesting, size or untranslated-text debt since #{short(base_sha)}"
         )
 
       count ->
@@ -113,6 +117,13 @@ defmodule Mix.Tasks.Mydia.Ratchet do
     |> Map.new(fn path ->
       {Path.relative_to(path, root), Ratchet.count_lines(File.read!(path))}
     end)
+  end
+
+  defp text_counts(root) do
+    root
+    |> Path.join("lib/mydia_web/**/*.{ex,heex}")
+    |> Path.wildcard()
+    |> Map.new(&{Path.relative_to(&1, root), Mydia.Ratchet.TemplateText.count_file(&1)})
   end
 
   defp short(sha), do: String.slice(sha, 0, 12)
