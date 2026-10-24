@@ -89,6 +89,12 @@ defmodule MydiaWeb.Features.AdminMobileCardsTest do
     assert style(session, ~s|#admin-tab-quality span[class*="hero-"]|, "display") == "none"
     assert tab_count(session) == 9
     assert tab_rows(session) == 1
+
+    # The strip overlaps the panel's top border by 1px, so no seam shows.
+    overlap =
+      rect(session, "#admin-tab-indexers", "bottom") - rect(session, "#admin-page-body", "top")
+
+    assert overlap >= 0.5
   end
 
   test "at 1536px Configuration's strip is one line with icons", %{session: session} do

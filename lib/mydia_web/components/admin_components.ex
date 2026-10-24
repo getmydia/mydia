@@ -143,14 +143,12 @@ defmodule MydiaWeb.AdminComponents do
   def admin_page(assigns) do
     nav_page = AdminNav.fetch!(assigns.page)
     tabs = AdminNav.visible_pages(nav_page.hub)
-    key = nav_page.key
 
     assigns =
       assign(assigns,
         nav_page: nav_page,
         hub_label: AdminNav.hub_label(nav_page.hub),
-        tabs: tabs,
-        first_tab_active?: match?(%{key: ^key}, List.first(tabs))
+        tabs: tabs
       )
 
     ~H"""
@@ -167,11 +165,13 @@ defmodule MydiaWeb.AdminComponents do
     <%!-- Measured 2026-10-23: Configuration's nine tabs need 842px as labels and
           1080px with icons, against 960px beside the sidebar at xl and 1216px at
           2xl. Lifted tabs that wrap look broken, so the strip starts at xl and
-          its icons at 2xl. --%>
+          its icons at 2xl. The strip and the switcher both overlap the panel's top
+          border by 1px (-mb-px), so the active tab's fill covers it and the inactive
+          tabs' bottom borders coincide with it. --%>
     <nav
       id="admin-page-tabs"
       aria-label={"#{@hub_label} pages"}
-      class="tabs tabs-lift max-xl:hidden"
+      class="tabs tabs-lift relative z-10 -mb-px max-xl:hidden"
     >
       <.link
         :for={tab <- @tabs}
@@ -200,6 +200,7 @@ defmodule MydiaWeb.AdminComponents do
           id="admin-page-switcher-trigger"
           tabindex="0"
           role="button"
+          aria-haspopup="menu"
           class="flex items-center gap-2 h-10 px-4 font-medium cursor-pointer bg-base-100 border border-base-300 border-b-0 rounded-t-box focus-visible:outline-2 focus-visible:outline-primary"
         >
           <.icon name={@nav_page.icon} class="size-4" />
@@ -230,11 +231,7 @@ defmodule MydiaWeb.AdminComponents do
 
     <div
       id="admin-page-body"
-      class={[
-        "bg-base-100 border border-base-300 rounded-box max-xl:rounded-tl-none",
-        "p-3 sm:p-4 xl:p-6 space-y-4",
-        @first_tab_active? && "rounded-tl-none"
-      ]}
+      class="bg-base-100 border border-base-300 rounded-box rounded-tl-none p-3 sm:p-4 xl:p-6 space-y-4"
     >
       <p :if={@nav_page.description} id="admin-page-description" class="text-base-content/70">
         {@nav_page.description}

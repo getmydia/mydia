@@ -346,9 +346,10 @@ lifted tab naming the current page, with a menu of `<.link navigate>` items
 into the page in every theme. `#admin-page-count` sits in the active strip tab
 and `#admin-switcher-count` in the switcher, since both are always in the DOM.
 
-**Body.** The tabs join `div#admin-page-body`, a bordered `bg-base-100` panel
+**Body.** The tabs join `div#admin-page-body`: both the strip and the switcher
+overlap its top border by 1px (`-mb-px`). It is a bordered `bg-base-100` panel
 (`p-3 sm:p-4 xl:p-6 space-y-4`) whose first child is the page description.
-Its top-left corner is square wherever a tab sits on it.
+Its top-left corner is always square, since a tab always sits there.
 A page's `*_tab` component renders its content directly, with no
 padding wrapper of its own; the conventions test flags one. A real subsection
 (Needs Attention, Scheduled Jobs) is `<.admin_section title icon count>`. Its

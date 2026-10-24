@@ -247,6 +247,8 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     hub_pages = MydiaWeb.AdminNav.visible_pages(:administration)
 
     assert count(html, ~s(nav#admin-page-tabs.tabs.tabs-lift[class~="max-xl:hidden"])) == 1
+    # -mb-px overlaps the panel's top border, as the switcher does.
+    assert count(html, ~s(nav#admin-page-tabs[class~="-mb-px"])) == 1
     assert count(html, ~s(nav#admin-page-tabs a[id^="admin-tab-"])) == length(hub_pages)
 
     for page <- hub_pages do
@@ -272,6 +274,7 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     # -mb-px lets the trigger cover the panel's top border, so the two read as one.
     assert count(html, ~s(nav#admin-page-switcher .dropdown[class~="-mb-px"])) == 1
     assert count(html, "#admin-page-switcher-trigger.btn") == 0
+    assert count(html, ~s(#admin-page-switcher-trigger[aria-haspopup="menu"])) == 1
 
     assert count(
              html,
@@ -319,22 +322,9 @@ defmodule MydiaWeb.AdminModalComponentsTest do
              "div#admin-page-body.bg-base-100.border.border-base-300.rounded-box.space-y-4 #inside"
            ) == 1
 
-    # Below xl the switcher always sits on the panel's top-left corner.
-    assert count(html, ~s(div#admin-page-body[class~="max-xl:rounded-tl-none"])) == 1
-    # Trash is not the hub's first tab, so from xl the corner stays round.
-    assert count(html, ~s(div#admin-page-body[class~="rounded-tl-none"])) == 0
-    assert count(html, ~s(div#admin-page-body[class~="max-sm:bg-transparent"])) == 0
-  end
-
-  test "admin_page/1 squares the panel's corner when the hub's first tab is active" do
-    assigns = %{}
-
-    html =
-      rendered_to_string(~H"""
-      <AdminComponents.admin_page page={:requests}>body</AdminComponents.admin_page>
-      """)
-
-    assert [%{key: :requests} | _] = MydiaWeb.AdminNav.visible_pages(:administration)
+    # A tab always sits on the top-left corner, so it is square at every width.
     assert count(html, ~s(div#admin-page-body[class~="rounded-tl-none"])) == 1
+    assert count(html, ~s(div#admin-page-body[class~="max-xl:rounded-tl-none"])) == 0
+    assert count(html, ~s(div#admin-page-body[class~="max-sm:bg-transparent"])) == 0
   end
 end
