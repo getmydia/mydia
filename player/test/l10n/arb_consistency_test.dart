@@ -40,6 +40,27 @@ void main() {
     expect(placeholders('Added {title}'), {'title'});
   });
 
+  test('every regional locale has its base language file', () {
+    final names = dir
+        .listSync()
+        .whereType<File>()
+        .map((f) => f.uri.pathSegments.last)
+        .toSet();
+    final missing = <String>[];
+    for (final n in names) {
+      final m = RegExp(r'^app_([a-z]+)_[A-Za-z0-9]+\.arb$').firstMatch(n);
+      if (m != null && !names.contains('app_${m.group(1)}.arb')) {
+        missing.add('app_${m.group(1)}.arb (for $n)');
+      }
+    }
+    expect(
+      missing,
+      isEmpty,
+      reason: 'gen_l10n fails pub get without the base file. Create each one '
+          'containing {"@@locale": "<lang>"}.',
+    );
+  });
+
   test('there is at least one translation', () {
     expect(translations, isNotEmpty);
   });

@@ -27,8 +27,8 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  # Message formatting for the generated AppLocalizations. Pinned to the
-  # version the Flutter SDK resolves, so it never forces a solve.
+  # Message formatting for the generated AppLocalizations. The constraint stays
+  # compatible with the version the Flutter SDK pins, so it never forces a solve.
   intl: ^0.20.2
   elliptic: ^0.4.0
   pointycastle: ^4.0.0

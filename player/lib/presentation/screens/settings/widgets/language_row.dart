@@ -25,8 +25,8 @@ class LanguageSettingsRow extends ConsumerWidget {
           ? l10n.settingsLanguageSystemDefault
           : localeDisplayName(locale),
       onTap: () async {
-        final choice = await showLanguagePicker(context, locale);
         final notifier = ref.read(localeSettingProvider.notifier);
+        final choice = await showLanguagePicker(context, locale);
         switch (choice) {
           case LanguageSystemDefault():
             await notifier.set(null);

@@ -8,8 +8,8 @@ import '../theme/theme_preset.dart';
 /// Storage goes through [AuthStorage] rather than `FlutterSecureStorage`
 /// directly, so every call inherits the platform hardening in
 /// `NativeAuthStorage`. Reaching for the plugin directly is what made
-/// `clearSettings` throw on the macOS legacy keychain and abort sign-out
-/// before it reached the step that ends the session.
+/// `clearSettings` throw on the macOS legacy keychain and abort sign-out before
+/// it reached the step that ends the session.
 class SettingsService {
   /// [storage] is injectable for tests. Production callers use the default,
   /// which is the platform-appropriate implementation.
