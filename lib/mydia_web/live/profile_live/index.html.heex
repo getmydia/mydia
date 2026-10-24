@@ -224,6 +224,25 @@
               <.radius_picker id="theme-radius-picker" selected={@theme_selection.radius} />
             </div>
 
+            <div class="form-control w-full mt-6" id="interface-language-settings">
+              <span class="label-text font-medium">{gettext("Language")}</span>
+              <p class="text-sm text-base-content/60 mb-3">
+                {gettext(
+                  "Automatic follows your browser. Percentages show how much of Mydia is translated; the rest stays in English."
+                )}
+              </p>
+              <.form for={%{}} id="interface-language-form" phx-change="set_interface_language">
+                <.input
+                  type="select"
+                  id="interface-language-select"
+                  name="interface_language"
+                  label={gettext("Interface language")}
+                  value={UserPreference.interface_language(@preference)}
+                  options={@language_options}
+                />
+              </.form>
+            </div>
+
             <div class="form-control w-full mt-6" id="time-display-settings">
               <span class="label-text font-medium">Date &amp; time</span>
               <p class="text-sm text-base-content/60 mb-3">

@@ -49,6 +49,7 @@ defmodule MydiaWeb.ProfileLive.Index do
       |> assign(:password_error, nil)
       # Preferences
       |> assign(:preference, preference)
+      |> assign(:language_options, language_options())
       |> assign(:themes, @themes)
       |> assign(:light_themes, Themes.light())
       |> assign(:dark_themes, Themes.dark())
@@ -284,7 +285,30 @@ defmodule MydiaWeb.ProfileLive.Index do
     save_time_display(socket, %{"clock_format" => clock})
   end
 
+  # A full reload, not a re-render: the root layout (<html lang>, sidebar) is
+  # outside this LiveView and only re-renders on an HTTP request.
+  def handle_event("set_interface_language", %{"interface_language" => code}, socket) do
+    case Accounts.update_preference(socket.assigns.preference, %{"interface_language" => code}) do
+      {:ok, _preference} ->
+        {:noreply, redirect(socket, to: ~p"/profile")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, gettext("Could not save your language"))}
+    end
+  end
+
   ## Private Helpers
+
+  defp language_options do
+    auto = {gettext("Automatic (browser language)"), "auto"}
+
+    [auto | Enum.map(Mydia.Locale.available(), &{language_label(&1), &1.code})]
+  end
+
+  defp language_label(%Mydia.Locale.Info{code: "en", native_name: name}), do: name
+
+  defp language_label(%Mydia.Locale.Info{native_name: name, completion: c}),
+    do: "#{name} · #{round(c * 100)}%"
 
   defp save_time_display(socket, delta) do
     case Accounts.update_preference(socket.assigns.preference, delta) do
