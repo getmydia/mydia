@@ -276,9 +276,11 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
          |> assign(:season_order_suggestion, nil)
          |> put_flash(
            :info,
-           gettext("Switched to %{ordering} — %{count} episode(s) remapped.",
-             ordering: SeasonOrderComponents.season_order_label(target),
-             count: count
+           ngettext(
+             "Switched to %{ordering} — %{count} episode remapped.",
+             "Switched to %{ordering} — %{count} episodes remapped.",
+             count,
+             ordering: SeasonOrderComponents.season_order_label(target)
            )
          )}
 

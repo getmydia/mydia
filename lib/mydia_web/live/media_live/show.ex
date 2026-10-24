@@ -1017,8 +1017,10 @@ defmodule MydiaWeb.MediaLive.Show do
         )
 
       true ->
-        gettext("Search complete: %{indexers} indexer(s) searched, no results found",
-          indexers: indexers
+        ngettext(
+          "Search complete: %{count} indexer searched, no results found",
+          "Search complete: %{count} indexers searched, no results found",
+          indexers
         )
     end
   end
