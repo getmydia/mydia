@@ -186,7 +186,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
       else: [{"downloads.audio_language", :invalid}]
   end
 
-  # The length bound mirrors metadata_changeset/2, but the tag-shape check
+  # The length bound mirrors Mydia.Config.Schema.Metadata.changeset/2, but the tag-shape check
   # (@language_tag) is enforced here, on write, and deliberately not added to
   # Mydia.Config.Schema: a stricter schema check would refuse to boot an
   # install whose existing YAML, env, or database value was accepted before

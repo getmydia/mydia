@@ -18,6 +18,10 @@ Weblate (see `TRANSLATING.md`). This file is for developers writing UI code.
 - Strings built in Elixir (flash messages, labels) use `gettext` too. Never put
   translatable text in a module attribute: attributes are evaluated at compile
   time, before any locale is set.
+- Work done in another process (`start_async`, `Task`) does not inherit the
+  Gettext locale. Build translated strings in the LiveView process, or pass
+  `Gettext.get_locale(MydiaWeb.Gettext)` to the task and call
+  `Gettext.put_locale/2` there.
 - Do not translate user or media data, log messages, API error codes or
   anything sent to the player.
 - Changeset messages use the `errors` domain through `translate_error/1`
@@ -31,8 +35,8 @@ then `en`. `MydiaWeb.Plugs.Locale` and `MydiaWeb.Plugs.UserLocale` set it for
 HTTP requests; `MydiaWeb.Live.UserAuth` sets it for LiveView processes, which
 do not inherit it. `@locale` is assigned in both.
 
-A language is offered once `priv/gettext/<code>/` exists. Untranslated
-messages fall back to English.
+A language is offered once `priv/gettext/<code>/LC_MESSAGES/` contains a `.po`
+file. Untranslated messages fall back to English.
 
 ## Files and checks
 

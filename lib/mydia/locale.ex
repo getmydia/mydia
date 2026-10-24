@@ -2,10 +2,11 @@ defmodule Mydia.Locale do
   @moduledoc """
   The interface languages Mydia ships, and which one a request gets.
 
-  A language is available when `priv/gettext/<code>/` exists. `en` always is,
-  because msgids are the English text. Weblate adds the directories, so a new
-  language appears with the first release that carries its translations.
-  Untranslated messages fall back to English.
+  A language is available when `priv/gettext/<code>/LC_MESSAGES/` contains a
+  `.po` file; an empty directory does not count. `en` always is, because msgids
+  are the English text. Weblate adds the catalogs, so a new language appears
+  with the first release that carries its translations. Untranslated messages
+  fall back to English.
 
   Resolution order (`resolve/4`): the user's `interface_language` preference,
   then the browser's `Accept-Language`, then the instance default
