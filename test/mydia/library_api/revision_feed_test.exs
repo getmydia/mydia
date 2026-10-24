@@ -138,57 +138,98 @@ defmodule Mydia.LibraryApi.RevisionFeedTest do
     assert Repo.get_by(MediaItemRevision, media_item_id: unknown) == nil
   end
 
-  test "mark_live cannot move a marker whose stored revision is already ahead" do
-    # Simulate a stale allocation: the stored marker sits ahead of the next
-    # revision the clock path can allocate. The greater-revision guard must leave
-    # its revision and deleted flag alone, because a marker moved backwards is a
-    # permanent consumer miss.
-    live = insert(:media_item)
-    ahead = marker!(live.id).revision + 1_000_000
-    store_marker_ahead!(live.id, ahead)
+  test "mark_live advances a still-present item past a stale allocation" do
+    # The clock path allocates before the conflict is resolved. On PostgreSQL
+    # that value can tie the marker, and the apply function retries with a new
+    # identity value, so a still-present item moves forward and a tombstone on
+    # a live row is cleared. The parked revision is the next real allocation
+    # (or, on SQLite, one step past the watermark), not a synthetic gap, and
+    # PostgreSQL's sequence is left where it is.
+    Enum.each([false, true], fn deleted ->
+      item = insert(:media_item)
+      ahead = park_marker!(item.id, deleted)
 
-    assert RevisionFeed.mark_live([live.id]) == :ok
+      assert RevisionFeed.mark_live([item.id]) == :ok
 
-    marked = marker!(live.id)
-    assert marked.revision >= ahead
-    refute marked.deleted
-    assert marker_count(live.id) == 1
+      marked = marker!(item.id)
+      assert marked.revision > ahead
+      refute marked.deleted
+      assert marker_count(item.id) == 1
+    end)
+  end
 
-    # PostgreSQL identity values are handed out outside commit order, so the
-    # clock sweep's revision can arrive below the committed marker's and only the
-    # guard keeps it from moving backwards. SQLite's AUTOINCREMENT allocates
-    # inside the write lock, in commit order, so its guard is inert and a
-    # tombstone on a still-present item is legitimately revived by the next
-    # allocation. The flag case is therefore PostgreSQL-only.
+  # Parks the marker on a real sequence position rather than a million-step gap.
+  #
+  # PostgreSQL: the row's revision becomes the next identity value and the
+  # sequence is not moved, so `mark_live`'s first `nextval` ties it and only
+  # the retry delivers. Rewinding the shared sequence would hand some other
+  # test a duplicate revision.
+  #
+  # SQLite: there is no retry, and AUTOINCREMENT will not allocate a rowid the
+  # table still holds. Park one past the watermark and leave that watermark in
+  # place, so the next allocation is a minimal gap ahead and the write lands.
+  defp park_marker!(media_item_id, deleted) do
     if Mydia.DB.postgres?() do
-      tombstoned = insert(:media_item)
-      ahead = marker!(tombstoned.id).revision + 1_000_000
-      store_marker_ahead!(tombstoned.id, ahead, true)
-
-      assert RevisionFeed.mark_live([tombstoned.id]) == :ok
-
-      marked = marker!(tombstoned.id)
-      assert marked.revision == ahead
-      assert marked.deleted
+      park_postgres_marker!(media_item_id, deleted)
+    else
+      park_sqlite_marker!(media_item_id, deleted)
     end
   end
 
-  # Writes the marker ahead of what the clock path can allocate next. SQLite's
-  # AUTOINCREMENT watermark tracks the largest rowid ever used, and an UPDATE
-  # that raises a rowid raises that watermark too, so it is rewound after the
-  # write; PostgreSQL keeps its sequence behind an identity column set directly,
-  # so it needs nothing.
-  defp store_marker_ahead!(media_item_id, revision, deleted \\ false) do
-    Repo.update_all(
-      from(r in MediaItemRevision, where: r.media_item_id == ^media_item_id),
-      set: [revision: revision, deleted: deleted]
+  defp park_postgres_marker!(media_item_id, deleted) do
+    # A concurrent test can consume the peeked value before this update lands.
+    # Retry against the new next value rather than holding a primary key the
+    # sequence has already handed out. Do not read the sequence again after a
+    # successful park: another connection will move it, and `mark_live` still
+    # delivers either by tying this revision or by allocating past it.
+    Enum.find_value(1..8, fn _attempt ->
+      ahead = next_identity_value!()
+
+      try do
+        {1, _} =
+          Repo.update_all(
+            from(r in MediaItemRevision, where: r.media_item_id == ^media_item_id),
+            set: [revision: ahead, deleted: deleted]
+          )
+
+        ahead
+      rescue
+        Ecto.ConstraintError -> nil
+        Postgrex.Error -> nil
+      end
+    end) || flunk("could not park the marker on the next identity value")
+  end
+
+  defp park_sqlite_marker!(media_item_id, deleted) do
+    %{rows: [[seq]]} =
+      Repo.query!("SELECT seq FROM sqlite_sequence WHERE name = 'media_item_revisions'")
+
+    ahead = seq + 1
+
+    {1, _} =
+      Repo.update_all(
+        from(r in MediaItemRevision, where: r.media_item_id == ^media_item_id),
+        set: [revision: ahead, deleted: deleted]
+      )
+
+    Repo.query!(
+      "UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'media_item_revisions'",
+      [ahead]
     )
 
-    unless Mydia.DB.postgres?() do
-      Repo.query!(
-        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'media_item_revisions'",
-        [revision - 1]
-      )
-    end
+    ahead
+  end
+
+  defp next_identity_value! do
+    %{rows: [[sequence]]} =
+      Repo.query!("SELECT pg_get_serial_sequence('media_item_revisions', 'revision')")
+
+    # The sequence relation exposes last_value and is_called, not its increment.
+    # This identity column steps by 1. Reading it does not allocate, and the
+    # sequence is not rewound afterwards.
+    %{rows: [[last, called]]} =
+      Repo.query!("SELECT last_value, is_called FROM #{sequence}")
+
+    if called, do: last + 1, else: last
   end
 end
