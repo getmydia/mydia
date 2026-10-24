@@ -24,14 +24,18 @@ defmodule Mydia.Media.AvailabilityStatus do
   @typedoc """
   Episode counts for one scope of a show: every episode, or only the monitored ones.
 
-  `downloaded` counts episodes with at least one version file, `downloading` those
-  with an active download, `upcoming` those whose air date is after today.
+  `expected` counts episodes the show can be expected to have: those that have
+  aired (air date on or before today) plus any that already have a version file,
+  so an episode grabbed before its listed date still counts. Future and undated
+  episodes without a file are left out until they air. `downloaded` counts
+  episodes with at least one version file, so it never exceeds `expected`.
+  `downloading` counts those with an active download.
   """
   @type episode_counts :: %{
           total: non_neg_integer(),
+          expected: non_neg_integer(),
           downloaded: non_neg_integer(),
-          downloading: non_neg_integer(),
-          upcoming: non_neg_integer()
+          downloading: non_neg_integer()
         }
 
   @doc """
@@ -59,6 +63,10 @@ defmodule Mydia.Media.AvailabilityStatus do
   Episodes are classified over the monitored ones when there are any, and over every
   episode when there are none, so the x/y counts always have a meaningful denominator.
 
+  Only expected episodes are counted toward the x/y total, so an airing show that
+  has every aired episode reads as downloaded, not partial. A show with episodes
+  but none expected yet is upcoming.
+
   A monitored show with every episode unmonitored is not chasing anything, so it
   renders muted. A show with no episodes at all is a different case: nothing
   contradicts the show's own flag yet, so a freshly added show awaiting metadata
@@ -70,9 +78,9 @@ defmodule Mydia.Media.AvailabilityStatus do
 
     state =
       cond do
-        scope.total > 0 and scope.downloaded == scope.total -> :downloaded
+        scope.expected > 0 and scope.downloaded == scope.expected -> :downloaded
         scope.downloading > 0 -> :downloading
-        scope.total > 0 and scope.upcoming == scope.total -> :upcoming
+        scope.total > 0 and scope.expected == 0 -> :upcoming
         scope.downloaded > 0 -> :partial
         true -> :missing
       end
@@ -81,7 +89,7 @@ defmodule Mydia.Media.AvailabilityStatus do
       state: state,
       monitored: show_monitored and (all.total == 0 or monitored.total > 0),
       downloaded: scope.downloaded,
-      total: scope.total
+      total: scope.expected
     }
   end
 

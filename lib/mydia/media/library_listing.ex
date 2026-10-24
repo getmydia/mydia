@@ -36,7 +36,7 @@ defmodule Mydia.Media.LibraryListing do
   alias Mydia.Playback.Progress
   alias Mydia.Repo
 
-  @no_episodes %{total: 0, downloaded: 0, downloading: 0, upcoming: 0}
+  @no_episodes %{total: 0, expected: 0, downloaded: 0, downloading: 0}
   @no_series %{
     all: @no_episodes,
     monitored: @no_episodes,
@@ -193,9 +193,9 @@ defmodule Mydia.Media.LibraryListing do
     }
   end
 
-  # Per show: episode counts over every episode and over the monitored ones,
-  # the latest air date (future episodes included, as the listing always
-  # sorted) and the next air date after today.
+  # Per show: episode counts over every episode and over the monitored ones
+  # (expected = aired or already on disk), the latest air date (future episodes
+  # included, as the listing always sorted) and the next air date after today.
   defp series_counts(ids) do
     today = Date.utc_today()
 
@@ -227,13 +227,16 @@ defmodule Mydia.Media.LibraryListing do
       select: {
         e.media_item_id,
         count(e.id),
+        filter(count(e.id), e.air_date <= ^today or not is_nil(f.episode_id)),
         count(f.episode_id),
         count(d.episode_id),
-        filter(count(e.id), e.air_date > ^today),
         filter(count(e.id), e.monitored),
+        filter(
+          count(e.id),
+          e.monitored and (e.air_date <= ^today or not is_nil(f.episode_id))
+        ),
         filter(count(f.episode_id), e.monitored),
         filter(count(d.episode_id), e.monitored),
-        filter(count(e.id), e.monitored and e.air_date > ^today),
         # Explicit casts, as RecentlyAdded does for its timestamps: SQLite
         # returns an aggregate over a TEXT date column as a string otherwise.
         type(max(e.air_date), :date),
@@ -241,22 +244,22 @@ defmodule Mydia.Media.LibraryListing do
       }
     )
     |> Repo.all()
-    |> Map.new(fn {id, total, downloaded, downloading, upcoming, monitored_total,
-                   monitored_downloaded, monitored_downloading, monitored_upcoming, last_air_date,
+    |> Map.new(fn {id, total, expected, downloaded, downloading, monitored_total,
+                   monitored_expected, monitored_downloaded, monitored_downloading, last_air_date,
                    next_air_date} ->
       {id,
        %{
          all: %{
            total: total,
+           expected: expected,
            downloaded: downloaded,
-           downloading: downloading,
-           upcoming: upcoming
+           downloading: downloading
          },
          monitored: %{
            total: monitored_total,
+           expected: monitored_expected,
            downloaded: monitored_downloaded,
-           downloading: monitored_downloading,
-           upcoming: monitored_upcoming
+           downloading: monitored_downloading
          },
          last_air_date: last_air_date,
          next_air_date: next_air_date

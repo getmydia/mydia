@@ -638,12 +638,16 @@ defmodule Mydia.Media.Items do
 
     %{
       total: length(episodes),
+      expected: Enum.count(episodes, &expected_episode?(&1, today)),
       downloaded: Enum.count(episodes, &(&1.media_files != [])),
       downloading:
-        Enum.count(episodes, fn episode -> Enum.any?(episode.downloads, &download_active?/1) end),
-      upcoming: Enum.count(episodes, &(&1.air_date && Date.compare(&1.air_date, today) == :gt))
+        Enum.count(episodes, fn episode -> Enum.any?(episode.downloads, &download_active?/1) end)
     }
   end
+
+  defp expected_episode?(%{media_files: [_ | _]}, _today), do: true
+  defp expected_episode?(%{air_date: nil}, _today), do: false
+  defp expected_episode?(%{air_date: air_date}, today), do: Date.compare(air_date, today) != :gt
 
   @doc """
   Re-fetches metadata from the provider and updates the media item.
