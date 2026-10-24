@@ -10,6 +10,7 @@
 #
 msgid ""
 msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
 
 #: lib/mydia_web/components/core_components.ex:332
 #, elixir-autogen, elixir-format
