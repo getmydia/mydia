@@ -15,13 +15,6 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
   alias MydiaWeb.PasskeySession
   alias MydiaWeb.ProfileLive.SecondFactorThrottle
 
-  @rate_limited "Too many login attempts. Please try again later."
-  @bad_password "Current password is incorrect"
-  @browser_errors %{
-    "cancelled" => "The passkey request was cancelled or timed out.",
-    "duplicate" => "This device already has a passkey for this account"
-  }
-
   @impl true
   def update(%{user_id: user_id, page_url: page_url} = assigns, socket) do
     {:ok,
@@ -63,10 +56,10 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
          |> push_event("passkey:register", %{options: options})}
 
       {:error, :invalid_password} ->
-        {:noreply, assign(socket, error: @bad_password)}
+        {:noreply, assign(socket, error: bad_password())}
 
       {:error, :rate_limited} ->
-        {:noreply, assign(socket, error: @rate_limited)}
+        {:noreply, assign(socket, error: rate_limited())}
     end
   end
 
@@ -80,19 +73,18 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
         {:noreply, socket |> reset_flow() |> load_passkeys(user.id)}
 
       {:error, :already_registered} ->
-        {:noreply, retry(socket, @browser_errors["duplicate"])}
+        {:noreply, retry(socket, browser_error("duplicate"))}
 
       {:error, _reason} ->
-        {:noreply, retry(socket, "Passkey not recognised")}
+        {:noreply, retry(socket, gettext("Passkey not recognised"))}
     end
   end
 
   def handle_event("passkey_registered", _params, socket),
-    do: {:noreply, retry(socket, "Sign-in expired, please try again")}
+    do: {:noreply, retry(socket, gettext("Sign-in expired, please try again"))}
 
   def handle_event("passkey_failed", params, socket) do
-    message = Map.get(@browser_errors, params["reason"], "Passkey not recognised")
-    {:noreply, retry(socket, message)}
+    {:noreply, retry(socket, browser_error(params["reason"]))}
   end
 
   def handle_event("start_rename", %{"id" => id}, socket) do
@@ -121,7 +113,7 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
         {:noreply, socket |> reset_flow() |> load_passkeys(socket.assigns.user.id)}
 
       {:error, %Ecto.Changeset{}} ->
-        {:noreply, assign(socket, error: "Name must be 1 to 100 characters")}
+        {:noreply, assign(socket, error: gettext("Name must be 1 to 100 characters"))}
 
       {:error, :not_found} ->
         {:noreply, socket |> reset_flow() |> load_passkeys(socket.assigns.user.id)}
@@ -150,8 +142,8 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
            Accounts.delete_passkey(user, target.id, password)
          end) do
       {:ok, _} -> {:noreply, socket |> reset_flow() |> load_passkeys(user.id)}
-      {:error, :invalid_password} -> {:noreply, assign(socket, error: @bad_password)}
-      {:error, :rate_limited} -> {:noreply, assign(socket, error: @rate_limited)}
+      {:error, :invalid_password} -> {:noreply, assign(socket, error: bad_password())}
+      {:error, :rate_limited} -> {:noreply, assign(socket, error: rate_limited())}
       {:error, :not_found} -> {:noreply, socket |> reset_flow() |> load_passkeys(user.id)}
     end
   end
@@ -177,7 +169,17 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
   defp available?(%{supported?: true, relying_party: {:ok, _}}), do: true
   defp available?(_assigns), do: false
 
-  defp format_date(nil, _display), do: "never"
+  defp rate_limited, do: gettext("Too many login attempts. Please try again later.")
+  defp bad_password, do: gettext("Current password is incorrect")
+
+  defp browser_error("cancelled"), do: gettext("The passkey request was cancelled or timed out.")
+
+  defp browser_error("duplicate"),
+    do: gettext("This device already has a passkey for this account")
+
+  defp browser_error(_reason), do: gettext("Passkey not recognised")
+
+  defp format_date(nil, _display), do: gettext("never")
   defp format_date(datetime, display), do: format(datetime, :date, display)
 
   @impl true
@@ -192,12 +194,13 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
       phx-target={@myself}
     >
       <h3 class="font-semibold flex items-center gap-2 mb-2">
-        <.icon name="hero-finger-print" class="w-5 h-5" /> Passkeys
+        <.icon name="hero-finger-print" class="w-5 h-5" /> {gettext("Passkeys")}
       </h3>
 
       <p :if={@passkeys == []} id="passkey-2fa-note" class="text-base-content/70 mb-4">
-        Sign in with your fingerprint, face or device PIN instead of a password. Once you add a
-        passkey, signing in with your password will also ask for it (or your authenticator code).
+        {gettext(
+          "Sign in with your fingerprint, face or device PIN instead of a password. Once you add a passkey, signing in with your password will also ask for it (or your authenticator code)."
+        )}
       </p>
 
       <ul :if={@passkeys != []} class="divide-y divide-base-300 mb-4">
@@ -209,9 +212,10 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
           <div class="flex-1 min-w-0">
             <div class="font-medium truncate">{passkey.name}</div>
             <div class="text-xs text-base-content/60">
-              Works at {passkey.rp_id} · Added {format_date(passkey.inserted_at, @time_display)} · Last used {format_date(
-                passkey.last_used_at,
-                @time_display
+              {gettext("Works at %{site} · Added %{added} · Last used %{last_used}",
+                site: passkey.rp_id,
+                added: format_date(passkey.inserted_at, @time_display),
+                last_used: format_date(passkey.last_used_at, @time_display)
               )}
             </div>
           </div>
@@ -223,7 +227,7 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
             phx-value-id={passkey.id}
             phx-target={@myself}
           >
-            Rename
+            {gettext("Rename")}
           </button>
           <button
             type="button"
@@ -233,7 +237,7 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
             phx-value-id={passkey.id}
             phx-target={@myself}
           >
-            Remove
+            {gettext("Remove")}
           </button>
         </li>
       </ul>
@@ -246,11 +250,13 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
           phx-click="start_add"
           phx-target={@myself}
         >
-          <.icon name="hero-plus" class="w-4 h-4" /> Add a passkey
+          <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add a passkey")}
         </button>
       <% else %>
         <p id="passkey-unsupported" class="text-sm text-base-content/60">
-          Adding a passkey needs a browser that supports them and a secure (https) address for Mydia.
+          {gettext(
+            "Adding a passkey needs a browser that supports them and a secure (https) address for Mydia."
+          )}
         </p>
       <% end %>
 
@@ -259,11 +265,11 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
           <h3 class="font-bold text-lg mb-4">
             <%= case @step do %>
               <% :rename -> %>
-                Rename passkey
+                {gettext("Rename passkey")}
               <% :delete -> %>
-                Remove passkey
+                {gettext("Remove passkey")}
               <% _ -> %>
-                Add a passkey
+                {gettext("Add a passkey")}
             <% end %>
           </h3>
 
@@ -275,37 +281,63 @@ defmodule MydiaWeb.ProfileLive.PasskeysComponent do
           <%= case @step do %>
             <% :add -> %>
               <.form for={@form} id="passkey-password-form" phx-submit="add" phx-target={@myself}>
-                <.input field={@form[:password]} type="password" label="Current password" required />
+                <.input
+                  field={@form[:password]}
+                  type="password"
+                  label={gettext("Current password")}
+                  required
+                />
                 <div class="modal-action">
-                  <button type="button" class="btn btn-ghost" phx-click="close" phx-target={@myself}>Cancel</button>
-                  <button type="submit" class="btn btn-primary">Continue</button>
+                  <button type="button" class="btn btn-ghost" phx-click="close" phx-target={@myself}>
+                    {gettext("Cancel")}
+                  </button>
+                  <button type="submit" class="btn btn-primary">{gettext("Continue")}</button>
                 </div>
               </.form>
             <% :waiting -> %>
               <div class="flex items-center gap-3">
                 <span class="loading loading-spinner loading-md"></span>
-                <span>Follow your browser's prompt to create the passkey.</span>
+                <span>{gettext("Follow your browser's prompt to create the passkey.")}</span>
               </div>
               <div class="modal-action">
-                <button type="button" class="btn btn-ghost" phx-click="close" phx-target={@myself}>Cancel</button>
+                <button type="button" class="btn btn-ghost" phx-click="close" phx-target={@myself}>
+                  {gettext("Cancel")}
+                </button>
               </div>
             <% :rename -> %>
               <.form for={@form} id="passkey-rename-form" phx-submit="rename" phx-target={@myself}>
-                <.input field={@form[:name]} type="text" label="Name" maxlength="100" required />
+                <.input
+                  field={@form[:name]}
+                  type="text"
+                  label={gettext("Name")}
+                  maxlength="100"
+                  required
+                />
                 <div class="modal-action">
-                  <button type="button" class="btn btn-ghost" phx-click="close" phx-target={@myself}>Cancel</button>
-                  <button type="submit" class="btn btn-primary">Save</button>
+                  <button type="button" class="btn btn-ghost" phx-click="close" phx-target={@myself}>
+                    {gettext("Cancel")}
+                  </button>
+                  <button type="submit" class="btn btn-primary">{gettext("Save")}</button>
                 </div>
               </.form>
             <% :delete -> %>
               <p class="mb-4">
-                Remove <span class="font-medium">{@target.name}</span>? You won't be able to sign in with it again.
+                {gettext("Remove %{name}? You won't be able to sign in with it again.",
+                  name: @target.name
+                )}
               </p>
               <.form for={@form} id="passkey-delete-form" phx-submit="delete" phx-target={@myself}>
-                <.input field={@form[:password]} type="password" label="Current password" required />
+                <.input
+                  field={@form[:password]}
+                  type="password"
+                  label={gettext("Current password")}
+                  required
+                />
                 <div class="modal-action">
-                  <button type="button" class="btn btn-ghost" phx-click="close" phx-target={@myself}>Cancel</button>
-                  <button type="submit" class="btn btn-error">Remove</button>
+                  <button type="button" class="btn btn-ghost" phx-click="close" phx-target={@myself}>
+                    {gettext("Cancel")}
+                  </button>
+                  <button type="submit" class="btn btn-error">{gettext("Remove")}</button>
                 </div>
               </.form>
           <% end %>

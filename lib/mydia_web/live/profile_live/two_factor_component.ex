@@ -13,8 +13,6 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
   alias Mydia.Accounts
   alias MydiaWeb.ProfileLive.SecondFactorThrottle
 
-  @rate_limited_message "Too many login attempts. Please try again later."
-
   @impl true
   def update(%{user_id: user_id} = assigns, socket) do
     {:ok,
@@ -56,14 +54,16 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
         {:noreply,
          socket
          |> reset_flow()
-         |> put_flash(:error, "Two-factor authentication is already on.")
+         |> put_flash(:error, gettext("Two-factor authentication is already on."))
          |> load_status(socket.assigns.user_id)}
 
       {:error, :invalid_code} ->
         {:noreply,
          assign(socket,
            error:
-             "That code didn't match. Check that your device's clock is correct and try again.",
+             gettext(
+               "That code didn't match. Check that your device's clock is correct and try again."
+             ),
            form: code_form()
          )}
     end
@@ -84,10 +84,10 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
          |> load_status(socket.assigns.user_id)}
 
       {:error, :rate_limited} ->
-        {:noreply, assign(socket, error: @rate_limited_message)}
+        {:noreply, assign(socket, error: rate_limited_message())}
 
       {:error, :invalid_code} ->
-        {:noreply, assign(socket, error: "Invalid code", form: code_form())}
+        {:noreply, assign(socket, error: gettext("Invalid code"), form: code_form())}
     end
   end
 
@@ -112,17 +112,17 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
         {:noreply,
          socket
          |> reset_flow()
-         |> put_flash(:info, "Two-factor authentication turned off.")
+         |> put_flash(:info, gettext("Two-factor authentication turned off."))
          |> load_status(socket.assigns.user_id)}
 
       {:error, :rate_limited} ->
-        {:noreply, assign(socket, error: @rate_limited_message)}
+        {:noreply, assign(socket, error: rate_limited_message())}
 
       {:error, :invalid_password} ->
-        {:noreply, assign(socket, error: "Current password is incorrect")}
+        {:noreply, assign(socket, error: gettext("Current password is incorrect"))}
 
       {:error, :invalid_code} ->
-        {:noreply, assign(socket, error: "Invalid code")}
+        {:noreply, assign(socket, error: gettext("Invalid code"))}
     end
   end
 
@@ -152,22 +152,27 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
     "data:text/plain;charset=utf-8," <> URI.encode(Enum.join(codes, "\n") <> "\n")
   end
 
-  defp recovery_codes_summary(1), do: "1 recovery code left"
-  defp recovery_codes_summary(remaining), do: "#{remaining} recovery codes left"
+  defp rate_limited_message, do: gettext("Too many login attempts. Please try again later.")
+
+  defp recovery_codes_summary(remaining) do
+    ngettext("1 recovery code left", "%{count} recovery codes left", remaining)
+  end
 
   @impl true
   def render(assigns) do
     ~H"""
     <div id="two-factor-card" class="mt-6 border-t border-base-300 pt-6">
       <h3 class="font-semibold flex items-center gap-2 mb-2">
-        <.icon name="hero-device-phone-mobile" class="w-5 h-5" /> Two-factor authentication
+        <.icon name="hero-device-phone-mobile" class="w-5 h-5" /> {gettext(
+          "Two-factor authentication"
+        )}
       </h3>
 
       <%= if @enabled? do %>
         <div id="totp-status" class="flex flex-wrap items-center gap-3 mb-4">
-          <span class="badge badge-success">On</span>
+          <span class="badge badge-success">{gettext("On")}</span>
           <span class="text-sm text-base-content/70">
-            Enabled {format(@user.totp_enabled_at, :date, @time_display)} · {recovery_codes_summary(
+            {gettext("Enabled %{date}", date: format(@user.totp_enabled_at, :date, @time_display))} · {recovery_codes_summary(
               @remaining
             )}
           </span>
@@ -180,7 +185,7 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
             phx-click="start_regenerate"
             phx-target={@myself}
           >
-            <.icon name="hero-arrow-path" class="w-4 h-4" /> New recovery codes
+            <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("New recovery codes")}
           </button>
           <button
             type="button"
@@ -189,12 +194,14 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
             phx-click="start_disable"
             phx-target={@myself}
           >
-            Turn off
+            {gettext("Turn off")}
           </button>
         </div>
       <% else %>
         <p class="text-base-content/70 mb-4">
-          Ask for a code from an authenticator app each time you sign in with your password.
+          {gettext(
+            "Ask for a code from an authenticator app each time you sign in with your password."
+          )}
         </p>
         <button
           type="button"
@@ -203,7 +210,9 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
           phx-click="start_enroll"
           phx-target={@myself}
         >
-          <.icon name="hero-shield-check" class="w-4 h-4" /> Set up two-factor authentication
+          <.icon name="hero-shield-check" class="w-4 h-4" /> {gettext(
+            "Set up two-factor authentication"
+          )}
         </button>
       <% end %>
 
@@ -226,9 +235,13 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
 
           <%= case @step do %>
             <% :enrolling -> %>
-              <h3 class="font-bold text-lg mb-2">Scan with your authenticator</h3>
+              <h3 class="font-bold text-lg mb-2">
+                {gettext("Scan with your authenticator")}
+              </h3>
               <p class="text-sm text-base-content/70 mb-4">
-                Scan the code with an app such as Aegis, 2FAS or 1Password, or enter the key by hand.
+                {gettext(
+                  "Scan the code with an app such as Aegis, 2FAS or 1Password, or enter the key by hand."
+                )}
               </p>
               <div id="totp-qr" class="flex justify-center bg-white rounded-box p-3 mb-3">
                 {Phoenix.HTML.raw(@qr_svg)}
@@ -248,22 +261,22 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
                 <.input
                   field={@form[:code]}
                   type="text"
-                  label="6-digit code"
+                  label={gettext("6-digit code")}
                   autocomplete="one-time-code"
                   inputmode="numeric"
                   required
                 />
                 <div class="modal-action">
                   <button type="button" class="btn btn-ghost" phx-click="close" phx-target={@myself}>
-                    Cancel
+                    {gettext("Cancel")}
                   </button>
-                  <button type="submit" class="btn btn-primary">Turn on</button>
+                  <button type="submit" class="btn btn-primary">{gettext("Turn on")}</button>
                 </div>
               </.form>
             <% :regenerating -> %>
-              <h3 class="font-bold text-lg mb-4">New recovery codes</h3>
+              <h3 class="font-bold text-lg mb-4">{gettext("New recovery codes")}</h3>
               <p class="text-sm text-base-content/70 mb-4">
-                Your current recovery codes will stop working.
+                {gettext("Your current recovery codes will stop working.")}
               </p>
               <.form
                 for={@form}
@@ -274,39 +287,48 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
                 <.input
                   field={@form[:code]}
                   type="text"
-                  label="Authentication code"
+                  label={gettext("Authentication code")}
                   autocomplete="one-time-code"
                   required
                 />
                 <div class="modal-action">
                   <button type="button" class="btn btn-ghost" phx-click="close" phx-target={@myself}>
-                    Cancel
+                    {gettext("Cancel")}
                   </button>
-                  <button type="submit" class="btn btn-primary">Generate</button>
+                  <button type="submit" class="btn btn-primary">{gettext("Generate")}</button>
                 </div>
               </.form>
             <% :disabling -> %>
-              <h3 class="font-bold text-lg mb-4">Turn off two-factor authentication</h3>
+              <h3 class="font-bold text-lg mb-4">
+                {gettext("Turn off two-factor authentication")}
+              </h3>
               <.form for={@form} id="totp-disable-form" phx-submit="disable" phx-target={@myself}>
-                <.input field={@form[:password]} type="password" label="Current password" required />
+                <.input
+                  field={@form[:password]}
+                  type="password"
+                  label={gettext("Current password")}
+                  required
+                />
                 <.input
                   field={@form[:code]}
                   type="text"
-                  label="Authentication code or recovery code"
+                  label={gettext("Authentication code or recovery code")}
                   autocomplete="one-time-code"
                   required
                 />
                 <div class="modal-action">
                   <button type="button" class="btn btn-ghost" phx-click="close" phx-target={@myself}>
-                    Cancel
+                    {gettext("Cancel")}
                   </button>
-                  <button type="submit" class="btn btn-error">Turn off</button>
+                  <button type="submit" class="btn btn-error">{gettext("Turn off")}</button>
                 </div>
               </.form>
             <% :show_codes -> %>
-              <h3 class="font-bold text-lg mb-2">Save your recovery codes</h3>
+              <h3 class="font-bold text-lg mb-2">{gettext("Save your recovery codes")}</h3>
               <p class="text-sm text-base-content/70 mb-4">
-                Each code signs you in once if you lose your authenticator. They won't be shown again.
+                {gettext(
+                  "Each code signs you in once if you lose your authenticator. They won't be shown again."
+                )}
               </p>
               <ul
                 id="recovery-codes"
@@ -321,7 +343,7 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
                   href={codes_download_href(@recovery_codes)}
                   download="mydia-recovery-codes.txt"
                 >
-                  <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Download
+                  <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> {gettext("Download")}
                 </a>
                 <button
                   type="button"
@@ -330,7 +352,7 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
                   phx-click="close"
                   phx-target={@myself}
                 >
-                  I saved these
+                  {gettext("I saved these")}
                 </button>
               </div>
           <% end %>

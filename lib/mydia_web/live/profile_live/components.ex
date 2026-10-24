@@ -20,7 +20,7 @@ defmodule MydiaWeb.ProfileLive.Components do
       <label class="block">
         <span class="label mb-1 text-sm font-medium text-base-content/80">{@label}</span>
         <select name={@name} class="select select-bordered select-sm w-full">
-          <option value="">Use server default</option>
+          <option value="">{gettext("Use server default")}</option>
           <option
             :for={{value, label} <- @options}
             value={to_string(value)}
@@ -52,7 +52,7 @@ defmodule MydiaWeb.ProfileLive.Components do
     <fieldset id={@id} class="mt-6">
       <legend class="mb-3 flex items-center gap-2 text-sm font-medium">
         {@title}
-        <span :if={@in_use} data-role="in-use" class="badge badge-primary badge-sm">In use</span>
+        <span :if={@in_use} data-role="in-use" class="badge badge-primary badge-sm">{gettext("In use")}</span>
       </legend>
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <label :for={theme <- @themes} id={"#{@id}-#{theme.id}"} class="group cursor-pointer">
@@ -104,12 +104,14 @@ defmodule MydiaWeb.ProfileLive.Components do
   # Glyph corner per radius id: each preset's --radius-box from app.css.
   # `theme` gets an icon instead, since var(--radius-box) would draw the
   # active preset's corner rather than the theme's own.
-  @radius_options [
-    {"theme", "Theme", nil},
-    {"sharp", "Sharp", "0.25rem"},
-    {"soft", "Soft", "0.5rem"},
-    {"round", "Round", "0.75rem"}
-  ]
+  defp radius_options do
+    [
+      {"theme", gettext("Theme"), nil},
+      {"sharp", gettext("Sharp"), "0.25rem"},
+      {"soft", gettext("Soft"), "0.5rem"},
+      {"round", gettext("Round"), "0.75rem"}
+    ]
+  end
 
   @doc """
   A joined row of radio buttons for the corner roundness, one per
@@ -120,10 +122,10 @@ defmodule MydiaWeb.ProfileLive.Components do
   attr :selected, :string, required: true, doc: "the current radius id"
 
   def radius_picker(assigns) do
-    assigns = assign(assigns, :options, @radius_options)
+    assigns = assign(assigns, :options, radius_options())
 
     ~H"""
-    <div id={@id} class="join" role="radiogroup" aria-label="Corners">
+    <div id={@id} class="join" role="radiogroup" aria-label={gettext("Corners")}>
       <label
         :for={{value, label, corner} <- @options}
         class={["btn join-item", value == @selected && "btn-primary"]}

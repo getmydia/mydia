@@ -1,26 +1,32 @@
 <Layouts.app {assigns}>
   <div class="max-w-4xl mx-auto">
-    <!-- Header -->
+    <%!-- Header --%>
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
       <div>
-        <h1 class="text-3xl font-bold">Profile & Preferences</h1>
-        <p class="text-base-content/70 mt-1">Manage your account and customize your experience</p>
+        <h1 class="text-3xl font-bold">{gettext("Profile & Preferences")}</h1>
+        <p class="text-base-content/70 mt-1">
+          {gettext("Manage your account and customize your experience")}
+        </p>
       </div>
     </div>
 
     <div class="grid gap-6 lg:grid-cols-3">
-      <!-- Account Info Card -->
+      <%!-- Account Info Card --%>
       <div class="lg:col-span-1">
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body">
-            <h2 class="card-title text-lg mb-4">Account Info</h2>
+            <h2 class="card-title text-lg mb-4">{gettext("Account Info")}</h2>
 
-            <!-- Avatar -->
+            <%!-- Avatar --%>
             <div class="flex justify-center mb-4">
               <div class="avatar placeholder">
                 <div class="bg-primary text-primary-content rounded-full w-24 h-24">
                   <%= if @current_user.avatar_url do %>
-                    <img src={@current_user.avatar_url} alt="Avatar" class="rounded-full" />
+                    <img
+                      src={@current_user.avatar_url}
+                      alt={gettext("Avatar")}
+                      class="rounded-full"
+                    />
                   <% else %>
                     <span class="text-3xl">
                       {String.first(
@@ -36,26 +42,32 @@
 
             <div class="space-y-3">
               <div>
-                <span class="text-xs text-base-content/50 uppercase tracking-wide">Username</span>
+                <span class="text-xs text-base-content/50 uppercase tracking-wide">
+                  {gettext("Username")}
+                </span>
                 <p class="font-medium">{@current_user.username || "-"}</p>
               </div>
               <div>
-                <span class="text-xs text-base-content/50 uppercase tracking-wide">Email</span>
+                <span class="text-xs text-base-content/50 uppercase tracking-wide">
+                  {gettext("Email")}
+                </span>
                 <p class="font-medium">{@current_user.email || "-"}</p>
               </div>
               <div>
-                <span class="text-xs text-base-content/50 uppercase tracking-wide">Role</span>
+                <span class="text-xs text-base-content/50 uppercase tracking-wide">
+                  {gettext("Role")}
+                </span>
                 <p class="font-medium capitalize">{@current_user.role}</p>
               </div>
               <div>
                 <span class="text-xs text-base-content/50 uppercase tracking-wide">
-                  Authentication
+                  {gettext("Authentication")}
                 </span>
                 <p class="font-medium">{auth_type(@current_user)}</p>
               </div>
               <div>
                 <span class="text-xs text-base-content/50 uppercase tracking-wide">
-                  Last Login
+                  {gettext("Last Login")}
                 </span>
                 <p class="font-medium">
                   {format_datetime(@current_user.last_login_at, @time_display)}
@@ -66,13 +78,13 @@
         </div>
       </div>
 
-      <!-- Right Column -->
+      <%!-- Right Column --%>
       <div class="lg:col-span-2 space-y-6">
-        <!-- Edit Profile Card -->
+        <%!-- Edit Profile Card --%>
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body">
             <h2 class="card-title text-lg mb-4">
-              <.icon name="hero-user" class="w-5 h-5" /> Edit Profile
+              <.icon name="hero-user" class="w-5 h-5" /> {gettext("Edit Profile")}
             </h2>
 
             <.form
@@ -85,17 +97,17 @@
               <.input
                 field={@profile_form[:display_name]}
                 type="text"
-                label="Display Name"
-                placeholder="Your display name"
+                label={gettext("Display Name")}
+                placeholder={gettext("Your display name")}
               />
-              <!-- Avatar Upload Section -->
+              <%!-- Avatar Upload Section --%>
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text font-medium">Avatar Image</span>
+                  <span class="label-text font-medium">{gettext("Avatar Image")}</span>
                 </label>
 
                 <div class="space-y-3">
-                  <!-- Staged Upload Preview -->
+                  <%!-- Staged Upload Preview --%>
                   <div
                     :for={entry <- @uploads.avatar.entries}
                     class="flex items-center gap-4 p-3 bg-base-200 rounded-lg"
@@ -107,7 +119,9 @@
                     </div>
                     <div class="flex-1 min-w-0">
                       <p class="text-sm font-medium truncate">{entry.client_name}</p>
-                      <p class="text-xs text-base-content/60">{entry.client_size} bytes</p>
+                      <p class="text-xs text-base-content/60">
+                        {gettext("%{size} bytes", size: entry.client_size)}
+                      </p>
                       <div
                         :for={err <- upload_errors(@uploads.avatar, entry)}
                         class="text-xs text-error mt-1"
@@ -120,13 +134,13 @@
                       class="btn btn-ghost btn-xs btn-circle"
                       phx-click="cancel_avatar_upload"
                       phx-value-ref={entry.ref}
-                      title="Cancel upload"
+                      title={gettext("Cancel upload")}
                     >
                       <.icon name="hero-x-mark" class="w-4 h-4" />
                     </button>
                   </div>
 
-                  <!-- File Input -->
+                  <%!-- File Input --%>
                   <div class="flex items-center gap-2">
                     <.live_file_input
                       upload={@uploads.avatar}
@@ -139,7 +153,7 @@
                         class="btn btn-outline btn-error shrink-0"
                         phx-click="remove_avatar"
                       >
-                        <.icon name="hero-trash" class="w-4 h-4" /> Remove Avatar
+                        <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Remove Avatar")}
                       </button>
                     <% end %>
                   </div>
@@ -150,45 +164,49 @@
                 </div>
               </div>
 
-              <div class="divider text-xs text-base-content/50">OR PROVIDE AN IMAGE URL</div>
+              <div class="divider text-xs text-base-content/50">
+                {gettext("OR PROVIDE AN IMAGE URL")}
+              </div>
 
               <.input
                 field={@profile_form[:avatar_url]}
                 type="text"
                 value={external_avatar_url(@profile_form[:avatar_url].value)}
-                label="Avatar URL"
-                placeholder="https://example.com/avatar.jpg"
+                label={gettext("Avatar URL")}
+                placeholder={gettext("https://example.com/avatar.jpg")}
               />
 
               <div class="flex justify-end pt-2">
                 <button type="submit" class="btn btn-primary">
-                  <.icon name="hero-check" class="w-4 h-4" /> Save Changes
+                  <.icon name="hero-check" class="w-4 h-4" /> {gettext("Save Changes")}
                 </button>
               </div>
             </.form>
           </div>
         </div>
 
-        <!-- Appearance Card -->
+        <%!-- Appearance Card --%>
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body">
             <h2 class="card-title text-lg mb-4">
-              <.icon name="hero-paint-brush" class="w-5 h-5" /> Appearance
+              <.icon name="hero-paint-brush" class="w-5 h-5" /> {gettext("Appearance")}
             </h2>
 
             <div class="form-control w-full">
               <label class="label" for="theme-picker">
-                <span class="label-text font-medium">Theme</span>
+                <span class="label-text font-medium">{gettext("Theme")}</span>
               </label>
               <p class="text-sm text-base-content/60 mb-3">
-                Choose how Mydia looks. System follows your device, using your light theme by day and your dark theme by night.
+                {gettext(
+                  "Choose how Mydia looks. System follows your device, using your light theme by day and your dark theme by night."
+                )}
               </p>
               <.segmented_control
                 id="theme-picker"
                 value={@theme_selection.mode}
                 event="set_theme_mode"
                 param="mode"
-                label="Theme"
+                label={gettext("Theme")}
                 size="md"
               >
                 <:option
@@ -201,7 +219,7 @@
               <.theme_gallery
                 id="light-theme-gallery"
                 slot="light"
-                title="Light theme"
+                title={gettext("Light theme")}
                 themes={@light_themes}
                 selected={@theme_selection.light.id}
                 in_use={@theme_selection.mode == "light"}
@@ -209,7 +227,7 @@
               <.theme_gallery
                 id="dark-theme-gallery"
                 slot="dark"
-                title="Dark theme"
+                title={gettext("Dark theme")}
                 themes={@dark_themes}
                 selected={@theme_selection.dark.id}
                 in_use={@theme_selection.mode == "dark"}
@@ -217,9 +235,11 @@
             </div>
 
             <div class="form-control w-full mt-6">
-              <span class="label-text font-medium">Corners</span>
+              <span class="label-text font-medium">{gettext("Corners")}</span>
               <p class="text-sm text-base-content/60 mb-3">
-                How round cards, buttons and inputs are. Theme keeps each theme's own corners.
+                {gettext(
+                  "How round cards, buttons and inputs are. Theme keeps each theme's own corners."
+                )}
               </p>
               <.radius_picker id="theme-radius-picker" selected={@theme_selection.radius} />
             </div>
@@ -244,20 +264,21 @@
             </div>
 
             <div class="form-control w-full mt-6" id="time-display-settings">
-              <span class="label-text font-medium">Date &amp; time</span>
+              <span class="label-text font-medium">{gettext("Date & time")}</span>
               <p class="text-sm text-base-content/60 mb-3">
-                Times across Mydia are shown in this zone. The server default comes from the
-                <code>TZ</code>
-                setting.
+                {gettext(
+                  "Times across Mydia are shown in this zone. The server default comes from the %{tz} setting.",
+                  tz: "TZ"
+                )}
               </p>
               <.form for={%{}} id="time-display-form" phx-change="set_time_zone">
                 <.input
                   type="select"
                   id="time-zone-select"
                   name="time_zone"
-                  label="Time zone"
+                  label={gettext("Time zone")}
                   value={UserPreference.time_zone(@preference) || ""}
-                  prompt={"Server default (#{@server_time_zone})"}
+                  prompt={gettext("Server default (%{zone})", zone: @server_time_zone)}
                   options={@time_zone_options}
                 />
               </.form>
@@ -267,16 +288,19 @@
                   value={UserPreference.clock_format(@preference)}
                   event="set_clock_format"
                   param="clock"
-                  label="Clock"
+                  label={gettext("Clock")}
                   size="md"
                 >
-                  <:option value="auto" label={"Auto (#{clock_label(@time_display)})"} />
-                  <:option value="12" label="12-hour" />
-                  <:option value="24" label="24-hour" />
+                  <:option
+                    value="auto"
+                    label={gettext("Auto (%{format})", format: clock_label(@time_display))}
+                  />
+                  <:option value="12" label={gettext("12-hour")} />
+                  <:option value="24" label={gettext("24-hour")} />
                 </.segmented_control>
               </div>
               <p id="time-display-preview" class="text-sm text-base-content/60 mt-3">
-                Now:
+                {gettext("Now:")}
                 <.local_time at={DateTime.utc_now()} format={:datetime} display={@time_display} />
               </p>
             </div>
@@ -285,17 +309,17 @@
               <div class="divider my-2"></div>
 
               <div class="form-control w-full">
-                <span class="label-text font-medium">Player</span>
+                <span class="label-text font-medium">{gettext("Player")}</span>
                 <p class="text-sm text-base-content/60 mb-3">
-                  Takes the player shortcuts out of the sidebar, the mobile dock and the dashboard.
-                  Play buttons on movies and episodes keep working, and the player itself stays
-                  available if you open it directly.
+                  {gettext(
+                    "Takes the player shortcuts out of the sidebar, the mobile dock and the dashboard. Play buttons on movies and episodes keep working, and the player itself stays available if you open it directly."
+                  )}
                 </p>
                 <.input
                   type="checkbox"
                   id="hide-player-toggle"
                   name="hide_player"
-                  label="Hide the player"
+                  label={gettext("Hide the player")}
                   class="toggle toggle-primary"
                   checked={@hide_player}
                   phx-click="toggle_hide_player"
@@ -305,15 +329,16 @@
           </div>
         </div>
 
-        <!-- Add Defaults Card -->
+        <%!-- Add Defaults Card --%>
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body">
             <h2 class="card-title text-lg mb-4">
-              <.icon name="hero-plus-circle" class="w-5 h-5" /> Add Defaults
+              <.icon name="hero-plus-circle" class="w-5 h-5" /> {gettext("Add Defaults")}
             </h2>
             <p class="text-sm text-base-content/60 mb-3">
-              Override what happens when you add a movie or TV show. Leave a field on
-              "Use server default" to follow the instance-wide setting.
+              {gettext(
+                "Override what happens when you add a movie or TV show. Leave a field on \"Use server default\" to follow the instance-wide setting."
+              )}
             </p>
 
             <form
@@ -323,66 +348,68 @@
             >
               <.inherit_select
                 name="add_movie_library_path_id"
-                label="Movie library"
+                label={gettext("Movie library")}
                 value={@add_prefs["add_movie_library_path_id"]}
                 options={@movie_library_options}
               />
               <.inherit_select
                 name="add_series_library_path_id"
-                label="TV library"
+                label={gettext("TV library")}
                 value={@add_prefs["add_series_library_path_id"]}
                 options={@series_library_options}
               />
               <.inherit_select
                 name="add_quality_profile_id"
-                label="Quality profile"
+                label={gettext("Quality profile")}
                 value={@add_prefs["add_quality_profile_id"]}
                 options={@quality_profile_options}
               />
               <.inherit_select
                 name="add_season_monitoring"
-                label="Season monitoring"
+                label={gettext("Season monitoring")}
                 value={@add_prefs["add_season_monitoring"]}
                 options={[
-                  {"all", "All seasons"},
-                  {"first", "First season"},
-                  {"future", "Future only"},
-                  {"none", "None"}
+                  {"all", gettext("All seasons")},
+                  {"first", gettext("First season")},
+                  {"future", gettext("Future only")},
+                  {"none", gettext("None")}
                 ]}
               />
               <.inherit_select
                 name="add_monitored"
-                label="Monitored on add"
+                label={gettext("Monitored on add")}
                 value={@add_prefs["add_monitored"]}
-                options={[{true, "Yes"}, {false, "No"}]}
+                options={[{true, gettext("Yes")}, {false, gettext("No")}]}
               />
               <.inherit_select
                 name="add_search_on_add"
-                label="Search for a release on add"
+                label={gettext("Search for a release on add")}
                 value={@add_prefs["add_search_on_add"]}
-                options={[{true, "Yes"}, {false, "No"}]}
+                options={[{true, gettext("Yes")}, {false, gettext("No")}]}
               />
             </form>
           </div>
         </div>
 
-        <!-- Security Card -->
+        <%!-- Security Card --%>
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body">
             <h2 class="card-title text-lg mb-4">
-              <.icon name="hero-shield-check" class="w-5 h-5" /> Security
+              <.icon name="hero-shield-check" class="w-5 h-5" /> {gettext("Security")}
             </h2>
 
             <%= if @is_oidc_user do %>
               <div class="alert">
                 <.icon name="hero-information-circle" class="w-5 h-5" />
                 <span>
-                  Your account is managed through your SSO provider. Password changes are not available.
+                  {gettext(
+                    "Your account is managed through your SSO provider. Password changes are not available."
+                  )}
                 </span>
               </div>
             <% else %>
               <p class="text-base-content/70 mb-4">
-                Change your password to keep your account secure.
+                {gettext("Change your password to keep your account secure.")}
               </p>
               <button
                 type="button"
@@ -390,7 +417,7 @@
                 class="btn btn-outline"
                 phx-click="show_password_modal"
               >
-                <.icon name="hero-key" class="w-4 h-4" /> Change Password
+                <.icon name="hero-key" class="w-4 h-4" /> {gettext("Change Password")}
               </button>
 
               <.live_component
@@ -412,34 +439,38 @@
           </div>
         </div>
 
-        <!-- Integrations Card -->
+        <%!-- Integrations Card --%>
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body">
             <h2 class="card-title text-lg mb-4">
-              <.icon name="hero-puzzle-piece" class="w-5 h-5" /> Integrations
+              <.icon name="hero-puzzle-piece" class="w-5 h-5" /> {gettext("Integrations")}
             </h2>
 
             <p class="text-base-content/70 mb-4">
-              Connect third-party plugins to sync your watch history.
+              {gettext("Connect third-party plugins to sync your watch history.")}
             </p>
             <.link navigate={~p"/integrations"} id="integrations-link" class="btn btn-outline">
-              <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> Manage Integrations
+              <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> {gettext(
+                "Manage Integrations"
+              )}
             </.link>
           </div>
         </div>
 
-        <!-- Devices Card -->
+        <%!-- Devices Card --%>
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body">
             <h2 class="card-title text-lg mb-4">
-              <.icon name="hero-device-phone-mobile" class="w-5 h-5" /> Devices
+              <.icon name="hero-device-phone-mobile" class="w-5 h-5" /> {gettext("Devices")}
             </h2>
 
             <p class="text-base-content/70 mb-4">
-              Connect a player to your account, or download one for your device.
+              {gettext("Connect a player to your account, or download one for your device.")}
             </p>
             <.link navigate={~p"/devices"} id="devices-link" class="btn btn-outline">
-              <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> Manage Devices
+              <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> {gettext(
+                "Manage Devices"
+              )}
             </.link>
           </div>
         </div>
@@ -447,7 +478,7 @@
     </div>
   </div>
 
-  <!-- Password Change Modal -->
+  <%!-- Password Change Modal --%>
   <%= if @show_password_modal do %>
     <div class="modal modal-open" id="password-modal">
       <div class="modal-box">
@@ -459,7 +490,7 @@
           <.icon name="hero-x-mark" class="w-4 h-4" />
         </button>
 
-        <h3 class="font-bold text-lg mb-4">Change Password</h3>
+        <h3 class="font-bold text-lg mb-4">{gettext("Change Password")}</h3>
 
         <%= if @password_error do %>
           <div class="alert alert-error mb-4">
@@ -478,28 +509,28 @@
           <.input
             field={@password_form[:current_password]}
             type="password"
-            label="Current Password"
+            label={gettext("Current Password")}
             required
           />
           <.input
             field={@password_form[:new_password]}
             type="password"
-            label="New Password"
+            label={gettext("New Password")}
             required
           />
           <.input
             field={@password_form[:confirm_password]}
             type="password"
-            label="Confirm New Password"
+            label={gettext("Confirm New Password")}
             required
           />
 
           <div class="modal-action">
             <button type="button" class="btn btn-ghost" phx-click="hide_password_modal">
-              Cancel
+              {gettext("Cancel")}
             </button>
             <button type="submit" class="btn btn-primary">
-              <.icon name="hero-check" class="w-4 h-4" /> Update Password
+              <.icon name="hero-check" class="w-4 h-4" /> {gettext("Update Password")}
             </button>
           </div>
         </.form>
