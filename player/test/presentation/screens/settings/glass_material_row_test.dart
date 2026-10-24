@@ -8,6 +8,7 @@ import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/glass_material.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/theme_providers.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/widgets/glass_material_row.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
@@ -18,6 +19,8 @@ Widget _host(MockAuthStorage storage, {bool? isTv}) => ProviderScope(
             .overrideWithValue(SettingsService(storage: storage)),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: AppTheme.build(Palettes.projectionBooth, liquid: false),
         home: Scaffold(body: GlassMaterialSettingsRow(debugIsTv: isTv)),
       ),

@@ -176,6 +176,7 @@ Future<void> _pump(
   bool inShell = false,
   ({InMemorySourceStore store, SourceSecrets secrets})? mydia,
   DownloadService? downloads,
+  Locale? locale,
 }) async {
   final stored = mydia ?? await _twoMydiaServers();
   final sources = stored.store;
@@ -231,6 +232,7 @@ Future<void> _pump(
           coreSettingsServiceProvider.overrideWithValue(coreSettingsService),
       ],
       child: MaterialApp.router(
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
@@ -548,6 +550,14 @@ void main() {
       findsOneWidget,
     );
     expect(tester.widget<SettingsRow>(row).onTap, isNull);
+  });
+
+  testWidgets('renders in Spanish under an es locale', (tester) async {
+    await _pump(tester, locale: const Locale('es'));
+
+    expect(find.text('Apariencia'), findsOneWidget);
+    expect(find.text('Ajustes'), findsOneWidget);
+    expect(find.text('Appearance'), findsNothing);
   });
 
   testWidgets('no row shows a raw relay url or peer count', (tester) async {

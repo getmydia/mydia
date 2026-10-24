@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/palette.dart';
+import '../../../../l10n/l10n.dart';
 import 'settings_dialog.dart';
 
 class SettingsDialogSidebar extends StatelessWidget {
@@ -19,6 +20,7 @@ class SettingsDialogSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     return SizedBox(
       width: compact ? 64 : 200,
       child: ListView(
@@ -46,14 +48,14 @@ class SettingsDialogSidebar extends StatelessWidget {
                   width: 20,
                   child: compact
                       ? Tooltip(
-                          message: c.label,
+                          message: c.label(l10n),
                           child: Icon(c.icon, size: 20),
                         )
                       : Icon(c.icon, size: 20),
                 ),
                 title: compact
                     ? null
-                    : Text(c.label,
+                    : Text(c.label(l10n),
                         key: Key('settings-category-label-${c.name}')),
                 onTap: () => onSelect(c),
               ),

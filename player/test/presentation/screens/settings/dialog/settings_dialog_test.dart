@@ -6,12 +6,12 @@ import 'package:player/presentation/screens/settings/dialog/settings_dialog.dart
 
 Widget _page(SettingsCategory c) => Builder(
       builder: (context) => SettingsPane(
-        title: c.label,
+        title: c.label(context.l10n),
         child: TextButton(
           key: Key('push-${c.name}'),
           onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) => SettingsPane(
-              title: '${c.label} detail',
+              title: '${c.label(context.l10n)} detail',
               child: const SizedBox.shrink(),
             ),
           )),

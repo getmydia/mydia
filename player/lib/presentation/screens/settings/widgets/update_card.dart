@@ -6,6 +6,7 @@ import '../../../../core/theme/palette.dart';
 import '../../../../core/update/install_environment.dart';
 import '../../../../core/update/update_provider.dart';
 import '../../../../domain/models/available_update.dart';
+import '../../../../l10n/l10n.dart';
 import 'settings_section.dart';
 import '../../../widgets/update_action.dart';
 
@@ -92,7 +93,11 @@ class UpdateCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _heading(update: update, awaitingRestart: awaitingRestart),
+                  _heading(
+                    context.l10n,
+                    update: update,
+                    awaitingRestart: awaitingRestart,
+                  ),
                   style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w600,
@@ -118,7 +123,7 @@ class UpdateCard extends ConsumerWidget {
                         ref.read(updateProvider.notifier).restart(),
                     style: _focusRing,
                     icon: const Icon(Icons.restart_alt, size: 18),
-                    label: const Text('Restart'),
+                    label: Text(context.l10n.settingsUpdateRestart),
                   )
                 else if (update != null)
                   Row(
@@ -131,14 +136,14 @@ class UpdateCard extends ConsumerWidget {
                         ),
                         style: _focusRing,
                         icon: const Icon(Icons.download, size: 18),
-                        label: const Text('Update Now'),
+                        label: Text(context.l10n.settingsUpdateNow),
                       ),
                       const SizedBox(width: 8),
                       TextButton(
                         style: _focusRing,
                         onPressed: () =>
                             _openReleaseNotes(update.releaseNotesUrl),
-                        child: const Text('Release Notes'),
+                        child: Text(context.l10n.settingsUpdateReleaseNotes),
                       ),
                     ],
                   ),
@@ -163,15 +168,16 @@ class UpdateCard extends ConsumerWidget {
   /// The one line at the top. A Flatpak update cannot name a version, because
   /// the portal reports commits, so it says so plainly rather than inventing
   /// one.
-  String _heading({
+  String _heading(
+    AppLocalizations l10n, {
     required AvailableUpdate? update,
     required bool awaitingRestart,
   }) {
-    if (awaitingRestart) return 'Restart to finish updating';
+    if (awaitingRestart) return l10n.settingsUpdateRestartToFinish;
     final version = update?.version;
-    if (version != null) return 'Update available: v$version';
-    if (update != null) return 'A new version of Mydia Player is available';
-    return 'Updates';
+    if (version != null) return l10n.settingsUpdateAvailableVersion(version);
+    if (update != null) return l10n.settingsUpdateAvailableNoVersion;
+    return l10n.settingsUpdatesSection;
   }
 
   Future<void> _openReleaseNotes(String url) async {
@@ -200,8 +206,9 @@ class _Progress extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           progress > 0
-              ? 'Downloading ${(progress * 100).toInt()}%'
-              : 'Downloading',
+              ? context.l10n
+                  .settingsUpdateDownloadingPercent((progress * 100).toInt())
+              : context.l10n.settingsUpdateDownloading,
           style: TextStyle(
             fontSize: 12,
             color: context.palette.textSecondary,

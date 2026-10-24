@@ -8,7 +8,7 @@ import 'untranslated_text_scanner.dart';
 /// fails here; converting a screen means adding its path. See
 /// docs/l10n.md.
 const convertedPaths = <String>[
-  'lib/presentation/screens/settings/widgets/language_row.dart',
+  'lib/presentation/screens/settings',
   'lib/presentation/widgets/language_picker.dart',
 ];
 

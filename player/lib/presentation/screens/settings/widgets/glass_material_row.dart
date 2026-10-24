@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/glass_material.dart';
 import '../../../../core/theme/theme_providers.dart';
+import '../../../../l10n/l10n.dart';
 import 'settings_row.dart';
 
 /// The Appearance section's Liquid Glass switch. Device-local like the theme
@@ -26,7 +27,7 @@ class GlassMaterialSettingsRow extends ConsumerWidget {
       key: const Key('glass-material-row'),
       icon: Icons.blur_on,
       title: GlassMaterial.liquid.label,
-      subtitle: 'Glass controls and panels',
+      subtitle: context.l10n.settingsGlassMaterialSubtitle,
       value: material == GlassMaterial.liquid,
       onChanged: (on) => ref
           .read(glassMaterialSettingProvider.notifier)

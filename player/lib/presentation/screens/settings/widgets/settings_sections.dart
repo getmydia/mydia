@@ -20,6 +20,7 @@ import '../../../../domain/models/available_update.dart';
 import '../../../../domain/models/quality_delivery_subtitle.dart';
 import '../../../../domain/models/quality_rung.dart';
 import '../../../../domain/models/user_settings.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../widgets/hls_quality_selector.dart';
 import '../../../widgets/glass/glass_dialog.dart';
 import '../settings_controller.dart';
@@ -58,15 +59,16 @@ class PlaybackSettingsSection extends ConsumerWidget {
         ? QualityRung.auto
         : QualityRung.fromStorageKey(current.defaultQuality) ??
             QualityRung.auto;
+    final l10n = context.l10n;
 
     return SettingsSection(
-      label: 'Playback',
+      label: l10n.settingsPlayback,
       children: [
         SettingsRow.navigation(
           key: const Key('default-quality-row'),
           icon: Icons.hd,
-          title: 'Default quality',
-          subtitle: 'Used when a title has no saved preference',
+          title: l10n.settingsDefaultQualityTitle,
+          subtitle: l10n.settingsDefaultQualitySubtitle,
           value: current == null ? null : quality.label,
           onTap: current == null
               ? null
@@ -75,8 +77,8 @@ class PlaybackSettingsSection extends ConsumerWidget {
         SettingsRow.toggle(
           key: const Key('auto-skip-segments-switch'),
           icon: Icons.fast_forward,
-          title: 'Skip intros and credits',
-          subtitle: 'Off shows a skip button instead',
+          title: l10n.settingsAutoSkipTitle,
+          subtitle: l10n.settingsAutoSkipSubtitle,
           value: current?.autoSkipSegments ?? false,
           onChanged: current == null
               ? null
@@ -92,8 +94,8 @@ class PlaybackSettingsSection extends ConsumerWidget {
             return SettingsRow.toggle(
               key: const Key('stats-overlay-switch'),
               icon: Icons.speed,
-              title: 'Stats for nerds',
-              subtitle: 'Live playback numbers over the video',
+              title: l10n.settingsStatsOverlayTitle,
+              subtitle: l10n.settingsStatsOverlaySubtitle,
               value: enabled,
               onChanged: (value) =>
                   ref.read(statsOverlayEnabledProvider.notifier).set(value),
@@ -105,9 +107,9 @@ class PlaybackSettingsSection extends ConsumerWidget {
           SettingsRow.action(
             key: const Key('settings-retry-row'),
             icon: Icons.error_outline,
-            title: "Couldn't load preferences",
-            subtitle: 'Your other settings still work.',
-            trailing: const Text('Retry'),
+            title: l10n.settingsPreferencesLoadFailedTitle,
+            subtitle: l10n.settingsPreferencesLoadFailedSubtitle,
+            trailing: Text(l10n.commonRetry),
             onTap: () => ref.invalidate(settingsControllerProvider),
           ),
       ],
@@ -148,11 +150,12 @@ class PlaybackSettingsSection extends ConsumerWidget {
 List<Widget> remoteControlRows(BuildContext context, WidgetRef ref) {
   final controllableEnabled = ref.watch(remoteControlEnabledProvider).value;
   final registration = ref.watch(nodeRegistrationSummaryProvider);
+  final l10n = context.l10n;
   return [
     SettingsRow.toggle(
       key: const Key('remote-control-enabled-switch'),
       icon: Icons.settings_remote,
-      title: 'Allow this device to be controlled',
+      title: l10n.settingsRemoteControlTitle,
       subtitle: registration.describe(),
       value: controllableEnabled ?? true,
       onChanged: controllableEnabled == null
@@ -163,8 +166,8 @@ List<Widget> remoteControlRows(BuildContext context, WidgetRef ref) {
       SettingsRow.action(
         key: const Key('remote-control-retry-row'),
         icon: Icons.refresh,
-        title: 'Retry registration',
-        subtitle: 'Try to make this device discoverable again',
+        title: l10n.settingsRetryRegistrationTitle,
+        subtitle: l10n.settingsRetryRegistrationSubtitle,
         onTap: () => ref.read(nodeRegistrationsProvider.notifier).retryAll(),
       ),
   ];
@@ -197,6 +200,7 @@ Future<void> _setControllable(WidgetRef ref, bool value) async {
 /// The release track and the manual update check.
 List<Widget> updateRows(BuildContext context, WidgetRef ref) {
   final updateState = ref.watch(updateProvider);
+  final l10n = context.l10n;
   return [
     const UpdateTrackSection(),
     if (updateState.manualCheck != ManualCheckBehaviour.unavailable)
@@ -204,9 +208,10 @@ List<Widget> updateRows(BuildContext context, WidgetRef ref) {
         key: const Key('check-for-updates-row'),
         icon: Icons.refresh,
         title: updateState.manualCheck == ManualCheckBehaviour.checksAndInstalls
-            ? 'Check and install updates'
-            : 'Check for updates',
+            ? l10n.settingsCheckAndInstallUpdates
+            : l10n.settingsCheckForUpdates,
         subtitle: updateCheckSubtitle(
+          l10n,
           behaviour: updateState.manualCheck,
           update: updateState.availableUpdate,
         ),
@@ -238,22 +243,23 @@ Future<void> _check(BuildContext context, WidgetRef ref) async {
   if (state.manualCheck == ManualCheckBehaviour.checksAndInstalls) {
     final proceed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => GlassDialog(
-        title: const Text('Check for updates'),
-        content: const Text(
-          'Check for an update and install it if one is found?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        final l10n = ctx.l10n;
+        return GlassDialog(
+          title: Text(l10n.settingsCheckForUpdates),
+          content: Text(l10n.settingsCheckForUpdatesConfirm),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(l10n.commonCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(l10n.commonContinue),
+            ),
+          ],
+        );
+      },
     );
     if (proceed != true) return;
   }
@@ -282,7 +288,10 @@ class AboutSettingsSection extends ConsumerWidget {
           ),
         ),
         const UpdateCard(),
-        SettingsSection(label: 'Updates', children: updateRows(context, ref)),
+        SettingsSection(
+          label: context.l10n.settingsUpdatesSection,
+          children: updateRows(context, ref),
+        ),
       ],
     );
   }
@@ -293,21 +302,22 @@ class AboutSettingsSection extends ConsumerWidget {
 /// Sparkle needs its own string, and the Flatpak row cannot promise a version
 /// because the portal reports commits rather than versions.
 @visibleForTesting
-String updateCheckSubtitle({
+String updateCheckSubtitle(
+  AppLocalizations l10n, {
   required ManualCheckBehaviour behaviour,
   required AvailableUpdate? update,
 }) {
   if (behaviour == ManualCheckBehaviour.delegatesToSparkle) {
-    return 'Opens the Sparkle update dialog';
+    return l10n.settingsUpdateCheckSparkle;
   }
 
   final version = update?.version;
-  if (version != null) return 'v$version available';
-  if (update != null) return 'An update is available';
+  if (version != null) return l10n.settingsUpdateCheckVersionAvailable(version);
+  if (update != null) return l10n.settingsUpdateCheckAvailable;
 
   return behaviour == ManualCheckBehaviour.checksAndInstalls
-      ? 'Checks and installs the newest build'
-      : "You're up to date";
+      ? l10n.settingsUpdateCheckInstallsNewest
+      : l10n.settingsUpdateCheckUpToDate;
 }
 
 /// The running version, stated once, quietly, at the bottom.
@@ -344,7 +354,7 @@ class AppearanceSettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SettingsSection(
-        label: 'Appearance',
+        label: context.l10n.settingsAppearanceSection,
         children: [
           const LanguageSettingsRow(),
           const ThemePresetSettingsRow(),
