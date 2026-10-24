@@ -3,6 +3,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   Modal components for the MediaLive.Show page.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
   use MydiaWeb, :verified_routes
   import MydiaWeb.CoreComponents
   import MydiaWeb.IndexerComponents
@@ -36,7 +37,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     ~H"""
     <div id="delete-media-modal" class="modal modal-open">
       <div class="modal-box max-w-lg">
-        <h3 class="font-bold text-lg mb-4">Delete {@media_item.title}?</h3>
+        <h3 class="font-bold text-lg mb-4">
+          {gettext("Delete %{title}?", title: @media_item.title)}
+        </h3>
 
         <form id="delete-media-form" phx-change="toggle_delete_files">
           <div class="space-y-2.5 mb-5">
@@ -53,8 +56,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 checked={!@delete_files}
               />
               <div>
-                <div class="font-medium mb-1">Remove from library only</div>
-                <div class="text-sm opacity-75">Files stay on disk, can be re-imported later</div>
+                <div class="font-medium mb-1">{gettext("Remove from library only")}</div>
+                <div class="text-sm opacity-75">
+                  {gettext("Files stay on disk, can be re-imported later")}
+                </div>
               </div>
             </label>
 
@@ -71,10 +76,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 checked={@delete_files}
               />
               <div>
-                <div class="font-medium mb-1">Delete from disk</div>
+                <div class="font-medium mb-1">{gettext("Delete from disk")}</div>
                 <div class="text-sm opacity-75 flex items-center gap-1">
                   <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-                  <span>Permanently deletes all files - cannot be undone</span>
+                  <span>{gettext("Permanently deletes all files - cannot be undone")}</span>
                 </div>
               </div>
             </label>
@@ -90,12 +95,14 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             <:loading>
               <div id="delete-preview-loading" class="flex items-center gap-2 opacity-75">
                 <span class="loading loading-spinner loading-xs"></span>
-                <span>Checking folders…</span>
+                <span>{gettext("Checking folders…")}</span>
               </div>
             </:loading>
             <:failed :let={_reason}>
               <p id="delete-preview-failed" class="opacity-75">
-                Couldn't check folders. Folders are removed only if nothing else is in them.
+                {gettext(
+                  "Couldn't check folders. Folders are removed only if nothing else is in them."
+                )}
               </p>
             </:failed>
             <.delete_preview_body preview={preview} />
@@ -104,7 +111,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
         <div class="modal-action">
           <button type="button" phx-click="hide_delete_confirm" class="btn btn-ghost">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button
             id="delete-media-confirm"
@@ -113,7 +120,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             class={["btn", (@delete_files && "btn-error") || "btn-warning"]}
           >
             <.icon name="hero-trash" class="w-4 h-4" />
-            {if @delete_files, do: "Delete Everything", else: "Remove from Library"}
+            {if @delete_files, do: gettext("Delete Everything"), else: gettext("Remove from Library")}
           </button>
         </div>
       </div>
@@ -132,11 +139,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
         id="delete-preview-empty"
         class="opacity-75"
       >
-        This item has no files on disk.
+        {gettext("This item has no files on disk.")}
       </p>
 
       <div :if={@preview.remove != []}>
-        <p class="font-medium mb-1">Deletes these folders and everything in them:</p>
+        <p class="font-medium mb-1">{gettext("Deletes these folders and everything in them:")}</p>
         <ul class="space-y-0.5">
           <li
             :for={{path, index} <- Enum.with_index(@preview.remove)}
@@ -152,8 +159,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
         :for={{{path, blockers}, index} <- Enum.with_index(@preview.keep)}
         id={"delete-preview-kept-#{index}"}
       >
-        Keeps <span class="font-mono text-xs break-all">{path}</span>: it also holds other
-        media ({blocker_summary(blockers)}). Only this item's files are removed there.
+        {gettext(
+          "Keeps %{path}: it also holds other media (%{blockers}). Only this item's files are removed there.",
+          path: path,
+          blockers: blocker_summary(blockers)
+        )}
       </p>
 
       <p :if={@preview.loose_files > 0} id="delete-preview-loose">
@@ -164,29 +174,38 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   end
 
   defp blocker_summary([first | rest]) do
-    if rest == [], do: blocker_name(first), else: "#{blocker_name(first)} and others"
+    if rest == [],
+      do: blocker_name(first),
+      else: gettext("%{name} and others", name: blocker_name(first))
   end
 
   defp season_quality_suffix(existing) do
     case Enum.reject([existing.resolution, existing.source, existing.codec], &is_nil/1) do
       [] -> ""
-      parts -> " · mostly " <> Enum.join(parts, " ")
+      parts -> " · " <> gettext("mostly %{quality}", quality: Enum.join(parts, " "))
     end
   end
 
-  defp blocker_name({:unreadable, rel}), do: "#{Path.basename(rel)} (unreadable)"
+  defp blocker_name({:unreadable, rel}),
+    do: gettext("%{name} (unreadable)", name: Path.basename(rel))
+
   defp blocker_name({_kind, rel}), do: Path.basename(rel)
 
-  defp loose_sentence(%Preview{remove: [], keep: [], loose_files: 1}),
-    do: "Deletes 1 file. It sits directly in a library folder, so no folder is removed."
-
   defp loose_sentence(%Preview{remove: [], keep: [], loose_files: n}),
-    do: "Deletes #{n} files. They sit directly in a library folder, so no folder is removed."
-
-  defp loose_sentence(%Preview{loose_files: 1}), do: "Also deletes 1 file outside these folders."
+    do:
+      ngettext(
+        "Deletes %{count} file. It sits directly in a library folder, so no folder is removed.",
+        "Deletes %{count} files. They sit directly in a library folder, so no folder is removed.",
+        n
+      )
 
   defp loose_sentence(%Preview{loose_files: n}),
-    do: "Also deletes #{n} files outside these folders."
+    do:
+      ngettext(
+        "Also deletes %{count} file outside these folders.",
+        "Also deletes %{count} files outside these folders.",
+        n
+      )
 
   @doc """
   Provider re-identification picker.
@@ -202,16 +221,22 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     ~H"""
     <div id="reidentify-modal" class="modal modal-open">
       <div class="modal-box max-w-xl">
-        <h3 class="font-bold text-lg mb-1">Re-identify on {provider_label(@provider)}</h3>
+        <h3 class="font-bold text-lg mb-1">
+          {gettext("Re-identify on %{provider}", provider: provider_label(@provider))}
+        </h3>
         <p class="text-sm opacity-75 mb-4">
-          Pick the correct show. Confirming re-matches episodes from {provider_label(@provider)} and
-          resets episode-level watch history for this show.
+          {gettext(
+            "Pick the correct show. Confirming re-matches episodes from %{provider} and resets episode-level watch history for this show.",
+            provider: provider_label(@provider)
+          )}
         </p>
 
         <%= if @candidates == [] do %>
           <div class="alert alert-warning mb-4">
             <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-            <span>No results found on {provider_label(@provider)}.</span>
+            <span>
+              {gettext("No results found on %{provider}.", provider: provider_label(@provider))}
+            </span>
           </div>
         <% else %>
           <div class="space-y-2 max-h-80 overflow-y-auto mb-2">
@@ -227,7 +252,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 <span :if={candidate.year} class="opacity-60 font-normal">({candidate.year})</span>
               </div>
               <div class="text-xs opacity-50 font-mono mt-0.5">
-                {provider_label(@provider)} ID {to_string(candidate.provider_id)}
+                {gettext("%{provider} ID %{id}",
+                  provider: provider_label(@provider),
+                  id: to_string(candidate.provider_id)
+                )}
               </div>
             </button>
           </div>
@@ -235,7 +263,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
         <div class="modal-action">
           <button type="button" phx-click="cancel_reidentify" class="btn btn-ghost">
-            Cancel
+            {gettext("Cancel")}
           </button>
         </div>
       </div>
@@ -262,13 +290,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     ~H"""
     <div class="modal modal-open">
       <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">Delete Media File?</h3>
+        <h3 class="font-bold text-lg mb-4">{gettext("Delete Media File?")}</h3>
         <div class="bg-base-200 p-3 rounded-box mb-4">
           <p class="text-sm font-mono text-base-content/70 break-all">
             {Mydia.Library.MediaFile.absolute_path(@file_to_delete)}
           </p>
           <p class="text-sm mt-2">
-            <span class="font-semibold">Size:</span>
+            <span class="font-semibold">{gettext("Size:")}</span>
             {format_file_size(@file_to_delete.size)}
           </p>
         </div>
@@ -288,9 +316,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 checked={@file_delete_mode == :library_only}
               />
               <div>
-                <div class="font-medium mb-1">Remove from library, leave the file on disk</div>
+                <div class="font-medium mb-1">
+                  {gettext("Remove from library, leave the file on disk")}
+                </div>
                 <div class="text-sm opacity-75">
-                  A later scan will find the file again and re-import it
+                  {gettext("A later scan will find the file again and re-import it")}
                 </div>
               </div>
             </label>
@@ -308,9 +338,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 checked={@file_delete_mode == :trash}
               />
               <div>
-                <div class="font-medium mb-1">Move to trash</div>
+                <div class="font-medium mb-1">{gettext("Move to trash")}</div>
                 <div class="text-sm opacity-75">
-                  Recoverable from Configuration &gt; Trash until it is purged
+                  {gettext("Recoverable from Configuration > Trash until it is purged")}
                 </div>
               </div>
             </label>
@@ -328,10 +358,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 checked={@file_delete_mode == :permanent}
               />
               <div>
-                <div class="font-medium mb-1">Delete permanently</div>
+                <div class="font-medium mb-1">{gettext("Delete permanently")}</div>
                 <div class="text-sm opacity-75 flex items-center gap-1">
                   <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-                  <span>Erases the file now, with no way to undo it</span>
+                  <span>{gettext("Erases the file now, with no way to undo it")}</span>
                 </div>
               </div>
             </label>
@@ -340,7 +370,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
         <div class="modal-action">
           <button type="button" phx-click="hide_file_delete_confirm" class="btn btn-ghost">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button
             id="file-delete-confirm"
@@ -362,9 +392,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   defp confirm_class(:trash), do: "btn-warning"
   defp confirm_class(:library_only), do: "btn-primary"
 
-  defp confirm_label(:permanent), do: "Delete permanently"
-  defp confirm_label(:trash), do: "Move to trash"
-  defp confirm_label(:library_only), do: "Remove from library"
+  defp confirm_label(:permanent), do: gettext("Delete permanently")
+  defp confirm_label(:trash), do: gettext("Move to trash")
+  defp confirm_label(:library_only), do: gettext("Remove from library")
 
   @doc """
   File details modal showing comprehensive information about a media file.
@@ -378,12 +408,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     ~H"""
     <div class="modal modal-open">
       <div class="modal-box max-w-2xl">
-        <h3 class="font-bold text-lg mb-4">Media File Details</h3>
+        <h3 class="font-bold text-lg mb-4">{gettext("Media File Details")}</h3>
 
         <div class="space-y-4">
           <%!-- File Path --%>
           <div>
-            <h4 class="text-sm font-semibold text-base-content/70 mb-2">File Path</h4>
+            <h4 class="text-sm font-semibold text-base-content/70 mb-2">{gettext("File Path")}</h4>
             <%!-- display_path/1 returns nil for a fully orphaned row, which
                   rendered an empty box. This modal is the only surface showing
                   a full path now that the card labels rows by basename. --%>
@@ -396,7 +426,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 into VLC, mpv or Infuse. Relative href, so the browser
                 resolves the host and Copy yields an absolute URL. --%>
           <div :if={@current_user_id}>
-            <h4 class="text-sm font-semibold text-base-content/70 mb-2">Stream Link</h4>
+            <h4 class="text-sm font-semibold text-base-content/70 mb-2">{gettext("Stream Link")}</h4>
             <div class="flex items-center gap-2 bg-base-200 p-3 rounded-box">
               <a
                 id="file-details-stream-link"
@@ -415,46 +445,55 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                   Phoenix.LiveView.JS.dispatch("mydia:copy-href", to: "#file-details-stream-link")
                 }
               >
-                <.icon name="hero-clipboard-document" class="w-4 h-4" /> Copy
+                <.icon name="hero-clipboard-document" class="w-4 h-4" /> {gettext("Copy")}
               </button>
             </div>
             <p class="text-xs text-base-content/60 mt-1">
-              Opens in your default video app, or paste it into VLC, mpv or Infuse.
-              Anyone with this link can stream the file, so share it like a password.
+              {gettext(
+                "Opens in your default video app, or paste it into VLC, mpv or Infuse. Anyone with this link can stream the file, so share it like a password."
+              )}
             </p>
           </div>
           <%!-- Quality Information --%>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Resolution</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">
+                {gettext("Resolution")}
+              </h4>
               <p class="text-sm">
                 <%= if @file_details.resolution do %>
                   <span class="badge badge-primary">{@file_details.resolution}</span>
                 <% else %>
-                  <span class="text-base-content/50">Unknown</span>
+                  <span class="text-base-content/50">{gettext("Unknown")}</span>
                 <% end %>
               </p>
             </div>
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Size</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">{gettext("Size")}</h4>
               <p class="text-sm">{format_file_size(@file_details.size)}</p>
             </div>
           </div>
           <%!-- Codec Information --%>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Video Codec</h4>
-              <p class="text-sm">{@file_details.codec || "Unknown"}</p>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">
+                {gettext("Video Codec")}
+              </h4>
+              <p class="text-sm">{@file_details.codec || gettext("Unknown")}</p>
             </div>
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Audio Codec</h4>
-              <p class="text-sm">{@file_details.audio_codec || "Unknown"}</p>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">
+                {gettext("Audio Codec")}
+              </h4>
+              <p class="text-sm">{@file_details.audio_codec || gettext("Unknown")}</p>
             </div>
           </div>
           <%!-- Additional Information --%>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">HDR Format</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">
+                {gettext("HDR Format")}
+              </h4>
               <p class="text-sm">
                 <%= if @file_details.hdr_format || @file_details.dolby_vision_profile do %>
                   <span class="badge badge-accent">
@@ -466,37 +505,43 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                   </span>
                   <%= if @file_details.dolby_vision_profile do %>
                     <span class="badge badge-ghost badge-sm">
-                      Profile {@file_details.dolby_vision_profile}
+                      {gettext("Profile %{profile}", profile: @file_details.dolby_vision_profile)}
                     </span>
                   <% end %>
                 <% else %>
-                  <span class="text-base-content/50">None</span>
+                  <span class="text-base-content/50">{gettext("None")}</span>
                 <% end %>
               </p>
             </div>
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Bitrate</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">{gettext("Bitrate")}</h4>
               <p class="text-sm">
                 <%= if @file_details.bitrate do %>
-                  {Float.round(@file_details.bitrate / 1_000_000, 2)} Mbps
+                  {gettext("%{mbps} Mbps", mbps: Float.round(@file_details.bitrate / 1_000_000, 2))}
                 <% else %>
-                  <span class="text-base-content/50">Unknown</span>
+                  <span class="text-base-content/50">{gettext("Unknown")}</span>
                 <% end %>
               </p>
             </div>
           </div>
           <%!-- Verification Status --%>
           <div>
-            <h4 class="text-sm font-semibold text-base-content/70 mb-2">Verification Status</h4>
+            <h4 class="text-sm font-semibold text-base-content/70 mb-2">
+              {gettext("Verification Status")}
+            </h4>
             <p class="text-sm">
               <%= if @file_details.verified_at do %>
                 <span class="text-success">
                   <.icon name="hero-check-circle" class="w-4 h-4 inline" />
-                  Verified on {format(@file_details.verified_at, :datetime, @display)}
+                  {gettext("Verified on %{date}",
+                    date: format(@file_details.verified_at, :datetime, @display)
+                  )}
                 </span>
               <% else %>
                 <span class="text-warning">
-                  <.icon name="hero-exclamation-triangle" class="w-4 h-4 inline" /> Not verified
+                  <.icon name="hero-exclamation-triangle" class="w-4 h-4 inline" /> {gettext(
+                    "Not verified"
+                  )}
                 </span>
               <% end %>
             </p>
@@ -505,14 +550,15 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 wrong item has no other way to explain itself. --%>
           <%= if @file_origin do %>
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Origin</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">{gettext("Origin")}</h4>
               <p class="text-sm">
-                Imported from the download
-                <span class="text-sm font-medium">{@file_origin.title}</span>
+                {gettext("Imported from the download %{title}", title: @file_origin.title)}
               </p>
               <%= if @file_origin.metadata["matched_from_client"] do %>
                 <p class="text-sm mt-1">
-                  <span class="badge badge-warning badge-sm">Added outside Mydia</span>
+                  <span class="badge badge-warning badge-sm">
+                    {gettext("Added outside Mydia")}
+                  </span>
                 </p>
               <% end %>
               <%= if @file_origin.metadata["match_reason"] do %>
@@ -525,7 +571,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <%!-- Metadata (if present) --%>
           <%= if @file_details.metadata && map_size(@file_details.metadata) > 0 do %>
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Additional Metadata</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">
+                {gettext("Additional Metadata")}
+              </h4>
               <pre class="text-xs bg-base-200 p-3 rounded-box overflow-x-auto"><%= Jason.encode!(@file_details.metadata, pretty: true) %></pre>
             </div>
           <% end %>
@@ -533,7 +581,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
         <div class="modal-action">
           <button type="button" phx-click="hide_file_details" class="btn btn-ghost">
-            Close
+            {gettext("Close")}
           </button>
         </div>
       </div>
@@ -551,33 +599,34 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     ~H"""
     <div class="modal modal-open">
       <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">Cancel Download?</h3>
+        <h3 class="font-bold text-lg mb-4">{gettext("Cancel Download?")}</h3>
         <p class="py-4">
-          Are you sure you want to cancel this download?
+          {gettext("Are you sure you want to cancel this download?")}
         </p>
         <div class="bg-base-200 p-3 rounded-box mb-4">
           <p class="text-sm font-medium">{@download_to_cancel.title}</p>
           <%= if quality = @download_to_cancel.metadata["quality"] do %>
             <p class="text-sm text-base-content/70 mt-1">
-              Quality: <span class="badge badge-sm">{format_download_quality(quality)}</span>
+              {gettext("Quality:")}
+              <span class="badge badge-sm">{format_download_quality(quality)}</span>
             </p>
           <% end %>
           <%= if @download_to_cancel.progress do %>
             <p class="text-sm text-base-content/70 mt-1">
-              Progress: {format_progress(@download_to_cancel.progress)}%
+              {gettext("Progress:")} {format_progress(@download_to_cancel.progress)}%
             </p>
           <% end %>
         </div>
         <p class="text-warning text-sm mb-4">
           <.icon name="hero-exclamation-triangle" class="w-4 h-4 inline" />
-          The download will be stopped and marked as cancelled.
+          {gettext("The download will be stopped and marked as cancelled.")}
         </p>
         <div class="modal-action">
           <button type="button" phx-click="hide_download_cancel_confirm" class="btn btn-ghost">
-            Keep Downloading
+            {gettext("Keep Downloading")}
           </button>
           <button type="button" phx-click="cancel_download" class="btn btn-warning">
-            Cancel Download
+            {gettext("Cancel Download")}
           </button>
         </div>
       </div>
@@ -595,14 +644,14 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     ~H"""
     <div class="modal modal-open">
       <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">Remove Download?</h3>
+        <h3 class="font-bold text-lg mb-4">{gettext("Remove Download?")}</h3>
         <p class="py-4">
-          Are you sure you want to remove this download from history?
+          {gettext("Are you sure you want to remove this download from history?")}
         </p>
         <div class="bg-base-200 p-3 rounded-box mb-4">
           <p class="text-sm font-medium">{@download_to_delete.title}</p>
           <p class="text-sm text-base-content/70 mt-1">
-            Status:
+            {gettext("Status:")}
             <span class={[
               "badge badge-sm",
               @download_to_delete.status == "completed" && "badge-success",
@@ -616,7 +665,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
         </div>
         <p class="text-warning text-sm mb-4">
           <.icon name="hero-exclamation-triangle" class="w-4 h-4 inline" />
-          This will only remove the download record. Downloaded files will remain on disk.
+          {gettext("This will only remove the download record. Downloaded files will remain on disk.")}
         </p>
         <div class="modal-action">
           <button
@@ -624,10 +673,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             phx-click="hide_download_delete_confirm"
             class="btn btn-ghost"
           >
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button type="button" phx-click="delete_download_record" class="btn btn-error">
-            Remove Record
+            {gettext("Remove Record")}
           </button>
         </div>
       </div>
@@ -646,18 +695,18 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     ~H"""
     <div class="modal modal-open">
       <div class="modal-box max-w-2xl">
-        <h3 class="font-bold text-lg mb-4">Download Details</h3>
+        <h3 class="font-bold text-lg mb-4">{gettext("Download Details")}</h3>
 
         <div class="space-y-4">
           <%!-- Title and Status --%>
           <div>
-            <h4 class="text-sm font-semibold text-base-content/70 mb-2">Title</h4>
+            <h4 class="text-sm font-semibold text-base-content/70 mb-2">{gettext("Title")}</h4>
             <p class="text-sm font-medium">{@download_details.title}</p>
           </div>
 
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Status</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">{gettext("Status")}</h4>
               <span class={[
                 "badge",
                 @download_details.status == "completed" && "badge-success",
@@ -669,18 +718,18 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               </span>
             </div>
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Quality</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">{gettext("Quality")}</h4>
               <%= if quality = @download_details.metadata["quality"] do %>
                 <span class="badge">{format_download_quality(quality)}</span>
               <% else %>
-                <span class="text-base-content/50">Unknown</span>
+                <span class="text-base-content/50">{gettext("Unknown")}</span>
               <% end %>
             </div>
           </div>
           <%!-- Progress --%>
           <%= if @download_details.progress do %>
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Progress</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">{gettext("Progress")}</h4>
               <div class="flex items-center gap-3">
                 <progress
                   class="progress progress-primary flex-1"
@@ -694,7 +743,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <%!-- Source URL --%>
           <%= if @download_details.source_url do %>
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Source URL</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">
+                {gettext("Source URL")}
+              </h4>
               <p class="text-xs font-mono bg-base-200 p-3 rounded-box break-all">
                 {@download_details.source_url}
               </p>
@@ -703,7 +754,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <%!-- Error Message --%>
           <%= if @download_details.error_message do %>
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Error Message</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">
+                {gettext("Error Message")}
+              </h4>
               <div class="alert alert-error">
                 <.icon name="hero-exclamation-circle" class="w-5 h-5" />
                 <span class="text-sm">{@download_details.error_message}</span>
@@ -713,14 +766,16 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <%!-- Timestamps --%>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Added</h4>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">{gettext("Added")}</h4>
               <p class="text-sm">
                 {format(@download_details.inserted_at, :datetime, @display)}
               </p>
             </div>
             <%= if @download_details.completed_at do %>
               <div>
-                <h4 class="text-sm font-semibold text-base-content/70 mb-2">Completed</h4>
+                <h4 class="text-sm font-semibold text-base-content/70 mb-2">
+                  {gettext("Completed")}
+                </h4>
                 <p class="text-sm">
                   {format(@download_details.completed_at, :datetime, @display)}
                 </p>
@@ -731,7 +786,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <%= if @download_details.estimated_completion do %>
             <div>
               <h4 class="text-sm font-semibold text-base-content/70 mb-2">
-                Estimated Completion
+                {gettext("Estimated Completion")}
               </h4>
               <p class="text-sm">
                 {format(@download_details.estimated_completion, :datetime, @display)}
@@ -742,7 +797,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <%= if @download_details.metadata && map_size(@download_details.metadata) > 0 do %>
             <div>
               <h4 class="text-sm font-semibold text-base-content/70 mb-2">
-                Additional Metadata
+                {gettext("Additional Metadata")}
               </h4>
               <pre class="text-xs bg-base-200 p-3 rounded-box overflow-x-auto"><%= Jason.encode!(@download_details.metadata, pretty: true) %></pre>
             </div>
@@ -751,7 +806,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
         <div class="modal-action">
           <button type="button" phx-click="hide_download_details" class="btn btn-ghost">
-            Close
+            {gettext("Close")}
           </button>
         </div>
       </div>
@@ -811,18 +866,23 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
         <div class="sticky top-0 z-10 bg-base-100 border-b border-base-300 p-4 sm:p-6">
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-xl sm:text-2xl font-bold">
-              Manual Search
+              {gettext("Manual Search")}
               <%= if @manual_search_context do %>
                 <%= case @manual_search_context.type do %>
                   <% :episode -> %>
-                    <span class="text-sm sm:text-base text-base-content/70">for Episode</span>
+                    <span class="text-sm sm:text-base text-base-content/70">
+                      {gettext("for Episode")}
+                    </span>
                   <% :season -> %>
                     <span class="text-sm sm:text-base text-base-content/70">
-                      for {@media_item.title} - Season {@manual_search_context.season_number}
+                      {gettext("for %{title} - Season %{season}",
+                        title: @media_item.title,
+                        season: @manual_search_context.season_number
+                      )}
                     </span>
                   <% :media_item -> %>
                     <span class="text-sm sm:text-base text-base-content/70">
-                      for {@media_item.title}
+                      {gettext("for %{title}", title: @media_item.title)}
                     </span>
                   <% _ -> %>
                     <span></span>
@@ -840,7 +900,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <%!-- Search Query Display --%>
           <div class="flex items-center gap-2 text-sm">
             <.icon name="hero-magnifying-glass" class="w-4 h-4 text-base-content/60" />
-            <span class="text-base-content/70">Searching for:</span>
+            <span class="text-base-content/70">{gettext("Searching for:")}</span>
             <span class="font-semibold truncate">{@manual_search_query}</span>
           </div>
           <%= if @existing do %>
@@ -849,7 +909,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm mt-1 min-w-0"
             >
               <.icon name="hero-archive-box" class="w-4 h-4 text-base-content/60 shrink-0" />
-              <span class="text-base-content/70 shrink-0">On disk:</span>
+              <span class="text-base-content/70 shrink-0">{gettext("On disk:")}</span>
               <%= case @existing.kind do %>
                 <% :file -> %>
                   <span
@@ -868,13 +928,14 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     {format_file_size(@existing.size)}
                   </span>
                   <span :if={@existing.extra_count > 0} class="text-xs text-base-content/60 shrink-0">
-                    +{@existing.extra_count} more
+                    {gettext("+%{count} more", count: @existing.extra_count)}
                   </span>
                 <% :season -> %>
                   <span class="truncate">
-                    {@existing.on_disk}/{@existing.total} episodes on disk{season_quality_suffix(
-                      @existing
-                    )}
+                    {gettext("%{on_disk}/%{total} episodes on disk",
+                      on_disk: @existing.on_disk,
+                      total: @existing.total
+                    )}{season_quality_suffix(@existing)}
                   </span>
               <% end %>
             </div>
@@ -930,10 +991,10 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             >
               <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
               <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-                Searching across indexers...
+                {gettext("Searching across indexers...")}
               </h3>
               <p class="text-base-content/50">
-                This may take a few seconds
+                {gettext("This may take a few seconds")}
               </p>
             </div>
           <% end %>
@@ -942,14 +1003,17 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             <div class="flex flex-col items-center justify-center py-16 text-center px-4">
               <.icon name="hero-exclamation-circle" class="w-16 h-16 text-base-content/20 mb-4" />
               <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-                No Results Found
+                {gettext("No Results Found")}
               </h3>
               <p class="text-base-content/50 max-w-sm mb-4">
-                We couldn't find any releases matching
-                "<span class="font-semibold">{@manual_search_query}</span>"
+                {gettext("We couldn't find any releases matching \"%{query}\"",
+                  query: @manual_search_query
+                )}
               </p>
               <div class="text-sm text-base-content/60">
-                <p>Try different keywords, adjusting filters, or checking your indexers.</p>
+                <p>
+                  {gettext("Try different keywords, adjusting filters, or checking your indexers.")}
+                </p>
               </div>
             </div>
           <% end %>
@@ -985,7 +1049,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                       score < 50 && "text-error"
                     ]}
                     style={"--value:#{ring_value}; --size:3rem; --thickness:4px;"}
-                    title="Show score breakdown"
+                    title={gettext("Show score breakdown")}
                   >
                     {trunc(score)}
                   </.score_trigger>
@@ -998,7 +1062,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                       result.seeders >= 10 && result.seeders < 50 && "bg-warning/20 text-warning",
                       result.seeders < 10 && "bg-base-300 text-base-content/70"
                     ]}
-                    title={"#{result.seeders} seeders"}
+                    title={ngettext("%{count} seeder", "%{count} seeders", result.seeders)}
                   >
                     <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
                     {result.seeders}
@@ -1048,7 +1112,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         target="_blank"
                         rel="noopener noreferrer"
                         class="badge badge-outline badge-sm gap-1 hover:border-primary hover:text-primary transition-colors"
-                        title={"View this release on #{result.indexer}"}
+                        title={gettext("View this release on %{indexer}", indexer: result.indexer)}
                       >
                         {result.indexer}
                         <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" />
@@ -1066,19 +1130,19 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                   <% end %>
                   <.score_panel :if={profile?} id={"#{id}-score-breakdown"}>
                     <.score_row
-                      label="Resolution"
+                      label={gettext("Resolution")}
                       value={score_data.detected[:resolution]}
                       score={breakdown.quality}
                       weight={60}
                     />
                     <.score_row
-                      label="Title match"
+                      label={gettext("Title match")}
                       value={nil}
                       score={breakdown.title_match}
                       weight={10}
                     />
                     <.score_row
-                      label="File Size"
+                      label={gettext("File Size")}
                       value={
                         if(score_data.detected[:size_mb],
                           do: "#{score_data.detected[:size_mb]} MB",
@@ -1088,22 +1152,30 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                       score={breakdown.size}
                       weight={5}
                     />
-                    <div class="divider my-1 text-xs opacity-50">Availability</div>
+                    <div class="divider my-1 text-xs opacity-50">{gettext("Availability")}</div>
                     <.score_row
-                      label="Seeders"
-                      value={"#{result.seeders} peers"}
+                      label={gettext("Seeders")}
+                      value={ngettext("%{count} peer", "%{count} peers", result.seeders)}
                       score={breakdown.seeders}
                       weight={30}
                     />
                     <%= if has_penalty do %>
-                      <div class="divider my-1 text-xs opacity-50">Penalties</div>
+                      <div class="divider my-1 text-xs opacity-50">{gettext("Penalties")}</div>
                       <%= if breakdown.limit_violation do %>
                         <div id={"#{id}-limit-violation"} class="text-xs text-warning py-1">
-                          Outside profile limits: {breakdown.limit_violation}
+                          {gettext("Outside profile limits: %{violation}",
+                            violation: breakdown.limit_violation
+                          )}
                         </div>
                       <% end %>
-                      <.penalty_row label="Seeder penalty" score={breakdown.seeder_penalty} />
-                      <.penalty_row label="Identity mismatch" score={breakdown.identity_penalty} />
+                      <.penalty_row
+                        label={gettext("Seeder penalty")}
+                        score={breakdown.seeder_penalty}
+                      />
+                      <.penalty_row
+                        label={gettext("Identity mismatch")}
+                        score={breakdown.identity_penalty}
+                      />
                     <% end %>
                   </.score_panel>
                 </div>
@@ -1113,17 +1185,17 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     <% Map.get(result, :downloaded) -> %>
                       <button class="btn btn-success btn-sm btn-disabled" disabled>
                         <.icon name="hero-check" class="w-4 h-4" />
-                        <span class="hidden sm:inline">Grabbed</span>
+                        <span class="hidden sm:inline">{gettext("Grabbed")}</span>
                       </button>
                     <% Map.get(result, :duplicate) -> %>
                       <button class="btn btn-ghost btn-sm btn-disabled" disabled>
                         <.icon name="hero-check-circle" class="w-4 h-4" />
-                        <span class="hidden sm:inline">Already downloading</span>
+                        <span class="hidden sm:inline">{gettext("Already downloading")}</span>
                       </button>
                     <% Map.get(result, :downloading) -> %>
                       <button class="btn btn-primary btn-sm btn-disabled" disabled>
                         <span class="loading loading-spinner loading-xs"></span>
-                        <span class="hidden sm:inline">Grabbing…</span>
+                        <span class="hidden sm:inline">{gettext("Grabbing…")}</span>
                       </button>
                     <% Map.get(result, :grab_failed) -> %>
                       <button
@@ -1136,10 +1208,14 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         phx-value-seeders={result.seeders || 0}
                         phx-value-leechers={result.leechers || 0}
                         phx-value-quality={get_search_quality_badge(result)}
-                        title={"Failed: #{Map.get(result, :grab_failed)} — click to retry"}
+                        title={
+                          gettext("Failed: %{reason} — click to retry",
+                            reason: Map.get(result, :grab_failed)
+                          )
+                        }
                       >
                         <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-                        <span class="hidden sm:inline">Failed — retry</span>
+                        <span class="hidden sm:inline">{gettext("Failed — retry")}</span>
                       </button>
                     <% true -> %>
                       <button
@@ -1152,14 +1228,14 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         phx-value-seeders={result.seeders || 0}
                         phx-value-leechers={result.leechers || 0}
                         phx-value-quality={get_search_quality_badge(result)}
-                        title="Download this release"
+                        title={gettext("Download this release")}
                       >
                         <span class="loading loading-spinner loading-xs hidden group-[.phx-click-loading]/dl:inline"></span>
                         <.icon
                           name="hero-arrow-down-tray"
                           class="w-4 h-4 group-[.phx-click-loading]/dl:hidden"
                         />
-                        <span class="hidden sm:inline">Download</span>
+                        <span class="hidden sm:inline">{gettext("Download")}</span>
                       </button>
                   <% end %>
                 </div>
@@ -1184,24 +1260,24 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     ~H"""
     <div class="modal modal-open">
       <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">Change Category</h3>
+        <h3 class="font-bold text-lg mb-4">{gettext("Change Category")}</h3>
 
         <div class="mb-4 p-3 bg-base-200 rounded-box">
           <div class="flex items-center gap-2 text-sm">
-            <span class="text-base-content/70">Current category:</span>
+            <span class="text-base-content/70">{gettext("Current category:")}</span>
             <%= if @media_item.category do %>
               <.category_badge
                 category={@media_item.category}
                 override={@media_item.category_override}
               />
             <% else %>
-              <span class="text-base-content/50">Not set</span>
+              <span class="text-base-content/50">{gettext("Not set")}</span>
             <% end %>
           </div>
           <%= if @media_item.category_override do %>
             <div class="text-xs text-warning mt-2 flex items-center gap-1">
               <.icon name="hero-exclamation-triangle" class="w-3 h-3" />
-              Category was manually set and won't change on metadata refresh
+              {gettext("Category was manually set and won't change on metadata refresh")}
             </div>
           <% end %>
         </div>
@@ -1214,13 +1290,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
         >
           <div class="form-control mb-4">
             <label class="label">
-              <span class="label-text font-medium">Select Category</span>
+              <span class="label-text font-medium">{gettext("Select Category")}</span>
             </label>
             <.input
               field={@category_form[:category]}
               type="select"
               options={@available_categories}
-              prompt="Select a category"
+              prompt={gettext("Select a category")}
             />
           </div>
 
@@ -1232,9 +1308,9 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 class="checkbox checkbox-primary"
               />
               <div>
-                <span class="label-text font-medium">Lock category</span>
+                <span class="label-text font-medium">{gettext("Lock category")}</span>
                 <p class="label-text-alt mt-1 text-base-content/70">
-                  Prevent auto-classification from changing this category
+                  {gettext("Prevent auto-classification from changing this category")}
                 </p>
               </div>
             </label>
@@ -1242,7 +1318,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
           <div class="modal-action">
             <button type="button" phx-click="hide_category_modal" class="btn btn-ghost">
-              Cancel
+              {gettext("Cancel")}
             </button>
             <%= if @media_item.category_override do %>
               <button
@@ -1250,11 +1326,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 phx-click="reset_category_to_auto"
                 class="btn btn-warning btn-outline"
               >
-                <.icon name="hero-arrow-path" class="w-4 h-4" /> Reset to Auto
+                <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Reset to Auto")}
               </button>
             <% end %>
             <button type="submit" class="btn btn-primary">
-              Save Category
+              {gettext("Save Category")}
             </button>
           </div>
         </.form>
@@ -1284,7 +1360,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
         <div class="aspect-video bg-black">
           <iframe
             src={@trailer_url <> "?rel=0&modestbranding=1&autoplay=1"}
-            title="Trailer"
+            title={gettext("Trailer")}
             class="w-full h-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowfullscreen
@@ -1315,7 +1391,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     ~H"""
     <div id="quality-profile-modal" class="modal modal-open">
       <div class="modal-box max-w-sm">
-        <h3 class="font-bold text-lg mb-2">Quality Profile</h3>
+        <h3 class="font-bold text-lg mb-2">{gettext("Quality Profile")}</h3>
         <ul class="menu w-full p-0">
           <li>
             <button
@@ -1356,7 +1432,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
         </ul>
         <div class="modal-action">
           <button type="button" phx-click="hide_quality_profile_modal" class="btn btn-ghost">
-            Cancel
+            {gettext("Cancel")}
           </button>
         </div>
       </div>
@@ -1381,7 +1457,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     ~H"""
     <div id="target-library-modal" class="modal modal-open">
       <div class="modal-box max-w-sm">
-        <h3 class="font-bold text-lg mb-2">Download Library</h3>
+        <h3 class="font-bold text-lg mb-2">{gettext("Download Library")}</h3>
         <ul class="menu w-full p-0">
           <li>
             <button
@@ -1390,7 +1466,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               phx-value-library-path-id=""
               class={["justify-between", is_nil(@media_item.library_path_id) && "active"]}
             >
-              Automatic
+              {gettext("Automatic")}
               <.icon :if={is_nil(@media_item.library_path_id)} name="hero-check" class="w-4 h-4" />
             </button>
           </li>
@@ -1411,11 +1487,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           </li>
         </ul>
         <p class="text-xs text-base-content/60 mt-3">
-          Changing this affects future downloads. Files already on disk stay where they are.
+          {gettext(
+            "Changing this affects future downloads. Files already on disk stay where they are."
+          )}
         </p>
         <div class="modal-action">
           <button type="button" phx-click="hide_target_library_modal" class="btn btn-ghost">
-            Cancel
+            {gettext("Cancel")}
           </button>
         </div>
       </div>
@@ -1437,11 +1515,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     ~H"""
     <div id="add-to-collection-modal" class="modal modal-open">
       <div class="modal-box max-w-sm">
-        <h3 class="font-bold text-lg mb-2">Add to Collection</h3>
+        <h3 class="font-bold text-lg mb-2">{gettext("Add to Collection")}</h3>
         <%= if Enum.empty?(@user_collections) do %>
-          <p class="text-sm text-base-content/60 mb-3">No collections yet.</p>
+          <p class="text-sm text-base-content/60 mb-3">{gettext("No collections yet.")}</p>
           <.link navigate={~p"/collections"} class="btn btn-primary btn-sm">
-            <.icon name="hero-plus" class="w-4 h-4" /> Create Collection
+            <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Create Collection")}
           </.link>
         <% else %>
           <ul class="menu w-full p-0">
@@ -1467,12 +1545,12 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             </li>
           </ul>
           <.link navigate={~p"/collections"} class="btn btn-ghost btn-sm mt-2">
-            <.icon name="hero-folder-open" class="w-4 h-4" /> Manage Collections
+            <.icon name="hero-folder-open" class="w-4 h-4" /> {gettext("Manage Collections")}
           </.link>
         <% end %>
         <div class="modal-action">
           <button type="button" phx-click="close_add_to_collection_modal" class="btn btn-ghost">
-            Close
+            {gettext("Close")}
           </button>
         </div>
       </div>

@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3]
 
@@ -32,14 +34,17 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
            |> assign(:media_item, updated_item)
            |> put_flash(
              :info,
-             "Monitoring #{if updated_item.monitored, do: "enabled", else: "disabled"}"
+             if(updated_item.monitored,
+               do: gettext("Monitoring enabled"),
+               else: gettext("Monitoring disabled")
+             )
            )}
 
         {:error, :restricted} ->
           {:noreply, put_flash(socket, :error, Media.restricted_message())}
 
         {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Failed to update monitoring")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to update monitoring"))}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -59,19 +64,25 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
           {:noreply,
            socket
            |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
-           |> put_flash(:info, "Applied '#{preset_label}' monitoring to #{count} episodes")}
+           |> put_flash(
+             :info,
+             gettext("Applied '%{preset}' monitoring to %{count} episodes",
+               preset: preset_label,
+               count: count
+             )
+           )}
 
         {:error, reason} ->
           Logger.error("Failed to apply episode monitoring: #{inspect(reason)}")
 
-          {:noreply, put_flash(socket, :error, "Failed to apply episode monitoring")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to apply episode monitoring"))}
       end
     else
       {:unauthorized, socket} ->
         {:noreply, socket}
 
       false ->
-        {:noreply, put_flash(socket, :error, "Invalid monitoring preset")}
+        {:noreply, put_flash(socket, :error, gettext("Invalid monitoring preset"))}
     end
   end
 
@@ -84,8 +95,8 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
 
       message =
         if mode == :all,
-          do: "New seasons will be monitored",
-          else: "New seasons will not be monitored"
+          do: gettext("New seasons will be monitored"),
+          else: gettext("New seasons will not be monitored")
 
       {:noreply,
        socket
@@ -109,7 +120,10 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
        )
        |> put_flash(
          :info,
-         "Episode monitoring #{if episode.monitored, do: "disabled", else: "enabled"}"
+         if(episode.monitored,
+           do: gettext("Episode monitoring disabled"),
+           else: gettext("Episode monitoring enabled")
+         )
        )}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -128,11 +142,14 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
            |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
            |> put_flash(
              :info,
-             "Monitoring enabled for #{count} episodes in Season #{season_number}"
+             gettext("Monitoring enabled for %{count} episodes in Season %{season}",
+               count: count,
+               season: season_number
+             )
            )}
 
         {:error, _reason} ->
-          {:noreply, put_flash(socket, :error, "Failed to update season monitoring")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to update season monitoring"))}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -151,11 +168,14 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
            |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
            |> put_flash(
              :info,
-             "Monitoring disabled for #{count} episodes in Season #{season_number}"
+             gettext("Monitoring disabled for %{count} episodes in Season %{season}",
+               count: count,
+               season: season_number
+             )
            )}
 
         {:error, _reason} ->
-          {:noreply, put_flash(socket, :error, "Failed to update season monitoring")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to update season monitoring"))}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}

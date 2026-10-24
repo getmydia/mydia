@@ -49,8 +49,11 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderComponents do
         <.icon name="hero-information-circle" class="w-5 h-5 shrink-0 mt-0.5" />
         <div class="flex-1">
           <p class="text-sm">
-            One season here has {season_episode_max(@media_item)} episodes. TVDB also splits
-            this show into {format_season_ordering_counts(@season_order_suggestion.counts)} as a DVD ordering.
+            {gettext(
+              "One season here has %{count} episodes. TVDB also splits this show into %{ordering} as a DVD ordering.",
+              count: season_episode_max(@media_item),
+              ordering: format_season_ordering_counts(@season_order_suggestion.counts)
+            )}
           </p>
           <div class="flex gap-2 mt-2">
             <button
@@ -60,7 +63,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderComponents do
               phx-click="change_season_order"
               phx-value-order="dvd"
             >
-              Use DVD ordering
+              {gettext("Use DVD ordering")}
             </button>
             <button
               type="button"
@@ -69,7 +72,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderComponents do
               phx-click="change_season_order"
               phx-value-order="official"
             >
-              Keep aired order
+              {gettext("Keep aired order")}
             </button>
           </div>
         </div>
@@ -82,7 +85,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderComponents do
         class="flex items-center gap-2"
       >
         <label for="season-order-select" class="text-xs text-base-content/60">
-          Episode ordering
+          {gettext("Episode ordering")}
         </label>
         <select id="season-order-select" name="order" class="select select-xs select-bordered w-auto">
           <option
@@ -90,13 +93,22 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderComponents do
             value={order}
             selected={current_season_order(@media_item) == order}
           >
-            {SeasonOrder.label(order)}
+            {season_order_label(order)}
           </option>
         </select>
       </form>
     </div>
     """
   end
+
+  @doc """
+  Display label for a TVDB season ordering. Web-side counterpart of
+  `Mydia.Media.SeasonOrder.label/1`, which stays English for non-web callers.
+  """
+  def season_order_label(nil), do: gettext("Aired order")
+  def season_order_label(:official), do: gettext("Aired order")
+  def season_order_label(:dvd), do: gettext("DVD order")
+  def season_order_label(:absolute), do: gettext("Absolute order")
 
   defp tvdb_show?(media_item),
     do: media_item.type == "tv_show" and media_item.metadata_source == :tvdb

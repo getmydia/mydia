@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.LibraryEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3]
 
@@ -31,8 +33,8 @@ defmodule MydiaWeb.MediaLive.Show.LibraryEvents do
         {:ok, updated} ->
           message =
             if library_path_id,
-              do: "Future downloads will go to the selected library",
-              else: "Library is now chosen automatically"
+              do: gettext("Future downloads will go to the selected library"),
+              else: gettext("Library is now chosen automatically")
 
           media_item = %{media_item | library_path_id: updated.library_path_id}
 
@@ -47,7 +49,7 @@ defmodule MydiaWeb.MediaLive.Show.LibraryEvents do
           {:noreply,
            socket
            |> assign(:show_target_library_modal, false)
-           |> put_flash(:error, "Failed to update the library")}
+           |> put_flash(:error, gettext("Failed to update the library"))}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}

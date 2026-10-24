@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [start_async: 3, put_flash: 3, connected?: 1]
 
@@ -82,7 +84,11 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
 
       {:error, :unknown_library} ->
         {:noreply,
-         put_flash(socket, :error, "That library is no longer available. Nothing was added.")}
+         put_flash(
+           socket,
+           :error,
+           gettext("That library is no longer available. Nothing was added.")
+         )}
 
       :error ->
         {:noreply, socket}
@@ -191,7 +197,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     {:noreply,
      socket
      |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
-     |> put_flash(:info, "Added #{added.title} to your library")}
+     |> put_flash(:info, gettext("Added %{title} to your library", title: added.title))}
   end
 
   # Not an error from here up: the movie the user clicked is already in the
@@ -207,7 +213,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     {:noreply,
      socket
      |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
-     |> put_flash(:info, "#{added.title} is already in your library")}
+     |> put_flash(:info, gettext("%{title} is already in your library", title: added.title))}
   end
 
   def handle_add_result(tmdb_id, {:ok, {:error, reason}}, socket) do
@@ -216,7 +222,10 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     {:noreply,
      socket
      |> clear_in_flight(tmdb_id)
-     |> put_flash(:error, "Could not add that movie: #{describe(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Could not add that movie: %{reason}", reason: describe(reason))
+     )}
   end
 
   def handle_add_result(tmdb_id, {:exit, reason}, socket) do
@@ -225,7 +234,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     {:noreply,
      socket
      |> clear_in_flight(tmdb_id)
-     |> put_flash(:error, "Could not add that movie")}
+     |> put_flash(:error, gettext("Could not add that movie"))}
   end
 
   ## Private
@@ -296,12 +305,15 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
         {:noreply,
          socket
          |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
-         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")}
+         |> put_flash(
+           :info,
+           gettext("%{title} requested. An admin will review it soon.", title: request.title)
+         )}
 
       {:error, reason} ->
         Logger.warning("Franchise request failed for tmdb #{entry.tmdb_id}: #{inspect(reason)}")
 
-        {:noreply, put_flash(socket, :error, "Could not request that movie")}
+        {:noreply, put_flash(socket, :error, gettext("Could not request that movie"))}
     end
   end
 
@@ -352,7 +364,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   defp describe({:changeset, changeset}),
     do: MediaAddHelpers.format_changeset_errors(changeset)
 
-  defp describe({:metadata, _reason}), do: "the metadata service could not be reached"
+  defp describe({:metadata, _reason}), do: gettext("the metadata service could not be reached")
   defp describe(:restricted), do: Media.restricted_message()
   defp describe(reason), do: inspect(reason)
 end

@@ -48,7 +48,10 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
             else: "badge-ghost"
           )
         ]}>
-          {@franchise.owned_count} of {@franchise.total_count}
+          {gettext("%{owned} of %{total}",
+            owned: @franchise.owned_count,
+            total: @franchise.total_count
+          )}
         </span>
       </:badge>
     </DiscoverComponents.media_rail>

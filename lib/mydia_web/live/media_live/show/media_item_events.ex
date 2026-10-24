@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3, push_navigate: 2, start_async: 3, connected?: 1]
 
@@ -10,6 +12,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.MediaLive.DiskRemovalFlash
   alias MydiaWeb.MediaLive.Show.Loaders
+  alias MydiaWeb.MediaLive.Show.SeasonOrderComponents
   alias Phoenix.LiveView.AsyncResult
 
   import MydiaWeb.MediaLive.Show.Helpers, only: [media_type_path: 1]
@@ -95,7 +98,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
         {:error, _changeset} ->
           {:noreply,
            socket
-           |> put_flash(:error, "Failed to delete #{media_item.title}")
+           |> put_flash(:error, gettext("Failed to delete %{title}", title: media_item.title))
            |> assign(:show_delete_confirm, false)}
       end
     else
@@ -219,8 +222,16 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
   def change_season_order(%{"order" => order_param}, socket) do
     with :ok <- Authorization.authorize_update_media(socket) do
       case Enum.find(SeasonOrder.values(), &(Atom.to_string(&1) == order_param)) do
-        nil -> {:noreply, put_flash(socket, :error, "Unknown episode ordering: #{order_param}")}
-        target -> do_change_season_order(target, socket)
+        nil ->
+          {:noreply,
+           put_flash(
+             socket,
+             :error,
+             gettext("Unknown episode ordering: %{order}", order: order_param)
+           )}
+
+        target ->
+          do_change_season_order(target, socket)
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -231,7 +242,8 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
   # above cannot match. Without this, it takes the whole LiveView down with a
   # FunctionClauseError instead of a flash.
   def change_season_order(_params, socket) do
-    {:noreply, put_flash(socket, :error, "Unknown episode ordering: missing order parameter")}
+    {:noreply,
+     put_flash(socket, :error, gettext("Unknown episode ordering: missing order parameter"))}
   end
 
   defp do_change_season_order(target, socket) do
@@ -247,7 +259,12 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
            Loaders.load_media_item(socket.assigns.current_scope, media_item.id)
          )
          |> assign(:season_order_suggestion, nil)
-         |> put_flash(:info, "Keeping #{SeasonOrder.label(target)}.")}
+         |> put_flash(
+           :info,
+           gettext("Keeping %{ordering}.",
+             ordering: SeasonOrderComponents.season_order_label(target)
+           )
+         )}
 
       {:ok, count} ->
         {:noreply,
@@ -259,7 +276,10 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
          |> assign(:season_order_suggestion, nil)
          |> put_flash(
            :info,
-           "Switched to #{SeasonOrder.label(target)} — #{count} episode(s) remapped."
+           gettext("Switched to %{ordering} — %{count} episode(s) remapped.",
+             ordering: SeasonOrderComponents.season_order_label(target),
+             count: count
+           )
          )}
 
       {:error, {:incomplete_ordering, missing_count}} ->
@@ -267,8 +287,11 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
          put_flash(
            socket,
            :error,
-           "TVDB's #{SeasonOrder.label(target)} is missing #{missing_count} of this show's " <>
-             "episodes, so nothing was changed."
+           gettext(
+             "TVDB's %{ordering} is missing %{missing} of this show's episodes, so nothing was changed.",
+             ordering: SeasonOrderComponents.season_order_label(target),
+             missing: missing_count
+           )
          )}
 
       {:error, :missing_provider_ids} ->
@@ -276,8 +299,9 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
          put_flash(
            socket,
            :error,
-           "Some of this show's episodes are missing their provider id. Refresh this " <>
-             "show's metadata, then try again."
+           gettext(
+             "Some of this show's episodes are missing their provider id. Refresh this show's metadata, then try again."
+           )
          )}
 
       {:error, :conflicting_mapping} ->
@@ -285,8 +309,9 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
          put_flash(
            socket,
            :error,
-           "That ordering would place two episodes on the same season and episode " <>
-             "number, so nothing was changed."
+           gettext(
+             "That ordering would place two episodes on the same season and episode number, so nothing was changed."
+           )
          )}
 
       {:error, :no_alternative_ordering} ->
@@ -294,12 +319,18 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
          put_flash(
            socket,
            :error,
-           "TVDB does not list #{SeasonOrder.label(target)} for this show."
+           gettext("TVDB does not list %{ordering} for this show.",
+             ordering: SeasonOrderComponents.season_order_label(target)
+           )
          )}
 
       {:error, :missing_tvdb_id} ->
         {:noreply,
-         put_flash(socket, :error, "This show has no TVDB id to look up orderings from.")}
+         put_flash(
+           socket,
+           :error,
+           gettext("This show has no TVDB id to look up orderings from.")
+         )}
 
       {:error, reason} ->
         Logger.warning("change_season_order failed",
@@ -309,7 +340,11 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
         )
 
         {:noreply,
-         put_flash(socket, :error, "Could not fetch that ordering from TVDB. Try again later.")}
+         put_flash(
+           socket,
+           :error,
+           gettext("Could not fetch that ordering from TVDB. Try again later.")
+         )}
     end
   end
 end

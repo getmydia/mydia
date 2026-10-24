@@ -32,21 +32,6 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :item_collections, :list, default: []
   attr :user_collections, :list, default: []
 
-  # Labels only. The list of valid presets is Media.monitoring_presets/0, and
-  # this is checked against it at compile time so the two cannot drift.
-  @preset_labels %{
-    all: "All Episodes",
-    missing: "Missing Episodes",
-    existing: "Existing Episodes",
-    future: "Future Episodes",
-    none: "No Episodes"
-  }
-
-  @monitoring_presets Enum.map(
-                        Mydia.Media.monitoring_presets(),
-                        &{&1, Map.fetch!(@preset_labels, &1)}
-                      )
-
   def hero_section(assigns) do
     ~H"""
     <%!-- Left Column: Poster and Quick Actions --%>
@@ -102,7 +87,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             }
             class="btn btn-primary btn-block"
           >
-            <.icon name="hero-play-circle-solid" class="w-5 h-5" /> Play Movie
+            <.icon name="hero-play-circle-solid" class="w-5 h-5" /> {gettext("Play Movie")}
           </a>
 
           <div class="divider my-1"></div>
@@ -132,7 +117,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         <div class="grid grid-cols-2 gap-2">
           <div class="col-span-2">
             <div class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-1">
-              Search
+              {pgettext("search", "Search")}
             </div>
           </div>
           <button
@@ -142,9 +127,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             disabled={@auto_searching || !can_auto_search?(@media_item, @downloads_with_status)}
           >
             <%= if @auto_searching do %>
-              <span class="loading loading-spinner loading-sm"></span> Searching...
+              <span class="loading loading-spinner loading-sm"></span> {gettext("Searching...")}
             <% else %>
-              <.icon name="hero-bolt" class="w-5 h-5" /> Auto
+              <.icon name="hero-bolt" class="w-5 h-5" /> {gettext("Auto")}
             <% end %>
           </button>
           <button
@@ -153,7 +138,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             phx-click="manual_search"
             class="btn btn-outline"
           >
-            <.icon name="hero-magnifying-glass" class="w-5 h-5" /> Manual
+            <.icon name="hero-magnifying-glass" class="w-5 h-5" /> {gettext("Manual")}
           </button>
           <button
             :if={@media_item.type == "movie" and not has_media_files?(@media_item)}
@@ -162,7 +147,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             phx-click="open_find_file"
             class="btn btn-outline col-span-2"
           >
-            <.icon name="hero-document-magnifying-glass" class="w-5 h-5" /> Find file on disk
+            <.icon name="hero-document-magnifying-glass" class="w-5 h-5" /> {gettext(
+              "Find file on disk"
+            )}
           </button>
 
           <%!-- Favorite and Collection actions --%>
@@ -174,13 +161,19 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               @is_favorite && "btn-error",
               !@is_favorite && "btn-outline"
             ]}
-            title={if @is_favorite, do: "Remove from Favorites", else: "Add to Favorites"}
+            title={
+              if @is_favorite,
+                do: gettext("Remove from Favorites"),
+                else: gettext("Add to Favorites")
+            }
           >
             <.icon
               name={if @is_favorite, do: "hero-heart-solid", else: "hero-heart"}
               class="w-5 h-5"
             />
-            <span class="hidden sm:inline">{if @is_favorite, do: "Favorited", else: "Favorite"}</span>
+            <span class="hidden sm:inline">
+              {if @is_favorite, do: gettext("Favorited"), else: gettext("Favorite")}
+            </span>
           </button>
 
           <%!-- Opens a page-level modal (Modals.add_to_collection_modal/1) rather
@@ -196,7 +189,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             class="btn btn-outline w-full"
           >
             <.icon name="hero-folder-plus" class="w-5 h-5" />
-            <span class="hidden sm:inline">Collection</span>
+            <span class="hidden sm:inline">{gettext("Collection")}</span>
           </button>
         </div>
 
@@ -225,18 +218,18 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             type="button"
             phx-click="show_quality_profile_modal"
             class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-base-300/50 transition-colors w-full group"
-            title="Click to change quality profile"
+            title={gettext("Click to change quality profile")}
           >
             <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
               <.icon name="hero-adjustments-horizontal" class="w-4 h-4 text-primary" />
             </div>
             <div class="flex-1 min-w-0 text-left">
-              <div class="text-xs text-base-content/50">Quality Profile</div>
+              <div class="text-xs text-base-content/50">{gettext("Quality Profile")}</div>
               <div class="text-sm font-medium truncate">
                 <%= if Ecto.assoc_loaded?(@media_item.quality_profile) and @media_item.quality_profile do %>
                   {@media_item.quality_profile.name}
                 <% else %>
-                  <span class="text-base-content/40">Not Set</span>
+                  <span class="text-base-content/40">{gettext("Not Set")}</span>
                 <% end %>
               </div>
             </div>
@@ -260,13 +253,13 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             type="button"
             phx-click="show_category_modal"
             class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-base-300/50 transition-colors w-full group"
-            title="Click to change category"
+            title={gettext("Click to change category")}
           >
             <div class="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center flex-shrink-0">
               <.icon name="hero-tag" class="w-4 h-4 text-secondary" />
             </div>
             <div class="flex-1 min-w-0 text-left">
-              <div class="text-xs text-base-content/50">Category</div>
+              <div class="text-xs text-base-content/50">{gettext("Category")}</div>
               <div class="text-sm font-medium">
                 <%= if @media_item.category do %>
                   <.category_badge
@@ -275,7 +268,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   />
                 <% else %>
                   <span class="badge badge-ghost badge-sm">
-                    {if @media_item.type == "movie", do: "Movie", else: "TV Show"}
+                    {if @media_item.type == "movie",
+                      do: gettext("Movie"),
+                      else: gettext("TV Show")}
                   </span>
                 <% end %>
               </div>
@@ -293,7 +288,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                 <.icon name="hero-folder" class="w-4 h-4 text-accent" />
               </div>
               <div class="flex-1 min-w-0">
-                <div class="text-xs text-base-content/50">Path</div>
+                <div class="text-xs text-base-content/50">{gettext("Path")}</div>
                 <div class="text-xs font-mono truncate" title={path}>
                   {path}
                 </div>
@@ -307,7 +302,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               <.icon name="hero-circle-stack" class="w-4 h-4 text-info" />
             </div>
             <div class="flex-1 min-w-0">
-              <div class="text-xs text-base-content/50">Size on Disk</div>
+              <div class="text-xs text-base-content/50">{gettext("Size on Disk")}</div>
               <div class="text-sm font-medium font-mono">
                 {format_file_size(total_media_size(@media_item))}
               </div>
@@ -356,7 +351,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             class="btn btn-sm 2xl:btn-md btn-soft btn-primary gap-1.5"
           >
             <.icon name="hero-play-circle" class="w-4 h-4 2xl:w-5 2xl:h-5" />
-            <span>Trailer</span>
+            <span>{gettext("Trailer")}</span>
           </button>
         <% end %>
 
@@ -369,7 +364,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               class="btn btn-sm 2xl:btn-md btn-soft btn-primary gap-1.5"
             >
               <.icon name="hero-users" class="w-4 h-4 2xl:w-5 2xl:h-5" />
-              <span>Cast</span>
+              <span>{gettext("Cast")}</span>
               <.icon name="hero-chevron-down" class="w-3 h-3 2xl:w-4 2xl:h-4 opacity-60" />
             </div>
             <div
@@ -380,7 +375,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                 <%= if @crew != [] do %>
                   <div class="mb-3">
                     <div class="text-xs font-semibold text-base-content/50 uppercase mb-2">
-                      Crew
+                      {gettext("Crew")}
                     </div>
                     <div class="space-y-1">
                       <div :for={member <- Enum.take(@crew, 3)} class="text-sm">
@@ -392,7 +387,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                 <% end %>
                 <%= if @cast != [] do %>
                   <div class="text-xs font-semibold text-base-content/50 uppercase mb-2">
-                    Cast
+                    {gettext("Cast")}
                   </div>
                   <div class="space-y-1.5">
                     <div :for={actor <- Enum.take(@cast, 6)} class="flex items-center gap-2">
@@ -409,7 +404,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       </div>
                       <div class="text-sm">
                         <span class="font-medium">{actor.name}</span>
-                        <span class="text-base-content/60 text-xs">as {actor.character}</span>
+                        <span class="text-base-content/60 text-xs">
+                          {gettext("as %{character}", character: actor.character)}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -446,7 +443,14 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :can_update_media, :boolean, required: true
 
   def episodes_section(assigns) do
-    assigns = assign(assigns, :monitoring_presets, @monitoring_presets)
+    # The list of valid presets is Media.monitoring_presets/0; the labels are
+    # resolved here, at render time, so they follow the current locale.
+    assigns =
+      assign(
+        assigns,
+        :monitoring_presets,
+        Enum.map(Mydia.Media.monitoring_presets(), &{&1, monitoring_preset_label(&1)})
+      )
 
     ~H"""
     <%= if @media_item.type == "tv_show" && length(@media_item.episodes) > 0 do %>
@@ -457,17 +461,19 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         <%!-- Card header with stats --%>
         <div class="card-body p-4 pb-0">
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <h2 class="card-title text-lg">Seasons & Episodes</h2>
+            <h2 class="card-title text-lg">{gettext("Seasons & Episodes")}</h2>
             <div class="flex items-center gap-2 sm:gap-4 text-sm flex-wrap">
               <span class="text-base-content/60">
-                {length(grouped_seasons)} seasons
+                {ngettext("%{count} season", "%{count} seasons", length(grouped_seasons))}
               </span>
               <span class="text-base-content/60">•</span>
               <span class="text-success">
-                {Enum.count(@media_item.episodes, &(length(&1.media_files) > 0))} available
+                {gettext("%{count} available",
+                  count: Enum.count(@media_item.episodes, &(length(&1.media_files) > 0))
+                )}
               </span>
               <span class="text-base-content/60">/</span>
-              <span>{length(@media_item.episodes)} total</span>
+              <span>{gettext("%{count} total", count: length(@media_item.episodes))}</span>
               <span class="text-base-content/60">•</span>
               <span id="show-total-size" class="text-base-content/70 font-mono">
                 {format_file_size(total_media_size(@media_item))}
@@ -479,7 +485,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     the preset made it unsayable. --%>
               <label
                 class="flex items-center gap-1.5 cursor-pointer text-base-content/70"
-                title="Whether a season added later arrives monitored. Episodes added to a season you already have follow that season instead."
+                title={
+                  gettext(
+                    "Whether a season added later arrives monitored. Episodes added to a season you already have follow that season instead."
+                  )
+                }
               >
                 <input
                   type="checkbox"
@@ -488,7 +498,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   checked={@media_item.monitor_new_seasons == :all}
                   phx-click="toggle_monitor_new_seasons"
                 />
-                <span>New seasons</span>
+                <span>{gettext("New seasons")}</span>
               </label>
 
               <%!-- One-shot bulk actions. The label reads the episode rows
@@ -694,7 +704,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         id={"play-#{@file.id}"}
         href={@play_url}
         class={@square}
-        title="Play this file"
+        title={gettext("Play this file")}
       >
         <.icon name="hero-play-solid" class={@icon} />
       </a>
@@ -705,13 +715,17 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         data-href={MydiaWeb.StreamLink.path(@current_user_id, @file)}
         phx-click={JS.dispatch("mydia:copy-href")}
         class={["group", @primary]}
-        title="Copy a link to paste into VLC, mpv or Infuse. Anyone with it can stream this file."
+        title={
+          gettext(
+            "Copy a link to paste into VLC, mpv or Infuse. Anyone with it can stream this file."
+          )
+        }
       >
         <.icon name="hero-link" class={"#{@icon} group-data-[copied]:hidden"} />
         <.icon name="hero-check" class={"#{@icon} hidden group-data-[copied]:inline-block"} />
         <span class={@label} aria-live="polite">
-          <span class="group-data-[copied]:hidden">Copy stream link</span>
-          <span class="hidden group-data-[copied]:inline">Copied</span>
+          <span class="group-data-[copied]:hidden">{gettext("Copy stream link")}</span>
+          <span class="hidden group-data-[copied]:inline">{gettext("Copied")}</span>
         </span>
       </button>
       <button
@@ -720,8 +734,8 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         phx-click="open_subtitle_manage"
         phx-value-media-file-id={@file.id}
         class={@square}
-        aria-label="Manage subtitles"
-        title="Subtitles"
+        aria-label={gettext("Manage subtitles")}
+        title={gettext("Subtitles")}
       >
         <.icon name="hero-language" class={@icon} />
       </button>
@@ -731,13 +745,19 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         phx-click="show_file_details"
         phx-value-file-id={@file.id}
         class={@square}
-        aria-label="View file details"
-        title="View file details"
+        aria-label={gettext("View file details")}
+        title={gettext("View file details")}
       >
         <.icon name="hero-information-circle" class={@icon} />
       </button>
       <div class="dropdown dropdown-end z-20">
-        <div tabindex="0" role="button" class={@square} aria-label="More file actions" title="More">
+        <div
+          tabindex="0"
+          role="button"
+          class={@square}
+          aria-label={gettext("More file actions")}
+          title={gettext("More")}
+        >
           <.icon name="hero-ellipsis-horizontal" class={@icon} />
         </div>
         <ul
@@ -753,11 +773,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               phx-value-file-id={@file.id}
               class="gap-2"
             >
-              <.icon name="hero-star" class="w-4 h-4" /> Mark as preferred
+              <.icon name="hero-star" class="w-4 h-4" /> {gettext("Mark as preferred")}
             </button>
           </li>
           <%= if @resolutions != [] do %>
-            <li class="menu-title">Pre-transcode</li>
+            <li class="menu-title">{gettext("Pre-transcode")}</li>
             <li :for={res <- @resolutions}>
               <button
                 id={"pre-transcode-#{@file.id}-#{res}"}
@@ -782,7 +802,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               phx-value-id={@file.id}
               class="gap-2"
             >
-              <.icon name="hero-chevron-double-down" class="w-4 h-4" /> Move to extras
+              <.icon name="hero-chevron-double-down" class="w-4 h-4" /> {gettext("Move to extras")}
             </button>
           </li>
           <%!-- Recovery for a file the matcher attached to the wrong item.
@@ -795,9 +815,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               phx-click={JS.push("not_this_item") |> JS.dispatch("mydia:blur")}
               phx-value-file-id={@file.id}
               class="gap-2"
-              aria-label={"This file is not this #{@item_label}"}
+              aria-label={not_this_item_aria_label(@item_label)}
             >
-              <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Not this {@item_label}
+              <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> {not_this_item_label(@item_label)}
             </button>
           </li>
           <li class="divider my-1"></li>
@@ -809,7 +829,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               phx-value-file-id={@file.id}
               class="gap-2 text-error"
             >
-              <.icon name="hero-trash" class="w-4 h-4" /> Delete file
+              <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Delete file")}
             </button>
           </li>
         </ul>
@@ -817,6 +837,15 @@ defmodule MydiaWeb.MediaLive.Show.Components do
     </div>
     """
   end
+
+  # `item_label` is a key ("episode", "movie" or "show"), not display text.
+  defp not_this_item_label("episode"), do: gettext("Not this episode")
+  defp not_this_item_label("movie"), do: gettext("Not this movie")
+  defp not_this_item_label("show"), do: gettext("Not this show")
+
+  defp not_this_item_aria_label("episode"), do: gettext("This file is not this episode")
+  defp not_this_item_aria_label("movie"), do: gettext("This file is not this movie")
+  defp not_this_item_aria_label("show"), do: gettext("This file is not this show")
 
   defp file_action_square_class("mfrow"), do: "btn btn-ghost btn-square @md/mfrow:btn-sm"
   defp file_action_square_class("eprow"), do: "btn btn-ghost btn-square @md/eprow:btn-xs"
@@ -905,7 +934,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               61px and still leaves 768px 71px clear on the other side; 448
               has no significance beyond that margin. --%>
         <div class="@container/mfrow card-body p-4 md:p-6">
-          <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Media Files</h2>
+          <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">{gettext("Media Files")}</h2>
           <%!-- DaisyUI list component.
 
                 w-full and flex-nowrap on the <ul>, flex-nowrap on the <li>, and
@@ -971,15 +1000,21 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       class="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-base-content/70 items-center"
                     >
                       <span class="badge badge-primary badge-sm">
-                        {file.resolution || "Unknown"}
+                        {file.resolution || gettext("Unknown")}
                       </span>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-film" class="w-3.5 h-3.5" />
-                        <span title={file.codec}>{shorten_codec(file.codec) || "Unknown"}</span>
+                        <span title={file.codec}>
+                          {shorten_codec(file.codec) || gettext("Unknown")}
+                        </span>
                       </div>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-speaker-wave" class="w-3.5 h-3.5" />
-                        <.audio_tracks file={file} id={"version-#{file.id}"} fallback="Unknown" />
+                        <.audio_tracks
+                          file={file}
+                          id={"version-#{file.id}"}
+                          fallback={gettext("Unknown")}
+                        />
                       </div>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-circle-stack" class="w-3.5 h-3.5" />
@@ -1014,7 +1049,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
 
           <details :if={@extras != []} id="extras-disclosure" class="mt-4">
             <summary class="cursor-pointer text-sm font-medium text-base-content/70 hover:text-base-content">
-              Extras ({length(@extras)})
+              {gettext("Extras (%{count})", count: length(@extras))}
             </summary>
             <%!-- Same w-full/flex-nowrap/items-stretch overrides as the versions
                   <ul> above, and for the same reason: without them this list
@@ -1037,7 +1072,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     <div class="flex flex-wrap gap-2 text-xs text-base-content/60">
                       <span class="badge badge-ghost badge-sm">{file.extra_kind}</span>
                       <span class="badge badge-ghost badge-sm">
-                        detected by {file.extra_source}
+                        {gettext("detected by %{source}", source: file.extra_source)}
                       </span>
                       <span class="font-mono">{format_file_size(file.size)}</span>
                     </div>
@@ -1046,11 +1081,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     id={"promote-#{file.id}"}
                     type="button"
                     class="btn btn-ghost self-end @md/mfrow:self-auto @md/mfrow:btn-sm"
-                    title="This is a version, not an extra"
+                    title={gettext("This is a version, not an extra")}
                     phx-click="promote_to_version"
                     phx-value-id={file.id}
                   >
-                    <.icon name="hero-chevron-double-up" class="w-4 h-4" /> Version
+                    <.icon name="hero-chevron-double-up" class="w-4 h-4" /> {gettext("Version")}
                   </button>
                 </div>
               </li>
@@ -1097,10 +1132,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           {@job.resolution} {format_transcode_progress(@job.progress)}
         <% "pending" -> %>
           <.icon name="hero-clock" class="w-3 h-3" />
-          {@job.resolution} queued
+          {gettext("%{resolution} queued", resolution: @job.resolution)}
         <% "failed" -> %>
           <.icon name="hero-exclamation-triangle-mini" class="w-3 h-3" />
-          {@job.resolution} failed
+          {gettext("%{resolution} failed", resolution: @job.resolution)}
         <% _other -> %>
           {@job.resolution}
       <% end %>
@@ -1110,7 +1145,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           phx-click="cancel_transcode"
           phx-value-job-id={@job.id}
           class="ml-1 hover:text-error"
-          title="Cancel transcode"
+          title={gettext("Cancel transcode")}
         >
           <.icon name="hero-x-mark-mini" class="w-3 h-3" />
         </button>
@@ -1190,7 +1225,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
     <%= if length(@timeline_events) > 0 do %>
       <div id="timeline-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6">
-          <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">History</h2>
+          <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">{gettext("History")}</h2>
           <div class="relative">
             <%!-- The spine. Inset to the centre of the 32px icon nodes below
                   (left-4 is 16px), so every node sits on it. --%>
@@ -1268,7 +1303,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             aria-expanded={@expanded}
             class="btn btn-ghost btn-sm justify-start self-start mt-2 -mb-1"
           >
-            {if @expanded, do: "Show less", else: "Show #{@hidden_count} more"}
+            {if @expanded,
+              do: gettext("Show less"),
+              else: gettext("Show %{count} more", count: @hidden_count)}
           </button>
         </div>
       </div>
@@ -1299,7 +1336,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         name={if @media_item.monitored, do: "hero-bookmark-solid", else: "hero-bookmark"}
         class="w-5 h-5"
       />
-      <span>{if @media_item.monitored, do: "Monitored", else: "Not Monitored"}</span>
+      <span>
+        {if @media_item.monitored,
+          do: pgettext("monitoring", "Monitored"),
+          else: pgettext("monitoring", "Not Monitored")}
+      </span>
     </button>
     """
   end

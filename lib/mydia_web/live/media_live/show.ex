@@ -653,7 +653,7 @@ defmodule MydiaWeb.MediaLive.Show do
       socket =
         cond do
           socket.assigns.auto_searching ->
-            put_flash(socket, :info, "Download started: #{download.title}")
+            put_flash(socket, :info, gettext("Download started: %{title}", title: download.title))
 
           socket.assigns.auto_searching_season &&
             download.episode_id &&
@@ -662,11 +662,11 @@ defmodule MydiaWeb.MediaLive.Show do
                 download.episode_id,
                 socket.assigns.auto_searching_season
               ) ->
-            put_flash(socket, :info, "Download started: #{download.title}")
+            put_flash(socket, :info, gettext("Download started: %{title}", title: download.title))
 
           socket.assigns.auto_searching_episode &&
               download.episode_id == socket.assigns.auto_searching_episode ->
-            put_flash(socket, :info, "Download started: #{download.title}")
+            put_flash(socket, :info, gettext("Download started: %{title}", title: download.title))
 
           true ->
             socket
@@ -705,7 +705,7 @@ defmodule MydiaWeb.MediaLive.Show do
       if socket.assigns.auto_searching do
         socket
         |> assign(:auto_searching, false)
-        |> put_flash(:warning, "Search timed out - no response from search job")
+        |> put_flash(:warning, gettext("Search timed out - no response from search job"))
       else
         socket
       end
@@ -749,7 +749,9 @@ defmodule MydiaWeb.MediaLive.Show do
         |> assign(:auto_searching_season, nil)
         |> put_flash(
           :warning,
-          "Search completed but no suitable releases found for season #{season_num}"
+          gettext("Search completed but no suitable releases found for season %{season}",
+            season: season_num
+          )
         )
       else
         socket
@@ -768,7 +770,10 @@ defmodule MydiaWeb.MediaLive.Show do
         |> assign(:auto_searching_episode, nil)
         |> put_flash(
           :warning,
-          "Search completed but no suitable releases found for S#{episode.season_number}E#{episode.episode_number}"
+          gettext("Search completed but no suitable releases found for S%{season}E%{episode}",
+            season: episode.season_number,
+            episode: episode.episode_number
+          )
         )
       else
         socket
@@ -994,16 +999,27 @@ defmodule MydiaWeb.MediaLive.Show do
 
     cond do
       Map.get(stats, :error) ->
-        "Search failed: #{stats.error}"
+        gettext("Search failed: %{reason}", reason: stats.error)
 
       picked_up > 0 ->
-        "Search complete: #{indexers} indexer(s) searched, #{results} result(s) found, #{picked_up} download(s) started"
+        gettext(
+          "Search complete: %{indexers} indexer(s) searched, %{results} result(s) found, %{picked_up} download(s) started",
+          indexers: indexers,
+          results: results,
+          picked_up: picked_up
+        )
 
       results > 0 ->
-        "Search complete: #{indexers} indexer(s) searched, #{results} result(s) found, but none matched quality criteria"
+        gettext(
+          "Search complete: %{indexers} indexer(s) searched, %{results} result(s) found, but none matched quality criteria",
+          indexers: indexers,
+          results: results
+        )
 
       true ->
-        "Search complete: #{indexers} indexer(s) searched, no results found"
+        gettext("Search complete: %{indexers} indexer(s) searched, no results found",
+          indexers: indexers
+        )
     end
   end
 end

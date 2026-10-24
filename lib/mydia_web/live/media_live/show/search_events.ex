@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3, start_async: 3, stream: 4, stream_insert: 3]
 
@@ -92,7 +94,10 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
           {:noreply,
            socket
            |> assign(:auto_searching, true)
-           |> put_flash(:info, "Searching indexers for #{media_item.title}...")}
+           |> put_flash(
+             :info,
+             gettext("Searching indexers for %{title}...", title: media_item.title)
+           )}
 
         "tv_show" ->
           %{mode: "show", media_item_id: media_item.id, bypass_delay: true}
@@ -109,7 +114,10 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
           {:noreply,
            socket
            |> assign(:auto_searching, true)
-           |> put_flash(:info, "Searching for all missing episodes of #{media_item.title}...")}
+           |> put_flash(
+             :info,
+             gettext("Searching for all missing episodes of %{title}...", title: media_item.title)
+           )}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -218,7 +226,10 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     {:noreply,
      socket
      |> assign(:auto_searching_season, season_num)
-     |> put_flash(:info, "Searching for season #{season_num} (preferring season pack)...")}
+     |> put_flash(
+       :info,
+       gettext("Searching for season %{season} (preferring season pack)...", season: season_num)
+     )}
   end
 
   def auto_search_episode(%{"episode-id" => episode_id}, socket) do
@@ -241,7 +252,10 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:auto_searching_episode, episode_id)
      |> put_flash(
        :info,
-       "Searching for S#{episode.season_number}E#{episode.episode_number}..."
+       gettext("Searching for S%{season}E%{episode}...",
+         season: episode.season_number,
+         episode: episode.episode_number
+       )
      )}
   end
 
@@ -332,12 +346,18 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
 
   def handle_retry_async(indexer_id, {:ok, {:error, reason}}, socket) do
     Logger.error("Indexer retry failed: #{inspect(reason)}")
-    {:noreply, restore_retry_error(socket, indexer_id, "Retry failed: #{inspect(reason)}")}
+
+    {:noreply,
+     restore_retry_error(
+       socket,
+       indexer_id,
+       gettext("Retry failed: %{reason}", reason: inspect(reason))
+     )}
   end
 
   def handle_retry_async(indexer_id, {:exit, reason}, socket) do
     Logger.error("Indexer retry crashed: #{inspect(reason)}")
-    {:noreply, restore_retry_error(socket, indexer_id, "Retry failed unexpectedly")}
+    {:noreply, restore_retry_error(socket, indexer_id, gettext("Retry failed unexpectedly"))}
   end
 
   # Map.replace_lazy/3 for the same reason handle_retry_indexer/2 uses it: an
@@ -428,7 +448,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
         {:noreply, assign(socket, :close_after_grab, new_value)}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not save preference")}
+        {:noreply, put_flash(socket, :error, gettext("Could not save preference"))}
     end
   end
 
@@ -506,7 +526,10 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
             if socket.assigns.close_after_grab do
               socket
               |> reset_search_modal()
-              |> put_flash(:info, "Grabbing \"#{title}\" — progress will appear on this page")
+              |> put_flash(
+                :info,
+                gettext("Grabbing \"%{title}\" — progress will appear on this page", title: title)
+              )
             else
               socket
             end
@@ -514,7 +537,12 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
           {:noreply, socket}
 
         {:error, _changeset} ->
-          {:noreply, assign(socket, :download_error, "Could not start download for \"#{title}\"")}
+          {:noreply,
+           assign(
+             socket,
+             :download_error,
+             gettext("Could not start download for \"%{title}\"", title: title)
+           )}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -623,7 +651,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     {:noreply,
      socket
      |> assign(:searching, false)
-     |> put_flash(:error, "Search failed: #{inspect(reason)}")}
+     |> put_flash(:error, gettext("Search failed: %{reason}", reason: inspect(reason)))}
   end
 
   def handle_search_async({:exit, reason}, socket) do
@@ -632,7 +660,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     {:noreply,
      socket
      |> assign(:searching, false)
-     |> put_flash(:error, "Search failed unexpectedly")}
+     |> put_flash(:error, gettext("Search failed unexpectedly"))}
   end
 
   # Grab pipeline PubSub handlers (topic "downloads", broadcast by

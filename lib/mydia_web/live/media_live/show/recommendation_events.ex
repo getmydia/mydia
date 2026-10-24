@@ -1,6 +1,7 @@
 defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
   use MydiaWeb, :verified_routes
 
   import Phoenix.Component, only: [assign: 3]
@@ -108,7 +109,11 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
 
       {:error, :unknown_library} ->
         {:noreply,
-         put_flash(socket, :error, "That library is no longer available. Nothing was added.")}
+         put_flash(
+           socket,
+           :error,
+           gettext("That library is no longer available. Nothing was added.")
+         )}
 
       :error ->
         {:noreply, socket}
@@ -234,7 +239,10 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
         {:noreply,
          socket
          |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
-         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")}
+         |> put_flash(
+           :info,
+           gettext("%{title} requested. An admin will review it soon.", title: request.title)
+         )}
 
       {:error, reason} ->
         Logger.warning("Recommendation request failed for tmdb #{tmdb_id}: #{inspect(reason)}")
@@ -242,7 +250,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
         {:noreply,
          socket
          |> assign(:requesting_recommendation_id, nil)
-         |> put_flash(:error, "Could not request that title")}
+         |> put_flash(:error, gettext("Could not request that title"))}
     end
   end
 
@@ -287,7 +295,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     {:noreply,
      socket
      |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
-     |> put_flash(:info, "Added #{added.title} to your library")}
+     |> put_flash(:info, gettext("Added %{title} to your library", title: added.title))}
   end
 
   # Not an error from here up: the title the user clicked is already in the
@@ -305,7 +313,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     {:noreply,
      socket
      |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
-     |> put_flash(:info, "#{added.title} is already in your library")}
+     |> put_flash(:info, gettext("%{title} is already in your library", title: added.title))}
   end
 
   def handle_add_result(tmdb_id, {:ok, {:error, reason}}, socket) do
@@ -314,7 +322,10 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     {:noreply,
      socket
      |> clear_in_flight(tmdb_id)
-     |> put_flash(:error, "Could not add that title: #{describe(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Could not add that title: %{reason}", reason: describe(reason))
+     )}
   end
 
   def handle_add_result(tmdb_id, {:exit, reason}, socket) do
@@ -323,7 +334,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     {:noreply,
      socket
      |> clear_in_flight(tmdb_id)
-     |> put_flash(:error, "Could not add that title")}
+     |> put_flash(:error, gettext("Could not add that title"))}
   end
 
   ## Private
@@ -446,7 +457,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   defp describe({:changeset, changeset}),
     do: MediaAddHelpers.format_changeset_errors(changeset)
 
-  defp describe({:metadata, _reason}), do: "the metadata service could not be reached"
+  defp describe({:metadata, _reason}), do: gettext("the metadata service could not be reached")
   defp describe(:restricted), do: Media.restricted_message()
   defp describe(reason), do: inspect(reason)
 end

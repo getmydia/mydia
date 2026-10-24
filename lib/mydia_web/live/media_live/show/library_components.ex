@@ -40,7 +40,7 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
         phx-click="show_target_library_modal"
         data-test="target-library"
         class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg w-full group transition-colors cursor-pointer hover:bg-base-300/50"
-        title="Click to change the download library"
+        title={gettext("Click to change the download library")}
       >
         <.target_library_row_content
           target_library={@target_library}
@@ -73,7 +73,7 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
       <.icon name="hero-folder" class="w-4 h-4 text-accent" />
     </div>
     <div class="flex-1 min-w-0 text-left">
-      <div class="text-xs text-base-content/50">Library</div>
+      <div class="text-xs text-base-content/50">{pgettext("library", "Library")}</div>
       <div class="text-sm font-medium truncate">
         <%= if @target_library do %>
           {LibraryPath.display_name(@target_library)}
@@ -81,7 +81,7 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
             {reason_label(@target_reason)}
           </span>
         <% else %>
-          <span class="text-base-content/40">No compatible library</span>
+          <span class="text-base-content/40">{gettext("No compatible library")}</span>
         <% end %>
       </div>
     </div>
@@ -93,10 +93,10 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
     """
   end
 
-  defp reason_label(:download_override), do: "set on the download"
-  defp reason_label(:explicit), do: "chosen"
-  defp reason_label(:existing_files), do: "matches existing files"
-  defp reason_label(:type_default), do: "library default"
-  defp reason_label(:first_compatible), do: "first compatible library"
+  defp reason_label(:download_override), do: gettext("set on the download")
+  defp reason_label(:explicit), do: gettext("chosen")
+  defp reason_label(:existing_files), do: gettext("matches existing files")
+  defp reason_label(:type_default), do: gettext("library default")
+  defp reason_label(:first_compatible), do: gettext("first compatible library")
   defp reason_label(_), do: ""
 end
