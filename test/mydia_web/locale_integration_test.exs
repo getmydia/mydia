@@ -47,7 +47,15 @@ defmodule MydiaWeb.LocaleIntegrationTest do
     conn = conn |> put_req_header("accept-language", "es") |> get(~p"/auth/login")
 
     refute es("Sign In") == "Sign In"
-    assert html_response(conn, 200) =~ es("Sign In")
+
+    heading =
+      conn
+      |> html_response(200)
+      |> LazyHTML.from_document()
+      |> LazyHTML.query("#login-heading")
+
+    assert Enum.count(heading) == 1
+    assert heading |> LazyHTML.text() |> String.trim() == es("Sign In")
   end
 
   test "the profile page is Spanish for a Spanish user", %{conn: conn} do
@@ -61,7 +69,43 @@ defmodule MydiaWeb.LocaleIntegrationTest do
     {:ok, view, _html} = conn |> log_in_user(user) |> live(~p"/profile")
 
     refute es("Language") == "Language"
-    assert view |> element("#interface-language-settings") |> render() =~ es("Language")
+
+    title =
+      view
+      |> element("#interface-language-title")
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.text()
+      |> String.trim()
+
+    assert title == es("Language")
+  end
+
+  test "a preference row without interface_language follows the browser", %{conn: conn} do
+    # Rows written before interface translations shipped lose a stored "en" in
+    # 20261024164324_reset_default_interface_language, leaving no key at all.
+    user = user_fixture()
+
+    user
+    |> Accounts.get_user_preference!()
+    |> Ecto.Changeset.change(preferences: %{"theme" => "dark"})
+    |> Mydia.Repo.update!()
+
+    conn = conn |> log_in_user(user) |> put_req_header("accept-language", "es")
+    {:ok, view, html} = live(conn, ~p"/profile")
+
+    assert html =~ ~s(<html lang="es")
+    assert lv_locale(view) == "es"
+  end
+
+  test "first-run setup takes the browser language", %{conn: conn} do
+    refute Accounts.any_users_exist?()
+
+    conn = put_req_header(conn, "accept-language", "es")
+    {:ok, view, html} = live(conn, ~p"/setup")
+
+    assert html =~ ~s(<html lang="es")
+    assert lv_locale(view) == "es"
   end
 
   # Gettext.put_locale/2 stores the locale in the calling process's dictionary
