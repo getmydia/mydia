@@ -1,8 +1,8 @@
 <Layouts.app {assigns}>
   <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
     <div>
-      <h1 class="text-3xl font-bold">Welcome to Mydia</h1>
-      <p class="text-base-content/70 mt-1">Your personal media management system</p>
+      <h1 class="text-3xl font-bold">{gettext("Welcome to Mydia")}</h1>
+      <p class="text-base-content/70 mt-1">{gettext("Your personal media management system")}</p>
     </div>
 
     <button
@@ -11,7 +11,7 @@
       phx-click="open_edit_home"
       class="btn btn-ghost btn-sm self-start md:self-center gap-1.5"
     >
-      <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> Edit Home
+      <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> {gettext("Edit Home")}
     </button>
   </div>
 
@@ -30,13 +30,13 @@
           <.icon name="hero-play-circle-solid" class="w-6 h-6 text-primary" />
         </div>
         <div class="flex-1 min-w-0">
-          <h3 class="font-semibold">Open the Mydia Player</h3>
+          <h3 class="font-semibold">{gettext("Open the Mydia Player")}</h3>
           <p class="text-sm text-base-content/60">
-            Watch your library right here, no separate app needed.
+            {gettext("Watch your library right here, no separate app needed.")}
           </p>
         </div>
         <span class="btn btn-primary btn-sm self-start sm:self-center shrink-0 group-hover:shadow-md transition-shadow">
-          Launch Player <.icon name="hero-arrow-right" class="w-4 h-4" />
+          {gettext("Launch Player")} <.icon name="hero-arrow-right" class="w-4 h-4" />
         </span>
       </a>
       <button
@@ -44,7 +44,7 @@
         type="button"
         phx-click="dismiss_player_banner"
         class="btn btn-sm btn-ghost btn-square self-start sm:self-center shrink-0"
-        aria-label="Dismiss"
+        aria-label={gettext("Dismiss")}
       >
         <.icon name="hero-x-mark" class="w-4 h-4" />
       </button>
@@ -63,33 +63,33 @@
           <Components.stat_tile
             id="stat-tile-movies"
             icon="hero-film"
-            label="Movies"
+            label={gettext("Movies")}
             value={@movie_count}
-            caption="Total movies"
+            caption={gettext("Total movies")}
             navigate={~p"/movies"}
           />
           <Components.stat_tile
             id="stat-tile-tv-shows"
             icon="hero-tv"
-            label="TV Shows"
+            label={gettext("TV Shows")}
             value={@tv_show_count}
-            caption="Total series"
+            caption={gettext("Total series")}
             navigate={~p"/tv"}
           />
           <Components.stat_tile
             id="stat-tile-downloads"
             icon="hero-arrow-down-tray"
-            label="Downloads"
+            label={gettext("Downloads")}
             value={@active_downloads_count}
-            caption="Active downloads"
+            caption={gettext("Active downloads")}
             navigate={~p"/downloads"}
           />
           <Components.stat_tile
             id="stat-tile-storage"
             icon="hero-circle-stack"
-            label="Storage"
+            label={gettext("Storage")}
             value={@total_storage}
-            caption="Total storage used"
+            caption={gettext("Total storage used")}
             navigate={if(admin?, do: ~p"/admin/library-paths", else: nil)}
           />
         </div>
@@ -109,31 +109,33 @@
         <% end %>
       <% :quick_actions -> %>
         <div id="quick-actions-widget" class="mb-6 md:mb-8">
-          <h2 class="text-lg md:text-xl font-semibold mb-3 md:mb-4">Quick Actions</h2>
+          <h2 class="text-lg md:text-xl font-semibold mb-3 md:mb-4">
+            {gettext("Quick Actions")}
+          </h2>
           <div class="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
             <%= if @current_user && @current_user.role == "guest" do %>
               <Components.quick_action_card
                 id="qa-request-movie"
                 navigate={~p"/discover?type=movie"}
                 icon="hero-film"
-                title="Request Movie"
-                description="Submit a movie request"
+                title={gettext("Request Movie")}
+                description={gettext("Submit a movie request")}
                 color="primary"
               />
               <Components.quick_action_card
                 id="qa-request-tv"
                 navigate={~p"/discover?type=tv_show"}
                 icon="hero-tv"
-                title="Request Series"
-                description="Submit a series request"
+                title={gettext("Request Series")}
+                description={gettext("Submit a series request")}
                 color="secondary"
               />
               <Components.quick_action_card
                 id="qa-my-requests"
                 navigate={~p"/requests"}
                 icon="hero-queue-list"
-                title="My Requests"
-                description="View your requests"
+                title={gettext("My Requests")}
+                description={gettext("View your requests")}
                 color="accent"
               />
             <% else %>
@@ -141,24 +143,24 @@
                 id="qa-add-movie"
                 navigate={~p"/discover?type=movie"}
                 icon="hero-plus"
-                title="Add Movie"
-                description="Search and add movies"
+                title={gettext("Add Movie")}
+                description={gettext("Search and add movies")}
                 color="primary"
               />
               <Components.quick_action_card
                 id="qa-add-tv"
                 navigate={~p"/discover?type=tv_show"}
                 icon="hero-plus"
-                title="Add TV Show"
-                description="Search and add series"
+                title={gettext("Add TV Show")}
+                description={gettext("Search and add series")}
                 color="secondary"
               />
               <Components.quick_action_card
                 id="qa-import"
                 navigate={~p"/import"}
                 icon="hero-arrow-down-tray"
-                title="Import Files"
-                description="Scan and import media"
+                title={gettext("Import Files")}
+                description={gettext("Scan and import media")}
                 color="accent"
               />
               <%= if @pending_requests_count > 0 do %>
@@ -166,8 +168,10 @@
                   id="qa-pending-requests"
                   navigate={~p"/admin/requests"}
                   icon="hero-inbox-stack"
-                  title="Pending Requests"
-                  description={"#{@pending_requests_count} request(s) awaiting review"}
+                  title={gettext("Pending Requests")}
+                  description={
+                    gettext("%{count} request(s) awaiting review", count: @pending_requests_count)
+                  }
                   color="warning"
                   badge={@pending_requests_count}
                   border_class="border-2 border-warning"
@@ -179,7 +183,7 @@
       <% :recently_added -> %>
         <Components.recently_added_rail
           id="recently-added-rail"
-          title="Recently Added"
+          title={gettext("Recently Added")}
           entries={@recently_added}
         />
       <% :shelves -> %>
@@ -191,7 +195,7 @@
             phx-click="undo_shelf_rating"
             class="btn btn-sm btn-ghost"
           >
-            Undo
+            {gettext("Undo")}
           </button>
         </div>
         <ShelfComponents.shelf_rail
@@ -204,13 +208,13 @@
       <% :recently_added_movies -> %>
         <Components.recently_added_rail
           id="recently-added-movies-rail"
-          title="Recently Added Movies"
+          title={gettext("Recently Added Movies")}
           entries={@recently_added_movies}
         />
       <% :recently_added_tv -> %>
         <Components.recently_added_rail
           id="recently-added-tv-rail"
-          title="Recently Added TV Shows"
+          title={gettext("Recently Added TV Shows")}
           entries={@recently_added_tv}
         />
       <% :trending_movies -> %>
@@ -218,7 +222,9 @@
           <%= cond do %>
             <% @trending_movies_loading -> %>
               <div class="flex items-center justify-between mb-3">
-                <h2 class="text-lg md:text-xl font-semibold truncate">Trending Movies</h2>
+                <h2 class="text-lg md:text-xl font-semibold truncate">
+                  {gettext("Trending Movies")}
+                </h2>
               </div>
               <.poster_card_rail_skeleton
                 id="trending-movies-skeleton"
@@ -226,16 +232,18 @@
               />
             <% @trending_movies == [] -> %>
               <div class="flex items-center justify-between mb-3">
-                <h2 class="text-lg md:text-xl font-semibold truncate">Trending Movies</h2>
+                <h2 class="text-lg md:text-xl font-semibold truncate">
+                  {gettext("Trending Movies")}
+                </h2>
               </div>
               <div class="alert alert-info">
                 <.icon name="hero-information-circle" class="w-5 h-5" />
-                <span>No trending movies available at the moment.</span>
+                <span>{gettext("No trending movies available at the moment.")}</span>
               </div>
             <% true -> %>
               <.media_rail
                 id="trending-movies-rail"
-                title="Trending Movies"
+                title={gettext("Trending Movies")}
                 items={@trending_movies}
                 media_type={:movie}
                 current_user={@current_user}
@@ -245,7 +253,7 @@
               >
                 <:badge>
                   <.link navigate={~p"/discover?type=movie"} class="btn btn-sm btn-ghost">
-                    View All <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
+                    {gettext("View All")} <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
                   </.link>
                 </:badge>
               </.media_rail>
@@ -268,7 +276,9 @@
           <%= cond do %>
             <% @trending_tv_loading -> %>
               <div class="flex items-center justify-between mb-3">
-                <h2 class="text-lg md:text-xl font-semibold truncate">Trending TV Shows</h2>
+                <h2 class="text-lg md:text-xl font-semibold truncate">
+                  {gettext("Trending TV Shows")}
+                </h2>
               </div>
               <.poster_card_rail_skeleton
                 id="trending-tv-skeleton"
@@ -276,16 +286,18 @@
               />
             <% @trending_tv == [] -> %>
               <div class="flex items-center justify-between mb-3">
-                <h2 class="text-lg md:text-xl font-semibold truncate">Trending TV Shows</h2>
+                <h2 class="text-lg md:text-xl font-semibold truncate">
+                  {gettext("Trending TV Shows")}
+                </h2>
               </div>
               <div class="alert alert-info">
                 <.icon name="hero-information-circle" class="w-5 h-5" />
-                <span>No trending TV shows available at the moment.</span>
+                <span>{gettext("No trending TV shows available at the moment.")}</span>
               </div>
             <% true -> %>
               <.media_rail
                 id="trending-tv-rail"
-                title="Trending TV Shows"
+                title={gettext("Trending TV Shows")}
                 items={@trending_tv}
                 media_type={:tv_show}
                 current_user={@current_user}
@@ -295,7 +307,7 @@
               >
                 <:badge>
                   <.link navigate={~p"/discover?type=tv_show"} class="btn btn-sm btn-ghost">
-                    View All <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
+                    {gettext("View All")} <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
                   </.link>
                 </:badge>
               </.media_rail>
@@ -304,7 +316,9 @@
       <% :episodes -> %>
         <%= if @recent_episodes != [] || @upcoming_episodes != [] do %>
           <div id="episodes-widget" class="mb-6 md:mb-8">
-            <h2 class="text-lg md:text-xl font-semibold mb-3 md:mb-4">Your Activity</h2>
+            <h2 class="text-lg md:text-xl font-semibold mb-3 md:mb-4">
+              {gettext("Your Activity")}
+            </h2>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
               <!-- Recent Episodes -->
@@ -312,7 +326,7 @@
                 <div class="card bg-base-100 shadow-sm">
                   <div class="card-body">
                     <h3 class="card-title text-base font-semibold">
-                      <.icon name="hero-clock" class="w-5 h-5" /> Recently Aired
+                      <.icon name="hero-clock" class="w-5 h-5" /> {gettext("Recently Aired")}
                     </h3>
                     <div class="space-y-2">
                       <%= for episode <- @recent_episodes do %>
@@ -320,11 +334,7 @@
                           <div class="flex-1 min-w-0">
                             <p class="font-medium text-sm truncate">{episode.media_item_title}</p>
                             <p class="text-xs text-base-content/70">
-                              S{String.pad_leading(to_string(episode.season_number), 2, "0")}E{String.pad_leading(
-                                to_string(episode.episode_number),
-                                2,
-                                "0"
-                              )} - {episode.title}
+                              {episode_line(episode)}
                             </p>
                             <p class="text-xs text-base-content/50">
                               {Calendar.strftime(episode.air_date, "%b %d, %Y")}
@@ -353,7 +363,7 @@
                 <div class="card bg-base-100 shadow-sm">
                   <div class="card-body">
                     <h3 class="card-title text-base font-semibold">
-                      <.icon name="hero-calendar" class="w-5 h-5" /> Coming Soon
+                      <.icon name="hero-calendar" class="w-5 h-5" /> {gettext("Coming Soon")}
                     </h3>
                     <div class="space-y-2">
                       <%= for episode <- @upcoming_episodes do %>
@@ -361,11 +371,7 @@
                           <div class="flex-1 min-w-0">
                             <p class="font-medium text-sm truncate">{episode.media_item_title}</p>
                             <p class="text-xs text-base-content/70">
-                              S{String.pad_leading(to_string(episode.season_number), 2, "0")}E{String.pad_leading(
-                                to_string(episode.episode_number),
-                                2,
-                                "0"
-                              )} - {episode.title}
+                              {episode_line(episode)}
                             </p>
                             <p class="text-xs text-base-content/50">
                               {Calendar.strftime(episode.air_date, "%b %d, %Y")}
@@ -389,16 +395,18 @@
       <div class="w-16 h-16 rounded-full bg-base-200 flex items-center justify-center mx-auto mb-4 text-base-content/60">
         <.icon name="hero-squares-plus" class="w-8 h-8" />
       </div>
-      <h2 class="text-xl font-bold mb-2">Your Home is empty</h2>
+      <h2 class="text-xl font-bold mb-2">{gettext("Your Home is empty")}</h2>
       <p class="text-base-content/70 max-w-md mx-auto mb-6">
-        All sections are currently hidden. Choose which widgets to show to customize your dashboard.
+        {gettext(
+          "All sections are currently hidden. Choose which widgets to show to customize your dashboard."
+        )}
       </p>
       <button
         type="button"
         phx-click="open_edit_home"
         class="btn btn-primary"
       >
-        <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> Edit Home
+        <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> {gettext("Edit Home")}
       </button>
     </div>
   <% end %>
@@ -408,12 +416,10 @@
     <div class="alert alert-info mt-4">
       <.icon name="hero-information-circle" class="w-5 h-5" />
       <div>
-        <p class="font-semibold">Getting Started</p>
+        <p class="font-semibold">{gettext("Getting Started")}</p>
         <p class="text-sm">
-          Your media library is empty. Start by adding movies or TV shows from <.link
-            navigate={~p"/discover"}
-            class="link font-medium"
-          >Discover</.link>!
+          {gettext("Your media library is empty. Start by adding movies or TV shows from")}
+          <.link navigate={~p"/discover"} class="link font-medium">{gettext("Discover")}</.link>!
         </p>
       </div>
     </div>

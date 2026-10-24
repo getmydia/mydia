@@ -29,7 +29,7 @@ defmodule MydiaWeb.CollectionLive.Show do
       nil ->
         {:ok,
          socket
-         |> put_flash(:error, "Collection not found")
+         |> put_flash(:error, gettext("Collection not found"))
          |> push_navigate(to: ~p"/collections")}
 
       collection ->
@@ -143,7 +143,7 @@ defmodule MydiaWeb.CollectionLive.Show do
                 <h1 class="text-2xl font-bold">{@collection.name}</h1>
                 <%= if @collection.is_system do %>
                   <span class="badge badge-ghost gap-1">
-                    <.icon name="hero-star" class="w-3 h-3" /> System
+                    <.icon name="hero-star" class="w-3 h-3" /> {gettext("System")}
                   </span>
                 <% end %>
                 <span class={["badge badge-sm gap-1", type_badge_class(@collection.type)]}>
@@ -158,7 +158,7 @@ defmodule MydiaWeb.CollectionLive.Show do
           </div>
           <div class="flex items-center gap-2">
             <span class="text-base-content/60">
-              {@item_count} {if @item_count == 1, do: "item", else: "items"}
+              {ngettext("%{count} item", "%{count} items", @item_count)}
             </span>
             <%!-- Play All button --%>
             <%= if @item_count > 0 do %>
@@ -167,7 +167,7 @@ defmodule MydiaWeb.CollectionLive.Show do
                 class="btn btn-secondary btn-sm gap-1"
                 phx-click="play_all"
               >
-                <.icon name="hero-play" class="w-4 h-4" /> Play All
+                <.icon name="hero-play" class="w-4 h-4" /> {gettext("Play All")}
               </button>
             <% end %>
             <%!-- Manual collection: Add Items button --%>
@@ -177,7 +177,7 @@ defmodule MydiaWeb.CollectionLive.Show do
                 class="btn btn-primary btn-sm gap-1"
                 phx-click="open_add_items_modal"
               >
-                <.icon name="hero-plus" class="w-4 h-4" /> Add Items
+                <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add Items")}
               </button>
             <% end %>
             <%!-- Smart collection: Edit Rules button --%>
@@ -187,7 +187,7 @@ defmodule MydiaWeb.CollectionLive.Show do
                 class="btn btn-ghost btn-sm gap-1"
                 phx-click="open_edit_modal"
               >
-                <.icon name="hero-funnel" class="w-4 h-4" /> Edit Rules
+                <.icon name="hero-funnel" class="w-4 h-4" /> {gettext("Edit Rules")}
               </button>
             <% end %>
             <%!-- Pin/unpin as a sidebar section: owned, smart, non-system collections only --%>
@@ -199,7 +199,7 @@ defmodule MydiaWeb.CollectionLive.Show do
                   class="btn btn-ghost btn-sm gap-1"
                   phx-click="unpin_collection"
                 >
-                  <.icon name="hero-bookmark-slash" class="w-4 h-4" /> Unpin from sidebar
+                  <.icon name="hero-bookmark-slash" class="w-4 h-4" /> {gettext("Unpin from sidebar")}
                 </button>
               <% else %>
                 <button
@@ -208,7 +208,7 @@ defmodule MydiaWeb.CollectionLive.Show do
                   class="btn btn-outline btn-primary btn-sm gap-1"
                   phx-click="pin_collection"
                 >
-                  <.icon name="hero-bookmark" class="w-4 h-4" /> Pin to sidebar
+                  <.icon name="hero-bookmark" class="w-4 h-4" /> {gettext("Pin to sidebar")}
                 </button>
               <% end %>
             <% end %>
@@ -224,12 +224,12 @@ defmodule MydiaWeb.CollectionLive.Show do
                 >
                   <li>
                     <button type="button" phx-click="open_edit_modal">
-                      <.icon name="hero-pencil" class="w-4 h-4" /> Edit Collection
+                      <.icon name="hero-pencil" class="w-4 h-4" /> {gettext("Edit Collection")}
                     </button>
                   </li>
                   <li>
                     <button type="button" phx-click="open_delete_modal" class="text-error">
-                      <.icon name="hero-trash" class="w-4 h-4" /> Delete Collection
+                      <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Delete Collection")}
                     </button>
                   </li>
                 </ul>
@@ -253,7 +253,7 @@ defmodule MydiaWeb.CollectionLive.Show do
                 phx-click="remove_item"
                 phx-value-id={item.id}
                 class="absolute top-2 right-2 z-10 btn btn-circle btn-xs btn-error opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Remove from collection"
+                title={gettext("Remove from collection")}
               >
                 <.icon name="hero-x-mark" class="w-3 h-3" />
               </button>
@@ -283,12 +283,14 @@ defmodule MydiaWeb.CollectionLive.Show do
           class="flex flex-col items-center justify-center py-16"
         >
           <.icon name="hero-film" class="w-16 h-16 mb-4 text-base-content/30" />
-          <h3 class="text-xl font-semibold text-base-content/70 mb-2">No items yet</h3>
+          <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+            {gettext("No items yet")}
+          </h3>
           <p class="text-base-content/50 text-center max-w-md mb-4">
             <%= if @collection.type == "smart" do %>
-              No items match your smart rules. Try adjusting the conditions.
+              {gettext("No items match your smart rules. Try adjusting the conditions.")}
             <% else %>
-              Start building your collection by adding movies and TV shows.
+              {gettext("Start building your collection by adding movies and TV shows.")}
             <% end %>
           </p>
           <%= if @collection.type == "manual" and can_edit?(@collection, @current_user) do %>
@@ -297,7 +299,7 @@ defmodule MydiaWeb.CollectionLive.Show do
               class="btn btn-primary gap-2"
               phx-click="open_add_items_modal"
             >
-              <.icon name="hero-plus" class="w-5 h-5" /> Add Items
+              <.icon name="hero-plus" class="w-5 h-5" /> {gettext("Add Items")}
             </button>
           <% end %>
           <%= if @collection.type == "smart" do %>
@@ -306,7 +308,7 @@ defmodule MydiaWeb.CollectionLive.Show do
               class="btn btn-secondary gap-2"
               phx-click="open_edit_modal"
             >
-              <.icon name="hero-funnel" class="w-5 h-5" /> Edit Rules
+              <.icon name="hero-funnel" class="w-5 h-5" /> {gettext("Edit Rules")}
             </button>
           <% end %>
         </div>
@@ -337,14 +339,14 @@ defmodule MydiaWeb.CollectionLive.Show do
                 />
               </div>
               <div>
-                <div class="font-bold text-lg">Edit Collection</div>
+                <div class="font-bold text-lg">{gettext("Edit Collection")}</div>
                 <div class="text-xs text-base-content/60 font-normal flex items-center gap-1">
                   <span class={[
                     "badge badge-xs",
                     @collection.type == "smart" && "badge-secondary",
                     @collection.type != "smart" && "badge-primary"
                   ]}>
-                    {if @collection.type == "smart", do: "Smart", else: "Manual"}
+                    {type_label(@collection.type)}
                   </span>
                   {@collection.name}
                 </div>
@@ -363,7 +365,7 @@ defmodule MydiaWeb.CollectionLive.Show do
               <div class={["grid gap-3", @current_user.role == "admin" && "grid-cols-2"]}>
                 <div class="form-control">
                   <label class="label py-1">
-                    <span class="label-text text-sm font-medium">Name</span>
+                    <span class="label-text text-sm font-medium">{gettext("Name")}</span>
                   </label>
                   <input
                     type="text"
@@ -377,17 +379,17 @@ defmodule MydiaWeb.CollectionLive.Show do
                 <%= if @current_user.role == "admin" do %>
                   <div class="form-control">
                     <label class="label py-1">
-                      <span class="label-text text-sm font-medium">Visibility</span>
+                      <span class="label-text text-sm font-medium">{gettext("Visibility")}</span>
                     </label>
                     <select
                       name="collection[visibility]"
                       class="select select-sm select-bordered w-full"
                     >
                       <option value="private" selected={@collection.visibility == "private"}>
-                        Private
+                        {gettext("Private")}
                       </option>
                       <option value="shared" selected={@collection.visibility == "shared"}>
-                        Shared
+                        {gettext("Shared")}
                       </option>
                     </select>
                   </div>
@@ -397,22 +399,22 @@ defmodule MydiaWeb.CollectionLive.Show do
               <%!-- Description --%>
               <div class="form-control">
                 <label class="label py-1">
-                  <span class="label-text text-sm font-medium">Description</span>
-                  <span class="label-text-alt text-xs">Optional</span>
+                  <span class="label-text text-sm font-medium">{gettext("Description")}</span>
+                  <span class="label-text-alt text-xs">{gettext("Optional")}</span>
                 </label>
                 <input
                   type="text"
                   name="collection[description]"
                   value={@collection.description}
                   class="input input-sm input-bordered w-full"
-                  placeholder="What's this collection about?"
+                  placeholder={gettext("What's this collection about?")}
                 />
               </div>
 
               <%!-- Smart Rules for smart collections --%>
               <%= if @collection.type == "smart" do %>
                 <div class="divider my-2 text-xs text-base-content/50">
-                  <.icon name="hero-sparkles" class="w-4 h-4" /> Smart Rules
+                  <.icon name="hero-sparkles" class="w-4 h-4" /> {gettext("Smart Rules")}
                 </div>
                 <.smart_rules_editor
                   conditions={@rules_conditions}
@@ -428,10 +430,10 @@ defmodule MydiaWeb.CollectionLive.Show do
 
           <:actions>
             <button type="button" class="btn btn-ghost" phx-click="close_edit_modal">
-              Cancel
+              {gettext("Cancel")}
             </button>
             <button type="submit" form="edit-collection-form" class="btn btn-primary">
-              Save Changes
+              {gettext("Save Changes")}
             </button>
           </:actions>
         </.modal>
@@ -443,22 +445,23 @@ defmodule MydiaWeb.CollectionLive.Show do
           show={@show_delete_modal}
           on_cancel={JS.push("close_delete_modal")}
         >
-          <:title>Delete Collection?</:title>
+          <:title>{gettext("Delete Collection?")}</:title>
 
           <p class="text-base-content/70">
-            Are you sure you want to delete <strong>{@collection.name}</strong>?
-            This action cannot be undone.
+            {gettext("Are you sure you want to delete %{name}? This action cannot be undone.",
+              name: @collection.name
+            )}
           </p>
           <p class="text-sm text-base-content/50 mt-2">
-            The media items in this collection will not be deleted.
+            {gettext("The media items in this collection will not be deleted.")}
           </p>
 
           <:actions>
             <button type="button" class="btn btn-ghost" phx-click="close_delete_modal">
-              Cancel
+              {gettext("Cancel")}
             </button>
             <button type="button" class="btn btn-error" phx-click="delete_collection">
-              <.icon name="hero-trash" class="w-4 h-4" /> Delete Collection
+              <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Delete Collection")}
             </button>
           </:actions>
         </.modal>
@@ -470,7 +473,7 @@ defmodule MydiaWeb.CollectionLive.Show do
           show={@show_add_items_modal}
           on_cancel={JS.push("close_add_items_modal")}
         >
-          <:title>Add Items to Collection</:title>
+          <:title>{gettext("Add Items to Collection")}</:title>
 
           <%!-- Search input with icon --%>
           <.form
@@ -485,7 +488,7 @@ defmodule MydiaWeb.CollectionLive.Show do
                 type="text"
                 name="search"
                 value={@add_items_search}
-                placeholder="Search movies or TV shows..."
+                placeholder={gettext("Search movies or TV shows...")}
                 phx-debounce="300"
                 class="grow bg-transparent border-none focus:outline-none text-lg min-w-0"
                 autofocus
@@ -510,15 +513,15 @@ defmodule MydiaWeb.CollectionLive.Show do
                 <%!-- Initial state --%>
                 <div class="flex flex-col items-center justify-center py-16 text-base-content/50">
                   <.icon name="hero-magnifying-glass" class="w-16 h-16 mb-4 opacity-30" />
-                  <p class="font-medium">Search your library</p>
-                  <p class="text-sm">Type at least 2 characters to search</p>
+                  <p class="font-medium">{gettext("Search your library")}</p>
+                  <p class="text-sm">{gettext("Type at least 2 characters to search")}</p>
                 </div>
               <% @add_items_results == [] -> %>
                 <%!-- No results --%>
                 <div class="flex flex-col items-center justify-center py-16 text-base-content/50">
                   <.icon name="hero-face-frown" class="w-16 h-16 mb-4 opacity-30" />
-                  <p class="font-medium">No results found</p>
-                  <p class="text-sm">Try a different search term</p>
+                  <p class="font-medium">{gettext("No results found")}</p>
+                  <p class="text-sm">{gettext("Try a different search term")}</p>
                 </div>
               <% true -> %>
                 <%!-- Results list --%>
@@ -558,7 +561,7 @@ defmodule MydiaWeb.CollectionLive.Show do
                         <div class="flex items-center gap-2 text-sm text-base-content/60">
                           <span>{item.year}</span>
                           <span class="badge badge-xs">
-                            {if item.type == "movie", do: "Movie", else: "TV Show"}
+                            {if item.type == "movie", do: gettext("Movie"), else: gettext("TV Show")}
                           </span>
                         </div>
                       </div>
@@ -568,12 +571,12 @@ defmodule MydiaWeb.CollectionLive.Show do
                         <%= if in_collection? do %>
                           <div class="btn btn-sm btn-success btn-outline gap-1">
                             <.icon name="hero-check" class="w-4 h-4" />
-                            <span class="hidden sm:inline">Added</span>
+                            <span class="hidden sm:inline">{gettext("Added")}</span>
                           </div>
                         <% else %>
                           <div class="btn btn-sm btn-ghost gap-1">
                             <.icon name="hero-plus" class="w-4 h-4" />
-                            <span class="hidden sm:inline">Add</span>
+                            <span class="hidden sm:inline">{gettext("Add")}</span>
                           </div>
                         <% end %>
                       </div>
@@ -585,7 +588,7 @@ defmodule MydiaWeb.CollectionLive.Show do
 
           <:actions>
             <button type="button" class="btn" phx-click="close_add_items_modal">
-              Done
+              {gettext("Done")}
             </button>
           </:actions>
         </.modal>
@@ -616,7 +619,7 @@ defmodule MydiaWeb.CollectionLive.Show do
 
     case playable_items do
       [] ->
-        {:noreply, put_flash(socket, :error, "No playable items in this collection")}
+        {:noreply, put_flash(socket, :error, gettext("No playable items in this collection"))}
 
       items ->
         # Build the queue player URL
@@ -636,16 +639,18 @@ defmodule MydiaWeb.CollectionLive.Show do
            socket
            |> stream_delete(:items, %{id: item_id})
            |> update(:item_count, &(&1 - 1))
-           |> put_flash(:info, "Item removed from collection")}
+           |> put_flash(:info, gettext("Item removed from collection"))}
 
         {:error, :not_found} ->
-          {:noreply, put_flash(socket, :error, "Item not found in collection")}
+          {:noreply, put_flash(socket, :error, gettext("Item not found in collection"))}
 
         {:error, :smart_collection} ->
-          {:noreply, put_flash(socket, :error, "Cannot remove items from smart collections")}
+          {:noreply,
+           put_flash(socket, :error, gettext("Cannot remove items from smart collections"))}
       end
     else
-      {:noreply, put_flash(socket, :error, "You don't have permission to edit this collection")}
+      {:noreply,
+       put_flash(socket, :error, gettext("You don't have permission to edit this collection"))}
     end
   end
 
@@ -725,7 +730,7 @@ defmodule MydiaWeb.CollectionLive.Show do
     # Validate smart rules before saving
     case validation_result do
       {:error, errors} ->
-        error_msg = "Invalid smart rules: #{Enum.join(errors, ", ")}"
+        error_msg = gettext("Invalid smart rules: %{errors}", errors: Enum.join(errors, ", "))
         {:noreply, put_flash(socket, :error, error_msg)}
 
       {:ok, _} ->
@@ -743,15 +748,19 @@ defmodule MydiaWeb.CollectionLive.Show do
              |> assign(:collection, updated_collection)
              |> assign(:page_title, updated_collection.name)
              |> assign(:show_edit_modal, false)
-             |> put_flash(:info, "Collection updated")
+             |> put_flash(:info, gettext("Collection updated"))
              |> load_items(reset: true)}
 
           {:error, :unauthorized} ->
             {:noreply,
-             put_flash(socket, :error, "You don't have permission to edit this collection")}
+             put_flash(
+               socket,
+               :error,
+               gettext("You don't have permission to edit this collection")
+             )}
 
           {:error, :system_collection} ->
-            {:noreply, put_flash(socket, :error, "System collections cannot be edited")}
+            {:noreply, put_flash(socket, :error, gettext("System collections cannot be edited"))}
 
           {:error, %Ecto.Changeset{} = changeset} ->
             error_msg = extract_changeset_error(changeset)
@@ -768,15 +777,15 @@ defmodule MydiaWeb.CollectionLive.Show do
       {:ok, _} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Collection deleted")
+         |> put_flash(:info, gettext("Collection deleted"))
          |> push_navigate(to: ~p"/collections")}
 
       {:error, :unauthorized} ->
         {:noreply,
-         put_flash(socket, :error, "You don't have permission to delete this collection")}
+         put_flash(socket, :error, gettext("You don't have permission to delete this collection"))}
 
       {:error, :system_collection} ->
-        {:noreply, put_flash(socket, :error, "System collections cannot be deleted")}
+        {:noreply, put_flash(socket, :error, gettext("System collections cannot be deleted"))}
     end
   end
 
@@ -788,7 +797,7 @@ defmodule MydiaWeb.CollectionLive.Show do
       {:ok, pinned} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Pinned to sidebar")
+         |> put_flash(:info, gettext("Pinned to sidebar"))
          |> push_navigate(to: ~p"/sections/#{pinned.id}")}
 
       {:error, reason} ->
@@ -805,7 +814,7 @@ defmodule MydiaWeb.CollectionLive.Show do
         {:noreply,
          socket
          |> assign(:collection, updated)
-         |> put_flash(:info, "Removed from sidebar")}
+         |> put_flash(:info, gettext("Removed from sidebar"))}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, pin_error_message(reason))}
@@ -874,10 +883,10 @@ defmodule MydiaWeb.CollectionLive.Show do
              |> stream_delete(:items, %{id: item_id})
              |> update(:item_count, &(&1 - 1))
              |> assign(:collection_item_ids, MapSet.delete(item_ids, item_id))
-             |> put_flash(:info, "Item removed from collection")}
+             |> put_flash(:info, gettext("Item removed from collection"))}
 
           {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Failed to remove item")}
+            {:noreply, put_flash(socket, :error, gettext("Failed to remove item"))}
         end
       else
         # Add item
@@ -899,17 +908,19 @@ defmodule MydiaWeb.CollectionLive.Show do
              |> stream_insert(:items, stream_item, at: -1)
              |> update(:item_count, &(&1 + 1))
              |> assign(:collection_item_ids, MapSet.put(item_ids, item_id))
-             |> put_flash(:info, "Item added to collection")}
+             |> put_flash(:info, gettext("Item added to collection"))}
 
           {:error, :smart_collection} ->
-            {:noreply, put_flash(socket, :error, "Cannot add items to smart collections")}
+            {:noreply,
+             put_flash(socket, :error, gettext("Cannot add items to smart collections"))}
 
           {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Failed to add item")}
+            {:noreply, put_flash(socket, :error, gettext("Failed to add item"))}
         end
       end
     else
-      {:noreply, put_flash(socket, :error, "You don't have permission to edit this collection")}
+      {:noreply,
+       put_flash(socket, :error, gettext("You don't have permission to edit this collection"))}
     end
   end
 
@@ -1109,8 +1120,8 @@ defmodule MydiaWeb.CollectionLive.Show do
 
   defp extract_changeset_error(changeset) do
     case changeset.errors do
-      [{_field, {msg, _}} | _] -> msg
-      _ -> "Failed to update collection"
+      [{_field, {_msg, _opts} = error} | _] -> translate_error(error)
+      _ -> gettext("Failed to update collection")
     end
   end
 
@@ -1191,13 +1202,13 @@ defmodule MydiaWeb.CollectionLive.Show do
   defp can_pin?(_collection, _user), do: false
 
   defp pin_error_message(:not_smart),
-    do: "Only smart collections can be pinned to the sidebar"
+    do: gettext("Only smart collections can be pinned to the sidebar")
 
   defp pin_error_message(:unauthorized),
-    do: "You don't have permission to pin this collection"
+    do: gettext("You don't have permission to pin this collection")
 
   defp pin_error_message(:system_collection),
-    do: "System collections cannot be pinned to the sidebar"
+    do: gettext("System collections cannot be pinned to the sidebar")
 
   defp pin_error_message(%Ecto.Changeset{} = changeset), do: extract_changeset_error(changeset)
 
@@ -1209,7 +1220,7 @@ defmodule MydiaWeb.CollectionLive.Show do
   defp type_icon("manual"), do: "hero-folder"
   defp type_icon(_), do: "hero-folder"
 
-  defp type_label("smart"), do: "Smart"
-  defp type_label("manual"), do: "Manual"
-  defp type_label(_), do: "Manual"
+  defp type_label("smart"), do: gettext("Smart")
+  defp type_label("manual"), do: gettext("Manual")
+  defp type_label(_), do: gettext("Manual")
 end

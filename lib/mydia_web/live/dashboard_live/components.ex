@@ -11,6 +11,7 @@ defmodule MydiaWeb.DashboardLive.Components do
 
   use Phoenix.Component
   use MydiaWeb, :verified_routes
+  use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [icon: 1, poster_figure: 1]
   import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1, poster_rail: 1]
@@ -25,13 +26,15 @@ defmodule MydiaWeb.DashboardLive.Components do
   """
   attr :entries, :list, required: true
   attr :id, :string, default: "recently-added-rail"
-  attr :title, :string, default: "Recently Added"
+  attr :title, :string, default: nil, doc: "defaults to the translated \"Recently Added\""
 
   def recently_added_rail(assigns) do
+    assigns = assign(assigns, :heading, assigns.title || gettext("Recently Added"))
+
     ~H"""
     <div :if={@entries != []} id={@id} class="mb-6 md:mb-8">
       <div class="flex items-center gap-3 mb-3">
-        <h2 class="text-2xl font-bold truncate">{@title}</h2>
+        <h2 class="text-2xl font-bold truncate">{@heading}</h2>
       </div>
 
       <.poster_rail id={"#{@id}-items"}>
@@ -68,12 +71,9 @@ defmodule MydiaWeb.DashboardLive.Components do
 
   # Only shows carry a count. A movie's arrival is the card itself, so a badge
   # would say nothing the poster does not already say.
-  defp new_episode_label(%{media_item: %{type: "tv_show"}, new_episode_count: 1}),
-    do: "1 new episode"
-
   defp new_episode_label(%{media_item: %{type: "tv_show"}, new_episode_count: count})
-       when is_integer(count) and count > 1 do
-    "#{count} new episodes"
+       when is_integer(count) and count >= 1 do
+    ngettext("%{count} new episode", "%{count} new episodes", count)
   end
 
   defp new_episode_label(_entry), do: nil

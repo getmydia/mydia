@@ -6,6 +6,7 @@ defmodule MydiaWeb.LibraryComponents do
   across different library types (media, music, books, etc.).
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   # Import only what we need to avoid circular dependency
   import MydiaWeb.CoreComponents, only: [icon: 1, modal: 1]
@@ -88,11 +89,13 @@ defmodule MydiaWeb.LibraryComponents do
       <div class="flex items-center bg-base-200 font-semibold text-sm px-4 py-3 border-b border-base-300">
         <div class="w-10 flex-shrink-0"></div>
         <div class="w-14 flex-shrink-0"></div>
-        <div class="flex-1 min-w-0">Title</div>
-        <div class="w-20 hidden md:block text-center flex-shrink-0">Year</div>
-        <div class="w-28 hidden lg:block flex-shrink-0">Status</div>
-        <div class="w-20 hidden lg:block text-center flex-shrink-0">Quality</div>
-        <div class="w-24 hidden xl:block text-right flex-shrink-0">Size</div>
+        <div class="flex-1 min-w-0">{gettext("Title")}</div>
+        <div class="w-20 hidden md:block text-center flex-shrink-0">{gettext("Year")}</div>
+        <div class="w-28 hidden lg:block flex-shrink-0">
+          {pgettext("list column", "Status")}
+        </div>
+        <div class="w-20 hidden lg:block text-center flex-shrink-0">{gettext("Quality")}</div>
+        <div class="w-24 hidden xl:block text-right flex-shrink-0">{gettext("Size")}</div>
       </div>
 
       <%!-- List Items --%>
@@ -169,11 +172,11 @@ defmodule MydiaWeb.LibraryComponents do
       value={@view_mode}
       event="toggle_view"
       param="mode"
-      label="View mode"
+      label={gettext("View mode")}
       icon_only
     >
-      <:option value="grid" label="Grid" icon="hero-squares-2x2" />
-      <:option value="list" label="List" icon="hero-list-bullet" />
+      <:option value="grid" label={gettext("Grid")} icon="hero-squares-2x2" />
+      <:option value="list" label={gettext("List")} icon="hero-list-bullet" />
     </.segmented_control>
     """
   end
@@ -213,11 +216,17 @@ defmodule MydiaWeb.LibraryComponents do
       type="button"
       class={["btn btn-sm gap-1", @selection_mode && "btn-active"]}
       phx-click="toggle_selection_mode"
-      title={if @selection_mode, do: "Exit selection mode", else: "Enter selection mode"}
+      title={
+        if @selection_mode,
+          do: gettext("Exit selection mode"),
+          else: gettext("Enter selection mode")
+      }
     >
       <.icon name="hero-check-circle" class="w-4 h-4" />
       <span class="hidden sm:inline">
-        {if @selection_mode, do: "Selecting", else: "Select"}
+        {if @selection_mode,
+          do: pgettext("selection", "Selecting"),
+          else: pgettext("selection", "Select")}
       </span>
     </button>
     """
@@ -232,28 +241,17 @@ defmodule MydiaWeb.LibraryComponents do
     * `:show` - Whether to show the modal.
     * `:selected_count` - Number of items to delete.
     * `:delete_files` - Whether file deletion is selected.
-    * `:item_label` - Label for items (default: "Item"/"Items").
   """
   attr :id, :string, required: true
   attr :show, :boolean, required: true
   attr :selected_count, :integer, required: true
   attr :delete_files, :boolean, required: true
-  attr :item_label, :string, default: nil
 
   def delete_confirmation_modal(assigns) do
-    item_word =
-      if assigns.item_label do
-        if assigns.selected_count == 1, do: assigns.item_label, else: assigns.item_label <> "s"
-      else
-        if assigns.selected_count == 1, do: "Item", else: "Items"
-      end
-
-    assigns = assign(assigns, :item_word, item_word)
-
     ~H"""
     <.modal id={@id} show={@show} on_cancel="cancel_delete">
       <:title>
-        Delete <strong>{@selected_count}</strong> {@item_word}?
+        {ngettext("Delete %{count} Item?", "Delete %{count} Items?", @selected_count)}
       </:title>
 
       <form id={"#{@id}-form"} phx-change="toggle_delete_files">
@@ -271,8 +269,10 @@ defmodule MydiaWeb.LibraryComponents do
               checked={!@delete_files}
             />
             <div>
-              <div class="font-medium mb-1">Remove from library only</div>
-              <div class="text-sm opacity-75">Files stay on disk, can be re-imported later</div>
+              <div class="font-medium mb-1">{gettext("Remove from library only")}</div>
+              <div class="text-sm opacity-75">
+                {gettext("Files stay on disk, can be re-imported later")}
+              </div>
             </div>
           </label>
 
@@ -289,14 +289,15 @@ defmodule MydiaWeb.LibraryComponents do
               checked={@delete_files}
             />
             <div>
-              <div class="font-medium mb-1">Delete from disk</div>
+              <div class="font-medium mb-1">{gettext("Delete from disk")}</div>
               <div class="text-sm opacity-75 flex items-center gap-1">
                 <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-                <span>Permanently deletes all files - cannot be undone</span>
+                <span>{gettext("Permanently deletes all files - cannot be undone")}</span>
               </div>
               <p id={"#{@id}-disk-note"} class="text-sm opacity-75 mt-1">
-                Deletes each item's folder and everything in it. A folder that also holds
-                other media is kept, and only the item's files are removed from it.
+                {gettext(
+                  "Deletes each item's folder and everything in it. A folder that also holds other media is kept, and only the item's files are removed from it."
+                )}
               </p>
             </div>
           </label>
@@ -305,7 +306,7 @@ defmodule MydiaWeb.LibraryComponents do
 
       <:actions>
         <button type="button" class="btn btn-ghost" phx-click="cancel_delete">
-          Cancel
+          {gettext("Cancel")}
         </button>
         <button
           type="button"
@@ -313,7 +314,7 @@ defmodule MydiaWeb.LibraryComponents do
           phx-click="batch_delete_confirmed"
         >
           <.icon name="hero-trash" class="w-4 h-4" />
-          {if @delete_files, do: "Delete Everything", else: "Remove from Library"}
+          {if @delete_files, do: gettext("Delete Everything"), else: gettext("Remove from Library")}
         </button>
       </:actions>
     </.modal>
@@ -348,7 +349,7 @@ defmodule MydiaWeb.LibraryComponents do
       type="button"
       data-test="add-config-caret"
       class={["btn btn-primary join-item px-2", @size == "sm" && "btn-sm"]}
-      title="Configure before adding"
+      title={gettext("Configure before adding")}
       phx-click="open_add_config"
       phx-value-ref={@ref}
       phx-value-media_type={@media_type}

@@ -22,6 +22,7 @@ defmodule MydiaWeb.GridDensityComponents do
   """
 
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
   import MydiaWeb.SegmentedControl, only: [segmented_control: 1]
@@ -54,12 +55,30 @@ defmodule MydiaWeb.GridDensityComponents do
   # icon on view_mode_toggle three buttons to the left on the same toolbar,
   # and the Activity page's "All" tab.
   @levels [
-    {"comfortable", "Comfortable", "hero-stop"},
-    {"compact", "Compact", "hero-view-columns"},
-    {"dense", "Dense", "hero-table-cells"}
+    {"comfortable", "hero-stop"},
+    {"compact", "hero-view-columns"},
+    {"dense", "hero-table-cells"}
   ]
 
   @values Enum.map(@levels, &elem(&1, 0))
+
+  # Labels are looked up at render time: a module attribute is evaluated at
+  # compile time, before any locale is set.
+  defp level_label("comfortable"), do: gettext("Comfortable")
+  defp level_label("compact"), do: gettext("Compact")
+  defp level_label("dense"), do: gettext("Dense")
+
+  # `Mydia.Accounts.PosterFields.catalog/0` carries English labels, so the web
+  # side translates by key. An unknown key falls back to the catalog label.
+  defp poster_field_label(:playback, _label), do: gettext("Watched")
+  defp poster_field_label(:quality, _label), do: gettext("Quality")
+  defp poster_field_label(:status, _label), do: pgettext("poster field", "Status")
+  defp poster_field_label(:category, _label), do: gettext("Category")
+  defp poster_field_label(:year, _label), do: gettext("Year")
+  defp poster_field_label(:episodes, _label), do: gettext("Episodes")
+  defp poster_field_label(:content_rating, _label), do: gettext("Age rating")
+  defp poster_field_label(:show_status, _label), do: gettext("Show status")
+  defp poster_field_label(_key, label), do: label
 
   @doc "The density values, in toggle order."
   @spec levels() :: [String.t()]
@@ -102,15 +121,15 @@ defmodule MydiaWeb.GridDensityComponents do
       value={@density}
       event="set_grid_density"
       param="density"
-      label="Grid density"
+      label={gettext("Grid density")}
       icon_only
       phx-hook="GridDensity"
       data-value={@density}
     >
       <:option
-        :for={{value, label, icon_name} <- @levels}
+        :for={{value, icon_name} <- @levels}
         value={value}
-        label={label}
+        label={level_label(value)}
         icon={icon_name}
         class={value in @phone_hidden && "max-sm:hidden"}
       />
@@ -148,12 +167,12 @@ defmodule MydiaWeb.GridDensityComponents do
       <%!-- tooltip-left: the button is the toolbar's right-most control, and
             a centred tip hangs past the viewport edge even while hidden,
             giving the whole page a horizontal scrollbar. --%>
-      <div class="tooltip tooltip-left" data-tip="Poster display">
+      <div class="tooltip tooltip-left" data-tip={gettext("Poster display")}>
         <div
           tabindex="0"
           role="button"
           class="btn btn-ghost btn-sm btn-square"
-          aria-label="Poster display"
+          aria-label={gettext("Poster display")}
         >
           <.icon name="hero-adjustments-horizontal" class="w-5 h-5" />
         </div>
@@ -162,13 +181,15 @@ defmodule MydiaWeb.GridDensityComponents do
         tabindex="0"
         class="dropdown-content z-30 mt-2 w-64 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto rounded-box bg-base-100 p-2 shadow-lg border border-base-300"
       >
-        <p class="px-3 pt-1 pb-2 text-xs font-semibold text-base-content/70">Show on posters</p>
+        <p class="px-3 pt-1 pb-2 text-xs font-semibold text-base-content/70">
+          {gettext("Show on posters")}
+        </p>
         <form id="poster-fields-form" phx-change="set_poster_fields">
           <input type="hidden" name="fields[]" value="" />
-          <ul class="menu menu-sm w-full p-0" aria-label="Poster fields">
+          <ul class="menu menu-sm w-full p-0" aria-label={gettext("Poster fields")}>
             <li :for={{key, label} <- @catalog}>
               <label for={"poster-field-#{key}"} class="flex items-center justify-between gap-3">
-                <span>{label}</span>
+                <span>{poster_field_label(key, label)}</span>
                 <input
                   type="checkbox"
                   class="toggle toggle-sm toggle-primary"
@@ -188,7 +209,7 @@ defmodule MydiaWeb.GridDensityComponents do
             phx-click="reset_poster_fields"
             class="btn btn-ghost btn-xs"
           >
-            Reset to default
+            {gettext("Reset to default")}
           </button>
         </div>
       </div>

@@ -9,6 +9,8 @@ defmodule MydiaWeb.DashboardLive.HomeOrder do
   one-line event clauses.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3]
 
@@ -49,7 +51,7 @@ defmodule MydiaWeb.DashboardLive.HomeOrder do
     else
       case Accounts.put_home_widgets(socket.assigns.current_user, new_widgets) do
         {:ok, _pref} -> assign(socket, :home_widgets, new_widgets)
-        {:error, _} -> put_flash(socket, :error, "Could not save your Home layout.")
+        {:error, _} -> put_flash(socket, :error, gettext("Could not save your Home layout."))
       end
     end
   end

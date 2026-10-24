@@ -24,16 +24,17 @@ defmodule MydiaWeb.DashboardLive.RegionalComponents do
       <%= if is_nil(@country) do %>
         <div class="card bg-base-200">
           <div class="card-body flex-row items-center justify-between gap-4 py-4">
-            <p>Set your country to see what's playing near you.</p>
+            <p>{gettext("Set your country to see what's playing near you.")}</p>
             <.link id="regional-set-country" navigate={~p"/discover"} class="btn btn-sm btn-primary">
-              Choose country
+              {gettext("Choose country")}
             </.link>
           </div>
         </div>
       <% else %>
         <div class="flex items-center justify-between gap-3 mb-3">
           <h2 class="text-lg md:text-xl font-semibold truncate">
-            <span aria-hidden="true">{Countries.flag(@country)}</span> In {Countries.name(@country)}
+            <span aria-hidden="true">{Countries.flag(@country)}</span>
+            {gettext("In %{country}", country: Countries.name(@country))}
           </h2>
           <.link
             :if={@selected}
@@ -43,7 +44,7 @@ defmodule MydiaWeb.DashboardLive.RegionalComponents do
             }
             class="btn btn-sm btn-ghost"
           >
-            View All <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
+            {gettext("View All")} <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
           </.link>
         </div>
         <div id="regional-chips" class="flex flex-wrap gap-2 mb-3">
@@ -65,10 +66,12 @@ defmodule MydiaWeb.DashboardLive.RegionalComponents do
           <% :error -> %>
             <div id="regional-error" class="alert alert-info">
               <.icon name="hero-information-circle" class="w-5 h-5" />
-              <span>Could not load these titles right now.</span>
+              <span>{gettext("Could not load these titles right now.")}</span>
             </div>
           <% :ok when @items == [] -> %>
-            <p class="text-sm text-base-content/60 py-4">Nothing here right now.</p>
+            <p class="text-sm text-base-content/60 py-4">
+              {gettext("Nothing here right now.")}
+            </p>
           <% :ok -> %>
             <.media_rail
               id="regional-rail"
@@ -90,5 +93,6 @@ defmodule MydiaWeb.DashboardLive.RegionalComponents do
 
   # Chips are short: the service name alone, not "Latest on ...".
   defp chip_label({:service, _id, name}), do: name
-  defp chip_label(source), do: RegionalSources.label(source, nil)
+  defp chip_label(:in_cinemas), do: gettext("In cinemas")
+  defp chip_label(:coming_soon), do: gettext("Coming soon")
 end

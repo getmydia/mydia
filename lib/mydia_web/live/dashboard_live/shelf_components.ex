@@ -47,7 +47,7 @@ defmodule MydiaWeb.DashboardLive.ShelfComponents do
             id={"shelf-noted-#{item.shelf_item_id}"}
             class="mt-1 h-6 flex items-center justify-center gap-1 text-xs text-success"
           >
-            <.icon name="hero-hand-thumb-up-mini" class="w-4 h-4" /> Good pick, noted
+            <.icon name="hero-hand-thumb-up-mini" class="w-4 h-4" /> {gettext("Good pick, noted")}
           </p>
           <div :if={!item.shelf_added?} class="join w-full mt-1">
             <button
@@ -56,11 +56,11 @@ defmodule MydiaWeb.DashboardLive.ShelfComponents do
               phx-click="rate_shelf_item"
               phx-value-id={item.shelf_item_id}
               phx-value-rating="up"
-              title="Seen it, liked it"
-              aria-label="Seen it, liked it"
+              title={gettext("Seen it, liked it")}
+              aria-label={gettext("Seen it, liked it")}
               class="btn btn-ghost btn-xs join-item flex-1 text-base-content/60 transition-colors hover:text-success"
             >
-              <.icon name="hero-hand-thumb-up" class="w-4 h-4" /> Seen it
+              <.icon name="hero-hand-thumb-up" class="w-4 h-4" /> {gettext("Seen it")}
             </button>
             <button
               type="button"
@@ -68,8 +68,8 @@ defmodule MydiaWeb.DashboardLive.ShelfComponents do
               phx-click="rate_shelf_item"
               phx-value-id={item.shelf_item_id}
               phx-value-rating="down"
-              title="Not for me"
-              aria-label="Not for me"
+              title={gettext("Not for me")}
+              aria-label={gettext("Not for me")}
               class="btn btn-ghost btn-xs join-item flex-1 text-base-content/60 transition-colors hover:text-error"
             >
               <.icon name="hero-hand-thumb-down" class="w-4 h-4" />

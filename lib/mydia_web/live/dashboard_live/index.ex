@@ -39,8 +39,6 @@ defmodule MydiaWeb.DashboardLive.Index do
   # reintroducing the layout shift this feature exists to prevent.
   @trending_rail_limit 10
 
-  @unsupported_media_type "That media type is not supported."
-
   @impl true
   def mount(_params, _session, socket) do
     user = socket.assigns[:current_user]
@@ -311,7 +309,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   def handle_params(_params, _url, socket) do
     {:noreply,
      socket
-     |> assign(:page_title, "Home")}
+     |> assign(:page_title, gettext("Home"))}
   end
 
   @impl true
@@ -324,7 +322,8 @@ defmodule MydiaWeb.DashboardLive.Index do
         {:noreply, assign(socket, :player_banner_dismissed, true)}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not dismiss that. Please try again.")}
+        {:noreply,
+         put_flash(socket, :error, gettext("Could not dismiss that. Please try again."))}
     end
   end
 
@@ -374,11 +373,11 @@ defmodule MydiaWeb.DashboardLive.Index do
            )}
 
         :error ->
-          {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+          {:noreply, put_flash(socket, :error, gettext("That media type is not supported."))}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
-      :error -> {:noreply, put_flash(socket, :error, "Could not add that item")}
+      :error -> {:noreply, put_flash(socket, :error, gettext("Could not add that item"))}
     end
   end
 
@@ -395,7 +394,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:noreply, socket}
     else
       {:unauthorized, socket} -> {:noreply, socket}
-      :error -> {:noreply, put_flash(socket, :error, "Could not request that item")}
+      :error -> {:noreply, put_flash(socket, :error, gettext("Could not request that item"))}
     end
   end
 
@@ -452,7 +451,7 @@ defmodule MydiaWeb.DashboardLive.Index do
           {:noreply, socket}
 
         {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Could not save your Home layout.")}
+          {:noreply, put_flash(socket, :error, gettext("Could not save your Home layout."))}
       end
     else
       {:noreply, socket}
@@ -483,7 +482,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         {:noreply, socket}
 
       {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Could not save your Home layout.")}
+        {:noreply, put_flash(socket, :error, gettext("Could not save your Home layout."))}
     end
   end
 
@@ -623,7 +622,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         {:noreply,
          socket
          |> clear_adding(ref)
-         |> put_flash(:error, "That library is no longer available. Nothing was added.")}
+         |> put_flash(:error, gettext("That library is no longer available. Nothing was added."))}
 
       {:ok, opts} ->
         add_with_opts(ref, media_type, opts, socket)
@@ -775,7 +774,10 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> reenrich_shelves()
          |> ShelfFeedback.record_add(ref, media_type)
          |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
-         |> put_flash(:info, "#{media_item.title} has been added to your library")}
+         |> put_flash(
+           :info,
+           gettext("%{title} has been added to your library", title: media_item.title)
+         )}
 
       {:already_in_library, media_item, updated_map} ->
         request_status_map = MediaRequestHelpers.request_status_map()
@@ -805,7 +807,10 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:regional_items, regional_items)
          |> reenrich_shelves()
          |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
-         |> put_flash(:info, "#{media_item.title} is already in your library")}
+         |> put_flash(
+           :info,
+           gettext("%{title} is already in your library", title: media_item.title)
+         )}
 
       {:error, :restricted} ->
         {:noreply,
@@ -819,14 +824,19 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> clear_adding(ref)
          |> put_flash(
            :error,
-           "Failed to add: #{MediaAddHelpers.format_changeset_errors(changeset)}"
+           gettext("Failed to add: %{reason}",
+             reason: MediaAddHelpers.format_changeset_errors(changeset)
+           )
          )}
 
       {:error, {:metadata, reason}} ->
         {:noreply,
          socket
          |> clear_adding(ref)
-         |> put_flash(:error, "Failed to fetch metadata: #{inspect(reason)}")}
+         |> put_flash(
+           :error,
+           gettext("Failed to fetch metadata: %{reason}", reason: inspect(reason))
+         )}
     end
   end
 
@@ -895,7 +905,10 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> reenrich_shelves()
         |> ShelfFeedback.record_add(Ref.from_search_result(item), media_type)
         |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
-        |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
+        |> put_flash(
+          :info,
+          gettext("%{title} requested. An admin will review it soon.", title: request.title)
+        )
 
       {:error, reason} ->
         socket
@@ -904,14 +917,30 @@ defmodule MydiaWeb.DashboardLive.Index do
     end
   end
 
-  defp request_error_message(:duplicate_media), do: "That title is already in the library."
-  defp request_error_message(:duplicate_request), do: "Someone has already requested that title."
+  # "S01E02 - Episode title" for the Your Activity lists.
+  defp episode_line(episode) do
+    gettext("S%{season}E%{episode} - %{title}",
+      season: String.pad_leading(to_string(episode.season_number), 2, "0"),
+      episode: String.pad_leading(to_string(episode.episode_number), 2, "0"),
+      title: episode.title
+    )
+  end
+
+  defp request_error_message(:duplicate_media),
+    do: gettext("That title is already in the library.")
+
+  defp request_error_message(:duplicate_request),
+    do: gettext("Someone has already requested that title.")
+
   defp request_error_message(:restricted), do: Media.restricted_message()
 
   defp request_error_message(%Ecto.Changeset{} = changeset),
-    do: "Could not submit the request: #{MediaAddHelpers.format_changeset_errors(changeset)}"
+    do:
+      gettext("Could not submit the request: %{reason}",
+        reason: MediaAddHelpers.format_changeset_errors(changeset)
+      )
 
-  defp request_error_message(_), do: "Could not submit the request. Please try again."
+  defp request_error_message(_), do: gettext("Could not submit the request. Please try again.")
 
   # phx-value payloads are client-controlled, and String.to_existing_atom/1
   # would raise on anything unexpected and take the LiveView down with it.
