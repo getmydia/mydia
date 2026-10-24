@@ -450,6 +450,12 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert html =~ "12 seeders"
       assert html =~ ~s(id="search-result-00000-1-audio")
     end
+
+    test "a result with nil seeders still renders" do
+      html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: nil})
+
+      assert html =~ ~s(id="search-result-00000-1")
+    end
   end
 
   describe "quality_profile_modal/1" do

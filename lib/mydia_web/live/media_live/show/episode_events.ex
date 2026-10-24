@@ -66,9 +66,11 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
            |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
            |> put_flash(
              :info,
-             gettext("Applied '%{preset}' monitoring to %{count} episodes",
-               preset: preset_label,
-               count: count
+             ngettext(
+               "Applied '%{preset}' monitoring to %{count} episode",
+               "Applied '%{preset}' monitoring to %{count} episodes",
+               count,
+               preset: preset_label
              )
            )}
 
@@ -142,8 +144,10 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
            |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
            |> put_flash(
              :info,
-             gettext("Monitoring enabled for %{count} episodes in Season %{season}",
-               count: count,
+             ngettext(
+               "Monitoring enabled for %{count} episode in Season %{season}",
+               "Monitoring enabled for %{count} episodes in Season %{season}",
+               count,
                season: season_number
              )
            )}
@@ -168,8 +172,10 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
            |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
            |> put_flash(
              :info,
-             gettext("Monitoring disabled for %{count} episodes in Season %{season}",
-               count: count,
+             ngettext(
+               "Monitoring disabled for %{count} episode in Season %{season}",
+               "Monitoring disabled for %{count} episodes in Season %{season}",
+               count,
                season: season_number
              )
            )}

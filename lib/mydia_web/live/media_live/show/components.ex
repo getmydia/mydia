@@ -468,12 +468,14 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               </span>
               <span class="text-base-content/60">•</span>
               <span class="text-success">
-                {gettext("%{count} available",
-                  count: Enum.count(@media_item.episodes, &(length(&1.media_files) > 0))
+                {ngettext(
+                  "%{count} available",
+                  "%{count} available",
+                  Enum.count(@media_item.episodes, &(length(&1.media_files) > 0))
                 )}
               </span>
               <span class="text-base-content/60">/</span>
-              <span>{gettext("%{count} total", count: length(@media_item.episodes))}</span>
+              <span>{ngettext("%{count} total", "%{count} total", length(@media_item.episodes))}</span>
               <span class="text-base-content/60">•</span>
               <span id="show-total-size" class="text-base-content/70 font-mono">
                 {format_file_size(total_media_size(@media_item))}

@@ -1062,7 +1062,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                       result.seeders >= 10 && result.seeders < 50 && "bg-warning/20 text-warning",
                       result.seeders < 10 && "bg-base-300 text-base-content/70"
                     ]}
-                    title={ngettext("%{count} seeder", "%{count} seeders", result.seeders)}
+                    title={ngettext("%{count} seeder", "%{count} seeders", result.seeders || 0)}
                   >
                     <.icon name="hero-arrow-up" class="w-3 h-3 mr-0.5" />
                     {result.seeders}
@@ -1155,7 +1155,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     <div class="divider my-1 text-xs opacity-50">{gettext("Availability")}</div>
                     <.score_row
                       label={gettext("Seeders")}
-                      value={ngettext("%{count} peer", "%{count} peers", result.seeders)}
+                      value={ngettext("%{count} peer", "%{count} peers", result.seeders || 0)}
                       score={breakdown.seeders}
                       weight={30}
                     />

@@ -505,13 +505,13 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         counts.missing > 0 ->
           %{
             class: "badge badge-warning",
-            label: gettext("%{count} missing", count: counts.missing)
+            label: ngettext("%{count} missing", "%{count} missing", counts.missing)
           }
 
         counts.upcoming > 0 ->
           %{
             class: "badge badge-ghost",
-            label: gettext("%{count} upcoming", count: counts.upcoming)
+            label: ngettext("%{count} upcoming", "%{count} upcoming", counts.upcoming)
           }
 
         counts.available == counts.total ->
