@@ -142,7 +142,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
 
     html =
       view
-      |> element("#match-files-#{download.id}")
+      |> element("#issue-menu-match-files-#{download.id}")
       |> render_click()
 
     assert html =~ "payload.exe"
@@ -155,7 +155,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     {:ok, view, _html} = live(conn, ~p"/downloads")
     render_patch(view, ~p"/downloads?tab=issues")
 
-    view |> element("#match-files-#{download.id}") |> render_click()
+    view |> element("#issue-menu-match-files-#{download.id}") |> render_click()
 
     # Drives the real rendered form (target[0] + hidden target_path[0]) rather
     # than handing handle_event a pre-built params map, so this exercises the
@@ -179,7 +179,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     {:ok, view, _html} = live(conn, ~p"/downloads")
     render_patch(view, ~p"/downloads?tab=issues")
 
-    view |> element("#match-files-#{download.id}") |> render_click()
+    view |> element("#issue-menu-match-files-#{download.id}") |> render_click()
 
     # No override: the rendered select defaults to "Ignore".
     html =
@@ -200,7 +200,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     {:ok, view, _html} = live(conn, ~p"/downloads")
     render_patch(view, ~p"/downloads?tab=issues")
 
-    view |> element("#match-files-#{download.id}") |> render_click()
+    view |> element("#issue-menu-match-files-#{download.id}") |> render_click()
 
     # `mkv` sits on disk in the same folder, but was never part of the
     # recorded/live candidate list — nothing server-side may trust it just
@@ -224,7 +224,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     {:ok, view, _html} = live(conn, ~p"/downloads")
     render_patch(view, ~p"/downloads?tab=issues")
 
-    view |> element("#match-files-#{download.id}") |> render_click()
+    view |> element("#issue-menu-match-files-#{download.id}") |> render_click()
 
     # The candidate's <select> is disabled in the DOM (missing files can't be
     # targeted normally), so a real form submit could never carry target[0].
@@ -249,7 +249,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
 
     html =
       view
-      |> element("#match-files-#{download.id}")
+      |> element("#issue-menu-match-files-#{download.id}")
       |> render_click()
 
     refute html =~ "Import as this movie"
@@ -266,7 +266,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     {:ok, view, _html} = live(conn, ~p"/downloads")
     render_patch(view, ~p"/downloads?tab=issues")
 
-    view |> element("#match-files-#{download.id}") |> render_click()
+    view |> element("#issue-menu-match-files-#{download.id}") |> render_click()
 
     # A crafted or stale submission: nothing in the DOM offers this value for
     # a tv_show (previous test), but the server must refuse it independently.
@@ -324,7 +324,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
 
     # Opened while the download is bound to show A — the (now-stale)
     # in-memory modal assign offers show A's episode as a target.
-    view |> element("#match-files-#{download.id}") |> render_click()
+    view |> element("#issue-menu-match-files-#{download.id}") |> render_click()
 
     # The download gets re-bound to a DIFFERENT show while the modal stays
     # open, exactly what the separate match/re-match modal does — this modal
@@ -371,7 +371,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     {:ok, view, _html} = live(conn, ~p"/downloads")
     render_patch(view, ~p"/downloads?tab=issues")
 
-    view |> element("#match-files-#{download.id}") |> render_click()
+    view |> element("#issue-menu-match-files-#{download.id}") |> render_click()
     view |> element("#match-files-reject") |> render_click()
 
     assert Mydia.Downloads.Blacklists.blacklisted?("1337x", "abc")
@@ -421,7 +421,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     {:ok, view, _html} = live(conn, ~p"/downloads")
     render_patch(view, ~p"/downloads?tab=issues")
 
-    view |> element("#match-files-#{download.id}") |> render_click()
+    view |> element("#issue-menu-match-files-#{download.id}") |> render_click()
     refute has_element?(view, "#match-files-reject[disabled]")
 
     view |> element("#match-files-reject") |> render_click()
@@ -517,7 +517,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     {:ok, view, _html} = live(conn, ~p"/downloads")
     render_patch(view, ~p"/downloads?tab=issues")
 
-    view |> element("#match-files-#{download.id}") |> render_click()
+    view |> element("#issue-menu-match-files-#{download.id}") |> render_click()
 
     # Drives the real rendered form rather than handing handle_event a
     # pre-built params map: `form/3` reads the actual `target[0]` /

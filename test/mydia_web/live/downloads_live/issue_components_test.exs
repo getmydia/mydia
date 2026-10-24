@@ -110,6 +110,14 @@ defmodule MydiaWeb.DownloadsLive.IssueComponentsTest do
       assert count(doc, "#retry-import-d1[phx-click=retry_import]") == 1
     end
 
+    test "an import failure keeps Match files in the menu; other kinds do not" do
+      doc = render_row(download_issue(:import_failed))
+      assert count(doc, "#issue-menu-match-files-d1[phx-click=open_match_files]") == 1
+
+      doc = render_row(download_issue(:download_failed))
+      assert count(doc, "#issue-menu-match-files-d1") == 0
+    end
+
     test "needs-matching rows have no checkbox and offer Match" do
       torrent = %Mydia.Downloads.Structs.ExternalTorrent{
         id: "t1",

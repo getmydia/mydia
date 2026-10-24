@@ -17,6 +17,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.DownloadsLive.Components
   alias MydiaWeb.DownloadsLive.DetailDrawer
   alias MydiaWeb.DownloadsLive.Filters
+  alias MydiaWeb.DownloadsLive.{Issue, IssueComponents, IssueList}
   alias MydiaWeb.DownloadsLive.ListComponents
   alias MydiaWeb.DownloadsLive.ListView
   alias MydiaWeb.DownloadsLive.Sorting
@@ -66,7 +67,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:delete_files, false)
      |> assign(:clearable_count, 0)
      # Issues tab state
-     |> assign(:issues_counts, %{unmatched: 0, unresolved: 0, other: 0})
+     |> assign(:issue_counts, IssueList.counts([]))
      # Match files modal state (manual matching of a failed import's file listing)
      |> assign(:match_files_modal, nil)
      |> assign(:match_files_error, nil)
@@ -94,10 +95,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:downloads_empty?, true)
      # Initialize all streams
      |> stream(:downloads, [])
-     |> stream(:needs_matching, [])
      |> stream(:external_torrents, [])
-     |> stream(:unresolved_downloads, [])
-     |> stream(:other_issues, [])}
+     |> stream_configure(:issues, dom_id: &"issues-#{&1.id}")
+     |> stream(:issues, [])}
   end
 
   @impl true
@@ -186,15 +186,23 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
     {:noreply,
      push_patch(socket,
-       to: downloads_path(socket, q: filters.q, client: filters.client, status: filters.status)
+       to:
+         downloads_path(socket,
+           q: filters.q,
+           client: filters.client,
+           status: filters.status,
+           kind: filters.kind
+         )
      )}
   end
 
   def handle_event("clear_filters", _params, socket) do
-    {:noreply, push_patch(socket, to: downloads_path(socket, q: nil, client: nil, status: nil))}
+    {:noreply,
+     push_patch(socket, to: downloads_path(socket, q: nil, client: nil, status: nil, kind: nil))}
   end
 
-  def handle_event("remove_filter", %{"key" => key}, socket) when key in ~w(q client status) do
+  def handle_event("remove_filter", %{"key" => key}, socket)
+      when key in ~w(q client status kind) do
     {:noreply,
      push_patch(socket, to: downloads_path(socket, [{String.to_existing_atom(key), nil}]))}
   end
@@ -618,20 +626,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   def handle_event("toggle_search", %{"id" => download_id}, socket) do
     current = socket.assigns.search_open_for
+    open_for = if current == download_id, do: nil, else: download_id
 
-    if current == download_id do
-      {:noreply,
-       socket
-       |> assign(:search_open_for, nil)
-       |> assign(:library_search_value, "")
-       |> assign(:library_search_results, [])}
-    else
-      {:noreply,
-       socket
-       |> assign(:search_open_for, download_id)
-       |> assign(:library_search_value, "")
-       |> assign(:library_search_results, [])}
-    end
+    {:noreply,
+     socket
+     |> assign(:search_open_for, open_for)
+     |> assign(:library_search_value, "")
+     |> assign(:library_search_results, [])
+     |> refresh_issue_rows([current, download_id])}
   end
 
   def handle_event(
@@ -651,7 +653,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:noreply,
      socket
      |> assign(:library_search_value, query)
-     |> assign(:library_search_results, results)}
+     |> assign(:library_search_results, results)
+     |> refresh_issue_rows([socket.assigns.search_open_for])}
   end
 
   # --- Match / re-match modal (in-flight correction + post-import re-match) ---
@@ -1279,16 +1282,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp assign_overview(socket, all) do
     active = Downloads.filter_downloads(all, :active)
-    issues = issue_lists(all)
 
     socket
     |> assign(:summary, ListView.summarize(active))
     |> assign(:client_options, ListView.clients(all))
     |> assign(:tab_counts, %{
       downloads: length(active),
-      issues:
-        length(socket.assigns.scan.needs_matching) + length(issues.unresolved) +
-          length(issues.other)
+      issues: length(IssueList.build(socket.assigns.scan.needs_matching, all))
     })
   end
 
@@ -1322,20 +1322,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:has_more, has_more)
     |> assign(:downloads_empty?, reset? and paginated_downloads == [])
     |> stream(:downloads, paginated_downloads, reset: reset?)
-  end
-
-  # Split out of load_issues_downloads/2 so the Issues count is available from
-  # every tab. The path-mapping enrichment is a query and only the Issues tab
-  # renders it, so it stays in load_issues_downloads/2.
-  defp issue_lists(all) do
-    %{
-      unresolved: Enum.filter(all, &(&1.match_status == "unresolved_files")),
-      other:
-        Enum.filter(all, fn d ->
-          (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at) ||
-             not is_nil(d.removal_error)) and d.match_status != "unresolved_files"
-        end)
-    }
   end
 
   # Finds the open drawer's download in `all` (fetching it when nil). A
@@ -1375,34 +1361,49 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   defp load_issues_downloads(socket, all_downloads) do
-    # Needs Matching is derived from the clients, not from the database: these
-    # torrents have no download row and never will unless the user matches one.
-    # `:scan` was refreshed by the caller (load_downloads/1 or reload_stream/1).
-    scan = socket.assigns.scan
+    # Needs Matching is derived from the clients, not the database: these
+    # torrents have no download row unless the user matches one. `:scan` was
+    # refreshed by the caller (load_downloads/1 or reload_stream/1).
     filters = socket.assigns.filters
-    %{unresolved: unresolved, other: other} = issue_lists(all_downloads)
-    needs_matching = ListView.filter_scan(scan.needs_matching, filters)
-    unresolved = ListView.filter(unresolved, filters)
-    other = other |> ListView.filter(filters) |> enrich_path_mapping_suggestions()
 
-    counts = %{
-      unmatched: length(needs_matching),
-      unresolved: length(unresolved),
-      other: length(other)
-    }
+    # Counted before the kind filter, so each chip shows what it would yield.
+    issues =
+      socket.assigns.scan.needs_matching
+      |> IssueList.build(all_downloads)
+      |> IssueList.filter(%{filters | kind: nil})
 
-    all_empty = counts.unmatched == 0 and counts.unresolved == 0 and counts.other == 0
+    shown = issues |> IssueList.filter(filters) |> enrich_issue_path_mappings()
 
     socket
     |> assign(:stale_status, stale_status(all_downloads))
     |> assign(:has_more, false)
-    |> assign(:downloads_empty?, all_empty)
-    |> assign(:issues_counts, counts)
-    |> assign(:scan, scan)
+    |> assign(:downloads_empty?, shown == [])
+    |> assign(:issue_counts, IssueList.counts(issues))
     |> assign(:removed_client_groups, removed_client_groups())
-    |> stream(:needs_matching, needs_matching, reset: true)
-    |> stream(:unresolved_downloads, unresolved, reset: true)
-    |> stream(:other_issues, other, reset: true)
+    |> stream(:issues, shown, reset: true)
+  end
+
+  # Stream rows are not re-rendered when an assign changes, so the inline
+  # library search (open state, query, results) re-inserts the torrent rows it
+  # affects. Only needs-matching rows carry the search.
+  defp refresh_issue_rows(%{assigns: %{active_tab: :issues}} = socket, ids) do
+    socket.assigns.scan.needs_matching
+    |> Enum.filter(&(&1.id in ids))
+    |> IssueList.build([])
+    |> Enum.reduce(socket, &stream_insert(&2, :issues, &1))
+  end
+
+  defp refresh_issue_rows(socket, _ids), do: socket
+
+  # The mapping suggestion is a query, so it runs only for the rows on screen.
+  defp enrich_issue_path_mappings(issues) do
+    downloads = for %Issue{download: d} <- issues, d, do: d
+    by_id = downloads |> enrich_path_mapping_suggestions() |> Map.new(&{&1.id, &1})
+
+    Enum.map(issues, fn
+      %Issue{download: %{id: id}} = issue -> %{issue | download: Map.fetch!(by_id, id)}
+      issue -> issue
+    end)
   end
 
   defp load_external(socket) do
@@ -1806,29 +1807,5 @@ defmodule MydiaWeb.DownloadsLive.Index do
     season = String.pad_leading("#{episode.season_number}", 2, "0")
     episode_num = String.pad_leading("#{episode.episode_number}", 2, "0")
     "S#{season}E#{episode_num}"
-  end
-
-  defp get_media_type(download) do
-    cond do
-      # If there's an episode, it's a TV show
-      is_map(download.episode) ->
-        "tv_show"
-
-      # Otherwise check media_item type
-      is_map(download.media_item) && download.media_item.type ->
-        download.media_item.type
-
-      # Unknown/fallback
-      true ->
-        nil
-    end
-  end
-
-  defp media_type_badge(download) do
-    case get_media_type(download) do
-      "movie" -> {"🎬", "Movie", "badge-accent"}
-      "tv_show" -> {"📺", "TV Show", "badge-info"}
-      _ -> nil
-    end
   end
 end

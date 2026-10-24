@@ -746,7 +746,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       assert Repo.get!(Download, download.id).removal_kind == "clear"
     end
 
-    test "a removal that gave up shows under Other Issues and can be retried", %{conn: conn} do
+    test "a removal that gave up shows in the Issues list and can be retried", %{conn: conn} do
       download =
         completed_download("Fictional Paper Comet", %{
           removal_kind: "clear",
@@ -757,7 +757,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       {:ok, view, _html} = live(conn, ~p"/downloads")
       view |> element("#downloads-tab-issues") |> render_click()
 
-      assert has_element?(view, "#other-issues", "Failed to remove torrent")
+      assert has_element?(view, "#issues-list #issues-#{download.id}", "Failed to remove torrent")
       assert has_element?(view, "#retry-removal-#{download.id}")
 
       view |> element("#retry-removal-#{download.id}") |> render_click()

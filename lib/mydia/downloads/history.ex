@@ -706,6 +706,7 @@ defmodule Mydia.Downloads.History do
       metadata: download.metadata,
       match_status: download.match_status,
       inserted_at: download.inserted_at,
+      updated_at: download.updated_at,
       status: status_from_torrent_state(torrent_status.state),
       progress: torrent_status.progress,
       download_speed: torrent_status.download_speed,
@@ -757,6 +758,7 @@ defmodule Mydia.Downloads.History do
       metadata: download.metadata,
       match_status: download.match_status,
       inserted_at: download.inserted_at,
+      updated_at: download.updated_at,
       # "unknown" intentionally avoids the "missing" / "failed" classifications.
       status: "unknown",
       progress: if(download.completed_at, do: 100.0, else: 0.0),
@@ -830,6 +832,7 @@ defmodule Mydia.Downloads.History do
       metadata: download.metadata,
       match_status: download.match_status,
       inserted_at: download.inserted_at,
+      updated_at: download.updated_at,
       status: status,
       progress: if(download.completed_at, do: 100.0, else: 0.0),
       download_speed: 0,

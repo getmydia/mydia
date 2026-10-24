@@ -350,6 +350,19 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
           <.icon name="hero-information-circle" class="size-4" /> Details
         </button>
       </li>
+      <%!-- A failed import's files can still be matched by hand. --%>
+      <li :if={@issue.kind == :import_failed}>
+        <button
+          id={"issue-menu-match-files-#{@issue.id}"}
+          type="button"
+          popovertarget={"issue-menu-list-#{@issue.id}"}
+          popovertargetaction="hide"
+          phx-click="open_match_files"
+          phx-value-id={@issue.id}
+        >
+          <.icon name="hero-document-magnifying-glass" class="size-4" /> Match files…
+        </button>
+      </li>
       <li :if={@issue.kind != :missing}>
         <button
           id={"issue-menu-dismiss-#{@issue.id}"}
