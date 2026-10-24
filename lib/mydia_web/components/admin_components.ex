@@ -89,9 +89,9 @@ defmodule MydiaWeb.AdminComponents do
   slot :actions, doc: "header buttons, right-aligned from the md breakpoint up"
 
   @doc """
-  The page header on its own: title, description, count and actions.
-  `admin_page/1` renders it for every `MydiaWeb.AdminNav` page; an admin page
-  that lives outside the hubs (Import Lists) renders it directly.
+  A standalone page header: title, description, count and actions. For an admin
+  page outside the `MydiaWeb.AdminNav` hubs (Import Lists); hub pages use
+  `admin_page/1`, whose title is the hub.
   """
   def admin_header(assigns) do
     ~H"""
@@ -133,65 +133,85 @@ defmodule MydiaWeb.AdminComponents do
   slot :inner_block, required: true
 
   @doc """
-  The chrome every admin page renders: its hub, its `<h1>` and one-line
-  description from `MydiaWeb.AdminNav`, optional header actions, and a tab
-  strip of the hub's pages.
+  The chrome every hub page renders: the hub as the `<h1>`, optional header
+  actions, the hub's pages as lifted tabs (a lifted switcher tab below `xl`), and
+  a bordered panel holding the page's description and body.
 
   Pass `page` as a literal (`<.admin_page page={:trash}>`) so a mistyped key
   fails the build.
   """
   def admin_page(assigns) do
     nav_page = AdminNav.fetch!(assigns.page)
+    tabs = AdminNav.visible_pages(nav_page.hub)
 
     assigns =
       assign(assigns,
         nav_page: nav_page,
         hub_label: AdminNav.hub_label(nav_page.hub),
-        tabs: AdminNav.visible_pages(nav_page.hub)
+        tabs: tabs
       )
 
     ~H"""
-    <.admin_header
-      title={@nav_page.label}
-      description={@nav_page.description}
-      eyebrow={@hub_label}
-      count={@count}
+    <div
+      id="admin-page-header"
+      class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6"
     >
-      <:actions :if={@actions != []}>{render_slot(@actions)}</:actions>
-    </.admin_header>
+      <h1 id="admin-page-title" class="text-3xl font-bold">{@hub_label}</h1>
+      <div :if={@actions != []} id="admin-page-actions" class="flex flex-wrap items-center gap-2">
+        {render_slot(@actions)}
+      </div>
+    </div>
 
+    <%!-- Measured 2026-10-23: Configuration's nine tabs need 842px as labels and
+          1080px with icons, against 960px beside the sidebar at xl and 1216px at
+          2xl. Lifted tabs that wrap look broken, so the strip starts at xl and
+          its icons at 2xl. The strip and the switcher both overlap the panel's top
+          border by 1px (-mb-px), so the active tab's fill covers it and the inactive
+          tabs' bottom borders coincide with it. --%>
     <nav
       id="admin-page-tabs"
       aria-label={"#{@hub_label} pages"}
-      class="tabs tabs-border flex-wrap mb-6 max-sm:hidden"
+      class="tabs tabs-lift relative z-10 -mb-px max-xl:hidden"
     >
       <.link
         :for={tab <- @tabs}
         id={"admin-tab-#{tab.key}"}
         navigate={tab.path}
         aria-current={tab.key == @nav_page.key && "page"}
-        class={["tab whitespace-nowrap", tab.key == @nav_page.key && "tab-active"]}
+        class={["tab gap-1.5 whitespace-nowrap", tab.key == @nav_page.key && "tab-active"]}
       >
+        <.icon name={tab.icon} class="size-4 hidden 2xl:inline-block" />
         {tab.label}
+        <span
+          :if={@count && tab.key == @nav_page.key}
+          id="admin-page-count"
+          class="badge badge-sm tabular-nums"
+        >
+          {@count}
+        </span>
       </.link>
     </nav>
 
-    <%!-- Phones: the wrapped strip took three lines, and a scrolling strip hid
-          tabs off-screen (ae1cb95ce), so the hub's pages sit in a menu. --%>
-    <nav id="admin-page-switcher" aria-label={"#{@hub_label} pages"} class="sm:hidden mb-4">
-      <div class="dropdown w-full z-20">
+    <%!-- Below xl the current page is one lifted tab that opens the hub's pages.
+          A plain btn here blended into the page in every theme (#1188). --%>
+    <nav id="admin-page-switcher" aria-label={"#{@hub_label} pages"} class="flex xl:hidden">
+      <div class="dropdown z-20 -mb-px">
         <div
           id="admin-page-switcher-trigger"
           tabindex="0"
           role="button"
-          class="btn w-full justify-between"
+          class="flex items-center gap-2 h-10 px-4 font-medium cursor-pointer bg-base-100 border border-base-300 border-b-0 rounded-t-box focus-visible:outline-2 focus-visible:outline-primary"
         >
+          <.icon name={@nav_page.icon} class="size-4" />
           {@nav_page.label}
-          <.icon name="hero-chevron-down" class="w-4 h-4 opacity-60" />
+          <span :if={@count} id="admin-switcher-count" class="badge badge-sm tabular-nums">
+            {@count}
+          </span>
+          <.icon name="hero-chevron-down" class="size-4 opacity-60" />
         </div>
         <ul
           tabindex="-1"
-          class="dropdown-content menu w-full mt-1 p-2 shadow-lg bg-base-200 border border-base-300 rounded-box"
+          class="dropdown-content menu w-64 mt-1 p-2 shadow-lg bg-base-200 border border-base-300 rounded-box"
         >
           <li :for={tab <- @tabs}>
             <.link
@@ -208,7 +228,13 @@ defmodule MydiaWeb.AdminComponents do
       </div>
     </nav>
 
-    <div id="admin-page-body" class="bg-base-100 max-sm:bg-transparent py-4 sm:p-6 space-y-4">
+    <div
+      id="admin-page-body"
+      class="bg-base-100 border border-base-300 rounded-box rounded-tl-none p-3 sm:p-4 xl:p-6 space-y-4"
+    >
+      <p :if={@nav_page.description} id="admin-page-description" class="text-base-content/70">
+        {@nav_page.description}
+      </p>
       {render_slot(@inner_block)}
     </div>
     """

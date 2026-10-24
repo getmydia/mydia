@@ -1,18 +1,18 @@
 defmodule MydiaWeb.Features.AdminMobileCardsTest do
   @moduledoc """
-  On a phone, admin list cards have a visible edge on the page background, and
-  the hub's pages are one line tall.
+  The admin hub chrome in a real browser: list cards keep an edge, the switcher
+  tab joins the page's panel on narrow screens, and the lifted tab strip stays on
+  one line at the widths where it shows.
 
-  Before the fix, at 390x844, `admin_list` was base-200 on a base-200 page with
-  no border, inside a base-100 body that showed only as stripes, and the
-  Configuration hub's tabs wrapped to three lines.
+  The strip's breakpoints come from measured widths: Configuration's nine tabs
+  need 842px as labels and 1080px with icons, against 960px beside the sidebar
+  in a 1280px window and 1216px in a 1536px one.
   """
   use MydiaWeb.FeatureCase, async: false
 
   @moduletag :feature
 
-  defp phone(session), do: Wallaby.Browser.resize_window(session, 390, 844)
-  defp desktop(session), do: Wallaby.Browser.resize_window(session, 1280, 900)
+  defp resize(session, width, height), do: Wallaby.Browser.resize_window(session, width, height)
 
   defp style(session, selector, prop) do
     eval_js(session, """
@@ -21,29 +21,49 @@ defmodule MydiaWeb.Features.AdminMobileCardsTest do
     """)
   end
 
-  defp height(session, selector) do
+  defp rect(session, selector, edge) do
     eval_js(session, """
     var el = document.querySelector(#{Jason.encode!(selector)});
-    return el ? el.getBoundingClientRect().height : null;
+    return el ? el.getBoundingClientRect()[#{Jason.encode!(edge)}] : null;
     """)
   end
 
-  test "list cards have an edge and the body has no fill on a phone", %{session: session} do
+  defp tab_count(session) do
+    eval_js(session, ~s|return document.querySelectorAll("nav#admin-page-tabs > a").length;|)
+  end
+
+  defp tab_rows(session) do
+    eval_js(session, """
+    var tabs = document.querySelectorAll("nav#admin-page-tabs > a");
+    return new Set(Array.from(tabs, function (a) { return Math.round(a.getBoundingClientRect().top); })).size;
+    """)
+  end
+
+  test "list cards keep an edge inside the bordered panel on a phone", %{session: session} do
     login_as_admin(session)
-    phone(session)
+    resize(session, 390, 844)
     visit_liveview(session, "/admin/indexers")
 
     assert style(session, "#flaresolverr", "borderTopWidth") == "1px"
-    assert style(session, "#admin-page-body", "backgroundColor") == "rgba(0, 0, 0, 0)"
+    assert style(session, "#admin-page-body", "borderTopWidth") == "1px"
+    refute style(session, "#admin-page-body", "backgroundColor") == "rgba(0, 0, 0, 0)"
   end
 
-  test "the hub's pages are one line on a phone and navigate", %{session: session} do
+  test "the switcher is one lifted tab on the panel and navigates", %{session: session} do
     login_as_admin(session)
-    phone(session)
+    resize(session, 390, 844)
     visit_liveview(session, "/admin/indexers")
 
     assert style(session, "nav#admin-page-tabs", "display") == "none"
-    assert height(session, "#admin-page-switcher-trigger") < 60
+    assert rect(session, "#admin-page-switcher-trigger", "height") < 60
+    assert style(session, "#admin-page-body", "borderTopLeftRadius") == "0px"
+
+    # The trigger overlaps the panel's top border by 1px, so no seam shows.
+    overlap =
+      rect(session, "#admin-page-switcher-trigger", "bottom") -
+        rect(session, "#admin-page-body", "top")
+
+    assert overlap >= 0.5
 
     js_click(session, "#admin-page-switcher-trigger")
     js_click(session, "a#admin-switcher-clients")
@@ -59,13 +79,38 @@ defmodule MydiaWeb.Features.AdminMobileCardsTest do
     )
   end
 
-  test "desktop keeps the tab strip and the filled body", %{session: session} do
+  test "at 1280px Configuration's strip is one line of labels", %{session: session} do
     login_as_admin(session)
-    desktop(session)
+    resize(session, 1280, 900)
     visit_liveview(session, "/admin/indexers")
 
     assert style(session, "nav#admin-page-switcher", "display") == "none"
     refute style(session, "nav#admin-page-tabs", "display") == "none"
-    refute style(session, "#admin-page-body", "backgroundColor") == "rgba(0, 0, 0, 0)"
+    assert style(session, ~s|#admin-tab-quality span[class*="hero-"]|, "display") == "none"
+    assert tab_count(session) == 9
+    assert tab_rows(session) == 1
+
+    # The strip overlaps the panel's top border by 1px, so no seam shows.
+    overlap =
+      rect(session, "#admin-tab-indexers", "bottom") - rect(session, "#admin-page-body", "top")
+
+    assert overlap >= 0.5
+  end
+
+  test "at 1536px Configuration's strip is one line with icons", %{session: session} do
+    login_as_admin(session)
+    resize(session, 1536, 900)
+    visit_liveview(session, "/admin/indexers")
+
+    refute style(session, "nav#admin-page-tabs", "display") == "none"
+
+    # The tab is a flex container, so the icon's inline-block computes to block.
+    assert style(session, ~s|#admin-tab-quality span[class*="hero-"]|, "display") in [
+             "block",
+             "inline-block"
+           ]
+
+    assert tab_count(session) == 9
+    assert tab_rows(session) == 1
   end
 end

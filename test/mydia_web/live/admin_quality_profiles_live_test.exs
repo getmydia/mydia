@@ -42,7 +42,7 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
     end
 
     test "displays quality profiles section", %{view: view} do
-      assert has_element?(view, "h1#admin-page-title", "Quality")
+      assert has_element?(view, ~s|#admin-tab-quality[aria-current="page"]|, "Quality")
       assert has_element?(view, "#quality-profiles-section")
     end
 

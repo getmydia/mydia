@@ -90,9 +90,15 @@ defmodule MydiaWeb.AdminNavLiveTest do
     test "names the hub, the page and its description", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
-      assert has_element?(view, "#admin-page-hub", "Administration")
-      assert has_element?(view, "h1#admin-page-title", "Trash")
-      assert has_element?(view, "#admin-page-description", "Deleted files waiting to be purged")
+      assert has_element?(view, "h1#admin-page-title", "Administration")
+      assert has_element?(view, ~s|#admin-tab-trash[aria-current="page"]|, "Trash")
+
+      assert has_element?(
+               view,
+               "#admin-page-body #admin-page-description",
+               "Deleted files waiting to be purged"
+             )
+
       assert has_element?(view, "#admin-page-actions #trash-scan")
       assert has_element?(view, "#admin-page-count", "0")
     end
@@ -100,7 +106,7 @@ defmodule MydiaWeb.AdminNavLiveTest do
     test "a page's card header merges into the page header", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/clients")
 
-      assert has_element?(view, "h1#admin-page-title", "Clients")
+      assert has_element?(view, ~s|#admin-tab-clients[aria-current="page"]|, "Clients")
       assert has_element?(view, "#admin-page-count", "0")
       assert has_element?(view, "#admin-page-actions button[phx-click=new_download_client]")
       refute has_element?(view, "main h2", "Download Clients")
@@ -138,8 +144,8 @@ defmodule MydiaWeb.AdminNavLiveTest do
     } do
       {:ok, view, _html} = live(conn, ~p"/admin/users")
 
-      assert has_element?(view, "#admin-page-hub", "System")
-      assert has_element?(view, "h1#admin-page-title", "Users")
+      assert has_element?(view, "h1#admin-page-title", "System")
+      assert has_element?(view, ~s|#admin-tab-users[aria-current="page"]|, "Users")
       assert has_element?(view, "#admin-page-actions button[phx-click=open_create_modal]")
       assert has_element?(view, ".alert", "OIDC Auto-Registration")
     end
@@ -147,7 +153,7 @@ defmodule MydiaWeb.AdminNavLiveTest do
     test "Requests uses the registry label", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/requests")
 
-      assert has_element?(view, "h1#admin-page-title", "Requests")
+      assert has_element?(view, ~s|#admin-tab-requests[aria-current="page"]|, "Requests")
       refute has_element?(view, "h1", "Manage Media Requests")
     end
 
@@ -158,7 +164,7 @@ defmodule MydiaWeb.AdminNavLiveTest do
       assert has_element?(view, "button[phx-click=sync_all]")
       assert has_element?(view, "button[phx-click=new_import_list]")
       refute has_element?(view, "#admin-page-tabs")
-      refute has_element?(view, "#admin-page-hub")
+      refute has_element?(view, "#admin-page-switcher")
       assert has_element?(view, ~s|a#nav-import-lists.menu-active[href="/admin/import-lists"]|)
       refute has_element?(view, "#admin-tab-import_lists")
     end
@@ -182,8 +188,8 @@ defmodule MydiaWeb.AdminNavLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/admin/jobs")
 
-      assert has_element?(view, "#admin-page-hub", "Administration")
-      assert has_element?(view, "h1#admin-page-title", "Background Jobs")
+      assert has_element?(view, "h1#admin-page-title", "Administration")
+      assert has_element?(view, ~s|#admin-tab-jobs[aria-current="page"]|, "Background Jobs")
       assert has_element?(view, "#admin-page-actions button[phx-click=refresh_jobs]")
     end
 
