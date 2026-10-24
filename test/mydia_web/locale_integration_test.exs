@@ -36,6 +36,34 @@ defmodule MydiaWeb.LocaleIntegrationTest do
     assert lv_locale(view) == "es"
   end
 
+  defp es(msgid),
+    do:
+      Gettext.with_locale(MydiaWeb.Gettext, "es", fn ->
+        Gettext.gettext(MydiaWeb.Gettext, msgid)
+      end)
+
+  test "the login page renders Spanish text for a Spanish browser", %{conn: conn} do
+    user_fixture()
+    conn = conn |> put_req_header("accept-language", "es") |> get(~p"/auth/login")
+
+    refute es("Sign In") == "Sign In"
+    assert html_response(conn, 200) =~ es("Sign In")
+  end
+
+  test "the profile page is Spanish for a Spanish user", %{conn: conn} do
+    user = user_fixture()
+
+    {:ok, _} =
+      user
+      |> Accounts.get_user_preference!()
+      |> Accounts.update_preference(%{"interface_language" => "es"})
+
+    {:ok, view, _html} = conn |> log_in_user(user) |> live(~p"/profile")
+
+    refute es("Language") == "Language"
+    assert view |> element("#interface-language-settings") |> render() =~ es("Language")
+  end
+
   # Gettext.put_locale/2 stores the locale in the calling process's dictionary
   # under the backend module, so this reads what the LiveView process will
   # translate with.
