@@ -55,7 +55,7 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
 
     {:ok, _view, html} = live(conn, ~p"/")
 
-    assert html =~ "Start by adding movies or TV shows from"
+    assert html =~ "Start by adding movies or TV shows."
     assert html =~ ~s(href="/discover")
   end
 

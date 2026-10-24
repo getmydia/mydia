@@ -170,7 +170,11 @@
                   icon="hero-inbox-stack"
                   title={gettext("Pending Requests")}
                   description={
-                    gettext("%{count} request(s) awaiting review", count: @pending_requests_count)
+                    ngettext(
+                      "%{count} request awaiting review",
+                      "%{count} requests awaiting review",
+                      @pending_requests_count
+                    )
                   }
                   color="warning"
                   badge={@pending_requests_count}
@@ -418,8 +422,10 @@
       <div>
         <p class="font-semibold">{gettext("Getting Started")}</p>
         <p class="text-sm">
-          {gettext("Your media library is empty. Start by adding movies or TV shows from")}
-          <.link navigate={~p"/discover"} class="link font-medium">{gettext("Discover")}</.link>!
+          {gettext("Your media library is empty. Start by adding movies or TV shows.")}
+          <.link navigate={~p"/discover"} class="link font-medium">
+            {gettext("Browse Discover")}
+          </.link>
         </p>
       </div>
     </div>

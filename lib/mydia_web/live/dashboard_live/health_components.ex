@@ -164,7 +164,7 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
               <span class="badge badge-sm badge-success font-medium">{gettext("None")}</span>
             <% _ -> %>
               <span class="badge badge-sm badge-warning font-medium">
-                {gettext("%{count} to review", count: @count)}
+                {ngettext("%{count} to review", "%{count} to review", @count)}
               </span>
           <% end %>
         </div>
