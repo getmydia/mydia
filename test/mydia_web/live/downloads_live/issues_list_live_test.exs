@@ -168,6 +168,158 @@ defmodule MydiaWeb.DownloadsLive.IssuesListLiveTest do
     refute has_element?(view, "#issues-list > li")
   end
 
+  describe "selection and batch actions" do
+    defp torrent_awaiting_match do
+      %ExternalTorrent{
+        id: "t1",
+        client_name: "qbit",
+        client_id: "hash-t1",
+        title: "Fictional.Salt.Meridian.S01E01.1080p.WEB-DL",
+        kind: :needs_matching,
+        status: :downloading,
+        progress: 40.0,
+        suggestions: []
+      }
+    end
+
+    test "Select picks every download-backed row, never a torrent", %{conn: conn} do
+      seed_import_failure_and_missing()
+
+      :ok =
+        ExternalTorrents.put(%{ExternalScan.empty() | needs_matching: [torrent_awaiting_match()]})
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")
+
+      view |> element("#downloads-select") |> render_click()
+
+      assert has_element?(view, "#downloads-batch-bar", "2 selected")
+      assert has_element?(view, "#downloads-batch-retry")
+      assert has_element?(view, "#downloads-batch-dismiss")
+      refute has_element?(view, "#downloads-batch-delete")
+    end
+
+    test "Select honours the kind filter", %{conn: conn} do
+      seed_import_failure_and_missing()
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues&kind=missing")
+
+      view |> element("#downloads-select") |> render_click()
+
+      assert has_element?(view, "#downloads-batch-bar", "1 selected")
+    end
+
+    test "only torrents to match: no Select button", %{conn: conn} do
+      :ok =
+        ExternalTorrents.put(%{ExternalScan.empty() | needs_matching: [torrent_awaiting_match()]})
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")
+
+      refute has_element?(view, "#downloads-select")
+    end
+
+    test "batch dismiss removes the selected issues", %{conn: conn} do
+      %{failed: failed, missing: missing} = seed_import_failure_and_missing()
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")
+
+      view |> element("#downloads-select") |> render_click()
+      view |> element("#downloads-batch-dismiss") |> render_click()
+
+      assert has_element?(view, "#flash-info", "2 dismissed")
+      refute has_element?(view, "#issues-#{failed.id}")
+      refute has_element?(view, "#issues-#{missing.id}")
+      refute has_element?(view, "#downloads-batch-bar")
+      assert is_nil(Mydia.Downloads.get_download(failed.id))
+      assert is_nil(Mydia.Downloads.get_download(missing.id))
+    end
+
+    test "batch retry retries import failures and skips what it cannot retry", %{conn: conn} do
+      # Oban is not started in test; the import retry enqueues a job.
+      start_supervised!(
+        {Oban, repo: Mydia.Repo, engine: Mydia.AdapterHelpers.oban_engine(), testing: :manual}
+      )
+
+      seed_import_failure_and_missing()
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")
+
+      view |> element("#downloads-select") |> render_click()
+      view |> element("#downloads-batch-retry") |> render_click()
+
+      assert has_element?(view, "#flash-info", "1 retried, 1 skipped")
+    end
+
+    test "the old Clear All Cancelled bulk action is gone", %{conn: conn} do
+      seed_import_failure_and_missing()
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")
+
+      refute render(view) =~ "Clear All Cancelled"
+    end
+  end
+
+  describe "retry_download" do
+    defmodule GrabAdapter do
+      @behaviour Mydia.Downloads.Client
+
+      @impl true
+      def supported_protocols, do: [:torrent]
+      @impl true
+      def test_connection(_config), do: {:ok, %{version: "1.0.0", api_version: "1.0"}}
+      @impl true
+      def add_torrent(_config, _torrent, _opts), do: {:ok, "regrabbed-id"}
+      @impl true
+      def get_status(_config, _client_id), do: {:ok, %{}}
+      @impl true
+      def list_torrents(_config, _opts), do: {:ok, []}
+      @impl true
+      def remove_torrent(_config, _client_id, _opts), do: :ok
+      @impl true
+      def pause_torrent(_config, _client_id), do: :ok
+      @impl true
+      def resume_torrent(_config, _client_id), do: :ok
+    end
+
+    setup do
+      alias Mydia.Downloads.Client.Registry
+
+      original =
+        case Registry.get_adapter(:qbittorrent) do
+          {:ok, adapter} -> adapter
+          {:error, _} -> nil
+        end
+
+      Registry.register(:qbittorrent, GrabAdapter)
+      on_exit(fn -> if original, do: Registry.register(:qbittorrent, original) end)
+
+      Mydia.SettingsFixtures.download_client_config_fixture(%{type: "qbittorrent"})
+      :ok
+    end
+
+    test "the row's Retry re-grabs a failed download", %{conn: conn} do
+      item = media_item_fixture(%{title: "Fictional Salt Meridian"})
+
+      failed =
+        download_fixture(%{
+          media_item_id: item.id,
+          title: "Fictional.Salt.Meridian.2031.1080p",
+          download_url: "magnet:?xt=urn:btih:fictional",
+          download_client: nil,
+          download_client_id: nil,
+          error_message: "tracker unreachable"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")
+      assert has_element?(view, "#retry-download-#{failed.id}")
+
+      view |> element("#retry-download-#{failed.id}") |> render_click()
+
+      assert has_element?(view, "#flash-info", "Download re-initiated")
+      assert is_nil(Mydia.Downloads.get_download(failed.id))
+      refute has_element?(view, "#issues-#{failed.id}")
+    end
+  end
+
   defp count_rows(html) do
     html
     |> LazyHTML.from_fragment()

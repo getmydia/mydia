@@ -19,7 +19,6 @@ defmodule Mydia.Downloads.Queue do
   defdelegate clear_completed(download, opts \\ []), to: Lifecycle
   defdelegate clear_all_completed(opts \\ []), to: Lifecycle
   defdelegate dismiss_download(download), to: Lifecycle
-  defdelegate dismiss_all_cancelled(), to: Lifecycle
 
   ## Duplicates
 

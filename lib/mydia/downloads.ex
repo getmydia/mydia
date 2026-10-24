@@ -514,12 +514,6 @@ defmodule Mydia.Downloads do
   """
   defdelegate dismiss_download(download), to: Mydia.Downloads.Queue
 
-  @doc """
-  Bulk-dismisses failed/errored downloads that don't have special match_status.
-  Only deletes downloads that have actually failed (error_message or import_failed_at set).
-  """
-  defdelegate dismiss_all_cancelled(), to: Mydia.Downloads.Queue
-
   # ── Transcoding (transcode job management) ────────────────────────────
 
   @doc """

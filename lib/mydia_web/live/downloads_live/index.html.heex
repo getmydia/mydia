@@ -16,8 +16,14 @@
           <.icon name="hero-arrow-path" class="w-4 h-4" />
           <span class="hidden sm:inline ml-1">Refresh</span>
         </button>
-        <%= if @active_tab == :downloads and not @downloads_empty? do %>
-          <button type="button" class="btn btn-sm btn-primary" phx-click="toggle_select_all">
+        <%= if (@active_tab == :downloads and not @downloads_empty?) or
+                 (@active_tab == :issues and @selectable_issues?) do %>
+          <button
+            id="downloads-select"
+            type="button"
+            class="btn btn-sm btn-primary"
+            phx-click="toggle_select_all"
+          >
             <%= cond do %>
               <% @selection_mode and MapSet.size(@selected_ids) > 0 -> %>
                 <.icon name="hero-x-mark" class="w-4 h-4" />
@@ -132,14 +138,35 @@
             <span class="font-semibold">{MapSet.size(@selected_ids)} selected</span>
           </div>
           <div class="join">
-            <button
-              type="button"
-              class="btn btn-sm btn-error join-item"
-              phx-click="batch_delete"
-              data-confirm="Delete selected downloads?"
-            >
-              <.icon name="hero-trash" class="w-4 h-4" /> Delete
-            </button>
+            <%= if @active_tab == :issues do %>
+              <button
+                id="downloads-batch-retry"
+                type="button"
+                class="btn btn-sm btn-primary join-item"
+                phx-click="batch_retry"
+              >
+                <.icon name="hero-arrow-path" class="w-4 h-4" /> Retry
+              </button>
+              <button
+                id="downloads-batch-dismiss"
+                type="button"
+                class="btn btn-sm join-item"
+                phx-click="batch_dismiss"
+                data-confirm="Dismiss selected issues?"
+              >
+                <.icon name="hero-x-mark" class="w-4 h-4" /> Dismiss
+              </button>
+            <% else %>
+              <button
+                id="downloads-batch-delete"
+                type="button"
+                class="btn btn-sm btn-error join-item"
+                phx-click="batch_delete"
+                data-confirm="Delete selected downloads?"
+              >
+                <.icon name="hero-trash" class="w-4 h-4" /> Delete
+              </button>
+            <% end %>
             <button type="button" class="btn btn-sm join-item" phx-click="toggle_select_all">
               Clear
             </button>

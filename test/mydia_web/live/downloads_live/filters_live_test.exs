@@ -227,7 +227,7 @@ defmodule MydiaWeb.DownloadsLive.FiltersLiveTest do
   end
 
   describe "tabs and views" do
-    test "Select is Downloads-only; select-all off Downloads selects nothing", %{conn: conn} do
+    test "Issues with nothing selectable get no Select and select nothing", %{conn: conn} do
       queued("Fictional Salt Meridian")
 
       {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")

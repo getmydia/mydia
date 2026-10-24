@@ -103,6 +103,11 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
               </div>
             </div>
 
+            <.path_mapping_block
+              :if={@download.import_failure_reason == "path_mapping_mismatch"}
+              download={@download}
+            />
+
             <div
               :if={copied_placement(@download)}
               id="import-placement-warning"
@@ -231,6 +236,65 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
         <button type="button" id="download-detail-backdrop" phx-click="close_details">close</button>
       </form>
     </dialog>
+    """
+  end
+
+  # Why a path-mapping failure happened and how to fix it: the suggested
+  # mapping with a one-click apply when one was found, a link to the Path
+  # Mappings page otherwise. `path_mapping_suggestion` is set by the Index's
+  # enrichment, which runs on the Issues tab only.
+  attr :download, :map, required: true
+
+  defp path_mapping_block(assigns) do
+    ~H"""
+    <div
+      id="drawer-path-mapping"
+      role="note"
+      class="alert alert-warning alert-soft items-start text-sm"
+    >
+      <.icon name="hero-folder-open" class="size-4 mt-0.5" />
+      <div class="min-w-0">
+        <p>
+          Mydia can't see the download client's path. This usually means its
+          volume isn't mounted into the Mydia container at the same path.
+        </p>
+        <%= if @download.path_mapping_suggestion do %>
+          <p class="mt-2 font-mono text-xs break-all">
+            {@download.path_mapping_suggestion.remote_prefix}
+            <span class="opacity-50">→</span>
+            {@download.path_mapping_suggestion.local_prefix}
+          </p>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              id={"drawer-apply-mapping-#{@download.id}"}
+              class="btn btn-warning btn-xs"
+              phx-click="apply_mapping_and_retry"
+              phx-value-remote_prefix={@download.path_mapping_suggestion.remote_prefix}
+              phx-value-local_prefix={@download.path_mapping_suggestion.local_prefix}
+              phx-disable-with="Applying…"
+              aria-label={"Apply mapping #{@download.path_mapping_suggestion.remote_prefix} to #{@download.path_mapping_suggestion.local_prefix} and retry"}
+            >
+              Apply mapping &amp; retry
+            </button>
+            <span :if={@download.path_mapping_affected_count} class="text-xs opacity-70">
+              Retries {@download.path_mapping_affected_count} {if @download.path_mapping_affected_count ==
+                                                                    1,
+                                                                  do: "download",
+                                                                  else: "downloads"}
+            </span>
+          </div>
+        <% else %>
+          <.link
+            id={"drawer-path-mappings-link-#{@download.id}"}
+            navigate={~p"/admin/path-mappings"}
+            class="link link-warning mt-2 inline-block"
+          >
+            Add a path mapping
+          </.link>
+        <% end %>
+      </div>
+    </div>
     """
   end
 

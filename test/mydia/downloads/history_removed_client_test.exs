@@ -1,9 +1,8 @@
 defmodule Mydia.Downloads.HistoryRemovedClientTest do
   @moduledoc """
-  The Issues-tab bulk clear must be scoped. `dismiss_all_cancelled/0` already
-  exists and deletes every errored row in the tab; these functions delete only
-  one removed client's orphans, leaving other clients and other failure
-  reasons alone.
+  The Issues-tab bulk clear must be scoped: these functions delete only one
+  removed client's orphans, leaving other clients and other failure reasons
+  alone.
   """
   use Mydia.DataCase, async: true
 

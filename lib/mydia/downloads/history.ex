@@ -199,8 +199,8 @@ defmodule Mydia.Downloads.History do
   @doc """
   Deletes the orphaned downloads referencing `client_name`.
 
-  Scoped on purpose, unlike `dismiss_all_cancelled/0`, which deletes every
-  errored row in the Issues tab. No attempt is made to remove anything from
+  Scoped on purpose: it never touches another client's rows or another
+  failure reason. No attempt is made to remove anything from
   the download client: that client is precisely what no longer exists.
   """
   @spec clear_downloads_for_removed_client(String.t()) :: {non_neg_integer(), nil | [term()]}
