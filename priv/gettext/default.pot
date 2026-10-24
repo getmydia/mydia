@@ -217,16 +217,6 @@ msgstr ""
 msgid "Error loading video"
 msgstr ""
 
-#: lib/mydia_web/live/user_auth.ex:457
-#, elixir-autogen, elixir-format
-msgid "Feedback is rate limited. Try again in %{seconds} seconds."
-msgstr ""
-
-#: lib/mydia_web/live/user_auth.ex:462
-#, elixir-autogen, elixir-format
-msgid "Feedback is rate limited. Try again in about %{minutes} minutes."
-msgstr ""
-
 #: lib/mydia_web/live/user_auth.ex:454
 #, elixir-autogen, elixir-format
 msgid "Feedback is rate limited. Try again later."
@@ -1379,5 +1369,19 @@ msgstr[1] ""
 #, elixir-autogen, elixir-format
 msgid "and %{count} earlier release"
 msgid_plural "and %{count} earlier releases"
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/mydia_web/live/user_auth.ex:457
+#, elixir-autogen, elixir-format
+msgid "Feedback is rate limited. Try again in %{count} second."
+msgid_plural "Feedback is rate limited. Try again in %{count} seconds."
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/mydia_web/live/user_auth.ex:465
+#, elixir-autogen, elixir-format
+msgid "Feedback is rate limited. Try again in about %{count} minute."
+msgid_plural "Feedback is rate limited. Try again in about %{count} minutes."
 msgstr[0] ""
 msgstr[1] ""

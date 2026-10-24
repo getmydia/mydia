@@ -454,12 +454,19 @@ defmodule MydiaWeb.Live.UserAuth do
   defp rate_limited_message(nil), do: gettext("Feedback is rate limited. Try again later.")
 
   defp rate_limited_message(seconds) when is_integer(seconds) and seconds < 60 do
-    gettext("Feedback is rate limited. Try again in %{seconds} seconds.", seconds: seconds)
+    ngettext(
+      "Feedback is rate limited. Try again in %{count} second.",
+      "Feedback is rate limited. Try again in %{count} seconds.",
+      seconds
+    )
   end
 
   defp rate_limited_message(seconds) when is_integer(seconds) do
-    minutes = max(div(seconds, 60), 1)
-    gettext("Feedback is rate limited. Try again in about %{minutes} minutes.", minutes: minutes)
+    ngettext(
+      "Feedback is rate limited. Try again in about %{count} minute.",
+      "Feedback is rate limited. Try again in about %{count} minutes.",
+      max(div(seconds, 60), 1)
+    )
   end
 
   # Get a MapSet of library types that have at least one enabled library path

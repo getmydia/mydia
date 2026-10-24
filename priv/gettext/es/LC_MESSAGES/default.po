@@ -217,16 +217,6 @@ msgstr "Descargas"
 msgid "Error loading video"
 msgstr "Error al cargar el video"
 
-#: lib/mydia_web/live/user_auth.ex:457
-#, elixir-autogen, elixir-format
-msgid "Feedback is rate limited. Try again in %{seconds} seconds."
-msgstr "El envío de comentarios está limitado. Inténtalo de nuevo en %{seconds} segundos."
-
-#: lib/mydia_web/live/user_auth.ex:462
-#, elixir-autogen, elixir-format
-msgid "Feedback is rate limited. Try again in about %{minutes} minutes."
-msgstr "El envío de comentarios está limitado. Inténtalo de nuevo en unos %{minutes} minutos."
-
 #: lib/mydia_web/live/user_auth.ex:454
 #, elixir-autogen, elixir-format
 msgid "Feedback is rate limited. Try again later."
@@ -1381,3 +1371,17 @@ msgid "and %{count} earlier release"
 msgid_plural "and %{count} earlier releases"
 msgstr[0] "y %{count} versión anterior"
 msgstr[1] "y %{count} versiones anteriores"
+
+#: lib/mydia_web/live/user_auth.ex:457
+#, elixir-autogen, elixir-format
+msgid "Feedback is rate limited. Try again in %{count} second."
+msgid_plural "Feedback is rate limited. Try again in %{count} seconds."
+msgstr[0] "El envío de comentarios está limitado. Inténtalo de nuevo en %{count} segundo."
+msgstr[1] "El envío de comentarios está limitado. Inténtalo de nuevo en %{count} segundos."
+
+#: lib/mydia_web/live/user_auth.ex:465
+#, elixir-autogen, elixir-format
+msgid "Feedback is rate limited. Try again in about %{count} minute."
+msgid_plural "Feedback is rate limited. Try again in about %{count} minutes."
+msgstr[0] "El envío de comentarios está limitado. Inténtalo de nuevo en aproximadamente %{count} minuto."
+msgstr[1] "El envío de comentarios está limitado. Inténtalo de nuevo en unos %{count} minutos."
