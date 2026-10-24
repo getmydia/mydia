@@ -3746,12 +3746,13 @@ instead of waiting for the next poll interval.</p>
   the item's aggregate change time, which on upgrade is the migration instant for
   every existing item until it next changes.</li>
 <li><strong>Some availability changes have no database write behind them.</strong> <code>status.state</code>
-  compares episode air dates with the current UTC date, so a show can leave
-  <code>UPCOMING</code> at a UTC date boundary with nothing written to the database. A
-  sweep marks the affected shows and they arrive as ordinary live changes, a
-  little after the boundary rather than at it. Expect a show to appear with no
-  child write, and re-read the whole selection from every live change instead of
-  merging only the fields you believe changed.</li>
+  compares episode air dates, and a movie's release date, with the current UTC
+  date, so a show can leave <code>UPCOMING</code> (and a movie can move from <code>UPCOMING</code> to
+  <code>MISSING</code>) at a UTC date boundary with nothing written to the database. A
+  sweep marks the affected shows and movies and they arrive as ordinary live
+  changes, a little after the boundary rather than at it. Expect an item to
+  appear with no child write, and re-read the whole selection from every live
+  change instead of merging only the fields you believe changed.</li>
 <li><strong>There is no push channel.</strong> The endpoint answers requests only, so poll on the
   interval your consumers need; each page is a plain indexed read.</li>
 </ul>
