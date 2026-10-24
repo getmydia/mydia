@@ -340,6 +340,28 @@ defmodule MydiaWeb.DownloadsLive.IssuesListLiveTest do
       assert is_nil(Mydia.Downloads.get_download(failed.id))
       refute has_element?(view, "#issues-#{failed.id}")
     end
+
+    test "a stale Retry click never deletes an already imported download", %{conn: conn} do
+      item = media_item_fixture(%{title: "Fictional Salt Meridian"})
+
+      imported =
+        download_fixture(%{
+          media_item_id: item.id,
+          title: "Fictional.Salt.Meridian.2031.1080p",
+          download_url: "magnet:?xt=urn:btih:fictional",
+          download_client: nil,
+          download_client_id: nil,
+          status: "failed",
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")
+
+      render_click(view, "retry_download", %{"id" => imported.id})
+
+      assert has_element?(view, "#flash-error", "already imported")
+      assert Mydia.Downloads.get_download(imported.id)
+    end
   end
 
   defp count_rows(html) do

@@ -324,7 +324,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
           {:error, reason} ->
             {:noreply,
              socket
-             |> put_flash(:error, "Failed to retry download: #{inspect(reason)}")
+             |> put_flash(:error, Retry.regrab_error_message(reason))
              |> load_downloads()}
         end
       end)

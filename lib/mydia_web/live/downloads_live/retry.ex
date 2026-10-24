@@ -18,6 +18,8 @@ defmodule MydiaWeb.DownloadsLive.Retry do
     case Downloads.update_download(download, %{
            import_retry_count: 0,
            import_last_error: nil,
+           import_failure_reason: nil,
+           import_reported_path: nil,
            import_next_retry_at: nil,
            import_failed_at: nil
          }) do
@@ -39,8 +41,14 @@ defmodule MydiaWeb.DownloadsLive.Retry do
   @doc """
   Grabs the same release again: the old row is deleted and a new one is
   initiated from its download URL, against the same client when it had one.
+
+  An imported download is never re-grabbed: a Retry button rendered before the
+  import finished can still post its event, so this returns
+  `{:error, :already_imported}` and leaves the row untouched.
   """
   @spec regrab(Mydia.Downloads.Download.t()) :: {:ok, term()} | {:error, term()}
+  def regrab(%{imported_at: %DateTime{}}), do: {:error, :already_imported}
+
   def regrab(download) do
     metadata = DownloadMetadata.from_map(download.metadata)
 
@@ -63,6 +71,11 @@ defmodule MydiaWeb.DownloadsLive.Retry do
     Downloads.delete_download(download)
     Downloads.initiate_download(search_result, opts)
   end
+
+  @doc "The flash text for a failed `regrab/1`."
+  @spec regrab_error_message(term()) :: String.t()
+  def regrab_error_message(:already_imported), do: "That download was already imported"
+  def regrab_error_message(reason), do: "Failed to retry download: #{inspect(reason)}"
 
   defp maybe_add_opt(opts, _key, nil), do: opts
   defp maybe_add_opt(opts, key, value), do: Keyword.put(opts, key, value)
