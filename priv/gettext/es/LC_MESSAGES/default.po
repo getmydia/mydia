@@ -25,7 +25,7 @@ msgstr "Intentando reconectar"
 #: lib/mydia_web/components/layouts.ex:384
 #, elixir-autogen, elixir-format
 msgid "Something went wrong!"
-msgstr "¡Algo salió mal!"
+msgstr "¡Algo ha salido mal!"
 
 #: lib/mydia_web/components/layouts.ex:371
 #, elixir-autogen, elixir-format
@@ -82,7 +82,7 @@ msgstr "%{category} (asignada manualmente)"
 #: lib/mydia_web/components/core_components.ex:652
 #, elixir-autogen, elixir-format
 msgid "%{duration} left"
-msgstr "Quedan %{duration}"
+msgstr "%{duration} restantes"
 
 #: lib/mydia_web/components/video_player_components.ex:486
 #, elixir-autogen, elixir-format
@@ -215,7 +215,7 @@ msgstr "Descargas"
 #: lib/mydia_web/components/video_player_components.ex:377
 #, elixir-autogen, elixir-format
 msgid "Error loading video"
-msgstr "Error al cargar el vídeo"
+msgstr "Error al cargar el video"
 
 #: lib/mydia_web/live/user_auth.ex:457
 #, elixir-autogen, elixir-format
@@ -486,7 +486,7 @@ msgstr "Novedades"
 #: lib/mydia_web/components/video_player_components.ex:72
 #, elixir-autogen, elixir-format
 msgid "Your browser does not support video playback."
-msgstr "Tu navegador no admite la reproducción de vídeo."
+msgstr "Tu navegador no admite la reproducción de video."
 
 #: lib/mydia_web/components/layouts.ex:613
 #, elixir-autogen, elixir-format
@@ -741,12 +741,12 @@ msgstr "Ocultar el reproductor"
 #: lib/mydia_web/live/profile_live/index.html.heex:240
 #, elixir-autogen, elixir-format
 msgid "How round cards, buttons and inputs are. Theme keeps each theme's own corners."
-msgstr "Qué tan redondeadas son las tarjetas, los botones y los campos. Tema mantiene las esquinas propias de cada tema."
+msgstr "Cuánto se redondean las tarjetas, los botones y los campos. Tema mantiene las esquinas propias de cada tema."
 
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:355
 #, elixir-autogen, elixir-format
 msgid "I saved these"
-msgstr "Ya los guardé"
+msgstr "Ya los he guardado"
 
 #: lib/mydia_web/live/profile_live/index.ex:407
 #, elixir-autogen, elixir-format
@@ -1042,7 +1042,7 @@ msgstr "Ese código no coincide. Comprueba que el reloj de tu dispositivo sea co
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:175
 #, elixir-autogen, elixir-format
 msgid "The passkey request was cancelled or timed out."
-msgstr "La solicitud de la passkey se canceló o caducó."
+msgstr "La solicitud de la passkey se ha cancelado o ha caducado."
 
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:178
 #, elixir-autogen, elixir-format
@@ -1057,7 +1057,7 @@ msgstr "Zona horaria"
 #: lib/mydia_web/live/profile_live/index.html.heex:269
 #, elixir-autogen, elixir-format
 msgid "Times across Mydia are shown in this zone. The server default comes from the %{tz} setting."
-msgstr "Las horas en todo Mydia se muestran en esta zona. El valor del servidor sale del ajuste %{tz}."
+msgstr "Las horas en todo Mydia se muestran en esta zona. El valor del servidor proviene del ajuste %{tz}."
 
 #: lib/mydia_web/controllers/session_controller.ex:69
 #: lib/mydia_web/controllers/session_controller.ex:210
@@ -1263,7 +1263,7 @@ msgstr "Iniciar sesión con OIDC"
 #: lib/mydia_web/controllers/session_html/totp.html.heex:66
 #, elixir-autogen, elixir-format
 msgid "Lost your authenticator? Use a recovery code or ask an admin to reset two-factor authentication."
-msgstr "¿Perdiste tu autenticador? Usa un código de recuperación o pide a un administrador que restablezca la autenticación en dos pasos."
+msgstr "¿Has perdido tu autenticador? Usa un código de recuperación o pide a un administrador que restablezca la autenticación en dos pasos."
 
 #: lib/mydia_web/live/first_time_setup_live/index.html.heex:186
 #, elixir-autogen, elixir-format
