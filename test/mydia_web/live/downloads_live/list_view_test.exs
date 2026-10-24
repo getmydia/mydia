@@ -269,4 +269,18 @@ defmodule MydiaWeb.DownloadsLive.ListViewTest do
       assert ListView.media_item_id(download(%{media_item_id: nil, media_item: nil})) == nil
     end
   end
+
+  describe "kind filter" do
+    test "kind is parsed only on the Issues tab" do
+      assert ListView.parse_filters(%{"kind" => "missing"}, {:issues, :active}).kind == :missing
+      assert ListView.parse_filters(%{"kind" => "missing"}, {:downloads, :active}).kind == nil
+      assert ListView.parse_filters(%{"kind" => "nope"}, {:issues, :active}).kind == nil
+    end
+
+    test "kind has a chip and a param" do
+      filters = %Filters{kind: :import_failed}
+      assert {"kind", "Kind: Import failed"} in ListView.chips(filters)
+      assert ListView.to_params(filters) == [kind: :import_failed]
+    end
+  end
 end

@@ -11,7 +11,7 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   alias Mydia.Downloads.StallDetector
   alias Mydia.Downloads.StatusFilter
   alias Mydia.Downloads.Structs.DownloadMetadata
-  alias MydiaWeb.DownloadsLive.{Filters, Summary}
+  alias MydiaWeb.DownloadsLive.{Filters, IssueList, Summary}
 
   @status_options [
     {"downloading", "Downloading"},
@@ -28,7 +28,7 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   @doc """
   The search and filter state from URL params. `scope` is `{tab, view}`: the
   status chips only exist in the Active view of the Downloads tab, so `status`
-  is dropped everywhere else.
+  is dropped everywhere else, and `kind` only exists on the Issues tab.
   """
   @spec parse_filters(map(), {atom(), atom() | nil}) :: Filters.t()
   def parse_filters(params, scope) do
@@ -37,7 +37,8 @@ defmodule MydiaWeb.DownloadsLive.ListView do
     %Filters{
       q: blank_to_nil(Map.get(params, "q")),
       client: blank_to_nil(Map.get(params, "client")),
-      status: if(scope == {:downloads, :active} and status in @statuses, do: status)
+      status: if(scope == {:downloads, :active} and status in @statuses, do: status),
+      kind: if(match?({:issues, _}, scope), do: IssueList.parse_kind(Map.get(params, "kind")))
     }
   end
 
@@ -98,7 +99,7 @@ defmodule MydiaWeb.DownloadsLive.ListView do
 
   @spec to_params(Filters.t()) :: keyword()
   def to_params(%Filters{} = filters) do
-    [q: filters.q, client: filters.client, status: filters.status]
+    [q: filters.q, client: filters.client, status: filters.status, kind: filters.kind]
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
   end
 
@@ -107,7 +108,8 @@ defmodule MydiaWeb.DownloadsLive.ListView do
     [
       filters.q && {"q", "\"#{filters.q}\""},
       filters.client && {"client", "Client: #{filters.client}"},
-      filters.status && {"status", "Status: #{status_label(filters.status)}"}
+      filters.status && {"status", "Status: #{status_label(filters.status)}"},
+      filters.kind && {"kind", "Kind: #{IssueList.label(filters.kind)}"}
     ]
     |> Enum.reject(&(&1 in [nil, false]))
   end
@@ -136,9 +138,11 @@ defmodule MydiaWeb.DownloadsLive.ListView do
     end)
   end
 
-  defp matches_query?(_fields, nil), do: true
+  @doc false
+  @spec matches_query?([term()], String.t() | nil) :: boolean()
+  def matches_query?(_fields, nil), do: true
 
-  defp matches_query?(fields, q) do
+  def matches_query?(fields, q) do
     needle = String.downcase(q)
     Enum.any?(fields, &(is_binary(&1) and String.contains?(String.downcase(&1), needle)))
   end

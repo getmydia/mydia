@@ -22,6 +22,7 @@ defmodule MydiaWeb.DownloadsLive.Paths do
           q: filters.q,
           client: filters.client,
           status: filters.status,
+          kind: filters.kind,
           download: drawer_id
         },
         Map.new(overrides)
@@ -29,7 +30,7 @@ defmodule MydiaWeb.DownloadsLive.Paths do
 
     # Fixed key order, so the same state always produces the same URL.
     params =
-      [:tab, :view, :q, :client, :status, :download]
+      [:tab, :view, :q, :client, :status, :kind, :download]
       |> Enum.map(&{&1, values[&1]})
       |> Enum.reject(fn {key, value} ->
         is_nil(value) or {key, value} in [{:tab, :downloads}, {:view, :active}]
@@ -42,11 +43,11 @@ defmodule MydiaWeb.DownloadsLive.Paths do
     end
   end
 
-  # Tab links keep the search and client, and drop the view, the status and
-  # the open drawer: none of them carries over to another tab.
+  # Tab links keep the search and client, and drop the view, the status, the
+  # kind and the open drawer: none of them carries over to another tab.
   @spec tabs(map()) :: [Tab.t()]
   def tabs(assigns) do
-    href = &downloads_path(assigns, tab: &1, view: nil, status: nil, download: nil)
+    href = &downloads_path(assigns, tab: &1, view: nil, status: nil, kind: nil, download: nil)
 
     [
       %Tab{

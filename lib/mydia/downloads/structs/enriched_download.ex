@@ -28,6 +28,7 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     :metadata,
     :match_status,
     :inserted_at,
+    :updated_at,
     # Real-time status fields
     :status,
     :progress,
@@ -135,6 +136,7 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           metadata: map(),
           match_status: String.t() | nil,
           inserted_at: DateTime.t(),
+          updated_at: DateTime.t(),
           # Real-time status fields
           status: String.t(),
           progress: float(),

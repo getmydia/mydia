@@ -48,12 +48,21 @@ defmodule MydiaWeb.DownloadsLive.PathMappingIssueTest do
     end
 
     test "renders an actionable mismatch entry in the issues tab", %{conn: conn} do
-      mismatch_download("/downloads/complete/Severance.S02E10")
+      download = mismatch_download("/downloads/complete/Severance.S02E10")
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
-      html = render_patch(view, ~p"/downloads?tab=issues")
+      render_patch(view, ~p"/downloads?tab=issues")
 
-      assert html =~ "Mydia can&#39;t see the download client&#39;s path"
+      # The row names the failure and offers a fix; the longer explanation
+      # lives in the detail drawer.
+      assert has_element?(
+               view,
+               "#issues-#{download.id}",
+               "Mydia can't access the download path"
+             )
+
+      assert has_element?(view, "#issues-#{download.id} #retry-import-#{download.id}") or
+               has_element?(view, "#issues-#{download.id} #apply-mapping-#{download.id}")
     end
 
     test "applying a mapping persists it and re-runs every affected mismatch", %{conn: conn} do

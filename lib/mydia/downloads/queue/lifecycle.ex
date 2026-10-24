@@ -387,15 +387,6 @@ defmodule Mydia.Downloads.Queue.Lifecycle do
     History.delete_download(download)
   end
 
-  def dismiss_all_cancelled do
-    from(d in Download,
-      where:
-        is_nil(d.match_status) and is_nil(d.imported_at) and
-          (not is_nil(d.error_message) or not is_nil(d.import_failed_at))
-    )
-    |> Repo.delete_all()
-  end
-
   # Best effort: a torrent the client no longer holds must not block the reject.
   defp remove_from_client(%Download{download_client: nil}), do: :ok
   defp remove_from_client(%Download{download_client_id: nil}), do: :ok

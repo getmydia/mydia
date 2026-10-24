@@ -7,7 +7,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.ImportCandidates
   alias Mydia.Downloads.StallDetector
-  alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Library.Structs.Quality
   alias Mydia.Library
   alias Mydia.Media
@@ -17,8 +16,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.DownloadsLive.Components
   alias MydiaWeb.DownloadsLive.DetailDrawer
   alias MydiaWeb.DownloadsLive.Filters
+  alias MydiaWeb.DownloadsLive.{Issue, IssueComponents, IssueList}
   alias MydiaWeb.DownloadsLive.ListComponents
   alias MydiaWeb.DownloadsLive.ListView
+  alias MydiaWeb.DownloadsLive.Retry
   alias MydiaWeb.DownloadsLive.Sorting
   alias MydiaWeb.DownloadsLive.Summary
   alias MydiaWeb.DownloadsLive.Paths
@@ -66,7 +67,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:delete_files, false)
      |> assign(:clearable_count, 0)
      # Issues tab state
-     |> assign(:issues_counts, %{unmatched: 0, unresolved: 0, other: 0})
+     |> assign(:issue_counts, IssueList.counts([]))
+     |> assign(:selectable_issues?, false)
      # Match files modal state (manual matching of a failed import's file listing)
      |> assign(:match_files_modal, nil)
      |> assign(:match_files_error, nil)
@@ -94,10 +96,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:downloads_empty?, true)
      # Initialize all streams
      |> stream(:downloads, [])
-     |> stream(:needs_matching, [])
      |> stream(:external_torrents, [])
-     |> stream(:unresolved_downloads, [])
-     |> stream(:other_issues, [])}
+     |> stream_configure(:issues, dom_id: &"issues-#{&1.id}")
+     |> stream(:issues, [])}
   end
 
   @impl true
@@ -134,13 +135,16 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # A new tab or view resets the sort: a view-specific sort (ratio on
   # Imported) is not an option in the next view.
   defp reset_list(socket, scope_changed?) do
-    # Any list change clears the selection: a batch action must not reach rows
-    # the new tab, view or filters hide.
+    # Any list change clears the selection and closes the inline library
+    # search: neither may reach rows the new tab, view or filters hide.
     socket =
       socket
       |> assign(:page, 0)
       |> assign(:selected_ids, MapSet.new())
       |> assign(:selection_mode, false)
+      |> assign(:search_open_for, nil)
+      |> assign(:library_search_value, "")
+      |> assign(:library_search_results, [])
 
     if scope_changed?, do: assign(socket, :sort_by, @default_sort), else: socket
   end
@@ -186,15 +190,23 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
     {:noreply,
      push_patch(socket,
-       to: downloads_path(socket, q: filters.q, client: filters.client, status: filters.status)
+       to:
+         downloads_path(socket,
+           q: filters.q,
+           client: filters.client,
+           status: filters.status,
+           kind: filters.kind
+         )
      )}
   end
 
   def handle_event("clear_filters", _params, socket) do
-    {:noreply, push_patch(socket, to: downloads_path(socket, q: nil, client: nil, status: nil))}
+    {:noreply,
+     push_patch(socket, to: downloads_path(socket, q: nil, client: nil, status: nil, kind: nil))}
   end
 
-  def handle_event("remove_filter", %{"key" => key}, socket) when key in ~w(q client status) do
+  def handle_event("remove_filter", %{"key" => key}, socket)
+      when key in ~w(q client status kind) do
     {:noreply,
      push_patch(socket, to: downloads_path(socket, [{String.to_existing_atom(key), nil}]))}
   end
@@ -234,7 +246,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   def handle_event("toggle_select_all", _params, %{assigns: %{active_tab: tab}} = socket)
-      when tab != :downloads,
+      when tab not in [:downloads, :issues],
       do: {:noreply, socket}
 
   def handle_event("toggle_select_all", _params, socket) do
@@ -246,9 +258,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
        |> assign(:selection_mode, false)
        |> reload_stream()}
     else
-      # Enter selection mode and select all visible downloads
-      downloads = get_current_downloads(socket)
-      selected_ids = downloads |> Enum.map(& &1.id) |> MapSet.new()
+      # Enter selection mode and select every visible row that can be selected
+      selected_ids = socket |> current_selectable_ids() |> MapSet.new()
 
       {:noreply,
        socket
@@ -303,46 +314,18 @@ defmodule MydiaWeb.DownloadsLive.Index do
   def handle_event("retry_download", %{"id" => id}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       with_download(socket, id, [preload: [:media_item, :episode]], fn download ->
-        # Clear error message if any
-        case Downloads.update_download(download, %{error_message: nil}) do
-          {:ok, updated} ->
-            # Convert metadata to struct for type-safe access
-            metadata = DownloadMetadata.from_map(updated.metadata)
+        case Retry.regrab(download) do
+          {:ok, _new_download} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "Download re-initiated")
+             |> load_downloads()}
 
-            # Re-add to client using the original download URL
-            search_result = %Mydia.Indexers.SearchResult{
-              download_url: updated.download_url,
-              title: updated.title,
-              indexer: updated.indexer,
-              size: metadata.size,
-              seeders: metadata.seeders,
-              leechers: metadata.leechers,
-              quality: metadata.quality
-            }
-
-            opts =
-              []
-              |> maybe_add_opt(:media_item_id, updated.media_item_id)
-              |> maybe_add_opt(:episode_id, updated.episode_id)
-              |> maybe_add_opt(:client_name, updated.download_client)
-
-            # Delete old download record and create new one
-            Downloads.delete_download(updated)
-
-            case Downloads.initiate_download(search_result, opts) do
-              {:ok, _new_download} ->
-                {:noreply,
-                 socket
-                 |> put_flash(:info, "Download re-initiated")
-                 |> load_downloads()}
-
-              {:error, reason} ->
-                {:noreply,
-                 put_flash(socket, :error, "Failed to retry download: #{inspect(reason)}")}
-            end
-
-          {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Failed to update download")}
+          {:error, reason} ->
+            {:noreply,
+             socket
+             |> put_flash(:error, Retry.regrab_error_message(reason))
+             |> load_downloads()}
         end
       end)
     else
@@ -390,30 +373,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
   def handle_event("retry_import", %{"id" => id}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       with_download(socket, id, [preload: [:media_item, :episode]], fn download ->
-        # Clear retry metadata and trigger immediate import
-        case Downloads.update_download(download, %{
-               import_retry_count: 0,
-               import_last_error: nil,
-               import_next_retry_at: nil,
-               import_failed_at: nil
-             }) do
-          {:ok, updated} ->
-            # Enqueue import job with immediate execution
-            %{
-              "download_id" => updated.id,
-              "save_path" => nil,
-              "cleanup_client" => true,
-              "use_hardlinks" => true
-            }
-            |> Mydia.Jobs.MediaImport.new()
-            |> Oban.insert()
-
+        case Retry.requeue_import(download) do
+          {:ok, _job} ->
             {:noreply,
              socket
              |> put_flash(:info, "Import retry initiated")
              |> load_downloads()}
 
-          {:error, _changeset} ->
+          {:error, _reason} ->
             {:noreply, put_flash(socket, :error, "Failed to retry import")}
         end
       end)
@@ -432,6 +399,15 @@ defmodule MydiaWeb.DownloadsLive.Index do
     start_removal(socket, id, fn download ->
       {download.removal_kind || "cancel", [delete_files: download.removal_delete_files]}
     end)
+  end
+
+  def handle_event("batch_retry", _params, %{assigns: %{active_tab: :issues}} = socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      {ok, skipped} = retry_issue_rows(socket)
+      {:noreply, finish_issue_batch(socket, "#{ok} retried", skipped)}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
   end
 
   def handle_event("batch_retry", _params, socket) do
@@ -504,6 +480,19 @@ defmodule MydiaWeb.DownloadsLive.Index do
       {:unauthorized, socket} -> {:noreply, socket}
     end
   end
+
+  # Dismissing deletes the row and leaves the client alone, like the per-row
+  # Dismiss. A row already gone is skipped rather than counted.
+  def handle_event("batch_dismiss", _params, %{assigns: %{active_tab: :issues}} = socket) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      {dismissed, skipped} = dismiss_issue_rows(socket)
+      {:noreply, finish_issue_batch(socket, "#{dismissed} dismissed", skipped)}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("batch_dismiss", _params, socket), do: {:noreply, socket}
 
   def handle_event("open_clear_completed_modal", _params, socket) do
     # Opening the modal is non-destructive, so it is ungated (the button renders
@@ -597,7 +586,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
        socket
        |> assign(:search_open_for, nil)
        |> assign(:library_search_value, "")
-       |> assign(:library_search_results, [])}
+       |> assign(:library_search_results, [])
+       |> refresh_issue_rows([torrent_id])}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -618,20 +608,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   def handle_event("toggle_search", %{"id" => download_id}, socket) do
     current = socket.assigns.search_open_for
+    open_for = if current == download_id, do: nil, else: download_id
 
-    if current == download_id do
-      {:noreply,
-       socket
-       |> assign(:search_open_for, nil)
-       |> assign(:library_search_value, "")
-       |> assign(:library_search_results, [])}
-    else
-      {:noreply,
-       socket
-       |> assign(:search_open_for, download_id)
-       |> assign(:library_search_value, "")
-       |> assign(:library_search_results, [])}
-    end
+    {:noreply,
+     socket
+     |> assign(:search_open_for, open_for)
+     |> assign(:library_search_value, "")
+     |> assign(:library_search_results, [])
+     |> refresh_issue_rows([current, download_id])}
   end
 
   def handle_event(
@@ -651,7 +635,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:noreply,
      socket
      |> assign(:library_search_value, query)
-     |> assign(:library_search_results, results)}
+     |> assign(:library_search_results, results)
+     |> refresh_issue_rows([socket.assigns.search_open_for])}
   end
 
   # --- Match / re-match modal (in-flight correction + post-import re-match) ---
@@ -960,19 +945,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  def handle_event("dismiss_all_cancelled", _params, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      {count, _} = Downloads.dismiss_all_cancelled()
-
-      {:noreply,
-       socket
-       |> put_flash(:info, "#{count} download(s) dismissed")
-       |> load_downloads()}
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
-  end
-
   def handle_event("clear_removed_client", %{"client" => client_name}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       {count, _} = Downloads.clear_downloads_for_removed_client(client_name)
@@ -1118,50 +1090,75 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # failure re-grabs the release. Returns the `{status, _}` shape the batch
   # tally counts.
   defp batch_retry_one(download) do
-    if download.import_last_error do
-      # Import failure - retry import
-      case Downloads.update_download(download, %{
-             import_retry_count: 0,
-             import_last_error: nil,
-             import_next_retry_at: nil,
-             import_failed_at: nil
-           }) do
-        {:ok, updated} ->
-          %{
-            "download_id" => updated.id,
-            "save_path" => nil,
-            "cleanup_client" => true,
-            "use_hardlinks" => true
-          }
-          |> Mydia.Jobs.MediaImport.new()
-          |> Oban.insert()
+    if download.import_last_error,
+      do: Retry.requeue_import(download),
+      else: Retry.regrab(download)
+  end
 
-        error ->
-          error
-      end
-    else
-      # Download failure - retry download
-      metadata = DownloadMetadata.from_map(download.metadata)
+  # The Issues tab retries by kind, which `IssueList.kind/1` derives from the
+  # polled row, not from the database row `batch_retry_one/1` reads.
+  defp retry_issue(:import_failed, download), do: Retry.requeue_import(download)
+  defp retry_issue(:download_failed, download), do: Retry.regrab(download)
 
-      search_result = %Mydia.Indexers.SearchResult{
-        download_url: download.download_url,
-        title: download.title,
-        indexer: download.indexer,
-        size: metadata.size,
-        seeders: metadata.seeders,
-        leechers: metadata.leechers,
-        quality: metadata.quality
-      }
+  defp retry_kind(nil), do: nil
+  defp retry_kind(row), do: IssueList.kind(row)
 
-      opts =
-        []
-        |> maybe_add_opt(:media_item_id, download.media_item_id)
-        |> maybe_add_opt(:episode_id, download.episode_id)
-        |> maybe_add_opt(:client_name, download.download_client)
+  # Only import and download failures have a retry. The kind comes from the
+  # rows the last load classified, the same rows the operator selected.
+  # Returns `{retried_count, skipped_count}`.
+  defp retry_issue_rows(socket) do
+    {retryable, skipped} =
+      socket.assigns.selected_ids
+      |> Enum.map(&{&1, retry_kind(socket.assigns.rows_by_id[&1])})
+      |> Enum.split_with(fn {_id, kind} -> kind in [:import_failed, :download_failed] end)
 
-      Downloads.delete_download(download)
-      Downloads.initiate_download(search_result, opts)
+    {Enum.count(retryable, &retry_issue_row/1), length(skipped)}
+  end
+
+  defp retry_issue_row({id, kind}) do
+    case Downloads.get_download(id, preload: [:media_item, :episode]) do
+      nil -> false
+      download -> retried?(fn -> retry_issue(kind, download) end)
     end
+  end
+
+  # Only rows the last load still classified as issues are dismissed; a row
+  # that was resolved since is left alone and counted as skipped.
+  # Returns `{dismissed_count, skipped_count}`.
+  defp dismiss_issue_rows(socket) do
+    {dismissable, skipped} =
+      Enum.split_with(socket.assigns.selected_ids, fn id ->
+        not is_nil(retry_kind(socket.assigns.rows_by_id[id]))
+      end)
+
+    {Enum.count(dismissable, &dismiss_issue_row/1), length(skipped)}
+  end
+
+  defp dismiss_issue_row(id) do
+    case Downloads.get_download(id) do
+      nil -> false
+      download -> match?({:ok, _}, Downloads.dismiss_download(download))
+    end
+  end
+
+  # Clears the selection and flashes the tally, with a skipped suffix when
+  # some rows were left alone.
+  defp finish_issue_batch(socket, tally, skipped) do
+    message = if skipped == 0, do: tally, else: "#{tally}, #{skipped} skipped"
+
+    socket
+    |> assign(:selected_ids, MapSet.new())
+    |> assign(:selection_mode, false)
+    |> put_flash(:info, message)
+    |> load_downloads()
+  end
+
+  # A retry that raises (a client adapter blowing up mid-grab) counts as not
+  # retried rather than crashing the batch.
+  defp retried?(fun) do
+    match?({:ok, _}, fun.())
+  rescue
+    _ -> false
   end
 
   # Loads the download an event names and hands it to `fun`.
@@ -1246,9 +1243,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp removal_flash(socket, _kind, _download), do: socket
 
-  defp maybe_add_opt(opts, _key, nil), do: opts
-  defp maybe_add_opt(opts, key, value), do: Keyword.put(opts, key, value)
-
   # Phoenix checkboxes submit "true" when checked and omit the key when not.
   defp delete_files?(params), do: Map.get(params, "delete_files") == "true"
 
@@ -1279,16 +1273,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp assign_overview(socket, all) do
     active = Downloads.filter_downloads(all, :active)
-    issues = issue_lists(all)
 
     socket
     |> assign(:summary, ListView.summarize(active))
     |> assign(:client_options, ListView.clients(all))
     |> assign(:tab_counts, %{
       downloads: length(active),
-      issues:
-        length(socket.assigns.scan.needs_matching) + length(issues.unresolved) +
-          length(issues.other)
+      issues: length(IssueList.build(socket.assigns.scan.needs_matching, all))
     })
   end
 
@@ -1324,20 +1315,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> stream(:downloads, paginated_downloads, reset: reset?)
   end
 
-  # Split out of load_issues_downloads/2 so the Issues count is available from
-  # every tab. The path-mapping enrichment is a query and only the Issues tab
-  # renders it, so it stays in load_issues_downloads/2.
-  defp issue_lists(all) do
-    %{
-      unresolved: Enum.filter(all, &(&1.match_status == "unresolved_files")),
-      other:
-        Enum.filter(all, fn d ->
-          (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at) ||
-             not is_nil(d.removal_error)) and d.match_status != "unresolved_files"
-        end)
-    }
-  end
-
   # Finds the open drawer's download in `all` (fetching it when nil). A
   # download that has gone (cleared, deleted, stale link) closes the drawer
   # once, with a flash; drawer_id is cleared so a refresh tick does not repeat it.
@@ -1369,40 +1346,82 @@ defmodule MydiaWeb.DownloadsLive.Index do
           [download]
           |> annotate_rematch_eligibility()
           |> annotate_auto_reject_cap()
+          |> enrich_path_mapping_suggestions()
 
         assign(socket, :drawer_download, download)
     end
   end
 
   defp load_issues_downloads(socket, all_downloads) do
-    # Needs Matching is derived from the clients, not from the database: these
-    # torrents have no download row and never will unless the user matches one.
-    # `:scan` was refreshed by the caller (load_downloads/1 or reload_stream/1).
-    scan = socket.assigns.scan
-    filters = socket.assigns.filters
-    %{unresolved: unresolved, other: other} = issue_lists(all_downloads)
-    needs_matching = ListView.filter_scan(scan.needs_matching, filters)
-    unresolved = ListView.filter(unresolved, filters)
-    other = other |> ListView.filter(filters) |> enrich_path_mapping_suggestions()
+    {issues, shown} = filtered_issues(socket, all_downloads)
+    shown = enrich_issue_path_mappings(shown)
 
-    counts = %{
-      unmatched: length(needs_matching),
-      unresolved: length(unresolved),
-      other: length(other)
-    }
-
-    all_empty = counts.unmatched == 0 and counts.unresolved == 0 and counts.other == 0
+    # Drop selections that are no longer on screen (filtered out, resolved).
+    visible_ids = for issue <- shown, Issue.selectable?(issue), into: MapSet.new(), do: issue.id
 
     socket
+    |> assign(:selected_ids, MapSet.intersection(socket.assigns.selected_ids, visible_ids))
     |> assign(:stale_status, stale_status(all_downloads))
     |> assign(:has_more, false)
-    |> assign(:downloads_empty?, all_empty)
-    |> assign(:issues_counts, counts)
-    |> assign(:scan, scan)
+    |> assign(:downloads_empty?, shown == [])
+    |> assign(:selectable_issues?, Enum.any?(shown, &Issue.selectable?/1))
+    |> assign(:issue_counts, IssueList.counts(issues))
     |> assign(:removed_client_groups, removed_client_groups())
-    |> stream(:needs_matching, needs_matching, reset: true)
-    |> stream(:unresolved_downloads, unresolved, reset: true)
-    |> stream(:other_issues, other, reset: true)
+    |> stream(:issues, shown, reset: true)
+  end
+
+  # The Issues list under the current filters, as `{issues, shown}`: `issues`
+  # skips the kind filter, so each chip can count what it would yield, and
+  # `shown` applies it.
+  #
+  # Needs Matching is derived from the clients, not the database: these
+  # torrents have no download row unless the user matches one. `:scan` was
+  # refreshed by the caller (load_downloads/1 or reload_stream/1).
+  defp filtered_issues(socket, all_downloads) do
+    filters = socket.assigns.filters
+
+    issues =
+      socket.assigns.scan.needs_matching
+      |> IssueList.build(all_downloads)
+      |> IssueList.filter(%{filters | kind: nil})
+
+    {issues, IssueList.filter(issues, filters)}
+  end
+
+  # The ids Select picks. On Issues they come from the rows the last load
+  # polled (`rows_by_id`), so Select picks what the operator is looking at
+  # without polling the clients again; torrents awaiting a match have no
+  # download row and are left out.
+  defp current_selectable_ids(%{assigns: %{active_tab: :issues}} = socket) do
+    {_issues, shown} = filtered_issues(socket, Map.values(socket.assigns.rows_by_id))
+    for issue <- shown, Issue.selectable?(issue), do: issue.id
+  end
+
+  defp current_selectable_ids(socket), do: socket |> get_current_downloads() |> Enum.map(& &1.id)
+
+  # Stream rows are not re-rendered when an assign changes, so the inline
+  # library search (open state, query, results) re-inserts the torrent rows it
+  # affects. Only needs-matching rows carry the search. Rows the filters hide
+  # stay out: stream_insert would append them.
+  defp refresh_issue_rows(%{assigns: %{active_tab: :issues}} = socket, ids) do
+    socket.assigns.scan.needs_matching
+    |> Enum.filter(&(&1.id in ids))
+    |> IssueList.build([])
+    |> IssueList.filter(socket.assigns.filters)
+    |> Enum.reduce(socket, &stream_insert(&2, :issues, &1))
+  end
+
+  defp refresh_issue_rows(socket, _ids), do: socket
+
+  # The mapping suggestion is a query, so it runs only for the rows on screen.
+  defp enrich_issue_path_mappings(issues) do
+    downloads = for %Issue{download: d} <- issues, d, do: d
+    by_id = downloads |> enrich_path_mapping_suggestions() |> Map.new(&{&1.id, &1})
+
+    Enum.map(issues, fn
+      %Issue{download: %{id: id}} = issue -> %{issue | download: Map.fetch!(by_id, id)}
+      issue -> issue
+    end)
   end
 
   defp load_external(socket) do
@@ -1806,29 +1825,5 @@ defmodule MydiaWeb.DownloadsLive.Index do
     season = String.pad_leading("#{episode.season_number}", 2, "0")
     episode_num = String.pad_leading("#{episode.episode_number}", 2, "0")
     "S#{season}E#{episode_num}"
-  end
-
-  defp get_media_type(download) do
-    cond do
-      # If there's an episode, it's a TV show
-      is_map(download.episode) ->
-        "tv_show"
-
-      # Otherwise check media_item type
-      is_map(download.media_item) && download.media_item.type ->
-        download.media_item.type
-
-      # Unknown/fallback
-      true ->
-        nil
-    end
-  end
-
-  defp media_type_badge(download) do
-    case get_media_type(download) do
-      "movie" -> {"🎬", "Movie", "badge-accent"}
-      "tv_show" -> {"📺", "TV Show", "badge-info"}
-      _ -> nil
-    end
   end
 end

@@ -149,4 +149,99 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawerTest do
     refute has_element?(view, "#download-detail")
     assert has_element?(view, "#match-modal")
   end
+
+  describe "path-mapping failures" do
+    defp mismatch(reported_path) do
+      queued(%{
+        status: "completed",
+        import_failed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        import_failure_reason: "path_mapping_mismatch",
+        import_reported_path: reported_path,
+        import_last_error: "Mydia can't access the download path: #{reported_path}."
+      })
+    end
+
+    # A basename no mount holds, so no suggestion can be found for it.
+    test "without a suggestion, explains the failure and links to Path Mappings", %{conn: conn} do
+      download = mismatch("/no-such-mydia-mount/Fictional.Salt.Meridian.S01E01")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues&download=#{download.id}")
+
+      assert has_element?(
+               view,
+               "#drawer-path-mapping",
+               "Mydia can't see the download client's path"
+             )
+
+      assert has_element?(view, "#drawer-path-mapping a[href='/admin/path-mappings']")
+      refute has_element?(view, "#drawer-apply-mapping-#{download.id}")
+    end
+
+    test "with a suggestion, shows the prefixes and Apply mapping", %{conn: conn} do
+      download = mismatch("/downloads/complete/Fictional.Salt.Meridian.S01E01")
+      {:ok, _view, _html} = live(conn, ~p"/downloads")
+
+      row =
+        Mydia.Downloads.list_downloads_with_status(bounded: true)
+        |> Enum.find(&(&1.id == download.id))
+
+      row = %{
+        row
+        | path_mapping_suggestion: %{
+            remote_prefix: "/downloads/complete",
+            local_prefix: "/data/torrents/complete"
+          },
+          path_mapping_affected_count: 2
+      }
+
+      html =
+        render_component(&MydiaWeb.DownloadsLive.DetailDrawer.detail_drawer/1,
+          download: row,
+          tab: :issues,
+          display: %Mydia.TimeDisplay{}
+        )
+
+      doc = LazyHTML.from_fragment(html)
+      block = LazyHTML.query(doc, "#drawer-path-mapping")
+
+      assert LazyHTML.text(block) =~ "Mydia can't see the download client's path"
+      assert LazyHTML.text(block) =~ "/downloads/complete"
+      assert LazyHTML.text(block) =~ "/data/torrents/complete"
+      assert LazyHTML.text(block) =~ "Retries 2 downloads"
+
+      assert doc
+             |> LazyHTML.query(
+               "#drawer-apply-mapping-#{download.id}[phx-click=apply_mapping_and_retry]"
+             )
+             |> Enum.count() == 1
+    end
+
+    test "is absent once the failure is cleared, though the stale reason remains", %{conn: conn} do
+      download =
+        queued(%{
+          status: "completed",
+          import_failed_at: nil,
+          import_failure_reason: "path_mapping_mismatch",
+          import_last_error: "Mydia can't access the download path: /gone."
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues&download=#{download.id}")
+
+      assert has_element?(view, "#download-detail-import-error")
+      refute has_element?(view, "#drawer-path-mapping")
+    end
+
+    test "is absent for other import failures", %{conn: conn} do
+      download =
+        queued(%{
+          import_last_error: "permission denied",
+          import_failed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues&download=#{download.id}")
+
+      assert has_element?(view, "#download-detail-import-error")
+      refute has_element?(view, "#drawer-path-mapping")
+    end
+  end
 end

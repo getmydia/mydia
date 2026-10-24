@@ -139,6 +139,9 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
   attr :clients, :list, required: true
   attr :show_status?, :boolean, required: true
 
+  slot :extra,
+    doc: "Extra controls rendered last inside the form, so their inputs submit with the filter"
+
   def filter_bar(assigns) do
     assigns = assign(assigns, :status_options, ListView.status_options())
 
@@ -221,6 +224,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
           checked={@filters.status == value}
         />
       </div>
+      {render_slot(@extra)}
     </form>
     """
   end
@@ -327,24 +331,25 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
 
   def client_chip(assigns) do
     ~H"""
+    <%!-- A badge has a fixed height, so a long name is cut to one line. --%>
     <%= if @url do %>
-      <span class="tooltip" data-tip={"Open #{@name}"}>
+      <span class="tooltip max-w-full min-w-0" data-tip={"Open #{@name}"}>
         <a
           id={@id}
           href={@url}
           target="_blank"
           rel="noopener noreferrer"
-          class="badge badge-ghost badge-sm gap-1 hover:badge-outline transition-colors"
+          class="badge badge-ghost badge-sm gap-1 max-w-full hover:badge-outline transition-colors"
         >
-          <.icon name="hero-server" class="size-3 opacity-70" />
-          {@name}
-          <.icon name="hero-arrow-top-right-on-square" class="size-3 opacity-70" />
+          <.icon name="hero-server" class="size-3 shrink-0 opacity-70" />
+          <span class="truncate min-w-0">{@name}</span>
+          <.icon name="hero-arrow-top-right-on-square" class="size-3 shrink-0 opacity-70" />
         </a>
       </span>
     <% else %>
-      <span id={@id} class="badge badge-ghost badge-sm gap-1">
-        <.icon name="hero-server" class="size-3 opacity-70" />
-        {@name}
+      <span id={@id} class="badge badge-ghost badge-sm gap-1 max-w-full" title={@name}>
+        <.icon name="hero-server" class="size-3 shrink-0 opacity-70" />
+        <span class="truncate min-w-0">{@name}</span>
       </span>
     <% end %>
     """

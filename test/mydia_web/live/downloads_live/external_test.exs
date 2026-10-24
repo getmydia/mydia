@@ -112,14 +112,14 @@ defmodule MydiaWeb.DownloadsLive.ExternalTest do
     refute has_element?(view, "#downloads-ext1")
   end
 
-  test "media-shaped torrents render in the issues needs-matching section", %{conn: conn} do
+  test "media-shaped torrents render in the issues list", %{conn: conn} do
     seed_scan()
     {:ok, view, _html} = live(conn, ~p"/downloads")
 
     view |> element("#downloads-tab-issues") |> render_click()
 
-    assert has_element?(view, "#needs-matching")
-    assert has_element?(view, "#needs_matching-needs1")
+    assert has_element?(view, "#issues-list")
+    assert has_element?(view, "#issues-list > #issues-needs1")
   end
 
   test "an unreachable client is named rather than silently omitted", %{conn: conn} do
@@ -137,6 +137,8 @@ defmodule MydiaWeb.DownloadsLive.ExternalTest do
     {:ok, view, _html} = live(conn, ~p"/downloads")
 
     view |> element("#downloads-tab-issues") |> render_click()
+    # Suggestions sit under the row's Match… toggle.
+    view |> element("#issue-match-needs1") |> render_click()
 
     view
     |> element("#adopt-needs1-#{show.id}")

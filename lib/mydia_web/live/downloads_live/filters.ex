@@ -4,11 +4,12 @@ defmodule MydiaWeb.DownloadsLive.Filters do
   `MydiaWeb.DownloadsLive.ListView.parse_filters/2`.
   """
 
-  defstruct q: nil, client: nil, status: nil
+  defstruct q: nil, client: nil, status: nil, kind: nil
 
   @type t :: %__MODULE__{
           q: String.t() | nil,
           client: String.t() | nil,
-          status: String.t() | nil
+          status: String.t() | nil,
+          kind: MydiaWeb.DownloadsLive.Issue.kind() | nil
         }
 end

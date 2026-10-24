@@ -199,9 +199,7 @@ defmodule Mydia.Downloads.History do
   @doc """
   Deletes the orphaned downloads referencing `client_name`.
 
-  Scoped on purpose, unlike `dismiss_all_cancelled/0`, which deletes every
-  errored row in the Issues tab. No attempt is made to remove anything from
-  the download client: that client is precisely what no longer exists.
+  Scoped to that client; nothing is removed from it, as it no longer exists.
   """
   @spec clear_downloads_for_removed_client(String.t()) :: {non_neg_integer(), nil | [term()]}
   def clear_downloads_for_removed_client(client_name) do
@@ -211,7 +209,6 @@ defmodule Mydia.Downloads.History do
   end
 
   def list_downloads_with_status(opts \\ []) do
-    # Get all download records from database
     # Preload episode.media_item to get parent show info for episode downloads
     downloads = list_downloads(preload: [:media_item, episode: :media_item])
 
@@ -706,6 +703,7 @@ defmodule Mydia.Downloads.History do
       metadata: download.metadata,
       match_status: download.match_status,
       inserted_at: download.inserted_at,
+      updated_at: download.updated_at,
       status: status_from_torrent_state(torrent_status.state),
       progress: torrent_status.progress,
       download_speed: torrent_status.download_speed,
@@ -757,6 +755,7 @@ defmodule Mydia.Downloads.History do
       metadata: download.metadata,
       match_status: download.match_status,
       inserted_at: download.inserted_at,
+      updated_at: download.updated_at,
       # "unknown" intentionally avoids the "missing" / "failed" classifications.
       status: "unknown",
       progress: if(download.completed_at, do: 100.0, else: 0.0),
@@ -830,6 +829,7 @@ defmodule Mydia.Downloads.History do
       metadata: download.metadata,
       match_status: download.match_status,
       inserted_at: download.inserted_at,
+      updated_at: download.updated_at,
       status: status,
       progress: if(download.completed_at, do: 100.0, else: 0.0),
       download_speed: 0,
