@@ -34,7 +34,7 @@ defmodule MydiaWeb.SessionController do
         render_login(conn)
       else
         conn
-        |> put_flash(:error, "Local authentication is disabled")
+        |> put_flash(:error, gettext("Local authentication is disabled"))
         |> redirect(to: "/")
       end
     else
@@ -66,11 +66,11 @@ defmodule MydiaWeb.SessionController do
           attempt_login(conn, ip_address, username, password)
 
         {:error, :rate_limited} ->
-          login_error(conn, "Too many login attempts. Please try again later.")
+          login_error(conn, gettext("Too many login attempts. Please try again later."))
       end
     else
       conn
-      |> put_flash(:error, "Local authentication is disabled")
+      |> put_flash(:error, gettext("Local authentication is disabled"))
       |> redirect(to: "/")
     end
   end
@@ -79,13 +79,13 @@ defmodule MydiaWeb.SessionController do
     case Accounts.get_user_by_username(username) do
       nil ->
         Accounts.record_login_failure(ip_address, username)
-        login_error(conn, "Invalid username or password")
+        login_error(conn, gettext("Invalid username or password"))
 
       user ->
         cond do
           not Accounts.verify_password(user, password) ->
             Accounts.record_login_failure(ip_address, username)
-            login_error(conn, "Invalid username or password")
+            login_error(conn, gettext("Invalid username or password"))
 
           Accounts.second_factor_enabled?(user) ->
             start_totp_challenge(conn, user)
@@ -113,7 +113,7 @@ defmodule MydiaWeb.SessionController do
   defp sign_in_and_redirect(conn, user) do
     conn
     |> SignIn.sign_in(user)
-    |> put_flash(:info, "Successfully logged in!")
+    |> put_flash(:info, gettext("Successfully logged in!"))
     |> redirect(to: "/")
   end
 
@@ -159,7 +159,8 @@ defmodule MydiaWeb.SessionController do
       |> PasskeySession.put_challenge(:second_factor, challenge)
       |> json(%{publicKey: options})
     else
-      _ -> PasskeySession.json_error(conn, :not_found, "Sign-in expired, please try again")
+      _ ->
+        PasskeySession.json_error(conn, :not_found, gettext("Sign-in expired, please try again"))
     end
   end
 
@@ -179,7 +180,11 @@ defmodule MydiaWeb.SessionController do
         )
 
       _ ->
-        PasskeySession.json_error(conn, :bad_request, "Sign-in expired, please try again")
+        PasskeySession.json_error(
+          conn,
+          :bad_request,
+          gettext("Sign-in expired, please try again")
+        )
     end
   end
 
@@ -195,18 +200,18 @@ defmodule MydiaWeb.SessionController do
       |> delete_session(:pending_totp)
       |> configure_session(renew: true)
       |> SignIn.sign_in(user)
-      |> put_flash(:info, "Successfully logged in!")
+      |> put_flash(:info, gettext("Successfully logged in!"))
       |> json(%{redirect: "/"})
     else
       {:error, :rate_limited} ->
         PasskeySession.json_error(
           conn,
           :too_many_requests,
-          "Too many login attempts. Please try again later."
+          gettext("Too many login attempts. Please try again later.")
         )
 
       {:error, :invalid_code} ->
-        PasskeySession.json_error(conn, :unauthorized, "Passkey not recognised")
+        PasskeySession.json_error(conn, :unauthorized, gettext("Passkey not recognised"))
     end
   end
 
@@ -228,10 +233,10 @@ defmodule MydiaWeb.SessionController do
       |> sign_in_and_redirect(user)
     else
       {:error, :rate_limited} ->
-        render_totp(conn, user, "Too many login attempts. Please try again later.")
+        render_totp(conn, user, gettext("Too many login attempts. Please try again later."))
 
       {:error, :invalid_code} ->
-        render_totp(conn, user, "Invalid code")
+        render_totp(conn, user, gettext("Invalid code"))
     end
   end
 
@@ -256,7 +261,7 @@ defmodule MydiaWeb.SessionController do
   defp abandon_totp(conn, :expired) do
     conn
     |> delete_session(:pending_totp)
-    |> put_flash(:error, "Sign-in expired, please try again")
+    |> put_flash(:error, gettext("Sign-in expired, please try again"))
     |> redirect(to: ~p"/auth/login")
   end
 

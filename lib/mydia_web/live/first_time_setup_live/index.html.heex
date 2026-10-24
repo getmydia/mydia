@@ -3,7 +3,7 @@
     <div class="card-body">
       <%= if @generated_password do %>
         <%!-- Password generated - show it once --%>
-        <h2 class="card-title text-2xl font-bold">Your Admin Password</h2>
+        <h2 class="card-title text-2xl font-bold">{gettext("Your Admin Password")}</h2>
 
         <div class="alert alert-warning my-4">
           <svg
@@ -20,16 +20,16 @@
             />
           </svg>
           <div>
-            <h3 class="font-bold">Save this password now!</h3>
+            <h3 class="font-bold">{gettext("Save this password now!")}</h3>
             <div class="text-sm">
-              This password will only be shown once and cannot be recovered.
+              {gettext("This password will only be shown once and cannot be recovered.")}
             </div>
           </div>
         </div>
 
         <div class="form-control">
           <label class="label">
-            <span class="label-text font-medium">Your Admin Password</span>
+            <span class="label-text font-medium">{gettext("Your Admin Password")}</span>
           </label>
           <div class="flex gap-2">
             <input
@@ -51,20 +51,20 @@
 
         <div class="card-actions justify-end mt-6">
           <button type="button" phx-click="continue_to_app" class="btn btn-primary">
-            Continue to Mydia
+            {gettext("Continue to Mydia")}
           </button>
         </div>
       <% else %>
         <%!-- Setup form --%>
-        <h2 class="card-title text-2xl font-bold">Welcome to Mydia!</h2>
+        <h2 class="card-title text-2xl font-bold">{gettext("Welcome to Mydia!")}</h2>
 
         <%= if @local_auth_enabled and @oidc_configured do %>
           <p class="text-sm text-base-content/70 mb-4">
-            Choose how you'd like to set up your admin account:
+            {gettext("Choose how you'd like to set up your admin account:")}
           </p>
         <% else %>
           <p class="text-sm text-base-content/70 mb-4">
-            Let's create your admin account to get started.
+            {gettext("Let's create your admin account to get started.")}
           </p>
         <% end %>
 
@@ -72,22 +72,26 @@
           <div class="alert alert-info mb-4">
             <.icon name="hero-information-circle" class="w-5 h-5" />
             <div>
-              <div class="font-semibold">OIDC Authentication Available</div>
+              <div class="font-semibold">{gettext("OIDC Authentication Available")}</div>
               <div class="text-sm">
-                You can log in with OIDC - the first user will automatically become an admin.
+                {gettext(
+                  "You can log in with OIDC - the first user will automatically become an admin."
+                )}
               </div>
             </div>
           </div>
 
           <a href="/auth/oidc" class="btn btn-primary btn-outline w-full mb-4">
-            <.icon name="hero-arrow-right-on-rectangle" class="w-5 h-5" /> Log in with OIDC
+            <.icon name="hero-arrow-right-on-rectangle" class="w-5 h-5" /> {gettext(
+              "Log in with OIDC"
+            )}
           </a>
 
           <%= if @local_auth_enabled do %>
-            <div class="divider">OR</div>
+            <div class="divider">{pgettext("divider between login options", "OR")}</div>
 
             <p class="text-sm text-base-content/70 mb-4">
-              Create a local admin account:
+              {gettext("Create a local admin account:")}
             </p>
           <% end %>
         <% end %>
@@ -96,30 +100,30 @@
           <.form for={@form} id="setup-form" phx-submit="create_admin" phx-change="validate">
             <div class="form-control">
               <label class="label" for="user_username">
-                <span class="label-text">Username</span>
+                <span class="label-text">{gettext("Username")}</span>
               </label>
               <.input field={@form[:username]} type="text" required autofocus />
             </div>
 
             <div class="form-control mt-4">
               <label class="label" for="user_email">
-                <span class="label-text">Email</span>
+                <span class="label-text">{gettext("Email")}</span>
               </label>
               <.input field={@form[:email]} type="email" required />
             </div>
 
             <div class="form-control mt-4">
               <label class="label" for="user_display_name">
-                <span class="label-text">Display Name (Optional)</span>
+                <span class="label-text">{gettext("Display Name (Optional)")}</span>
               </label>
               <.input field={@form[:display_name]} type="text" />
             </div>
 
-            <div class="divider">Password Setup</div>
+            <div class="divider">{gettext("Password Setup")}</div>
 
             <div class="form-control">
               <label class="label cursor-pointer">
-                <span class="label-text">Choose how to set your password</span>
+                <span class="label-text">{gettext("Choose how to set your password")}</span>
               </label>
               <div class="flex gap-4">
                 <label class="label cursor-pointer gap-2">
@@ -132,7 +136,7 @@
                     phx-click="change_password_mode"
                     phx-value-mode="custom"
                   />
-                  <span class="label-text">Set my own password</span>
+                  <span class="label-text">{gettext("Set my own password")}</span>
                 </label>
                 <label class="label cursor-pointer gap-2">
                   <input
@@ -144,7 +148,7 @@
                     phx-click="change_password_mode"
                     phx-value-mode="random"
                   />
-                  <span class="label-text">Generate random password</span>
+                  <span class="label-text">{gettext("Generate random password")}</span>
                 </label>
               </div>
             </div>
@@ -152,7 +156,7 @@
             <%= if @password_mode == :custom do %>
               <div class="form-control mt-4">
                 <label class="label" for="user_password">
-                  <span class="label-text">Password</span>
+                  <span class="label-text">{gettext("Password")}</span>
                 </label>
                 <.input field={@form[:password]} type="password" required />
               </div>
@@ -160,14 +164,16 @@
               <div class="alert alert-info mt-4">
                 <.icon name="hero-information-circle" class="w-5 h-5" />
                 <span>
-                  A secure random password will be generated and displayed after creation.
+                  {gettext(
+                    "A secure random password will be generated and displayed after creation."
+                  )}
                 </span>
               </div>
             <% end %>
 
             <div class="card-actions justify-end mt-6">
               <button type="submit" class="btn btn-primary">
-                Create Admin Account
+                {gettext("Create Admin Account")}
               </button>
             </div>
           </.form>
@@ -177,7 +183,9 @@
           <div class="alert alert-error">
             <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
             <span>
-              No authentication methods are configured. Please enable LOCAL_AUTH_ENABLED or configure OIDC.
+              {gettext(
+                "No authentication methods are configured. Please enable LOCAL_AUTH_ENABLED or configure OIDC."
+              )}
             </span>
           </div>
         <% end %>

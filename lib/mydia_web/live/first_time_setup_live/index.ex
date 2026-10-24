@@ -22,7 +22,7 @@ defmodule MydiaWeb.FirstTimeSetupLive.Index do
     else
       {:ok,
        socket
-       |> assign(:page_title, "Welcome to Mydia")
+       |> assign(:page_title, gettext("Welcome to Mydia"))
        |> assign(:password_mode, :custom)
        |> assign(:generated_password, nil)
        |> assign(:oidc_configured, oidc_configured?())
@@ -96,12 +96,12 @@ defmodule MydiaWeb.FirstTimeSetupLive.Index do
            |> assign(:generated_password, generated_password)
            |> assign(:auth_token, token)
            |> assign(:user_id, user.id)
-           |> put_flash(:info, "Admin user created successfully!")}
+           |> put_flash(:info, gettext("Admin user created successfully!"))}
         else
           # Redirect to auto-login endpoint for custom password
           {:noreply,
            socket
-           |> put_flash(:info, "Admin user created successfully! You are now logged in.")
+           |> put_flash(:info, gettext("Admin user created successfully! You are now logged in."))
            |> push_navigate(to: ~p"/auth/auto-login?token=#{token}")}
         end
 
@@ -116,7 +116,7 @@ defmodule MydiaWeb.FirstTimeSetupLive.Index do
 
     {:noreply,
      socket
-     |> put_flash(:info, "Welcome to Mydia!")
+     |> put_flash(:info, gettext("Welcome to Mydia!"))
      |> push_navigate(to: ~p"/auth/auto-login?token=#{token}")}
   end
 

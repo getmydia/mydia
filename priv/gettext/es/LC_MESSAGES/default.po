@@ -565,6 +565,7 @@ msgstr ""
 msgid "Authentication"
 msgstr ""
 
+#: lib/mydia_web/controllers/session_html/totp.html.heex:42
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:290
 #, elixir-autogen, elixir-format
 msgid "Authentication code"
@@ -696,6 +697,7 @@ msgstr ""
 msgid "Edit Profile"
 msgstr ""
 
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:110
 #: lib/mydia_web/live/profile_live/index.html.heex:52
 #, elixir-autogen, elixir-format
 msgid "Email"
@@ -756,6 +758,7 @@ msgstr ""
 msgid "In use"
 msgstr ""
 
+#: lib/mydia_web/controllers/session_controller.ex:239
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:90
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:125
 #, elixir-autogen, elixir-format
@@ -869,6 +872,7 @@ msgstr ""
 msgid "Override what happens when you add a movie or TV show. Leave a field on \"Use server default\" to follow the instance-wide setting."
 msgstr ""
 
+#: lib/mydia_web/controllers/session_controller.ex:214
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:79
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:180
 #, elixir-autogen, elixir-format
@@ -1002,6 +1006,9 @@ msgstr ""
 msgid "Sign in with your fingerprint, face or device PIN instead of a password. Once you add a passkey, signing in with your password will also ask for it (or your authenticator code)."
 msgstr ""
 
+#: lib/mydia_web/controllers/session_controller.ex:163
+#: lib/mydia_web/controllers/session_controller.ex:186
+#: lib/mydia_web/controllers/session_controller.ex:264
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:84
 #, elixir-autogen, elixir-format
 msgid "Sign-in expired, please try again"
@@ -1052,6 +1059,9 @@ msgstr ""
 msgid "Times across Mydia are shown in this zone. The server default comes from the %{tz} setting."
 msgstr ""
 
+#: lib/mydia_web/controllers/session_controller.ex:69
+#: lib/mydia_web/controllers/session_controller.ex:210
+#: lib/mydia_web/controllers/session_controller.ex:236
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:172
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:155
 #, elixir-autogen, elixir-format
@@ -1109,6 +1119,8 @@ msgstr ""
 msgid "Use server default"
 msgstr ""
 
+#: lib/mydia_web/controllers/session_html/new.html.heex:23
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:103
 #: lib/mydia_web/live/profile_live/index.html.heex:46
 #, elixir-autogen, elixir-format
 msgid "Username"
@@ -1158,4 +1170,214 @@ msgstr ""
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:182
 #, elixir-autogen, elixir-format
 msgid "never"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:167
+#, elixir-autogen, elixir-format
+msgid "A secure random password will be generated and displayed after creation."
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.ex:99
+#, elixir-autogen, elixir-format
+msgid "Admin user created successfully!"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.ex:104
+#, elixir-autogen, elixir-format
+msgid "Admin user created successfully! You are now logged in."
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/totp.html.heex:87
+#, elixir-autogen, elixir-format
+msgid "Back to sign in"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:126
+#, elixir-autogen, elixir-format
+msgid "Choose how to set your password"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:63
+#, elixir-autogen, elixir-format
+msgid "Choose how you'd like to set up your admin account:"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:54
+#, elixir-autogen, elixir-format, fuzzy
+msgid "Continue to Mydia"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:176
+#, elixir-autogen, elixir-format
+msgid "Create Admin Account"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:94
+#, elixir-autogen, elixir-format
+msgid "Create a local admin account:"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:117
+#, elixir-autogen, elixir-format, fuzzy
+msgid "Display Name (Optional)"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/totp.html.heex:34
+#, elixir-autogen, elixir-format
+msgid "Enter the 6-digit code from your authenticator app, or one of your recovery codes."
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:151
+#, elixir-autogen, elixir-format
+msgid "Generate random password"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_controller.ex:82
+#: lib/mydia_web/controllers/session_controller.ex:88
+#, elixir-autogen, elixir-format
+msgid "Invalid username or password"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:67
+#, elixir-autogen, elixir-format
+msgid "Let's create your admin account to get started."
+msgstr ""
+
+#: lib/mydia_web/controllers/session_controller.ex:37
+#: lib/mydia_web/controllers/session_controller.ex:73
+#, elixir-autogen, elixir-format
+msgid "Local authentication is disabled"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/new.html.heex:51
+#, elixir-autogen, elixir-format
+msgid "Log In"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/new.html.heex:75
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:85
+#, elixir-autogen, elixir-format
+msgid "Log in with OIDC"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/totp.html.heex:66
+#, elixir-autogen, elixir-format
+msgid "Lost your authenticator? Use a recovery code or ask an admin to reset two-factor authentication."
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:186
+#, elixir-autogen, elixir-format
+msgid "No authentication methods are configured. Please enable LOCAL_AUTH_ENABLED or configure OIDC."
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:75
+#, elixir-autogen, elixir-format, fuzzy
+msgid "OIDC Authentication Available"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/new.html.heex:38
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:159
+#, elixir-autogen, elixir-format, fuzzy
+msgid "Password"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:122
+#, elixir-autogen, elixir-format
+msgid "Password Setup"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:23
+#, elixir-autogen, elixir-format
+msgid "Save this password now!"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:139
+#, elixir-autogen, elixir-format
+msgid "Set my own password"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/new.html.heex:4
+#, elixir-autogen, elixir-format
+msgid "Sign In"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/new.html.heex:65
+#, elixir-autogen, elixir-format
+msgid "Sign in with a passkey"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/new.html.heex:6
+#, elixir-autogen, elixir-format
+msgid "Sign in with your username and password."
+msgstr ""
+
+#: lib/mydia_web/controllers/session_controller.ex:116
+#: lib/mydia_web/controllers/session_controller.ex:203
+#, elixir-autogen, elixir-format
+msgid "Successfully logged in!"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:25
+#, elixir-autogen, elixir-format
+msgid "This password will only be shown once and cannot be recovered."
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/totp.html.heex:22
+#, elixir-autogen, elixir-format, fuzzy
+msgid "Use a passkey"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/totp.html.heex:20
+#, elixir-autogen, elixir-format
+msgid "Use one of your passkeys."
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/totp.html.heex:60
+#, elixir-autogen, elixir-format
+msgid "Verify"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/totp.html.heex:5
+#, elixir-autogen, elixir-format
+msgid "Verify it's you"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.ex:25
+#, elixir-autogen, elixir-format
+msgid "Welcome to Mydia"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.ex:119
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:59
+#, elixir-autogen, elixir-format
+msgid "Welcome to Mydia!"
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:77
+#, elixir-autogen, elixir-format
+msgid "You can log in with OIDC - the first user will automatically become an admin."
+msgstr ""
+
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:6
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:32
+#, elixir-autogen, elixir-format
+msgid "Your Admin Password"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/totp.html.heex:79
+#, elixir-autogen, elixir-format
+msgid "Your passkey can't be used at this address. Sign in from the address where you added it, or ask an admin to reset two-factor authentication."
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/new.html.heex:63
+#: lib/mydia_web/controllers/session_html/totp.html.heex:29
+#, elixir-autogen, elixir-format
+msgid "or"
+msgstr ""
+
+#: lib/mydia_web/controllers/session_html/new.html.heex:71
+#: lib/mydia_web/live/first_time_setup_live/index.html.heex:91
+#, elixir-autogen, elixir-format
+msgctxt "divider between login options"
+msgid "OR"
 msgstr ""
