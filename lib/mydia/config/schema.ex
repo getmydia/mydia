@@ -126,21 +126,7 @@ defmodule Mydia.Config.Schema do
       field :trash_retention_days, :integer, default: 30
     end
 
-    embeds_one :metadata, Metadata, on_replace: :update, primary_key: false do
-      @type t :: %__MODULE__{}
-      # Language sent to TMDB/TVDB through metadata-relay. Accepts ISO 639-1
-      # codes ("de") or BCP 47 language tags ("de-DE", "pt-BR").
-      field :language, :string, default: "en-US"
-    end
-
-    embeds_one :ui, Ui, on_replace: :update, primary_key: false do
-      @type t :: %__MODULE__{}
-      # Interface language for requests whose user and browser name no
-      # translated locale. A gettext code (`es`, `pt_BR`); an untranslated code
-      # is accepted here and skipped by Mydia.Locale.resolve/4, so a YAML value
-      # naming a language whose translation was dropped never blocks boot.
-      field :default_locale, :string, default: "en"
-    end
+    embeds_one :metadata, Mydia.Config.Schema.Metadata, on_replace: :update
 
     embeds_one :downloads, Downloads, on_replace: :update, primary_key: false do
       @type t :: %__MODULE__{}
@@ -331,6 +317,7 @@ defmodule Mydia.Config.Schema do
 
     embeds_one :flaresolverr, Mydia.Config.Schema.FlareSolverr, on_replace: :update
     embeds_one :cardigann, Mydia.Config.Schema.Cardigann, on_replace: :update
+    embeds_one :ui, Mydia.Config.Schema.Ui, on_replace: :update
 
     # Whether this server runs its p2p node and accepts pairing. It only counts
     # while the player is on, and that switch (ENABLE_PLAYER) is not part of
@@ -489,8 +476,8 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:database, with: &database_changeset/2)
     |> cast_embed(:auth, with: &auth_changeset/2)
     |> cast_embed(:media, with: &media_changeset/2)
-    |> cast_embed(:metadata, with: &metadata_changeset/2)
-    |> cast_embed(:ui, with: &ui_changeset/2)
+    |> cast_embed(:metadata)
+    |> cast_embed(:ui)
     |> cast_embed(:downloads, with: &downloads_changeset/2)
     |> cast_embed(:upgrades, with: &upgrades_changeset/2)
     |> cast_embed(:streaming, with: &streaming_changeset/2)
@@ -579,20 +566,6 @@ defmodule Mydia.Config.Schema do
     # daily `TrashCleanup` run rather than failing at config load.
     |> validate_required([:trash_retention_days])
     |> validate_number(:trash_retention_days, greater_than_or_equal_to: 0)
-  end
-
-  defp metadata_changeset(schema, attrs) do
-    schema
-    |> cast(attrs, [:language])
-    |> validate_required([:language])
-    |> validate_length(:language, min: 2, max: 16)
-  end
-
-  defp ui_changeset(schema, attrs) do
-    schema
-    |> cast(attrs, [:default_locale])
-    |> validate_required([:default_locale])
-    |> validate_length(:default_locale, min: 2, max: 16)
   end
 
   defp downloads_changeset(schema, attrs) do
