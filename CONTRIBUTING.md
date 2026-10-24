@@ -74,6 +74,13 @@ exactly what the gate wants.
 new text in `gettext/1` (see `lib/mydia_web/gettext/README.md`). Print a file's
 count with `./dev mix run -e 'IO.puts Mydia.Ratchet.TemplateText.count_file("path")'`.
 
+### Translations
+
+Interface translations are written on Weblate, not in pull requests: see
+[`TRANSLATING.md`](TRANSLATING.md) for translators and
+[`lib/mydia_web/gettext/README.md`](lib/mydia_web/gettext/README.md) for how to
+write translatable UI code.
+
 ### Dialyzer
 
 `./dev dialyzer` (and the `Dialyzer` CI job) must report zero findings. There is

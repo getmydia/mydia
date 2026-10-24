@@ -4,6 +4,7 @@
 [![Documentation](https://github.com/getmydia/mydia/actions/workflows/ci-docs.yml/badge.svg)](https://docs.mydia.dev)
 [![Code health](https://api.repowise.dev/badge/health/getmydia/mydia.svg)](https://repowise.dev/repo/getmydia/mydia)
 [![repowise](https://api.repowise.dev/badge/wiki/getmydia/mydia.svg)](https://repowise.dev/repo/getmydia/mydia)
+[![Translation status](https://hosted.weblate.org/widget/mydia/svg-badge.svg)](https://hosted.weblate.org/engage/mydia/)
 [![TestFlight](https://img.shields.io/badge/TestFlight-Install%20on%20iOS-0D96F6?logo=apple&logoColor=white)](https://testflight.apple.com/join/KFSYxaQP)
 
 **Your personal media companion, built with Phoenix LiveView**
@@ -176,6 +177,8 @@ dashboard above switches with your GitHub theme.
 ```
 
 See the [Development Guide](https://docs.mydia.dev/latest/contributing/setup/) for details.
+
+Mydia's interface is translated by the community on [Weblate](https://hosted.weblate.org/projects/mydia/); see [TRANSLATING.md](TRANSLATING.md).
 
 ### Documentation
 
