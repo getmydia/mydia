@@ -67,8 +67,18 @@ before changing a term everywhere.
 | Discover | Descubrir | Descobrir |
 | Activity | Actividad | Atividade |
 | Calendar | Calendario | Calendário |
+| Configuration (menu) | Configuración | Configuração |
+| Scan (noun / verb) | Escaneo / escanear | Varredura / escanear |
+| Re-scan | Reescaneo / volver a escanear | Nova varredura / escanear de novo |
+| Match (noun / verb) | Coincidencia / asociar | Correspondência / associar |
+| Re-match | Volver a asociar | Associar de novo |
+| Dismiss | Descartar | Dispensar |
+| Stalled | Estancado | Parado |
+| Pin (to sidebar) | Anclar | Fixar |
 
 ## Reviewing the seed translations
 
 The Spanish and Brazilian Portuguese translations were machine-drafted. Native
-speakers: please review them on Weblate.
+speakers: please review them on Weblate. The Spanish and Brazilian Portuguese
+strings for the full interface were machine-drafted and want review by native
+speakers on Weblate.
