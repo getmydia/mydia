@@ -413,7 +413,7 @@ enum AvailabilityState {
   "At least one download active"
   DOWNLOADING
 
-  "Every episode airs in the future"
+  "Not yet aired or released"
   UPCOMING
 }
 

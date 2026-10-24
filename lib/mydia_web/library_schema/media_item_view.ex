@@ -20,7 +20,7 @@ defmodule MydiaWeb.LibrarySchema.MediaItemView do
 
   Uses `MediaFile.versions/0`, the one place trashed files and extras are
   excluded, as `Mydia.Media.LibraryListing` does. Both classify through
-  `AvailabilityStatus.for_movie/3` and `for_series/3`, so this API's `status` and
+  `AvailabilityStatus.for_movie/4` and `for_series/3`, so this API's `status` and
   `hasFile` agree with the UI badge.
   """
   @spec preloads() :: keyword()

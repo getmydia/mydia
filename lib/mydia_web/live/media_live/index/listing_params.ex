@@ -14,7 +14,12 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
   @first_page 50
   @max_shown 1000
   @default_sort "title_asc"
-  @progress %{"missing" => :missing, "partial" => :partial, "downloaded" => :downloaded}
+  @progress %{
+    "missing" => :missing,
+    "partial" => :partial,
+    "downloaded" => :downloaded,
+    "upcoming" => :upcoming
+  }
   @qualities ~w(720p 1080p 2160p)
 
   defstruct search: "",
@@ -28,7 +33,7 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
   @type t :: %__MODULE__{
           search: String.t(),
           library: binary() | nil,
-          progress: :missing | :partial | :downloaded | nil,
+          progress: :missing | :partial | :downloaded | :upcoming | nil,
           monitored: boolean() | nil,
           quality: String.t() | nil,
           sort: String.t(),

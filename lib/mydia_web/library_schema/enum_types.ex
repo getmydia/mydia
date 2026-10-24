@@ -26,7 +26,7 @@ defmodule MydiaWeb.LibrarySchema.EnumTypes do
     value(:partial, description: "Some episodes present")
     value(:downloaded, description: "Fully present")
     value(:downloading, description: "At least one download active")
-    value(:upcoming, description: "Every episode airs in the future")
+    value(:upcoming, description: "Not yet aired or released")
   end
 
   @desc "Which downloads to return"
