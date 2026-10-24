@@ -1150,5 +1150,18 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       ids = :sys.get_state(view.pid).socket.assigns.stream_ids
       assert Enum.sort(ids) == Enum.sort([a.id, b.id])
     end
+
+    test "a burst of download updates becomes one reload", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      fresh = grabbing_download("Fictional Ember Coast")
+
+      for _ <- 1..3, do: send(view.pid, {:download_updated, fresh.id})
+      refute has_element?(view, "#downloads-#{fresh.id}")
+      assert :sys.get_state(view.pid).socket.assigns.reload_pending
+
+      send(view.pid, :reload_downloads)
+      assert has_element?(view, "#downloads-#{fresh.id}")
+      refute :sys.get_state(view.pid).socket.assigns.reload_pending
+    end
   end
 end

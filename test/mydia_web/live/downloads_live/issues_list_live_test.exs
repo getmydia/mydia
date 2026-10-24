@@ -247,6 +247,7 @@ defmodule MydiaWeb.DownloadsLive.IssuesListLiveTest do
         |> Mydia.Repo.update()
 
       send(view.pid, {:download_updated, failed.id})
+      send(view.pid, :reload_downloads)
       render(view)
 
       view |> element("#downloads-batch-dismiss") |> render_click()

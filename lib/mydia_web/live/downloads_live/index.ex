@@ -42,6 +42,11 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # load. This timer re-polls + re-renders the Downloads tab while work is active.
   @progress_refresh_interval_ms 3_000
 
+  # Download updates arrive in bursts (a removal, a monitor pass over every
+  # active row). Each reload polls every client, so a burst is collapsed into
+  # one reload this long after its first message.
+  @reload_debounce_ms 300
+
   @allowed_sort_fields Sorting.allowed_fields()
 
   @impl true
@@ -63,6 +68,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      |> assign(:page, 0)
      # Page-0 row ids on screen; nil when unknown, which forces a stream reset.
      |> assign(:stream_ids, nil)
+     |> assign(:reload_pending, false)
      |> assign(:has_more, true)
      # Clear-completed modal state
      |> assign(:show_clear_modal, false)
@@ -975,14 +981,18 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp media_type_atom("tv_show"), do: :tv_show
 
   @impl true
-  def handle_info({:download_updated, _download_id}, socket) do
-    # Reload downloads when we receive an update
-    # In a real implementation, we might want to just update the specific download
-    {:noreply, socket |> maybe_refresh_clearable_count() |> load_downloads()}
-  end
+  def handle_info({:download_updated, _download_id}, socket),
+    do: {:noreply, schedule_reload(socket)}
 
-  def handle_info({:search_completed, _media_item_id, _stats}, socket) do
-    {:noreply, socket |> maybe_refresh_clearable_count() |> load_downloads()}
+  def handle_info({:search_completed, _media_item_id, _stats}, socket),
+    do: {:noreply, schedule_reload(socket)}
+
+  def handle_info(:reload_downloads, socket) do
+    {:noreply,
+     socket
+     |> assign(:reload_pending, false)
+     |> maybe_refresh_clearable_count()
+     |> load_downloads()}
   end
 
   # A fresh client scan landed. Only the two scan-backed tabs need a full
@@ -1031,6 +1041,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   defp schedule_progress_refresh do
     Process.send_after(self(), :refresh_progress, @progress_refresh_interval_ms)
+  end
+
+  defp schedule_reload(%{assigns: %{reload_pending: true}} = socket), do: socket
+
+  defp schedule_reload(socket) do
+    Process.send_after(self(), :reload_downloads, @reload_debounce_ms)
+    assign(socket, :reload_pending, true)
   end
 
   # Keeps the Clear Completed modal's blast-radius count fresh if a background
