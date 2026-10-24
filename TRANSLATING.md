@@ -25,6 +25,49 @@ Start it from the Weblate project page ("Start new translation"). It appears in
 Mydia's language picker in the first release after its first translations are
 merged.
 
+## Glossary
+
+Use these terms so the interface reads consistently. Discuss changes on Weblate
+before changing a term everywhere.
+
+| English | Español | Português (Brasil) |
+| --- | --- | --- |
+| Library | Biblioteca | Biblioteca |
+| Movie | Película | Filme |
+| TV show | Serie | Série |
+| Season | Temporada | Temporada |
+| Episode | Episodio | Episódio |
+| Collection | Colección | Coleção |
+| Download | Descarga (verb: descargar) | Download (verb: baixar) |
+| Download client | Cliente de descargas | Cliente de download |
+| Indexer | Indexador | Indexador |
+| Quality profile | Perfil de calidad | Perfil de qualidade |
+| Custom format | Formato personalizado | Formato personalizado |
+| Release | Lanzamiento | Lançamento |
+| Grab | Capturar | Capturar |
+| Import | Importar | Importar |
+| Monitored | Monitorizado | Monitorado |
+| Unmonitored | Sin monitorizar | Não monitorado |
+| Missing | Faltante | Ausente |
+| Wanted | Buscados | Procurados |
+| Queue | Cola | Fila |
+| Request | Solicitud | Solicitação |
+| Subtitle | Subtítulo | Legenda |
+| Device | Dispositivo | Dispositivo |
+| Plugin | Complemento | Plugin |
+| Settings | Ajustes | Configurações |
+| Search | Buscar | Buscar |
+| Seeders | Semillas | Seeders |
+| Peers | Pares | Peers |
+| Trash | Papelera | Lixeira |
+| Blocklist | Lista de bloqueo | Lista de bloqueio |
+| Smart collection | Colección inteligente | Coleção inteligente |
+| Shelf | Estante | Estante |
+| Section | Sección | Seção |
+| Discover | Descubrir | Descobrir |
+| Activity | Actividad | Atividade |
+| Calendar | Calendario | Calendário |
+
 ## Reviewing the seed translations
 
 The Spanish and Brazilian Portuguese translations were machine-drafted. Native
