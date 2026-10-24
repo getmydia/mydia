@@ -1124,6 +1124,29 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       })
     end
 
+    # Stream inserts re-render a row from scratch, and LiveView keys id-less
+    # component roots by a client-generated id that changes on every insert,
+    # so without stable ids these containers are rebuilt on each refresh and
+    # the buttons inside are detached mid-click (issue #1257).
+    test "row action containers carry stable ids", %{conn: conn} do
+      download = grabbing_download("Fictional Lantern Bay")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      assert has_element?(view, "#row-actions-#{download.id}")
+      assert has_element?(view, "#row-action-strip-#{download.id} #row-cancel-#{download.id}")
+    end
+
+    test "the cancel confirmation names the download", %{conn: conn} do
+      download = grabbing_download("Fictional Lantern Bay")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      assert view
+             |> element("#row-cancel-#{download.id}")
+             |> render() =~ ~s(data-confirm="Cancel Fictional Lantern Bay?")
+    end
+
     test "a row removed between refreshes disappears and the others stay", %{conn: conn} do
       keep = grabbing_download("Fictional Lantern Bay")
       gone = grabbing_download("Fictional Copper Hollow")
