@@ -335,14 +335,20 @@ one admin-only page outside the hubs; it renders `<.admin_header>` directly.
 `components.ex`, as `btn-sm` buttons (the primary one `btn-primary`). The body
 never repeats the page name.
 
-**Body.** `admin_page/1` wraps the body in `div#admin-page-body`
-(`bg-base-100 max-sm:bg-transparent py-4 sm:p-6 space-y-4`: no side padding
-and no fill on phones, where `main` already has 12px. A filled body with no
-inset showed only as dark stripes between edge-to-edge lists).
-Below `sm` the hub tab strip is hidden and `nav#admin-page-switcher` takes its
-place: a full-width dropdown button naming the current page, with a menu of
-`<.link navigate>` items (`#admin-switcher-<key>`). Wrapped, the Configuration
-strip took three lines; scrolled, it hid tabs off-screen.
+**Hub chrome.** `admin_page/1` titles the page with its hub
+(`h1#admin-page-title`); the page itself is named by its active tab. From `xl`
+the hub's pages are lifted tabs (`nav#admin-page-tabs`, `tabs-lift`) with their
+icons from `2xl`. Configuration's nine tabs need 842px as labels and 1080px with
+icons, against 960px beside the sidebar at `xl` and 1216px at `2xl`, and lifted
+tabs that wrap look broken. Below `xl`, `nav#admin-page-switcher` is a single
+lifted tab naming the current page, with a menu of `<.link navigate>` items
+(`#admin-switcher-<key>`). It was a plain `btn` until #1188 reported it blended
+into the page in every theme. `#admin-page-count` sits in the active strip tab
+and `#admin-switcher-count` in the switcher, since both are always in the DOM.
+
+**Body.** The tabs join `div#admin-page-body`, a bordered `bg-base-100` panel
+(`p-3 sm:p-4 xl:p-6 space-y-4`) whose first child is the page description.
+Its top-left corner is square wherever a tab sits on it.
 A page's `*_tab` component renders its content directly, with no
 padding wrapper of its own; the conventions test flags one. A real subsection
 (Needs Attention, Scheduled Jobs) is `<.admin_section title icon count>`. Its

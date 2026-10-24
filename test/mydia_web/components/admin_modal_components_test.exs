@@ -10,6 +10,14 @@ defmodule MydiaWeb.AdminModalComponentsTest do
   defp count(html, selector),
     do: html |> LazyHTML.from_fragment() |> LazyHTML.query(selector) |> Enum.count()
 
+  defp text(html, selector),
+    do:
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(selector)
+      |> LazyHTML.text()
+      |> String.trim()
+
   describe "admin_modal/1" do
     test "fills the screen on phones and lets field labels wrap" do
       assigns = %{}
@@ -209,20 +217,26 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     assert count(html, "#admin-page-tabs") == 0
   end
 
-  test "admin_page/1 wraps the hub tab strip instead of scrolling it" do
+  test "admin_page/1 titles the page with its hub and names the page on its active tab" do
     assigns = %{}
 
     html =
       rendered_to_string(~H"""
-      <AdminComponents.admin_page page={:trash}>body</AdminComponents.admin_page>
+      <AdminComponents.admin_page page={:trash} count={3}>body</AdminComponents.admin_page>
       """)
 
-    assert count(html, "nav#admin-page-tabs.tabs.flex-wrap") == 1
-    assert count(html, "nav#admin-page-tabs.overflow-x-auto") == 0
-    assert count(html, "nav#admin-page-tabs.flex-nowrap") == 0
+    assert text(html, "h1#admin-page-title") == "Administration"
+    assert count(html, "#admin-page-hub") == 0
+    assert count(html, ~s(nav#admin-page-tabs a[aria-current="page"])) == 1
+    assert text(html, ~s(a#admin-tab-trash.tab-active[aria-current="page"])) =~ "Trash"
+    assert count(html, "a#admin-tab-trash #admin-page-count") == 1
+    assert count(html, "#admin-page-count") == 1
+    assert count(html, "#admin-page-header #admin-page-description") == 0
+    assert count(html, "div#admin-page-body > p#admin-page-description") == 1
+    assert count(html, "[role=tab], [role=tablist], [role=tabpanel]") == 0
   end
 
-  test "admin_page/1 swaps the tab strip for a one-line page switcher on phones" do
+  test "admin_page/1 shows lifted tabs from xl, with their icons from 2xl" do
     assigns = %{}
 
     html =
@@ -232,18 +246,42 @@ defmodule MydiaWeb.AdminModalComponentsTest do
 
     hub_pages = MydiaWeb.AdminNav.visible_pages(:administration)
 
-    assert count(html, ~s(nav#admin-page-tabs[class~="max-sm:hidden"])) == 1
-    assert count(html, ~s(nav#admin-page-switcher[class~="sm:hidden"])) == 1
-    assert count(html, "nav#admin-page-switcher .dropdown.w-full.z-20") == 1
-    assert count(html, "#admin-page-switcher-trigger.btn.w-full") == 1
+    assert count(html, ~s(nav#admin-page-tabs.tabs.tabs-lift[class~="max-xl:hidden"])) == 1
+    assert count(html, ~s(nav#admin-page-tabs a[id^="admin-tab-"])) == length(hub_pages)
 
-    assert html
-           |> LazyHTML.from_fragment()
-           |> LazyHTML.query("#admin-page-switcher-trigger")
-           |> LazyHTML.text()
-           |> String.trim() == "Trash"
+    for page <- hub_pages do
+      assert count(
+               html,
+               ~s(a#admin-tab-#{page.key}[href="#{page.path}"] span.#{page.icon}.hidden[class~="2xl:inline-block"])
+             ) == 1
+    end
+  end
 
-    assert count(html, "nav#admin-page-switcher ul.dropdown-content.menu.w-full") == 1
+  test "admin_page/1 gives narrow screens a lifted switcher tab on the panel" do
+    assigns = %{}
+
+    html =
+      rendered_to_string(~H"""
+      <AdminComponents.admin_page page={:trash} count={3}>body</AdminComponents.admin_page>
+      """)
+
+    hub_pages = MydiaWeb.AdminNav.visible_pages(:administration)
+    trash = MydiaWeb.AdminNav.fetch!(:trash)
+
+    assert count(html, ~s(nav#admin-page-switcher[class~="xl:hidden"])) == 1
+    # -mb-px lets the trigger cover the panel's top border, so the two read as one.
+    assert count(html, ~s(nav#admin-page-switcher .dropdown[class~="-mb-px"])) == 1
+    assert count(html, "#admin-page-switcher-trigger.btn") == 0
+
+    assert count(
+             html,
+             "#admin-page-switcher-trigger.bg-base-100.border.border-base-300.border-b-0.rounded-t-box span.#{trash.icon}"
+           ) == 1
+
+    assert count(html, "#admin-page-switcher-trigger #admin-switcher-count") == 1
+    assert text(html, "#admin-page-switcher-trigger") =~ "Trash"
+
+    assert count(html, "nav#admin-page-switcher ul.dropdown-content.menu") == 1
     assert count(html, ~s(nav#admin-page-switcher a[id^="admin-switcher-"])) == length(hub_pages)
 
     for page <- hub_pages do
@@ -254,7 +292,19 @@ defmodule MydiaWeb.AdminModalComponentsTest do
     assert count(html, ~s(a#admin-switcher-trash[aria-current="page"].menu-active)) == 1
   end
 
-  test "admin_page/1 supplies the body wrapper, with no side padding or fill on phones" do
+  test "admin_page/1 renders no count badge without a count" do
+    assigns = %{}
+
+    html =
+      rendered_to_string(~H"""
+      <AdminComponents.admin_page page={:trash}>body</AdminComponents.admin_page>
+      """)
+
+    assert count(html, "#admin-page-count") == 0
+    assert count(html, "#admin-switcher-count") == 0
+  end
+
+  test "admin_page/1 wraps the body in a bordered panel joined to the active tab" do
     assigns = %{}
 
     html =
@@ -264,12 +314,27 @@ defmodule MydiaWeb.AdminModalComponentsTest do
       </AdminComponents.admin_page>
       """)
 
-    assert count(html, "div#admin-page-body.bg-base-100.py-4.space-y-4 #inside") == 1
-    assert count(html, ~s(div#admin-page-body[class*="sm:p-6"])) == 1
-    # Below sm the body paints nothing, so bordered lists sit on the page
-    # background instead of leaving base-100 stripes between sections.
-    assert count(html, ~s(div#admin-page-body[class~="max-sm:bg-transparent"])) == 1
-    assert count(html, "div#admin-page-body.p-4") == 0
-    assert count(html, "div#admin-page-body.px-4") == 0
+    assert count(
+             html,
+             "div#admin-page-body.bg-base-100.border.border-base-300.rounded-box.space-y-4 #inside"
+           ) == 1
+
+    # Below xl the switcher always sits on the panel's top-left corner.
+    assert count(html, ~s(div#admin-page-body[class~="max-xl:rounded-tl-none"])) == 1
+    # Trash is not the hub's first tab, so from xl the corner stays round.
+    assert count(html, ~s(div#admin-page-body[class~="rounded-tl-none"])) == 0
+    assert count(html, ~s(div#admin-page-body[class~="max-sm:bg-transparent"])) == 0
+  end
+
+  test "admin_page/1 squares the panel's corner when the hub's first tab is active" do
+    assigns = %{}
+
+    html =
+      rendered_to_string(~H"""
+      <AdminComponents.admin_page page={:requests}>body</AdminComponents.admin_page>
+      """)
+
+    assert [%{key: :requests} | _] = MydiaWeb.AdminNav.visible_pages(:administration)
+    assert count(html, ~s(div#admin-page-body[class~="rounded-tl-none"])) == 1
   end
 end

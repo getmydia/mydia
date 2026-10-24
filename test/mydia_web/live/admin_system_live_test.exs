@@ -64,7 +64,7 @@ defmodule MydiaWeb.AdminSystemLiveTest do
         |> put_req_header("authorization", "Bearer #{token}")
 
       {:ok, view, _html} = live(conn, ~p"/admin/status")
-      assert has_element?(view, "h1#admin-page-title", "Status")
+      assert has_element?(view, ~s|#admin-tab-status[aria-current="page"]|, "Status")
     end
   end
 
@@ -83,8 +83,8 @@ defmodule MydiaWeb.AdminSystemLiveTest do
     end
 
     test "renders the Status header under the System hub", %{view: view} do
-      assert has_element?(view, "#admin-page-hub", "System")
-      assert has_element?(view, "h1#admin-page-title", "Status")
+      assert has_element?(view, "h1#admin-page-title", "System")
+      assert has_element?(view, ~s|#admin-tab-status[aria-current="page"]|, "Status")
     end
 
     test "displays system information", %{view: view} do
@@ -226,7 +226,7 @@ defmodule MydiaWeb.AdminSystemLiveTest do
       refute has_element?(view, "div.divider", "Activity")
 
       # The page itself must still render; only the activity section is gone.
-      assert has_element?(view, "h1#admin-page-title", "Status")
+      assert has_element?(view, ~s|#admin-tab-status[aria-current="page"]|, "Status")
     end
   end
 
