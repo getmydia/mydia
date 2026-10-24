@@ -209,7 +209,7 @@ defmodule MydiaWeb.DashboardLive.ComponentsTest do
     assert html =~ "Trending TV shows"
     assert html =~ "Reset to default"
     assert html =~ "Done"
-    assert html =~ ~s(aria-label="Move Library stats up")
-    assert html =~ ~s(aria-label="Move Quick actions down")
+    assert html =~ ~s(aria-label="Reorder Library stats. Use arrow keys to move.")
+    assert html =~ ~s(aria-label="Reorder Quick actions. Use arrow keys to move.")
   end
 end

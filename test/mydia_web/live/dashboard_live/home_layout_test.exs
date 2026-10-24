@@ -139,6 +139,29 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
       assert Accounts.home_widgets(user) == [:library_stats, :quick_actions]
     end
 
+    test "visible widgets render as a sortable list with drag handles", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      view |> element("#edit-home-btn") |> render_click()
+
+      assert has_element?(view, "#edit-home-visible[phx-hook='HomeWidgetSort']")
+
+      assert has_element?(
+               view,
+               "#edit-home-visible > #edit-home-widget-library_stats[data-key='library_stats'] button[data-drag-handle]"
+             )
+
+      assert has_element?(
+               view,
+               "#edit-home-visible > #edit-home-widget-quick_actions[data-key='quick_actions'] button[data-drag-handle]"
+             )
+
+      refute has_element?(view, "#edit-home-modal button[phx-value-direction]")
+      refute has_element?(view, "#edit-home-visible [data-key='episodes']")
+    end
+
     test "reset_home_widgets resets preferences to defaults", %{conn: conn} do
       user = user_fixture(%{role: "admin"})
       {:ok, _} = Accounts.put_home_widgets(user, [:library_stats])
@@ -266,10 +289,8 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
       refute has_element?(view, "#quick-actions-widget")
       assert :quick_actions not in Accounts.home_widgets(user)
 
-      # Move library_stats down
-      view
-      |> element("#edit-home-widget-library_stats button[aria-label='Move Library stats down']")
-      |> render_click()
+      # Move library_stats down (the keyboard path from the drag handle)
+      render_hook(view, "move_home_widget", %{"key" => "library_stats", "direction" => "down"})
 
       assert Accounts.home_widgets(user) |> Enum.at(0) != :library_stats
 

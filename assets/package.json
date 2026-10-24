@@ -16,7 +16,8 @@
     "hls.js": "^1.7.3",
     "phoenix": "file:../deps/phoenix",
     "phoenix_html": "file:../deps/phoenix_html",
-    "phoenix_live_view": "file:../deps/phoenix_live_view"
+    "phoenix_live_view": "file:../deps/phoenix_live_view",
+    "sortablejs": "^1.15.7"
   },
   "devDependencies": {
     "@catppuccin/palette": "^1.8.0",

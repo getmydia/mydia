@@ -20,17 +20,26 @@ defmodule MydiaWeb.DashboardLive.EditHomeComponents do
         <div>
           <h2 class="text-xl font-bold">Customize Home</h2>
           <p class="text-sm text-base-content/70 mt-1">
-            Choose which sections appear on your dashboard and arrange them in order.
+            Choose which sections appear on your dashboard. Drag the handle to reorder them.
           </p>
         </div>
 
         <div class="space-y-2">
-          <!-- Visible widgets -->
-          <%= for {widget, index} <- Enum.with_index(@visible_widgets) do %>
+          <div id="edit-home-visible" phx-hook="HomeWidgetSort" class="space-y-2">
             <div
+              :for={widget <- @visible_widgets}
               id={"edit-home-widget-#{widget.key}"}
-              class="flex items-center justify-between p-3 rounded-lg bg-base-200/50 border border-base-content/10 gap-3"
+              data-key={widget.key}
+              class="flex items-center p-3 rounded-lg bg-base-200/50 border border-base-content/10 gap-3"
             >
+              <button
+                type="button"
+                data-drag-handle
+                class="btn btn-ghost btn-xs btn-square shrink-0 cursor-grab active:cursor-grabbing touch-none"
+                aria-label={"Reorder #{widget.label}. Use arrow keys to move."}
+              >
+                <.icon name="hero-bars-3" class="w-4 h-4" />
+              </button>
               <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
                 <input
                   type="checkbox"
@@ -44,33 +53,8 @@ defmodule MydiaWeb.DashboardLive.EditHomeComponents do
                   <p class="text-xs text-base-content/60 truncate">{widget.description}</p>
                 </div>
               </label>
-
-              <div class="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  phx-click="move_home_widget"
-                  phx-value-key={widget.key}
-                  phx-value-direction="up"
-                  disabled={index == 0}
-                  class="btn btn-ghost btn-xs btn-square"
-                  aria-label={"Move #{widget.label} up"}
-                >
-                  <.icon name="hero-chevron-up" class="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  phx-click="move_home_widget"
-                  phx-value-key={widget.key}
-                  phx-value-direction="down"
-                  disabled={index == length(@visible_widgets) - 1}
-                  class="btn btn-ghost btn-xs btn-square"
-                  aria-label={"Move #{widget.label} down"}
-                >
-                  <.icon name="hero-chevron-down" class="w-4 h-4" />
-                </button>
-              </div>
             </div>
-          <% end %>
+          </div>
 
           <!-- Hidden divider -->
           <%= if @hidden_widgets != [] do %>
