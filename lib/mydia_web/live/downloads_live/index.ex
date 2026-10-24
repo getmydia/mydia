@@ -7,7 +7,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias Mydia.Downloads.ExternalTorrents
   alias Mydia.Downloads.ImportCandidates
   alias Mydia.Downloads.StallDetector
-  alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Library.Structs.Quality
   alias Mydia.Library
   alias Mydia.Media
@@ -20,6 +19,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias MydiaWeb.DownloadsLive.{Issue, IssueComponents, IssueList}
   alias MydiaWeb.DownloadsLive.ListComponents
   alias MydiaWeb.DownloadsLive.ListView
+  alias MydiaWeb.DownloadsLive.Retry
   alias MydiaWeb.DownloadsLive.Sorting
   alias MydiaWeb.DownloadsLive.Summary
   alias MydiaWeb.DownloadsLive.Paths
@@ -314,7 +314,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   def handle_event("retry_download", %{"id" => id}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       with_download(socket, id, [preload: [:media_item, :episode]], fn download ->
-        case regrab(download) do
+        case Retry.regrab(download) do
           {:ok, _new_download} ->
             {:noreply,
              socket
@@ -373,7 +373,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   def handle_event("retry_import", %{"id" => id}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       with_download(socket, id, [preload: [:media_item, :episode]], fn download ->
-        case requeue_import(download) do
+        case Retry.requeue_import(download) do
           {:ok, _job} ->
             {:noreply,
              socket
@@ -1124,14 +1124,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # tally counts.
   defp batch_retry_one(download) do
     if download.import_last_error,
-      do: requeue_import(download),
-      else: regrab(download)
+      do: Retry.requeue_import(download),
+      else: Retry.regrab(download)
   end
 
   # The Issues tab retries by kind, which `IssueList.kind/1` derives from the
   # polled row, not from the database row `batch_retry_one/1` reads.
-  defp retry_issue(:import_failed, download), do: requeue_import(download)
-  defp retry_issue(:download_failed, download), do: regrab(download)
+  defp retry_issue(:import_failed, download), do: Retry.requeue_import(download)
+  defp retry_issue(:download_failed, download), do: Retry.regrab(download)
 
   defp retry_kind(nil), do: nil
   defp retry_kind(row), do: IssueList.kind(row)
@@ -1142,54 +1142,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     match?({:ok, _}, fun.())
   rescue
     _ -> false
-  end
-
-  # Clears the import failure and enqueues an immediate import.
-  defp requeue_import(download) do
-    case Downloads.update_download(download, %{
-           import_retry_count: 0,
-           import_last_error: nil,
-           import_next_retry_at: nil,
-           import_failed_at: nil
-         }) do
-      {:ok, updated} ->
-        %{
-          "download_id" => updated.id,
-          "save_path" => nil,
-          "cleanup_client" => true,
-          "use_hardlinks" => true
-        }
-        |> Mydia.Jobs.MediaImport.new()
-        |> Oban.insert()
-
-      error ->
-        error
-    end
-  end
-
-  # Grabs the same release again: the old row is deleted and a new one is
-  # initiated from its download URL, against the same client when it had one.
-  defp regrab(download) do
-    metadata = DownloadMetadata.from_map(download.metadata)
-
-    search_result = %Mydia.Indexers.SearchResult{
-      download_url: download.download_url,
-      title: download.title,
-      indexer: download.indexer,
-      size: metadata.size,
-      seeders: metadata.seeders,
-      leechers: metadata.leechers,
-      quality: metadata.quality
-    }
-
-    opts =
-      []
-      |> maybe_add_opt(:media_item_id, download.media_item_id)
-      |> maybe_add_opt(:episode_id, download.episode_id)
-      |> maybe_add_opt(:client_name, download.download_client)
-
-    Downloads.delete_download(download)
-    Downloads.initiate_download(search_result, opts)
   end
 
   # Loads the download an event names and hands it to `fun`.
@@ -1273,9 +1225,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   defp removal_flash(socket, _kind, _download), do: socket
-
-  defp maybe_add_opt(opts, _key, nil), do: opts
-  defp maybe_add_opt(opts, key, value), do: Keyword.put(opts, key, value)
 
   # Phoenix checkboxes submit "true" when checked and omit the key when not.
   defp delete_files?(params), do: Map.get(params, "delete_files") == "true"

@@ -199,9 +199,7 @@ defmodule Mydia.Downloads.History do
   @doc """
   Deletes the orphaned downloads referencing `client_name`.
 
-  Scoped on purpose: it never touches another client's rows or another
-  failure reason. No attempt is made to remove anything from
-  the download client: that client is precisely what no longer exists.
+  Scoped to that client; nothing is removed from it, as it no longer exists.
   """
   @spec clear_downloads_for_removed_client(String.t()) :: {non_neg_integer(), nil | [term()]}
   def clear_downloads_for_removed_client(client_name) do
@@ -211,7 +209,6 @@ defmodule Mydia.Downloads.History do
   end
 
   def list_downloads_with_status(opts \\ []) do
-    # Get all download records from database
     # Preload episode.media_item to get parent show info for episode downloads
     downloads = list_downloads(preload: [:media_item, episode: :media_item])
 
