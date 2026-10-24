@@ -9,6 +9,7 @@
 msgid ""
 msgstr ""
 "Language: es\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 msgid "can't be blank"

@@ -9,6 +9,7 @@
 msgid ""
 msgstr ""
 "Language: es\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: lib/mydia_web/components/core_components.ex:332
