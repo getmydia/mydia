@@ -34,8 +34,8 @@ defmodule MydiaWeb.MediaLive.Index.SelectionComponents do
     <button
       type="button"
       id={"select-from-card-#{@item.id}"}
-      aria-label={"Select #{@item.title}"}
-      title="Select"
+      aria-label={gettext("Select %{title}", title: @item.title)}
+      title={pgettext("selection", "Select")}
       phx-click={
         JS.push("start_selection", value: %{id: @item.id})
         |> JS.dispatch("mydia:start-selection", to: @target)

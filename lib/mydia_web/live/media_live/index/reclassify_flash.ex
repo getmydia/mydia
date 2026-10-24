@@ -2,6 +2,7 @@ defmodule MydiaWeb.MediaLive.Index.ReclassifyFlash do
   @moduledoc """
   The flash message for the library's bulk reclassify action.
   """
+  use Gettext, backend: MydiaWeb.Gettext
 
   @spec message(%{
           required(:updated) => non_neg_integer(),
@@ -9,19 +10,24 @@ defmodule MydiaWeb.MediaLive.Index.ReclassifyFlash do
           optional(atom()) => term()
         }) :: String.t()
   def message(%{updated: updated, skipped: skipped}) when updated > 0 and skipped > 0,
-    do: "Reclassified #{updated} #{items(updated)}, #{skipped} skipped (category override)"
+    do:
+      ngettext(
+        "Reclassified %{count} item, %{skipped} skipped (category override)",
+        "Reclassified %{count} items, %{skipped} skipped (category override)",
+        updated,
+        skipped: skipped
+      )
 
   def message(%{updated: updated}) when updated > 0,
-    do: "Reclassified #{updated} #{items(updated)}"
+    do: ngettext("Reclassified %{count} item", "Reclassified %{count} items", updated)
 
   def message(%{skipped: skipped}) when skipped > 0,
-    do: "No changes - #{skipped} #{items(skipped)} #{verb(skipped)} category override"
+    do:
+      ngettext(
+        "No changes - %{count} item has category override",
+        "No changes - %{count} items have category override",
+        skipped
+      )
 
-  def message(_summary), do: "No category changes detected"
-
-  defp verb(1), do: "has"
-  defp verb(_), do: "have"
-
-  defp items(1), do: "item"
-  defp items(_), do: "items"
+  def message(_summary), do: gettext("No category changes detected")
 end

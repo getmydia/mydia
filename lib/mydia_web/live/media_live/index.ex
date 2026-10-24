@@ -114,7 +114,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp apply_action(socket, :movies, _params) do
     socket
-    |> assign(:page_title, "Movies")
+    |> assign(:page_title, gettext("Movies"))
     |> assign(:filter_type, "movie")
     |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> assign_library_options(:movies)
@@ -122,7 +122,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp apply_action(socket, :tv_shows, _params) do
     socket
-    |> assign(:page_title, "TV Shows")
+    |> assign(:page_title, gettext("TV Shows"))
     |> assign(:filter_type, "tv_show")
     |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> assign_library_options(:tv_shows)
@@ -145,7 +145,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
       _not_found_or_not_smart ->
         socket
-        |> put_flash(:error, "That section is no longer available.")
+        |> put_flash(:error, gettext("That section is no longer available."))
         |> push_navigate(to: ~p"/")
     end
   end
@@ -488,14 +488,22 @@ defmodule MydiaWeb.MediaLive.Index do
 
     case Collections.get_collection(user, collection_id) do
       nil ->
-        {:noreply, put_flash(socket, :error, "Collection not found")}
+        {:noreply, put_flash(socket, :error, gettext("Collection not found"))}
 
       collection ->
         case Collections.add_items(collection, selected_ids) do
           {:ok, count} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Added #{count} #{pluralize_items(count)} to #{collection.name}")
+             |> put_flash(
+               :info,
+               ngettext(
+                 "Added %{count} item to %{name}",
+                 "Added %{count} items to %{name}",
+                 count,
+                 name: collection.name
+               )
+             )
              |> assign(:selection_mode, false)
              |> assign(:selected_ids, MapSet.new())
              |> assign(:show_add_to_collection_modal, false)}
@@ -503,13 +511,13 @@ defmodule MydiaWeb.MediaLive.Index do
           {:error, :smart_collection} ->
             {:noreply,
              socket
-             |> put_flash(:error, "Cannot add items to smart collections")
+             |> put_flash(:error, gettext("Cannot add items to smart collections"))
              |> assign(:show_add_to_collection_modal, false)}
 
           {:error, _reason} ->
             {:noreply,
              socket
-             |> put_flash(:error, "Failed to add to collection")
+             |> put_flash(:error, gettext("Failed to add to collection"))
              |> assign(:show_add_to_collection_modal, false)}
         end
     end
@@ -561,10 +569,10 @@ defmodule MydiaWeb.MediaLive.Index do
            |> assign(:page_title, updated.name)
            |> assign(:show_section_settings, false)
            |> assign(:excluded_categories, Collections.claimed_categories(user))
-           |> put_flash(:info, "Section updated")}
+           |> put_flash(:info, gettext("Section updated"))}
 
         {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Could not update the section")}
+          {:noreply, put_flash(socket, :error, gettext("Could not update the section"))}
       end
     end)
   end
@@ -577,11 +585,11 @@ defmodule MydiaWeb.MediaLive.Index do
         {:ok, _collection} ->
           {:noreply,
            socket
-           |> put_flash(:info, "Section removed from the sidebar")
+           |> put_flash(:info, gettext("Section removed from the sidebar"))
            |> push_navigate(to: ~p"/tv")}
 
         {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Could not remove the section")}
+          {:noreply, put_flash(socket, :error, gettext("Could not remove the section"))}
       end
     end)
   end
@@ -611,7 +619,7 @@ defmodule MydiaWeb.MediaLive.Index do
       {:noreply, push_navigate(socket, to: ~p"/sections/#{pinned.id}")}
     else
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not create the Anime section")}
+        {:noreply, put_flash(socket, :error, gettext("Could not create the Anime section"))}
     end
   end
 
@@ -696,7 +704,7 @@ defmodule MydiaWeb.MediaLive.Index do
      socket
      |> assign(:scanning, false)
      |> assign(:scan_progress, nil)
-     |> put_flash(:error, "Library scan failed: #{error}")}
+     |> put_flash(:error, gettext("Library scan failed: %{error}", error: error))}
   end
 
   def handle_info({:library_scan_progress, progress}, socket) do
@@ -725,21 +733,26 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp batch_set_monitored(socket, monitored) do
     selected_ids = MapSet.to_list(socket.assigns.selected_ids)
-    label = if monitored, do: "monitored", else: "unmonitored"
 
     case Media.update_media_items_monitored(socket.assigns.current_scope, selected_ids, monitored) do
       {:ok, count} ->
         {:noreply,
          socket
-         |> put_flash(:info, "#{count} #{pluralize_items(count)} set to #{label}")
+         |> put_flash(:info, batch_monitored_message(count, monitored))
          |> assign(:selection_mode, false)
          |> assign(:selected_ids, MapSet.new())
          |> load_media_items()}
 
       {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to update items")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to update items"))}
     end
   end
+
+  defp batch_monitored_message(count, true),
+    do: ngettext("%{count} item set to monitored", "%{count} items set to monitored", count)
+
+  defp batch_monitored_message(count, false),
+    do: ngettext("%{count} item set to unmonitored", "%{count} items set to unmonitored", count)
 
   defp batch_reclassify(socket) do
     selected_ids = MapSet.to_list(socket.assigns.selected_ids)
@@ -781,7 +794,7 @@ defmodule MydiaWeb.MediaLive.Index do
       {:error, _reason} ->
         {:noreply,
          socket
-         |> put_flash(:error, "Failed to delete items")
+         |> put_flash(:error, gettext("Failed to delete items"))
          |> assign(:show_delete_modal, false)
          |> assign(:delete_files, false)}
     end
@@ -800,7 +813,14 @@ defmodule MydiaWeb.MediaLive.Index do
       {:ok, count} ->
         {:noreply,
          socket
-         |> put_flash(:info, "#{count} #{pluralize_items(count)} updated successfully")
+         |> put_flash(
+           :info,
+           ngettext(
+             "%{count} item updated successfully",
+             "%{count} items updated successfully",
+             count
+           )
+         )
          |> assign(:selection_mode, false)
          |> assign(:selected_ids, MapSet.new())
          |> assign(:show_batch_edit_modal, false)
@@ -809,7 +829,7 @@ defmodule MydiaWeb.MediaLive.Index do
       {:error, _reason} ->
         {:noreply,
          socket
-         |> put_flash(:error, "Failed to update items")
+         |> put_flash(:error, gettext("Failed to update items"))
          |> assign(:show_batch_edit_modal, false)}
     end
   end
@@ -841,7 +861,7 @@ defmodule MydiaWeb.MediaLive.Index do
           reason: inspect(reason)
         )
 
-        put_flash(socket, :error, "Failed to queue searches")
+        put_flash(socket, :error, gettext("Failed to queue searches"))
     end
   end
 
@@ -1016,7 +1036,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp get_progress(%LibraryRow{progress: progress}), do: progress
 
-  defp format_year(nil), do: "N/A"
+  defp format_year(nil), do: gettext("N/A")
   defp format_year(year), do: year
 
   # Ranked by parsed height rather than lexically: comparing the raw strings
@@ -1028,31 +1048,37 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp total_file_size(%LibraryRow{total_size: total_size}), do: total_size
 
-  defp pluralize_items(1), do: "item"
-  defp pluralize_items(_), do: "items"
+  defp auto_search_flash(0, 0), do: gettext("Nothing to search")
 
-  defp auto_search_flash(0, 0), do: "Nothing to search"
-
-  defp auto_search_flash(0, 1), do: "Nothing to search. The selected item does not need a search."
+  defp auto_search_flash(0, 1),
+    do: gettext("Nothing to search. The selected item does not need a search.")
 
   defp auto_search_flash(0, skipped) do
-    "Nothing to search. None of the #{skipped} selected items need a search."
+    gettext("Nothing to search. None of the %{skipped} selected items need a search.",
+      skipped: skipped
+    )
   end
 
   defp auto_search_flash(queued, 0) do
-    "Queued #{queued} #{pluralize_searches(queued)}"
+    ngettext("Queued %{count} search", "Queued %{count} searches", queued)
   end
 
   defp auto_search_flash(queued, 1) do
-    "Queued #{queued} #{pluralize_searches(queued)}, skipped 1 that does not need one"
+    ngettext(
+      "Queued %{count} search, skipped 1 that does not need one",
+      "Queued %{count} searches, skipped 1 that does not need one",
+      queued
+    )
   end
 
   defp auto_search_flash(queued, skipped) do
-    "Queued #{queued} #{pluralize_searches(queued)}, skipped #{skipped} that do not need one"
+    ngettext(
+      "Queued %{count} search, skipped %{skipped} that do not need one",
+      "Queued %{count} searches, skipped %{skipped} that do not need one",
+      queued,
+      skipped: skipped
+    )
   end
-
-  defp pluralize_searches(1), do: "search"
-  defp pluralize_searches(_), do: "searches"
 
   defp maybe_add_attr(attrs, _key, nil), do: attrs
   defp maybe_add_attr(attrs, _key, ""), do: attrs
@@ -1082,7 +1108,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp format_episode_count(%AvailabilityStatus{downloaded: downloaded, total: total})
        when is_integer(downloaded) and is_integer(total),
-       do: "#{downloaded}/#{total} episodes"
+       do: gettext("%{downloaded}/%{total} episodes", downloaded: downloaded, total: total)
 
   defp format_episode_count(_), do: nil
 
@@ -1102,17 +1128,31 @@ defmodule MydiaWeb.MediaLive.Index do
         auto_linked: auto_linked
       }) do
     parts = []
-    parts = if new_files > 0, do: ["#{new_files} new" | parts], else: parts
-    parts = if modified_files > 0, do: ["#{modified_files} modified" | parts], else: parts
-    parts = if deleted_files > 0, do: ["#{deleted_files} removed" | parts], else: parts
 
     parts =
-      if auto_linked > 0, do: parts ++ ["#{auto_linked} imported automatically"], else: parts
+      if new_files > 0,
+        do: [gettext("%{count} new", count: new_files) | parts],
+        else: parts
+
+    parts =
+      if modified_files > 0,
+        do: [gettext("%{count} modified", count: modified_files) | parts],
+        else: parts
+
+    parts =
+      if deleted_files > 0,
+        do: [gettext("%{count} removed", count: deleted_files) | parts],
+        else: parts
+
+    parts =
+      if auto_linked > 0,
+        do: parts ++ [gettext("%{count} imported automatically", count: auto_linked)],
+        else: parts
 
     if parts == [] do
-      "Library scan completed: No changes detected"
+      gettext("Library scan completed: No changes detected")
     else
-      "Library scan completed: " <> Enum.join(parts, ", ")
+      gettext("Library scan completed: %{changes}", changes: Enum.join(parts, ", "))
     end
   end
 end

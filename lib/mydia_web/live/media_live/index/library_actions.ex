@@ -5,6 +5,8 @@ defmodule MydiaWeb.MediaLive.Index.LibraryActions do
   here does.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3, stream_insert: 3]
 
@@ -16,7 +18,7 @@ defmodule MydiaWeb.MediaLive.Index.LibraryActions do
   def toggle_monitored(socket, id) do
     case Media.list_media_items(socket.assigns.current_scope, ids: [id]) do
       [media_item] -> toggle_item(socket, media_item)
-      [] -> {:noreply, put_flash(socket, :error, "Failed to update monitoring status")}
+      [] -> {:noreply, put_flash(socket, :error, gettext("Failed to update monitoring status"))}
     end
   end
 
@@ -45,11 +47,14 @@ defmodule MydiaWeb.MediaLive.Index.LibraryActions do
          put_flash(
            socket,
            :info,
-           "Monitoring #{if new_monitored_status, do: "enabled", else: "disabled"}"
+           if(new_monitored_status,
+             do: gettext("Monitoring enabled"),
+             else: gettext("Monitoring disabled")
+           )
          )}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update monitoring status")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to update monitoring status"))}
     end
   end
 
@@ -61,7 +66,7 @@ defmodule MydiaWeb.MediaLive.Index.LibraryActions do
       # it runs). Don't claim a scan started, and don't switch the UI into a
       # scanning state that no broadcast will ever clear.
       {:ok, %Oban.Job{conflict?: true}} ->
-        {:noreply, put_flash(socket, :info, "A library scan is already queued")}
+        {:noreply, put_flash(socket, :info, gettext("A library scan is already queued"))}
 
       {:ok, _job} ->
         {:noreply,
@@ -69,10 +74,10 @@ defmodule MydiaWeb.MediaLive.Index.LibraryActions do
          |> assign(:scanning, true)
          |> assign(:scan_result, nil)
          |> assign(:scan_progress, nil)
-         |> put_flash(:info, "Library scan started...")}
+         |> put_flash(:info, gettext("Library scan started..."))}
 
       {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start library scan")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to start library scan"))}
     end
   end
 end
