@@ -249,6 +249,29 @@ defmodule Mydia.Accounts.HomeLayout do
     end
   end
 
+  @doc """
+  Rearranges `visible_keys` to follow `requested`.
+
+  Unknown keys, keys not in `visible_keys` and repeats are dropped, and any
+  visible key the request leaves out keeps its relative place at the end, so
+  the result is always a permutation of `visible_keys`: a stale or tampered
+  request can reorder widgets but never hide or add one.
+  """
+  @spec reorder([atom()], term()) :: [atom()]
+  def reorder(visible_keys, requested) when is_list(requested) do
+    visible_set = MapSet.new(visible_keys)
+
+    ordered =
+      requested
+      |> Enum.map(&to_key/1)
+      |> Enum.filter(&MapSet.member?(visible_set, &1))
+      |> Enum.uniq()
+
+    ordered ++ (visible_keys -- ordered)
+  end
+
+  def reorder(visible_keys, _requested), do: visible_keys
+
   defp swap(list, i, j) do
     elem_i = Enum.at(list, i)
     elem_j = Enum.at(list, j)

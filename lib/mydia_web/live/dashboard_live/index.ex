@@ -25,6 +25,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias MydiaWeb.DashboardLive.Components
   alias MydiaWeb.DashboardLive.ShelfComponents
   alias MydiaWeb.DashboardLive.{ShelfFeedback, ShelfRail}
+  alias MydiaWeb.DashboardLive.HomeOrder
   alias MydiaWeb.DashboardLive.HealthComponents
   alias MydiaWeb.DashboardLive.EditHomeComponents
   alias MydiaWeb.Live.Authorization, as: LiveAuthorization
@@ -458,26 +459,9 @@ defmodule MydiaWeb.DashboardLive.Index do
     end
   end
 
-  def handle_event("move_home_widget", %{"key" => raw_key, "direction" => dir_str}, socket) do
-    user = socket.assigns.current_user
-    direction = if dir_str == "up", do: :up, else: :down
+  def handle_event("move_home_widget", params, socket), do: HomeOrder.move(socket, params)
 
-    case HomeLayout.to_key(raw_key) do
-      nil ->
-        {:noreply, socket}
-
-      key ->
-        new_widgets = HomeLayout.move(socket.assigns.home_widgets, key, direction)
-
-        case Accounts.put_home_widgets(user, new_widgets) do
-          {:ok, _pref} ->
-            {:noreply, assign(socket, :home_widgets, new_widgets)}
-
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Could not save your Home layout.")}
-        end
-    end
-  end
+  def handle_event("reorder_home_widgets", params, socket), do: HomeOrder.reorder(socket, params)
 
   def handle_event("reset_home_widgets", _params, socket) do
     user = socket.assigns.current_user

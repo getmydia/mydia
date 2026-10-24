@@ -216,4 +216,53 @@ defmodule Mydia.Accounts.HomeLayoutTest do
       assert HomeLayout.move(list, "unknown", :down) == list
     end
   end
+
+  describe "reorder/2" do
+    @visible [:library_stats, :quick_actions, :recently_added, :episodes]
+
+    test "follows the requested order given as strings" do
+      assert HomeLayout.reorder(@visible, [
+               "episodes",
+               "library_stats",
+               "recently_added",
+               "quick_actions"
+             ]) == [:episodes, :library_stats, :recently_added, :quick_actions]
+    end
+
+    test "accepts atom keys" do
+      assert HomeLayout.reorder(@visible, [:quick_actions, :library_stats]) ==
+               [:quick_actions, :library_stats, :recently_added, :episodes]
+    end
+
+    test "drops unknown keys and keys that are not visible" do
+      assert HomeLayout.reorder(@visible, [
+               "bogus",
+               "trending_movies",
+               "episodes",
+               "library_stats",
+               "quick_actions",
+               "recently_added"
+             ]) == [:episodes, :library_stats, :quick_actions, :recently_added]
+    end
+
+    test "keeps the first occurrence of a duplicated key" do
+      assert HomeLayout.reorder(@visible, [
+               "episodes",
+               "library_stats",
+               "episodes",
+               "quick_actions",
+               "recently_added"
+             ]) == [:episodes, :library_stats, :quick_actions, :recently_added]
+    end
+
+    test "appends visible keys missing from the request in their current order" do
+      assert HomeLayout.reorder(@visible, ["episodes"]) ==
+               [:episodes, :library_stats, :quick_actions, :recently_added]
+    end
+
+    test "returns visible keys unchanged for non-list input" do
+      assert HomeLayout.reorder(@visible, nil) == @visible
+      assert HomeLayout.reorder(@visible, "episodes") == @visible
+    end
+  end
 end

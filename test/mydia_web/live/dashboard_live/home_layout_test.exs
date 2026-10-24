@@ -99,6 +99,113 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
       assert Enum.at(updated_widgets, 1) == first
     end
 
+    test "reorder_home_widgets persists the requested order", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+
+      {:ok, _} =
+        Accounts.put_home_widgets(user, [:library_stats, :quick_actions, :recently_added])
+
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      render_hook(view, "reorder_home_widgets", %{
+        "keys" => ["recently_added", "library_stats", "quick_actions"]
+      })
+
+      expected = [:recently_added, :library_stats, :quick_actions]
+      assert :sys.get_state(view.pid).socket.assigns.home_widgets == expected
+      assert Accounts.home_widgets(user) == expected
+    end
+
+    test "reorder_home_widgets cannot make a hidden widget visible", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      render_hook(view, "reorder_home_widgets", %{
+        "keys" => ["episodes", "quick_actions", "library_stats"]
+      })
+
+      assert Accounts.home_widgets(user) == [:quick_actions, :library_stats]
+    end
+
+    test "reorder_home_widgets ignores malformed params", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      render_hook(view, "reorder_home_widgets", %{"keys" => "quick_actions"})
+      render_hook(view, "reorder_home_widgets", %{})
+
+      assert Accounts.home_widgets(user) == [:library_stats, :quick_actions]
+    end
+
+    test "reorder_home_widgets replies with the saved order", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+      view |> element("#edit-home-btn") |> render_click()
+
+      view
+      |> element("#edit-home-visible")
+      |> render_hook("reorder_home_widgets", %{"keys" => ["quick_actions", "library_stats"]})
+
+      assert_reply(view, %{keys: ["quick_actions", "library_stats"]})
+    end
+
+    test "reorder_home_widgets replies with visible keys only when a hidden one is named", %{
+      conn: conn
+    } do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+      view |> element("#edit-home-btn") |> render_click()
+
+      view
+      |> element("#edit-home-visible")
+      |> render_hook("reorder_home_widgets", %{
+        "keys" => ["episodes", "quick_actions", "library_stats"]
+      })
+
+      assert_reply(view, %{keys: ["quick_actions", "library_stats"]})
+    end
+
+    test "move_home_widget at the list edge replies with the unchanged order", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+      view |> element("#edit-home-btn") |> render_click()
+
+      view
+      |> element("#edit-home-visible")
+      |> render_hook("move_home_widget", %{"key" => "library_stats", "direction" => "up"})
+
+      assert_reply(view, %{keys: ["library_stats", "quick_actions"]})
+      assert Accounts.home_widgets(user) == [:library_stats, :quick_actions]
+    end
+
+    test "visible widgets render as a sortable list with drag handles", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      view |> element("#edit-home-btn") |> render_click()
+
+      assert has_element?(view, "#edit-home-visible[phx-hook='HomeWidgetSort']")
+
+      assert has_element?(
+               view,
+               "#edit-home-visible > #edit-home-widget-library_stats[data-key='library_stats'] button#edit-home-handle-library_stats[data-drag-handle]"
+             )
+
+      assert has_element?(
+               view,
+               "#edit-home-visible > #edit-home-widget-quick_actions[data-key='quick_actions'] button#edit-home-handle-quick_actions[data-drag-handle]"
+             )
+
+      refute has_element?(view, "#edit-home-modal button[phx-value-direction]")
+      refute has_element?(view, "#edit-home-visible [data-key='episodes']")
+    end
+
     test "reset_home_widgets resets preferences to defaults", %{conn: conn} do
       user = user_fixture(%{role: "admin"})
       {:ok, _} = Accounts.put_home_widgets(user, [:library_stats])
@@ -226,10 +333,8 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
       refute has_element?(view, "#quick-actions-widget")
       assert :quick_actions not in Accounts.home_widgets(user)
 
-      # Move library_stats down
-      view
-      |> element("#edit-home-widget-library_stats button[aria-label='Move Library stats down']")
-      |> render_click()
+      # Move library_stats down (the keyboard path from the drag handle)
+      render_hook(view, "move_home_widget", %{"key" => "library_stats", "direction" => "down"})
 
       assert Accounts.home_widgets(user) |> Enum.at(0) != :library_stats
 
