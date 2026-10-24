@@ -233,6 +233,28 @@ defmodule MydiaWeb.DownloadsLive.IssuesListLiveTest do
       assert is_nil(Mydia.Downloads.get_download(missing.id))
     end
 
+    test "batch dismiss leaves a selected row that stopped being an issue", %{conn: conn} do
+      %{failed: failed, missing: missing} = seed_import_failure_and_missing()
+
+      {:ok, view, _html} = live(conn, ~p"/downloads?tab=issues")
+
+      view |> element("#downloads-select") |> render_click()
+
+      # The import failure is resolved elsewhere while the selection is open.
+      {:ok, _} =
+        failed
+        |> Ecto.Changeset.change(import_failed_at: nil, import_last_error: nil)
+        |> Mydia.Repo.update()
+
+      send(view.pid, {:download_updated, failed.id})
+      render(view)
+
+      view |> element("#downloads-batch-dismiss") |> render_click()
+
+      assert Mydia.Downloads.get_download(failed.id)
+      assert is_nil(Mydia.Downloads.get_download(missing.id))
+    end
+
     test "batch retry retries import failures and skips what it cannot retry", %{conn: conn} do
       # Oban is not started in test; the import retry enqueues a job.
       start_supervised!(

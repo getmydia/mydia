@@ -169,6 +169,8 @@ defmodule MydiaWeb.DownloadsLive.IssueComponentsTest do
 
       doc = render_row(issue, search_open?: true)
       assert count(doc, "#adopt-t1-m1[phx-click=adopt_suggestion]") == 1
+      assert doc |> LazyHTML.query("#adopt-t1-m1 .badge") |> LazyHTML.text() =~ "90%"
+      refute doc |> LazyHTML.query("#adopt-t1-m1 .badge") |> LazyHTML.text() =~ "90.0"
     end
 
     test "unresolved rows offer Match files" do

@@ -178,7 +178,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
               >
                 <span class="line-clamp-2 min-w-0 break-words">{suggestion.title}</span>
                 <span class="badge badge-xs ml-1 shrink-0">
-                  {Float.round(suggestion.confidence * 100, 0)}%
+                  {round(suggestion.confidence * 100)}%
                 </span>
               </button>
             </div>

@@ -507,26 +507,40 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   # Dismissing deletes the row and leaves the client alone, like the per-row
   # Dismiss. A row already gone is skipped rather than counted.
-  def handle_event("batch_dismiss", _params, socket) do
+  def handle_event("batch_dismiss", _params, %{assigns: %{active_tab: :issues}} = socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
+      # Only rows the last load still classified as issues are dismissed; a row
+      # that was resolved since is left alone and counted as skipped.
+      {dismissable, skipped} =
+        Enum.split_with(socket.assigns.selected_ids, fn id ->
+          not is_nil(retry_kind(socket.assigns.rows_by_id[id]))
+        end)
+
       dismissed =
-        Enum.count(socket.assigns.selected_ids, fn id ->
+        Enum.count(dismissable, fn id ->
           case Downloads.get_download(id) do
             nil -> false
             download -> match?({:ok, _}, Downloads.dismiss_download(download))
           end
         end)
 
+      message =
+        if skipped == [],
+          do: "#{dismissed} dismissed",
+          else: "#{dismissed} dismissed, #{length(skipped)} skipped"
+
       {:noreply,
        socket
        |> assign(:selected_ids, MapSet.new())
        |> assign(:selection_mode, false)
-       |> put_flash(:info, "#{dismissed} dismissed")
+       |> put_flash(:info, message)
        |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
   end
+
+  def handle_event("batch_dismiss", _params, socket), do: {:noreply, socket}
 
   def handle_event("open_clear_completed_modal", _params, socket) do
     # Opening the modal is non-destructive, so it is ungated (the button renders
@@ -620,7 +634,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
        socket
        |> assign(:search_open_for, nil)
        |> assign(:library_search_value, "")
-       |> assign(:library_search_results, [])}
+       |> assign(:library_search_results, [])
+       |> refresh_issue_rows([torrent_id])}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -1329,24 +1344,21 @@ defmodule MydiaWeb.DownloadsLive.Index do
           [download]
           |> annotate_rematch_eligibility()
           |> annotate_auto_reject_cap()
-          |> maybe_enrich_path_mapping(socket.assigns.active_tab)
+          |> enrich_path_mapping_suggestions()
 
         assign(socket, :drawer_download, download)
     end
   end
 
-  # The drawer's path-mapping block needs the suggestion, which scans the
-  # mounts, so only the Issues tab (where path-mapping failures live) pays it.
-  defp maybe_enrich_path_mapping(downloads, :issues),
-    do: enrich_path_mapping_suggestions(downloads)
-
-  defp maybe_enrich_path_mapping(downloads, _tab), do: downloads
-
   defp load_issues_downloads(socket, all_downloads) do
     {issues, shown} = filtered_issues(socket, all_downloads)
     shown = enrich_issue_path_mappings(shown)
 
+    # Drop selections that are no longer on screen (filtered out, resolved).
+    visible_ids = for issue <- shown, Issue.selectable?(issue), into: MapSet.new(), do: issue.id
+
     socket
+    |> assign(:selected_ids, MapSet.intersection(socket.assigns.selected_ids, visible_ids))
     |> assign(:stale_status, stale_status(all_downloads))
     |> assign(:has_more, false)
     |> assign(:downloads_empty?, shown == [])

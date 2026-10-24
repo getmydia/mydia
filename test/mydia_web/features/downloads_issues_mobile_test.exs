@@ -160,31 +160,10 @@ defmodule MydiaWeb.Features.DownloadsIssuesMobileTest do
       end
 
     ExternalTorrents.put(%ExternalScan{needs_matching: torrents})
+    on_exit(fn -> ExternalTorrents.put(ExternalScan.empty()) end)
   end
 
   defp phone(session), do: resize_window(session, 390, 844)
-
-  # Logs in without typing: ChromeDriver's send-keys call hangs in this
-  # environment, so the form is filled and submitted from the page.
-  defp login_by_script(session) do
-    user = create_admin_user()
-
-    Wallaby.Browser.visit(session, "/auth/local/login")
-
-    eval_js(session, """
-    document.querySelector('input[name="user[username]"]').value = #{Jason.encode!(user.username)};
-    document.querySelector('input[name="user[password]"]').value = 'password123';
-    document.querySelector('input[name="user[password]"]').form.submit();
-    """)
-
-    eventually(fn ->
-      if eval_js(session, "return window.location.pathname;") == "/auth/local/login",
-        do: :error,
-        else: {:ok, true}
-    end)
-
-    session
-  end
 
   # Every element outside the sidebar and dock that scrolls on its own, as
   # "Y client/scroll X client/scroll selector" lines. The document itself is
@@ -271,7 +250,7 @@ defmodule MydiaWeb.Features.DownloadsIssuesMobileTest do
   end
 
   defp open_issues(session) do
-    login_by_script(session)
+    login_as_admin(session)
     phone(session)
     visit_liveview(session, "/downloads?tab=issues")
   end
@@ -345,7 +324,7 @@ defmodule MydiaWeb.Features.DownloadsIssuesMobileTest do
 
   @tag :feature
   test "the Downloads tab fits a phone", %{session: session} do
-    login_by_script(session)
+    login_as_admin(session)
     phone(session)
     visit_liveview(session, "/downloads")
 
