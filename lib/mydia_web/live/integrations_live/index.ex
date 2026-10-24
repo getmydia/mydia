@@ -41,7 +41,7 @@ defmodule MydiaWeb.IntegrationsLive.Index do
 
   @impl true
   def handle_params(_params, _url, socket) do
-    {:noreply, assign(socket, :page_title, "Integrations")}
+    {:noreply, assign(socket, :page_title, gettext("Integrations"))}
   end
 
   @impl true
@@ -81,7 +81,7 @@ defmodule MydiaWeb.IntegrationsLive.Index do
             {:noreply,
              assign(socket, :plugin_connect, %{
                slug: slug,
-               error: "Could not start the connection. Please try again."
+               error: gettext("Could not start the connection. Please try again.")
              })}
         end
     end
@@ -101,7 +101,7 @@ defmodule MydiaWeb.IntegrationsLive.Index do
      socket
      |> assign(:plugin_connections, load_plugin_connections(user.id))
      |> assign(:plugin_connect, nil)
-     |> put_flash(:info, "Disconnected.")}
+     |> put_flash(:info, gettext("Disconnected."))}
   end
 
   ## Plugin Connections (U8)
@@ -120,7 +120,11 @@ defmodule MydiaWeb.IntegrationsLive.Index do
   defp poll_plugin(socket, connect, slug) do
     if System.system_time(:second) >= connect.expires_at do
       {:noreply,
-       assign(socket, :plugin_connect, connect_error(slug, "The code expired. Please try again."))}
+       assign(
+         socket,
+         :plugin_connect,
+         connect_error(slug, gettext("The code expired. Please try again."))
+       )}
     else
       opts = [allowed_hosts: connect.allowed_hosts, slug: slug]
 
@@ -153,11 +157,15 @@ defmodule MydiaWeb.IntegrationsLive.Index do
          socket
          |> assign(:plugin_connect, nil)
          |> assign(:plugin_connections, load_plugin_connections(user.id))
-         |> put_flash(:info, "#{connect.name} connected.")}
+         |> put_flash(:info, gettext("%{name} connected.", name: connect.name))}
 
       {:error, _} ->
         {:noreply,
-         assign(socket, :plugin_connect, connect_error(slug, "Could not save the connection."))}
+         assign(
+           socket,
+           :plugin_connect,
+           connect_error(slug, gettext("Could not save the connection."))
+         )}
     end
   end
 
@@ -175,11 +183,20 @@ defmodule MydiaWeb.IntegrationsLive.Index do
 
   defp handle_poll(socket, _connect, slug, :expired) do
     {:noreply,
-     assign(socket, :plugin_connect, connect_error(slug, "The code expired. Please try again."))}
+     assign(
+       socket,
+       :plugin_connect,
+       connect_error(slug, gettext("The code expired. Please try again."))
+     )}
   end
 
   defp handle_poll(socket, _connect, slug, :denied) do
-    {:noreply, assign(socket, :plugin_connect, connect_error(slug, "Authorization was denied."))}
+    {:noreply,
+     assign(
+       socket,
+       :plugin_connect,
+       connect_error(slug, gettext("Authorization was denied."))
+     )}
   end
 
   defp handle_poll(socket, connect, slug, {:error, _reason}) do

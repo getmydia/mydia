@@ -7,6 +7,10 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   request approval shares.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
+  import MydiaWeb.CoreComponents, only: [translate_error: 1]
+
   alias Mydia.Media.Add
   alias Mydia.Media.AddDefaults
   alias Mydia.MediaRequests
@@ -18,10 +22,9 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   alias Mydia.Settings
   alias MydiaWeb.Live.Authorization
 
-  @unknown_library_flash "That library is no longer available. Nothing was added."
-
   @doc "Flash shown when a submitted library id is not a candidate for the chosen type."
-  def unknown_library_message, do: @unknown_library_flash
+  def unknown_library_message,
+    do: gettext("That library is no longer available. Nothing was added.")
 
   @doc """
   Libraries a caller may pick as the add-time target for `media_type`.
@@ -230,11 +233,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   Formats changeset errors into a human-readable string.
   """
   def format_changeset_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Enum.reduce(opts, msg, fn {key, value}, acc_msg ->
-        String.replace(acc_msg, "%{#{key}}", to_string(value))
-      end)
-    end)
+    Ecto.Changeset.traverse_errors(changeset, &translate_error/1)
     |> Enum.map_join("; ", fn {field, errors} -> "#{field}: #{Enum.join(errors, ", ")}" end)
   end
 
@@ -431,7 +430,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
         {:halt,
          socket
          |> clear_add_config()
-         |> Phoenix.LiveView.put_flash(:error, @unknown_library_flash)}
+         |> Phoenix.LiveView.put_flash(:error, unknown_library_message())}
     end
   end
 

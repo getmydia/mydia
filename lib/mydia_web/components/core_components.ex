@@ -680,12 +680,22 @@ defmodule MydiaWeb.CoreComponents do
     minutes = div(rem(seconds, 3600), 60)
     secs = rem(seconds, 60)
 
-    cond do
-      hours > 0 && minutes > 0 -> "#{hours}h #{minutes}m#{suffix}"
-      hours > 0 -> "#{hours}h#{suffix}"
-      minutes > 0 -> "#{minutes}m#{suffix}"
-      true -> "#{secs}s#{suffix}"
-    end
+    text =
+      cond do
+        hours > 0 && minutes > 0 ->
+          pgettext("runtime", "%{hours}h %{mins}m", hours: hours, mins: minutes)
+
+        hours > 0 ->
+          pgettext("runtime", "%{hours}h", hours: hours)
+
+        minutes > 0 ->
+          pgettext("runtime", "%{mins}m", mins: minutes)
+
+        true ->
+          pgettext("runtime", "%{secs}s", secs: secs)
+      end
+
+    text <> suffix
   end
 
   def format_duration(_, _), do: nil

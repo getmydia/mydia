@@ -922,6 +922,9 @@ defmodule MydiaWeb.SearchLive.Index do
   # of `inspect/1`, which would otherwise print the bare atom in the flash.
   defp add_to_library_error_message(:restricted), do: Media.restricted_message()
 
+  defp add_to_library_error_message({:metadata_error, reason}),
+    do: metadata_error_message(reason)
+
   defp add_to_library_error_message(reason),
     do: gettext("Failed to add to library: %{reason}", reason: inspect(reason))
 

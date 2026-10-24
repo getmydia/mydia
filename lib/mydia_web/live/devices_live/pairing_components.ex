@@ -37,10 +37,10 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
     <div id="pairing-card" class="card bg-base-100 shadow-sm">
       <div class="card-body">
         <h2 class="card-title text-lg mb-1">
-          <.icon name="hero-qr-code" class="w-5 h-5" /> Connect a player
+          <.icon name="hero-qr-code" class="w-5 h-5" /> {gettext("Connect a player")}
         </h2>
         <p class="text-base-content/70 mb-4">
-          Open the Mydia app on your device and enter a pairing code.
+          {gettext("Open the Mydia app on your device and enter a pairing code.")}
         </p>
 
         <%= if @pairing_available do %>
@@ -55,10 +55,10 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
             </div>
             <div class="flex-1">
               <div class="font-semibold group-hover:text-primary transition-colors">
-                Pair a new device
+                {gettext("Pair a new device")}
               </div>
               <div class="text-xs text-base-content/50">
-                Scan a QR code or type a short code
+                {gettext("Scan a QR code or type a short code")}
               </div>
             </div>
             <.icon
@@ -75,22 +75,22 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
               <.icon name="hero-qr-code" class="w-5 h-5 opacity-40" />
             </div>
             <div class="flex-1">
-              <div class="font-semibold">Pairing is unavailable</div>
+              <div class="font-semibold">{gettext("Pairing is unavailable")}</div>
               <div class="text-xs text-base-content/50">
                 <%= if @remote_access_enabled do %>
-                  Connecting to the relay. Try again in a moment.
+                  {gettext("Connecting to the relay. Try again in a moment.")}
                 <% else %>
-                  Remote access is turned off on this server.
+                  {gettext("Remote access is turned off on this server.")}
                   <%= if @admin do %>
                     <.link
                       id="pairing-enable-remote-access"
                       navigate={~p"/admin/remote-access"}
                       class="link link-primary"
                     >
-                      Turn it on
+                      {gettext("Turn it on")}
                     </.link>
                   <% else %>
-                    Ask an administrator to turn it on before connecting a player.
+                    {gettext("Ask an administrator to turn it on before connecting a player.")}
                   <% end %>
                 <% end %>
               </div>
@@ -110,9 +110,9 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
               <.icon name="hero-device-phone-mobile" class="w-5 h-5 text-primary" />
             </span>
             <span>
-              <span class="block text-lg font-semibold">Pair a new device</span>
+              <span class="block text-lg font-semibold">{gettext("Pair a new device")}</span>
               <span class="block text-sm font-normal text-base-content/50">
-                Open the Mydia app to connect
+                {gettext("Open the Mydia app to connect")}
               </span>
             </span>
           </span>
@@ -136,7 +136,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
               <div class="flex items-center gap-3">
                 <div class="flex-1 h-px bg-base-300"></div>
                 <span class="text-xs text-base-content/40 uppercase tracking-wider">
-                  or enter code
+                  {gettext("or enter code")}
                 </span>
                 <div class="flex-1 h-px bg-base-300"></div>
               </div>
@@ -161,21 +161,23 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
                       phx-click="copy_claim_code"
                       data-claim-code={@claim_code}
                       onclick="navigator.clipboard?.writeText(this.dataset.claimCode)"
-                      title="Copy code"
+                      title={gettext("Copy code")}
                     >
                       <.icon name="hero-clipboard-document" class="w-4 h-4 opacity-50" />
                     </button>
                   </div>
                   <div class="mt-2 flex items-center justify-center gap-1.5 text-xs">
                     <.icon name="hero-check-circle" class="w-4 h-4 text-success" />
-                    <span class="text-success">Ready for pairing</span>
+                    <span class="text-success">{gettext("Ready for pairing")}</span>
                   </div>
                   <%!-- Typing a code resolves it through the relay, and the
                   lookup changed shape in this release. Players older than it
                   will report the code as invalid. Scanning skips the relay
                   entirely, so it keeps working on any version. --%>
                   <p class="mt-2 text-xs text-base-content/50">
-                    Typing the code needs a recent player. On an older one, scan the QR instead.
+                    {gettext(
+                      "Typing the code needs a recent player. On an older one, scan the QR instead."
+                    )}
                   </p>
                 <% @claim_code_rendezvous_status == :unregistered -> %>
                   <div
@@ -184,17 +186,20 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
                   >
                     <div class="flex items-center gap-2">
                       <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-warning" />
-                      <span class="text-sm font-medium">Typed code unavailable</span>
+                      <span class="text-sm font-medium">{gettext("Typed code unavailable")}</span>
                     </div>
                     <p class="text-xs text-base-content/70 text-center">
-                      The relay could not be reached, so entering a code by hand will not work.
-                      Scan the QR code above instead, or try again in a moment.
+                      {gettext(
+                        "The relay could not be reached, so entering a code by hand will not work. Scan the QR code above instead, or try again in a moment."
+                      )}
                     </p>
                   </div>
                 <% true -> %>
                   <div class="inline-flex flex-col items-center gap-3 bg-base-200 rounded-box px-8 py-5">
                     <span class="loading loading-spinner loading-lg text-primary"></span>
-                    <div class="text-sm text-base-content/60">Preparing pairing code...</div>
+                    <div class="text-sm text-base-content/60">
+                      {gettext("Preparing pairing code...")}
+                    </div>
                   </div>
               <% end %>
             </div>
@@ -213,7 +218,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
                   <.icon name="hero-clock" class="w-4 h-4" />
                 </div>
                 <div class="text-sm">
-                  <span class="text-base-content/60">Expires in</span>
+                  <span class="text-base-content/60">{gettext("Expires in")}</span>
                   <span class={[
                     "font-mono font-semibold ml-1",
                     if(@countdown_seconds > 60, do: "text-base-content", else: "text-warning")
@@ -229,7 +234,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
                 phx-click="generate_claim_code"
                 phx-disable-with="..."
               >
-                New Code
+                {gettext("New Code")}
               </button>
             </div>
           </div>
@@ -245,7 +250,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
               <div class="flex justify-center">
                 <span class="loading loading-spinner loading-lg text-primary/50"></span>
               </div>
-              <p class="text-sm text-base-content/50">Generating pairing code...</p>
+              <p class="text-sm text-base-content/50">{gettext("Generating pairing code...")}</p>
             <% end %>
           </div>
         <% end %>
@@ -262,7 +267,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
     min(100, round(seconds / @claim_lifetime_seconds * 100))
   end
 
-  defp format_countdown(seconds) when seconds <= 0, do: "Expired"
+  defp format_countdown(seconds) when seconds <= 0, do: gettext("Expired")
 
   defp format_countdown(seconds) do
     minutes = div(seconds, 60)

@@ -156,7 +156,7 @@ defmodule MydiaWeb.PluginPageLive.Show do
             id="plugin-activity-link"
             class="btn btn-ghost btn-sm"
           >
-            <.icon name="hero-clock" class="w-4 h-4" /> Activity
+            <.icon name="hero-clock" class="w-4 h-4" /> {gettext("Activity")}
           </.link>
         </div>
         <div

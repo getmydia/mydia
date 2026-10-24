@@ -12,6 +12,7 @@ defmodule MydiaWeb.MediaRequestComponents do
   `:details` and `:actions` slots.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   alias Mydia.Media.MediaRequest
   alias Mydia.Metadata.ImageUrl
@@ -50,7 +51,7 @@ defmodule MydiaWeb.MediaRequestComponents do
               type="button"
               phx-click={@on_select}
               phx-value-id={@request.id}
-              aria-label={"View details for #{@request.title}"}
+              aria-label={gettext("View details for %{title}", title: @request.title)}
               class="shrink-0 w-16 md:w-24 rounded-lg overflow-hidden transition hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <img
@@ -121,18 +122,21 @@ defmodule MydiaWeb.MediaRequestComponents do
   def status_badge_class(_), do: "badge-ghost"
 
   @doc "Human label for a request status."
-  def status_text("pending"), do: "Pending Review"
-  def status_text("approved"), do: "Approved"
-  def status_text("rejected"), do: "Rejected"
-  def status_text(_), do: "Unknown"
+  def status_text("pending"), do: gettext("Pending Review")
+  def status_text("approved"), do: gettext("Approved")
+  def status_text("rejected"), do: gettext("Rejected")
+  def status_text(_), do: gettext("Unknown")
 
   @doc "Formats a request timestamp in the viewer's display zone, or \"N/A\" when it is nil."
-  def format_date(nil, %Mydia.TimeDisplay{}), do: "N/A"
+  def format_date(nil, %Mydia.TimeDisplay{}), do: gettext("N/A")
 
   def format_date(%DateTime{} = dt, %Mydia.TimeDisplay{} = display),
     do: DateTimeFormat.format(dt, :datetime, display)
 
   @doc ~S[Human label for a request media type ("tv_show" becomes "Tv show").]
+  def media_type_text("movie"), do: pgettext("media type", "Movie")
+  def media_type_text("tv_show"), do: pgettext("media type", "Tv show")
+
   def media_type_text(media_type) do
     media_type
     |> String.replace("_", " ")

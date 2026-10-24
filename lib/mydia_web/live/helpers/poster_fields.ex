@@ -6,6 +6,8 @@ defmodule MydiaWeb.Live.Helpers.PosterFields do
   persisted.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3]
 
@@ -41,8 +43,11 @@ defmodule MydiaWeb.Live.Helpers.PosterFields do
         stored = Enum.map(keys, &Atom.to_string/1)
 
         case Accounts.update_preference(preference, %{"poster_fields" => stored}) do
-          {:ok, _} -> assign(socket, @assign, keys)
-          {:error, _} -> put_flash(socket, :error, "Could not save poster display settings")
+          {:ok, _} ->
+            assign(socket, @assign, keys)
+
+          {:error, _} ->
+            put_flash(socket, :error, gettext("Could not save poster display settings"))
         end
     end
   end

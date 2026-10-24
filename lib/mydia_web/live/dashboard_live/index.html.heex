@@ -341,7 +341,11 @@
                               {episode_line(episode)}
                             </p>
                             <p class="text-xs text-base-content/50">
-                              {Calendar.strftime(episode.air_date, "%b %d, %Y")}
+                              {Calendar.strftime(
+                                episode.air_date,
+                                "%b %d, %Y",
+                                MydiaWeb.DateNames.strftime_opts()
+                              )}
                             </p>
                           </div>
                           <%= if episode.has_files do %>
@@ -378,7 +382,11 @@
                               {episode_line(episode)}
                             </p>
                             <p class="text-xs text-base-content/50">
-                              {Calendar.strftime(episode.air_date, "%b %d, %Y")}
+                              {Calendar.strftime(
+                                episode.air_date,
+                                "%b %d, %Y",
+                                MydiaWeb.DateNames.strftime_opts()
+                              )}
                             </p>
                           </div>
                         </div>

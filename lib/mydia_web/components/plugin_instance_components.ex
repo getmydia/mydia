@@ -33,7 +33,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
         <.env_lock_badge :if={@read_only} />
       </:title>
       <:descriptor>
-        {@plugin.name} plugin
+        {gettext("%{name} plugin", name: @plugin.name)}
       </:descriptor>
       <:details>
         <div :if={@health[:message]} class="text-error/80 break-words">
@@ -70,8 +70,10 @@ defmodule MydiaWeb.PluginInstanceComponents do
               phx-value-scheme={endpoint["scheme"]}
               phx-value-host={endpoint["host"]}
               phx-value-port={endpoint["port"]}
-              data-confirm="Remove this address? The plugin will no longer be able to reach it."
-              aria-label="Remove address"
+              data-confirm={
+                gettext("Remove this address? The plugin will no longer be able to reach it.")
+              }
+              aria-label={gettext("Remove address")}
             >
               <.icon name="hero-x-mark" class="w-3 h-3" />
             </button>
@@ -85,14 +87,16 @@ defmodule MydiaWeb.PluginInstanceComponents do
             {link.external_username || link.external_user_id}
           </li>
         </ul>
-        <div :if={@read_only}>Configured via environment variables, read-only</div>
+        <div :if={@read_only}>{gettext("Configured via environment variables, read-only")}</div>
       </:details>
       <:badges>
         <span class={[
           "badge badge-sm badge-outline",
           if(@instance.enabled, do: "badge-success", else: "badge-ghost")
         ]}>
-          {if @instance.enabled, do: "Active", else: "Inactive"}
+          {if @instance.enabled,
+            do: pgettext("plugin instance", "Active"),
+            else: pgettext("plugin instance", "Inactive")}
         </span>
         <span class={[
           "badge badge-sm badge-outline gap-1",
@@ -101,7 +105,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
           {health_label(@health.status)}
         </span>
         <span :if={@health[:checked_at]} class="text-xs text-base-content/50">
-          Checked {format(@health.checked_at, :time, @display)}
+          {gettext("Checked %{time}", time: format(@health.checked_at, :time, @display))}
         </span>
       </:badges>
       <:actions>
@@ -109,14 +113,14 @@ defmodule MydiaWeb.PluginInstanceComponents do
           <.row_action
             id={"plugin-instance-sync-#{@instance.id}"}
             icon="hero-arrow-path"
-            title="Sync now"
+            title={gettext("Sync now")}
             phx-click="plugin_instance_sync"
             phx-value-id={@instance.id}
           />
           <.row_action
             id={"plugin-instance-test-#{@instance.id}"}
             icon="hero-signal"
-            title="Test"
+            title={pgettext("plugin instance", "Test")}
             phx-click="plugin_instance_test"
             phx-value-id={@instance.id}
           />
@@ -124,7 +128,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
             :if={@plugin.setup}
             id={"plugin-instance-accounts-#{@instance.id}"}
             icon="hero-user-group"
-            title="Accounts"
+            title={gettext("Accounts")}
             disabled={@read_only}
             disabled_reason={if(@read_only, do: env_read_only_reason())}
             phx-click="plugin_instance_accounts"
@@ -134,7 +138,7 @@ defmodule MydiaWeb.PluginInstanceComponents do
             :if={@plugin.setup}
             id={"plugin-instance-reconnect-#{@instance.id}"}
             icon="hero-key"
-            title="Reconnect"
+            title={gettext("Reconnect")}
             disabled={@read_only}
             disabled_reason={if(@read_only, do: env_read_only_reason())}
             phx-click="plugin_instance_reconnect"
@@ -143,7 +147,12 @@ defmodule MydiaWeb.PluginInstanceComponents do
           <.row_action
             id={"plugin-instance-toggle-#{@instance.id}"}
             icon="hero-power"
-            title={if(@instance.enabled, do: "Disable", else: "Enable")}
+            title={
+              if(@instance.enabled,
+                do: pgettext("plugin instance", "Disable"),
+                else: pgettext("plugin instance", "Enable")
+              )
+            }
             disabled={@read_only}
             disabled_reason={if(@read_only, do: env_read_only_reason())}
             phx-click="plugin_instance_toggle"
@@ -152,13 +161,17 @@ defmodule MydiaWeb.PluginInstanceComponents do
           <.row_action
             id={"plugin-instance-delete-#{@instance.id}"}
             icon="hero-trash"
-            title="Delete"
+            title={gettext("Delete")}
             destructive
             disabled={@read_only}
             disabled_reason={if(@read_only, do: env_read_only_reason())}
             phx-click="plugin_instance_delete"
             phx-value-id={@instance.id}
-            data-confirm={"Delete #{@instance.name}? Its account links and sync state are removed."}
+            data-confirm={
+              gettext("Delete %{name}? Its account links and sync state are removed.",
+                name: @instance.name
+              )
+            }
           />
         </.row_actions>
       </:actions>
@@ -173,22 +186,26 @@ defmodule MydiaWeb.PluginInstanceComponents do
     <div :if={@declarations != []} id="plex-deprecation-banner" class="alert alert-warning">
       <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
       <div class="text-sm space-y-1">
-        <p class="font-medium">Plex is now configured as a plugin.</p>
+        <p class="font-medium">{gettext("Plex is now configured as a plugin.")}</p>
         <p>
-          These servers still work, but they are declared through
-          <code>MEDIA_SERVER_&lt;N&gt;_*</code>
-          or <code>media_servers:</code>, which will
-          stop being read for Plex in a future release:
+          {gettext(
+            "These servers still work, but they are declared through %{env} or %{yaml}, which will stop being read for Plex in a future release:",
+            env: "MEDIA_SERVER_<N>_*",
+            yaml: "media_servers:"
+          )}
         </p>
         <ul class="list-disc ml-5">
           <li :for={decl <- @declarations}>{decl.name}</li>
         </ul>
         <p>
-          Rename them to <code>PLUGIN_PLEX_&lt;N&gt;_NAME</code>,
-          <code>PLUGIN_PLEX_&lt;N&gt;_URL</code>
-          and <code>PLUGIN_PLEX_&lt;N&gt;_TOKEN</code>,
-          or move them to a <code>plugin_instances:</code>
-          entry with <code>plugin: plex</code>.
+          {gettext(
+            "Rename them to %{name}, %{url} and %{token}, or move them to a %{section} entry with %{plugin}.",
+            name: "PLUGIN_PLEX_<N>_NAME",
+            url: "PLUGIN_PLEX_<N>_URL",
+            token: "PLUGIN_PLEX_<N>_TOKEN",
+            section: "plugin_instances:",
+            plugin: "plugin: plex"
+          )}
         </p>
       </div>
     </div>
@@ -201,9 +218,11 @@ defmodule MydiaWeb.PluginInstanceComponents do
   def account_links_list(assigns) do
     ~H"""
     <div :if={@links != []} id="account-links" class="space-y-2">
-      <h3 class="font-semibold">Linked accounts</h3>
+      <h3 class="font-semibold">{gettext("Linked accounts")}</h3>
       <p class="text-sm text-base-content/70">
-        An administrator linked these accounts to you. Watch history syncs for each of them.
+        {gettext(
+          "An administrator linked these accounts to you. Watch history syncs for each of them."
+        )}
       </p>
       <ul class="divide-y divide-base-200">
         <li
@@ -214,7 +233,10 @@ defmodule MydiaWeb.PluginInstanceComponents do
           <span>
             <span class="font-medium">{link.external_username || link.external_user_id}</span>
             <span class="text-base-content/60">
-              on {link.instance.name} ({Map.get(@plugin_names, link.plugin_slug, link.plugin_slug)})
+              {gettext("on %{instance} (%{plugin})",
+                instance: link.instance.name,
+                plugin: Map.get(@plugin_names, link.plugin_slug, link.plugin_slug)
+              )}
             </span>
           </span>
           <span class={["badge badge-sm", link_badge_class(link.status)]}>
@@ -226,13 +248,13 @@ defmodule MydiaWeb.PluginInstanceComponents do
     """
   end
 
-  defp health_label(:ok), do: "Healthy"
-  defp health_label(:degraded), do: "Degraded"
-  defp health_label(:unauthorized), do: "Sign-in expired"
-  defp health_label(:unreachable), do: "Unreachable"
-  defp health_label(:disabled), do: "Disabled"
-  defp health_label(:unsupported), do: "No health check"
-  defp health_label(_), do: "Unknown"
+  defp health_label(:ok), do: gettext("Healthy")
+  defp health_label(:degraded), do: gettext("Degraded")
+  defp health_label(:unauthorized), do: gettext("Sign-in expired")
+  defp health_label(:unreachable), do: gettext("Unreachable")
+  defp health_label(:disabled), do: pgettext("plugin instance", "Disabled")
+  defp health_label(:unsupported), do: gettext("No health check")
+  defp health_label(_), do: gettext("Unknown")
 
   defp health_badge_class(:ok), do: "badge-success"
   defp health_badge_class(:degraded), do: "badge-warning"
@@ -240,8 +262,8 @@ defmodule MydiaWeb.PluginInstanceComponents do
   defp health_badge_class(:unreachable), do: "badge-error"
   defp health_badge_class(_), do: "badge-ghost"
 
-  defp health_action_label(:reconnect), do: "Reconnect"
-  defp health_action_label(:confirm_endpoints), do: "Confirm new addresses"
+  defp health_action_label(:reconnect), do: gettext("Reconnect")
+  defp health_action_label(:confirm_endpoints), do: gettext("Confirm new addresses")
 
   defp run_badge_class(:ok), do: "badge-success"
   defp run_badge_class(:partial), do: "badge-warning"
@@ -250,25 +272,28 @@ defmodule MydiaWeb.PluginInstanceComponents do
   defp run_badge_class(_), do: "badge-ghost"
 
   defp run_label(%{status: :ok, counts: counts}) when is_map(counts) do
-    "Synced: pulled #{Map.get(counts, "pulled", 0)}, pushed #{Map.get(counts, "pushed", 0)}"
+    gettext("Synced: pulled %{pulled}, pushed %{pushed}",
+      pulled: Map.get(counts, "pulled", 0),
+      pushed: Map.get(counts, "pushed", 0)
+    )
   end
 
   # A partial run finished with some item errors. The counts may lack "errors".
   defp run_label(%{status: :partial, counts: %{"errors" => errors}})
        when is_integer(errors) and errors > 0,
-       do: "Partly synced: #{errors} errors"
+       do: ngettext("Partly synced: %{count} error", "Partly synced: %{count} errors", errors)
 
-  defp run_label(%{status: :partial}), do: "Partly synced"
+  defp run_label(%{status: :partial}), do: gettext("Partly synced")
 
-  defp run_label(%{status: :skipped}), do: "Skipped"
-  defp run_label(%{status: :error}), do: "Failed"
-  defp run_label(_), do: "Ran"
+  defp run_label(%{status: :skipped}), do: gettext("Skipped")
+  defp run_label(%{status: :error}), do: gettext("Failed")
+  defp run_label(_), do: gettext("Ran")
 
   defp link_badge_class(:active), do: "badge-success badge-outline"
   defp link_badge_class(:error), do: "badge-error"
   defp link_badge_class(_), do: "badge-ghost"
 
-  defp link_status_label(:active), do: "Active"
-  defp link_status_label(:error), do: "Needs attention"
-  defp link_status_label(_), do: "Paused"
+  defp link_status_label(:active), do: pgettext("plugin instance", "Active")
+  defp link_status_label(:error), do: gettext("Needs attention")
+  defp link_status_label(_), do: pgettext("monitoring", "Paused")
 end

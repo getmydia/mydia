@@ -33,7 +33,7 @@ defmodule MydiaWeb.DevicesLive.Components do
         inactive_count = length(inactive_devices) %>
         <div class="flex items-center justify-between mb-4">
           <h2 class="card-title text-lg flex items-center gap-2">
-            <.icon name="hero-device-phone-mobile" class="w-5 h-5" /> Your devices
+            <.icon name="hero-device-phone-mobile" class="w-5 h-5" /> {gettext("Your devices")}
             <span class="badge badge-ghost badge-sm">{device_count}</span>
           </h2>
           <%= if inactive_count > 0 do %>
@@ -42,7 +42,9 @@ defmodule MydiaWeb.DevicesLive.Components do
               class="btn btn-ghost btn-xs text-base-content/60"
               phx-click="open_clear_inactive_modal"
             >
-              <.icon name="hero-trash" class="w-3 h-3" /> Clear inactive ({inactive_count})
+              <.icon name="hero-trash" class="w-3 h-3" /> {gettext("Clear inactive (%{count})",
+                count: inactive_count
+              )}
             </button>
           <% end %>
         </div>
@@ -53,9 +55,9 @@ defmodule MydiaWeb.DevicesLive.Components do
               <div class="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center mb-2">
                 <.icon name="hero-device-phone-mobile" class="w-8 h-8 opacity-40" />
               </div>
-              <h4 class="font-medium text-base-content/70">No devices connected</h4>
+              <h4 class="font-medium text-base-content/70">{gettext("No devices connected")}</h4>
               <p class="text-sm text-base-content/50 max-w-xs">
-                Use a pairing code above to connect your first player.
+                {gettext("Use a pairing code above to connect your first player.")}
               </p>
             </div>
           </div>
@@ -91,7 +93,7 @@ defmodule MydiaWeb.DevicesLive.Components do
                       <div class="flex items-center gap-1.5">
                         <span class="font-medium text-sm truncate">{device.device_name}</span>
                         <%= if RemoteAccess.RemoteDevice.revoked?(device) do %>
-                          <span class="badge badge-error badge-xs">Revoked</span>
+                          <span class="badge badge-error badge-xs">{gettext("Revoked")}</span>
                         <% else %>
                           <%= if RemoteAccess.online?(device.last_seen_at) do %>
                             <span class="w-1.5 h-1.5 rounded-full bg-success animate-pulse shrink-0"></span>
@@ -101,11 +103,11 @@ defmodule MydiaWeb.DevicesLive.Components do
                       <div class="text-xs text-base-content/50 truncate">
                         <%= cond do %>
                           <% RemoteAccess.RemoteDevice.revoked?(device) -> %>
-                            Access revoked
+                            {gettext("Access revoked")}
                           <% RemoteAccess.online?(device.last_seen_at) -> %>
-                            Online now
+                            {gettext("Online now")}
                           <% is_nil(device.last_seen_at) -> %>
-                            Never connected
+                            {gettext("Never connected")}
                           <% true -> %>
                             {format_relative_time(device.last_seen_at, @display)}
                         <% end %>
@@ -118,7 +120,7 @@ defmodule MydiaWeb.DevicesLive.Components do
                         <button
                           id={"revoke-device-#{device.id}"}
                           class="btn btn-ghost btn-xs btn-square text-warning opacity-50 group-hover:opacity-100"
-                          title="Revoke access"
+                          title={gettext("Revoke access")}
                           phx-click="open_revoke_modal"
                           phx-value-id={device.id}
                         >
@@ -128,7 +130,7 @@ defmodule MydiaWeb.DevicesLive.Components do
                       <button
                         id={"delete-device-#{device.id}"}
                         class="btn btn-ghost btn-xs btn-square text-error opacity-50 group-hover:opacity-100"
-                        title="Remove device"
+                        title={gettext("Remove device")}
                         phx-click="open_delete_modal"
                         phx-value-id={device.id}
                       >
@@ -143,12 +145,12 @@ defmodule MydiaWeb.DevicesLive.Components do
           <%= if hidden_count > 0 do %>
             <button class="btn btn-ghost btn-sm w-full gap-2" phx-click="toggle_show_all_devices">
               <.icon name="hero-chevron-down" class="w-4 h-4" />
-              Show {hidden_count} more device{if hidden_count == 1, do: "", else: "s"}
+              {ngettext("Show %{count} more device", "Show %{count} more devices", hidden_count)}
             </button>
           <% end %>
           <%= if @show_all_devices && device_count > 10 do %>
             <button class="btn btn-ghost btn-sm w-full gap-2" phx-click="toggle_show_all_devices">
-              <.icon name="hero-chevron-up" class="w-4 h-4" /> Show less
+              <.icon name="hero-chevron-up" class="w-4 h-4" /> {gettext("Show less")}
             </button>
           <% end %>
         <% end %>
@@ -161,15 +163,17 @@ defmodule MydiaWeb.DevicesLive.Components do
         show={@show_revoke_modal && @selected_device != nil}
         on_cancel={JS.push("close_revoke_modal")}
       >
-        <:title>Revoke Access?</:title>
+        <:title>{gettext("Revoke Access?")}</:title>
         <p :if={@selected_device} class="text-base-content/70">
-          <strong>{@selected_device.device_name}</strong>
-          will be disconnected and won't be able to access your library until paired again.
+          {gettext(
+            "%{device} will be disconnected and won't be able to access your library until paired again.",
+            device: @selected_device.device_name
+          )}
         </p>
         <:actions>
-          <button phx-click="close_revoke_modal" class="btn btn-ghost">Cancel</button>
+          <button phx-click="close_revoke_modal" class="btn btn-ghost">{gettext("Cancel")}</button>
           <button id="confirm-revoke" phx-click="submit_revoke" class="btn btn-warning">
-            Revoke
+            {gettext("Revoke")}
           </button>
         </:actions>
       </.modal>
@@ -179,15 +183,16 @@ defmodule MydiaWeb.DevicesLive.Components do
         show={@show_delete_modal && @device_to_delete != nil}
         on_cancel={JS.push("close_delete_modal")}
       >
-        <:title>Remove Device?</:title>
+        <:title>{gettext("Remove Device?")}</:title>
         <p :if={@device_to_delete} class="text-base-content/70">
-          <strong>{@device_to_delete.device_name}</strong>
-          will be removed. You'll need to pair it again to reconnect.
+          {gettext("%{device} will be removed. You'll need to pair it again to reconnect.",
+            device: @device_to_delete.device_name
+          )}
         </p>
         <:actions>
-          <button phx-click="close_delete_modal" class="btn btn-ghost">Cancel</button>
+          <button phx-click="close_delete_modal" class="btn btn-ghost">{gettext("Cancel")}</button>
           <button id="confirm-delete" phx-click="submit_delete" class="btn btn-error">
-            Remove
+            {gettext("Remove")}
           </button>
         </:actions>
       </.modal>
@@ -201,11 +206,13 @@ defmodule MydiaWeb.DevicesLive.Components do
         show={@show_clear_inactive_modal}
         on_cancel={JS.push("close_clear_inactive_modal")}
       >
-        <:title>Clear Inactive Devices?</:title>
+        <:title>{gettext("Clear Inactive Devices?")}</:title>
         <p class="text-base-content/70 mb-3">
-          This will remove <strong>{length(inactive_to_clear)}</strong>
-          inactive device{if length(inactive_to_clear) == 1, do: "", else: "s"}.
-          They will need to be paired again to reconnect.
+          {ngettext(
+            "This will remove %{count} inactive device. It will need to be paired again to reconnect.",
+            "This will remove %{count} inactive devices. They will need to be paired again to reconnect.",
+            length(inactive_to_clear)
+          )}
         </p>
         <div class="text-sm text-base-content/50 max-h-32 overflow-y-auto">
           <div :for={device <- inactive_to_clear} class="flex items-center gap-2 py-1">
@@ -214,9 +221,11 @@ defmodule MydiaWeb.DevicesLive.Components do
           </div>
         </div>
         <:actions>
-          <button phx-click="close_clear_inactive_modal" class="btn btn-ghost">Cancel</button>
+          <button phx-click="close_clear_inactive_modal" class="btn btn-ghost">
+            {gettext("Cancel")}
+          </button>
           <button id="confirm-clear-inactive" phx-click="submit_clear_inactive" class="btn btn-error">
-            Clear All
+            {gettext("Clear All")}
           </button>
         </:actions>
       </.modal>
@@ -229,18 +238,27 @@ defmodule MydiaWeb.DevicesLive.Components do
   # rather than resolving assets here keeps the release naming scheme in one
   # place, next to release.yml, where drift gets caught.
   @downloads [
-    %{id: "android", name: "Android", icon: "hero-device-phone-mobile", label: "Download APK"},
-    %{
-      id: "ios",
-      name: "iOS",
-      icon: "hero-device-phone-mobile",
-      label: "Join the TestFlight beta"
-    },
-    %{id: "macos", name: "macOS", icon: "hero-computer-desktop", label: "Download .dmg"},
-    %{id: "windows", name: "Windows", icon: "hero-computer-desktop", label: "Download installer"},
-    %{id: "flatpak", name: "Linux", icon: "hero-computer-desktop", label: "Get the Flatpak repo"},
-    %{id: "linux", name: "Linux tarball", icon: "hero-archive-box", label: "Download .tar.gz"}
+    %{id: "android", icon: "hero-device-phone-mobile"},
+    %{id: "ios", icon: "hero-device-phone-mobile"},
+    %{id: "macos", icon: "hero-computer-desktop"},
+    %{id: "windows", icon: "hero-computer-desktop"},
+    %{id: "flatpak", icon: "hero-computer-desktop"},
+    %{id: "linux", icon: "hero-archive-box"}
   ]
+
+  defp download_name("android"), do: "Android"
+  defp download_name("ios"), do: "iOS"
+  defp download_name("macos"), do: "macOS"
+  defp download_name("windows"), do: "Windows"
+  defp download_name("flatpak"), do: "Linux"
+  defp download_name("linux"), do: gettext("Linux tarball")
+
+  defp download_label("android"), do: gettext("Download APK")
+  defp download_label("ios"), do: gettext("Join the TestFlight beta")
+  defp download_label("macos"), do: gettext("Download .dmg")
+  defp download_label("windows"), do: gettext("Download installer")
+  defp download_label("flatpak"), do: gettext("Get the Flatpak repo")
+  defp download_label("linux"), do: gettext("Download .tar.gz")
 
   attr :hide_player, :boolean,
     default: false,
@@ -253,10 +271,10 @@ defmodule MydiaWeb.DevicesLive.Components do
     <div id="download-card" class="card bg-base-100 shadow-sm">
       <div class="card-body">
         <h2 class="card-title text-lg mb-1">
-          <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> Get the app
+          <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> {gettext("Get the app")}
         </h2>
         <p class="text-base-content/70 mb-4">
-          Install the Mydia player, then connect it with a pairing code above.
+          {gettext("Install the Mydia player, then connect it with a pairing code above.")}
         </p>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -272,8 +290,10 @@ defmodule MydiaWeb.DevicesLive.Components do
               <.icon name={platform.icon} class="w-5 h-5" />
             </div>
             <div class="flex-1 min-w-0">
-              <div class="font-semibold truncate">{platform.name}</div>
-              <div class="text-xs text-base-content/50 truncate">{platform.label}</div>
+              <div class="font-semibold truncate">{download_name(platform.id)}</div>
+              <div class="text-xs text-base-content/50 truncate">
+                {download_label(platform.id)}
+              </div>
             </div>
             <.icon
               name="hero-arrow-top-right-on-square"
@@ -291,27 +311,22 @@ defmodule MydiaWeb.DevicesLive.Components do
               <.icon name="hero-globe-alt" class="w-5 h-5" />
             </div>
             <div class="flex-1 min-w-0">
-              <div class="font-semibold truncate">Web</div>
-              <div class="text-xs text-base-content/50 truncate">Play in this browser</div>
+              <div class="font-semibold truncate">{gettext("Web")}</div>
+              <div class="text-xs text-base-content/50 truncate">
+                {gettext("Play in this browser")}
+              </div>
             </div>
             <.icon name="hero-chevron-right" class="w-4 h-4 text-base-content/30 shrink-0" />
           </.link>
         </div>
 
         <p class="text-xs text-base-content/50 mt-4">
-          Downloads are served from mydia.dev, so this device needs internet access.
+          {gettext("Downloads are served from mydia.dev, so this device needs internet access.")}
         </p>
       </div>
     </div>
     """
   end
-
-  @doc """
-  Renders a count with its noun, pluralizing the noun. Returns "1 device" or "3 devices".
-  """
-  @spec pluralize(non_neg_integer(), String.t()) :: String.t()
-  def pluralize(1, word), do: "1 #{word}"
-  def pluralize(n, word), do: "#{n} #{word}s"
 
   defp format_datetime(%DateTime{} = dt, display) do
     format(dt, :datetime, display)
@@ -327,11 +342,20 @@ defmodule MydiaWeb.DevicesLive.Components do
     diff_seconds = DateTime.diff(now, dt, :second)
 
     cond do
-      diff_seconds < 60 -> "just now"
-      diff_seconds < 3600 -> "#{div(diff_seconds, 60)} min ago"
-      diff_seconds < 86400 -> "#{pluralize(div(diff_seconds, 3600), "hour")} ago"
-      diff_seconds < 604_800 -> "#{pluralize(div(diff_seconds, 86400), "day")} ago"
-      true -> format_datetime(dt, display)
+      diff_seconds < 60 ->
+        gettext("just now")
+
+      diff_seconds < 3600 ->
+        ngettext("%{count} minute ago", "%{count} minutes ago", div(diff_seconds, 60))
+
+      diff_seconds < 86400 ->
+        ngettext("%{count} hour ago", "%{count} hours ago", div(diff_seconds, 3600))
+
+      diff_seconds < 604_800 ->
+        ngettext("%{count} day ago", "%{count} days ago", div(diff_seconds, 86400))
+
+      true ->
+        format_datetime(dt, display)
     end
   end
 end

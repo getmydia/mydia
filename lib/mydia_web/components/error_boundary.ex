@@ -43,12 +43,17 @@ defmodule MydiaWeb.Components.ErrorBoundary do
   """
 
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
 
   attr :id, :string, required: true
   attr :error, :any, default: nil
-  attr :title, :string, default: "Something went wrong"
+
+  attr :title, :string,
+    default: nil,
+    doc: "heading shown on error; defaults to a translated \"Something went wrong\""
+
   attr :show_retry, :boolean, default: true
   attr :retry_event, :string, default: nil
   slot :inner_block, required: true
@@ -61,12 +66,12 @@ defmodule MydiaWeb.Components.ErrorBoundary do
           <div>
             <.icon name="hero-exclamation-triangle" class="w-6 h-6" />
             <div>
-              <h3 class="font-bold">{@title}</h3>
+              <h3 class="font-bold">{@title || gettext("Something went wrong")}</h3>
               <div class="text-sm">
                 <%= if is_binary(@error) do %>
                   {@error}
                 <% else %>
-                  An unexpected error occurred. Our team has been notified.
+                  {gettext("An unexpected error occurred. Our team has been notified.")}
                 <% end %>
               </div>
             </div>
@@ -78,7 +83,7 @@ defmodule MydiaWeb.Components.ErrorBoundary do
                 class="btn btn-sm btn-ghost"
                 type="button"
               >
-                Try Again
+                {gettext("Try Again")}
               </button>
             </div>
           <% end %>
@@ -106,7 +111,7 @@ defmodule MydiaWeb.Components.ErrorBoundary do
           <%= if is_binary(@error) do %>
             {@error}
           <% else %>
-            An error occurred
+            {gettext("An error occurred")}
           <% end %>
         </span>
       </div>
