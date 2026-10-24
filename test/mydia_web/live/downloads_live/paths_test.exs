@@ -47,4 +47,13 @@ defmodule MydiaWeb.DownloadsLive.PathsTest do
       assert issues.href == "/downloads?tab=issues&q=show"
     end
   end
+
+  describe "kind" do
+    test "is carried in the URL and dropped by tab links" do
+      state = assigns(%{active_tab: :issues, filters: %Filters{kind: :missing}})
+
+      assert Paths.downloads_path(state, []) == "/downloads?tab=issues&kind=missing"
+      refute Enum.any?(Paths.tabs(state), &String.contains?(&1.href, "kind="))
+    end
+  end
 end
