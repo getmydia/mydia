@@ -1,6 +1,8 @@
 defmodule MydiaWeb.DownloadsLive.Format do
   @moduledoc "Display formatting shared by the Downloads LiveView and its components."
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   alias MydiaWeb.DateTimeFormat
 
   def format_speed(nil), do: "—"
@@ -24,22 +26,18 @@ defmodule MydiaWeb.DownloadsLive.Format do
     now = DateTime.utc_now()
     diff = DateTime.diff(dt, now, :second)
 
-    cond do
-      diff < 0 -> "Now"
-      diff < 60 -> "#{diff}s"
-      diff < 3600 -> "#{div(diff, 60)}m"
-      diff < 86400 -> "#{div(diff, 3600)}h"
-      true -> "#{div(diff, 86400)}d"
-    end
+    format_eta_seconds(diff)
   end
 
-  def format_eta(seconds) when is_integer(seconds) do
+  def format_eta(seconds) when is_integer(seconds), do: format_eta_seconds(seconds)
+
+  defp format_eta_seconds(seconds) do
     cond do
-      seconds < 0 -> "Now"
-      seconds < 60 -> "#{seconds}s"
-      seconds < 3600 -> "#{div(seconds, 60)}m"
-      seconds < 86400 -> "#{div(seconds, 3600)}h"
-      true -> "#{div(seconds, 86400)}d"
+      seconds < 0 -> pgettext("eta", "Now")
+      seconds < 60 -> gettext("%{count}s", count: seconds)
+      seconds < 3600 -> gettext("%{count}m", count: div(seconds, 60))
+      seconds < 86400 -> gettext("%{count}h", count: div(seconds, 3600))
+      true -> gettext("%{count}d", count: div(seconds, 86400))
     end
   end
 
@@ -52,10 +50,10 @@ defmodule MydiaWeb.DownloadsLive.Format do
     diff = DateTime.diff(now, dt, :second)
 
     cond do
-      diff < 60 -> "just now"
-      diff < 3600 -> "#{div(diff, 60)}m ago"
-      diff < 86400 -> "#{div(diff, 3600)}h ago"
-      diff < 604_800 -> "#{div(diff, 86400)}d ago"
+      diff < 60 -> gettext("just now")
+      diff < 3600 -> gettext("%{count}m ago", count: div(diff, 60))
+      diff < 86400 -> gettext("%{count}h ago", count: div(diff, 3600))
+      diff < 604_800 -> gettext("%{count}d ago", count: div(diff, 86400))
       true -> DateTimeFormat.format(dt, :month_day, display)
     end
   end
@@ -71,11 +69,11 @@ defmodule MydiaWeb.DownloadsLive.Format do
     diff = DateTime.diff(dt, now, :second)
 
     cond do
-      diff < 0 -> "Retrying soon..."
-      diff < 60 -> "in #{diff}s"
-      diff < 3600 -> "in #{div(diff, 60)}m"
-      diff < 86400 -> "in #{div(diff, 3600)}h"
-      true -> "in #{div(diff, 86400)}d"
+      diff < 0 -> gettext("Retrying soon...")
+      diff < 60 -> gettext("in %{count}s", count: diff)
+      diff < 3600 -> gettext("in %{count}m", count: div(diff, 60))
+      diff < 86400 -> gettext("in %{count}h", count: div(diff, 3600))
+      true -> gettext("in %{count}d", count: div(diff, 86400))
     end
   end
 

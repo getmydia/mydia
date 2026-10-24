@@ -3,8 +3,8 @@
     <!-- Header -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
       <div>
-        <h1 class="text-3xl font-bold">Activity Feed</h1>
-        <p class="text-base-content/70 mt-1">Recent events and system activity</p>
+        <h1 class="text-3xl font-bold">{gettext("Activity Feed")}</h1>
+        <p class="text-base-content/70 mt-1">{gettext("Recent events and system activity")}</p>
       </div>
     </div>
 
@@ -17,7 +17,7 @@
             <div class="flex items-center gap-2 mb-2 lg:mb-0 lg:hidden">
               <.icon name="hero-funnel" class="w-4 h-4 text-base-content/50" />
               <span class="text-xs font-medium text-base-content/50 uppercase tracking-wide">
-                Category
+                {gettext("Category")}
               </span>
             </div>
             <div class="flex flex-wrap gap-1">
@@ -33,7 +33,7 @@
                 phx-click="filter_category"
                 phx-value-category={chip.value}
               >
-                <.icon name={chip.icon} class="w-4 h-4" /> {chip.label}
+                <.icon name={chip.icon} class="w-4 h-4" /> {chip_label(chip.value)}
               </button>
             </div>
           </div>
@@ -46,7 +46,7 @@
             <div class="flex items-center gap-2 mb-2 lg:mb-0 lg:hidden">
               <.icon name="hero-calendar" class="w-4 h-4 text-base-content/50" />
               <span class="text-xs font-medium text-base-content/50 uppercase tracking-wide">
-                Time Period
+                {gettext("Time Period")}
               </span>
             </div>
             <.segmented_control
@@ -54,13 +54,13 @@
               value={@date_filter}
               event="filter_date"
               param="date"
-              label="Time period"
+              label={gettext("Time period")}
             >
-              <:option value="all" label="All" />
-              <:option value="today" label="Today" />
-              <:option value="yesterday" label="Yesterday" />
-              <:option value="week" label="7 Days" />
-              <:option value="month" label="30 Days" />
+              <:option value="all" label={gettext("All")} />
+              <:option value="today" label={gettext("Today")} />
+              <:option value="yesterday" label={gettext("Yesterday")} />
+              <:option value="week" label={gettext("7 Days")} />
+              <:option value="month" label={gettext("30 Days")} />
             </.segmented_control>
           </div>
         </div>
@@ -74,15 +74,15 @@
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body text-center py-12">
             <.icon name="hero-inbox" class="w-12 h-12 mx-auto mb-3 text-base-content/20" />
-            <p class="font-medium text-base-content/70">No events found</p>
+            <p class="font-medium text-base-content/70">{gettext("No events found")}</p>
             <p class="text-sm text-base-content/50 mt-1">
               <%= cond do %>
                 <% @category_filter == "all" && @date_filter == "all" -> %>
-                  Events will appear here as activity happens.
+                  {gettext("Events will appear here as activity happens.")}
                 <% @date_filter != "all" -> %>
-                  Try a different time period.
+                  {gettext("Try a different time period.")}
                 <% true -> %>
-                  Try selecting a different category.
+                  {gettext("Try selecting a different category.")}
               <% end %>
             </p>
           </div>
@@ -121,7 +121,7 @@
                     "badge badge-sm flex-shrink-0",
                     severity_badge_class(event.severity)
                   ]}>
-                    {event.severity}
+                    {severity_label(event.severity)}
                   </span>
                 <% end %>
               </div>
@@ -148,15 +148,15 @@
                 <.icon
                   name="hero-chevron-right"
                   class="w-4 h-4 transition-transform group-open:rotate-90"
-                /> View changes
+                /> {gettext("View changes")}
               </summary>
               <div class="mt-3 ml-5 overflow-x-auto">
                 <table class="table table-sm">
                   <thead>
                     <tr class="text-base-content/50">
-                      <th>Field</th>
-                      <th>Before</th>
-                      <th>After</th>
+                      <th>{gettext("Field")}</th>
+                      <th>{gettext("Before")}</th>
+                      <th>{gettext("After")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -186,7 +186,7 @@
                 <.icon
                   name="hero-chevron-right"
                   class="w-4 h-4 transition-transform group-open:rotate-90"
-                /> View error details
+                /> {gettext("View error details")}
               </summary>
               <div class="mt-3 ml-5 space-y-3">
                 <!-- Job info -->
@@ -194,14 +194,14 @@
                   <%= if event.metadata["queue"] do %>
                     <div class="flex items-center gap-1.5">
                       <.icon name="hero-queue-list" class="w-4 h-4 text-base-content/40" />
-                      <span class="text-base-content/60">Queue:</span>
+                      <span class="text-base-content/60">{pgettext("job queue", "Queue:")}</span>
                       <span class="font-medium">{event.metadata["queue"]}</span>
                     </div>
                   <% end %>
                   <%= if event.metadata["attempt"] do %>
                     <div class="flex items-center gap-1.5">
                       <.icon name="hero-arrow-path" class="w-4 h-4 text-base-content/40" />
-                      <span class="text-base-content/60">Attempt:</span>
+                      <span class="text-base-content/60">{gettext("Attempt:")}</span>
                       <span class="font-medium">
                         {event.metadata["attempt"]}/{event.metadata["max_attempts"] || "?"}
                       </span>
@@ -212,7 +212,7 @@
                 <!-- Error message -->
                 <%= if event.metadata["error_message"] do %>
                   <div class="p-3 bg-error/10 rounded-lg border border-error/20">
-                    <div class="text-sm font-medium text-error mb-1">Error</div>
+                    <div class="text-sm font-medium text-error mb-1">{gettext("Error")}</div>
                     <code class="text-sm break-all whitespace-pre-wrap">
                       {event.metadata["error_message"]}
                     </code>
@@ -222,7 +222,9 @@
                 <!-- Stacktrace -->
                 <%= if event.metadata["stacktrace"] do %>
                   <div class="p-3 bg-base-200 rounded-lg">
-                    <div class="text-sm font-medium text-base-content/70 mb-2">Stacktrace</div>
+                    <div class="text-sm font-medium text-base-content/70 mb-2">
+                      {gettext("Stacktrace")}
+                    </div>
                     <pre class="text-xs font-mono overflow-x-auto whitespace-pre-wrap text-base-content/60">{event.metadata["stacktrace"]}</pre>
                   </div>
                 <% end %>
@@ -234,7 +236,7 @@
                       <.icon
                         name="hero-chevron-right"
                         class="w-3 h-3 transition-transform group-open/args:rotate-90"
-                      /> Job arguments
+                      /> {gettext("Job arguments")}
                     </summary>
                     <div class="mt-2 p-2 bg-base-200 rounded text-xs font-mono overflow-x-auto">
                       <pre>{Jason.encode!(event.metadata["args"], pretty: true)}</pre>
@@ -252,13 +254,13 @@
                 <.icon
                   name="hero-chevron-right"
                   class="w-4 h-4 transition-transform group-open:rotate-90"
-                /> View search details
+                /> {gettext("View search details")}
               </summary>
               <div class="mt-3 ml-5 space-y-3">
                 <!-- Query -->
                 <%= if event.metadata["query"] do %>
                   <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-base-content/60 text-sm">Query:</span>
+                    <span class="text-base-content/60 text-sm">{gettext("Query:")}</span>
                     <code class="text-sm bg-base-200 px-2 py-0.5 rounded font-mono">
                       {event.metadata["query"]}
                     </code>
@@ -271,14 +273,14 @@
                     <%= if event.metadata["indexers_searched"] do %>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-server-stack" class="w-4 h-4 text-base-content/40" />
-                        <span class="text-base-content/60">Indexers:</span>
+                        <span class="text-base-content/60">{gettext("Indexers:")}</span>
                         <span class="font-medium">{event.metadata["indexers_searched"]}</span>
                       </div>
                     <% end %>
                     <%= if event.metadata["results_count"] do %>
                       <div class="flex items-center gap-1.5">
                         <.icon name="hero-document-text" class="w-4 h-4 text-base-content/40" />
-                        <span class="text-base-content/60">Results:</span>
+                        <span class="text-base-content/60">{gettext("Results:")}</span>
                         <span class="font-medium">{event.metadata["results_count"]}</span>
                       </div>
                     <% end %>
@@ -300,11 +302,11 @@
                         <table class="table table-sm table-zebra">
                           <thead class="sticky top-0 bg-base-200">
                             <tr>
-                              <th>Release</th>
-                              <th>Audio</th>
-                              <th class="text-right">Score</th>
-                              <th class="text-right">Seeds</th>
-                              <th>Status</th>
+                              <th>{pgettext("release", "Release")}</th>
+                              <th>{gettext("Audio")}</th>
+                              <th class="text-right">{gettext("Score")}</th>
+                              <th class="text-right">{gettext("Seeds")}</th>
+                              <th>{gettext("Status")}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -342,10 +344,12 @@
                                         class="badge badge-xs badge-warning"
                                         title={format_penalty_summary(result["penalties"])}
                                       >
-                                        Penalized
+                                        {gettext("Penalized")}
                                       </span>
                                     <% true -> %>
-                                      <span class="badge badge-xs badge-success">OK</span>
+                                      <span class="badge badge-xs badge-success">
+                                        {gettext("OK")}
+                                      </span>
                                   <% end %>
                                 </td>
                               </tr>
@@ -368,7 +372,7 @@
                 <!-- Score breakdown -->
                 <%= if event.metadata["breakdown"] do %>
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-sm text-base-content/60">Score:</span>
+                    <span class="text-sm text-base-content/60">{gettext("Score:")}</span>
                     <span class="badge badge-primary font-mono">{event.metadata["score"]}</span>
                     <%= for {key, value} <- event.metadata["breakdown"] do %>
                       <span class={[
@@ -389,7 +393,9 @@
                   <div class="flex items-start gap-2 p-3 bg-success/10 rounded-lg border border-success/20">
                     <.icon name="hero-check-circle" class="w-5 h-5 text-success flex-shrink-0" />
                     <div>
-                      <div class="text-sm font-medium text-success">Selected Release</div>
+                      <div class="text-sm font-medium text-success">
+                        {gettext("Selected Release")}
+                      </div>
                       <div class="text-sm break-all mt-0.5">
                         {event.metadata["selected_release"]}
                       </div>
@@ -403,11 +409,11 @@
                     <table class="table table-sm table-zebra">
                       <thead class="sticky top-0 bg-base-200">
                         <tr>
-                          <th>Release</th>
-                          <th>Audio</th>
-                          <th class="text-right">Score</th>
-                          <th class="text-right">Seeds</th>
-                          <th>Status</th>
+                          <th>{pgettext("release", "Release")}</th>
+                          <th>{gettext("Audio")}</th>
+                          <th class="text-right">{gettext("Score")}</th>
+                          <th class="text-right">{gettext("Seeds")}</th>
+                          <th>{gettext("Status")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -451,10 +457,10 @@
                                     class="badge badge-xs badge-warning"
                                     title={format_penalty_summary(result["penalties"])}
                                   >
-                                    Penalized
+                                    {gettext("Penalized")}
                                   </span>
                                 <% true -> %>
-                                  <span class="badge badge-xs badge-success">OK</span>
+                                  <span class="badge badge-xs badge-success">{gettext("OK")}</span>
                               <% end %>
                             </td>
                           </tr>
@@ -474,7 +480,7 @@
     <%= if @has_more? do %>
       <div class="flex justify-center mt-6">
         <button class="btn btn-outline btn-sm gap-2" phx-click="load_more">
-          <.icon name="hero-arrow-down" class="w-4 h-4" /> Load more
+          <.icon name="hero-arrow-down" class="w-4 h-4" /> {gettext("Load more")}
         </button>
       </div>
     <% end %>

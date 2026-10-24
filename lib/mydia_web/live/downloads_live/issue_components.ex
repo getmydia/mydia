@@ -29,7 +29,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
         type="radio"
         name="kind"
         value=""
-        aria-label="All"
+        aria-label={gettext("All")}
         checked={is_nil(@selected)}
       />
       <%= for {kind, label} <- @kinds, Map.get(@counts, kind, 0) > 0 or @selected == kind do %>
@@ -117,7 +117,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
               phx-value-id={@issue.id}
               class="block max-w-full truncate text-left text-xs text-base-content/40 hover:text-base-content/70 cursor-pointer transition-colors"
             >
-              {@issue.subtitle || "Details"}
+              {@issue.subtitle || gettext("Details")}
             </button>
           <% @issue.subtitle -> %>
             <div class="truncate text-xs text-base-content/40">{@issue.subtitle}</div>
@@ -138,10 +138,12 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
               :if={(@issue.download.import_retry_count || 0) > 0}
               class="shrink-0 text-base-content/60"
             >
-              Attempt #{@issue.download.import_retry_count}
+              {gettext("Attempt #%{count}", count: @issue.download.import_retry_count)}
             </span>
             <span :if={@issue.download.import_next_retry_at} class="shrink-0 text-base-content/60">
-              Next retry: {format_next_retry(@issue.download.import_next_retry_at)}
+              {gettext("Next retry: %{time}",
+                time: format_next_retry(@issue.download.import_next_retry_at)
+              )}
             </span>
           <% end %>
           <%= if @issue.torrent do %>
@@ -164,7 +166,9 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
         </div>
         <%= if @issue.kind == :needs_matching and @search_open? do %>
           <div :if={@issue.torrent.suggestions != []} class="mt-2">
-            <span class="text-xs text-base-content/60 mb-1 block">Suggestions:</span>
+            <span class="text-xs text-base-content/60 mb-1 block">
+              {gettext("Suggestions:")}
+            </span>
             <div class="flex flex-wrap gap-2">
               <button
                 :for={suggestion <- @issue.torrent.suggestions}
@@ -212,7 +216,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
       phx-value-id={@issue.id}
     >
       <.icon name="hero-magnifying-glass" class="size-4" />
-      <span class="hidden sm:inline">Match…</span>
+      <span class="hidden sm:inline">{gettext("Match…")}</span>
     </button>
     """
   end
@@ -227,7 +231,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
       phx-value-id={@issue.id}
     >
       <.icon name="hero-document-magnifying-glass" class="size-4" />
-      <span class="hidden sm:inline">Match files…</span>
+      <span class="hidden sm:inline">{gettext("Match files…")}</span>
     </button>
     """
   end
@@ -246,10 +250,15 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
       phx-click="apply_mapping_and_retry"
       phx-value-remote_prefix={@suggestion.remote_prefix}
       phx-value-local_prefix={@suggestion.local_prefix}
-      phx-disable-with="Applying…"
-      aria-label={"Apply mapping #{@suggestion.remote_prefix} to #{@suggestion.local_prefix} and retry"}
+      phx-disable-with={gettext("Applying…")}
+      aria-label={
+        gettext("Apply mapping %{remote} to %{local} and retry",
+          remote: @suggestion.remote_prefix,
+          local: @suggestion.local_prefix
+        )
+      }
     >
-      Apply mapping &amp; retry
+      {gettext("Apply mapping & retry")}
     </button>
     """
   end
@@ -264,7 +273,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
       phx-value-id={@issue.id}
     >
       <.icon name="hero-arrow-path" class="size-4" />
-      <span class="hidden sm:inline">Retry import</span>
+      <span class="hidden sm:inline">{gettext("Retry import")}</span>
     </button>
     """
   end
@@ -279,7 +288,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
       phx-value-id={@issue.id}
     >
       <.icon name="hero-arrow-path" class="size-4" />
-      <span class="hidden sm:inline">Retry</span>
+      <span class="hidden sm:inline">{gettext("Retry")}</span>
     </button>
     """
   end
@@ -292,10 +301,10 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
       class="btn btn-sm btn-ghost"
       phx-click="dismiss_download"
       phx-value-id={@issue.id}
-      data-confirm="Dismiss this issue?"
+      data-confirm={gettext("Dismiss this issue?")}
     >
       <.icon name="hero-x-mark" class="size-4" />
-      <span class="hidden sm:inline">Dismiss</span>
+      <span class="hidden sm:inline">{gettext("Dismiss")}</span>
     </button>
     """
   end
@@ -310,7 +319,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
       phx-value-id={@issue.id}
     >
       <.icon name="hero-arrow-path" class="size-4" />
-      <span class="hidden sm:inline">Retry removal</span>
+      <span class="hidden sm:inline">{gettext("Retry removal")}</span>
     </button>
     """
   end
@@ -327,8 +336,8 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
       class="btn btn-sm btn-ghost btn-square"
       popovertarget={"issue-menu-list-#{@issue.id}"}
       style={"anchor-name:--issue-menu-#{@issue.id}"}
-      aria-label="More actions"
-      title="More actions"
+      aria-label={gettext("More actions")}
+      title={gettext("More actions")}
     >
       <.icon name="hero-ellipsis-horizontal" class="size-4" />
     </button>
@@ -347,7 +356,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
           phx-click="open_details"
           phx-value-id={@issue.id}
         >
-          <.icon name="hero-information-circle" class="size-4" /> Details
+          <.icon name="hero-information-circle" class="size-4" /> {gettext("Details")}
         </button>
       </li>
       <%!-- A failed import's files can still be matched by hand. --%>
@@ -360,7 +369,7 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
           phx-click="open_match_files"
           phx-value-id={@issue.id}
         >
-          <.icon name="hero-document-magnifying-glass" class="size-4" /> Match files…
+          <.icon name="hero-document-magnifying-glass" class="size-4" /> {gettext("Match files…")}
         </button>
       </li>
       <li :if={@issue.kind != :missing}>
@@ -371,9 +380,9 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
           popovertargetaction="hide"
           phx-click="dismiss_download"
           phx-value-id={@issue.id}
-          data-confirm="Dismiss this issue?"
+          data-confirm={gettext("Dismiss this issue?")}
         >
-          <.icon name="hero-x-mark" class="size-4" /> Dismiss
+          <.icon name="hero-x-mark" class="size-4" /> {gettext("Dismiss")}
         </button>
       </li>
     </ul>
@@ -398,10 +407,16 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
           client back on.
         --%>
         <div class="font-semibold">
-          {@group.count} download(s) reference '{@group.download_client}', which Mydia is no longer tracking
+          {gettext(
+            "%{count} download(s) reference '%{client}', which Mydia is no longer tracking",
+            count: @group.count,
+            client: @group.download_client
+          )}
         </div>
         <div class="text-sm opacity-80">
-          Re-enabling or re-adding a client that holds these same torrents will restore them automatically.
+          {gettext(
+            "Re-enabling or re-adding a client that holds these same torrents will restore them automatically."
+          )}
         </div>
       </div>
       <button
@@ -410,9 +425,15 @@ defmodule MydiaWeb.DownloadsLive.IssueComponents do
         class="btn btn-sm btn-warning"
         phx-click="clear_removed_client"
         phx-value-client={@group.download_client}
-        data-confirm={"Clear #{@group.count} download(s) from '#{@group.download_client}'? This removes the records from Mydia only."}
+        data-confirm={
+          gettext(
+            "Clear %{count} download(s) from '%{client}'? This removes the records from Mydia only.",
+            count: @group.count,
+            client: @group.download_client
+          )
+        }
       >
-        Clear them
+        {gettext("Clear them")}
       </button>
     </div>
     """

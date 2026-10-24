@@ -11,7 +11,7 @@ defmodule MydiaWeb.MyRequestsLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "My Requests")
+     |> assign(:page_title, gettext("My Requests"))
      |> assign(:filter_status, "all")
      |> assign(:poster_backfill_attempted, MapSet.new())
      |> assign(:detail_request, nil)

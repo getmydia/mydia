@@ -5,24 +5,31 @@ defmodule MydiaWeb.DownloadsLive.IssueList do
   Pure: touches no Repo and no socket.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   alias MydiaWeb.DownloadsLive.{Filters, Issue, ListView}
 
-  @kinds [
-    needs_matching: "Needs matching",
-    unresolved: "Unresolved files",
-    import_failed: "Import failed",
-    download_failed: "Download failed",
-    missing: "Missing from client",
-    removal_failed: "Couldn't remove"
+  @kind_keys [
+    :needs_matching,
+    :unresolved,
+    :import_failed,
+    :download_failed,
+    :missing,
+    :removal_failed
   ]
-  @kind_order @kinds |> Keyword.keys() |> Enum.with_index() |> Map.new()
-  @kind_strings Map.new(Keyword.keys(@kinds), &{Atom.to_string(&1), &1})
+  @kind_order @kind_keys |> Enum.with_index() |> Map.new()
+  @kind_strings Map.new(@kind_keys, &{Atom.to_string(&1), &1})
 
   @spec kinds() :: [{Issue.kind(), String.t()}]
-  def kinds, do: @kinds
+  def kinds, do: Enum.map(@kind_keys, &{&1, label(&1)})
 
   @spec label(Issue.kind()) :: String.t()
-  def label(kind), do: Keyword.fetch!(@kinds, kind)
+  def label(:needs_matching), do: gettext("Needs matching")
+  def label(:unresolved), do: gettext("Unresolved files")
+  def label(:import_failed), do: gettext("Import failed")
+  def label(:download_failed), do: gettext("Download failed")
+  def label(:missing), do: gettext("Missing from client")
+  def label(:removal_failed), do: gettext("Couldn't remove")
 
   @spec parse_kind(String.t() | nil) :: Issue.kind() | nil
   def parse_kind(value), do: Map.get(@kind_strings, value)
@@ -67,7 +74,7 @@ defmodule MydiaWeb.DownloadsLive.IssueList do
 
   @spec counts([Issue.t()]) :: %{Issue.kind() => non_neg_integer()}
   def counts(issues) do
-    base = Map.new(Keyword.keys(@kinds), &{&1, 0})
+    base = Map.new(@kind_keys, &{&1, 0})
     Enum.reduce(issues, base, fn %Issue{kind: kind}, acc -> Map.update!(acc, kind, &(&1 + 1)) end)
   end
 
@@ -94,8 +101,10 @@ defmodule MydiaWeb.DownloadsLive.IssueList do
       kind: :needs_matching,
       id: torrent.id,
       title: torrent.title,
-      subtitle: torrent.parsed && torrent.parsed.title && "Parsed: #{torrent.parsed.title}",
-      reason: "No library match",
+      subtitle:
+        torrent.parsed && torrent.parsed.title &&
+          gettext("Parsed: %{title}", title: torrent.parsed.title),
+      reason: gettext("No library match"),
       client: torrent.client_name,
       torrent: torrent
     }
@@ -117,16 +126,26 @@ defmodule MydiaWeb.DownloadsLive.IssueList do
     }
   end
 
-  defp reason(:unresolved, _download), do: "Some files could not be matched"
+  defp reason(:unresolved, _download), do: gettext("Some files could not be matched")
 
   defp reason(:removal_failed, download),
-    do: "Couldn't remove from #{download.download_client}: #{download.removal_error}"
+    do:
+      gettext("Couldn't remove from %{client}: %{error}",
+        client: download.download_client,
+        error: download.removal_error
+      )
 
   defp reason(:import_failed, download),
-    do: "Import failed: #{download.import_last_error || "unknown error"}"
+    do:
+      gettext("Import failed: %{error}",
+        error: download.import_last_error || gettext("unknown error")
+      )
 
   defp reason(:download_failed, download),
-    do: "Download failed: #{download.error_message || "unknown error"}"
+    do:
+      gettext("Download failed: %{error}",
+        error: download.error_message || gettext("unknown error")
+      )
 
-  defp reason(:missing, _download), do: "Removed from client"
+  defp reason(:missing, _download), do: gettext("Removed from client")
 end

@@ -8,22 +8,35 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   returns. Touches no Repo and no socket.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   alias Mydia.Downloads.StallDetector
   alias Mydia.Downloads.StatusFilter
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias MydiaWeb.DownloadsLive.{Filters, IssueList, Summary}
 
-  @status_options [
-    {"downloading", "Downloading"},
-    {"stalled", "Stalled"},
-    {"paused", "Paused"},
-    {"queued", "Queued"},
-    {"importing", "Importing"}
-  ]
-  @statuses Enum.map(@status_options, &elem(&1, 0))
+  @statuses ~w(downloading stalled paused queued importing)
 
   @spec status_options() :: [{String.t(), String.t()}]
-  def status_options, do: @status_options
+  def status_options, do: Enum.map(@statuses, &{&1, status_label(&1)})
+
+  # Chip labels for the status filter. Statuses outside the filter fall back to
+  # their capitalised key.
+  @spec status_label(String.t()) :: String.t()
+  def status_label("downloading"), do: pgettext("download", "Downloading")
+  def status_label("stalled"), do: pgettext("download", "Stalled")
+  def status_label("paused"), do: pgettext("download", "Paused")
+  def status_label("queued"), do: pgettext("download", "Queued")
+  def status_label("importing"), do: pgettext("download", "Importing")
+  def status_label("seeding"), do: pgettext("download", "Seeding")
+  def status_label("checking"), do: pgettext("download", "Checking")
+  def status_label("completed"), do: pgettext("download", "Completed")
+  def status_label("failed"), do: pgettext("download", "Failed")
+  def status_label("cancelled"), do: pgettext("download", "Cancelled")
+  def status_label("missing"), do: pgettext("download", "Missing")
+  def status_label("imported"), do: pgettext("download", "Imported")
+  def status_label("grabbing"), do: pgettext("download", "Grabbing…")
+  def status_label(other), do: String.capitalize(other)
 
   @doc """
   The search and filter state from URL params. `scope` is `{tab, view}`: the
@@ -107,15 +120,13 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   def chips(%Filters{} = filters) do
     [
       filters.q && {"q", "\"#{filters.q}\""},
-      filters.client && {"client", "Client: #{filters.client}"},
-      filters.status && {"status", "Status: #{status_label(filters.status)}"},
-      filters.kind && {"kind", "Kind: #{IssueList.label(filters.kind)}"}
+      filters.client && {"client", gettext("Client: %{client}", client: filters.client)},
+      filters.status &&
+        {"status", gettext("Status: %{status}", status: status_label(filters.status))},
+      filters.kind &&
+        {"kind", gettext("Kind: %{kind}", kind: IssueList.label(filters.kind))}
     ]
     |> Enum.reject(&(&1 in [nil, false]))
-  end
-
-  defp status_label(value) do
-    Enum.find_value(@status_options, value, fn {v, label} -> v == value && label end)
   end
 
   @spec filter(list(), Filters.t()) :: list()
@@ -245,7 +256,7 @@ defmodule MydiaWeb.DownloadsLive.ListView do
 
   # Fallback to direct media_item if episode.media_item is not loaded
   def display_title(%{episode: %{}, media_item: %{title: title}}), do: title
-  def display_title(%{episode: %{}}), do: "Unknown Show"
+  def display_title(%{episode: %{}}), do: gettext("Unknown Show")
 
   # Movie or show-level download
   def display_title(%{media_item: %{title: title}}) when title not in [nil, false], do: title
@@ -280,9 +291,9 @@ defmodule MydiaWeb.DownloadsLive.ListView do
   @spec status_badge(map()) :: {String.t(), String.t()}
   def status_badge(download) do
     if soft_stalled?(download) do
-      {status_badge_class("stalled"), "Stalled"}
+      {status_badge_class("stalled"), status_label("stalled")}
     else
-      {status_badge_class(download.status), String.capitalize(download.status)}
+      {status_badge_class(download.status), status_label(download.status)}
     end
   end
 

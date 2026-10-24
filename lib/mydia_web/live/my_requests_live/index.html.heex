@@ -3,17 +3,17 @@
     <%!-- Header --%>
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
       <div>
-        <h1 class="text-3xl font-bold">My Requests</h1>
+        <h1 class="text-3xl font-bold">{gettext("My Requests")}</h1>
         <p class="text-base-content/70 mt-1">
-          View the status of your media requests
+          {gettext("View the status of your media requests")}
         </p>
       </div>
       <div class="flex gap-2">
         <.link navigate={~p"/discover?type=movie"} class="btn btn-primary btn-sm">
-          <.icon name="hero-plus" class="w-4 h-4" /> Request Movie
+          <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Request Movie")}
         </.link>
         <.link navigate={~p"/discover?type=tv_show"} class="btn btn-primary btn-sm">
-          <.icon name="hero-plus" class="w-4 h-4" /> Request Series
+          <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Request Series")}
         </.link>
       </div>
     </div>
@@ -26,7 +26,7 @@
         phx-click="filter"
         phx-value-status="all"
       >
-        All
+        {gettext("All")}
       </button>
       <button
         role="tab"
@@ -34,7 +34,7 @@
         phx-click="filter"
         phx-value-status="pending"
       >
-        Pending
+        {gettext("Pending")}
       </button>
       <button
         role="tab"
@@ -42,7 +42,7 @@
         phx-click="filter"
         phx-value-status="approved"
       >
-        Approved
+        {gettext("Approved")}
       </button>
       <button
         role="tab"
@@ -50,7 +50,7 @@
         phx-click="filter"
         phx-value-status="rejected"
       >
-        Rejected
+        {gettext("Rejected")}
       </button>
     </div>
 
@@ -58,20 +58,22 @@
     <%= if @requests == [] do %>
       <div class="text-center py-12">
         <.icon name="hero-inbox" class="w-16 h-16 mx-auto text-base-content/30 mb-4" />
-        <h3 class="text-lg font-semibold mb-2">No requests found</h3>
+        <h3 class="text-lg font-semibold mb-2">{gettext("No requests found")}</h3>
         <p class="text-base-content/70 mb-6">
           <%= if @filter_status == "all" do %>
-            You haven't submitted any requests yet. Start by searching for media to request!
+            {gettext(
+              "You haven't submitted any requests yet. Start by searching for media to request!"
+            )}
           <% else %>
-            No {status_text(@filter_status)} requests found.
+            {gettext("No %{status} requests found.", status: status_text(@filter_status))}
           <% end %>
         </p>
         <div class="flex gap-2 justify-center">
           <.link navigate={~p"/discover?type=movie"} class="btn btn-primary">
-            <.icon name="hero-plus" class="w-5 h-5" /> Request Movie
+            <.icon name="hero-plus" class="w-5 h-5" /> {gettext("Request Movie")}
           </.link>
           <.link navigate={~p"/discover?type=tv_show"} class="btn btn-primary">
-            <.icon name="hero-plus" class="w-5 h-5" /> Request Series
+            <.icon name="hero-plus" class="w-5 h-5" /> {gettext("Request Series")}
           </.link>
         </div>
       </div>
@@ -83,26 +85,38 @@
             <:details>
               <div class="flex items-center gap-2 text-base-content/70">
                 <.icon name="hero-calendar" class="w-4 h-4" />
-                <span>Requested on {format_date(request.inserted_at, @time_display)}</span>
+                <span>
+                  {gettext("Requested on %{date}",
+                    date: format_date(request.inserted_at, @time_display)
+                  )}
+                </span>
               </div>
               <div :if={request.status == "approved"} class="flex items-start gap-2 text-success">
                 <.icon name="hero-check-circle" class="w-4 h-4 mt-0.5" />
                 <div>
-                  <div>Approved on {format_date(request.approved_at, @time_display)}</div>
+                  <div>
+                    {gettext("Approved on %{date}",
+                      date: format_date(request.approved_at, @time_display)
+                    )}
+                  </div>
                   <div :if={request.admin_notes} class="text-xs mt-1">
-                    Admin notes: {request.admin_notes}
+                    {gettext("Admin notes: %{notes}", notes: request.admin_notes)}
                   </div>
                 </div>
               </div>
               <div :if={request.status == "rejected"} class="flex items-start gap-2 text-error">
                 <.icon name="hero-x-circle" class="w-4 h-4 mt-0.5" />
                 <div>
-                  <div>Rejected on {format_date(request.rejected_at, @time_display)}</div>
+                  <div>
+                    {gettext("Rejected on %{date}",
+                      date: format_date(request.rejected_at, @time_display)
+                    )}
+                  </div>
                   <div :if={request.rejection_reason} class="text-xs mt-1">
-                    Reason: {request.rejection_reason}
+                    {gettext("Reason: %{reason}", reason: request.rejection_reason)}
                   </div>
                   <div :if={request.admin_notes} class="text-xs mt-1">
-                    Admin notes: {request.admin_notes}
+                    {gettext("Admin notes: %{notes}", notes: request.admin_notes)}
                   </div>
                 </div>
               </div>
@@ -114,7 +128,9 @@
                 navigate={~p"/media/#{request.media_item.id}"}
                 class="btn btn-sm btn-success"
               >
-                <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> View in Library
+                <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> {gettext(
+                  "View in Library"
+                )}
               </.link>
             </:actions>
           </.request_card>
@@ -135,13 +151,15 @@
       config_open={false}
     >
       <:actions>
-        <button class="btn btn-ghost" phx-click="close_details">Close</button>
+        <button class="btn btn-ghost" phx-click="close_details">{gettext("Close")}</button>
         <.link
           :if={@detail_request && @detail_request.media_item}
           navigate={~p"/media/#{@detail_request.media_item.id}"}
           class="btn btn-primary"
         >
-          <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> View in Library
+          <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> {gettext(
+            "View in Library"
+          )}
         </.link>
       </:actions>
     </.live_component>

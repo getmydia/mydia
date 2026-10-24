@@ -25,13 +25,14 @@ defmodule MydiaWeb.DownloadsLive.Components do
 
     ~H"""
     <.modal id="match-files-modal" show={true} on_cancel="close_match_files">
-      <:title>Match files</:title>
+      <:title>{gettext("Match files")}</:title>
       <p class="text-sm text-base-content/60 truncate">{@modal.download.title}</p>
 
       <p :if={@modal.source == :snapshot} class="alert alert-warning mt-3 text-sm">
         <.icon name="hero-exclamation-triangle" class="size-4" />
-        Mydia cannot read this download's folder right now, so this is the listing
-        recorded when the import failed.
+        {gettext(
+          "Mydia cannot read this download's folder right now, so this is the listing recorded when the import failed."
+        )}
       </p>
 
       <p
@@ -80,7 +81,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
                 • {probe_label(candidate["probe"])}
               </span>
               <span :if={candidate["skip_reason"]}>
-                • skipped: {skip_label(candidate["skip_reason"])}
+                • {gettext("skipped: %{reason}", reason: skip_label(candidate["skip_reason"]))}
               </span>
             </div>
           </div>
@@ -91,8 +92,8 @@ defmodule MydiaWeb.DownloadsLive.Components do
                 disabled={candidate["missing"]}
                 class="select select-bordered select-sm w-56"
               >
-                <option value="">Ignore</option>
-                <option value="movie">Import as this movie</option>
+                <option value="">{gettext("Ignore")}</option>
+                <option value="movie">{gettext("Import as this movie")}</option>
               </select>
             <% :tv_show -> %>
               <select
@@ -100,7 +101,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
                 disabled={candidate["missing"]}
                 class="select select-bordered select-sm w-56"
               >
-                <option value="">Ignore</option>
+                <option value="">{gettext("Ignore")}</option>
                 <option
                   :for={episode <- @modal.episodes}
                   value={episode.id}
@@ -111,7 +112,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
               </select>
             <% _blocked -> %>
               <span class="select select-sm select-bordered w-56 flex items-center text-base-content/40 italic">
-                Can't match yet
+                {gettext("Can't match yet")}
               </span>
           <% end %>
         </div>
@@ -119,7 +120,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
 
       <:actions>
         <button type="button" class="btn btn-ghost btn-sm" phx-click="close_match_files">
-          Cancel
+          {gettext("Cancel")}
         </button>
         <button
           type="button"
@@ -128,9 +129,13 @@ defmodule MydiaWeb.DownloadsLive.Components do
           phx-click="reject_release"
           phx-value-id={@modal.download.id}
           title={reject_hint(@modal.download)}
-          data-confirm="Blacklist this release, remove the download and its data from the download client, and search again. Files already imported to the library are kept."
+          data-confirm={
+            gettext(
+              "Blacklist this release, remove the download and its data from the download client, and search again. Files already imported to the library are kept."
+            )
+          }
         >
-          Reject release
+          {gettext("Reject release")}
         </button>
         <button
           type="submit"
@@ -139,7 +144,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
           class="btn btn-primary btn-sm"
           disabled={@target_kind in [:tv_show_no_episodes, :unmatched]}
         >
-          <.icon name="hero-arrow-down-tray" class="size-4" /> Import selected
+          <.icon name="hero-arrow-down-tray" class="size-4" /> {gettext("Import selected")}
         </button>
       </:actions>
     </.modal>
@@ -159,18 +164,20 @@ defmodule MydiaWeb.DownloadsLive.Components do
     ~H"""
     <.modal id="match-modal" show={true} on_cancel="close_match_modal">
       <:title>
-        {if @dialog.mode == :inflight, do: "Change match", else: "Re-match download"}
+        {if @dialog.mode == :inflight,
+          do: gettext("Change match"),
+          else: gettext("Re-match download")}
       </:title>
 
       <%= if @dialog.selected do %>
         <p class="text-sm text-base-content/80">
-          Choose the episode for <span class="font-medium">{@dialog.selected.title}</span>:
+          {gettext("Choose the episode for %{title}:", title: @dialog.selected.title)}
         </p>
         <p :if={@dialog.mode == :postimport} class="text-xs text-base-content/50 mt-1">
-          This download imported one file, so it maps to a single episode.
+          {gettext("This download imported one file, so it maps to a single episode.")}
         </p>
         <div :if={@dialog.episodes == []} class="text-sm text-base-content/50 mt-2">
-          No episodes found for this show.
+          {gettext("No episodes found for this show.")}
         </div>
         <p :if={@dialog.error} id="match-dialog-error" class="alert alert-error mt-3 text-sm">
           {@dialog.error}
@@ -184,11 +191,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
             phx-click="match_modal_pick_episode"
             phx-value-episode_id={ep.id}
           >
-            S{String.pad_leading("#{ep.season_number}", 2, "0")}E{String.pad_leading(
-              "#{ep.episode_number}",
-              2,
-              "0"
-            )}
+            {episode_code(ep)}
             <span :if={ep.title} class="text-base-content/60">- {ep.title}</span>
           </button>
         </div>
@@ -199,7 +202,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
             class="btn btn-sm"
             type="checkbox"
             name="match_type"
-            aria-label="TV"
+            aria-label={gettext("TV")}
             checked={@dialog.type == :tv_show}
             phx-click="match_modal_set_type"
             phx-value-type="tv_show"
@@ -209,7 +212,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
             class="btn btn-sm"
             type="checkbox"
             name="match_type"
-            aria-label="Movie"
+            aria-label={gettext("Movie")}
             checked={@dialog.type == :movie}
             phx-click="match_modal_set_type"
             phx-value-type="movie"
@@ -224,7 +227,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
             class="input input-bordered w-full"
             phx-debounce="300"
             autocomplete="off"
-            placeholder="Search your library or add a new title..."
+            placeholder={gettext("Search your library or add a new title...")}
           />
         </form>
 
@@ -251,7 +254,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
               <span class="font-medium">{item.title}</span>
               <span :if={item.year} class="text-base-content/60">({item.year})</span>
               <span class="badge badge-xs badge-outline">
-                {if item.type == "tv_show", do: "TV", else: "Movie"}
+                {if item.type == "tv_show", do: gettext("TV"), else: gettext("Movie")}
               </span>
             </button>
             <button
@@ -261,15 +264,15 @@ defmodule MydiaWeb.DownloadsLive.Components do
               class="btn btn-xs btn-ghost"
               phx-click="match_modal_show_episodes"
               phx-value-media_item_id={item.id}
-              title="Match a single episode instead of the whole show"
+              title={gettext("Match a single episode instead of the whole show")}
             >
-              Pick episode
+              {gettext("Pick episode")}
             </button>
           </div>
         </div>
 
         <div :if={@dialog.external_results != []} class="divider text-xs my-1">
-          Not in your library
+          {gettext("Not in your library")}
         </div>
 
         <div class="max-h-64 overflow-y-auto flex flex-col gap-1">
@@ -280,18 +283,18 @@ defmodule MydiaWeb.DownloadsLive.Components do
             class="btn btn-sm btn-ghost justify-start"
             phx-click="match_modal_add_external"
             phx-value-provider_id={result.provider_id}
-            phx-disable-with="Adding..."
+            phx-disable-with={gettext("Adding...")}
           >
             <span class="font-medium">{result.title}</span>
             <span :if={result.year} class="text-base-content/60">({result.year})</span>
-            <span class="badge badge-xs badge-outline">Add to library</span>
+            <span class="badge badge-xs badge-outline">{gettext("Add to library")}</span>
           </button>
         </div>
       <% end %>
 
       <:actions>
         <button type="button" class="btn btn-ghost" phx-click="close_match_modal">
-          Cancel
+          {gettext("Cancel")}
         </button>
       </:actions>
     </.modal>
@@ -317,41 +320,59 @@ defmodule MydiaWeb.DownloadsLive.Components do
 
   defp blocked_reason(:tv_show_no_episodes),
     do:
-      "This show's episodes have not been loaded yet, so these files cannot be matched to one. Refresh the show's episode list, then try again."
+      gettext(
+        "This show's episodes have not been loaded yet, so these files cannot be matched to one. Refresh the show's episode list, then try again."
+      )
 
   defp blocked_reason(:unmatched),
-    do: "This download has no matched title, so its files cannot be matched to a destination yet."
+    do:
+      gettext(
+        "This download has no matched title, so its files cannot be matched to a destination yet."
+      )
 
   defp prefilled?(candidate, episode) do
     candidate["parsed_season"] == episode.season_number and
       candidate["parsed_episode"] == episode.episode_number
   end
 
-  defp episode_label(episode) do
+  # The "S01E02" code is a technical token shared by every locale.
+  defp episode_code(episode) do
     season = String.pad_leading("#{episode.season_number}", 2, "0")
     number = String.pad_leading("#{episode.episode_number}", 2, "0")
+    "S#{season}E#{number}"
+  end
 
+  defp episode_label(episode) do
     if episode.title do
-      "S#{season}E#{number} - #{episode.title}"
+      "#{episode_code(episode)} - #{episode.title}"
     else
-      "S#{season}E#{number}"
+      episode_code(episode)
     end
   end
 
-  defp skip_label("not_video_extension"), do: "unsupported file type for this library"
+  defp skip_label("not_video_extension"), do: gettext("unsupported file type for this library")
   defp skip_label(reason) when is_binary(reason), do: reason
   defp skip_label(_reason), do: nil
 
-  defp probe_label(%{"status" => "media", "detail" => detail}), do: "Media (#{detail})"
-  defp probe_label(%{"status" => "not_media", "detail" => detail}), do: "Not media (#{detail})"
-  defp probe_label(%{"detail" => detail}), do: "Unknown (#{detail})"
+  defp probe_label(%{"status" => "media", "detail" => detail}),
+    do: gettext("Media (%{detail})", detail: detail)
+
+  defp probe_label(%{"status" => "not_media", "detail" => detail}),
+    do: gettext("Not media (%{detail})", detail: detail)
+
+  defp probe_label(%{"detail" => detail}), do: gettext("Unknown (%{detail})", detail: detail)
   defp probe_label(_probe), do: nil
 
   defp reject_hint(download) do
     case Blacklists.extract_key(download) do
-      {:ok, _indexer, _guid} -> "Blacklist this release and search again"
-      {:error, :no_indexer} -> "Remove this download and search again (no indexer to blacklist)"
-      {:error, :no_guid} -> "Remove this download and search again (no release id to blacklist)"
+      {:ok, _indexer, _guid} ->
+        gettext("Blacklist this release and search again")
+
+      {:error, :no_indexer} ->
+        gettext("Remove this download and search again (no indexer to blacklist)")
+
+      {:error, :no_guid} ->
+        gettext("Remove this download and search again (no release id to blacklist)")
     end
   end
 end

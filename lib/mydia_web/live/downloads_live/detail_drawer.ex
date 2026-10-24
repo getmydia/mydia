@@ -83,7 +83,11 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
               class="alert alert-warning alert-soft text-sm"
             >
               <.icon name="hero-clock" class="size-4" />
-              <span>No progress for {format_duration(ListView.stall_elapsed_seconds(@download))}.</span>
+              <span>
+                {gettext("No progress for %{duration}.",
+                  duration: format_duration(ListView.stall_elapsed_seconds(@download))
+                )}
+              </span>
             </div>
 
             <div
@@ -96,8 +100,8 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
               <div class="min-w-0">
                 <p class="font-medium text-sm">
                   {if ListView.import_issue(@download) == :retrying,
-                    do: "Import retrying",
-                    else: "Import failed"}
+                    do: gettext("Import retrying"),
+                    else: gettext("Import failed")}
                 </p>
                 <pre class="whitespace-pre-wrap break-words text-xs mt-1">{@download.import_last_error}</pre>
               </div>
@@ -119,7 +123,7 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
             >
               <.icon name="hero-document-duplicate" class="size-4 mt-0.5" />
               <div class="min-w-0 text-sm">
-                <p class="font-medium">Copied instead of hardlinked</p>
+                <p class="font-medium">{gettext("Copied instead of hardlinked")}</p>
                 <p class="mt-1">{placement_advice(copied_placement(@download))}</p>
               </div>
             </div>
@@ -131,27 +135,30 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
               class="alert alert-error alert-soft items-start"
             >
               <.icon name="hero-exclamation-triangle" class="size-4 mt-0.5" />
-              <pre class="whitespace-pre-wrap break-words text-xs">Couldn't remove from {@download.download_client}: {@download.removal_error}</pre>
+              <pre class="whitespace-pre-wrap break-words text-xs">{gettext("Couldn't remove from %{client}: %{error}", client: @download.download_client, error: @download.removal_error)}</pre>
             </div>
 
             <fieldset id="download-detail-release" class="fieldset">
-              <legend class="fieldset-legend">Release</legend>
+              <legend class="fieldset-legend">{pgettext("release", "Release")}</legend>
               <dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-                <dt class="text-base-content/60">Title</dt>
+                <dt class="text-base-content/60">{gettext("Title")}</dt>
                 <dd class="break-all">{@download.title}</dd>
-                <.detail_row label="Quality" value={@quality} />
-                <.detail_row label="Protocol" value={@protocol} />
-                <.detail_row label="Size" value={@download.size && format_file_size(@download.size)} />
-                <.detail_row label="Seeders" value={@seeders} />
+                <.detail_row label={gettext("Quality")} value={@quality} />
+                <.detail_row label={gettext("Protocol")} value={@protocol} />
+                <.detail_row
+                  label={gettext("Size")}
+                  value={@download.size && format_file_size(@download.size)}
+                />
+                <.detail_row label={gettext("Seeders")} value={@seeders} />
               </dl>
             </fieldset>
 
             <fieldset :if={@download.download_client} id="download-detail-client" class="fieldset">
-              <legend class="fieldset-legend">Client</legend>
+              <legend class="fieldset-legend">{gettext("Client")}</legend>
               <dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-                <.detail_row label="Name" value={@download.download_client} />
-                <.detail_row label="Client ID" value={@download.download_client_id} mono />
-                <.detail_row label="Save path" value={@download.save_path} mono />
+                <.detail_row label={gettext("Name")} value={@download.download_client} />
+                <.detail_row label={gettext("Client ID")} value={@download.download_client_id} mono />
+                <.detail_row label={gettext("Save path")} value={@download.save_path} mono />
               </dl>
               <a
                 :if={@client_url}
@@ -162,12 +169,12 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
                 class="btn btn-outline btn-sm mt-2 w-fit"
               >
                 <.icon name="hero-arrow-top-right-on-square" class="size-4" />
-                Open in {@download.download_client}
+                {gettext("Open in %{client}", client: @download.download_client)}
               </a>
             </fieldset>
 
             <fieldset id="download-detail-timeline" class="fieldset">
-              <legend class="fieldset-legend">Timeline</legend>
+              <legend class="fieldset-legend">{gettext("Timeline")}</legend>
               <ul class="timeline timeline-vertical timeline-compact">
                 <li
                   :for={{{slug, label, at, icon, color}, index} <- Enum.with_index(@events)}
@@ -199,18 +206,22 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
               id="download-detail-import"
               class="fieldset"
             >
-              <legend class="fieldset-legend">Import</legend>
+              <legend class="fieldset-legend">{pgettext("import", "Import")}</legend>
               <dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-                <.detail_row label="Reported path" value={@download.import_reported_path} mono />
-                <.detail_row label="Failure" value={@download.import_failure_reason} />
+                <.detail_row
+                  label={gettext("Reported path")}
+                  value={@download.import_reported_path}
+                  mono
+                />
+                <.detail_row label={gettext("Failure")} value={@download.import_failure_reason} />
                 <.detail_row
                   :if={(@download.import_retry_count || 0) > 0}
-                  label="Attempts"
+                  label={gettext("Attempts")}
                   value={@download.import_retry_count}
                 />
                 <.detail_row
                   :if={@download.import_next_retry_at}
-                  label="Next retry"
+                  label={gettext("Next retry")}
                   value={format_next_retry(@download.import_next_retry_at)}
                 />
               </dl>
@@ -227,7 +238,7 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
             id="download-detail-close"
             type="button"
             class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
-            aria-label="Close"
+            aria-label={gettext("Close")}
             phx-click="close_details"
           >
             <.icon name="hero-x-mark" class="w-5 h-5" />
@@ -236,7 +247,9 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
       </div>
 
       <form method="dialog" class="modal-backdrop">
-        <button type="button" id="download-detail-backdrop" phx-click="close_details">close</button>
+        <button type="button" id="download-detail-backdrop" phx-click="close_details">
+          {gettext("close")}
+        </button>
       </form>
     </dialog>
     """
@@ -258,8 +271,9 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
       <.icon name="hero-folder-open" class="size-4 mt-0.5" />
       <div class="min-w-0">
         <p>
-          Mydia can't see the download client's path. This usually means its
-          volume isn't mounted into the Mydia container at the same path.
+          {gettext(
+            "Mydia can't see the download client's path. This usually means its volume isn't mounted into the Mydia container at the same path."
+          )}
         </p>
         <%= if @download.path_mapping_suggestion do %>
           <p class="mt-2 font-mono text-xs break-all">
@@ -275,16 +289,22 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
               phx-click="apply_mapping_and_retry"
               phx-value-remote_prefix={@download.path_mapping_suggestion.remote_prefix}
               phx-value-local_prefix={@download.path_mapping_suggestion.local_prefix}
-              phx-disable-with="Applying…"
-              aria-label={"Apply mapping #{@download.path_mapping_suggestion.remote_prefix} to #{@download.path_mapping_suggestion.local_prefix} and retry"}
+              phx-disable-with={gettext("Applying…")}
+              aria-label={
+                gettext("Apply mapping %{remote} to %{local} and retry",
+                  remote: @download.path_mapping_suggestion.remote_prefix,
+                  local: @download.path_mapping_suggestion.local_prefix
+                )
+              }
             >
-              Apply mapping &amp; retry
+              {gettext("Apply mapping & retry")}
             </button>
             <span :if={@download.path_mapping_affected_count} class="text-xs opacity-70">
-              Retries {@download.path_mapping_affected_count} {if @download.path_mapping_affected_count ==
-                                                                    1,
-                                                                  do: "download",
-                                                                  else: "downloads"}
+              {ngettext(
+                "Retries %{count} download",
+                "Retries %{count} downloads",
+                @download.path_mapping_affected_count
+              )}
             </span>
           </div>
         <% else %>
@@ -293,7 +313,7 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
             navigate={~p"/admin/path-mappings"}
             class="link link-warning mt-2 inline-block"
           >
-            Add a path mapping
+            {gettext("Add a path mapping")}
           </.link>
         <% end %>
       </div>
@@ -319,24 +339,28 @@ defmodule MydiaWeb.DownloadsLive.DetailDrawer do
 
   defp placement_advice(%{"reason" => "link_refused"}),
     do:
-      "The download and library folders are on the same disk but reached through different mounts. " <>
-        "Map one parent folder (for example /data) that holds both, and point the download client at the same path."
+      gettext(
+        "The download and library folders are on the same disk but reached through different mounts. Map one parent folder (for example /data) that holds both, and point the download client at the same path."
+      )
 
   defp placement_advice(_),
     do:
-      "The download and library folders are on different filesystems, so hardlinks are not possible."
+      gettext(
+        "The download and library folders are on different filesystems, so hardlinks are not possible."
+      )
 
   # Only the events this download has reached, oldest first.
   defp timeline_events(download) do
     [
-      {"grabbed", "Grabbed", download.inserted_at, "hero-arrow-down-tray",
+      {"grabbed", gettext("Grabbed"), download.inserted_at, "hero-arrow-down-tray",
        "text-base-content/60"},
-      {"last-progress", "Last progress", download.last_progress_at, "hero-arrow-trending-up",
-       "text-base-content/60"},
-      {"stalled", "Stalled since", download.stalled_since, "hero-clock", "text-warning"},
-      {"completed", "Completed", download.completed_at || download.db_completed_at, "hero-check",
-       "text-success"},
-      {"imported", "Imported", download.imported_at, "hero-check-circle", "text-success"}
+      {"last-progress", gettext("Last progress"), download.last_progress_at,
+       "hero-arrow-trending-up", "text-base-content/60"},
+      {"stalled", gettext("Stalled since"), download.stalled_since, "hero-clock", "text-warning"},
+      {"completed", pgettext("download", "Completed"),
+       download.completed_at || download.db_completed_at, "hero-check", "text-success"},
+      {"imported", pgettext("download", "Imported"), download.imported_at, "hero-check-circle",
+       "text-success"}
     ]
     |> Enum.filter(fn {_slug, _label, at, _icon, _color} -> match?(%DateTime{}, at) end)
   end

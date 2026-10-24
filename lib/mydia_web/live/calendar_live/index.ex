@@ -24,7 +24,7 @@ defmodule MydiaWeb.CalendarLive.Index do
 
   @impl true
   def handle_params(_params, _url, socket) do
-    {:noreply, assign(socket, :page_title, "Calendar")}
+    {:noreply, assign(socket, :page_title, gettext("Calendar"))}
   end
 
   @impl true
@@ -191,7 +191,7 @@ defmodule MydiaWeb.CalendarLive.Index do
 
   defp format_month_year(month, year) do
     date = Date.new!(year, month, 1)
-    Calendar.strftime(date, "%B %Y")
+    Calendar.strftime(date, "%B %Y", MydiaWeb.DateNames.strftime_opts())
   end
 
   defp get_item_status(item) do

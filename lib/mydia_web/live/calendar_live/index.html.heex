@@ -5,7 +5,7 @@
       <div>
         <h1 class="text-3xl font-bold">{@page_title}</h1>
         <p class="text-base-content/70 mt-1">
-          Track upcoming and past media releases
+          {gettext("Track upcoming and past media releases")}
         </p>
       </div>
 
@@ -18,12 +18,14 @@
       >
         <select
           name="type"
-          aria-label="Filter by media type"
+          aria-label={gettext("Filter by media type")}
           class="select select-bordered select-sm"
         >
-          <option value="all" selected={is_nil(@filter_type)}>All Media</option>
-          <option value="tv_show" selected={@filter_type == "tv_show"}>TV Shows</option>
-          <option value="movie" selected={@filter_type == "movie"}>Movies</option>
+          <option value="all" selected={is_nil(@filter_type)}>{gettext("All Media")}</option>
+          <option value="tv_show" selected={@filter_type == "tv_show"}>
+            {gettext("TV Shows")}
+          </option>
+          <option value="movie" selected={@filter_type == "movie"}>{gettext("Movies")}</option>
         </select>
       </.form>
     </div>
@@ -36,7 +38,7 @@
         class="btn btn-ghost btn-sm"
       >
         <.icon name="hero-chevron-left" class="w-5 h-5" />
-        <span class="hidden sm:inline ml-1">Previous</span>
+        <span class="hidden sm:inline ml-1">{gettext("Previous")}</span>
       </button>
 
       <div class="flex items-center gap-2">
@@ -48,7 +50,7 @@
           phx-click="today"
           class="btn btn-primary btn-xs ml-2"
         >
-          Today
+          {gettext("Today")}
         </button>
       </div>
 
@@ -57,7 +59,7 @@
         phx-click="next_month"
         class="btn btn-ghost btn-sm"
       >
-        <span class="hidden sm:inline mr-1">Next</span>
+        <span class="hidden sm:inline mr-1">{gettext("Next")}</span>
         <.icon name="hero-chevron-right" class="w-5 h-5" />
       </button>
     </div>
@@ -66,11 +68,12 @@
     <%= if @calendar_empty? do %>
       <div class="flex flex-col items-center justify-center py-16">
         <.icon name="hero-calendar" class="w-16 h-16 text-base-content/30 mb-4" />
-        <h3 class="text-xl font-semibold text-base-content/70 mb-2">No releases this month</h3>
+        <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+          {gettext("No releases this month")}
+        </h3>
         <p class="text-base-content/50">
-          No monitored media has releases scheduled for {format_month_year(
-            @selected_month,
-            @selected_year
+          {gettext("No monitored media has releases scheduled for %{month}",
+            month: format_month_year(@selected_month, @selected_year)
           )}
         </p>
       </div>
@@ -81,10 +84,14 @@
       <%!-- Weekday headers --%>
       <div class="grid grid-cols-7 gap-2 mb-2">
         <div
-          :for={day <- ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}
+          :for={day <- 1..7}
           class="text-center text-sm font-semibold text-base-content/70 py-2"
         >
-          {day}
+          {Calendar.strftime(
+            Date.add(~D[2024-01-01], day - 1),
+            "%a",
+            MydiaWeb.DateNames.strftime_opts()
+          )}
         </div>
       </div>
 
@@ -134,7 +141,7 @@
                 <%!-- Show +N more indicator if there are more items --%>
                 <%= if length(day_data.items) > 3 do %>
                   <div class="text-xs text-base-content/50 pl-1">
-                    +{length(day_data.items) - 3} more
+                    {gettext("+%{count} more", count: length(day_data.items) - 3)}
                   </div>
                 <% end %>
               </div>
@@ -154,9 +161,9 @@
               "text-lg font-semibold mb-3",
               date == @current_date && "text-primary"
             ]}>
-              {Calendar.strftime(date, "%A, %B %-d")}
+              {Calendar.strftime(date, "%A, %B %-d", MydiaWeb.DateNames.strftime_opts())}
               <%= if date == @current_date do %>
-                <span class="badge badge-primary badge-sm ml-2">Today</span>
+                <span class="badge badge-primary badge-sm ml-2">{gettext("Today")}</span>
               <% end %>
             </h3>
 
@@ -180,14 +187,14 @@
                           {item.media_item_title}
                         </div>
                         <div class="text-xs opacity-90">
-                          {format_episode(item)} - {item.title || "TBA"}
+                          {format_episode(item)} - {item.title || gettext("TBA")}
                         </div>
                       <% else %>
                         <div class="font-semibold text-sm">
                           {item.title}
                         </div>
                         <div class="text-xs opacity-90">
-                          Movie
+                          {gettext("Movie")}
                         </div>
                       <% end %>
                     </div>
@@ -205,23 +212,23 @@
 
     <%!-- Legend --%>
     <div class="mt-8 p-4 bg-base-200 rounded-lg">
-      <h4 class="text-sm font-semibold mb-3">Status Legend</h4>
+      <h4 class="text-sm font-semibold mb-3">{gettext("Status Legend")}</h4>
       <div class="flex flex-wrap gap-3 text-sm">
         <div class="flex items-center gap-2">
           <div class="w-4 h-4 rounded bg-base-300"></div>
-          <span>Upcoming</span>
+          <span>{gettext("Upcoming")}</span>
         </div>
         <div class="flex items-center gap-2">
           <div class="w-4 h-4 rounded bg-info"></div>
-          <span>Downloading</span>
+          <span>{pgettext("download", "Downloading")}</span>
         </div>
         <div class="flex items-center gap-2">
           <div class="w-4 h-4 rounded bg-success"></div>
-          <span>Downloaded</span>
+          <span>{pgettext("download", "Downloaded")}</span>
         </div>
         <div class="flex items-center gap-2">
           <div class="w-4 h-4 rounded bg-error"></div>
-          <span>Missing</span>
+          <span>{pgettext("download", "Missing")}</span>
         </div>
       </div>
     </div>

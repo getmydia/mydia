@@ -4,6 +4,7 @@ defmodule MydiaWeb.DownloadsLive.Paths do
   """
 
   use MydiaWeb, :verified_routes
+  use Gettext, backend: MydiaWeb.Gettext
 
   alias MydiaWeb.DownloadsLive.Tab
 
@@ -52,7 +53,7 @@ defmodule MydiaWeb.DownloadsLive.Paths do
     [
       %Tab{
         key: :downloads,
-        label: "Downloads",
+        label: gettext("Downloads"),
         icon: "hero-arrow-down-tray",
         href: href.(:downloads),
         count: assigns.tab_counts.downloads,
@@ -60,7 +61,7 @@ defmodule MydiaWeb.DownloadsLive.Paths do
       },
       %Tab{
         key: :issues,
-        label: "Issues",
+        label: gettext("Issues"),
         icon: "hero-exclamation-triangle",
         href: href.(:issues),
         count: assigns.tab_counts.issues,
@@ -69,7 +70,7 @@ defmodule MydiaWeb.DownloadsLive.Paths do
       # Neutral on purpose: unmanaged torrents are not problems.
       %Tab{
         key: :external,
-        label: "External",
+        label: gettext("External"),
         icon: "hero-inbox-stack",
         href: href.(:external),
         count: length(assigns.scan.external)
