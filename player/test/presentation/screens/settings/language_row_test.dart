@@ -61,6 +61,19 @@ void main() {
     expect(find.text('Español'), findsOneWidget);
   });
 
+  testWidgets('only the current language tile is marked selected',
+      (tester) async {
+    final storage = MockAuthStorage()..seedData({'interface_locale': 'es'});
+    await tester.pumpWidget(_host(storage));
+    await tester.pumpAndSettle();
+    await _openPicker(tester);
+    bool selected(String key) =>
+        tester.widget<ListTile>(find.byKey(Key(key))).selected;
+    expect(selected('language-option-es'), isTrue);
+    expect(selected('language-option-en'), isFalse);
+    expect(selected('language-option-system'), isFalse);
+  });
+
   testWidgets('picking Spanish stores it and re-localizes the row',
       (tester) async {
     final storage = MockAuthStorage();

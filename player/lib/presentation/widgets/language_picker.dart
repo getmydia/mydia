@@ -45,6 +45,7 @@ Future<LanguageChoice?> showLanguagePicker(
           ListTile(
             key: key,
             autofocus: selected,
+            selected: selected,
             title: Text(
               label,
               style: TextStyle(

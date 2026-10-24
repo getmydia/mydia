@@ -13,6 +13,10 @@ class LocaleSetting extends Notifier<Locale?> {
   /// Set by [set], so a stored read finishing later cannot undo a choice.
   bool _chosen = false;
 
+  /// Tail of the write chain: each write starts after the previous one
+  /// finished, so overlapping [set] calls reach storage in call order.
+  Future<void> _pendingWrite = Future.value();
+
   @override
   Locale? build() {
     unawaited(_load());
@@ -40,17 +44,19 @@ class LocaleSetting extends Notifier<Locale?> {
   }
 
   /// Applies at once; a failed write keeps the choice for this session and
-  /// is only logged.
-  Future<void> set(Locale? locale) async {
+  /// is only logged. Writes are serialized (see [_pendingWrite]) and a failed
+  /// one does not block later ones.
+  Future<void> set(Locale? locale) {
     _chosen = true;
     state = locale;
-    try {
-      await ref
-          .read(coreSettingsServiceProvider)
-          .setLocaleCode(locale?.toLanguageTag());
-    } catch (e) {
-      debugPrint('[LocaleSetting] Could not persist: $e');
-    }
+    final service = ref.read(coreSettingsServiceProvider);
+    return _pendingWrite = _pendingWrite.then((_) async {
+      try {
+        await service.setLocaleCode(locale?.toLanguageTag());
+      } catch (e) {
+        debugPrint('[LocaleSetting] Could not persist: $e');
+      }
+    });
   }
 }
 

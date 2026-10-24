@@ -16,15 +16,6 @@ void main() {
       if (!e.key.startsWith('@')) e.key: e.value as String,
   };
 
-  // Placeholder names, ignoring ICU plural/select keywords and branch text.
-  Set<String> placeholders(String message) {
-    final names = <String>{};
-    for (final m in RegExp(r'\{(\w+)(?:,|\})').allMatches(message)) {
-      names.add(m.group(1)!);
-    }
-    return names;
-  }
-
   final translations = dir
       .listSync()
       .whereType<File>()
@@ -32,12 +23,37 @@ void main() {
       .where((f) => !f.path.endsWith('app_en.arb'))
       .toList();
 
-  test('placeholder parsing ignores plural branch keywords', () {
+  test('argument parsing ignores plural branch bodies', () {
     expect(
-      placeholders('{count, plural, one{{count} file} other{{count} files}}'),
+      icuArguments('{count, plural, one{{count} file} other{{count} files}}'),
       {'count'},
     );
-    expect(placeholders('Added {title}'), {'title'});
+    expect(
+      icuArguments('{count, plural, one{archivo} other{{count} archivos}}'),
+      {'count'},
+    );
+    expect(icuArguments('Added {title}'), {'title'});
+  });
+
+  test('a translation with branch text instead of a number still passes', () {
+    expect(
+      missingPlaceholders(
+        {'count'},
+        '{count, plural, one{archivo} other{{count} archivos}}',
+      ),
+      isEmpty,
+    );
+  });
+
+  test('a translation missing or renaming a placeholder fails', () {
+    expect(
+      missingPlaceholders(
+        {'count'},
+        '{n, plural, one{archivo} other{{n} archivos}}',
+      ),
+      {'count'},
+    );
+    expect(missingPlaceholders({'title'}, 'Agregado'), {'title'});
   });
 
   test('every regional locale has its base language file', () {
@@ -91,8 +107,12 @@ void main() {
           if (e.key.startsWith('@')) continue;
           final english = messages[e.key];
           if (english == null) continue;
-          if (!setEquals(
-              placeholders(english), placeholders(e.value as String))) {
+          final declared =
+              (template['@${e.key}'] as Map?)?['placeholders'] as Map?;
+          final required = declared != null
+              ? declared.keys.cast<String>().toSet()
+              : icuArguments(english);
+          if (missingPlaceholders(required, e.value as String).isNotEmpty) {
             broken.add(e.key);
           }
         }
@@ -102,5 +122,22 @@ void main() {
   }
 }
 
-bool setEquals(Set<String> a, Set<String> b) =>
-    a.length == b.length && a.containsAll(b);
+/// Argument names at ICU argument positions: `{name}` or `{name,` where the
+/// brace is not the opening of a plural branch body (`one{...}`, `=0{...}`).
+/// Extra names from select branch bodies are harmless: callers only check
+/// that required names are present.
+Set<String> icuArguments(String message) {
+  final names = <String>{};
+  final argument = RegExp(
+    r'(?<!\b(?:zero|one|two|few|many|other)\s*)(?<!=\d+\s*)\{\s*(\w+)\s*(?:,|\})',
+  );
+  for (final m in argument.allMatches(message)) {
+    names.add(m.group(1)!);
+  }
+  return names;
+}
+
+/// Names in [required] the [translation] does not use as `{name}` or
+/// `{name,`.
+Set<String> missingPlaceholders(Set<String> required, String translation) =>
+    required.difference(icuArguments(translation));
