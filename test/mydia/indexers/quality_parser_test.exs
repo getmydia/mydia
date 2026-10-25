@@ -113,25 +113,6 @@ defmodule Mydia.Indexers.QualityParserTest do
     end
   end
 
-  describe "has_hdr?/1" do
-    test "detects HDR in title" do
-      assert QualityParser.has_hdr?("Movie.2160p.WEB-DL.HDR.x265")
-    end
-
-    test "detects Dolby Vision" do
-      assert QualityParser.has_hdr?("Movie.2160p.WEB-DL.Dolby-Vision.x265")
-      assert QualityParser.has_hdr?("Movie.2160p.WEB-DL.DV.x265")
-    end
-
-    test "returns false when no HDR" do
-      refute QualityParser.has_hdr?("Movie.1080p.BluRay.x264")
-    end
-
-    test "is case insensitive" do
-      assert QualityParser.has_hdr?("MOVIE.HDR.X265")
-    end
-  end
-
   describe "quality_score/1" do
     test "scores 2160p BluRay with Dolby Vision highest" do
       quality =

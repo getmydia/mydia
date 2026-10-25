@@ -197,7 +197,7 @@ defmodule Mydia.Quality.Attrs do
   """
   @spec from_quality(Quality.t(), non_neg_integer() | nil, :movie | :episode) :: map()
   def from_quality(%Quality{} = quality, size_bytes, media_type) do
-    {audio_codec, audio_channels} = split_audio(quality.audio)
+    {audio_codec, audio_channels} = split_release_audio(quality.audio)
 
     %{
       resolution: canonical_resolution(quality.resolution),
@@ -307,6 +307,20 @@ defmodule Mydia.Quality.Attrs do
   end
 
   defp canonical_source(_), do: nil
+
+  # The release parser labels a title with only an `Atmos` token (no TrueHD or
+  # DD+ beside it) as bare "Atmos", often lossy streaming audio. Ranking it as
+  # the "atmos" tier would score it like TrueHD Atmos, so the codec stays
+  # unknown and only the channels survive. Media files keep the mapping.
+  defp split_release_audio(audio) when is_binary(audio) do
+    if Regex.match?(~r/^\s*atmos(\s+\S+)?\s*$/i, audio) do
+      {nil, elem(split_audio(audio), 1)}
+    else
+      split_audio(audio)
+    end
+  end
+
+  defp split_release_audio(audio), do: split_audio(audio)
 
   # Analyzer writes audio as "<codec> <channels>", e.g. "DD+ 5.1" or
   # "AAC Stereo", and sometimes as a bare codec ("PCM"). Release titles give

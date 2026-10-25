@@ -241,6 +241,16 @@ defmodule Mydia.Quality.AttrsTest do
       assert {ac3.audio_codec, ac3.audio_channels} == {"ac3", "5.1"}
     end
 
+    test "a bare Atmos label is not the TrueHD Atmos tier" do
+      bare = Attrs.from_quality(%Quality{audio: "Atmos 5.1"}, nil, :movie)
+      assert {bare.audio_codec, bare.audio_channels} == {nil, "5.1"}
+
+      assert Attrs.from_quality(%Quality{audio: "Atmos"}, nil, :movie).audio_codec == nil
+
+      truehd = Attrs.from_quality(%Quality{audio: "TrueHD Atmos 7.1"}, nil, :movie)
+      assert truehd.audio_codec == "atmos"
+    end
+
     test "leaves every unmentioned dimension nil, hdr_tokens included" do
       quality = %Quality{resolution: "1080p"}
       attrs = Attrs.from_quality(quality, nil, :movie)

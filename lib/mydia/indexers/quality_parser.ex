@@ -93,23 +93,6 @@ defmodule Mydia.Indexers.QualityParser do
   def assumed_resolution, do: @assumed_resolution
 
   @doc """
-  Checks if the release has HDR, including Dolby Vision with no base format.
-
-  ## Examples
-
-      iex> QualityParser.has_hdr?("Movie.2160p.WEB-DL.HDR.x265")
-      true
-
-      iex> QualityParser.has_hdr?("Movie.2160p.WEB-DL.DV.x265")
-      true
-
-      iex> QualityParser.has_hdr?("Movie.1080p.BluRay.x264")
-      false
-  """
-  @spec has_hdr?(String.t()) :: boolean()
-  def has_hdr?(title), do: title |> parse() |> Quality.hdr?()
-
-  @doc """
   Calculates a quality score for ranking purposes.
 
   Returns a numeric score where higher is better quality.
