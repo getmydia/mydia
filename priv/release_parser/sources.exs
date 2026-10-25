@@ -124,10 +124,10 @@ alias Mydia.Library.ReleaseParser.VocabularyEntry
 
   # Cam-tier sources (camcorder and pre-release captures). Their metadata
   # confidence stays below every good source above, DVD included, so an
-  # explicit good token wins the :source singleton, matching
-  # `Mydia.Quality.Sources`. `Screener` and `Workprint` are also title words,
-  # so these take WEB's title-zone penalty too. The tokenizer keeps dashed
-  # forms whole, so `HD-TS` needs its own alias.
+  # explicit good token wins the :source singleton (one of the precision
+  # rules `Mydia.Quality.Sources` documents). `Screener` and `Workprint` are
+  # also title words, so these take WEB's title-zone penalty too. The
+  # tokenizer keeps dashed forms whole, so `HD-TS` needs its own alias.
   %VocabularyEntry{
     label: :source,
     aliases: ["HDCAM", "HD-CAM", "CAMRip", "CAM-Rip", "HQCAM"],

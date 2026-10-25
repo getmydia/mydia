@@ -316,9 +316,8 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
   # The resolver passes every :hdr token, in token order, because they
   # stack: `DV.HDR10` is a Dolby Vision layer over an HDR10 base, and
-  # keeping only one of them loses either the layer or the base. The fold
-  # is QualityParser.extract_hdr/1's: the first base token wins and Dolby
-  # Vision is sticky.
+  # keeping only one of them loses either the layer or the base. The first
+  # base token wins and Dolby Vision is sticky.
   #
   # The vocabulary's canonical value is folded, not the raw token text, so
   # a listed tag (`[HEVC, HDR10, DV]`) reads the same as a dotted one. Two

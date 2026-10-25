@@ -17,6 +17,13 @@ defmodule Mydia.Library.ReleaseParser.QualityCanonicalTest do
       assert q("Fake.Show.S01E01.1080p.WEB-Rip.x264-GRP").source == "WEBRip"
     end
 
+    test "PROPER and REPACK count only as whole words" do
+      assert q("Fake.Movie.2020.PROPER.1080p.BluRay.x264-GRP").proper
+      assert q("Fake.Movie.2020.REPACK.1080p.BluRay.x264-GRP").repack
+      refute q("Fake.Movie.Improperly.Named.2020.1080p.BluRay.x264-GRP").proper
+      refute q("Fake.Movie.Repacker.Name.2020.1080p.BluRay.x264-GRP").repack
+    end
+
     test "resolution aliases normalise" do
       assert q("Fake.Movie.2020.4K.UHD.BluRay.x265-GRP").resolution == "2160p"
       assert q("Fake.Movie.2020.1440p.WEB-DL.x264-GRP").resolution == "1080p"

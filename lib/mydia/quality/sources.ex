@@ -1,51 +1,57 @@
 defmodule Mydia.Quality.Sources do
   @moduledoc """
-  The source-detection vocabulary for the indexer search/grab path.
+  The release-source vocabulary: every source label the release parser emits,
+  which of them are cam-tier, and `detect/1` for callers that only want the
+  source of a name.
 
-  `QualityParser` uses this module to classify release names during search and
-  grab. `Mydia.Library.ReleaseParser` (`priv/release_parser/sources.exs`) keeps
-  its own token table, but both now emit the same canonical names: `BDRip` and
-  `BRRip` fold into `BluRay` on either side, and `Mydia.Quality.Attrs` and
-  `Mydia.Settings.QualityProfile` no longer list them. Retiring this module in
-  favour of the release parser is follow-up work.
+  Detection is not done here. `detect/1` reads the source that
+  `Mydia.Indexers.QualityParser.parse/1` reports, which is
+  `Mydia.Library.ReleaseParser` with its token table in
+  `priv/release_parser/sources.exs`. A search result's quality, a profile's
+  `excluded_sources` check and an on-disk file's cam-tier fallback therefore
+  all read one tokenizer, and a spelling fixed there is fixed for all three.
 
-  ## Why the short tokens are delimiter-anchored
+  ## Cam-tier precision
 
-  Scene names abbreviate Telesync to `TS`, Telecine to `TC`, Workprint to `WP`,
-  and Screener to `SCR`. Matching those as bare substrings misclassifies
-  ordinary words: `Ghosts` contains `ts`, `Watchmen` contains `tc`, `Scream`
-  contains `scr`.
+  A false cam-tier detection silently refuses a legitimate release with no way
+  for the operator to find out why; a missed one lets one bad release through.
+  The parser leans toward precision accordingly, and the cases in
+  `test/mydia/quality/sources_test.exs` pin it:
 
-  Word boundaries alone are still not enough, because `\\bts\\b` matches the
-  release-group suffix in `Some.Movie.2020.1080p.x264-TS` and the leading word
-  in `Ts.Madison.Show.2021.1080p.x264`.
-
-  So the ambiguous short tokens require a dot, space, or bracket on both sides,
-  which excludes the hyphenated group position and the start of the string.
-  Unambiguous long forms (`telesync`, `workprint`, `hdcam`) keep plain `\\b`.
-
-  The tradeoff is deliberate: a genuine telesync marked only as `-TS` in the
-  group position is not detected. A false negative means one bad release slips
-  through, which is the pre-existing behavior anyway. A false positive means a
-  legitimate release is silently refused with no way for the operator to find
-  out why. Precision wins.
-
-  ## Why some source names have to dodge each other
-
-  Several source tokens contain another source's token: `DVDScr`, `DVDRip`,
-  `PDVD` and `PreDVD` all contain `dvd`. Because `patterns/0` is first-wins, a
-  broad pattern placed above them swallows the longer name and reports the
-  wrong source. `DVDRip` and `Screener` avoid it by sitting above `DVD` in the
-  table; `PDVD`/`PreDVD` avoid it with lookbehinds on the `DVD` pattern,
-  because reordering would have put a cam-tier source above a good one.
-
-  Getting this wrong is quiet and expensive. A `PreDVD` release reported as
-  `DVD` passes every profile's `excluded_sources` list, scores like a real
-  digital source, and gets grabbed. Any new source token added below a broader
-  one needs a test proving the broader one does not claim it first.
+  - Cam-tier letters inside ordinary words (`Ghosts`, `Watchmen`, `Scream`)
+    are not tokens, so they never match.
+  - The short scene forms (`TS`, `TC`, `SCR`, `WP`, `CAM`) count only as
+    whole capitalised tokens. A lowercase `ts` or `cam` is a word, not a tag.
+  - The hyphenated group position (`x264-TS`) is a release group, and the
+    first word of a title (`Ts.Marlow`) is title zone, so neither is a source.
+  - A cam-tier word inside an episode title (`S02E03.Cam.and.Mitch`) is part
+    of that title.
+  - Every good source outranks every cam-tier one, so an explicit `BluRay`
+    wins over a cam-tier token elsewhere in the name.
   """
 
+  alias Mydia.Indexers.QualityParser
+
   @cam_tier ["CAM", "Telesync", "Telecine", "Screener", "Workprint"]
+
+  # Display order for source pickers: good sources first, roughly best to
+  # worst, then the cam-tier ones.
+  @all [
+    "REMUX",
+    "BluRay",
+    "WEB-DL",
+    "WEBRip",
+    "HDTV",
+    "SDTV",
+    "DVDRip",
+    "Screener",
+    "DVD",
+    "Telecine",
+    "Telesync",
+    "CAM",
+    "Workprint",
+    "PDTV"
+  ]
 
   @doc """
   The release types that are camcorder or pre-release captures rather than
@@ -74,17 +80,16 @@ defmodule Mydia.Quality.Sources do
   def cam_tier?(source) when is_binary(source), do: source in @cam_tier
 
   @doc """
-  Every source label this module can detect, in match order.
+  Every source label `detect/1` can return, in display order.
   """
   @spec all() :: [String.t()]
-  def all, do: patterns() |> Enum.map(fn {label, _pattern} -> label end) |> Enum.uniq()
+  def all, do: @all
 
   @doc """
   Detects the source of a release name, or `nil` when no source token is found.
 
-  Matching is first-wins in table order, so a name carrying an explicit good
-  source token resolves to that source even if a cam-tier abbreviation also
-  appears later in the string.
+  This is `Mydia.Indexers.QualityParser.parse/1`'s source, so the two can
+  never disagree.
 
       iex> Mydia.Quality.Sources.detect("Movie.2026.1080p.BluRay.x264")
       "BluRay"
@@ -96,59 +101,7 @@ defmodule Mydia.Quality.Sources do
       nil
   """
   @spec detect(String.t()) :: String.t() | nil
-  def detect(title) when is_binary(title) do
-    Enum.find_value(patterns(), fn {label, pattern} ->
-      if Regex.match?(pattern, title), do: label
-    end)
-  end
+  def detect(title) when is_binary(title), do: QualityParser.parse(title).source
 
   def detect(_), do: nil
-
-  @doc """
-  The label/pattern table, in match order.
-
-  Order is load-bearing in two places:
-
-  1. `Screener` sits above `DVD`, otherwise `DVDScr` matches the bare `dvd`
-     pattern first and resolves to `DVD`.
-  2. Every good source is checked before every cam-tier source, so an explicit
-     `BluRay` token beats a `-TS` release-group suffix. The one exception is
-     the bare `WEB` form of `WEB-DL`, checked last because `web` is also an
-     ordinary title word that must not mask a cam-tier token.
-  """
-  @spec patterns() :: [{String.t(), Regex.t()}]
-  def patterns do
-    [
-      {"REMUX", ~r/remux/i},
-      {"BluRay", ~r/blu[\-\s]?ray|bluray|bdrip|brrip|bd(?:$|[\.\s])/i},
-      {"WEB-DL", ~r/web[\-\s]?dl|webdl/i},
-      {"WEBRip", ~r/web[\-\s]?rip|webrip/i},
-      {"HDTV", ~r/hdtv/i},
-      {"SDTV", ~r/sdtv/i},
-      {"DVDRip", ~r/dvd[\-\s]?rip|dvdrip/i},
-      # Screener must precede DVD so DVDScr does not match the bare dvd pattern.
-      {"Screener", ~r/\b(?:dvd|bd|web)scr(?:eener)?\b|\bscreener\b|#{delimited("scr")}/i},
-      # The lookbehinds keep this from swallowing the `dvd` inside `PDVD` and
-      # `PreDVD`, which are Telesync tokens listed below. Without them the bare
-      # pattern matches first and a cam-tier release resolves to `DVD`, which
-      # no `excluded_sources` list rejects. Solved here rather than by moving
-      # Telesync above DVD so the "good sources before cam-tier" rule below
-      # stays true and no legitimate DVD release becomes a false positive.
-      {"DVD", ~r/(?<!p)(?<!pre)dvd/i},
-      {"Telecine", ~r/\btelecine\b|\bhd\-?tc\b|#{delimited("tc")}/i},
-      {"Telesync", ~r/\btelesync\b|\bhd\-?ts\b|\bpdvd\b|\bpredvd\b|#{delimited("ts")}/i},
-      {"CAM", ~r/\bhd\-?cam\b|\bcam\-?rip\b|\bhqcam\b|#{delimited("cam")}/i},
-      {"Workprint", ~r/\bworkprint\b|#{delimited("wp")}/i},
-      {"PDTV", ~r/pdtv/i},
-      # Scene WEB releases are untouched streaming downloads, which is what
-      # WEB-DL names. A bare `web` is also an ordinary title word, so this sits
-      # last: an explicit cam-tier token anywhere in the name still wins.
-      {"WEB-DL", ~r/\bweb\b/i}
-    ]
-  end
-
-  # Requires a dot, space, or bracket on both sides of the token. This excludes
-  # the hyphenated release-group position (`x264-TS`) and the start of the
-  # string (`Ts.Madison`), both of which plain \b would match.
-  defp delimited(token), do: "(?<=[.\\s\\[])#{token}(?=[.\\s\\]]|$)"
 end

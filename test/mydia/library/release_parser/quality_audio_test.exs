@@ -28,6 +28,11 @@ defmodule Mydia.Library.ReleaseParser.QualityAudioTest do
     assert audio("Fake.Show.S01E01.1080p.WEB-DL.E-AC3.H.264-GRP") == "DD+"
   end
 
+  test "lossy web codecs" do
+    assert audio("Fake.Movie.2020.1080p.WEBRip.VP9.Vorbis-GRP") == "Vorbis"
+    assert audio("Fake.Movie.2020.1080p.WEBRip.VP9.Opus-GRP") == "Opus"
+  end
+
   test "HDTS is not DTS audio" do
     assert audio("Fake.Movie.2020.HDTS.x264-GRP") == nil
   end

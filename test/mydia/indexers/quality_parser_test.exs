@@ -2,6 +2,7 @@ defmodule Mydia.Indexers.QualityParserTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Indexers.QualityParser
+  alias Mydia.Library.ReleaseParser
   alias Mydia.Library.Structs.Quality
 
   describe "parse/1" do
@@ -61,30 +62,26 @@ defmodule Mydia.Indexers.QualityParserTest do
     end
   end
 
-  describe "extract_resolution/1" do
-    test "extracts 2160p resolution" do
-      assert QualityParser.extract_resolution("Movie.2160p.BluRay") == "2160p"
-      assert QualityParser.extract_resolution("Movie.4K.BluRay") == "2160p"
+  describe "parse/1 delegates to ReleaseParser" do
+    for title <- [
+          "Fake.Movie.2020.1080p.BluRay.x264-GRP",
+          "Fake.Show.S01E01.PROPER.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-GRP",
+          "Fake.Movie.2020.HDTS.x264-GRP",
+          "Some.Web.Show.2024.1080p.x264-GRP"
+        ] do
+      test "matches ReleaseParser for #{title}" do
+        assert QualityParser.parse(unquote(title)) ==
+                 ReleaseParser.parse(unquote(title)).quality
+      end
     end
 
-    test "extracts 1080p resolution" do
-      assert QualityParser.extract_resolution("Movie.1080p.BluRay") == "1080p"
-    end
+    test "a slash in an indexer title is not a path separator" do
+      # ReleaseParser takes Path.basename of its input, so a "/" would drop
+      # every quality token before it.
+      quality = QualityParser.parse("Fake.Movie.2020.2160p.BluRay/x265-GRP")
 
-    test "extracts 720p resolution" do
-      assert QualityParser.extract_resolution("Movie.720p.WEB-DL") == "720p"
-    end
-
-    test "extracts 480p resolution" do
-      assert QualityParser.extract_resolution("Movie.480p.DVDRip") == "480p"
-    end
-
-    test "returns nil when no resolution found" do
-      assert QualityParser.extract_resolution("Movie.BluRay.x264") == nil
-    end
-
-    test "is case insensitive" do
-      assert QualityParser.extract_resolution("MOVIE.1080P.BLURAY") == "1080p"
+      assert {quality.resolution, quality.source, quality.codec} ==
+               {"2160p", "BluRay", "x265"}
     end
   end
 
@@ -113,203 +110,6 @@ defmodule Mydia.Indexers.QualityParserTest do
       # media_import.ex feeds parse/1 into FileNamer. A resolution invented
       # here would be written into the filename on disk.
       assert QualityParser.parse("Movie.BluRay.x264").resolution == nil
-    end
-  end
-
-  describe "extract_source/1" do
-    test "extracts BluRay source" do
-      assert QualityParser.extract_source("Movie.1080p.BluRay.x264") == "BluRay"
-      assert QualityParser.extract_source("Movie.1080p.Blu-Ray.x264") == "BluRay"
-      assert QualityParser.extract_source("Movie.1080p.BDRip.x264") == "BluRay"
-      assert QualityParser.extract_source("Movie.1080p.BRRip.x264") == "BluRay"
-    end
-
-    test "extracts WEB-DL source" do
-      assert QualityParser.extract_source("Movie.1080p.WEB-DL.x264") == "WEB-DL"
-      assert QualityParser.extract_source("Movie.1080p.WEBDL.x264") == "WEB-DL"
-    end
-
-    test "extracts WEBRip source" do
-      assert QualityParser.extract_source("Movie.1080p.WEBRip.x264") == "WEBRip"
-      assert QualityParser.extract_source("Movie.1080p.WEB-Rip.x264") == "WEBRip"
-    end
-
-    test "extracts HDTV source" do
-      assert QualityParser.extract_source("Show.S01E01.HDTV.x264") == "HDTV"
-    end
-
-    test "extracts DVDRip source" do
-      assert QualityParser.extract_source("Movie.DVDRip.x264") == "DVDRip"
-    end
-
-    test "returns nil when no source found" do
-      assert QualityParser.extract_source("Movie.1080p.x264") == nil
-    end
-
-    test "is case insensitive" do
-      assert QualityParser.extract_source("MOVIE.BLURAY.X264") == "BluRay"
-    end
-  end
-
-  describe "extract_codec/1" do
-    test "extracts x264 codec" do
-      assert QualityParser.extract_codec("Movie.1080p.BluRay.x264") == "x264"
-      assert QualityParser.extract_codec("Movie.1080p.BluRay.x.264") == "x264"
-    end
-
-    test "extracts x265 codec" do
-      assert QualityParser.extract_codec("Movie.2160p.WEB-DL.x265") == "x265"
-      assert QualityParser.extract_codec("Movie.2160p.WEB-DL.HEVC") == "x265"
-    end
-
-    test "extracts H.264 codec" do
-      assert QualityParser.extract_codec("Movie.1080p.BluRay.H.264") == "H.264"
-      assert QualityParser.extract_codec("Movie.1080p.BluRay.AVC") == "H.264"
-    end
-
-    test "extracts H.265 codec" do
-      assert QualityParser.extract_codec("Movie.2160p.WEB-DL.H.265") == "H.265"
-    end
-
-    # Indexers often drop the dot (H264) or replace every dot with a space
-    # (H 264), which left these releases with no codec at all.
-    test "extracts H.264 and H.265 written without a dot or with a space" do
-      assert QualityParser.extract_codec("Movie.1080p.WEB.H264-GRP") == "H.264"
-      assert QualityParser.extract_codec("Movie.1080p.WEB.h264-GRP") == "H.264"
-      assert QualityParser.extract_codec("Movie 1080p WEB-DL DDP5 1 H 264-GRP") == "H.264"
-      assert QualityParser.extract_codec("Movie.2160p.WEB.H265-GRP") == "H.265"
-      assert QualityParser.extract_codec("Movie 2160p WEB-DL DDP5 1 H 265-GRP") == "H.265"
-    end
-
-    test "extracts x264 and x265 written with a space" do
-      assert QualityParser.extract_codec("Movie 1080p BluRay x 264-GRP") == "x264"
-      assert QualityParser.extract_codec("Movie 2160p BluRay x 265-GRP") == "x265"
-    end
-
-    test "extracts other codecs" do
-      assert QualityParser.extract_codec("Movie.XviD") == "XviD"
-      assert QualityParser.extract_codec("Movie.DivX") == "DivX"
-      assert QualityParser.extract_codec("Movie.VP9") == "VP9"
-      assert QualityParser.extract_codec("Movie.AV1") == "AV1"
-    end
-
-    test "returns nil when no codec found" do
-      assert QualityParser.extract_codec("Movie.1080p.BluRay") == nil
-    end
-
-    test "is case insensitive" do
-      assert QualityParser.extract_codec("MOVIE.X264") == "x264"
-    end
-  end
-
-  describe "extract_audio/1" do
-    test "extracts DTS audio" do
-      assert QualityParser.extract_audio("Movie.1080p.BluRay.DTS") == "DTS"
-    end
-
-    test "extracts DTS-HD audio" do
-      assert QualityParser.extract_audio("Movie.1080p.BluRay.DTS-HD") == "DTS-HD"
-    end
-
-    test "extracts TrueHD audio" do
-      assert QualityParser.extract_audio("Movie.1080p.BluRay.TrueHD") == "TrueHD"
-    end
-
-    test "extracts AAC audio" do
-      assert QualityParser.extract_audio("Movie.1080p.WEB-DL.AAC") == "AAC"
-    end
-
-    test "extracts AC3 audio" do
-      assert QualityParser.extract_audio("Movie.1080p.BluRay.AC3") == "AC3"
-      # DD5.1 is detected as AC3 (Dolby Digital)
-      assert QualityParser.extract_audio("Movie.1080p.BluRay.DD5.1") == "AC3"
-    end
-
-    test "extracts DD+ (Dolby Digital Plus) audio" do
-      assert QualityParser.extract_audio("Movie.1080p.WEB-DL.DDP5.1") == "DD+"
-      assert QualityParser.extract_audio("Movie.1080p.WEB-DL.DD+") == "DD+"
-      assert QualityParser.extract_audio("Movie.1080p.WEB-DL.E-AC3") == "DD+"
-    end
-
-    test "extracts TrueHD Atmos audio" do
-      # TrueHD Atmos is a specific lossless format with object audio
-      assert QualityParser.extract_audio("Movie.TrueHD.Atmos") == "TrueHD Atmos"
-      assert QualityParser.extract_audio("Movie.TrueHD.7.1.Atmos") == "TrueHD Atmos"
-    end
-
-    test "extracts DTS-HD MA audio" do
-      assert QualityParser.extract_audio("Movie.DTS-HD.MA.5.1") == "DTS-HD MA"
-      assert QualityParser.extract_audio("Movie.DTS-HD.MA") == "DTS-HD MA"
-    end
-
-    test "extracts other audio codecs" do
-      assert QualityParser.extract_audio("Movie.MP3") == "MP3"
-      assert QualityParser.extract_audio("Movie.FLAC") == "FLAC"
-      assert QualityParser.extract_audio("Movie.Opus") == "Opus"
-      # Note: Plain "Atmos" without TrueHD is ambiguous - DD+ Atmos is still DD+
-    end
-
-    test "returns nil when no audio codec found" do
-      assert QualityParser.extract_audio("Movie.1080p.BluRay.x264") == nil
-    end
-
-    test "is case insensitive" do
-      assert QualityParser.extract_audio("MOVIE.DTS") == "DTS"
-    end
-  end
-
-  describe "has_hdr?/1" do
-    test "detects HDR in title" do
-      assert QualityParser.has_hdr?("Movie.2160p.WEB-DL.HDR.x265")
-    end
-
-    test "detects Dolby Vision" do
-      assert QualityParser.has_hdr?("Movie.2160p.WEB-DL.Dolby-Vision.x265")
-      assert QualityParser.has_hdr?("Movie.2160p.WEB-DL.DV.x265")
-    end
-
-    test "returns false when no HDR" do
-      refute QualityParser.has_hdr?("Movie.1080p.BluRay.x264")
-    end
-
-    test "is case insensitive" do
-      assert QualityParser.has_hdr?("MOVIE.HDR.X265")
-    end
-  end
-
-  describe "has_proper?/1" do
-    test "detects PROPER tag" do
-      assert QualityParser.has_proper?("Movie.PROPER.1080p.BluRay")
-    end
-
-    test "returns false when no PROPER tag" do
-      refute QualityParser.has_proper?("Movie.1080p.BluRay")
-    end
-
-    test "is case insensitive" do
-      assert QualityParser.has_proper?("movie.proper.1080p")
-    end
-
-    test "only matches whole word PROPER" do
-      refute QualityParser.has_proper?("Movie.Improperly.Named")
-    end
-  end
-
-  describe "has_repack?/1" do
-    test "detects REPACK tag" do
-      assert QualityParser.has_repack?("Movie.REPACK.1080p.BluRay")
-    end
-
-    test "returns false when no REPACK tag" do
-      refute QualityParser.has_repack?("Movie.1080p.BluRay")
-    end
-
-    test "is case insensitive" do
-      assert QualityParser.has_repack?("movie.repack.1080p")
-    end
-
-    test "only matches whole word REPACK" do
-      refute QualityParser.has_repack?("Movie.Repacker.Name")
     end
   end
 
@@ -427,6 +227,44 @@ defmodule Mydia.Indexers.QualityParserTest do
       score = QualityParser.quality_score(quality)
       assert score < 500
     end
+
+    test "scores PDTV with SDTV and Workprint with CAM" do
+      base = Quality.new(resolution: "480p", codec: "XviD")
+
+      assert QualityParser.quality_score(%{base | source: "PDTV"}) ==
+               QualityParser.quality_score(%{base | source: "SDTV"})
+
+      assert QualityParser.quality_score(%{base | source: "Workprint"}) ==
+               QualityParser.quality_score(%{base | source: "CAM"})
+    end
+  end
+
+  describe "quality_score/1 with channel-carrying audio" do
+    test "channels do not change the audio tier" do
+      base = Quality.new(resolution: "1080p", source: "WEB-DL", codec: "x264")
+
+      assert QualityParser.quality_score(%{base | audio: "DD+ 5.1"}) ==
+               QualityParser.quality_score(%{base | audio: "DD+"})
+
+      assert QualityParser.quality_score(%{base | audio: "TrueHD Atmos 7.1"}) -
+               QualityParser.quality_score(base) == 200
+    end
+
+    test "every tier keeps its score with channels attached" do
+      base = Quality.new(resolution: "1080p", source: "BluRay", codec: "x264")
+      score = &QualityParser.quality_score(%{base | audio: &1})
+
+      for codec <- ["TrueHD", "DTS-HD MA", "DTS-HD", "DTS:X", "DTS", "AC3", "AAC", "FLAC"] do
+        assert score.(codec <> " 5.1") == score.(codec), "#{codec} 5.1 scored off-tier"
+      end
+    end
+
+    test "a bare Atmos label scores no audio tier" do
+      base = Quality.new(resolution: "1080p", source: "WEB-DL", codec: "x264")
+
+      assert QualityParser.quality_score(%{base | audio: "Atmos"}) ==
+               QualityParser.quality_score(base)
+    end
   end
 
   describe "real world examples" do
@@ -437,7 +275,7 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert quality.resolution == "1080p"
       assert quality.source == "BluRay"
       assert quality.codec == "x264"
-      assert quality.audio == "DTS-HD MA"
+      assert quality.audio == "DTS-HD MA 5.1"
       assert quality.hdr_format == nil
       refute quality.dolby_vision
     end
@@ -450,7 +288,7 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert quality.resolution == "2160p"
       assert quality.source == "WEB-DL"
       assert quality.codec == "H.265"
-      assert quality.audio == "DD+"
+      assert quality.audio == "DD+ 5.1"
       assert quality.dolby_vision
       assert quality.hdr_format == :hdr10
     end
@@ -461,8 +299,8 @@ defmodule Mydia.Indexers.QualityParserTest do
 
       assert quality.resolution == "2160p"
       assert quality.source == "REMUX"
-      assert quality.codec == "x265"
-      assert quality.audio == "TrueHD Atmos"
+      assert quality.codec == "H.265"
+      assert quality.audio == "TrueHD Atmos 7.1"
       assert quality.dolby_vision
       assert quality.hdr_format == :hdr10
     end
@@ -494,32 +332,7 @@ defmodule Mydia.Indexers.QualityParserTest do
       assert quality.resolution == "2160p"
       assert quality.source == "BluRay"
       assert quality.hdr_format == :hdr10_plus
-      assert quality.audio == "DTS-HD MA"
-    end
-  end
-
-  describe "extract_source/1 regression: unanchored short tokens" do
-    test "ordinary words containing cam-tier letter pairs are not cam-tier" do
-      alias Mydia.Quality.Sources
-
-      for title <- [
-            "Ghosts.of.Mars.2001.1080p.x264-GRP",
-            "The.Watchmen.2009.2160p.HDR.x265",
-            "Scream.VI.2023.1080p.x265-RARBG",
-            "Cameron.Diaz.Doc.2020.1080p.x264",
-            "Lights.Out.2016.1080p.x264"
-          ] do
-        refute Sources.cam_tier?(QualityParser.extract_source(title)),
-               "#{title} must not be classified cam-tier"
-      end
-    end
-
-    test "real telesync releases are still detected" do
-      assert QualityParser.extract_source("The.Odyssey.2026.1080p.TELESYNC.HEVC.AAC2.0") ==
-               "Telesync"
-
-      assert QualityParser.extract_source("Movie.2026.HDTS.x264") == "Telesync"
-      assert QualityParser.extract_source("Movie.2026.HDCAM.x264") == "CAM"
+      assert quality.audio == "DTS-HD MA 5.1"
     end
   end
 
@@ -536,34 +349,6 @@ defmodule Mydia.Indexers.QualityParserTest do
 
     test "HDR10+ maps to :hdr10_plus" do
       assert QualityParser.parse("Movie.2024.2160p.HDR10+.x265").hdr_format == :hdr10_plus
-    end
-
-    test "separator-form HDR10+ labels map to :hdr10_plus too" do
-      # REGRESSION: the token regex spelled the suffix `hdr10\+|hdr10plus`,
-      # with no separator allowed between the two halves. Alternation is
-      # leftmost-first, so "HDR10.PLUS" matched the bare `hdr10` alternative,
-      # the trailing "PLUS" matched nothing at all, and the release scored as
-      # HDR10 - a tier below what it actually carries. The real corpus in
-      # release_ranker_trash_guide_integration_test.exs holds one of these
-      # ("1917.2019.2160p.REMUX.Dolby.Vision.And.HDR10.PLUS...").
-      for title <- [
-            "Movie.2024.2160p.HDR10.PLUS.x265",
-            "Movie.2024.2160p.HDR10-PLUS.x265",
-            "Movie.2024.2160p.HDR10_PLUS.x265",
-            "Movie 2024 2160p HDR10 PLUS x265",
-            "Movie.2024.2160p.HDR10PLUS.x265"
-          ] do
-        assert QualityParser.parse(title).hdr_format == :hdr10_plus,
-               "expected :hdr10_plus for #{title}"
-      end
-    end
-
-    test "the first base token wins when a title carries two distinct bases" do
-      # A bare HDR token (:hdr10) precedes an HDR10+ token here; extract_hdr/1
-      # must keep the first base found, not the last, or a release that opens
-      # with a weaker HDR claim would silently overwrite a stronger one found
-      # later (or vice versa) depending on token order alone.
-      assert QualityParser.extract_hdr("Movie.2024.2160p.HDR.HDR10+.x265") == {:hdr10, false}
     end
 
     test "an SDR release has neither" do

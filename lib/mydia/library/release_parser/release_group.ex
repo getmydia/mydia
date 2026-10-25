@@ -221,7 +221,7 @@ defmodule Mydia.Library.ReleaseParser.ReleaseGroup do
                             web bluray bdrip brrip webrip webdl hdtv dvd dvdrip dvdscr
                             remux hdr hdr10 hdr10+ dolbyvision dovi dv
                             atmos dts dts-x dts-hd truehd aac ac3 dd ddp eac3
-                            hevc avc xvid divx vp9 av1 nvenc opus flac mp3
+                            hevc avc xvid divx vp9 av1 nvenc opus vorbis flac mp3
                             x264 x265 h264 h265
                             proper repack internal limited unrated extended theatrical hybrid
                             amzn nf atvp dsnp hmax hulu pmtp pcok stan

@@ -58,12 +58,15 @@ defmodule Mydia.Indexers.SearchResult do
         resolution: "1080p" | "720p" | "2160p" | "480p" | nil,
         source: "BluRay" | "WEB-DL" | "WEBRip" | "HDTV" | nil,
         codec: "x264" | "x265" | "H.264" | "H.265" | nil,
-        audio: "AAC" | "AC3" | "DTS" | "TrueHD" | nil,
+        audio: "DD+ 5.1" | "TrueHD Atmos 7.1" | "AAC" | nil,
         hdr_format: :hdr10 | :hdr10_plus | :hlg | nil,
         dolby_vision: true | false,
         proper: true | false,
         repack: true | false
       }
+
+  `audio` is the parser's canonical codec label, followed by the channel
+  layout when the title gives one (for example `"DD+ 5.1"`).
 
   ## Examples
 

@@ -28,6 +28,11 @@ defmodule Mydia.Library.ReleaseParser.QualitySourceTest do
     assert source("Some.Web.Show.2024.1080p.x264-GRP") == nil
     assert source("The.Cam.Story.2020.1080p.BluRay.x264-GRP") == "BluRay"
 
+    # cam-tier letters inside ordinary words ("ghoSTS", "waTChmaker",
+    # "sCAMpers") once read as Telesync, Telecine and CAM
+    assert source("Fake.Ghosts.of.Lights.2020.1080p.x264-GRP") == nil
+    assert source("The.Watchmaker.Scampers.2020.2160p.HDR.x265-GRP") == nil
+
     parsed = ReleaseParser.parse("The.Screener.2020.1080p.x264-GRP")
     assert parsed.quality.source == nil
     assert parsed.title == "The Screener"

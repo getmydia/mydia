@@ -34,6 +34,8 @@ defmodule Mydia.Library.ReleaseParser.QualityHdrTest do
 
     assert hdr("Fake.Movie.2020.2160p.WEB-DL.DV.HDR10.PLUS.H.265-GRP") == {:hdr10_plus, true}
     assert hdr("Fake.Movie.2020.2160p.WEB-DL.HDR10-PLUS.H.265-GRP") == {:hdr10_plus, false}
+    assert hdr("Fake.Movie.2020.2160p.WEB-DL.HDR10_PLUS.H.265-GRP") == {:hdr10_plus, false}
+    assert hdr("Fake.Movie.2020.2160p.WEB-DL.HDR10PLUS.H.265-GRP") == {:hdr10_plus, false}
     assert hdr("Fake Movie 2020 [HEVC, HDR10, Dolby Vision, WEB-DL 2160p]") == {:hdr10, true}
     assert hdr("Fake Movie 2020 2160p WEB-DL (HDR10, DV) H 265-GRP") == {:hdr10, true}
   end

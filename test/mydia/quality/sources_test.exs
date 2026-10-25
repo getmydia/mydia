@@ -7,38 +7,39 @@ defmodule Mydia.Quality.SourcesTest do
   # failure modes of the old unanchored patterns plus legitimate controls.
   @never_cam_tier [
     # substring matches inside ordinary words
-    "Ghosts.of.Mars.2001.1080p.x264-GRP",
-    "The.Watchmen.2009.2160p.HDR.x265",
-    "Dutch.1991.1080p.x264",
-    "Scream.VI.2023.1080p.x265-RARBG",
-    "Cameron.Diaz.Doc.2020.1080p.x264",
-    "Kitchen.Nightmares.S01E01.1080p.x264",
-    "Lights.Out.2016.1080p.x264",
+    "Ghosts.of.Pellmar.2001.1080p.x264-GRP",
+    "The.Watchmen.of.Orvale.2009.2160p.HDR.x265",
+    "Dutch.Harbor.Blues.1991.1080p.x264",
+    "Scream.Hollow.2023.1080p.x265-GRP",
+    "Cameron.Vale.Doc.2020.1080p.x264",
+    "Kitchen.Quarrels.S01E01.1080p.x264",
+    "Lights.Below.Ferrin.2016.1080p.x264",
     # release-group suffixes in the hyphenated position
     "Some.Movie.2020.1080p.x264-WP",
     "Some.Movie.2020.1080p.x264-TS",
     "Some.Movie.2020.1080p.x264-TC",
     "Some.Movie.2020.2160p.HDR.DV.x265-SCR",
     # title-initial token
-    "Ts.Madison.Show.2021.1080p.x264",
+    "Ts.Marlow.Show.2021.1080p.x264",
     # legitimate releases with explicit good sources
-    "The.Matrix.1999.1080p.BluRay.x264",
-    "Interstellar.2014.2160p.WEB-DL.x265",
-    "Hitchcock.2012.1080p.WEBRip.x264",
+    "The.Lattice.1999.1080p.BluRay.x264",
+    "Starward.2014.2160p.WEB-DL.x265",
+    "Hatchcroft.2012.1080p.WEBRip.x264",
     "Descriptions.2020.720p.HDTV.x264",
     # legitimate releases with no source token at all
-    "WALL-E.2008.1080p.x264",
-    "Wonka.2023.1080p.x264",
-    "The.Big.Short.2015.1080p.x264",
-    "Doctor.Who.2005.S01E01.1080p.x264"
+    "KRANE-O.2008.1080p.x264",
+    "Wonlo.2023.1080p.x264",
+    "The.Tall.Shorts.2015.1080p.x264",
+    "Doctor.Quill.2005.S01E01.1080p.x264"
   ]
 
-  # Titles that must ALWAYS be classified cam-tier. The first three are real
-  # releases grabbed by the production instance on 2026-08-04.
+  # Titles that must ALWAYS be classified cam-tier. The first three copy the
+  # shape of releases the production instance grabbed on 2026-08-04, with the
+  # titles replaced.
   @always_cam_tier [
-    "The.Odyssey.2026.1080p.TELESYNC.HEVC.10bit.AAC2.0-SLH.mkv",
-    "The Odyssey (2026) 1080p HQ HDTS - x264 - [Tel + Tam + Hin + Eng] - HQ Clean - 3.3GB.mkv",
-    "Spider Man.Brand.New.Day.2026.1080p.TELESYNC.x264-DKS",
+    "The.Wayfarer.2026.1080p.TELESYNC.HEVC.10bit.AAC2.0-SLH.mkv",
+    "The Wayfarer (2026) 1080p HQ HDTS - x264 - [Tel + Tam + Hin + Eng] - HQ Clean - 3.3GB.mkv",
+    "Lantern Man.Bright.New.Hour.2026.1080p.TELESYNC.x264-DKS",
     "Movie.2026.TS.x264-GRP",
     "Movie.2026.HDCAM.x264",
     "Movie.2026.CAMRip.XviD",
@@ -47,14 +48,14 @@ defmodule Mydia.Quality.SourcesTest do
     "Movie.2026.WORKPRINT.x264",
     "Movie 2026 CAM x264",
     "Movie.2026.TC.x264-GRP",
-    "Odyseja - The Odyssey 2026 [HGL HDR SDR] [1080p.TELESYNC.H264-AS76-FT] [ENG-Lektor PL AI] [Alusia]",
-    # Real releases the production instance grabbed automatically on
-    # 2026-08-12 and 2026-08-26. Both resolved to "DVD" because the bare `dvd`
-    # pattern claimed the `dvd` inside `PreDVD` before the Telesync entry that
-    # carries \bpredvd\b was ever tried, so no excluded_sources list rejected
-    # them and each became its movie's only copy.
-    "www.1TamilMV.top - Spider-Man Brand New Day (2026) HQ PreDVD - 1080p - x264 - [Tam + Tel + Hin + Eng] - HQ Clean - 5GB",
-    "www.1TamilMV.ing - Insidious Out of the Further (2026) HQ PreDVD - 1080p - x264 - [Tam + Hin + Eng] - HQ Clean - AAC - 2GB",
+    "Wedrowiec - The Wayfarer 2026 [HGL HDR SDR] [1080p.TELESYNC.H264-AS76-FT] [ENG-Lektor PL AI] [Alusia]",
+    # The shape of releases the production instance grabbed automatically on
+    # 2026-08-12 and 2026-08-26, titles replaced. Both once resolved to "DVD"
+    # because a bare `dvd` pattern claimed the `dvd` inside `PreDVD`, so no
+    # excluded_sources list rejected them and each became its movie's only
+    # copy.
+    "www.1TamilMV.top - Lantern-Man Bright New Hour (2026) HQ PreDVD - 1080p - x264 - [Tam + Tel + Hin + Eng] - HQ Clean - 5GB",
+    "www.1TamilMV.ing - Hollowed Out of the Deeper (2026) HQ PreDVD - 1080p - x264 - [Tam + Hin + Eng] - HQ Clean - AAC - 2GB",
     "Movie.2026.1080p.PreDVD.x264",
     "Movie.2026.1080p.PDVD.x264",
     "Movie 2026 HQ PreDVD 1080p x264"
@@ -102,22 +103,22 @@ defmodule Mydia.Quality.SourcesTest do
     end
   end
 
-  describe "detect/1 - load-bearing table properties" do
-    test "Screener is checked before DVD so DVDScr does not resolve DVD" do
+  describe "detect/1 - overlapping tokens" do
+    test "DVDScr resolves Screener, not DVD" do
       assert Sources.detect("Movie.2026.DVDScr.x264") == "Screener"
     end
 
-    test "first-wins keeps an explicit good source ahead of a group suffix" do
+    test "an explicit good source wins over a group suffix" do
       assert Sources.detect("Movie.2026.1080p.BluRay.x264-TS") == "BluRay"
     end
 
-    test "PDVD and PreDVD resolve Telesync, not the bare DVD pattern" do
+    test "PDVD and PreDVD resolve Telesync, not DVD" do
       assert Sources.detect("Movie.2026.1080p.PDVD.x264") == "Telesync"
       assert Sources.detect("Movie.2026.1080p.PreDVD.x264") == "Telesync"
       assert Sources.detect("Movie 2026 HQ PreDVD - 1080p - x264") == "Telesync"
     end
 
-    test "the DVD lookbehinds do not cost a real DVD release its source" do
+    test "a real DVD release keeps its source" do
       assert Sources.detect("Movie.2026.DVD.x264") == "DVD"
       assert Sources.detect("Movie 2026 DVD x264") == "DVD"
       assert Sources.detect("Movie.2026.DVD5.x264") == "DVD"
@@ -143,8 +144,8 @@ defmodule Mydia.Quality.SourcesTest do
     end
 
     test "a WEB title word never outranks a cam-tier token" do
-      assert Sources.detect("Tangled.Web.2026.1080p.TELESYNC.x264") == "Telesync"
-      assert Sources.detect("Tangled.Web.2026.CAM.x264") == "CAM"
+      assert Sources.detect("Copper.Web.2026.1080p.TELESYNC.x264") == "Telesync"
+      assert Sources.detect("Copper.Web.2026.CAM.x264") == "CAM"
     end
 
     test "WEB inside a longer word is not a source" do
@@ -155,11 +156,26 @@ defmodule Mydia.Quality.SourcesTest do
     test "returns nil when no source token is present" do
       assert Sources.detect("Movie.2026.1080p.x264") == nil
     end
+
+    test "returns nil for a nil title" do
+      assert Sources.detect(nil) == nil
+    end
+
+    test "a cam word in an episode title is not a source" do
+      assert Sources.detect("Fake.Show.S02E03.Cam.and.Friends.1080p.x264-GRP") == nil
+    end
+
+    test "agrees with QualityParser on a title carrying a slash" do
+      title = "Movie 2026 1080p / BluRay / x264"
+
+      assert Sources.detect(title) == "BluRay"
+      assert Sources.detect(title) == Mydia.Indexers.QualityParser.parse(title).source
+    end
   end
 
   describe "detect/1 - on-disk relative paths" do
     test "detects cam-tier releases already sitting in the library" do
-      # The real file the production instance imported on 2026-08-04.
+      # The shape of the file the production instance imported on 2026-08-04.
       path =
         "Starfall Requiem (2026)/Starfall Requiem (2026) 1080p HQ HDTS - x264 - [Tel + Tam + Hin + Eng] - HQ Clean - 3.3GB.mkv"
 
@@ -181,6 +197,26 @@ defmodule Mydia.Quality.SourcesTest do
   end
 
   describe "all/0" do
+    test "lists the source vocabulary in display order" do
+      # The manual-search Source filter lists its options in this order.
+      assert Sources.all() == [
+               "REMUX",
+               "BluRay",
+               "WEB-DL",
+               "WEBRip",
+               "HDTV",
+               "SDTV",
+               "DVDRip",
+               "Screener",
+               "DVD",
+               "Telecine",
+               "Telesync",
+               "CAM",
+               "Workprint",
+               "PDTV"
+             ]
+    end
+
     test "includes every cam-tier label" do
       for label <- Sources.cam_tier() do
         assert label in Sources.all()

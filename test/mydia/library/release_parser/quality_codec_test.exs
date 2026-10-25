@@ -21,6 +21,11 @@ defmodule Mydia.Library.ReleaseParser.QualityCodecTest do
              "H.264"
   end
 
+  test "space-separated x 264 and x 265" do
+    assert ReleaseParser.parse("Fake Movie 2020 1080p BluRay x 264-GRP").quality.codec == "x264"
+    assert ReleaseParser.parse("Fake Movie 2020 2160p BluRay x 265-GRP").quality.codec == "x265"
+  end
+
   test "a reposter's tag after the group is not the group" do
     parsed = ReleaseParser.parse("Fake.Show.S01E01.720p.HDTV.x264-GRP-RP")
     assert parsed.quality.codec == "x264"

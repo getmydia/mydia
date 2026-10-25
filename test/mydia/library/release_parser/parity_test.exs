@@ -783,7 +783,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 1
       assert result.episodes == [5]
       assert result.quality.resolution == "1080p"
-      # REMUX outranks the other source tokens, as in `Mydia.Quality.Sources`.
+      # REMUX outranks the other source tokens.
       assert result.quality.source == "REMUX"
       assert result.quality.audio == "DD+ 5.1"
       assert result.quality.codec == "H.264"
