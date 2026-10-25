@@ -199,5 +199,7 @@
   "loginErrorInvalidCode": "Código inválido",
   "loginErrorSignInExpired": "O login expirou, tente novamente",
   "loginErrorTooManyAttempts": "Muitas tentativas de login. Tente novamente mais tarde.",
-  "calendarMovie": "Filme"
+  "calendarMovie": "Filme",
+  "freshnessStaleBanner": "Mostrando sua biblioteca de {time}.",
+  "freshnessFailedBanner": "Não foi possível conectar ao seu servidor. Mostrando sua biblioteca de {time}."
 }

@@ -739,5 +739,15 @@
   "loginErrorTooManyAttempts": "Too many login attempts. Please try again later.",
   "@loginErrorTooManyAttempts": {"description": "Error shown when the server is rate limiting sign-in attempts."},
   "calendarMovie": "Movie",
-  "@calendarMovie": {"description": "Label on a calendar entry that is a movie, where an episode would show its season and episode code such as S02E05."}
+  "@calendarMovie": {"description": "Label on a calendar entry that is a movie, where an episode would show its season and episode code such as S02E05."},
+  "freshnessStaleBanner": "Showing your library from {time}.",
+  "@freshnessStaleBanner": {
+    "description": "Banner above a screen when its data is old: the library shown was last fetched at the given time. {time} is a relative time such as '3 hours ago'.",
+    "placeholders": {"time": {"type": "String"}}
+  },
+  "freshnessFailedBanner": "Couldn't reach your server. Showing your library from {time}.",
+  "@freshnessFailedBanner": {
+    "description": "Banner above a screen when refreshing failed because the server is unreachable: the library shown was last fetched at the given time. {time} is a relative time such as '3 hours ago'.",
+    "placeholders": {"time": {"type": "String"}}
+  }
 }

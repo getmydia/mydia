@@ -137,10 +137,11 @@ class _FreshnessBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final relative = context.l10n.relativeTime(fetchedAt);
+    final l10n = context.l10n;
+    final relative = l10n.relativeTime(fetchedAt);
     final message = failed
-        ? "Couldn't reach your server. Showing your library from $relative."
-        : 'Showing your library from $relative.';
+        ? l10n.freshnessFailedBanner(relative)
+        : l10n.freshnessStaleBanner(relative);
 
     return Container(
       width: double.infinity,
@@ -187,7 +188,7 @@ class _FreshnessBanner extends StatelessWidget {
               ),
             ),
             child: Text(
-              failed ? 'Retry' : 'Refresh',
+              failed ? l10n.commonRetry : l10n.commonRefresh,
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,

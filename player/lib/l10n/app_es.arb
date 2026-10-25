@@ -199,5 +199,7 @@
   "loginErrorInvalidCode": "Código no válido",
   "loginErrorSignInExpired": "El inicio de sesión ha caducado, inténtalo de nuevo",
   "loginErrorTooManyAttempts": "Demasiados intentos de inicio de sesión. Inténtalo de nuevo más tarde.",
-  "calendarMovie": "Película"
+  "calendarMovie": "Película",
+  "freshnessStaleBanner": "Mostrando tu biblioteca de {time}.",
+  "freshnessFailedBanner": "No se pudo conectar con tu servidor. Mostrando tu biblioteca de {time}."
 }
