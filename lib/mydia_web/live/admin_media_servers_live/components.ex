@@ -39,20 +39,21 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
         />
       </:row>
       <:empty>
-        <span class="block font-semibold">No media servers connected</span>
+        <span class="block font-semibold">{gettext("No media servers connected")}</span>
         <span class="block mt-1">
-          Connect a server, or add one from the Add server menu, and Mydia
-          refreshes its library as soon as an import finishes, so new episodes show up
-          without waiting for the server's next scheduled scan. Both also sync watched
-          status in both directions, mapped separately for each account on the server
-          so nobody inherits anyone else's history.
+          {gettext(
+            "Connect a server, or add one from the Add server menu, and Mydia refreshes its library as soon as an import finishes, so new episodes show up without waiting for the server's next scheduled scan."
+          )}
+          {gettext(
+            "Both also sync watched status in both directions, mapped separately for each account on the server so nobody inherits anyone else's history."
+          )}
         </span>
         <button
           id="media-servers-empty-cta"
           class="btn btn-sm btn-primary mt-3"
           phx-click="new_media_server"
         >
-          <.icon name="hero-plus" class="w-4 h-4" /> Connect a server
+          <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Connect a server")}
         </button>
       </:empty>
     </.admin_list>
@@ -60,7 +61,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     <.admin_section
       :if={@plugin_instances != []}
       id="plugin-servers"
-      title="Plugin servers"
+      title={gettext("Plugin servers")}
       icon="hero-puzzle-piece"
       count={length(@plugin_instances)}
     >
@@ -75,7 +76,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
             links={Map.get(@plugin_instance_links, instance.id, [])}
           />
         </:row>
-        <:empty>No plugin servers.</:empty>
+        <:empty>{gettext("No plugin servers.")}</:empty>
       </.admin_list>
     </.admin_section>
     """
@@ -116,14 +117,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           {@health.error}
         </div>
         <div :if={@sync_enabled?} data-test="watched-sync-enabled">
-          Watched sync enabled
+          {gettext("Watched sync enabled")}
           <%= if @last_sync do %>
-            &middot; Last synced {@last_sync}
+            &middot; {gettext("Last synced %{time}", time: @last_sync)}
           <% end %>
         </div>
         <.last_run_lines :if={@last_run} server={@server} last_run={@last_run} />
         <div :if={@runtime?} data-test="env-config-note">
-          Configured via environment variables, read-only
+          {gettext("Configured via environment variables, read-only")}
         </div>
       </:details>
       <:badges>
@@ -132,7 +133,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           "badge badge-sm badge-outline",
           if(@server.enabled, do: "badge-success", else: "badge-ghost")
         ]}>
-          {if @server.enabled, do: "Active", else: "Inactive"}
+          {if @server.enabled,
+            do: pgettext("server status", "Active"),
+            else: pgettext("server status", "Inactive")}
         </span>
         <span
           role="img"
@@ -143,10 +146,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           {health_status_label(@health.status)}
         </span>
         <span :if={@link_count > 0} class="badge badge-sm badge-outline">
-          {@link_count} {if @link_count == 1, do: "account", else: "accounts"}
+          {ngettext("%{count} account", "%{count} accounts", @link_count)}
         </span>
         <span :if={@health[:checked_at]} class="text-xs text-base-content/50">
-          Checked {format(@health.checked_at, :time, @display)}
+          {gettext("Checked %{time}", time: format(@health.checked_at, :time, @display))}
         </span>
       </:badges>
       <:actions>
@@ -154,29 +157,36 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           <%= if @sync_enabled? and @server.type == :jellyfin do %>
             <.row_action
               icon="hero-user-group"
-              title={if(@link_count > 0, do: "Accounts (#{@link_count})", else: "Accounts")}
+              title={
+                if(@link_count > 0,
+                  do: gettext("Accounts (%{count})", count: @link_count),
+                  else: gettext("Accounts")
+                )
+              }
               data-test="map-accounts"
               disabled={@runtime?}
-              disabled_reason={if(@runtime?, do: "Account mapping needs a database-managed server")}
+              disabled_reason={
+                if(@runtime?, do: gettext("Account mapping needs a database-managed server"))
+              }
               phx-click="open_account_mapping"
               phx-value-id={@server.id}
             />
             <.row_action
               icon="hero-arrow-path"
-              title="Sync now"
+              title={gettext("Sync now")}
               phx-click="sync_watched"
               phx-value-id={@server.id}
             />
           <% end %>
           <.row_action
             icon="hero-signal"
-            title="Test"
+            title={pgettext("plugin instance", "Test")}
             phx-click="test_media_server"
             phx-value-id={@server.id}
           />
           <.row_action
             icon="hero-pencil"
-            title="Edit"
+            title={gettext("Edit")}
             disabled={@runtime?}
             disabled_reason={if(@runtime?, do: env_read_only_reason())}
             phx-click="edit_media_server"
@@ -184,13 +194,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           />
           <.row_action
             icon="hero-trash"
-            title="Delete"
+            title={gettext("Delete")}
             destructive
             disabled={@runtime?}
             disabled_reason={if(@runtime?, do: env_read_only_reason())}
             phx-click="delete_media_server"
             phx-value-id={@server.id}
-            data-confirm="Are you sure you want to delete this media server?"
+            data-confirm={gettext("Are you sure you want to delete this media server?")}
           />
         </.row_actions>
       </:actions>
@@ -237,7 +247,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     ~H"""
     <div id="add-server-menu" class="dropdown dropdown-end w-full sm:w-auto">
       <div tabindex="0" role="button" class="btn btn-sm btn-primary">
-        <.icon name="hero-plus" class="w-4 h-4" /> Add server
+        <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add server")}
       </div>
       <ul
         tabindex="0"
@@ -289,10 +299,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp health_status_icon(:unknown), do: "hero-question-mark-circle"
   defp health_status_icon(:disabled), do: "hero-pause-circle"
 
-  defp health_status_label(:healthy), do: "Healthy"
-  defp health_status_label(:unhealthy), do: "Unhealthy"
-  defp health_status_label(:unknown), do: "Unknown"
-  defp health_status_label(:disabled), do: "Disabled"
+  defp health_status_label(:healthy), do: pgettext("health status", "Healthy")
+  defp health_status_label(:unhealthy), do: pgettext("health status", "Unhealthy")
+  defp health_status_label(:unknown), do: pgettext("health status", "Unknown")
+  defp health_status_label(:disabled), do: pgettext("health status", "Disabled")
 
   defp run_label(%{status: :skipped, skip_reason: reason}) when is_binary(reason) do
     skip_reason_label(reason)
@@ -301,38 +311,44 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   # A skipped run with no reason recorded still has to read as skipped. Without
   # this the clause below catches it and the badge says "Failed", which is the
   # one thing it definitely was not.
-  defp run_label(%{status: :skipped}), do: "Skipped"
+  defp run_label(%{status: :skipped}), do: gettext("Skipped")
 
   defp run_label(%{status: :ok, counts: counts}) when is_map(counts) do
     imported = Map.get(counts, "imported") || Map.get(counts, :imported) || 0
     exported = Map.get(counts, "exported") || Map.get(counts, :exported) || 0
-    "Synced #{imported} in, #{exported} out"
+    gettext("Synced %{imported} in, %{exported} out", imported: imported, exported: exported)
   end
 
-  defp run_label(%{status: :error}), do: "Failed"
-  defp run_label(_), do: "Failed"
+  defp run_label(%{status: :error}), do: pgettext("download", "Failed")
+  defp run_label(_), do: pgettext("download", "Failed")
 
   # The short badge label. sync_runs rows outlive the code that wrote them, so
   # every reason ever recorded needs a label here.
   #
   # Kept deliberately provider-neutral.
-  defp skip_reason_label("server_disabled"), do: "Server is disabled"
-  defp skip_reason_label("sync_disabled"), do: "Watched sync is off"
-  defp skip_reason_label("unsupported_provider"), do: "Watched sync not supported"
-  defp skip_reason_label("no_user_mapping"), do: "No users linked yet"
-  defp skip_reason_label("seeding_links"), do: "Linking accounts to Mydia users"
-  defp skip_reason_label("no_matching_users"), do: "Nothing new to link"
-  defp skip_reason_label("link_seeding_failed"), do: "Could not reach the server to link users"
+  defp skip_reason_label("server_disabled"), do: gettext("Server is disabled")
+  defp skip_reason_label("sync_disabled"), do: gettext("Watched sync is off")
+  defp skip_reason_label("unsupported_provider"), do: gettext("Watched sync not supported")
+  defp skip_reason_label("no_user_mapping"), do: gettext("No users linked yet")
+  defp skip_reason_label("seeding_links"), do: gettext("Linking accounts to Mydia users")
+  defp skip_reason_label("no_matching_users"), do: gettext("Nothing new to link")
+
+  defp skip_reason_label("link_seeding_failed"),
+    do: gettext("Could not reach the server to link users")
+
   # Recorded by an earlier release that could pause a single mapping. Kept
   # because sync_runs rows outlive the code that wrote them.
-  defp skip_reason_label("all_mappings_paused"), do: "Every mapping is paused"
-  defp skip_reason_label("no_token"), do: "No API token configured"
-  defp skip_reason_label("link_user_mismatch"), do: "A user mapping points at the wrong account"
-  defp skip_reason_label("link_identity_missing"), do: "A user mapping is incomplete"
-  defp skip_reason_label("link_not_found"), do: "The user mapping was deleted"
-  defp skip_reason_label("missing_user_token"), do: "A user mapping has no token"
-  defp skip_reason_label("missing_remote_user_id"), do: "A user mapping names no account"
-  defp skip_reason_label(other), do: "Skipped: #{other}"
+  defp skip_reason_label("all_mappings_paused"), do: gettext("Every mapping is paused")
+  defp skip_reason_label("no_token"), do: gettext("No API token configured")
+
+  defp skip_reason_label("link_user_mismatch"),
+    do: gettext("A user mapping points at the wrong account")
+
+  defp skip_reason_label("link_identity_missing"), do: gettext("A user mapping is incomplete")
+  defp skip_reason_label("link_not_found"), do: gettext("The user mapping was deleted")
+  defp skip_reason_label("missing_user_token"), do: gettext("A user mapping has no token")
+  defp skip_reason_label("missing_remote_user_id"), do: gettext("A user mapping names no account")
+  defp skip_reason_label(other), do: gettext("Skipped: %{reason}", reason: other)
 
   # The badge above is a few words; this is the operator-facing detail line
   # under it, which says what to actually do about it. It is what tells someone
@@ -340,21 +356,29 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   # badge alone cannot. New reasons should get their own clause here rather than
   # falling through, but the fallback keeps a future reason from crashing or
   # rendering blank.
-  defp humanize_skip("server_disabled"), do: "This server is disabled, so sync did not run."
-  defp humanize_skip("sync_disabled"), do: "Watched sync is turned off for this server."
+  defp humanize_skip("server_disabled"),
+    do: gettext("This server is disabled, so sync did not run.")
+
+  defp humanize_skip("sync_disabled"), do: gettext("Watched sync is turned off for this server.")
 
   defp humanize_skip("unsupported_provider"),
-    do: "This server type does not support watched sync."
+    do: gettext("This server type does not support watched sync.")
 
   defp humanize_skip("no_user_mapping"),
-    do: "No Mydia users are mapped to accounts on this server. Press Accounts to map them."
+    do:
+      gettext("No Mydia users are mapped to accounts on this server. Press Accounts to map them.")
 
   defp humanize_skip("all_mappings_paused"),
     do:
-      "Every user mapping on this server was paused, so there was nobody to sync. Press Accounts to review them."
+      gettext(
+        "Every user mapping on this server was paused, so there was nobody to sync. Press Accounts to review them."
+      )
 
   defp humanize_skip("seeding_links"),
-    do: "Linking this server's accounts to Mydia users. Sync runs again once that finishes."
+    do:
+      gettext(
+        "Linking this server's accounts to Mydia users. Sync runs again once that finishes."
+      )
 
   # Reached whenever a seeding pass wrote no new link, which covers an account
   # matching nobody and an account whose Mydia user is already mapped. Telling
@@ -362,29 +386,37 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   # mapping they want already exists.
   defp humanize_skip("no_matching_users"),
     do:
-      "Nothing new was linked. Either no account matched a Mydia username, or the ones that did are already mapped. Press Accounts to check."
+      gettext(
+        "Nothing new was linked. Either no account matched a Mydia username, or the ones that did are already mapped. Press Accounts to check."
+      )
 
   defp humanize_skip("link_seeding_failed"),
-    do: "Could not reach the server to link users. This retries on the next run."
+    do: gettext("Could not reach the server to link users. This retries on the next run.")
 
   defp humanize_skip("no_token"),
-    do: "This server has no API token, so sync could not authenticate. Add one and save."
+    do: gettext("This server has no API token, so sync could not authenticate. Add one and save.")
 
   defp humanize_skip("link_user_mismatch"),
-    do: "A user mapping points at the wrong account. Press Accounts to fix it."
+    do: gettext("A user mapping points at the wrong account. Press Accounts to fix it.")
 
   defp humanize_skip("link_identity_missing"),
-    do: "A user mapping is missing its account on this server. Press Accounts to fix it."
+    do: gettext("A user mapping is missing its account on this server. Press Accounts to fix it.")
 
   defp humanize_skip("link_not_found"),
-    do: "The user mapping used for this run was deleted. Press Accounts to map the user again."
+    do:
+      gettext(
+        "The user mapping used for this run was deleted. Press Accounts to map the user again."
+      )
 
   defp humanize_skip("missing_user_token"),
     do:
-      "A user mapping has no token of its own, so the sync would have read the server owner's account. Press Accounts and save the mapping again to mint one."
+      gettext(
+        "A user mapping has no token of its own, so the sync would have read the server owner's account. Press Accounts and save the mapping again to mint one."
+      )
 
   defp humanize_skip("missing_remote_user_id"),
-    do: "A user mapping does not name an account on this server. Press Accounts to fix it."
+    do:
+      gettext("A user mapping does not name an account on this server. Press Accounts to fix it.")
 
   defp humanize_skip(other), do: other
 end

@@ -45,7 +45,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
         <section id={"discover-row-#{param}"} class="mb-6 md:mb-8">
           <div class="flex items-center justify-between gap-3 mb-3">
             <h2 class="text-lg md:text-xl font-semibold truncate">
-              {RegionalSources.label(source, @country)}
+              {MydiaWeb.StatusLabels.regional_source(source, @country)}
             </h2>
             <.link
               id={"discover-row-#{param}-see-all"}
@@ -81,7 +81,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
               <.media_rail
                 id={"discover-row-#{param}-rail"}
                 show_header={false}
-                title={RegionalSources.label(source, @country)}
+                title={MydiaWeb.StatusLabels.regional_source(source, @country)}
                 items={items}
                 media_type={@media_type}
                 current_user={@current_user}

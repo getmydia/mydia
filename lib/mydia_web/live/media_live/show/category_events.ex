@@ -78,7 +78,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
            |> put_flash(:info, gettext("Category updated successfully"))}
 
         {:error, :restricted} ->
-          {:noreply, put_flash(socket, :error, Media.restricted_message())}
+          {:noreply, put_flash(socket, :error, MydiaWeb.OperationErrors.restricted_message())}
 
         {:error, %Ecto.Changeset{} = changeset} ->
           {:noreply, assign(socket, :category_form, Phoenix.Component.to_form(changeset))}
@@ -114,7 +114,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
            )}
 
         {:error, :restricted} ->
-          {:noreply, put_flash(socket, :error, Media.restricted_message())}
+          {:noreply, put_flash(socket, :error, MydiaWeb.OperationErrors.restricted_message())}
 
         {:error, %Ecto.Changeset{} = changeset} ->
           {:noreply,

@@ -94,7 +94,8 @@ class _ResultTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final language = context.l10n.languageName(candidate.language) ?? '';
+    final language =
+        context.l10n.languageName(candidate.language) ?? candidate.language;
     return ListTile(
       title: Text(
         candidate.releaseName ?? language,

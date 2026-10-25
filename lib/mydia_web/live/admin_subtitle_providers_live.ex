@@ -13,7 +13,7 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Subtitle Providers")
+     |> assign(:page_title, gettext("Configuration - Subtitle Providers"))
      |> load_data()}
   end
 
@@ -40,7 +40,7 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
 
     cond do
       is_nil(config) ->
-        {:noreply, put_flash(socket, :error, "Provider not found")}
+        {:noreply, put_flash(socket, :error, gettext("Provider not found"))}
 
       registry_config?(config) ->
         # Registry rows have no database row. Prefill the form and create on save.
@@ -64,7 +64,7 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
          |> assign(:editing_subtitle_provider, nil)
          |> put_flash(
            :info,
-           "Saving will create a database-managed configuration for this provider"
+           gettext("Saving will create a database-managed configuration for this provider")
          )}
 
       Settings.runtime_config?(config) ->
@@ -72,7 +72,9 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
          put_flash(
            socket,
            :error,
-           "Cannot edit a runtime-configured provider. Configure it in the database instead."
+           gettext(
+             "Cannot edit a runtime-configured provider. Configure it in the database instead."
+           )
          )}
 
       true ->
@@ -122,7 +124,7 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
         {:noreply,
          socket
          |> assign(:show_subtitle_provider_modal, false)
-         |> put_flash(:info, "Subtitle provider saved successfully")
+         |> put_flash(:info, gettext("Subtitle provider saved successfully"))
          |> load_data()}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -141,7 +143,7 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
 
     cond do
       is_nil(config) ->
-        {:noreply, put_flash(socket, :error, "Provider not found")}
+        {:noreply, put_flash(socket, :error, gettext("Provider not found"))}
 
       registry_config?(config) ->
         attrs = %{
@@ -156,12 +158,16 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
             {:noreply, load_data(socket)}
 
           {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Failed to update provider")}
+            {:noreply, put_flash(socket, :error, gettext("Failed to update provider"))}
         end
 
       Settings.runtime_config?(config) ->
         {:noreply,
-         put_flash(socket, :error, "Cannot toggle a runtime-configured provider from the UI")}
+         put_flash(
+           socket,
+           :error,
+           gettext("Cannot toggle a runtime-configured provider from the UI")
+         )}
 
       true ->
         case ServiceConfigs.update_subtitle_provider_config(config, %{enabled: !config.enabled}) do
@@ -169,7 +175,7 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
             {:noreply, load_data(socket)}
 
           {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Failed to update provider")}
+            {:noreply, put_flash(socket, :error, gettext("Failed to update provider"))}
         end
     end
   end
@@ -179,19 +185,24 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
     config = Enum.find(socket.assigns.providers, &(&1.id == id))
 
     if is_nil(config) do
-      {:noreply, put_flash(socket, :error, "Provider not found")}
+      {:noreply, put_flash(socket, :error, gettext("Provider not found"))}
     else
       adapter = ProviderRegistry.adapter_for(config)
 
       case adapter.validate_config(config) do
         {:ok, _config} ->
-          {:noreply, put_flash(socket, :info, "Provider configuration is valid")}
+          {:noreply, put_flash(socket, :info, gettext("Provider configuration is valid"))}
 
         {:error, message} when is_binary(message) ->
           {:noreply, put_flash(socket, :error, message)}
 
         {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Validation failed: #{inspect(reason)}")}
+          {:noreply,
+           put_flash(
+             socket,
+             :error,
+             gettext("Validation failed: %{reason}", reason: inspect(reason))
+           )}
       end
     end
   end
@@ -202,21 +213,22 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
 
     cond do
       is_nil(config) ->
-        {:noreply, put_flash(socket, :error, "Provider not found")}
+        {:noreply, put_flash(socket, :error, gettext("Provider not found"))}
 
       registry_config?(config) or Settings.runtime_config?(config) ->
-        {:noreply, put_flash(socket, :error, "Cannot delete a built-in or runtime provider")}
+        {:noreply,
+         put_flash(socket, :error, gettext("Cannot delete a built-in or runtime provider"))}
 
       true ->
         case ServiceConfigs.delete_subtitle_provider_config(config) do
           {:ok, _} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Subtitle provider deleted")
+             |> put_flash(:info, gettext("Subtitle provider deleted"))
              |> load_data()}
 
           {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Failed to delete provider")}
+            {:noreply, put_flash(socket, :error, gettext("Failed to delete provider"))}
         end
     end
   end

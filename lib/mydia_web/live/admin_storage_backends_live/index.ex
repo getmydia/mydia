@@ -9,7 +9,7 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Storage")
+     |> assign(:page_title, gettext("Configuration - Storage"))
      |> assign(:show_storage_backend_modal, false)
      |> assign(:storage_backend_form, nil)
      |> assign(:storage_backend_mode, :new)
@@ -28,8 +28,11 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
 
   def handle_event("edit_storage_backend", %{"id" => id}, socket) do
     case find_editable(socket, id) do
-      {:ok, backend} -> {:noreply, open_form(socket, :edit, backend)}
-      :error -> {:noreply, put_flash(socket, :error, "That storage backend cannot be edited")}
+      {:ok, backend} ->
+        {:noreply, open_form(socket, :edit, backend)}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, gettext("That storage backend cannot be edited"))}
     end
   end
 
@@ -60,7 +63,7 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
          socket
          |> close_form()
          |> load_backends()
-         |> put_flash(:info, "Storage backend #{backend.name} saved")}
+         |> put_flash(:info, gettext("Storage backend %{name} saved", name: backend.name))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, :storage_backend_form, to_form(changeset))}
@@ -75,7 +78,7 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
             {:noreply,
              socket
              |> load_backends()
-             |> put_flash(:info, "Storage backend #{backend.name} deleted")}
+             |> put_flash(:info, gettext("Storage backend %{name} deleted", name: backend.name))}
 
           {:error, %Ecto.Changeset{} = changeset} ->
             {:noreply,
@@ -83,19 +86,22 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
              |> load_backends()
              |> put_flash(
                :error,
-               "Cannot delete storage backend #{backend.name}: #{first_error(changeset)}"
+               gettext("Cannot delete storage backend %{name}: %{reason}",
+                 name: backend.name,
+                 reason: first_error(changeset)
+               )
              )}
         end
 
       :error ->
-        {:noreply, put_flash(socket, :error, "That storage backend cannot be deleted")}
+        {:noreply, put_flash(socket, :error, gettext("That storage backend cannot be deleted"))}
     end
   end
 
   def handle_event("test_storage_backend", %{"id" => id}, socket) do
     case Enum.find(socket.assigns.backends, &(&1.id == id)) do
       nil ->
-        {:noreply, put_flash(socket, :error, "That storage backend no longer exists")}
+        {:noreply, put_flash(socket, :error, gettext("That storage backend no longer exists"))}
 
       %StorageBackend{name: name} = backend ->
         # A dead endpoint takes several seconds to give up; never block the page on it.
@@ -110,15 +116,23 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
   def handle_async({:test, name}, {:ok, result}, socket) do
     flash =
       case result do
-        :ok -> {:info, "#{name}: connected"}
-        {:error, %Mydia.Storage.Error{message: message}} -> {:error, "#{name}: #{message}"}
+        :ok ->
+          {:info, gettext("%{name}: connected", name: name)}
+
+        {:error, %Mydia.Storage.Error{message: message}} ->
+          {:error, gettext("%{name}: %{message}", name: name, message: message)}
       end
 
     {:noreply, finish_test(socket, name, flash)}
   end
 
   def handle_async({:test, name}, {:exit, _reason}, socket) do
-    {:noreply, finish_test(socket, name, {:error, "#{name}: the connection test crashed"})}
+    {:noreply,
+     finish_test(
+       socket,
+       name,
+       {:error, gettext("%{name}: the connection test crashed", name: name)}
+     )}
   end
 
   defp finish_test(socket, name, {kind, message}) do
@@ -127,8 +141,8 @@ defmodule MydiaWeb.AdminStorageBackendsLive.Index do
     |> put_flash(kind, message)
   end
 
-  defp first_error(%Ecto.Changeset{errors: [{_field, {message, _opts}} | _]}), do: message
-  defp first_error(%Ecto.Changeset{}), do: "it could not be deleted"
+  defp first_error(%Ecto.Changeset{errors: [{_field, error} | _]}), do: translate_error(error)
+  defp first_error(%Ecto.Changeset{}), do: gettext("it could not be deleted")
 
   defp load_backends(socket), do: assign(socket, :backends, Settings.list_storage_backends())
 

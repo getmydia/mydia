@@ -14,6 +14,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   import MydiaWeb.Formatters, only: [format_progress: 1, format_file_size: 1]
   import MydiaWeb.MediaLive.Show.SearchHelpers
   import MydiaWeb.MediaLive.Show.ScoreBreakdown
+  import MydiaWeb.MediaLive.Show.ManualSearchComponents
 
   alias Mydia.Indexers.SearchResult
   alias Mydia.Library.Hdr
@@ -740,13 +741,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             </div>
           <% end %>
           <%!-- Source URL --%>
-          <%= if @download_details.source_url do %>
+          <%= if @download_details.download_url do %>
             <div>
               <h4 class="text-sm font-semibold text-base-content/70 mb-2">
                 {gettext("Source URL")}
               </h4>
               <p class="text-xs font-mono bg-base-200 p-3 rounded-box break-all">
-                {@download_details.source_url}
+                {@download_details.download_url}
               </p>
             </div>
           <% end %>
@@ -781,17 +782,6 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               </div>
             <% end %>
           </div>
-          <%!-- Estimated Completion --%>
-          <%= if @download_details.estimated_completion do %>
-            <div>
-              <h4 class="text-sm font-semibold text-base-content/70 mb-2">
-                {gettext("Estimated Completion")}
-              </h4>
-              <p class="text-sm">
-                {format(@download_details.estimated_completion, :datetime, @display)}
-              </p>
-            </div>
-          <% end %>
           <%!-- Metadata (if present) --%>
           <%= if @download_details.metadata && map_size(@download_details.metadata) > 0 do %>
             <div>
@@ -820,6 +810,8 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   """
   attr :manual_search_context, :map, default: nil
   attr :existing, :any, default: nil
+  # Downloads that would block any grab here (Mydia.Downloads.blocking_downloads/2).
+  attr :blocking, :list, default: []
   attr :media_item, Mydia.Media.MediaItem, required: true
   attr :manual_search_query, :string, required: true
   attr :searching, :boolean, required: true
@@ -973,6 +965,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               <span class="text-sm">{@download_error}</span>
             </div>
           <% end %>
+          <.blocking_banner
+            :if={@blocking != []}
+            blocking={@blocking}
+            context_type={@manual_search_context && @manual_search_context.type}
+          />
           <%!-- Per-indexer search progress --%>
           <div class="px-4">
             <.indexer_search_status
@@ -1123,8 +1120,22 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         {result.indexer}
                       </span>
                     <% end %>
+                    <%!-- Tried before: failed for this target or blacklisted --%>
+                    <%= if attempt = visible_prior_attempt(result) do %>
+                      <span
+                        id={"#{id}-prior-attempt"}
+                        class="badge badge-error badge-outline badge-sm"
+                      >
+                        <%= if attempt.kind == :blacklisted do %>
+                          {gettext("Blacklisted")}
+                        <% else %>
+                          {failed_ago_text(format_relative_time_short(attempt.at))}
+                        <% end %>
+                      </span>
+                    <% end %>
                   </div>
-                  <%= if reason = Map.get(result, :grab_failed) do %>
+                  <%!-- A live failure from this dialog wins over the recorded one --%>
+                  <%= if reason = Map.get(result, :grab_failed) || visible_prior_reason(result) do %>
                     <div class="text-xs text-error mt-1 line-clamp-2">{reason}</div>
                   <% end %>
                   <.score_panel :if={profile?} id={"#{id}-score-breakdown"}>
@@ -1197,25 +1208,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         <span class="hidden sm:inline">{gettext("Grabbing…")}</span>
                       </button>
                     <% Map.get(result, :grab_failed) -> %>
-                      <button
-                        class="btn btn-error btn-sm group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
-                        phx-click="download_from_search"
-                        phx-value-download-url={result.download_url}
-                        phx-value-title={result.title}
-                        phx-value-indexer={result.indexer}
-                        phx-value-size={result.size}
-                        phx-value-seeders={result.seeders || 0}
-                        phx-value-leechers={result.leechers || 0}
-                        phx-value-quality={get_search_quality_badge(result)}
-                        title={
-                          gettext("Failed: %{reason} — click to retry",
-                            reason: Map.get(result, :grab_failed)
-                          )
-                        }
-                      >
-                        <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-                        <span class="hidden sm:inline">{gettext("Failed — retry")}</span>
-                      </button>
+                      <.retry_button result={result} reason={Map.get(result, :grab_failed)} />
+                    <% Map.get(result, :prior_attempt) -> %>
+                      <.retry_button
+                        result={result}
+                        reason={prior_attempt_reason(result)}
+                        blacklisted={result.prior_attempt.kind == :blacklisted}
+                      />
                     <% true -> %>
                       <button
                         class="btn btn-primary btn-sm group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"

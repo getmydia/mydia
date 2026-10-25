@@ -141,7 +141,7 @@ defmodule Mydia.Library.ReleaseParserTest do
       assert result.quality.resolution == "1080p"
       assert result.quality.source == "BluRay"
       assert result.quality.codec == "x264"
-      assert result.quality.audio == "DDP5.1"
+      assert result.quality.audio == "DD+ 5.1"
     end
 
     test "true returns canonical forms matching V2 output" do

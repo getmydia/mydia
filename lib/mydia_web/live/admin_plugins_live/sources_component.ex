@@ -78,13 +78,17 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
 
   def handle_async(:preview, {:exit, reason}, socket),
     do:
-      {:noreply, assign(socket, error: "Preview failed: #{inspect(reason)}", previewing?: false)}
+      {:noreply,
+       assign(socket,
+         error: gettext("Preview failed: %{reason}", reason: inspect(reason)),
+         previewing?: false
+       )}
 
   @impl true
   def render(assigns) do
     ~H"""
     <div id="plugin-sources">
-      <.admin_section title="Plugin sources" icon="hero-globe-alt">
+      <.admin_section title={gettext("Plugin sources")} icon="hero-globe-alt">
         <div class="flex justify-end">
           <button
             id="add-source"
@@ -93,7 +97,7 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
             phx-click="open_add_source"
             phx-target={@myself}
           >
-            <.icon name="hero-plus" class="w-4 h-4" /> Add source
+            <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add source")}
           </button>
         </div>
 
@@ -102,21 +106,29 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
           rows={source_rows(@official, @sources)}
           row_id={& &1.dom_id}
         >
-          <:col :let={row} label="Name"><span class="font-medium break-words">{row.name}</span></:col>
+          <:col :let={row} label={gettext("Name")}>
+            <span class="font-medium break-words">{row.name}</span>
+          </:col>
           <:col :let={row} label="URL"><span class="text-xs break-all">{row.url}</span></:col>
-          <:col :let={row} label="Key"><span class="font-mono text-xs">{row.key}</span></:col>
-          <:col :let={row} label="Plugins">{row.plugin_count}</:col>
-          <:col :let={row} label="Status">
+          <:col :let={row} label={gettext("Key")}>
+            <span class="font-mono text-xs">{row.key}</span>
+          </:col>
+          <:col :let={row} label={gettext("Plugins")}>{row.plugin_count}</:col>
+          <:col :let={row} label={gettext("Status")}>
             <div class="flex flex-wrap items-center gap-1">
-              <span :if={row.official?} class="badge badge-sm badge-ghost">Official</span>
+              <span :if={row.official?} class="badge badge-sm badge-ghost">
+                {gettext("Official")}
+              </span>
               <span
                 :if={row.declared?}
                 class="badge badge-sm badge-ghost"
-                title="Set in the environment or config file"
+                title={gettext("Set in the environment or config file")}
               >
-                Declared
+                {gettext("Declared")}
               </span>
-              <span :if={row.disabled?} class="badge badge-sm badge-ghost">Disabled</span>
+              <span :if={row.disabled?} class="badge badge-sm badge-ghost">
+                {gettext("Disabled")}
+              </span>
               <span :if={row.last_error} class="text-error text-xs break-words">
                 {row.last_error}
               </span>
@@ -127,15 +139,19 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
               :if={row.removable?}
               id={"remove-source-#{row.id}"}
               icon="hero-trash"
-              title="Remove"
+              title={gettext("Remove")}
               destructive
               phx-click="remove_source"
               phx-value-id={row.id}
               phx-target={@myself}
-              data-confirm="Remove this source? Plugins installed from it keep running but stop receiving updates."
+              data-confirm={
+                gettext(
+                  "Remove this source? Plugins installed from it keep running but stop receiving updates."
+                )
+              }
             />
           </:action>
-          <:empty>No plugin sources.</:empty>
+          <:empty>{gettext("No plugin sources.")}</:empty>
         </.admin_table>
       </.admin_section>
 
@@ -143,7 +159,7 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
         :if={@adding?}
         id="add-source-modal"
         icon="hero-plus-circle"
-        title="Add a plugin source"
+        title={gettext("Add a plugin source")}
         on_close={JS.push("close_add_source_modal", target: @myself)}
       >
         <.form
@@ -155,11 +171,12 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
           <.input
             field={@form[:url]}
             type="url"
-            label="Catalog URL"
+            label={gettext("Catalog URL")}
             placeholder="https://example.com/index.json"
           />
           <button type="submit" class="btn btn-sm btn-outline" disabled={@previewing?}>
-            <span :if={@previewing?} class="loading loading-spinner loading-xs"></span> Check source
+            <span :if={@previewing?} class="loading loading-spinner loading-xs"></span>
+            {gettext("Check source")}
           </button>
         </.form>
 
@@ -171,7 +188,7 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
         <div :if={@preview} id="source-preview" class="mt-4 space-y-3">
           <dl class="text-sm space-y-1">
             <div>
-              <dt class="text-base-content/60 text-xs">Name</dt>
+              <dt class="text-base-content/60 text-xs">{gettext("Name")}</dt>
               <dd class="font-medium break-words">{@preview.name}</dd>
             </div>
             <div>
@@ -179,20 +196,21 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
               <dd class="break-all">{@preview.url}</dd>
             </div>
             <div>
-              <dt class="text-base-content/60 text-xs">Signing key</dt>
+              <dt class="text-base-content/60 text-xs">{gettext("Signing key")}</dt>
               <dd class="font-mono">{@preview.fingerprint}</dd>
             </div>
             <div>
-              <dt class="text-base-content/60 text-xs">Plugins listed</dt>
+              <dt class="text-base-content/60 text-xs">{gettext("Plugins listed")}</dt>
               <dd>{@preview.plugin_count}</dd>
             </div>
           </dl>
           <div class="alert alert-warning text-sm">
             <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
             <span>
-              Adding this source trusts whoever holds the signing key {@preview.fingerprint}. Mydia
-              has not reviewed its plugins. Compare the fingerprint with the one the publisher
-              gives you before you continue.
+              {gettext(
+                "Adding this source trusts whoever holds the signing key %{fingerprint}. Mydia has not reviewed its plugins. Compare the fingerprint with the one the publisher gives you before you continue.",
+                fingerprint: @preview.fingerprint
+              )}
             </span>
           </div>
         </div>
@@ -205,7 +223,7 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
             phx-click="close_add_source_modal"
             phx-target={@myself}
           >
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button
             :if={@preview}
@@ -215,7 +233,7 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
             phx-click="confirm_add_source"
             phx-target={@myself}
           >
-            Trust and add
+            {gettext("Trust and add")}
           </button>
         </:actions>
       </.admin_modal>
@@ -240,7 +258,7 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
           %{
             id: nil,
             dom_id: "source-row-official",
-            name: "Mydia plugin index",
+            name: gettext("Mydia plugin index"),
             url: official.url,
             key: fingerprint(official.public_key),
             plugin_count: nil,

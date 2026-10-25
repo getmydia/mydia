@@ -34,17 +34,20 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
   # `category_only` is omitted for a client that cannot report a category back
   # (rqbit), rather than offered and left to adopt nothing in silence. The
   # changeset rejects that combination too, in both config layers.
-  @external_torrent_modes [
-    {"Automatic (recommended)", "auto"},
-    {"Adopt any match", "adopt"},
-    {"Only my category", "category_only"},
-    {"Ignore", "ignore"}
-  ]
+  defp external_torrent_modes do
+    [
+      {gettext("Automatic (recommended)"), "auto"},
+      {gettext("Adopt any match"), "adopt"},
+      {gettext("Only my category"), "category_only"},
+      {gettext("Ignore"), "ignore"}
+    ]
+  end
 
   # Placeholder hints shown in the per-tier priority profile inputs. Each
   # adapter has its own native priority value domain; the placeholder mirrors
   # the hardcoded default mapping so users see what value they'd get if they
-  # left the override blank.
+  # left the override blank. qBittorrent has no native value, so its hint is
+  # words and lives in `priority_placeholders/1`.
   @priority_profile_placeholders %{
     "sabnzbd" => %{
       "verylow" => "-100",
@@ -59,13 +62,6 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
       "normal" => "0",
       "high" => "50",
       "veryhigh" => "100"
-    },
-    "qbittorrent" => %{
-      "verylow" => "(unset)",
-      "low" => "(unset)",
-      "normal" => "(unset)",
-      "high" => "(unset)",
-      "veryhigh" => "(unset)"
     },
     "transmission" => %{
       "verylow" => "-1",
@@ -83,19 +79,30 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
     }
   }
 
-  @priority_tiers [
-    {"verylow", "Very Low"},
-    {"low", "Low"},
-    {"normal", "Normal"},
-    {"high", "High"},
-    {"veryhigh", "Very High"}
-  ]
+  defp priority_tiers do
+    [
+      {"verylow", gettext("Very Low")},
+      {"low", gettext("Low")},
+      {"normal", gettext("Normal")},
+      {"high", gettext("High")},
+      {"veryhigh", gettext("Very High")}
+    ]
+  end
 
-  @content_types [
-    {"movie", "Movies"},
-    {"tv", "TV Shows"},
-    {"music", "Music"}
-  ]
+  defp content_types do
+    [
+      {"movie", gettext("Movies")},
+      {"tv", gettext("TV Shows")},
+      {"music", gettext("Music")}
+    ]
+  end
+
+  defp priority_placeholders("qbittorrent") do
+    unset = gettext("(unset)")
+    Map.new(~w(verylow low normal high veryhigh), &{&1, unset})
+  end
+
+  defp priority_placeholders(type), do: Map.get(@priority_profile_placeholders, type, %{})
 
   @doc """
   Renders the Download Client modal.
@@ -155,12 +162,12 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
     # never match there. Drop the option rather than let it look available.
     external_torrent_modes =
       if category_capable_type?(selected_type) do
-        @external_torrent_modes
+        external_torrent_modes()
       else
-        Enum.reject(@external_torrent_modes, fn {_label, value} -> value == "category_only" end)
+        Enum.reject(external_torrent_modes(), fn {_label, value} -> value == "category_only" end)
       end
 
-    priority_placeholders = Map.get(@priority_profile_placeholders, selected_type, %{})
+    priority_placeholders = priority_placeholders(selected_type)
 
     assigns =
       assigns
@@ -176,26 +183,28 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
       |> assign(:external_torrent_modes, external_torrent_modes)
       |> assign(:category_capable_type?, category_capable_type?(selected_type))
       |> assign(:priority_placeholders, priority_placeholders)
-      |> assign(:priority_tiers, @priority_tiers)
-      |> assign(:content_types, @content_types)
+      |> assign(:priority_tiers, priority_tiers())
+      |> assign(:content_types, content_types())
 
     ~H"""
     <.admin_modal
       id="download-client-modal"
       icon={if @download_client_mode == :new, do: "hero-plus-circle", else: "hero-pencil-square"}
       title={
-        if @download_client_mode == :new, do: "Add Download Client", else: "Edit Download Client"
+        if @download_client_mode == :new,
+          do: gettext("Add Download Client"),
+          else: gettext("Edit Download Client")
       }
       subtitle={
         if @download_client_mode == :new,
-          do: "Configure a new download client",
-          else: "Update client settings"
+          do: gettext("Configure a new download client"),
+          else: gettext("Update client settings")
       }
       on_close="close_download_client_modal"
     >
       <:header_aside>
         <label class="label cursor-pointer gap-2">
-          <span class="label-text text-sm">Enabled</span>
+          <span class="label-text text-sm">{gettext("Enabled")}</span>
           <input
             type="hidden"
             name={@download_client_form[:enabled].name}
@@ -224,13 +233,18 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
           <%!-- Basic Settings Row --%>
           <div class="grid grid-cols-6 gap-3">
             <div class="col-span-6 md:col-span-3">
-              <.input field={@download_client_form[:name]} type="text" label="Name" required />
+              <.input
+                field={@download_client_form[:name]}
+                type="text"
+                label={gettext("Name")}
+                required
+              />
             </div>
             <div class="col-span-4 md:col-span-2">
               <.input
                 field={@download_client_form[:type]}
                 type="select"
-                label="Type"
+                label={pgettext("download client", "Type")}
                 options={[
                   {"qBittorrent", "qbittorrent"},
                   {"Transmission", "transmission"},
@@ -245,7 +259,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
               />
             </div>
             <div class="col-span-2 md:col-span-1">
-              <.input field={@download_client_form[:priority]} type="number" label="Priority" />
+              <.input
+                field={@download_client_form[:priority]}
+                type="number"
+                label={gettext("Priority")}
+              />
             </div>
           </div>
 
@@ -293,17 +311,19 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
               field={@download_client_form[:incomplete_grace_minutes]}
               id="download-client-grace-minutes"
               type="number"
-              label="Stalled timeout (minutes)"
+              label={gettext("Stalled timeout (minutes)")}
               placeholder="60"
               min="1"
             />
             <% grace = grace_minutes_value(@download_client_form[:incomplete_grace_minutes].value) %>
             <% escalation = StallDetector.escalation_minutes(grace) %>
             <p class="text-xs text-base-content/50">
-              Flagged as stalled after {format_duration(grace * 60)} without progress.
-              If it still hasn't moved {format_duration(escalation * 60)} later
-              ({format_duration((grace + escalation) * 60)} total), Mydia removes it
-              and searches for a different release.
+              {gettext(
+                "Flagged as stalled after %{grace} without progress. If it still hasn't moved %{escalation} later (%{total} total), Mydia removes it and searches for a different release.",
+                grace: format_duration(grace * 60),
+                escalation: format_duration(escalation * 60),
+                total: format_duration((grace + escalation) * 60)
+              )}
             </p>
           </div>
 
@@ -328,19 +348,18 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
           <div class="space-y-3">
             <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
               <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
-              <span>Options</span>
+              <span>{gettext("Options")}</span>
             </div>
 
             <div class="flex items-center justify-between bg-base-200 rounded-lg px-4 py-3">
               <div class="flex items-center gap-3">
                 <.icon name="hero-trash" class="w-4 h-4 text-base-content/60" />
                 <div>
-                  <span class="text-sm font-medium">Remove After Import</span>
+                  <span class="text-sm font-medium">{gettext("Remove After Import")}</span>
                   <p class="text-xs text-base-content/50">
-                    Remove downloads from the client after importing. Torrent clients
-                    that support seeding wait until the torrent is stopped or paused
-                    (seed ratio/time), then remove. Usenet and similar clients remove
-                    immediately.
+                    {gettext(
+                      "Remove downloads from the client after importing. Torrent clients that support seeding wait until the torrent is stopped or paused (seed ratio/time), then remove. Usenet and similar clients remove immediately."
+                    )}
                   </p>
                 </div>
               </div>
@@ -368,7 +387,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
         <%!-- Modal Actions --%>
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_download_client_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button
             type="button"
@@ -377,14 +396,16 @@ defmodule MydiaWeb.AdminDownloadClientsLive.DownloadClientModalComponents do
             disabled={@testing_download_client_connection}
           >
             <%= if @testing_download_client_connection do %>
-              <span class="loading loading-spinner loading-sm"></span> Testing...
+              <span class="loading loading-spinner loading-sm"></span> {gettext("Testing...")}
             <% else %>
-              <.icon name="hero-signal" class="w-4 h-4" /> Test Connection
+              <.icon name="hero-signal" class="w-4 h-4" /> {gettext("Test Connection")}
             <% end %>
           </button>
           <button type="submit" class="btn btn-primary gap-2">
             <.icon name="hero-check" class="w-4 h-4" />
-            {if @download_client_mode == :new, do: "Add Client", else: "Save Changes"}
+            {if @download_client_mode == :new,
+              do: gettext("Add Client"),
+              else: gettext("Save Changes")}
           </button>
         </.admin_modal_actions>
       </.form>

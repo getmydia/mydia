@@ -38,7 +38,10 @@ defmodule MydiaWeb.AuthController do
           Logger.error("Ueberauth failure: #{inspect(failure)}")
 
           conn
-          |> put_flash(:error, "Authentication failed: #{format_errors(failure.errors)}")
+          |> put_flash(
+            :error,
+            gettext("Authentication failed: %{errors}", errors: format_errors(failure.errors))
+          )
           |> redirect(to: "/auth/login")
 
         _ ->
@@ -46,14 +49,14 @@ defmodule MydiaWeb.AuthController do
           Logger.error("Ueberauth didn't handle the request and no failure was set")
 
           conn
-          |> put_flash(:error, "OIDC authentication configuration error")
+          |> put_flash(:error, gettext("OIDC authentication configuration error"))
           |> redirect(to: "/auth/login")
       end
     else
       Logger.warning("OIDC is not configured, redirecting to login page")
 
       conn
-      |> put_flash(:error, "OIDC authentication is not configured.")
+      |> put_flash(:error, gettext("OIDC authentication is not configured."))
       |> redirect(to: "/auth/login")
     end
   end
@@ -66,7 +69,10 @@ defmodule MydiaWeb.AuthController do
     Logger.error("OIDC callback failure: #{inspect(fails)}")
 
     conn
-    |> put_flash(:error, "Authentication failed: #{format_errors(fails.errors)}")
+    |> put_flash(
+      :error,
+      gettext("Authentication failed: %{errors}", errors: format_errors(fails.errors))
+    )
     |> redirect(to: "/auth/login")
   end
 
@@ -86,14 +92,17 @@ defmodule MydiaWeb.AuthController do
         |> Guardian.Plug.sign_in(user)
         |> put_session(:guardian_default_token, token)
         |> put_session(:guardian_token, token)
-        |> put_flash(:info, "Successfully authenticated!")
+        |> put_flash(:info, gettext("Successfully authenticated!"))
         |> redirect(to: "/")
 
       {:error, reason} ->
         Logger.error("OIDC authentication failed: #{inspect(reason)}")
 
         conn
-        |> put_flash(:error, "Authentication failed: #{inspect(reason)}")
+        |> put_flash(
+          :error,
+          gettext("Authentication failed: %{errors}", errors: inspect(reason))
+        )
         |> redirect(to: "/auth/login")
     end
   end
@@ -110,7 +119,7 @@ defmodule MydiaWeb.AuthController do
         case Accounts.get_user!(claims["sub"]) do
           nil ->
             conn
-            |> put_flash(:error, "Invalid authentication token")
+            |> put_flash(:error, gettext("Invalid authentication token"))
             |> redirect(to: "/")
 
           user ->
@@ -123,7 +132,7 @@ defmodule MydiaWeb.AuthController do
 
       {:error, _reason} ->
         conn
-        |> put_flash(:error, "Invalid or expired authentication token")
+        |> put_flash(:error, gettext("Invalid or expired authentication token"))
         |> redirect(to: "/")
     end
   end
@@ -141,7 +150,7 @@ defmodule MydiaWeb.AuthController do
     conn
     |> Guardian.Plug.sign_out()
     |> clear_session()
-    |> put_flash(:info, "You have been logged out")
+    |> put_flash(:info, gettext("You have been logged out"))
     |> redirect(to: "/")
   end
 

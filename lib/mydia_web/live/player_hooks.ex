@@ -9,6 +9,8 @@ defmodule MydiaWeb.PlayerHooks do
   mount.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.LiveView, only: [put_flash: 3, redirect: 2]
 
   def on_mount(:require_player, _params, _session, socket) do
@@ -17,7 +19,7 @@ defmodule MydiaWeb.PlayerHooks do
     else
       {:halt,
        socket
-       |> put_flash(:error, "The player is disabled on this server.")
+       |> put_flash(:error, gettext("The player is disabled on this server."))
        |> redirect(to: "/")}
     end
   end

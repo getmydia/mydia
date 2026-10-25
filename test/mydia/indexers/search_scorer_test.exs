@@ -345,10 +345,9 @@ defmodule Mydia.Indexers.SearchScorerTest do
       end
 
       # "DDP 5.1" is the space-delimited "<codec> <channels>" shape every real
-      # producer emits (FileAnalyzer's extract_audio_codec/1, "DD+ 5.1"); the
-      # glued "DDP5.1" this test used to pass is not producible by either
-      # QualityParser.extract_audio/1 (only ever returns a bare codec label,
-      # never channels) or FileAnalyzer, so it no longer extracts through
+      # producer emits (FileAnalyzer's extract_audio_codec/1 and
+      # QualityParser.parse/1, "DD+ 5.1"); the glued "DDP5.1" this test used
+      # to pass is not producible by either, so it no longer extracts through
       # Attrs.split_audio/1's whitespace tokenization.
       {ddp_five_one, _, _} =
         Mydia.Indexers.SearchScorer.score_quality(base.("DDP 5.1"), profile, :movie)

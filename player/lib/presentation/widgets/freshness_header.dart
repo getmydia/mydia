@@ -137,10 +137,11 @@ class _FreshnessBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final relative = context.l10n.relativeTime(fetchedAt);
+    final l10n = context.l10n;
+    final relative = l10n.relativeTime(fetchedAt);
     final message = failed
-        ? context.l10n.freshnessFailed(relative)
-        : context.l10n.freshnessStale(relative);
+        ? l10n.freshnessFailedBanner(relative)
+        : l10n.freshnessStaleBanner(relative);
 
     return Container(
       width: double.infinity,
@@ -187,7 +188,7 @@ class _FreshnessBanner extends StatelessWidget {
               ),
             ),
             child: Text(
-              failed ? context.l10n.commonRetry : context.l10n.commonRefresh,
+              failed ? l10n.commonRetry : l10n.commonRefresh,
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,

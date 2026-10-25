@@ -938,10 +938,6 @@
   "@episodeActionsTooltip": {"description": "Tooltip of the three-dot menu on an episode card."},
   "episodeMarkThisAndPreviousWatched": "Mark this and previous watched",
   "@episodeMarkThisAndPreviousWatched": {"description": "Menu entry on an episode card that marks it and every earlier episode as watched."},
-  "freshnessFailed": "Couldn't reach your server. Showing your library from {time}.",
-  "@freshnessFailed": {"description": "Banner shown when the server cannot be reached and the library comes from the cache. The time is a relative phrase such as 5 minutes ago.", "placeholders": {"time": {"type": "String"}}},
-  "freshnessStale": "Showing your library from {time}.",
-  "@freshnessStale": {"description": "Banner shown when the library on screen is older than the latest data. The time is a relative phrase such as 5 minutes ago.", "placeholders": {"time": {"type": "String"}}},
   "gestureSeekSeconds": "{seconds} sec",
   "@gestureSeekSeconds": {"description": "Indicator shown while double tapping to seek, with the abbreviated number of seconds skipped.", "placeholders": {"seconds": {"type": "int"}}},
   "qualityDialogTitle": "Video Quality",
@@ -1499,5 +1495,15 @@
   "videoScalingFillToast": "Fill: cropped to screen",
   "@videoScalingFillToast": {"description": "Toast after the video scaling is switched to fill, which crops the picture to cover the screen."},
   "calendarMovie": "Movie",
-  "@calendarMovie": {"description": "Label on a calendar entry that is a movie, where an episode would show its season and episode code such as S02E05."}
+  "@calendarMovie": {"description": "Label on a calendar entry that is a movie, where an episode would show its season and episode code such as S02E05."},
+  "freshnessStaleBanner": "Showing your library from {time}.",
+  "@freshnessStaleBanner": {
+    "description": "Banner above a screen when its data is old: the library shown was last fetched at the given time. {time} is a relative time such as '3 hours ago'.",
+    "placeholders": {"time": {"type": "String"}}
+  },
+  "freshnessFailedBanner": "Couldn't reach your server. Showing your library from {time}.",
+  "@freshnessFailedBanner": {
+    "description": "Banner above a screen when refreshing failed because the server is unreachable: the library shown was last fetched at the given time. {time} is a relative time such as '3 hours ago'.",
+    "placeholders": {"time": {"type": "String"}}
+  }
 }

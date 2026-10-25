@@ -65,6 +65,7 @@ class StartupErrorApp extends StatelessWidget {
       // Follows the device locale: no settings exist yet at this point.
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      localeListResolutionCallback: resolveAppLocale,
       // This widget's own context sits above Localizations.
       home: Builder(builder: (context) => _buildBody(context.l10n, report)),
     );

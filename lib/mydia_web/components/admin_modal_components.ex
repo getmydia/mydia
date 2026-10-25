@@ -9,6 +9,7 @@ defmodule MydiaWeb.AdminModalComponents do
   `admin_modal_actions/1` itself and leaves the `:actions` slot empty.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
 
@@ -67,7 +68,7 @@ defmodule MydiaWeb.AdminModalComponents do
               id={"#{@id}-close"}
               type="button"
               class="btn btn-sm btn-circle btn-ghost"
-              aria-label="Close"
+              aria-label={gettext("Close")}
               phx-click={@on_close}
             >
               <.icon name="hero-x-mark" class="w-5 h-5" />

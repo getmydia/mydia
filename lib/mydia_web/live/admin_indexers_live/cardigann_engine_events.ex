@@ -7,6 +7,8 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineEvents do
   not started while Cardigann is disabled, so every event is ignored then.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 2]
   import Phoenix.LiveView
 
@@ -64,16 +66,21 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineEvents do
         {:halt, load(socket)}
 
       {:error, :env_locked} ->
-        {:halt, put_flash(socket, :error, "The engine is set by CARDIGANN_ENGINE")}
+        {:halt, put_flash(socket, :error, gettext("The engine is set by CARDIGANN_ENGINE"))}
 
       {:error, reason} ->
-        {:halt, put_flash(socket, :error, "Could not switch engine: #{inspect(reason)}")}
+        {:halt,
+         put_flash(
+           socket,
+           :error,
+           gettext("Could not switch engine: %{reason}", reason: inspect(reason))
+         )}
     end
   end
 
   # Only a forged event gets here; the page offers only the two engines.
   defp handle_event("switch_cardigann_engine", _params, socket),
-    do: {:halt, put_flash(socket, :error, "Unknown engine")}
+    do: {:halt, put_flash(socket, :error, gettext("Unknown engine"))}
 
   defp handle_event("retry_cardigann_engine", _params, socket) do
     EngineSwitcher.retry_now()
@@ -91,12 +98,14 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineEvents do
          socket
          |> put_flash(
            :info,
-           "Removed the cached Prowlarr-based engine (#{CardigannEngineComponents.format_mb(bytes)})"
+           gettext("Removed the cached Prowlarr-based engine (%{size})",
+             size: CardigannEngineComponents.format_mb(bytes)
+           )
          )
          |> load()}
 
       {:error, :in_use} ->
-        {:halt, put_flash(socket, :error, "The Prowlarr-based engine is in use")}
+        {:halt, put_flash(socket, :error, gettext("The Prowlarr-based engine is in use"))}
     end
   end
 

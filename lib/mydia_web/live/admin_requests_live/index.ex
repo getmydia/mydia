@@ -13,7 +13,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Manage Requests")
+     |> assign(:page_title, gettext("Manage Requests"))
      |> assign(:filter_status, "pending")
      |> assign(:show_approve_modal, false)
      |> assign(:show_reject_modal, false)
@@ -118,7 +118,9 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
          |> keep_approve_choices(defaults)
          |> put_flash(
            :error,
-           "No library path is configured. Please configure a library path before approving."
+           gettext(
+             "No library path is configured. Please configure a library path before approving."
+           )
          )}
 
       {:ok, defaults} ->
@@ -132,7 +134,10 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
          |> assign(:show_approve_modal, false)
          |> assign(:selected_request, nil)
          |> assign(:approve_config, nil)
-         |> put_flash(:error, "That library is no longer available. Please try again.")}
+         |> put_flash(
+           :error,
+           gettext("That library is no longer available. Please try again.")
+         )}
     end
   end
 
@@ -185,13 +190,16 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
          socket
          |> assign(:show_reject_modal, false)
          |> assign(:selected_request, nil)
-         |> put_flash(:info, "Request rejected successfully.")
+         |> put_flash(:info, gettext("Request rejected successfully."))
          |> load_requests()}
 
       {:error, changeset} ->
         {:noreply,
          socket
-         |> put_flash(:error, "Failed to reject request: #{inspect(changeset.errors)}")
+         |> put_flash(
+           :error,
+           gettext("Failed to reject request: %{reason}", reason: inspect(changeset.errors))
+         )
          |> assign(:reject_form, to_form(changeset, as: :reject))}
     end
   end
@@ -258,7 +266,9 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
          |> assign(:approve_config, nil)
          |> put_flash(
            :info,
-           "Request approved! #{media_item.title} has been added to the library."
+           gettext("Request approved! %{title} has been added to the library.",
+             title: media_item.title
+           )
          )
          |> load_requests()}
 
@@ -274,14 +284,19 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
          |> keep_approve_choices(defaults)
          |> put_flash(
            :error,
-           "Could not reach the metadata service, so the request was not approved. Please try again."
+           gettext(
+             "Could not reach the metadata service, so the request was not approved. Please try again."
+           )
          )}
 
       {:error, changeset} ->
         {:noreply,
          socket
          |> keep_approve_choices(defaults)
-         |> put_flash(:error, "Failed to approve request: #{inspect(changeset.errors)}")
+         |> put_flash(
+           :error,
+           gettext("Failed to approve request: %{reason}", reason: inspect(changeset.errors))
+         )
          |> assign(:approve_form, to_form(changeset, as: :approve))}
     end
   end

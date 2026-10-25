@@ -1,24 +1,27 @@
 defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   @moduledoc """
   Stage 5 of the V3 release parser: project the resolver's
-  `quality_tokens` into a `%Quality{}` struct, matching V2's raw and
-  canonical-form outputs.
+  `quality_tokens` into a `%Quality{}` struct.
 
   Two flavors of output, controlled by `opts[:standardize]`:
 
-  - `false` (default) — raw token values, matching V2's default API.
-    `BluRay` stays `"BluRay"`, `x264` stays `"x264"`, `DDP5.1` stays
-    `"DDP5.1"`.
-  - `true` — canonical forms (`"H.264/AVC"`, `"Blu-ray"`,
-    `"Dolby Digital Plus 5.1"`, `"2160p (4K)"`).
+  - `false` (default) - the canonical labels shared with the rest of the
+    app (`Mydia.Quality`, the scorers): resolution `"2160p"`, source
+    `"BluRay"` / `"WEB-DL"` / `"WEBRip"` / `"REMUX"`, codec `"H.265"` or
+    the encoder `"x264"`, audio `"DD+ 5.1"` / `"AC3 5.1"` /
+    `"DTS-HD MA 5.1"` / `"TrueHD 7.1"`. Spelling variants of one value
+    (`HEVC`, `h265`; `BDRip`, `BRRip`; `DDP5.1`, `EAC3`) fold into one label.
+  - `true` - display strings (`"H.265/HEVC"`, `"Blu-ray"`,
+    `"Dolby Digital Plus 5.1"`, `"2160p (4K)"`), projected from the
+    canonical labels.
 
   ## Adjacency rejoin
 
   The tokenizer splits on dots and dashes, so compound tokens like
   `DDP5.1`, `H.264`, `WEB-DL`, `DTS-HD.MA`, `2160p-NVENC` arrive as
   multiple tokens. This module rejoins them using the original token
-  stream (`resolver.all_tokens`) so V2-compatible raw values come back
-  out the other side.
+  stream (`resolver.all_tokens`), so each compound reaches the canonical
+  fold whole.
 
   ## Byte-safety
 
@@ -60,24 +63,103 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
     end
   end
 
-  # ---- Raw projection (matches V2 raw output) ----
+  # ---- Projection: rejoin adjacent tokens, then map to canonical labels ----
 
   defp build_raw(quality_tokens, all_tokens, next_by_token) do
     resolution = extract_resolution(quality_tokens)
     source = extract_source(quality_tokens, next_by_token)
     codec = extract_codec(quality_tokens, all_tokens, next_by_token)
-    {hdr_format, dolby_vision} = extract_hdr(quality_tokens)
+    {hdr_format, dolby_vision} = extract_hdr(quality_tokens, all_tokens, next_by_token)
     audio = extract_audio(quality_tokens, next_by_token)
 
     %Quality{
-      resolution: resolution,
-      source: source,
-      codec: codec,
+      resolution: canonical_resolution(resolution),
+      source: canonical_source(source),
+      codec: canonical_codec(codec),
       hdr_format: hdr_format,
       dolby_vision: dolby_vision,
-      audio: audio
+      audio: audio,
+      proper: has_label?(quality_tokens, :proper),
+      repack: has_label?(quality_tokens, :repack)
     }
   end
+
+  defp has_label?(quality_tokens, label), do: Enum.any?(quality_tokens, &(&1.label == label))
+
+  # ---- Canonical labels ----
+  #
+  # The rejoin code below produces whatever spelling the release used;
+  # these fold each spelling into the one label the scorers and
+  # `Mydia.Quality.Attrs` understand. Unknown values pass through.
+
+  defp canonical_resolution(nil), do: nil
+
+  defp canonical_resolution(value) do
+    down = String.downcase(value)
+
+    cond do
+      down in ["4k", "uhd"] -> "2160p"
+      down == "8k" -> "4320p"
+      down == "1440p" -> "1080p"
+      Regex.match?(~r/^\d{3,4}i$/, down) -> String.replace_suffix(down, "i", "p")
+      true -> value
+    end
+  end
+
+  defp canonical_source(nil), do: nil
+
+  defp canonical_source(value) do
+    case String.downcase(value) do
+      v when v in ["bluray", "bd", "bdrip", "brrip"] -> "BluRay"
+      "web" -> "WEB-DL"
+      v when v in ["web-rip", "webrip"] -> "WEBRip"
+      "remux" -> "REMUX"
+      "dvdrip" -> "DVDRip"
+      _ -> value
+    end
+  end
+
+  defp canonical_codec(nil), do: nil
+
+  # The classifier reads `HEVC,` from a comma-separated tag list; the
+  # comma is not part of the codec.
+  defp canonical_codec(value) do
+    value = String.trim_trailing(value, ",")
+    down = String.downcase(value)
+
+    cond do
+      down == "hevc" -> "H.265"
+      down == "avc" -> "H.264"
+      m = Regex.run(~r/^([hx])[\s.]?(26[45])$/, down) -> canonical_h26x(m)
+      down == "xvid" -> "XviD"
+      down == "divx" -> "DivX"
+      down == "vp9" -> "VP9"
+      down == "av1" -> "AV1"
+      true -> value
+    end
+  end
+
+  defp canonical_h26x([_, "h", digits]), do: "H.#{digits}"
+  defp canonical_h26x([_, "x", digits]), do: "x#{digits}"
+
+  defp canonical_audio_name(name) when name in ["ddp", "eac3", "e-ac3", "e-ac-3", "eac3d", "dd+"],
+    do: "DD+"
+
+  defp canonical_audio_name(name) when name in ["dd", "ac3", "ac3d"], do: "AC3"
+
+  defp canonical_audio_name(name) when name in ["dts-hd.ma", "dts-hd ma", "dtshdma"],
+    do: "DTS-HD MA"
+
+  defp canonical_audio_name(name) when name in ["dts-hd", "dtshd"], do: "DTS-HD"
+  defp canonical_audio_name(name) when name in ["dts-x", "dts:x", "dtsx"], do: "DTS:X"
+  defp canonical_audio_name("dts"), do: "DTS"
+  defp canonical_audio_name("truehd"), do: "TrueHD"
+  defp canonical_audio_name(name) when name in ["aac", "aac-lc"], do: "AAC"
+  defp canonical_audio_name(name) when name in ["flac", "2xflac", "flacx2"], do: "FLAC"
+  defp canonical_audio_name("opus"), do: "Opus"
+  defp canonical_audio_name("vorbis"), do: "Vorbis"
+  defp canonical_audio_name("mp3"), do: "MP3"
+  defp canonical_audio_name(_), do: nil
 
   # --- Resolution ---
   #
@@ -113,7 +195,9 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   #
   # Rejoin WEB → WEB-DL / WEB-Rip if the next adjacent token is `DL`
   # or `Rip` (the tokenizer's compound-dash split produces these
-  # post-split tokens).
+  # post-split tokens). Every other source takes the vocabulary's
+  # canonical value, which is what folds `HDTS`, `PDVD` and `TS` into
+  # `Telesync`.
 
   defp extract_source(quality_tokens, next_by_token) do
     case Enum.find(quality_tokens, &(&1.label == :source)) do
@@ -122,27 +206,29 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
       entry ->
         raw = token_text(entry)
-        rejoin_web_compound(raw, entry, next_by_token)
+
+        if String.upcase(raw) == "WEB" do
+          rejoin_web_compound(raw, entry, next_by_token)
+        else
+          vocabulary_value(entry) || raw
+        end
     end
   end
 
+  defp vocabulary_value(%{value: value}) when is_binary(value), do: value
+  defp vocabulary_value(_entry), do: nil
+
   defp rejoin_web_compound(raw, entry, next_by_token) do
-    if String.upcase(raw) == "WEB" do
-      case next_token(entry.token, next_by_token) do
-        %Token{value: value} ->
-          upper = String.upcase(value)
+    case next_token(entry.token, next_by_token) do
+      %Token{value: value} ->
+        case String.upcase(value) do
+          "DL" -> "WEB-DL"
+          "RIP" -> "WEB-Rip"
+          _ -> raw
+        end
 
-          cond do
-            upper == "DL" -> "WEB-DL"
-            upper == "RIP" -> "WEB-Rip"
-            true -> raw
-          end
-
-        _ ->
-          raw
-      end
-    else
-      raw
+      _ ->
+        raw
     end
   end
 
@@ -228,156 +314,214 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
   # --- HDR ---
 
-  # Defensive fold, not a load-bearing one: Resolver.@singleton_labels treats
-  # :hdr as a singleton, and resolve_one_label/2 strips every losing :hdr
-  # candidate before quality_tokens is built, so this producer receives at
-  # most one :hdr-labeled token per release. The scan-and-fold shape mirrors
-  # QualityParser.extract_hdr/1, which scans a release title's raw text with
-  # a regex and genuinely can see several HDR tokens (no resolver sits
-  # between it and the string), so it keeps this shape for consistency and
-  # to stay correct if the resolver's singleton constraint on :hdr is ever
-  # relaxed.
-  defp extract_hdr(quality_tokens) do
-    quality_tokens
-    |> Enum.filter(&(&1.label == :hdr))
-    |> Enum.reduce({nil, false}, fn entry, {base, dv} ->
-      case Hdr.from_release_token(token_text(entry)) do
-        :dolby_vision -> {base, true}
-        {:base, found} -> {base || found, dv}
-        :unknown -> {base, dv}
-      end
+  # The resolver passes every :hdr token, in token order, because they
+  # stack: `DV.HDR10` is a Dolby Vision layer over an HDR10 base, and
+  # keeping only one of them loses either the layer or the base. The first
+  # base token wins and Dolby Vision is sticky.
+  #
+  # The vocabulary's canonical value is folded, not the raw token text, so
+  # a listed tag (`[HEVC, HDR10, DV]`) reads the same as a dotted one. Two
+  # spellings split across tokens are rejoined here: `HDR10.PLUS` and
+  # `Dolby.Vision`. "Dolby" has no vocabulary entry of its own, so it is
+  # only read when the classifier left it unclaimed, which keeps a title
+  # word ("Dolby.Vision.Story.2020") out.
+  defp extract_hdr(quality_tokens, all_tokens, next_by_token) do
+    {base, dv} =
+      quality_tokens
+      |> Enum.filter(&(&1.label == :hdr))
+      |> Enum.reduce({nil, false}, fn entry, {base, dv} ->
+        case Hdr.from_release_token(hdr_text(entry, next_by_token)) do
+          :dolby_vision -> {base, true}
+          {:base, found} -> {base || found, dv}
+          :unknown -> {base, dv}
+        end
+      end)
+
+    {base, dv or spaced_dolby_vision?(all_tokens, next_by_token)}
+  end
+
+  defp hdr_text(%{value: "HDR10", token: %Token{} = token}, next_by_token) do
+    if next_word(token, next_by_token) == "plus", do: "HDR10+", else: "HDR10"
+  end
+
+  defp hdr_text(%{value: value}, _next_by_token) when is_binary(value), do: value
+  defp hdr_text(entry, _next_by_token), do: token_text(entry)
+
+  defp spaced_dolby_vision?(all_tokens, next_by_token) do
+    Enum.any?(all_tokens, fn %Token{value: value, candidates: candidates} = token ->
+      candidates == [] and String.downcase(value) == "dolby" and
+        next_word(token, next_by_token) == "vision"
     end)
+  end
+
+  # The next token's text, downcased, without the comma of a listed tag
+  # set (`Dolby Vision, WEB-DL`).
+  defp next_word(%Token{} = token, next_by_token) do
+    case next_token(token, next_by_token) do
+      %Token{value: value} -> value |> String.downcase() |> String.trim_trailing(",")
+      nil -> nil
+    end
   end
 
   # --- Audio ---
   #
   # Audio is the most adjacency-prone field. Tokens like `DDP5.1`,
   # `DTS-HD.MA`, `TrueHD.7.1`, `AAC 2.0` get split on dots, spaces, and
-  # dashes. Rebuild the V2 canonical *raw* string.
+  # dashes, so each audio token is rebuilt from its neighbours into a
+  # canonical label and its channels.
+  #
+  # A release can list several tracks (`Esp DD2.0, Ing DTS-HD5.1`), and
+  # the one reported is the best in the scorers' tier order, so a dub
+  # listed first does not hide the lossless original. `Atmos` is not a
+  # track: beside TrueHD it is the `TrueHD Atmos` tier, beside DD+ it has
+  # no tier of its own and is dropped, and alone it is all the release
+  # says.
+
+  @audio_tiers [
+    "TrueHD Atmos",
+    "DTS:X",
+    "TrueHD",
+    "DTS-HD MA",
+    "DTS-HD",
+    "FLAC",
+    "DD+",
+    "DTS",
+    "AC3",
+    "AAC",
+    "Opus",
+    "Vorbis",
+    "MP3"
+  ]
 
   defp extract_audio(quality_tokens, next_by_token) do
-    case Enum.find(quality_tokens, &(&1.label == :audio)) do
-      nil ->
-        nil
+    {atmos, tracks} =
+      quality_tokens
+      |> Enum.filter(&(&1.label == :audio))
+      |> Enum.split_with(&(String.upcase(token_text(&1)) == "ATMOS"))
 
-      entry ->
-        raw = token_text(entry)
-        rejoin_audio(raw, entry, next_by_token)
-    end
+    tracks
+    |> Enum.map(&(&1 |> audio_track(next_by_token) |> with_atmos(atmos != [])))
+    |> Enum.min_by(&audio_tier/1, fn -> nil end)
+    |> audio_label(atmos)
   end
 
-  defp rejoin_audio(raw, entry, next_by_token) do
-    upper = String.upcase(raw)
+  defp with_atmos({"TrueHD", channels}, true), do: {"TrueHD Atmos", channels}
+  defp with_atmos(track, _atmos?), do: track
 
-    cond do
-      # DTS-HD: tokenizer compound-dash split produces DTS, HD as two
-      # tokens. The vocab matches `DTS-HD` from `DTS` (after rejoin).
-      # Then ".MA" may follow as a third token. We handle that case
-      # below.
-      upper in ["DTS"] ->
-        rejoin_dts(entry, next_by_token, raw)
-
-      # TrueHD: optional channel spec (`TrueHD 7.1` → `TrueHD 7.1`)
-      upper == "TRUEHD" ->
-        rejoin_trailing_channel(raw, entry, next_by_token)
-
-      # AAC: optional channel spec
-      upper in ["AAC", "AAC-LC"] ->
-        rejoin_trailing_channel(raw, entry, next_by_token)
-
-      # DDP / DD: may have channel suffix as separate token (`DDP5` `1` → `DDP5.1`).
-      Regex.match?(~r/^DDP\d+$/i, raw) or Regex.match?(~r/^DD\d+$/i, raw) ->
-        rejoin_trailing_channel_dot(raw, entry, next_by_token)
-
-      # OPUS: with channels
-      upper == "OPUS" ->
-        rejoin_trailing_channel(raw, entry, next_by_token)
-
-      true ->
-        raw
-    end
+  defp audio_tier({label, _channels}) do
+    Enum.find_index(@audio_tiers, &(&1 == label)) || length(@audio_tiers)
   end
 
-  # Handle DTS rejoin: DTS-HD (with optional .MA) or DTS-X. Both are
-  # adjacent dash compounds the tokenizer splits.
-  defp rejoin_dts(entry, next_by_token, raw) do
-    case next_token(entry.token, next_by_token) do
-      %Token{value: hd_value, byte_offset: ho, byte_length: hl} = hd_token
-      when hd_value in ["HD", "hd", "Hd"] ->
-        sep_len = ho - (entry.token.byte_offset + entry.token.byte_length)
+  defp audio_label(nil, []), do: nil
+  defp audio_label(nil, [_ | _]), do: "Atmos"
+  defp audio_label({label, nil}, _atmos), do: label
+  defp audio_label({label, channels}, _atmos), do: "#{label} #{channels}"
 
-        if sep_len == 1 do
-          rejoined = "DTS-HD"
-
-          case next_token(hd_token, next_by_token) do
-            %Token{value: ma_value, byte_offset: mo}
-            when ma_value in ["MA", "ma", "Ma"] ->
-              if mo == ho + hl + 1 do
-                "DTS-HD.MA"
-              else
-                rejoined
-              end
-
-            _ ->
-              rejoined
-          end
-        else
-          raw
-        end
-
-      %Token{value: x_value, byte_offset: xo}
-      when x_value in ["X", "x"] ->
-        sep_len = xo - (entry.token.byte_offset + entry.token.byte_length)
-        if sep_len == 1, do: "DTS-X", else: raw
-
-      _ ->
-        raw
-    end
+  defp audio_track(entry, next_by_token) do
+    {name, fused} = entry |> token_text() |> keep_dd_plus(entry) |> split_fused_channels()
+    {name, last, fused} = extend_dts(String.upcase(name), name, entry.token, fused, next_by_token)
+    label = canonical_audio_name(String.downcase(name)) || name
+    {label, audio_channels(fused, last, next_by_token)}
   end
 
-  # Rejoin TrueHD/AAC/Opus with trailing channel notation: `TrueHD 7.1`
-  # becomes `TrueHD 7.1`. The channels arrive as separate tokens
-  # `7` and `1` after the dot split.
-  defp rejoin_trailing_channel(raw, entry, next_by_token) do
-    case channel_after(entry.token, next_by_token) do
-      nil -> raw
-      ch -> "#{raw} #{ch}"
-    end
-  end
-
-  # Rejoin DDP/DD with channel suffix via dot: `DDP5` followed by `1` → `DDP5.1`.
-  defp rejoin_trailing_channel_dot(raw, entry, next_by_token) do
-    case next_token(entry.token, next_by_token) do
-      %Token{value: digit, byte_offset: to}
-      when digit in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] ->
-        head_end = entry.token.byte_offset + entry.token.byte_length
-
-        # Must be adjacent (separated by a single dot byte)
-        if to == head_end + 1 do
-          "#{raw}.#{digit}"
-        else
-          raw
-        end
-
-      _ ->
-        raw
-    end
-  end
-
-  # Detect a 2-digit channel suffix (e.g. `7` `1` after `TrueHD`).
-  defp channel_after(%Token{} = token, next_by_token) do
-    n1 = next_token(token, next_by_token)
-    n2 = if n1, do: next_token(n1, next_by_token), else: nil
-
-    if is_digit_token?(n1) and is_digit_token?(n2) do
-      "#{n1.value}.#{n2.value}"
+  # `AAC2` (from `AAC2.0`), `DDP51`, `DTS-HD5`: the digits glued onto the
+  # codec start its channel layout. The whole value is checked first,
+  # since `EAC3` and `MP3` end in digits that are not channels.
+  defp split_fused_channels(raw) do
+    with nil <- canonical_audio_name(String.downcase(raw)),
+         [_, name, digits] <- Regex.run(~r/^(.+?)(\d{1,2})$/, raw),
+         label when is_binary(label) <- canonical_audio_name(String.downcase(name)) do
+      {name, digits}
     else
-      nil
+      _ -> {raw, ""}
     end
   end
 
-  defp is_digit_token?(%Token{value: v}), do: Regex.match?(~r/^\d+$/, v)
-  defp is_digit_token?(_), do: false
+  # `token_text/1` drops trailing `+`, which would turn `DD+` into plain `DD`.
+  defp keep_dd_plus("DD", %{token: %Token{value: value}}) do
+    if String.upcase(value) == "DD+", do: "DD+", else: "DD"
+  end
+
+  defp keep_dd_plus(raw, _entry), do: raw
+
+  # DTS compounds arrive split: `DTS-HD.MA` as `DTS` `HD` `MA`, `DTS-X` as
+  # `DTS` `X`, and the shorthands `DTS-MA`, `DTSHD-MA` and `DTS-HR` (high
+  # resolution) the same way. `DTS-ES` is plain DTS with its channels
+  # after the `ES`. Returns the rebuilt name, the last token it used, and
+  # any channel digits fused onto that token (`MA5` in `DTS-HD.MA5.1`).
+  defp extend_dts("DTS", name, token, "", next_by_token) do
+    case adjacent_token(token, next_by_token) do
+      %Token{value: value} = next ->
+        case String.upcase(value) do
+          up when up in ["HD", "HR"] -> extend_ma(next, "DTS-HD", next_by_token)
+          "X" -> {"DTS-X", next, ""}
+          "ES" -> {name, next, ""}
+          _ -> extend_ma(token, name, next_by_token)
+        end
+
+      nil ->
+        {name, token, ""}
+    end
+  end
+
+  defp extend_dts("DTSHD", _name, token, "", next_by_token),
+    do: extend_ma(token, "DTS-HD", next_by_token)
+
+  defp extend_dts(_upper, name, token, fused, _next_by_token), do: {name, token, fused}
+
+  defp extend_ma(token, fallback, next_by_token) do
+    with %Token{value: value} = ma <- adjacent_token(token, next_by_token),
+         [_, digits] <- Regex.run(~r/^MA(\d{0,2})(?:-.*)?$/i, value) do
+      {"DTS-HD MA", ma, digits}
+    else
+      _ -> {fallback, token, ""}
+    end
+  end
+
+  # Channels come glued whole (`DDP51`), glued then split on the dot
+  # (`DDP5` `1`, or `AAC2 0` with a space), or as two digit tokens after
+  # the codec (`TrueHD.7.1`, `DD 5 1`), possibly past an `Atmos`
+  # (`TrueHD.Atmos.7.1`).
+  defp audio_channels(<<a, b>>, _last, _next_by_token) when a in ?0..?9 and b in ?0..?9,
+    do: <<a, ?., b>>
+
+  defp audio_channels(<<a>>, last, next_by_token) when a in ?0..?9 do
+    case last |> adjacent_token(next_by_token) |> channel_digit() do
+      nil -> nil
+      b -> <<a, ?., b>>
+    end
+  end
+
+  defp audio_channels(_fused, last, next_by_token) do
+    n1 = last |> next_token(next_by_token) |> skip_atmos(next_by_token)
+    n2 = next_token(n1, next_by_token)
+
+    with a when a != nil <- channel_digit(n1),
+         b when b != nil <- channel_digit(n2) do
+      <<a, ?., b>>
+    end
+  end
+
+  defp skip_atmos(%Token{value: value} = token, next_by_token) do
+    if String.upcase(value) == "ATMOS", do: next_token(token, next_by_token), else: token
+  end
+
+  defp skip_atmos(nil, _next_by_token), do: nil
+
+  # One digit, or one digit before the comma of a track list
+  # (`Esp DD2.0,Ing DTS-HD5.1` tokenizes as `DD2` `0,Ing`): commas do not
+  # split tokens.
+  defp channel_digit(%Token{value: <<d>>}) when d in ?0..?9, do: d
+  defp channel_digit(%Token{value: <<d, ?,, _::binary>>}) when d in ?0..?9, do: d
+  defp channel_digit(_), do: nil
+
+  # The next token, when only one separator byte sits between the two.
+  defp adjacent_token(%Token{byte_offset: offset, byte_length: length} = token, next_by_token) do
+    case next_token(token, next_by_token) do
+      %Token{byte_offset: next_offset} = next when next_offset == offset + length + 1 -> next
+      _ -> nil
+    end
+  end
 
   # --- Helpers ---
 
@@ -417,12 +561,17 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
     Map.get(next_by_token, token_key(current))
   end
 
+  defp next_token(nil, _next_by_token), do: nil
+
   defp token_key(%Token{byte_offset: offset, byte_length: length}), do: {offset, length}
 
-  # ---- Standardization (matches V2's standardize_quality/1 outputs exactly) ----
+  # ---- Standardization: canonical labels to display strings ----
 
   @doc """
-  Canonicalizes a `%Quality{}` into the parser's standard vocabulary.
+  Projects a `%Quality{}` of canonical labels (what `extract/2` emits by
+  default) into display strings such as `"Blu-ray"`, `"2160p (4K)"`,
+  `"Dolby Digital Plus 5.1"`. Input spellings the parser used to emit (`"4K"`,
+  `"DDP5.1"`, `"BDRip"`) are still accepted.
 
   Public so a caller holding quality values from another source, such as the
   analyzed columns on a media file, can bring them into the same vocabulary the
@@ -431,15 +580,14 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   """
   @spec standardize(Quality.t()) :: Quality.t()
   def standardize(%Quality{} = q) do
+    # Update syntax, so the release flags (`proper`, `repack`) and the HDR
+    # fields, already canonical out of extract_hdr/3, carry over.
     %Quality{
-      resolution: standardize_resolution(q.resolution),
-      source: standardize_source(q.source),
-      codec: standardize_codec(q.codec),
-      # HDR is already canonical coming out of extract_hdr/1; no raw string
-      # form remains to standardize.
-      hdr_format: q.hdr_format,
-      dolby_vision: q.dolby_vision,
-      audio: standardize_audio(q.audio)
+      q
+      | resolution: standardize_resolution(q.resolution),
+        source: standardize_source(q.source),
+        codec: standardize_codec(q.codec),
+        audio: standardize_audio(q.audio)
     }
   end
 
@@ -453,7 +601,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
       normalized == "1080p" -> "1080p (Full HD)"
       normalized == "720p" -> "720p (HD)"
       normalized in ["4320p", "8k"] -> "4320p (8K)"
-      normalized in ["576p", "480p"] -> "#{value} (SD)"
+      normalized in ["576p", "540p", "480p", "360p"] -> "#{value} (SD)"
       true -> value
     end
   end
@@ -471,7 +619,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
       normalized == "web-rip" -> "WEBRip"
       normalized == "web" -> "WEB"
       normalized == "hdtv" -> "HDTV"
-      normalized in ["dvd", "dvdrip", "dvdscr"] -> "DVD"
+      normalized in ["dvd", "dvdrip"] -> "DVD"
       true -> value
     end
   end
@@ -495,54 +643,42 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
     end
   end
 
+  # First match wins. `:channels` appends the first number in the value;
+  # `AC3 5.1` drops its codec name first, whose `3` would otherwise read as
+  # the channel count. `DTS-HD` with `ma` anywhere is Master Audio.
+  @audio_display [
+    {~r/^eac3$/, "Dolby Digital Plus", :bare},
+    {~r/^(ddp|dd\+)\s?(\d+\.?\d*)?$/, "Dolby Digital Plus", :channels},
+    {~r/^ac3$/, "Dolby Digital", :bare},
+    {~r/^ac3\s\d+\.?\d*$/, "Dolby Digital", :channels_after_ac3},
+    {~r/^dd(\d+\.?\d*)?$/, "Dolby Digital", :channels},
+    {~r/^(?=.*dts-hd)(?=.*ma)/s, "DTS-HD Master Audio", :bare},
+    {~r/dts-hd/, "DTS-HD High Resolution Audio", :bare},
+    {~r/^dts[-:]x$/, "DTS:X", :bare},
+    {~r/^dts$/, "DTS", :bare},
+    {~r/truehd atmos/, "Dolby TrueHD Atmos", :channels},
+    {~r/truehd/, "Dolby TrueHD", :channels},
+    {~r/^atmos$/, "Dolby Atmos", :bare},
+    {~r/^aac-lc/, "AAC-LC", :bare},
+    {~r/^aac/, "AAC", :channels}
+  ]
+
   defp standardize_audio(nil), do: nil
 
   defp standardize_audio(value) do
     normalized = String.downcase(value)
 
-    cond do
-      Regex.match?(~r/^eac3$/i, normalized) ->
-        "Dolby Digital Plus"
-
-      Regex.match?(~r/^ddp(\d+\.?\d*)?$/i, normalized) ->
-        extract_channels(value, "Dolby Digital Plus")
-
-      Regex.match?(~r/^ac3$/i, normalized) ->
-        "Dolby Digital"
-
-      Regex.match?(~r/^dd(\d+\.?\d*)?$/i, normalized) ->
-        extract_channels(value, "Dolby Digital")
-
-      String.contains?(normalized, "dts-hd") and String.contains?(normalized, "ma") ->
-        "DTS-HD Master Audio"
-
-      String.contains?(normalized, "dts-hd") ->
-        "DTS-HD High Resolution Audio"
-
-      Regex.match?(~r/^dts-x$/i, normalized) ->
-        "DTS:X"
-
-      Regex.match?(~r/^dts$/i, normalized) ->
-        "DTS"
-
-      String.contains?(normalized, "truehd") ->
-        extract_channels(value, "Dolby TrueHD")
-
-      Regex.match?(~r/^atmos$/i, normalized) ->
-        "Dolby Atmos"
-
-      Regex.match?(~r/^aac-lc/i, normalized) ->
-        "AAC-LC"
-
-      Regex.match?(~r/^aac/i, normalized) ->
-        extract_channels(value, "AAC")
-
-      true ->
-        value
+    case Enum.find(@audio_display, fn {re, _, _} -> Regex.match?(re, normalized) end) do
+      {_, display, :bare} -> display
+      {_, display, :channels} -> with_channels(value, display)
+      {_, display, :channels_after_ac3} -> value |> drop_ac3_name() |> with_channels(display)
+      nil -> value
     end
   end
 
-  defp extract_channels(value, base_name) do
+  defp drop_ac3_name(value), do: String.replace(value, ~r/^ac3\s/i, "")
+
+  defp with_channels(value, base_name) do
     case Regex.run(~r/(\d+\.?\d*)/, value) do
       [_, channels] -> "#{base_name} #{channels}"
       _ -> base_name
