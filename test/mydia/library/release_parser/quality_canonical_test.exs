@@ -39,8 +39,41 @@ defmodule Mydia.Library.ReleaseParser.QualityCanonicalTest do
     end
   end
 
-  describe "standardize: true is unchanged for display" do
-    test "projects canonical values to display strings" do
+  describe "dotless and spaced forms" do
+    test "two-digit channel strings read as N.M" do
+      assert q("Fake.Movie.2020.1080p.BluRay.DD51.x264-GRP").audio == "AC3 5.1"
+      assert q("Fake.Movie.2020.1080p.WEB-DL.DDP51.H.264-GRP").audio == "DD+ 5.1"
+    end
+
+    test "spaced H 264 reads as H.264" do
+      assert q("Fake.Movie.2020 1080p BluRay H 264-GRP").codec == "H.264"
+    end
+  end
+
+  describe "standardize: true on canonical input (deliberate outputs)" do
+    defp std(title), do: ReleaseParser.parse(title, standardize: true).quality
+
+    test "bare WEB displays as WEB-DL" do
+      assert std("Fake.Show.S01E01.1080p.WEB.H264-GRP").source == "WEB-DL"
+    end
+
+    test "1440p and 1080i display as Full HD" do
+      assert std("Fake.Movie.2020.1440p.WEB-DL.x264-GRP").resolution == "1080p (Full HD)"
+      assert std("Fake.Show.S01E01.1080i.HDTV.MPEG2-GRP").resolution == "1080p (Full HD)"
+    end
+
+    test "AAC-LC displays as AAC with channels" do
+      assert std("Fake.Movie.2020.1080p.BluRay.AAC-LC.2.0.x264-GRP").audio == "AAC 2.0"
+    end
+
+    test "DD+ displays as Dolby Digital Plus" do
+      assert std("Fake.Movie.2020.1080p.WEB-DL.DD+.5.1.H.264-GRP").audio ==
+               "Dolby Digital Plus 5.1"
+    end
+  end
+
+  describe "standardize: true projects canonical values to display strings" do
+    test "full projection" do
       std =
         ReleaseParser.parse("Fake.Movie.2020.2160p.BDRip.DDP5.1.HEVC-GRP", standardize: true).quality
 

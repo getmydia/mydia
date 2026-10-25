@@ -546,12 +546,12 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
     test "handles audio codec variations without dots" do
       # DD51 without dot
       result1 = FileParser.parse("Movie.2024.1080p.DD51.mkv")
-      assert result1.quality.audio == "AC3 51"
+      assert result1.quality.audio == "AC3 5.1"
       assert result1.title == "Movie"
 
       # DDP51 without dot
       result2 = FileParser.parse("Movie.2024.1080p.DDP51.mkv")
-      assert result2.quality.audio == "DD+ 51"
+      assert result2.quality.audio == "DD+ 5.1"
       assert result2.title == "Movie"
     end
 
@@ -798,7 +798,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       # DDP51 → Dolby Digital Plus 51
       result2 = FileParser.parse("Movie.2024.1080p.DDP51.mkv", standardize: true)
-      assert result2.quality.audio == "Dolby Digital Plus 51"
+      assert result2.quality.audio == "Dolby Digital Plus 5.1"
 
       # EAC3 → Dolby Digital Plus
       result3 = FileParser.parse("Movie.2024.1080p.EAC3.mkv", standardize: true)
@@ -812,7 +812,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       # DD51 → Dolby Digital 51
       result2 = FileParser.parse("Movie.2024.1080p.DD51.mkv", standardize: true)
-      assert result2.quality.audio == "Dolby Digital 51"
+      assert result2.quality.audio == "Dolby Digital 5.1"
 
       # AC3 → Dolby Digital
       result3 = FileParser.parse("Movie.2024.1080p.AC3.mkv", standardize: true)

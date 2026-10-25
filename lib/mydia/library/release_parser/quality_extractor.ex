@@ -63,7 +63,7 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
     end
   end
 
-  # ---- Raw projection (matches V2 raw output) ----
+  # ---- Projection: rejoin adjacent tokens, then map to canonical labels ----
 
   defp build_raw(quality_tokens, all_tokens, next_by_token) do
     resolution = extract_resolution(quality_tokens)
@@ -169,10 +169,14 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   # Channels arrive glued on (`DDP5.1`) or after a space (`TrueHD 7.1`).
   defp split_audio_channels(value) do
     case Regex.run(~r/^(.*?)\s*(\d+(?:\.\d+)?)$/, value) do
-      [_, name, channels] when name != "" -> {name, channels}
+      [_, name, channels] when name != "" -> {name, dotted_channels(channels)}
       _ -> {value, nil}
     end
   end
+
+  # `DD51` / `DDP51` carry the layout without its dot.
+  defp dotted_channels(<<a, b>>) when a in ?0..?9 and b in ?0..?9, do: <<a, ?., b>>
+  defp dotted_channels(channels), do: channels
 
   defp join_channels(label, nil), do: label
   defp join_channels(label, channels), do: "#{label} #{channels}"
@@ -527,7 +531,10 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   # ---- Standardization (matches V2's standardize_quality/1 outputs exactly) ----
 
   @doc """
-  Canonicalizes a `%Quality{}` into the parser's standard vocabulary.
+  Projects a `%Quality{}` of canonical labels (what `extract/2` emits by
+  default) into display strings such as `"Blu-ray"`, `"2160p (4K)"`,
+  `"Dolby Digital Plus 5.1"`. Input spellings the parser used to emit (`"4K"`,
+  `"DDP5.1"`, `"BDRip"`) are still accepted.
 
   Public so a caller holding quality values from another source, such as the
   analyzed columns on a media file, can bring them into the same vocabulary the

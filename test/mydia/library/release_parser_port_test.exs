@@ -646,12 +646,12 @@ defmodule Mydia.Library.ReleaseParserPortTest do
     test "handles audio codec variations without dots" do
       # DD51 without dot
       result1 = FileParser.parse("Movie.2024.1080p.DD51.mkv")
-      assert result1.quality.audio == "AC3 51"
+      assert result1.quality.audio == "AC3 5.1"
       assert result1.title == "Movie"
 
       # DDP51 without dot
       result2 = FileParser.parse("Movie.2024.1080p.DDP51.mkv")
-      assert result2.quality.audio == "DD+ 51"
+      assert result2.quality.audio == "DD+ 5.1"
       assert result2.title == "Movie"
     end
 
