@@ -108,6 +108,7 @@ defmodule Mydia.Library.ReleaseParser.VocabularyTest do
       assert "languages.exs" in basenames
       assert "streaming_services.exs" in basenames
       assert "release_groups.exs" in basenames
+      assert "revisions.exs" in basenames
 
       for file <- files do
         assert File.exists?(file), "expected #{file} to exist on disk"

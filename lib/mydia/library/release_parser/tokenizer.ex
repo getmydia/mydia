@@ -29,10 +29,11 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     `Marvel's What-If`).
   - A source glued to a resolution (`HDTV-720p`, `Bluray1080p`, Sonarr's
     file naming) is split in two, but only when the left part is a known
-    source, so `Pilot-720p` stays whole. Past the title boundary, a video
-    or audio codec dash-joined to anything (`BDRip-AVC`, `HEVC-10bit`,
-    `x264-AAC`, `720p-FLAC`) is split off it; in the title (`Route-264`)
-    it stays.
+    source, so `Pilot-720p` stays whole. `HD1080p` keeps only the
+    resolution. Past the title boundary, a video or audio codec or a
+    revision flag dash-joined to anything (`BDRip-AVC`, `HEVC-10bit`,
+    `x264-AAC`, `720p-FLAC`, `x264-REPACK-GRP`) is split off it; in the
+    title (`Route-264`) it stays.
   """
 
   alias Mydia.Library.ReleaseParser.Token
@@ -52,7 +53,19 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   @year_re_primary ~r/[\(\[](19\d{2}|20\d{2})[\)\]]/
   @year_re_secondary ~r/(?<![0-9])(19\d{2}|20\d{2})(?![0-9])/
 
-  @resolution_re ~r/(?<![0-9a-zA-Z])(?:(?:480|540|576|720|1080|1440|2160|4320)[pi]|4K|8K|UHD)(?![a-zA-Z])/i
+  @resolution_heights "(?:360|480|540|576|720|1080|1440|2160|4320)[pi]"
+
+  @resolution_re ~r/(?<![0-9a-zA-Z])(?:#{@resolution_heights}|4K|8K|UHD)(?![a-zA-Z])/i
+
+  # A resolution glued to the word before it (`Bluray1080p`, `HD1080p`).
+  # The lookbehind above rejects these, so the prefix is checked on its
+  # own and the anchor lands on the digits, where the glued split puts
+  # the resolution token.
+  @glued_resolution_anchor_re ~r/(?<![0-9a-zA-Z])([a-zA-Z][a-zA-Z-]*?)-?(#{@resolution_heights})(?![a-zA-Z])/i
+
+  # `HD` glued to a resolution says nothing the resolution doesn't, and is
+  # not a source.
+  @glued_resolution_noise ["HD"]
 
   @type anchors :: %{
           year: non_neg_integer() | nil,
@@ -99,7 +112,10 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
         first_match_pos(stripped, [@year_re_secondary])
       end
 
-    resolution = first_match_pos(stripped, [@resolution_re])
+    resolution =
+      [first_match_pos(stripped, [@resolution_re]), glued_resolution_pos(stripped)]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.min(fn -> nil end)
 
     %{
       year: year_after_episode_only(year, episode, primary_year),
@@ -262,7 +278,19 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     end
   end
 
-  @glued_resolution_re ~r/^(.+?)(-?)((?:480|540|576|720|1080|1440|2160|4320)[pi])$/i
+  @glued_resolution_re ~r/^(.+?)(-?)(#{@resolution_heights})$/i
+
+  defp glued_resolution_pos(input) do
+    @glued_resolution_anchor_re
+    |> Regex.scan(input, return: :index)
+    |> Enum.find_value(fn [_full, {prefix_at, prefix_len}, {res_at, _}] ->
+      if glued_prefix?(:binary.part(input, prefix_at, prefix_len)), do: res_at
+    end)
+  end
+
+  defp glued_prefix?(word), do: source_word?(word) or noise_prefix?(word)
+
+  defp noise_prefix?(word), do: String.upcase(word) in @glued_resolution_noise
 
   defp apply_glued_source_splits(tokens, boundary) do
     Enum.flat_map(tokens, fn %Token{} = token ->
@@ -270,15 +298,16 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
         [_, left, dash, right] ->
           left_len = byte_size(left)
 
-          [
-            %Token{token | value: left, byte_length: left_len},
-            %Token{
-              token
-              | value: right,
-                byte_offset: token.byte_offset + left_len + byte_size(dash),
-                byte_length: byte_size(right)
-            }
-          ]
+          resolution = %Token{
+            token
+            | value: right,
+              byte_offset: token.byte_offset + left_len + byte_size(dash),
+              byte_length: byte_size(right)
+          }
+
+          if noise_prefix?(left),
+            do: [resolution],
+            else: [%Token{token | value: left, byte_length: left_len}, resolution]
 
         nil ->
           if metadata_zone?(token, boundary), do: split_dashed_codecs(token), else: [token]
@@ -296,10 +325,10 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
       (token.bracket_context != nil and token.byte_offset > 1)
   end
 
-  # A source followed by its resolution, dash optional.
+  # A source (or `HD`) followed by its resolution, dash optional.
   defp source_then_resolution(value) do
     case Regex.run(@glued_resolution_re, value) do
-      [_, left, _, _] = match -> if source_word?(left), do: match
+      [_, left, _, _] = match -> if glued_prefix?(left), do: match
       nil -> nil
     end
   end
@@ -332,8 +361,12 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     end
   end
 
-  defp codec_part?(part),
-    do: part in ["264", "265"] or has_label?(part, :codec) or has_label?(part, :audio)
+  # A revision flag between the codec and the group (`x264-REPACK-TLA`)
+  # comes off too, or it stays glued to the group name.
+  defp codec_part?(part) do
+    part in ["264", "265"] or has_label?(part, :codec) or has_label?(part, :audio) or
+      has_label?(part, :proper) or has_label?(part, :repack)
+  end
 
   # `{relative_offset, value}` for each codec part and each dash-joined run
   # of other parts between them; empty parts (a leading dash) are dropped.

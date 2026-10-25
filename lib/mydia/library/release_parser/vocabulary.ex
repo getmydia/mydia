@@ -27,6 +27,7 @@ defmodule Mydia.Library.ReleaseParser.Vocabulary do
     languages.exs
     streaming_services.exs
     release_groups.exs
+    revisions.exs
   )
 
   for file <- @vocab_files do

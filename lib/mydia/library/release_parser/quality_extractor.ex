@@ -78,9 +78,13 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
       codec: canonical_codec(codec),
       hdr_format: hdr_format,
       dolby_vision: dolby_vision,
-      audio: audio
+      audio: audio,
+      proper: has_label?(quality_tokens, :proper),
+      repack: has_label?(quality_tokens, :repack)
     }
   end
+
+  defp has_label?(quality_tokens, label), do: Enum.any?(quality_tokens, &(&1.label == label))
 
   # ---- Canonical labels ----
   #
@@ -577,15 +581,17 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   """
   @spec standardize(Quality.t()) :: Quality.t()
   def standardize(%Quality{} = q) do
+    # Update syntax, so the release flags (`proper`, `repack`) carry over.
     %Quality{
-      resolution: standardize_resolution(q.resolution),
-      source: standardize_source(q.source),
-      codec: standardize_codec(q.codec),
-      # HDR is already canonical coming out of extract_hdr/1; no raw string
-      # form remains to standardize.
-      hdr_format: q.hdr_format,
-      dolby_vision: q.dolby_vision,
-      audio: standardize_audio(q.audio)
+      q
+      | resolution: standardize_resolution(q.resolution),
+        source: standardize_source(q.source),
+        codec: standardize_codec(q.codec),
+        # HDR is already canonical coming out of extract_hdr/1; no raw string
+        # form remains to standardize.
+        hdr_format: q.hdr_format,
+        dolby_vision: q.dolby_vision,
+        audio: standardize_audio(q.audio)
     }
   end
 

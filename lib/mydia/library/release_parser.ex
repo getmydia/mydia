@@ -419,7 +419,7 @@ defmodule Mydia.Library.ReleaseParser do
                             x264 x265 h264 h265
                             proper repack internal limited unrated extended theatrical hybrid
                             amzn nf atvp dsnp hmax hulu pmtp pcok stan
-                            4k 8k uhd 720p 1080p 2160p 480p 540p 576p 1440p 4320p
+                            4k 8k uhd 720p 1080p 2160p 360p 480p 540p 576p 1440p 4320p
                             ddp5 ddp7 dd5 dd7 ddp51 ddp71 dd51 dd71 ddp20 dd20
                             aac20 aac51
                           ))
@@ -429,7 +429,7 @@ defmodule Mydia.Library.ReleaseParser do
   @combined_marker_re ~r/^\d{3,4}[pPiIkK]?\.[A-Z0-9]+$/i
   @ddp_dd_channel_re ~r/^DD[P]?\d+(?:\.\d+)?$/i
   @dotted_codec_re ~r/^(?:[HX]\.?\d{3}|HEVC|AVC)$/i
-  @contains_resolution_re ~r/\b(?:480p|540p|576p|720p|1080p|1440p|2160p|4320p|4K|8K|UHD)\b/i
+  @contains_resolution_re ~r/\b(?:360p|480p|540p|576p|720p|1080p|1440p|2160p|4320p|4K|8K|UHD)\b/i
   @episode_marker_in_group_re ~r/^(?:S\d{1,3}E\d{1,4}|E\d{1,4})(?:[-\s.]?E?\d{1,4})*/i
 
   defp sanitize_release_group(group) do

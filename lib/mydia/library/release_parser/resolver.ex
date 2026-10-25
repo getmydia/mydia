@@ -98,7 +98,10 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
 
   # Labels mapped through to `quality_tokens` for QualityExtractor in
   # Unit 6.
-  @quality_labels [:resolution, :source, :codec, :hdr, :audio]
+  @quality_labels [:resolution, :source, :codec, :hdr, :audio, :proper, :repack]
+
+  # PROPER / REPACK only flag the release; they carry no field confidence.
+  @revision_labels [:proper, :repack]
 
   @doc """
   Resolve the given tokens to a field assignment.
@@ -192,7 +195,10 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   # a real tag. A tag at the end of the title zone ("Show.S01.FRENCH.1080p")
   # and words of a tag run ("MULTi.BluRay.x264") are not reclaimed here.
   #
-  # Only language words are reclaimed, not the other vocab-derived labels
+  # Revision words ("The.Proper.Way", "Repack.2020") follow the same rule;
+  # a PROPER closing the title zone ("Show.PROPER.1080p") stays a flag.
+  #
+  # Only language and revision words are reclaimed, not the other vocab-derived labels
   # (source, codec, hdr, audio, streaming_service, release_group). A
   # quality word ("HDTV", "DVD", "x264") sitting next to a title word is
   # usually not part of the title. It's release noise the parser has no
@@ -211,8 +217,11 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
 
   defp reclaim_zone([{token, cands}], boundary) when boundary != :infinity do
     case slate_kind(cands) do
-      :language -> [{token, [reclaimed_candidate(max_confidence(cands) * 0.5)]}]
-      _ -> [{token, cands}]
+      kind when kind in [:language, :revision] ->
+        [{token, [reclaimed_candidate(max_confidence(cands) * 0.5)]}]
+
+      _ ->
+        [{token, cands}]
     end
   end
 
@@ -234,6 +243,15 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
       else: {token, cands}
   end
 
+  # `PROPER.REAL.RERIP` qualifies the revision, so REAL after one is not
+  # the title word that would make PROPER a title word too.
+  defp maybe_reclaim({{token, cands}, :revision, previous_kind, {next_token, next_cands}})
+       when previous_kind != :revision do
+    if slate_kind(next_cands) == :plain and String.upcase(next_token.value) != "REAL",
+      do: {token, [reclaimed_candidate(neighbor_confidence(next_cands))]},
+      else: {token, cands}
+  end
+
   defp maybe_reclaim({entry, _kind, _previous_kind, _next}), do: entry
 
   defp in_title_zone?(_token, :infinity), do: true
@@ -245,6 +263,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     cond do
       Enum.any?(cands, &(&1.label == :title_candidate)) -> :plain
       Enum.all?(cands, &(&1.label == :language)) -> :language
+      Enum.all?(cands, &(&1.label in @revision_labels)) -> :revision
       true -> :other
     end
   end
@@ -748,7 +767,9 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   end
 
   defp apply_quality_confidence(result, quality_tokens) do
-    Enum.reduce(quality_tokens, result, fn entry, acc ->
+    quality_tokens
+    |> Enum.reject(&(&1.label in @revision_labels))
+    |> Enum.reduce(result, fn entry, acc ->
       put_field_confidence(acc, quality_field_key(entry.label), entry.confidence)
     end)
   end
