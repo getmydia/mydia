@@ -173,16 +173,35 @@ defmodule Mydia.ImportLists.ImportList do
   defp media_type_label("movie"), do: "movies"
   defp media_type_label("tv_show"), do: "TV shows"
 
-  # Validates that list_url is provided when the type requires config
+  # Validates that a URL-backed list has a list_url. list_url is virtual, so a
+  # list loaded from the database carries its URL only in config["list_url"].
+  # When the caller didn't submit list_url at all (sync bookkeeping,
+  # enable/disable), that stored value satisfies the requirement. A submitted
+  # list_url is always checked, including a blank one: cast/3 turns "" into
+  # nil with no recorded change, so submission is read from params.
   defp validate_list_url(changeset) do
     type = get_field(changeset, :type)
 
-    if requires_config?(type) do
-      changeset
-      |> validate_required([:list_url], message: "is required for this list type")
-      |> validate_list_url_format()
-    else
-      changeset
+    cond do
+      not requires_config?(type) ->
+        changeset
+
+      not list_url_submitted?(changeset) and stored_list_url?(changeset) ->
+        changeset
+
+      true ->
+        changeset
+        |> validate_required([:list_url], message: "is required for this list type")
+        |> validate_list_url_format()
+    end
+  end
+
+  defp list_url_submitted?(changeset), do: Map.has_key?(changeset.params || %{}, "list_url")
+
+  defp stored_list_url?(changeset) do
+    case get_field(changeset, :config) do
+      %{"list_url" => url} when is_binary(url) and url != "" -> true
+      _ -> false
     end
   end
 

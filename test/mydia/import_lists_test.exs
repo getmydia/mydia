@@ -663,7 +663,7 @@ defmodule Mydia.ImportListsTest do
     end
 
     test "mark_sync_error/2 preserves other config keys such as list_url" do
-      {:ok, list} =
+      {:ok, created} =
         ImportLists.create_import_list(%{
           name: "Test",
           type: "custom_url",
@@ -671,6 +671,9 @@ defmodule Mydia.ImportListsTest do
           list_url: "https://example.com/feed.json"
         })
 
+      # Reload: list_url is virtual, so only a fresh struct matches what the
+      # sync job sees.
+      list = ImportLists.get_import_list!(created.id)
       assert list.config["list_url"] == "https://example.com/feed.json"
 
       {:ok, failed} = ImportLists.mark_sync_error(list, "Connection failed")
@@ -850,6 +853,88 @@ defmodule Mydia.ImportListsTest do
       due_lists = ImportLists.list_sync_due_lists()
       assert length(due_lists) == 1
       assert hd(due_lists).id == due_list.id
+    end
+  end
+
+  describe "updating stored URL-backed lists" do
+    defp stored_url_list(type, list_url) do
+      {:ok, created} =
+        ImportLists.create_import_list(%{
+          name: "Stored #{type}",
+          type: type,
+          media_type: "movie",
+          list_url: list_url
+        })
+
+      ImportLists.get_import_list!(created.id)
+    end
+
+    for {type, url} <- [{"tmdb_list", "8709058"}, {"custom_url", "https://example.com/feed.json"}] do
+      @type_under_test type
+      @url_under_test url
+
+      test "mark_sync_success/1 succeeds on a reloaded #{type} list" do
+        list = stored_url_list(@type_under_test, @url_under_test)
+
+        assert {:ok, synced} = ImportLists.mark_sync_success(list)
+        assert synced.last_synced_at != nil
+        assert synced.config["list_url"] == @url_under_test
+      end
+
+      test "mark_sync_error/2 records the error on a reloaded #{type} list" do
+        list = stored_url_list(@type_under_test, @url_under_test)
+
+        assert {:ok, failed} = ImportLists.mark_sync_error(list, "boom")
+        assert failed.sync_error == "boom"
+        assert failed.config["consecutive_failures"] == 1
+      end
+
+      test "toggle_import_list/1 succeeds on a reloaded #{type} list" do
+        list = stored_url_list(@type_under_test, @url_under_test)
+
+        assert {:ok, toggled} = ImportLists.toggle_import_list(list)
+        assert toggled.enabled == not list.enabled
+        assert toggled.config["list_url"] == @url_under_test
+      end
+
+      test "clearing list_url on a stored #{type} list is rejected" do
+        list = stored_url_list(@type_under_test, @url_under_test)
+
+        assert {:error, changeset} = ImportLists.update_import_list(list, %{list_url: ""})
+        assert "is required for this list type" in errors_on(changeset).list_url
+      end
+    end
+
+    test "an invalid new custom_url is rejected on a stored list" do
+      list = stored_url_list("custom_url", "https://example.com/feed.json")
+
+      assert {:error, changeset} = ImportLists.update_import_list(list, %{list_url: "not a url"})
+      assert errors_on(changeset).list_url != []
+    end
+
+    test "an invalid new tmdb_list id is rejected on a stored list" do
+      list = stored_url_list("tmdb_list", "8709058")
+
+      assert {:error, changeset} = ImportLists.update_import_list(list, %{list_url: "abc"})
+      assert errors_on(changeset).list_url != []
+    end
+
+    test "a valid new list_url replaces the stored one" do
+      list = stored_url_list("tmdb_list", "8709058")
+
+      assert {:ok, updated} = ImportLists.update_import_list(list, %{list_url: "4242"})
+      assert updated.config["list_url"] == "4242"
+    end
+
+    test "creating a URL-backed list without list_url is still rejected" do
+      assert {:error, changeset} =
+               ImportLists.create_import_list(%{
+                 name: "No URL",
+                 type: "tmdb_list",
+                 media_type: "movie"
+               })
+
+      assert "is required for this list type" in errors_on(changeset).list_url
     end
   end
 
