@@ -144,7 +144,8 @@ void main() {
     });
 
     test('an untranslated language shows English, like the web UI', () {
-      expect(LocaleSetting.fromHostCode('pt_BR'), const Locale('en'));
+      expect(LocaleSetting.fromHostCode('de'), const Locale('en'));
+      expect(LocaleSetting.fromHostCode('de_AT'), const Locale('en'));
     });
 
     test('no code is no preference', () {
