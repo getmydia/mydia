@@ -1,7 +1,8 @@
 defmodule MydiaWeb.MediaLive.Index.ListingParams do
   @moduledoc """
   The library listing's URL state: search, filters, sort and how many rows are
-  on screen.
+  on screen. `letter` is where an A-Z jump started the window; `shown` counts
+  rows from there.
 
   Keeping it in the URL is what lets Back from a title restore the list as it
   was. Default values are left out of the URL, so an untouched page keeps a
@@ -28,6 +29,7 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
             monitored: nil,
             quality: nil,
             sort: @default_sort,
+            letter: nil,
             shown: @first_page
 
   @type t :: %__MODULE__{
@@ -37,6 +39,7 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
           monitored: boolean() | nil,
           quality: String.t() | nil,
           sort: String.t(),
+          letter: String.t() | nil,
           shown: pos_integer()
         }
 
@@ -60,6 +63,7 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
           do: params["sort"],
           else: @default_sort
         ),
+      letter: letter(params["letter"]),
       shown: shown(params["shown"])
     }
   end
@@ -73,6 +77,7 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
       {"monitored", if(is_nil(p.monitored), do: nil, else: to_string(p.monitored))},
       {"quality", p.quality},
       {"sort", if(p.sort == @default_sort, do: nil, else: p.sort)},
+      {"letter", p.letter},
       {"shown", if(p.shown == @first_page, do: nil, else: Integer.to_string(p.shown))}
     ]
     |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
@@ -86,13 +91,20 @@ defmodule MydiaWeb.MediaLive.Index.ListingParams do
     end
   end
 
-  @doc "Whether anything the Clear filters button would undo is set."
+  @doc "Whether anything the Clear filters button would undo is set. A letter jump is not."
   @spec filtered?(t()) :: boolean()
-  def filtered?(%__MODULE__{} = p), do: not same_listing?(p, %__MODULE__{})
+  def filtered?(%__MODULE__{} = p), do: not same_listing?(%{p | letter: nil}, %__MODULE__{})
 
   @spec same_listing?(t(), t()) :: boolean()
   def same_listing?(%__MODULE__{} = a, %__MODULE__{} = b),
     do: %{a | shown: @first_page} == %{b | shown: @first_page}
+
+  defp letter(value) when is_binary(value) do
+    letter = String.downcase(value)
+    if letter in LibraryListing.letters(), do: letter
+  end
+
+  defp letter(_value), do: nil
 
   defp monitored("true"), do: true
   defp monitored("false"), do: false

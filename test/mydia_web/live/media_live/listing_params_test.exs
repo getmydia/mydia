@@ -86,4 +86,30 @@ defmodule MydiaWeb.MediaLive.Index.ListingParamsTest do
     assert ListingParams.path("/tv", %ListingParams{search: "a b", progress: :partial}) ==
              "/tv?q=a+b&progress=partial"
   end
+
+  describe "letter" do
+    test "parses # and a-z, lowercased" do
+      assert ListingParams.parse(%{"letter" => "M"}, []).letter == "m"
+      assert ListingParams.parse(%{"letter" => "#"}, []).letter == "#"
+    end
+
+    test "rejects anything else" do
+      for value <- ["mm", "", "1", "é", nil, ["m"]] do
+        assert ListingParams.parse(%{"letter" => value}, []).letter == nil
+      end
+    end
+
+    test "round-trips through the query string" do
+      params = %ListingParams{letter: "#", shown: 100}
+      query = ListingParams.to_query(params)
+      assert {"letter", "#"} in query
+      assert ListingParams.parse(Map.new(query), []) == params
+      assert ListingParams.path("/movies", params) == "/movies?letter=%23&shown=100"
+    end
+
+    test "a jump alone is not a filter, but is a different listing" do
+      refute ListingParams.filtered?(%ListingParams{letter: "m"})
+      refute ListingParams.same_listing?(%ListingParams{letter: "m"}, %ListingParams{})
+    end
+  end
 end
