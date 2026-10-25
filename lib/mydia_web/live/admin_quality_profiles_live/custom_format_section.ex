@@ -41,11 +41,10 @@ defmodule MydiaWeb.AdminQualityProfilesLive.CustomFormatSection do
       <div class="collapse-content space-y-2">
         <p class="text-sm opacity-70">
           {gettext("Score releases by what their title contains. A rejected format is never grabbed.")}
-          {gettext("Define formats on the")}
+          {gettext("Define formats on the Custom Formats page.")}
           <.link navigate={~p"/admin/custom-formats"} class="link">
-            {gettext("Custom Formats")}
+            {gettext("Open Custom Formats")}
           </.link>
-          {gettext("page.")}
         </p>
 
         <div class="divide-y divide-base-200">
