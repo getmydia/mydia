@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/sources/current_source_status.dart';
-import '../../core/format/relative_time.dart';
 import '../../core/cache/freshness.dart';
 import '../../core/cache/invalidation_target.dart';
 import '../../core/cache/query_key.dart';
 import '../../core/cache/watcher_registry.dart';
 import '../../core/theme/colors.dart';
+import '../../l10n/l10n.dart';
 
 /// The space a screen must reserve above the header so it lands below
 /// whatever is drawn over the top of its body, rather than behind it.
@@ -137,7 +137,7 @@ class _FreshnessBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final relative = formatRelativeTime(fetchedAt);
+    final relative = context.l10n.relativeTime(fetchedAt);
     final message = failed
         ? "Couldn't reach your server. Showing your library from $relative."
         : 'Showing your library from $relative.';

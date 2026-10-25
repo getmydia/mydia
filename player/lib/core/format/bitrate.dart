@@ -2,7 +2,7 @@
 /// ("6.2 Mb/s").
 ///
 /// This is the single implementation for the app, beside
-/// [formatRelativeTime] and for the same reason: the stats panel renders a
+/// `AppFormatters` and for the same reason: the stats panel renders a
 /// measured throughput and a file's own static bitrate with identical
 /// wording, and two copies of the rounding would drift.
 library;

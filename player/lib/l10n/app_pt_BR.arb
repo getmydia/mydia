@@ -149,5 +149,19 @@
   "startupSendReport": "Enviar relatório",
   "startupSendingReport": "Enviando relatório",
   "startupReportSent": "Relatório enviado",
-  "startupReportFailed": "Não foi possível enviar. Tente novamente"
+  "startupReportFailed": "Não foi possível enviar. Tente novamente",
+  "timeJustNow": "Agora mesmo",
+  "timeMinutesAgo": "{count, plural, one{há {count} minuto} other{há {count} minutos}}",
+  "timeHoursAgo": "{count, plural, one{há {count} hora} other{há {count} horas}}",
+  "timeDaysAgo": "{count, plural, one{há {count} dia} other{há {count} dias}}",
+  "timeMonthsAgo": "{count, plural, one{há {count} mês} other{há {count} meses}}",
+  "timeYearsAgo": "{count, plural, one{há {count} ano} other{há {count} anos}}",
+  "timeSecondsLeft": "{seconds} s restantes",
+  "timeMinutesLeft": "{minutes} min restantes",
+  "timeHoursMinutesLeft": "{hours} h {minutes} min restantes",
+  "durationMinutes": "{minutes} min",
+  "durationHours": "{hours} h",
+  "durationHoursMinutes": "{hours} h {minutes} min",
+  "remoteDeviceNeverActive": "Nunca ativo",
+  "remoteDeviceNeverSeen": "Nunca"
 }

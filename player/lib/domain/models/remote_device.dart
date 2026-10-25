@@ -1,4 +1,6 @@
-import '../../core/format/relative_time.dart';
+/// How a paired device is doing. Widgets turn it into text with
+/// `AppLocalizations.remoteDeviceStatus`.
+enum RemoteDeviceStatus { revoked, neverActive, active, inactive }
 
 /// Domain model for a remote device paired to a user account.
 class RemoteDevice {
@@ -26,18 +28,12 @@ class RemoteDevice {
     return difference.inHours < 24;
   }
 
-  /// Get human-readable status text.
-  String get statusText {
-    if (isRevoked) return 'Revoked';
-    if (lastSeenAt == null) return 'Never active';
-    if (isRecentlyActive) return 'Active';
-    return 'Inactive';
-  }
-
-  /// Get relative time string for last seen.
-  String get lastSeenRelative {
-    if (lastSeenAt == null) return 'Never';
-    return formatRelativeTime(lastSeenAt!);
+  /// Where the device stands, for the status label in Settings.
+  RemoteDeviceStatus get status {
+    if (isRevoked) return RemoteDeviceStatus.revoked;
+    if (lastSeenAt == null) return RemoteDeviceStatus.neverActive;
+    if (isRecentlyActive) return RemoteDeviceStatus.active;
+    return RemoteDeviceStatus.inactive;
   }
 
   /// Get platform icon name.

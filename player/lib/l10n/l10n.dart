@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'gen/app_localizations.dart';
 
+export 'formatters.dart';
 export 'gen/app_localizations.dart';
 
 /// `context.l10n.someKey` instead of `AppLocalizations.of(context).someKey`.

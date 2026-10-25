@@ -13,7 +13,6 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_storage.dart';
-import '../format/relative_time.dart';
 import '../sources/mydia/source_link.dart';
 import '../sources/sources_providers.dart' show activeSourceIdProvider;
 
@@ -122,12 +121,6 @@ class ConnectionDiagnosticsState {
       directUrls.isNotEmpty &&
       urlAttempts.length == directUrls.length &&
       urlAttempts.values.every((a) => !a.success);
-
-  /// Gets a human-readable time since last attempt.
-  String? get timeSinceLastAttempt {
-    if (lastDirectAttempt == null) return null;
-    return formatRelativeTime(lastDirectAttempt!);
-  }
 }
 
 /// Notifier for connection diagnostics.
