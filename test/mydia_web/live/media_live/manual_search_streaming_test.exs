@@ -1240,6 +1240,66 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
 
       assert has_element?(view, "#{row} .btn-success")
       refute has_element?(view, "#{row} .btn-error")
+      refute has_element?(view, "##{positioned_result_dom_id(release)}-prior-attempt")
+      refute has_element?(view, row, "Client rejected the torrent")
+    end
+
+    test "a row in the live downloading state shows neither badge nor retry button",
+         %{conn: conn} do
+      media_item = media_item_fixture(%{title: "Quiet Meridian", type: "movie"})
+      indexer = pending_indexer_fixture("slow-indexer")
+      release = search_result("Quiet.Meridian.2023.2160p.UHD")
+      failed_download!(media_item, release.download_url, "Client rejected the torrent")
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+      view |> element("#manual-search-button") |> render_click()
+      wait_for_indexer_progress(view)
+      report_results(view, indexer.id, [release], 1)
+
+      row = "##{positioned_result_dom_id(release)}"
+      assert has_element?(view, "#{row}-prior-attempt"), "precondition: badge not shown"
+
+      # The real grab runs asynchronously and would replace the downloading
+      # state before it is observed, so seed the per-row state the click would
+      # record and let the next stream rebuild fold it in.
+      :sys.replace_state(view.pid, fn state ->
+        socket = state.socket
+        states = Map.put(socket.assigns.result_states, release.download_url, %{downloading: true})
+        %{state | socket: Phoenix.Component.assign(socket, :result_states, states)}
+      end)
+
+      report_results(view, "other-id", [], 2)
+
+      assert has_element?(view, "#{row} .loading-spinner"),
+             "precondition: row not in the downloading state"
+
+      refute has_element?(view, "#{row}-prior-attempt")
+      refute has_element?(view, "#{row} .btn-error")
+      refute has_element?(view, row, "Client rejected the torrent")
+    end
+
+    test "a blacklisted row shows the badge and a humanized reason, not the slug",
+         %{conn: conn} do
+      media_item = media_item_fixture(%{title: "Quiet Meridian", type: "movie"})
+      indexer = pending_indexer_fixture("slow-indexer")
+      release = search_result("Quiet.Meridian.2023.2160p.UHD")
+
+      {:ok, _} =
+        Mydia.Downloads.Blacklists.add(
+          release.indexer,
+          Mydia.Downloads.Blacklists.release_guid(release),
+          release.title,
+          "cancelled_stalled"
+        )
+
+      {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+      view |> element("#manual-search-button") |> render_click()
+      wait_for_indexer_progress(view)
+      report_results(view, indexer.id, [release], 1)
+
+      row = "##{positioned_result_dom_id(release)}"
+      assert has_element?(view, "#{row}-prior-attempt", "Blacklisted")
+      refute has_element?(view, row, "cancelled_stalled")
     end
 
     test "an in-flight download for the searched episode shows the blocking banner",

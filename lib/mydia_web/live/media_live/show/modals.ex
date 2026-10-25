@@ -1120,7 +1120,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                       </span>
                     <% end %>
                     <%!-- Tried before: failed for this target or blacklisted --%>
-                    <%= if attempt = Map.get(result, :prior_attempt) do %>
+                    <%= if attempt = visible_prior_attempt(result) do %>
                       <span
                         id={"#{id}-prior-attempt"}
                         class="badge badge-error badge-outline badge-sm"
@@ -1128,13 +1128,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                         <%= if attempt.kind == :blacklisted do %>
                           {gettext("Blacklisted")}
                         <% else %>
-                          {gettext("Failed %{ago}", ago: format_relative_time_short(attempt.at))}
+                          {failed_ago_text(format_relative_time_short(attempt.at))}
                         <% end %>
                       </span>
                     <% end %>
                   </div>
                   <%!-- A live failure from this dialog wins over the recorded one --%>
-                  <%= if reason = Map.get(result, :grab_failed) || prior_attempt_reason(result) do %>
+                  <%= if reason = Map.get(result, :grab_failed) || visible_prior_reason(result) do %>
                     <div class="text-xs text-error mt-1 line-clamp-2">{reason}</div>
                   <% end %>
                   <.score_panel :if={profile?} id={"#{id}-score-breakdown"}>
@@ -1339,10 +1339,42 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     """
   end
 
+  # A live grab state from this dialog (in flight, done, duplicate or failed)
+  # wins over the recorded prior attempt everywhere in the row.
+  defp live_grab_state?(result) do
+    Enum.any?(
+      [:downloading, :downloaded, :duplicate, :grab_failed],
+      &Map.get(result, &1)
+    )
+  end
+
+  defp visible_prior_attempt(result) do
+    if live_grab_state?(result), do: nil, else: Map.get(result, :prior_attempt)
+  end
+
+  defp visible_prior_reason(result) do
+    if live_grab_state?(result), do: nil, else: prior_attempt_reason(result)
+  end
+
+  # format_relative_time_short/1 yields "now" or a bare "3h"; each reads
+  # differently in a sentence.
+  defp failed_ago_text(ago) do
+    if ago == pgettext("relative time", "now"),
+      do: gettext("Failed just now"),
+      else: gettext("Failed %{ago} ago", ago: ago)
+  end
+
+  # Blacklist reasons are machine slugs; failed downloads carry free text.
   defp prior_attempt_reason(result) do
     case Map.get(result, :prior_attempt) do
-      %{reason: reason} -> reason
-      nil -> nil
+      %{kind: :blacklisted, reason: reason} when is_binary(reason) ->
+        MydiaWeb.StatusLabels.failure_category(reason)
+
+      %{reason: reason} ->
+        reason
+
+      nil ->
+        nil
     end
   end
 
