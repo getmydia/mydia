@@ -108,6 +108,7 @@ class StashMediaSource extends MediaSource
         Library(
           ref: LibraryRef(sourceId: id, id: stashScenesLibraryId),
           kind: LibraryKind.videos,
+          scenes: true,
           sortOptions: stashSortOptions,
           filterOptions: stashFilterOptions,
         ),

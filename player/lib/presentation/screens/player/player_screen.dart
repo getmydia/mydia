@@ -5007,7 +5007,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _scalingTouched = true;
     setState(() => _scaling = next);
     unawaited(VideoScalingPrefs.save(next));
-    _showToast(next.toastMessage);
+    _showToast(context.l10n.videoScalingToast(next));
   }
 
   void _toggleScaling() => _setScaling(_scaling.toggled);

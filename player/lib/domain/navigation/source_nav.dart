@@ -18,6 +18,7 @@ class SourceNavEntry {
     required this.id,
     this.label,
     this.libraryKind,
+    this.libraryScenes = false,
     required this.icon,
     required this.selectedIcon,
     required this.route,
@@ -28,6 +29,9 @@ class SourceNavEntry {
   /// The kind of the library this entry opens, so a library its server left
   /// unnamed is still named. Null for every other entry.
   final LibraryKind? libraryKind;
+
+  /// The library is a Stash one, named Scenes when its server gave no name.
+  final bool libraryScenes;
 
   /// Whether the bottom bar uses the short form of the name, when the full
   /// one does not fit.
@@ -60,6 +64,7 @@ class SourceNavEntry {
       other.id == id &&
       other.label == label &&
       other.libraryKind == libraryKind &&
+      other.libraryScenes == libraryScenes &&
       other.icon == icon &&
       other.selectedIcon == selectedIcon &&
       other.route == route &&
@@ -67,8 +72,8 @@ class SourceNavEntry {
       other.shortLabel == shortLabel;
 
   @override
-  int get hashCode => Object.hash(
-      id, label, libraryKind, icon, selectedIcon, route, anchored, shortLabel);
+  int get hashCode => Object.hash(id, label, libraryKind, libraryScenes, icon,
+      selectedIcon, route, anchored, shortLabel);
 }
 
 /// The source id in a `/s/<id>/...` location, or null elsewhere.
@@ -206,6 +211,7 @@ List<SourceNavEntry> resolveSourceNav({
           id: 'library-${l.ref.id}',
           label: l.title,
           libraryKind: l.kind,
+          libraryScenes: l.scenes,
           icon: Icons.video_library_outlined,
           selectedIcon: Icons.video_library,
           route: sourceLibraryLocation(l.ref),

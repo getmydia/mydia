@@ -64,7 +64,22 @@ class _CountingStorage extends MockAuthStorage {
   }
 }
 
+/// Serves libraries with no title, as Mydia and Stash do.
+class _UnnamedLibrariesSource extends FakeMediaSource {
+  @override
+  Future<List<Library>> libraries() async => const [
+        Library(ref: FakeMediaSource.movies, kind: LibraryKind.movies),
+      ];
+}
+
 void main() {
+  testWidgets('a library its server did not name is titled by its kind',
+      (tester) async {
+    await pumpLibrary(tester, _UnnamedLibrariesSource());
+
+    expect(find.text('Movies'), findsOneWidget);
+  });
+
   testWidgets('a stalled storage read falls back to the default order',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));

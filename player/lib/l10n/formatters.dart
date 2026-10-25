@@ -15,6 +15,7 @@ import '../core/playback/stats/playback_stats.dart';
 import '../core/playback/stats/stats_report.dart';
 import '../core/player/fullscreen/fullscreen_failure.dart';
 import '../core/player/subtitle_size.dart';
+import '../core/player/video_scaling.dart';
 import '../core/remote/registration_status.dart';
 import '../core/router/push_route.dart';
 import '../core/theme/glass_material.dart';
@@ -259,7 +260,9 @@ extension AppFormatters on AppLocalizations {
   String navEntryLabel(SourceNavEntry entry) {
     final kind = entry.libraryKind;
     return entry.label ??
-        (kind == null ? _builtinNavName(entry.id) : libraryKindTitle(kind));
+        (kind == null
+            ? _builtinNavName(entry.id)
+            : libraryKindTitle(kind, scenes: entry.libraryScenes));
   }
 
   /// What the bottom bar shows for [entry]: the short form where it has one.
@@ -284,13 +287,14 @@ extension AppFormatters on AppLocalizations {
 
   /// A library's name: its server's, else one for its kind.
   String libraryTitle(Library library) =>
-      library.title ?? libraryKindTitle(library.kind);
+      library.title ?? libraryKindTitle(library.kind, scenes: library.scenes);
 
   /// What a library of [kind] is called when its server did not name it.
-  String libraryKindTitle(LibraryKind kind) => switch (kind) {
+  String libraryKindTitle(LibraryKind kind, {bool scenes = false}) =>
+      switch (kind) {
         LibraryKind.movies => navMovies,
         LibraryKind.shows => navShows,
-        LibraryKind.videos => libraryTitleVideos,
+        LibraryKind.videos => scenes ? libraryTitleScenes : libraryTitleVideos,
       };
 
   String sortName(SortName name) => switch (name) {
@@ -347,6 +351,13 @@ extension AppFormatters on AppLocalizations {
       };
 
   /// The badge before the Playing value.
+  /// Confirms a scaling change, which matters when the video already matches
+  /// the screen and the two modes look identical.
+  String videoScalingToast(VideoScaling scaling) => switch (scaling) {
+        VideoScaling.fit => videoScalingFitToast,
+        VideoScaling.fill => videoScalingFillToast,
+      };
+
   String statsPill(PlaybackMode mode) => switch (mode) {
         PlaybackMode.direct => statsPillDirect,
         PlaybackMode.copy => statsPillCopy,

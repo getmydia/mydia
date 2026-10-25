@@ -16,11 +16,6 @@ void main() {
       expect(VideoScaling.fit.toggled, VideoScaling.fill);
       expect(VideoScaling.fill.toggled, VideoScaling.fit);
     });
-
-    test('names each mode in its toast', () {
-      expect(VideoScaling.fit.toastMessage, 'Fit: whole picture');
-      expect(VideoScaling.fill.toastMessage, 'Fill: cropped to screen');
-    });
   });
 
   group('VideoScalingPrefs', () {

@@ -255,7 +255,8 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
 
     return BrowseScaffold(
       icon: widget.icon ?? (isShows ? Icons.tv_rounded : Icons.movie_rounded),
-      title: widget.title ?? info?.title ?? '',
+      title:
+          widget.title ?? (info == null ? '' : context.l10n.libraryTitle(info)),
       queryKeys: [key],
       actions: [
         ...widget.actions,

@@ -461,7 +461,8 @@
   "navFavorites": "Favoritos",
   "navCollections": "Colecciones",
   "navDownloads": "Descargas",
-  "libraryTitleVideos": "Escenas",
+  "libraryTitleVideos": "Vídeos",
+  "libraryTitleScenes": "Escenas",
   "sortTitle": "Título",
   "sortYear": "Año",
   "sortRecentlyAdded": "Agregado recientemente",
@@ -498,7 +499,7 @@
   "statsModeStreamCopy": "Copia del flujo",
   "statsModeTranscode": "Transcodificación",
   "statsModeLocalFile": "Archivo local",
-  "statsPillDirect": "DIRECTA",
+  "statsPillDirect": "DIRECTO",
   "statsPillCopy": "COPIA",
   "statsPillTranscode": "TRANSCODIFICADO",
   "statsDecoderHardware": "{decoder} por hardware",
@@ -576,5 +577,7 @@
   "settingsDiagnosticsRelayHttp": "El relay respondió HTTP {status}",
   "settingsDiagnosticsNoLogs": "Aún no hay registros en este dispositivo.",
   "settingsDiagnosticsLogsUnavailable": "Los registros no están disponibles en este dispositivo.",
+  "videoScalingFitToast": "Ajustar: imagen completa",
+  "videoScalingFillToast": "Rellenar: recortada a la pantalla",
   "calendarMovie": "Película"
 }

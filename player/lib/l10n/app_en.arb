@@ -1262,8 +1262,10 @@
   "@navCollections": {"description": "Name of the Collections row in the sidebar."},
   "navDownloads": "Downloads",
   "@navDownloads": {"description": "Name of the Downloads row in the sidebar and bottom bar."},
-  "libraryTitleVideos": "Scenes",
-  "@libraryTitleVideos": {"description": "Name of a video library that its server did not name, such as the single scene library of a Stash server."},
+  "libraryTitleVideos": "Videos",
+  "@libraryTitleVideos": {"description": "Name of a video library that its server did not name, such as a Jellyfin home videos library."},
+  "libraryTitleScenes": "Scenes",
+  "@libraryTitleScenes": {"description": "Name of the single scene library of a Stash server, which gives libraries no name."},
   "sortTitle": "Title",
   "@sortTitle": {"description": "Library sort chip: alphabetical order."},
   "sortYear": "Year",
@@ -1492,6 +1494,10 @@
   "@settingsDiagnosticsNoLogs": {"description": "Error in the Send logs dialog: nothing has been logged yet, so there is nothing to send."},
   "settingsDiagnosticsLogsUnavailable": "Logs are not available on this device.",
   "@settingsDiagnosticsLogsUnavailable": {"description": "Error in the Send logs dialog: this platform does not keep logs."},
+  "videoScalingFitToast": "Fit: whole picture",
+  "@videoScalingFitToast": {"description": "Toast after the video scaling is switched to fit, which shows the whole picture with bars if needed."},
+  "videoScalingFillToast": "Fill: cropped to screen",
+  "@videoScalingFillToast": {"description": "Toast after the video scaling is switched to fill, which crops the picture to cover the screen."},
   "calendarMovie": "Movie",
   "@calendarMovie": {"description": "Label on a calendar entry that is a movie, where an episode would show its season and episode code such as S02E05."}
 }

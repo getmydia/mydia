@@ -125,4 +125,31 @@ void main() {
     expect(back.toJson((i) => i.toJson()), json);
     expect(back.hasMore, isTrue);
   });
+
+  test('a library cached before options were typed still decodes', () {
+    // The shape written by the previous release: a `label`, no `name`.
+    final old = _viaString({
+      'ref': {'sourceId': _id.value, 'id': '3'},
+      'title': 'Films',
+      'kind': 'movies',
+      'sortOptions': [
+        {
+          'id': 'addedAt',
+          'label': 'Recently added',
+          'descendingByDefault': true,
+          'shared': 'added',
+        },
+        {'id': 'titleSort', 'name': 'title'},
+      ],
+      'filterOptions': [
+        {'id': 'unwatched', 'label': 'Unwatched'},
+      ],
+    });
+
+    final library = Library.fromJson(old);
+
+    expect(library.title, 'Films');
+    expect(library.sortOptions.map((o) => o.id), ['titleSort']);
+    expect(library.filterOptions, isEmpty);
+  });
 }

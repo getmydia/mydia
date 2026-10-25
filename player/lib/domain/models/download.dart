@@ -271,42 +271,6 @@ class DownloadTask {
     return (transcodeProgress * 0.3) + (downloadProgress * 0.7);
   }
 
-  /// Status display text for progressive downloads.
-  String get statusDisplay {
-    if (!isProgressive) {
-      return status;
-    }
-
-    switch (downloadStatus) {
-      case DownloadStatus.transcoding:
-        return 'Preparing ${(transcodeProgress * 100).toStringAsFixed(0)}%';
-      case DownloadStatus.downloading:
-        if (transcodeProgress < 1.0) {
-          return 'Preparing & Downloading';
-        }
-        if (downloadProgress <= 0.0) {
-          return 'Starting Download...';
-        }
-        return 'Downloading ${(downloadProgress * 100).toStringAsFixed(0)}%';
-      case DownloadStatus.completed:
-        return 'Completed';
-      case DownloadStatus.failed:
-        return 'Failed';
-      case DownloadStatus.paused:
-        return 'Paused';
-      case DownloadStatus.cancelled:
-        return 'Cancelled';
-      case DownloadStatus.pending:
-        return 'Pending';
-      case DownloadStatus.queued:
-        return 'Queued';
-      case DownloadStatus.interrupted:
-        return 'Interrupted';
-      case DownloadStatus.stalled:
-        return 'Stalled';
-    }
-  }
-
   MediaType get type {
     return mediaType == 'episode' ? MediaType.episode : MediaType.movie;
   }

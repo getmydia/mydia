@@ -12,6 +12,7 @@ import 'package:player/core/player/subtitle_size.dart';
 import 'package:player/core/router/push_route.dart';
 import 'package:player/core/theme/glass_material.dart';
 import 'package:player/core/theme/theme_preset.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/audio_track.dart';
@@ -344,7 +345,7 @@ void main() {
             icon: icon,
             selectedIcon: icon,
             route: '/x')),
-        'Escenas',
+        'Vídeos',
       );
       expect(
         es.navEntryTabLabel(const SourceNavEntry(
@@ -478,6 +479,18 @@ void main() {
               LogUploadFailure.relayHttp,
               status: 502)),
           'The relay answered HTTP 502');
+    });
+
+    test('an unnamed video library is Videos, and Scenes only for Stash',
+        () async {
+      final en = await l10n('en');
+      const ref = LibraryRef(sourceId: SourceId('s'), id: '1');
+      expect(en.libraryTitle(const Library(ref: ref, kind: LibraryKind.videos)),
+          'Videos');
+      expect(
+          en.libraryTitle(
+              const Library(ref: ref, kind: LibraryKind.videos, scenes: true)),
+          'Scenes');
     });
   });
 }
