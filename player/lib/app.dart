@@ -546,6 +546,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
+        localeListResolutionCallback: resolveAppLocale,
         home: Scaffold(
           body: Center(
             child: Column(
@@ -578,6 +579,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      localeListResolutionCallback: resolveAppLocale,
       routerConfig: router,
       // Float the cast mini controller above every route. `CastBarLayer`
       // documents what mounting it out here costs the bar.

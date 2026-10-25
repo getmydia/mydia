@@ -61,6 +61,15 @@ void main() {
     expect(find.text('Español'), findsOneWidget);
   });
 
+  testWidgets('the picker offers pt-BR but not the empty pt stub',
+      (tester) async {
+    await tester.pumpWidget(_host(MockAuthStorage()));
+    await tester.pumpAndSettle();
+    await _openPicker(tester);
+    expect(find.byKey(const Key('language-option-pt-BR')), findsOneWidget);
+    expect(find.byKey(const Key('language-option-pt')), findsNothing);
+  });
+
   testWidgets('only the current language tile is marked selected',
       (tester) async {
     final storage = MockAuthStorage()..seedData({'interface_locale': 'es'});

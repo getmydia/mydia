@@ -62,6 +62,24 @@ void main() {
     expect(c.read(localeSettingProvider), isNull);
   });
 
+  test('ignores a stored bare pt, whose catalog is an empty stub', () async {
+    final storage = MockAuthStorage();
+    await storage.write('interface_locale', 'pt');
+    final c = containerWith(storage);
+    c.read(localeSettingProvider);
+    await settle();
+    expect(c.read(localeSettingProvider), isNull);
+  });
+
+  test('loads a stored pt-BR', () async {
+    final storage = MockAuthStorage();
+    await storage.write('interface_locale', 'pt-BR');
+    final c = containerWith(storage);
+    c.read(localeSettingProvider);
+    await settle();
+    expect(c.read(localeSettingProvider), const Locale('pt', 'BR'));
+  });
+
   test('set publishes at once and persists; null clears', () async {
     final storage = MockAuthStorage();
     final c = containerWith(storage);
@@ -146,6 +164,13 @@ void main() {
     test('an untranslated language shows English, like the web UI', () {
       expect(LocaleSetting.fromHostCode('de'), const Locale('en'));
       expect(LocaleSetting.fromHostCode('de_AT'), const Locale('en'));
+    });
+
+    test('Portuguese maps to the regional variant, never the empty pt stub',
+        () {
+      expect(LocaleSetting.fromHostCode('pt_BR'), const Locale('pt', 'BR'));
+      expect(LocaleSetting.fromHostCode('pt'), const Locale('pt', 'BR'));
+      expect(LocaleSetting.fromHostCode('pt_PT'), const Locale('pt', 'BR'));
     });
 
     test('no code is no preference', () {
