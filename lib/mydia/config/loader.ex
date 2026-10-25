@@ -317,6 +317,7 @@ defmodule Mydia.Config.Loader do
     |> put_if_present(:oidc_client_secret, System.get_env("OIDC_CLIENT_SECRET"))
     |> put_if_present(:oidc_redirect_uri, System.get_env("OIDC_REDIRECT_URI"))
     |> put_if_present(:oidc_scopes, System.get_env("OIDC_SCOPES"))
+    |> put_if_present(:oidc_link_by_email, System.get_env("OIDC_LINK_BY_EMAIL"), &parse_boolean/1)
     |> put_if_present(:jwt_ttl_days, System.get_env("JWT_TTL_DAYS"), &parse_integer/1)
     |> put_if_present(:jwt_allowed_drift, System.get_env("JWT_ALLOWED_DRIFT"), &parse_integer/1)
   end
