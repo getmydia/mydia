@@ -37,7 +37,7 @@ class _FakePairing extends PairingService {
     required String claimCode,
     required String deviceName,
     String? platform,
-    void Function(String status)? onStatusUpdate,
+    void Function(PairingStep step)? onStatusUpdate,
   }) async =>
       PairingResult.success(credentials, isP2PMode: true);
 
@@ -46,7 +46,7 @@ class _FakePairing extends PairingService {
     required QrPairingData qrData,
     required String deviceName,
     String? platform,
-    void Function(String status)? onStatusUpdate,
+    void Function(PairingStep step)? onStatusUpdate,
   }) async =>
       PairingResult.success(credentials, isP2PMode: true);
 }
@@ -62,7 +62,7 @@ class _GatedPairing extends PairingService {
     required String claimCode,
     required String deviceName,
     String? platform,
-    void Function(String status)? onStatusUpdate,
+    void Function(PairingStep step)? onStatusUpdate,
   }) async {
     await gate.future;
     return PairingResult.success(credentials, isP2PMode: true);

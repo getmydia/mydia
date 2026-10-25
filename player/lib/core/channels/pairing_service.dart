@@ -76,10 +76,48 @@ abstract class _StorageKeys {
   static const serverNodeAddr = 'server_node_addr';
 }
 
+/// Where pairing is, for the progress line under the code field. The service
+/// reports its own steps; the login controller adds the ones around it
+/// ([lookingUpCode], [validatingQr], [paired]). The screen words them, so this
+/// carries no text.
+enum PairingStep {
+  lookingUpCode,
+  validatingQr,
+  resolvingCode,
+  initializing,
+  connecting,
+  submitting,
+  succeeded,
+  paired,
+}
+
+/// Why pairing stopped. [other] carries the exception text in
+/// [PairingFailure.detail], which is diagnostic and shown as it is.
+enum PairingFailureKind {
+  serviceUnavailable,
+  cannotConnect,
+  invalidServerAddress,
+  invalidQrServerAddress,
+  missingTokens,
+  invalidCode,
+  tooManyAttempts,
+  serverOffline,
+  timedOut,
+  other,
+}
+
+class PairingFailure {
+  const PairingFailure(this.kind, {this.detail});
+  final PairingFailureKind kind;
+  final String? detail;
+}
+
 /// Result of a pairing operation.
 class PairingResult {
   final bool success;
-  final String? error;
+
+  /// Set when [success] is false.
+  final PairingFailure? failure;
   final PairingCredentials? credentials;
 
   /// Whether the connection is via P2P.
@@ -87,7 +125,7 @@ class PairingResult {
 
   const PairingResult._({
     required this.success,
-    this.error,
+    this.failure,
     this.credentials,
     this.isP2PMode = false,
   });
@@ -98,8 +136,11 @@ class PairingResult {
         success: true, credentials: credentials, isP2PMode: isP2PMode);
   }
 
-  factory PairingResult.error(String error) {
-    return PairingResult._(success: false, error: error);
+  factory PairingResult.failure(PairingFailureKind kind, {String? detail}) {
+    return PairingResult._(
+      success: false,
+      failure: PairingFailure(kind, detail: detail),
+    );
   }
 }
 
@@ -183,7 +224,7 @@ class PairingService {
     required String claimCode,
     required String deviceName,
     String? platform,
-    void Function(String status)? onStatusUpdate,
+    void Function(PairingStep step)? onStatusUpdate,
   }) async {
     try {
       final devicePlatform = platform ?? _detectPlatform();
@@ -196,42 +237,40 @@ class PairingService {
       // Use the injected P2P service - it must be provided and initialized
       final p2pService = _p2pService;
       if (p2pService == null) {
-        return PairingResult.error(
-            'P2P service not available. Please try again.');
+        return PairingResult.failure(PairingFailureKind.serviceUnavailable);
       }
 
       // 1. Resolve claim code via relay API to get server's EndpointAddr
-      onStatusUpdate?.call('Resolving pairing code...');
+      onStatusUpdate?.call(PairingStep.resolvingCode);
       final relayClient = _relayClient ?? RelayApiClient();
       final resolveResult = await relayClient.resolveClaimCode(claimCode);
       debugPrint(
           '[PairingService] Resolved node_addr: ${resolveResult.nodeAddr}');
 
       // 2. Initialize the P2P host
-      onStatusUpdate?.call('Initializing secure connection...');
+      onStatusUpdate?.call(PairingStep.initializing);
       await p2pService.initialize();
 
       // 3. Dial the server using EndpointAddr
-      onStatusUpdate?.call('Connecting to server...');
+      onStatusUpdate?.call(PairingStep.connecting);
       try {
         await p2pService.dial(resolveResult.nodeAddr);
         debugPrint('[PairingService] Dialed server successfully');
       } catch (e) {
         debugPrint('[PairingService] Failed to dial server: $e');
-        return PairingResult.error(
-            'Could not connect to server. Please check your network connection.');
+        return PairingResult.failure(PairingFailureKind.cannotConnect);
       }
 
       final peerId = _extractNodeId(resolveResult.nodeAddr);
       if (peerId == null) {
         debugPrint(
             '[PairingService] Could not extract node ID from resolved node_addr');
-        return PairingResult.error('Pairing failed: server address is invalid');
+        return PairingResult.failure(PairingFailureKind.invalidServerAddress);
       }
       debugPrint('[PairingService] Using peer node ID: $peerId');
 
       // 4. Send pairing request
-      onStatusUpdate?.call('Submitting pairing request...');
+      onStatusUpdate?.call(PairingStep.submitting);
       final result = await p2pService.sendPairingRequest(
         peer: peerId,
         claimCode: claimCode,
@@ -244,7 +283,7 @@ class PairingService {
       final deviceToken = result['deviceToken'] as String?;
 
       if (accessToken == null || mediaToken == null) {
-        return PairingResult.error('Server did not return required tokens');
+        return PairingResult.failure(PairingFailureKind.missingTokens);
       }
 
       // In P2P mode, serverUrl is a p2p:// URI
@@ -260,22 +299,20 @@ class PairingService {
         serverNodeAddr: resolveResult.nodeAddr,
       );
 
-      onStatusUpdate?.call('Pairing successful!');
+      onStatusUpdate?.call(PairingStep.succeeded);
       return PairingResult.success(credentials, isP2PMode: true);
     } on InvalidClaimCodeException {
-      return PairingResult.error('Invalid or expired claim code');
+      return PairingResult.failure(PairingFailureKind.invalidCode);
     } on RateLimitedException {
-      return PairingResult.error('Too many attempts. Please wait a moment.');
+      return PairingResult.failure(PairingFailureKind.tooManyAttempts);
     } on ServerNotOnlineException {
-      return PairingResult.error(
-        'The Mydia server is not currently online. Please ensure the server is running and try again.',
-      );
+      return PairingResult.failure(PairingFailureKind.serverOffline);
     } on TimeoutException catch (e) {
       debugPrint('[PairingService] Timeout: $e');
-      return PairingResult.error('Connection timed out. Please try again.');
+      return PairingResult.failure(PairingFailureKind.timedOut);
     } catch (e) {
       debugPrint('[PairingService] Error: $e');
-      return PairingResult.error('Pairing failed: $e');
+      return PairingResult.failure(PairingFailureKind.other, detail: '$e');
     }
   }
 
@@ -287,7 +324,7 @@ class PairingService {
     required QrPairingData qrData,
     required String deviceName,
     String? platform,
-    void Function(String status)? onStatusUpdate,
+    void Function(PairingStep step)? onStatusUpdate,
   }) async {
     try {
       final devicePlatform = platform ?? _detectPlatform();
@@ -298,36 +335,33 @@ class PairingService {
 
       final p2pService = _p2pService;
       if (p2pService == null) {
-        return PairingResult.error(
-            'P2P service not available. Please try again.');
+        return PairingResult.failure(PairingFailureKind.serviceUnavailable);
       }
 
       // Initialize the host
-      onStatusUpdate?.call('Initializing secure connection...');
+      onStatusUpdate?.call(PairingStep.initializing);
       await p2pService.initialize();
 
       // Dial the server directly using the EndpointAddr from QR
-      onStatusUpdate?.call('Connecting to server...');
+      onStatusUpdate?.call(PairingStep.connecting);
       try {
         await p2pService.dial(qrData.nodeAddr);
         debugPrint('[PairingService] Dialed server successfully');
       } catch (e) {
         debugPrint('[PairingService] Failed to dial server: $e');
-        return PairingResult.error(
-            'Could not connect to server. Please check your network connection.');
+        return PairingResult.failure(PairingFailureKind.cannotConnect);
       }
 
       final peerId = _extractNodeId(qrData.nodeAddr);
       if (peerId == null) {
         debugPrint(
             '[PairingService] Could not extract node ID from QR node_addr');
-        return PairingResult.error(
-            'Pairing failed: QR code contains an invalid server address');
+        return PairingResult.failure(PairingFailureKind.invalidQrServerAddress);
       }
       debugPrint('[PairingService] Using peer node ID: $peerId');
 
       // Send pairing request
-      onStatusUpdate?.call('Submitting pairing request...');
+      onStatusUpdate?.call(PairingStep.submitting);
       final result = await p2pService.sendPairingRequest(
         peer: peerId,
         claimCode: qrData.claimCode,
@@ -340,7 +374,7 @@ class PairingService {
       final deviceToken = result['deviceToken'] as String?;
 
       if (accessToken == null || mediaToken == null) {
-        return PairingResult.error('Server did not return required tokens');
+        return PairingResult.failure(PairingFailureKind.missingTokens);
       }
 
       // In P2P mode, serverUrl is a p2p:// URI
@@ -356,14 +390,14 @@ class PairingService {
         serverNodeAddr: qrData.nodeAddr,
       );
 
-      onStatusUpdate?.call('Pairing successful!');
+      onStatusUpdate?.call(PairingStep.succeeded);
       return PairingResult.success(credentials, isP2PMode: true);
     } on TimeoutException catch (e) {
       debugPrint('[PairingService] Timeout: $e');
-      return PairingResult.error('Connection timed out. Please try again.');
+      return PairingResult.failure(PairingFailureKind.timedOut);
     } catch (e) {
       debugPrint('[PairingService] Error: $e');
-      return PairingResult.error('Pairing failed: $e');
+      return PairingResult.failure(PairingFailureKind.other, detail: '$e');
     }
   }
 

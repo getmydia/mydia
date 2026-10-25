@@ -402,7 +402,8 @@ void main() {
       deviceName: 'Player B (E2E target)',
     );
     expect(bResult.success, isTrue,
-        reason: 'Player B failed to pair: ${bResult.error}');
+        reason:
+            'Player B failed to pair: ${bResult.failure?.kind.name} ${bResult.failure?.detail}');
 
     final bNodeId = bP2p.nodeId;
     expect(bNodeId, isNotNull, reason: 'Player B has no node ID after pairing');

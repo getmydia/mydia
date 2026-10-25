@@ -6,6 +6,7 @@ library;
 
 import 'package:intl/intl.dart';
 
+import '../core/channels/pairing_service.dart';
 import '../core/playback/playback_plan.dart';
 import '../core/playback/stats/playback_stats.dart';
 import '../core/playback/stats/stats_report.dart';
@@ -39,6 +40,35 @@ extension AppFormatters on AppLocalizations {
             LoginFailureKind.signInExpired => loginErrorSignInExpired,
             LoginFailureKind.tooManyAttempts => loginErrorTooManyAttempts,
           },
+        LoginFailureOfPairing(:final failure) => switch (failure.kind) {
+            PairingFailureKind.serviceUnavailable => loginPairErrorUnavailable,
+            PairingFailureKind.cannotConnect => loginPairErrorCannotConnect,
+            PairingFailureKind.invalidServerAddress =>
+              loginPairErrorInvalidAddress,
+            PairingFailureKind.invalidQrServerAddress =>
+              loginPairErrorInvalidQrAddress,
+            PairingFailureKind.missingTokens => loginPairErrorMissingTokens,
+            PairingFailureKind.invalidCode => loginPairErrorInvalidCode,
+            PairingFailureKind.tooManyAttempts => loginPairErrorTooManyAttempts,
+            PairingFailureKind.serverOffline => loginPairErrorServerOffline,
+            PairingFailureKind.timedOut => loginPairErrorTimedOut,
+            PairingFailureKind.other => switch (failure.detail) {
+                final detail? => loginPairErrorFailed(detail),
+                null => loginPairErrorFailedGeneric,
+              },
+          },
+      };
+
+  /// The progress line under the code field while pairing.
+  String pairingStepText(PairingStep step) => switch (step) {
+        PairingStep.lookingUpCode => loginPairStepLookingUp,
+        PairingStep.validatingQr => loginPairStepValidatingQr,
+        PairingStep.resolvingCode => loginPairStepResolving,
+        PairingStep.initializing => loginPairStepInitializing,
+        PairingStep.connecting => loginPairStepConnecting,
+        PairingStep.submitting => loginPairStepSubmitting,
+        PairingStep.succeeded => loginPairStepSucceeded,
+        PairingStep.paired => loginPairStepPaired,
       };
 
   /// A coarse relative time ("3 hours ago"). [now] pins the clock in tests.
