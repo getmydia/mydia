@@ -22,6 +22,7 @@ import '../../../domain/navigation/media_filter.dart';
 import '../../screens/detail/detail_links.dart';
 import '../../screens/filter/filter_editor_sheet.dart';
 import 'current_source.dart';
+import '../../../l10n/l10n.dart';
 import 'native_sidebar.dart';
 import 'native_tab_bar.dart';
 import 'sidebar_edit_sheet.dart';
@@ -144,6 +145,7 @@ class _NativeSidebarHostState extends ConsumerState<NativeSidebarHost> {
     ref.watch(activeSourceIdProvider);
     final current = currentSwitcherSource(ref, location);
     return nativeSidebarFor(
+      l10n: context.l10n,
       entries: ref.watch(sourceNavEntriesProvider(location)),
       servers: allServers
           ? [
@@ -157,7 +159,7 @@ class _NativeSidebarHostState extends ConsumerState<NativeSidebarHost> {
       sourceHeader: current == null
           ? null
           : allServers
-              ? 'All servers'
+              ? context.l10n.navAllServers
               : current.displayName,
       settingsBadge: widget.settingsBadge,
       // The macOS pane is a source list, which reads best with headings.

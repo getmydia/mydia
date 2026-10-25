@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/l10n.dart';
+
 /// The affordance shown when a browser declines to start playback on its own.
 ///
 /// Every browser refuses to start an unmuted video without a live user
@@ -30,7 +32,7 @@ class TapToPlayOverlay extends StatelessWidget {
     return Positioned.fill(
       child: Semantics(
         button: true,
-        label: 'Play',
+        label: context.l10n.commonPlay,
         child: GestureDetector(
           onTap: onPlay,
           // Without this the scrim's transparent regions would pass taps
@@ -60,7 +62,7 @@ class TapToPlayOverlay extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Tap to play',
+                  context.l10n.tapToPlayTitle,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
@@ -70,7 +72,7 @@ class TapToPlayOverlay extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 32),
                   child: Text(
-                    'Your browser needs a tap before it will start the video.',
+                    context.l10n.tapToPlayHint,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Colors.white70,

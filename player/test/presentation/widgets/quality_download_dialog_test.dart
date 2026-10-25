@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/domain/models/download_option.dart';
 import 'package:player/presentation/widgets/quality_download_dialog.dart';
 
@@ -13,6 +14,8 @@ Future<void> _open(
   bool settle = true,
 }) async {
   await tester.pumpWidget(MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Builder(
       builder: (context) => TextButton(
         onPressed: () async {

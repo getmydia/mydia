@@ -21,6 +21,7 @@ import '../focus_highlight.dart';
 import '../../../domain/navigation/all_servers_locations.dart'
     show allServersRoot, isAllServersLocation;
 import '../../../domain/navigation/source_nav.dart' show sourceIdFromLocation;
+import '../../../l10n/l10n.dart';
 import 'rail_scope.dart';
 import 'source_picker.dart';
 
@@ -75,8 +76,10 @@ class SourceSwitcher extends ConsumerWidget {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         child: _RailSwitcher(
-          name: allServers ? 'All servers' : current.displayName,
-          caption: allServers ? null : _Header._caption(current, homeUser),
+          name: allServers ? context.l10n.navAllServers : current.displayName,
+          caption: allServers
+              ? null
+              : _Header._caption(context.l10n, current, homeUser),
           needsReauth: !allServers && current.account.needsReauth,
           labelsVisible: rail.labelsVisible,
           onOpen: open,
@@ -200,7 +203,7 @@ class _RailSwitcher extends StatelessWidget {
 
     return Semantics(
       button: true,
-      label: 'Switch server: $name',
+      label: context.l10n.navSwitchServer(name),
       excludeSemantics: true,
       onTap: open,
       child: RailEntry(
@@ -291,8 +294,12 @@ class _Header extends StatelessWidget {
   final ValueChanged<BuildContext> onOpen;
 
   /// The line under the name.
-  static String? _caption(Source source, String? homeUser) {
-    if (source.account.needsReauth) return 'Sign in again';
+  static String? _caption(
+    AppLocalizations l10n,
+    Source source,
+    String? homeUser,
+  ) {
+    if (source.account.needsReauth) return l10n.navSourceSignInAgain;
     return switch (source.kind) {
       SourceKind.mydia => 'Mydia · ${source.account.displayName}',
       SourceKind.plex => homeUser == null
@@ -309,12 +316,13 @@ class _Header extends StatelessWidget {
     final palette = context.palette;
     final theme = Theme.of(context).textTheme;
     final needsReauth = !allServers && source.account.needsReauth;
-    final caption = allServers ? null : _caption(source, homeUser);
-    final name = allServers ? 'All servers' : source.displayName;
+    final caption =
+        allServers ? null : _caption(context.l10n, source, homeUser);
+    final name = allServers ? context.l10n.navAllServers : source.displayName;
 
     return Semantics(
         button: true,
-        label: 'Switch server, current: $name',
+        label: context.l10n.navSwitchServerCurrent(name),
         child: FocusHighlight(
           key: const ValueKey('source-switcher-header'),
           onActivate: open,

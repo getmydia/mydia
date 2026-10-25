@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/downloads/orphan_download_sweep.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
@@ -50,6 +51,8 @@ Future<void> _pumpShell(
       mediaSourceProvider(_plexId).overrideWithValue(plexSource),
     ],
     child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       builder: toastLayerBuilder,
       routerConfig: GoRouter(routes: [
         GoRoute(

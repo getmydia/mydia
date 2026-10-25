@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 
 /// The bar shown below the sidebar's brand row while edit mode is active.
 ///
@@ -46,7 +47,7 @@ class SidebarEditBar extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              'Editing',
+              context.l10n.navEditing,
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
               style: TextStyle(
@@ -60,7 +61,7 @@ class SidebarEditBar extends StatelessWidget {
           if (onReset != null) ...[
             IconButton(
               onPressed: onReset,
-              tooltip: 'Reset sidebar',
+              tooltip: context.l10n.navResetSidebar,
               iconSize: 19,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(
@@ -87,7 +88,7 @@ class SidebarEditBar extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            child: const Text('Done'),
+            child: Text(context.l10n.commonDone),
           ),
         ],
       ),

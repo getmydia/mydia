@@ -10,6 +10,7 @@ import '../../core/theme/palette.dart';
 import '../../domain/models/subtitle_candidate.dart';
 import '../../domain/models/subtitle_search_outcome.dart';
 import '../../domain/models/subtitle_track.dart';
+import '../../l10n/l10n.dart';
 import 'osd_sheet.dart';
 import 'subtitle_search_results.dart';
 import 'subtitle_size_stepper.dart';
@@ -51,7 +52,7 @@ enum _SheetMode { tracks, searching, results, downloading }
 
 /// Languages offered as chips, in the same order [SubtitleCandidate]
 /// displays them.
-final _chipLanguages = SubtitleCandidate.languageNames.keys.toList();
+const _chipLanguages = SubtitleCandidate.searchLanguages;
 
 /// The line to show a viewer for [error]: its own message when it was
 /// written for one, and [fallback] for everything else.
@@ -195,7 +196,7 @@ class _SubtitleTrackSelectorSheetState
       if (!mounted) return;
       setState(() {
         _outcome = const SubtitleSearchOutcome(results: [], providers: []);
-        _error = _viewerMessage(e, 'Subtitle search failed. Try again.');
+        _error = _viewerMessage(e, context.l10n.subtitleSearchFailed);
         _mode = _SheetMode.results;
       });
     }
@@ -244,10 +245,7 @@ class _SubtitleTrackSelectorSheetState
       if (!mounted) return;
       setState(() {
         _mode = _SheetMode.results;
-        _error = _viewerMessage(
-            e,
-            'Could not download that subtitle. '
-            'Try again.');
+        _error = _viewerMessage(e, context.l10n.subtitleDownloadFailed);
       });
     }
   }
@@ -269,7 +267,7 @@ class _SubtitleTrackSelectorSheetState
       debugPrint('[SubtitleTrackSelectorSheet] Delay nudge failed: $e');
       if (!mounted) return;
       setState(() {
-        _delayError = _viewerMessage(e, 'Could not adjust the subtitle delay.');
+        _delayError = _viewerMessage(e, context.l10n.subtitleDelayAdjustFailed);
       });
     }
   }
@@ -282,7 +280,7 @@ class _SubtitleTrackSelectorSheetState
       debugPrint('[SubtitleTrackSelectorSheet] Delay reset failed: $e');
       if (!mounted) return;
       setState(() {
-        _delayError = _viewerMessage(e, 'Could not reset the subtitle delay.');
+        _delayError = _viewerMessage(e, context.l10n.subtitleDelayResetFailed);
       });
     }
   }
@@ -295,7 +293,7 @@ class _SubtitleTrackSelectorSheetState
       debugPrint('[SubtitleTrackSelectorSheet] Delay save failed: $e');
       if (!mounted) return;
       setState(() {
-        _delayError = _viewerMessage(e, 'Could not save the subtitle delay.');
+        _delayError = _viewerMessage(e, context.l10n.subtitleDelaySaveFailed);
       });
     }
   }
@@ -317,7 +315,7 @@ class _SubtitleTrackSelectorSheetState
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
-                'Subtitles',
+                context.l10n.commonSubtitles,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       color: palette.textPrimary,
                       fontWeight: FontWeight.bold,
@@ -335,8 +333,10 @@ class _SubtitleTrackSelectorSheetState
   Widget _buildBody(BuildContext context) {
     return switch (_mode) {
       _SheetMode.tracks => _buildTracks(context),
-      _SheetMode.searching => _buildProgress('Searching for subtitles...'),
-      _SheetMode.downloading => _buildProgress('Downloading subtitle...'),
+      _SheetMode.searching =>
+        _buildProgress(context.l10n.subtitleSearchSearching),
+      _SheetMode.downloading =>
+        _buildProgress(context.l10n.subtitleSearchDownloading),
       _SheetMode.results => _buildResults(context),
     };
   }
@@ -349,7 +349,7 @@ class _SubtitleTrackSelectorSheetState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _TrackTile(
-            title: 'Off',
+            title: context.l10n.commonOff,
             isSelected: widget.currentTrack == null,
             onTap: () => Navigator.of(context).pop(const SubtitleTrackOff()),
           ),
@@ -375,7 +375,7 @@ class _SubtitleTrackSelectorSheetState
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
-                      'This file has no subtitles.',
+                      context.l10n.subtitleNoTracks,
                       style: TextStyle(color: palette.textSecondary),
                       textAlign: TextAlign.center,
                     ),
@@ -384,7 +384,7 @@ class _SubtitleTrackSelectorSheetState
                       key: SubtitleTrackSelectorSheet.emptySearchKey,
                       onPressed: _search,
                       icon: const Icon(Icons.search),
-                      label: const Text('Search online'),
+                      label: Text(context.l10n.subtitleSearchOnline),
                       // Explicit colours, not the ambient theme: the sheet
                       // sits on the dark OSD material, so a themed button
                       // would inherit the wrong contrast.
@@ -401,7 +401,9 @@ class _SubtitleTrackSelectorSheetState
             ...widget.tracks.map(
               (track) => _TrackTile(
                 title: track.displayName,
-                subtitle: track.embedded ? 'Embedded' : 'External',
+                subtitle: track.embedded
+                    ? context.l10n.subtitleTrackEmbedded
+                    : context.l10n.subtitleTrackExternal,
                 isSelected: widget.currentTrack?.id == track.id,
                 onTap: () =>
                     Navigator.of(context).pop(SubtitleTrackPicked(track)),
@@ -450,7 +452,7 @@ class _SubtitleTrackSelectorSheetState
             ListTile(
               leading: Icon(Icons.search, color: palette.textSecondary),
               title: Text(
-                'Search online',
+                context.l10n.subtitleSearchOnline,
                 style: TextStyle(color: palette.textPrimary),
               ),
               onTap: _search,
@@ -490,7 +492,7 @@ class _SubtitleTrackSelectorSheetState
           child: TextButton.icon(
             onPressed: () => setState(() => _mode = _SheetMode.tracks),
             icon: const Icon(Icons.arrow_back, size: 18),
-            label: const Text('Back to tracks'),
+            label: Text(context.l10n.subtitleBackToTracks),
             style: TextButton.styleFrom(
               foregroundColor: context.palette.textSecondary,
             ),
@@ -559,7 +561,7 @@ class _LanguageChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final label = SubtitleCandidate.languageNames[code] ?? code.toUpperCase();
+    final label = context.l10n.languageName(code) ?? code.toUpperCase();
     return Material(
       color:
           isSelected ? palette.primary : Colors.white.withValues(alpha: 0.06),
@@ -653,7 +655,7 @@ class _SubtitleDelayRow extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
-              'Subtitle delay',
+              context.l10n.subtitleDelayTitle,
               style: TextStyle(color: palette.textSecondary, fontSize: 13),
             ),
           ),
@@ -665,13 +667,15 @@ class _SubtitleDelayRow extends StatelessWidget {
                   Icons.remove_circle_outline,
                   color: palette.textPrimary,
                 ),
-                tooltip: '-100 ms',
+                tooltip: context.l10n.subtitleDelayAmount('-100'),
                 onPressed: () => onNudge(-100),
               ),
               Expanded(
                 child: Center(
                   child: Text(
-                    '${delayMs >= 0 ? '+' : ''}$delayMs ms',
+                    context.l10n.subtitleDelayAmount(
+                      '${delayMs >= 0 ? '+' : ''}$delayMs',
+                    ),
                     style: TextStyle(
                       color: palette.textPrimary,
                       fontWeight: FontWeight.bold,
@@ -685,7 +689,7 @@ class _SubtitleDelayRow extends StatelessWidget {
                   Icons.add_circle_outline,
                   color: palette.textPrimary,
                 ),
-                tooltip: '+100 ms',
+                tooltip: context.l10n.subtitleDelayAmount('+100'),
                 onPressed: () => onNudge(100),
               ),
             ],
@@ -696,13 +700,13 @@ class _SubtitleDelayRow extends StatelessWidget {
               TextButton(
                 key: const ValueKey('subtitle-delay-reset'),
                 onPressed: onReset,
-                child: const Text('Reset'),
+                child: Text(context.l10n.commonReset),
               ),
               if (canSave)
                 TextButton(
                   key: const ValueKey('subtitle-delay-save'),
                   onPressed: onSave,
-                  child: const Text('Save'),
+                  child: Text(context.l10n.loginSave),
                 ),
             ],
           ),

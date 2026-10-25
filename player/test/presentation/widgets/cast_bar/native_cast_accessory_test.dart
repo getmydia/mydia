@@ -71,15 +71,18 @@ class _RecordingManager implements CastSessionManager {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+NativeAccessory? _accessoryFor(CastBarState? state) =>
+    nativeAccessoryFor(lookupAppLocalizations(const Locale('en')), state);
+
 void main() {
   group('nativeAccessoryFor', () {
     test('nothing to show: no accessory', () {
-      expect(nativeAccessoryFor(null), isNull);
+      expect(_accessoryFor(null), isNull);
     });
 
     test('ambient', () {
       expect(
-        nativeAccessoryFor(
+        _accessoryFor(
             CastBarAmbient(target: _ambient(), deviceName: 'Lantern Room')),
         const NativeAccessory(
           title: 'Night Harbor',
@@ -92,7 +95,7 @@ void main() {
 
     test('offline', () {
       expect(
-        nativeAccessoryFor(const CastBarOffline(_device)),
+        _accessoryFor(const CastBarOffline(_device)),
         const NativeAccessory(
           title: 'Cottage Chromecast',
           subtitle: 'Not connected',
@@ -103,7 +106,7 @@ void main() {
 
     test('connecting', () {
       expect(
-        nativeAccessoryFor(const CastBarConnecting(_device)),
+        _accessoryFor(const CastBarConnecting(_device)),
         const NativeAccessory(
           title: 'Connecting to Cottage Chromecast…',
           symbol: 'airplayvideo',
@@ -113,7 +116,7 @@ void main() {
 
     test('stale', () {
       expect(
-        nativeAccessoryFor(CastBarStale(_playing())),
+        _accessoryFor(CastBarStale(_playing())),
         const NativeAccessory(
           title: 'Silo - S02E01',
           subtitle: 'Lost connection to Cottage Chromecast',
@@ -125,7 +128,7 @@ void main() {
 
     test('idle', () {
       expect(
-        nativeAccessoryFor(const CastBarIdle(_device)),
+        _accessoryFor(const CastBarIdle(_device)),
         const NativeAccessory(
           title: 'Ready to play on Cottage Chromecast',
           subtitle: 'Connected',
@@ -136,7 +139,7 @@ void main() {
 
     test('playing, paused, and syncing', () {
       expect(
-        nativeAccessoryFor(CastBarPlaying(_playing())),
+        _accessoryFor(CastBarPlaying(_playing())),
         const NativeAccessory(
           title: 'Silo - S02E01',
           subtitle: 'Casting to Cottage Chromecast',
@@ -145,11 +148,9 @@ void main() {
           playing: true,
         ),
       );
-      expect(
-          nativeAccessoryFor(CastBarPlaying(_playing(paused: true)))?.playing,
+      expect(_accessoryFor(CastBarPlaying(_playing(paused: true)))?.playing,
           isFalse);
-      final syncing =
-          nativeAccessoryFor(CastBarPlaying(_playing(syncing: true)));
+      final syncing = _accessoryFor(CastBarPlaying(_playing(syncing: true)));
       expect(syncing?.playing, isNull);
       expect(syncing?.subtitle, 'Reconnecting to Cottage Chromecast…');
     });
@@ -290,9 +291,13 @@ void main() {
       // synchronously.
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
-        child: const Directionality(
-          textDirection: TextDirection.ltr,
-          child: NativeCastAccessory(),
+        child: Localizations(
+          locale: const Locale('en'),
+          delegates: AppLocalizations.localizationsDelegates,
+          child: const Directionality(
+            textDirection: TextDirection.ltr,
+            child: NativeCastAccessory(),
+          ),
         ),
       ));
       await tester.pump();

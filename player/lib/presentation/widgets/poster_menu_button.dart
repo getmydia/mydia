@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/l10n.dart';
+
 /// The kebab that opens a poster card's secondary menu.
 ///
 /// A [PosterFrame] overlay, so it positions itself the way that widget's
@@ -24,12 +26,13 @@ class PosterMenuButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   /// Named for the surface, so screen readers do not just say "button".
-  final String tooltip;
+  /// Null means the localized "More actions".
+  final String? tooltip;
 
   const PosterMenuButton({
     super.key,
     required this.onPressed,
-    this.tooltip = 'More actions',
+    this.tooltip,
   });
 
   @override
@@ -48,7 +51,7 @@ class PosterMenuButton extends StatelessWidget {
             color: Colors.white,
             size: 20,
           ),
-          tooltip: tooltip,
+          tooltip: tooltip ?? context.l10n.posterMenuMoreActions,
           padding: const EdgeInsets.all(4),
           constraints: const BoxConstraints(),
           visualDensity: VisualDensity.compact,

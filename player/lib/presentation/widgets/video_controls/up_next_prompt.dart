@@ -7,6 +7,7 @@ import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/player/input_capabilities.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../../../l10n/l10n.dart';
 import '../artwork_image.dart';
 import '../glass_surface.dart';
 import '../shimmer_card.dart';
@@ -149,7 +150,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
           const SizedBox(width: 8),
           _FocusableTap(
             onTap: () => _setExpanded(true),
-            child: Text(widget.target.pillLabel),
+            child: Text(widget.target.pillLabel(context.l10n)),
           ),
           const _PillDivider(),
           _PillSegment(
@@ -161,7 +162,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                 const Icon(Icons.play_arrow_rounded, size: 16),
                 if (!compact) ...[
                   const SizedBox(width: 4),
-                  const Text('Play'),
+                  Text(context.l10n.commonPlay),
                 ],
               ],
             ),
@@ -170,7 +171,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
           _PillSegment(
             key: UpNextPrompt.dismissKey,
             onTap: widget.onDismiss,
-            tooltip: 'Dismiss',
+            tooltip: context.l10n.commonDismiss,
             child: const Icon(Icons.close_rounded, size: 16),
           ),
         ],
@@ -205,7 +206,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                   Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(widget.target.eyebrow.toUpperCase(),
+                        Text(widget.target.eyebrow(context.l10n).toUpperCase(),
                             style: glassText.copyWith(
                                 fontSize: 9,
                                 letterSpacing: 1.2,
@@ -258,14 +259,14 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                               Radius.circular(DepthTokens.radiusOsdPill),
                             ),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.play_arrow_rounded,
+                              const Icon(Icons.play_arrow_rounded,
                                   size: 16, color: Color(0xFF0B0B0C)),
-                              SizedBox(width: 4),
-                              Text('Play now',
-                                  style: TextStyle(
+                              const SizedBox(width: 4),
+                              Text(context.l10n.videoUpNextPlayNow,
+                                  style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                       color: Color(0xFF0B0B0C))),
@@ -280,7 +281,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                         icon: Icons.close_rounded,
                         size: 32,
                         iconSize: 18,
-                        tooltip: 'Dismiss',
+                        tooltip: context.l10n.commonDismiss,
                         onTap: widget.onDismiss),
                   ]),
                 ]),

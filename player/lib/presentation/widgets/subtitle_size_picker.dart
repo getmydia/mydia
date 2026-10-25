@@ -17,7 +17,7 @@ Future<SubtitleSize?> showSubtitleSizePicker(
     builder: (context) {
       final palette = context.palette;
       return OsdDialog(
-        title: const Text('Subtitle size'),
+        title: Text(context.l10n.settingsSubtitleSizeTitle),
         contentPadding: const EdgeInsets.symmetric(vertical: 12),
         content: Material(
           type: MaterialType.transparency,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/palette.dart';
+import '../../l10n/l10n.dart';
 import 'focus_highlight.dart';
 
 class TvKeypad extends StatelessWidget {
@@ -87,7 +88,7 @@ class TvKeypad extends StatelessWidget {
               _buildActionButton(
                 palette,
                 keyName: 'delete',
-                label: '⌫ Delete',
+                label: context.l10n.tvKeypadDelete,
                 icon: Icons.backspace_outlined,
                 flex: 2,
                 onPressed: enabled ? onDeletePressed : null,
@@ -95,7 +96,7 @@ class TvKeypad extends StatelessWidget {
               _buildActionButton(
                 palette,
                 keyName: 'clear',
-                label: 'Clear',
+                label: context.l10n.loginClear,
                 icon: Icons.refresh_rounded,
                 flex: 2,
                 onPressed: enabled ? onClearPressed : null,

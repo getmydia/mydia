@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/l10n.dart';
 import 'glass/glass_dialog.dart';
 
 /// Warns that credentials were accepted but could not be saved.
@@ -12,24 +13,19 @@ class StorageUnavailableDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
 
     return GlassDialog(
       icon: const Icon(Icons.warning_amber_rounded, size: 32),
-      title: const Text('Connection could not be saved'),
+      title: Text(l10n.storageUnavailableTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'You are connected and can keep using the app, but this '
-            'connection may be lost when you close it.',
-          ),
+          Text(l10n.storageUnavailableConnected),
           const SizedBox(height: 12),
           Text(
-            'Mydia could not save your credentials because this system\'s '
-            'secure storage rejected them. On Linux that usually means either '
-            'no keyring service is running, or the app is sandboxed without '
-            'permission to reach it.',
+            l10n.storageUnavailableDetail,
             style: theme.textTheme.bodySmall,
           ),
         ],
@@ -37,7 +33,7 @@ class StorageUnavailableDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Continue'),
+          child: Text(l10n.commonContinue),
         ),
       ],
     );

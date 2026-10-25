@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 import '../../domain/models/show_next_up.dart';
+import '../../l10n/l10n.dart';
 import 'focus_highlight.dart';
 import 'next_up_labels.dart';
 import 'primary_play_button.dart';
@@ -43,7 +44,8 @@ class SmartPlayButton extends StatefulWidget {
   final NextUpEpisode? episode;
 
   /// The icon form's label: "Play", or "Resume" for an item with progress.
-  final String playLabel;
+  /// Null means the localized "Play".
+  final String? playLabel;
 
   const SmartPlayButton({
     super.key,
@@ -51,7 +53,7 @@ class SmartPlayButton extends StatefulWidget {
     required this.onFileSelected,
     this.state,
     this.episode,
-    this.playLabel = 'Play',
+    this.playLabel,
   });
 
   @override
@@ -102,6 +104,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
         final cueLine = episode == null
             ? null
             : nextUpCueLine(
+                context.l10n,
                 episode,
                 state,
                 resolution: compact ? null : _selectedFile?.resolution,
@@ -117,7 +120,9 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
             if (cueLine != null) ...[
               const SizedBox(height: 6),
               Text(
-                compact ? '${nextUpShortLabel(state)} · $cueLine' : cueLine,
+                compact
+                    ? '${nextUpShortLabel(context.l10n, state)} · $cueLine'
+                    : cueLine,
                 style: TextStyle(
                   fontSize: 12,
                   color: palette.textSecondary,
@@ -154,7 +159,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
         ],
         // Play button
         PrimaryPlayButton(
-          label: widget.playLabel,
+          label: widget.playLabel ?? context.l10n.commonPlay,
           iconOnly: iconOnly,
           onPressed: _selectedFile != null
               ? () => widget.onFileSelected(_selectedFile!)
@@ -189,7 +194,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
               ? () => widget.onFileSelected(_selectedFile!)
               : null,
           icon: const Icon(Icons.play_arrow_rounded, size: 20),
-          label: Text(nextUpLabel(widget.state!)),
+          label: Text(nextUpLabel(context.l10n, widget.state!)),
           style: FilledButton.styleFrom(
             backgroundColor: Colors.white,
             foregroundColor: palette.background,

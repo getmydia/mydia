@@ -8,6 +8,7 @@ import '../../core/player/input_capabilities.dart';
 import '../../core/update/install_environment.dart';
 import '../../core/update/update_provider.dart';
 import '../../domain/models/available_update.dart';
+import '../../l10n/l10n.dart';
 import 'glass/glass_dialog.dart';
 
 /// Opens a URL. Injectable so tests can observe the read-only branch without
@@ -95,18 +96,16 @@ Future<bool> _confirmInPlace(BuildContext context, AppUpdate update) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => GlassDialog(
-      title: const Text('Update Mydia'),
-      content: Text(
-        'Mydia will close and update to v${update.version}. Continue?',
-      ),
+      title: Text(ctx.l10n.updateConfirmTitle),
+      content: Text(ctx.l10n.updateConfirmBody(update.version)),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Cancel'),
+          child: Text(ctx.l10n.commonCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Update'),
+          child: Text(ctx.l10n.commonUpdate),
         ),
       ],
     ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/player/video_scaling.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/liquid_glass/liquid_geometry.dart';
@@ -8,6 +9,8 @@ import 'package:player/presentation/widgets/video_controls/control_button.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 
 Widget _host(Widget child) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: Center(child: SizedBox(width: 600, child: child)),
       ),
@@ -34,6 +37,8 @@ void main() {
     testWidgets('Liquid Glass widens the slider by the knob to keep the track',
         (tester) async {
       await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
         home: Scaffold(
           body: Center(

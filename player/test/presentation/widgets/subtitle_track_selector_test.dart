@@ -713,7 +713,7 @@ void main() {
     await tester.tap(find.text('Search online'));
     await tester.pumpAndSettle();
 
-    // 'th' is not in the curated roster (`SubtitleCandidate.languageNames`
+    // 'th' is not in the curated roster (`SubtitleCandidate.searchLanguages`
     // has no Thai entry), so without unioning the roster with whatever is
     // actually selected, this chip would never render and 'th' could never
     // be seen or removed.

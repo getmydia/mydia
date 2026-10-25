@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/palette.dart';
+import '../../l10n/l10n.dart';
 import 'glass/glass_dialog.dart';
 
 /// Dialog that asks the user if they want to resume playback from a saved position.
@@ -18,6 +19,7 @@ class ResumeDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final l10n = context.l10n;
     final positionText = _formatDuration(savedPositionSeconds);
     // Guard against division by zero
     final percentage = totalDurationSeconds > 0
@@ -29,18 +31,18 @@ class ResumeDialog extends StatelessWidget {
         : 0.0;
 
     return GlassDialog(
-      title: const Text('Resume Playback'),
+      title: Text(l10n.resumeTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'You previously watched $percentage% of this video.',
+            l10n.resumePreviouslyWatched(percentage),
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),
           Text(
-            'Resume from $positionText or start over?',
+            l10n.resumePrompt(positionText),
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: 8),
@@ -74,11 +76,11 @@ class ResumeDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Start Over'),
+          child: Text(l10n.resumeStartOver),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Resume'),
+          child: Text(l10n.commonResume),
         ),
       ],
     );

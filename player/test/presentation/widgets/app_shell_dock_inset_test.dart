@@ -10,6 +10,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 
@@ -33,6 +34,8 @@ void main() {
           viewPadding: EdgeInsets.only(bottom: kHomeIndicator),
         ),
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             extendBody: true,
             bottomNavigationBar: SafeArea(
@@ -71,6 +74,8 @@ void main() {
           viewPadding: EdgeInsets.only(bottom: kHomeIndicator),
         ),
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           // Outer: AppShell's mobile Scaffold.
           home: Scaffold(
             extendBody: true,
@@ -120,6 +125,8 @@ void main() {
           ),
           child: ProviderScope(
             child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(
                 extendBody: true,
                 bottomNavigationBar: KeyedSubtree(
@@ -150,6 +157,8 @@ void main() {
           data: const MediaQueryData(size: Size(400, 800)),
           child: ProviderScope(
             child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(
                 extendBody: true,
                 bottomNavigationBar: KeyedSubtree(

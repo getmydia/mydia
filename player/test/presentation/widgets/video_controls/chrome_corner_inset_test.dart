@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
@@ -17,6 +18,8 @@ import 'package:player/presentation/widgets/video_controls/video_progress_bar.da
 Widget _panel(double width) {
   final metrics = PanelMetrics.forWidth(width);
   return MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
       body: Center(
         child: ChromePanel(

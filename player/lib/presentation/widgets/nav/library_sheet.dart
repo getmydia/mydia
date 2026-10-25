@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/source_nav.dart';
+import '../../../l10n/l10n.dart';
 import '../glass/glass_sheet.dart';
 
 /// Bottom sheet listing the source's libraries and saved filters, opened by
@@ -22,7 +23,7 @@ Future<void> showLibrarySheet(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-            child: Text('Libraries',
+            child: Text(sheetContext.l10n.navLibraries,
                 style: Theme.of(sheetContext).textTheme.headlineSmall),
           ),
           // The heading stays put; the rows scroll when the source has

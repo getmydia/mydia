@@ -127,7 +127,7 @@ class BottomNav extends StatelessWidget {
                             child: NavItem(
                               icon: Icons.arrow_back_rounded,
                               selectedIcon: Icons.arrow_back_rounded,
-                              label: 'Mydia',
+                              label: 'Mydia', // l10n-ignore: product name
                               isSelected: false,
                               compact: compact,
                               onTap: navigateToMydiaApp,

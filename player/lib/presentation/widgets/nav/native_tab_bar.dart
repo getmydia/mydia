@@ -50,7 +50,7 @@ List<NativeTab> nativeTabsFor(
       if (showBackToMydia)
         NativeTab(
           id: kMydiaBackTabId,
-          title: 'Mydia',
+          title: 'Mydia', // l10n-ignore: product name
           symbol: nativeTabSymbol(kMydiaBackTabId),
         ),
       for (final entry in entries)

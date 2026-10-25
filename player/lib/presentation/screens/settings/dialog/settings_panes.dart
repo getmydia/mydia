@@ -85,7 +85,7 @@ class _MydiaInstancePage extends ConsumerWidget {
     final account =
         mydiaAccountFor(ref.watch(sourceRecordsProvider).value, sourceId);
     return SettingsPane(
-      title: account?.displayName ?? context.l10n.settingsServerFallback,
+      title: account?.displayName ?? context.l10n.commonServer,
       child: MydiaInstanceBody(sourceId: sourceId, padding: _bodyPadding),
     );
   }

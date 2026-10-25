@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
+import '../../../l10n/l10n.dart';
 import '../glass_surface.dart';
 import 'sidebar_content.dart';
 import 'sidebar_row.dart';
@@ -43,7 +44,7 @@ class MobileDrawer extends StatelessWidget {
           ? SidebarRow(
               icon: Icons.arrow_back_rounded,
               selectedIcon: Icons.arrow_back_rounded,
-              label: 'Back to Mydia',
+              label: context.l10n.navBackToMydia,
               isSelected: false,
               onTap: () {
                 Navigator.of(context).pop();

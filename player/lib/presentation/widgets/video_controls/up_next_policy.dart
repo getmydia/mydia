@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../../domain/models/media_segment.dart';
+import '../../../l10n/l10n.dart';
 
 /// Fallback trigger window, used only when no credits segment was detected
 /// for the file.
@@ -124,10 +125,12 @@ class UpNextTarget {
 
   String get episodeCode => 'S${seasonNumber}E$episodeNumber';
 
-  String get eyebrow => crossesSeason ? 'Next season' : 'Next up';
+  String eyebrow(AppLocalizations l10n) =>
+      crossesSeason ? l10n.videoUpNextSeason : l10n.nextUpNextUp;
 
   /// The resting pill's single line of text.
-  String get pillLabel => '$eyebrow · $episodeCode';
+  String pillLabel(AppLocalizations l10n) =>
+      l10n.videoUpNextPill(eyebrow(l10n), episodeCode);
 
   /// The title written into the player route, matching the format
   /// `UpNextController.playNext` already builds.

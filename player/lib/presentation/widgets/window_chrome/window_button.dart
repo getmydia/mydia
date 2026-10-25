@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/palette.dart';
 import '../../../core/window/decoration_layout.dart';
+import '../../../l10n/l10n.dart';
 
 /// A single window-manager button, drawn by Flutter.
 ///
@@ -87,9 +88,11 @@ class _WindowButtonWidgetState extends State<WindowButtonWidget> {
   }
 
   String get _tooltip => switch (widget.button) {
-        WindowButton.minimize => 'Minimize',
-        WindowButton.maximize => widget.isMaximized ? 'Restore' : 'Maximize',
-        WindowButton.close => 'Close',
+        WindowButton.minimize => context.l10n.windowMinimize,
+        WindowButton.maximize => widget.isMaximized
+            ? context.l10n.windowRestore
+            : context.l10n.windowMaximize,
+        WindowButton.close => context.l10n.commonClose,
       };
 
   @override

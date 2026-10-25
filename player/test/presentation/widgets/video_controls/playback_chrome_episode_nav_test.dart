@@ -6,6 +6,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
@@ -50,6 +51,8 @@ void main() {
     tearDown(() => player.dispose());
 
     Widget host(double width) => MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SizedBox(
               width: width,

@@ -58,32 +58,29 @@ class SubtitleCandidate {
     );
   }
 
-  String get displayLanguage =>
-      languageNames[language] ?? language.toUpperCase();
-
-  /// Code-to-name map for the languages a provider is likely to offer.
+  /// ISO 639-1 codes of the languages a provider is likely to offer, in the
+  /// order the subtitle search sheet shows them as chips.
   ///
-  /// Public so the subtitle search sheet can build its language chips from
-  /// the same source [displayLanguage] uses, rather than keeping a second,
-  /// independent list in sync by hand.
-  static const languageNames = {
-    'en': 'English',
-    'es': 'Spanish',
-    'fr': 'French',
-    'de': 'German',
-    'it': 'Italian',
-    'pt': 'Portuguese',
-    'ru': 'Russian',
-    'ja': 'Japanese',
-    'ko': 'Korean',
-    'zh': 'Chinese',
-    'ar': 'Arabic',
-    'hi': 'Hindi',
-    'nl': 'Dutch',
-    'pl': 'Polish',
-    'sv': 'Swedish',
-    'tr': 'Turkish',
-  };
+  /// Names are not kept here: widgets turn a code into the viewer's language
+  /// with `AppLocalizations.languageName`.
+  static const searchLanguages = [
+    'en',
+    'es',
+    'fr',
+    'de',
+    'it',
+    'pt',
+    'ru',
+    'ja',
+    'ko',
+    'zh',
+    'ar',
+    'hi',
+    'nl',
+    'pl',
+    'sv',
+    'tr',
+  ];
 
   /// Maps an ISO 639-2 code, as reported for embedded tracks, to ISO 639-1,
   /// which is what provider search expects.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/palette.dart';
 import '../../../domain/navigation/sidebar_layout.dart';
+import '../../../l10n/l10n.dart';
 
 /// The sidebar's scrolling middle region, in one of two renderings.
 ///
@@ -113,7 +114,7 @@ class SidebarMiddleList extends StatelessWidget {
         final Widget trailing = row.hidden
             ? IconButton(
                 onPressed: () => onRestore(row.destination.id),
-                tooltip: 'Restore ${row.destination.label}',
+                tooltip: context.l10n.navRestoreRow(row.destination.label),
                 iconSize: 20,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints.tightFor(

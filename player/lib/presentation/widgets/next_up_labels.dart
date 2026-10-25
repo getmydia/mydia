@@ -1,32 +1,33 @@
 import '../../domain/models/show_next_up.dart';
+import '../../l10n/l10n.dart';
 
-/// Wide-form button text. Deliberately identical to the Phoenix web UI
+/// Wide-form button text. Matches the Phoenix web UI
 /// (see lib/mydia_web/live/media_live/show/helpers.ex) so the two surfaces
 /// read alike when a user moves between them.
-String nextUpLabel(NextUpState state) {
+String nextUpLabel(AppLocalizations l10n, NextUpState state) {
   switch (state) {
     case NextUpState.continueWatching:
-      return 'Continue Watching';
+      return l10n.nextUpContinueWatching;
     case NextUpState.next:
-      return 'Play Next Episode';
+      return l10n.nextUpPlayNextEpisode;
     case NextUpState.start:
-      return 'Start Watching';
+      return l10n.nextUpStartWatching;
     case NextUpState.unknown:
-      return 'Play';
+      return l10n.commonPlay;
   }
 }
 
 /// Compact word for the cue line when the button has shed its label.
-String nextUpShortLabel(NextUpState state) {
+String nextUpShortLabel(AppLocalizations l10n, NextUpState state) {
   switch (state) {
     case NextUpState.continueWatching:
-      return 'Continue';
+      return l10n.nextUpContinue;
     case NextUpState.next:
-      return 'Next up';
+      return l10n.nextUpNextUp;
     case NextUpState.start:
-      return 'Start';
+      return l10n.nextUpStart;
     case NextUpState.unknown:
-      return 'Play';
+      return l10n.commonPlay;
   }
 }
 
@@ -60,6 +61,7 @@ int? remainingMinutes(NextUpEpisode episode) {
 
 /// Secondary line under the play control.
 String nextUpCueLine(
+  AppLocalizations l10n,
   NextUpEpisode episode,
   NextUpState state, {
   String? resolution,
@@ -72,7 +74,7 @@ String nextUpCueLine(
 
   if (state == NextUpState.continueWatching) {
     final remaining = remainingMinutes(episode);
-    if (remaining != null) parts.add('$remaining min left');
+    if (remaining != null) parts.add(l10n.nextUpMinutesLeft(remaining));
   }
 
   return parts.join(' · ');

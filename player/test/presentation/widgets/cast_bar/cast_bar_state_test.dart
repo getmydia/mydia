@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show Locale;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -5,6 +6,7 @@ import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_bar_state.dart';
 
 const _device = CastDevice(
@@ -137,14 +139,16 @@ void main() {
   });
 
   test('CastBarText matches what the bar has always said', () {
-    expect(CastBarText.idleTitle('Den'), 'Ready to play on Den');
-    expect(CastBarText.idleStatus, 'Connected');
-    expect(CastBarText.connectingTitle('Den'), 'Connecting to Den…');
-    expect(CastBarText.offlineStatus, 'Not connected');
-    expect(CastBarText.staleStatus('Den'), 'Lost connection to Den');
-    expect(CastBarText.ambientStatus('Den'), 'Playing on Den');
-    expect(CastBarText.playingStatus('Den', syncing: false), 'Casting to Den');
-    expect(CastBarText.playingStatus('Den', syncing: true),
+    final en = lookupAppLocalizations(const Locale('en'));
+    expect(CastBarText.idleTitle(en, 'Den'), 'Ready to play on Den');
+    expect(CastBarText.idleStatus(en), 'Connected');
+    expect(CastBarText.connectingTitle(en, 'Den'), 'Connecting to Den…');
+    expect(CastBarText.offlineStatus(en), 'Not connected');
+    expect(CastBarText.staleStatus(en, 'Den'), 'Lost connection to Den');
+    expect(CastBarText.ambientStatus(en, 'Den'), 'Playing on Den');
+    expect(
+        CastBarText.playingStatus(en, 'Den', syncing: false), 'Casting to Den');
+    expect(CastBarText.playingStatus(en, 'Den', syncing: true),
         'Reconnecting to Den…');
   });
 }

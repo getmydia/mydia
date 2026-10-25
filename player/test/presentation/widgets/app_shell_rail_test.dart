@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/focus/sidebar_focus_boundary.dart';
 import 'package:player/core/layout/breakpoints.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
@@ -57,6 +58,8 @@ void _setSize(WidgetTester tester, Size size) {
 Widget _switchingHost() => ProviderScope(
       overrides: _overrides(),
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) => Scaffold(
             bottomNavigationBar: Breakpoints.showsRail(context)
@@ -131,6 +134,8 @@ void main() {
         ProviderScope(
           overrides: _overrides(),
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               // The shell's own layer builder, so a miswired region, swapped
               // direction or dropped `onExitRequested` fails here.
@@ -248,6 +253,8 @@ void main() {
         ProviderScope(
           overrides: _overrides(),
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: MediaQuery(
                 data: MediaQueryData(
@@ -324,6 +331,8 @@ void main() {
         ProviderScope(
           overrides: _overrides(),
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: AppShell.railLayers(
                 regionsEnabled: false,
@@ -386,6 +395,8 @@ void main() {
         ProviderScope(
           overrides: _overrides(),
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: AppShell.railLayers(
                 regionsEnabled: false,

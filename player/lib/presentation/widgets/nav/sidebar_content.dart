@@ -22,6 +22,7 @@ import 'sidebar_row.dart';
 import '../../../core/sources/media_source.dart' show SourceCapability;
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/navigation/source_nav.dart';
+import '../../../l10n/l10n.dart';
 import 'current_source.dart';
 import 'source_switcher.dart';
 
@@ -189,7 +190,7 @@ class SidebarContent extends ConsumerWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          'Mydia Player',
+                          'Mydia Player', // l10n-ignore: product name
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                           style: Theme.of(context)
@@ -209,7 +210,7 @@ class SidebarContent extends ConsumerWidget {
                 IconButton(
                   onPressed: () =>
                       ref.read(sidebarEditModeProvider.notifier).toggle(),
-                  tooltip: 'Edit sidebar',
+                  tooltip: context.l10n.navEditSidebar,
                   visualDensity: VisualDensity.compact,
                   icon: Icon(
                     Icons.edit_outlined,
@@ -413,7 +414,9 @@ class SidebarContent extends ConsumerWidget {
               icon: Icons.add_rounded,
               selectedIcon: Icons.add_rounded,
               // The rail names it in the tooltip and beside the icon.
-              label: railLayout ? 'New filter' : '+ New filter',
+              label: railLayout
+                  ? context.l10n.navNewFilter
+                  : context.l10n.navNewFilterPlus,
               isSelected: false,
               onTap: () => showFilterEditor(
                 context: context,
@@ -466,19 +469,16 @@ class SidebarContent extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => GlassDialog(
         backgroundColor: context.palette.surfaceVariant,
-        title: const Text('Reset sidebar?'),
-        content: const Text(
-          'Restores the default order and shows every hidden row. Saved '
-          'filters are kept, but move to the bottom of the list.',
-        ),
+        title: Text(dialogContext.l10n.navResetSidebarTitle),
+        content: Text(dialogContext.l10n.navResetSidebarBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(dialogContext.l10n.commonCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Reset'),
+            child: Text(dialogContext.l10n.commonReset),
           ),
         ],
       ),

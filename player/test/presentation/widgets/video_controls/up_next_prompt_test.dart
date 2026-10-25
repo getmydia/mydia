@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
 import 'package:player/presentation/widgets/video_controls/up_next_countdown.dart';
 import 'package:player/presentation/widgets/video_controls/up_next_policy.dart';
@@ -37,6 +38,8 @@ Future<void> _pump(
   // make `pumpAndSettle` time out in a test environment with no network.
   await mockNetworkImages(() => tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: MediaQuery(
             data: MediaQueryData(size: Size(width, 720)),
             child: Scaffold(

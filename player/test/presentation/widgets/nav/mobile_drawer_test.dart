@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/layout/breakpoints.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
@@ -40,6 +41,8 @@ Future<void> _openDrawer(WidgetTester tester,
       mediaSourceProvider(fakeSourceId).overrideWithValue(FakeCapableSource()),
     ],
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
       builder: direction == null
           ? null

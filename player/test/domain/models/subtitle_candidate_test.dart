@@ -4,34 +4,12 @@ import 'package:player/graphql/queries/subtitle_search.graphql.dart';
 
 void main() {
   group('SubtitleCandidate', () {
-    const candidate = SubtitleCandidate(
-      token: 'signed-token',
-      language: 'en',
-      releaseName: 'Movie.2020.1080p.BluRay.srt',
-      format: 'srt',
-      rating: 8.5,
-      downloadCount: 4200,
-      hearingImpaired: false,
-      hashMatch: true,
-      score: 180,
-      providerName: 'Mydia Relay',
-    );
-
-    test('renders a human language name', () {
-      expect(candidate.displayLanguage, 'English');
-    });
-
-    test('falls back to the uppercased code for unmapped languages', () {
-      const other = SubtitleCandidate(
-        token: 't',
-        language: 'th',
-        format: 'srt',
-        hearingImpaired: false,
-        hashMatch: false,
-        score: 10,
-        providerName: 'p',
+    test('the search roster holds two letter codes', () {
+      expect(SubtitleCandidate.searchLanguages, contains('en'));
+      expect(
+        SubtitleCandidate.searchLanguages.every((c) => c.length == 2),
+        isTrue,
       );
-      expect(other.displayLanguage, 'TH');
     });
   });
 

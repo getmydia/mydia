@@ -20,7 +20,7 @@ Future<ThemePreset?> showThemePresetPicker(
     builder: (context) {
       final palette = context.palette;
       return OsdDialog(
-        title: const Text('Theme'),
+        title: Text(context.l10n.settingsThemeTitle),
         contentPadding: const EdgeInsets.symmetric(vertical: 12),
         content: Material(
           type: MaterialType.transparency,

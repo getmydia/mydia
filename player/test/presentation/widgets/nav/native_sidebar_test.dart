@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/navigation/source_nav.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/nav/native_sidebar.dart';
 import 'package:player/presentation/widgets/nav/native_tab_bar.dart';
 
@@ -37,6 +38,7 @@ NativeSidebar _build({
   bool grouped = false,
 }) =>
     nativeSidebarFor(
+      l10n: lookupAppLocalizations(const Locale('en')),
       entries: entries ?? _entries,
       servers: servers,
       canFilter: canFilter,

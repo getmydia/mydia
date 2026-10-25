@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../l10n/l10n.dart';
 import 'control_button.dart';
 
 /// The playback transport: previous episode, −10s, play/pause, +10s, next
@@ -84,7 +85,7 @@ class TransportSurface extends StatelessWidget {
   /// Deliberately not AnimatedIcons.play_pause: that ships its own glyph style
   /// and would break the _rounded family coherence the icon_family_test
   /// enforces.
-  Widget _playPause() {
+  Widget _playPause(BuildContext context) {
     return ControlButton(
       key: playPauseKey,
       focusNode: playPauseFocusNode,
@@ -92,7 +93,7 @@ class TransportSurface extends StatelessWidget {
       icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
       size: 40,
       iconSize: 24,
-      tooltip: isPlaying ? 'Pause' : 'Play',
+      tooltip: isPlaying ? context.l10n.commonPause : context.l10n.commonPlay,
       onTap: onPlayPause,
     );
   }
@@ -100,7 +101,7 @@ class TransportSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (compact) {
-      return _playPause();
+      return _playPause(context);
     }
 
     return Row(
@@ -112,7 +113,7 @@ class TransportSurface extends StatelessWidget {
             icon: Icons.skip_previous_rounded,
             size: 36,
             iconSize: 18,
-            tooltip: 'Previous episode',
+            tooltip: context.l10n.videoPreviousEpisode,
             onTap: onPreviousEpisode,
           ),
           const SizedBox(width: gap),
@@ -122,18 +123,18 @@ class TransportSurface extends StatelessWidget {
           icon: Icons.replay_10_rounded,
           size: 36,
           iconSize: 20,
-          tooltip: 'Rewind 10 seconds',
+          tooltip: context.l10n.videoRewind10,
           onTap: onBack10,
         ),
         const SizedBox(width: gap),
-        _playPause(),
+        _playPause(context),
         const SizedBox(width: gap),
         ControlButton(
           key: forward10Key,
           icon: Icons.forward_10_rounded,
           size: 36,
           iconSize: 20,
-          tooltip: 'Forward 10 seconds',
+          tooltip: context.l10n.videoForward10,
           onTap: onForward10,
         ),
         if (onNextEpisode != null) ...[
@@ -143,7 +144,7 @@ class TransportSurface extends StatelessWidget {
             icon: Icons.skip_next_rounded,
             size: 36,
             iconSize: 18,
-            tooltip: 'Next episode',
+            tooltip: context.l10n.videoNextEpisode,
             onTap: onNextEpisode,
           ),
         ],
