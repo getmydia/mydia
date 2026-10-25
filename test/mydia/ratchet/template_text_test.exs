@@ -70,6 +70,18 @@ defmodule Mydia.Ratchet.TemplateTextTest do
     assert TemplateText.count(~S|<input placeholder="john@example.com" />|) == 0
     assert TemplateText.count(~S|<input placeholder="localhost" />|) == 0
     assert TemplateText.count(~S|<input placeholder="en-US" />|) == 0
+    assert TemplateText.count(~S|<input placeholder="release.mkv" />|) == 0
+    assert TemplateText.count(~S|<input placeholder="~/media" />|) == 0
+
+    for prose <- ["Search...", "Loading...", "Delete.", "Name:", "Download/Upload", "e.g. 4K"] do
+      assert TemplateText.count(~s|<input placeholder="#{prose}" />|) == 1, prose
+    end
+
+    for word <- ["optional", "username", "search"] do
+      assert TemplateText.count(~s|<input placeholder="#{word}" />|) == 1, word
+    end
+
+    assert TemplateText.count(~S|<p>e.g. 5</p>|) == 1
     assert TemplateText.count(~S|<input title="localhost" />|) == 1
     assert TemplateText.count(~S|<input placeholder="Search" />|) == 1
     assert TemplateText.count(~S|<input placeholder="Type a path: /data" />|) == 1

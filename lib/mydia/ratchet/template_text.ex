@@ -9,9 +9,9 @@ defmodule Mydia.Ratchet.TemplateText do
   HTML comments, the doctype, HTML entities, and text made only of the proper
   nouns in `@proper_nouns`, the format names and units in `@technical_tokens`,
   tokens containing a digit or underscore (`1080p`, `2FA`) and single letters.
-  A single-token attribute value with a `/ . : @` in it (a URL, path or email
-  example) is a value, not prose, and so is a lowercase-identifier or locale-tag
-  `placeholder` (`localhost`, `en-US`).
+  An attribute value shaped like a URL, path, email or file name is a value, not
+  prose, and so are the `placeholder` examples listed in `@example_placeholders`
+  and locale tags (`en-US`). Abbreviations such as `e.g.` count as words.
 
   Uses `Phoenix.LiveView.TagEngine.Parser.tokenize/2`, which is internal to
   LiveView; `Mydia.Ratchet.TemplateTextTest` pins its shape.
@@ -74,13 +74,21 @@ defmodule Mydia.Ratchet.TemplateText do
            "us"
          )
 
-  # An example value in a form field (`https://x.example.org`, `/path/to/dir`,
-  # `john@example.com`): one token with a separator in it, not a word.
-  @example_value ~r/^\S*[\/.:@]\S*$/u
-  # A `placeholder` that is a lowercase identifier (`localhost`, `my-bucket`) or a
-  # locale tag (`en-US`) is an example too. Capitalised words (`Search`) and
-  # phrases are prose and still count.
-  @example_identifier ~r/^(?:[a-z][a-z0-9-]*|[a-z]{2,3}-[A-Z]{2})$/
+  # An example value in a form field, by shape: a URL (`https://x.example.org`),
+  # a path (`/path/to/dir`, `~/media`), an email (`john@example.com`) or a file
+  # or host name (`release.mkv`, `example.com`). Trailing punctuation
+  # (`Search...`, `Delete.`) or a bare separator (`Name:`, `Download/Upload`)
+  # is prose and still counts.
+  @example_values [
+    ~r/^\S*:\/\/\S*$/u,
+    ~r/^[\/~]\S*$/u,
+    ~r/^\S*\w@\w+\.\w\S*$/u,
+    ~r/^\S*\w\.\w+$/u
+  ]
+  # `placeholder` values that are examples and not words, listed one by one.
+  # Extend only when a current template needs it.
+  @example_placeholders ~w(localhost mydia media)
+  @locale_tag ~r/^[a-z]{2,3}-[A-Z]{2}$/
 
   @spec count_file(Path.t()) :: non_neg_integer()
   def count_file(path) do
@@ -140,15 +148,21 @@ defmodule Mydia.Ratchet.TemplateText do
   defp counted_attr?({name, {:string, value, _}, _}) when name in @counted_attrs do
     value = String.trim(value)
 
-    not Regex.match?(@example_value, value) and
-      not (name == "placeholder" and Regex.match?(@example_identifier, value)) and
+    not Enum.any?(@example_values, &Regex.match?(&1, value)) and
+      not (name == "placeholder" and example_placeholder?(value)) and
       words?(value)
   end
 
   defp counted_attr?(_attr), do: false
 
-  # A word is two or more letters: a lone `v`, `S` or `E` is a prefix, not text.
-  defp words?(text), do: Regex.match?(~r/\p{L}{2}/u, Regex.replace(@noise, text, ""))
+  defp example_placeholder?(value),
+    do: value in @example_placeholders or Regex.match?(@locale_tag, value)
+
+  # A word is two or more letters, or an abbreviation (`e.g.`, `i.e.`). A lone
+  # `v`, `S` or `E` is a prefix, not text.
+  defp words?(text) do
+    Regex.match?(~r/\p{L}{2}|\p{L}\.\p{L}\./u, Regex.replace(@noise, text, ""))
+  end
 
   defp sigils(source) do
     {_ast, acc} =

@@ -36,6 +36,8 @@ defmodule MydiaWeb.UntranslatedTextTest do
     assert offenders == [], "wrap these in gettext:\n" <> Enum.join(offenders, "\n")
   end
 
+  # Covers `put_flash` with an atom kind and a string literal. It does not see
+  # `~s` sigils or messages held in module attributes.
   test "flash messages are translated" do
     offenders =
       for f <- files("**/*.ex"),
