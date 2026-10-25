@@ -244,6 +244,77 @@ defmodule Mydia.Library.ReleaseParser do
     stripped_for_match = Tokenizer.drop_extension(filename)
     normalized = String.replace(stripped_for_match, ~r/[._]/, " ")
 
+    case codec_led_group(stripped_for_match, normalized) do
+      {group, dash_offset} ->
+        {replace_byte(filename, dash_offset, " "), group, dash_offset}
+
+      nil ->
+        strip_generic_release_group(filename, stripped_for_match, normalized)
+    end
+  end
+
+  # After a codec the dash is unambiguous, so the group may itself hold
+  # dashes (`x264-Some-Group`, `x264-D-Z0N3`) or be bracketed with nothing
+  # before it (`x264-[GRP]`, `x264.-[YTS.LT]`). @release_group_re reads
+  # neither: it takes only the last dash part, and needs a bare group
+  # before a bracket.
+  @codec_led_group_re ~r/
+    (?<![A-Z0-9])(?:[xh]\s?26[45]|hevc|avc|xvid|divx|av1|vp9)\s?
+    (-)
+    (?:
+        \[([A-Z0-9][^\]]*)\]
+      |
+        ([A-Z0-9]+(?:-[A-Z0-9]+)+)(?:\[[^\]]+\])?
+    )
+    \s*$
+  /ix
+
+  # Reposters and indexers append their own tag to the group
+  # (`-NTb-xpost`, `-RiVER-RP`). Sonarr's CleanReleaseGroupRegex list.
+  @reposter_suffix_re ~r/^(?:RP|1|NZBGeek|Obfuscated|Scrambled|sample|Pre|postbot|xpost|Rakuv[a-z0-9]*|WhiteRev|BUYMORE|AsRequested|AlternativeToRequested|GEROV|Z0iDS3N|Chamele0n|4P|4Planet|AlteZachen|RePACKPOST)$/i
+
+  # Offsets index `stripped` too: normalization swaps bytes one for one,
+  # and the group keeps its own dots (`YTS.LT`).
+  defp codec_led_group(stripped, normalized) do
+    case Regex.run(@codec_led_group_re, normalized, return: :index) do
+      [_, {dash_offset, 1} | groups] ->
+        {start, len} = Enum.find(groups, &(elem(&1, 0) >= 0))
+
+        stripped
+        |> :binary.part(start, len)
+        |> clean_dashed_group()
+        |> sanitize_release_group()
+        |> case do
+          nil -> nil
+          group -> {group, dash_offset}
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  # `REPACK-GRP` puts the release flag where the group goes; the flag is
+  # not part of the name. A quality word further in means the run is more
+  # metadata (`H264-Fra-Ac3-2-0-Eng`, `x264-DHD-Remux`), not a name.
+  defp clean_dashed_group(group) do
+    parts =
+      group
+      |> String.split("-")
+      |> Enum.reverse()
+      |> Enum.drop_while(&Regex.match?(@reposter_suffix_re, &1))
+      |> Enum.reverse()
+      |> Enum.drop_while(&quality_marker_word?/1)
+
+    if Enum.any?(parts, &quality_marker_word?/1), do: "", else: Enum.join(parts, "-")
+  end
+
+  defp replace_byte(binary, offset, replacement) do
+    :binary.part(binary, 0, offset) <>
+      replacement <> :binary.part(binary, offset + 1, byte_size(binary) - offset - 1)
+  end
+
+  defp strip_generic_release_group(filename, stripped_for_match, normalized) do
     case Regex.run(@release_group_re, normalized, return: :index) do
       [{full_start, _full_len}, {g_start, g_len}] ->
         group_name = :binary.part(normalized, g_start, g_len)
@@ -382,9 +453,11 @@ defmodule Mydia.Library.ReleaseParser do
   defp quality_marker_after_anchor?(group_name, input, separator_offset) do
     anchors = Tokenizer.anchor_positions(input)
 
-    String.downcase(group_name) in @quality_marker_words and
+    quality_marker_word?(group_name) and
       separator_offset > Tokenizer.title_boundary(anchors, input)
   end
+
+  defp quality_marker_word?(word), do: String.downcase(word) in @quality_marker_words
 
   defp build_parsed_file_info(resolver_result, filename, opts) do
     quality = QualityExtractor.extract(resolver_result, opts)

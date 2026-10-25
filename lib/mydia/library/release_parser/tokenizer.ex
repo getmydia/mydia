@@ -28,9 +28,9 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     `Hi10P-Hi10`). All other dashes stay un-split (`Spider-Man`,
     `Marvel's What-If`).
   - A source glued to a resolution (`HDTV-720p`, `Bluray1080p`, Sonarr's
-    file naming) or dash-joined to a codec (`BDRip-AVC`) is split in two,
-    but only when the left part is a known source, so `Pilot-720p` stays
-    whole.
+    file naming) is split in two, but only when the left part is a known
+    source, so `Pilot-720p` stays whole. A codec dash-joined to anything
+    (`BDRip-AVC`, `HEVC-10bit`, `x264-AAC`) is split off it.
   """
 
   alias Mydia.Library.ReleaseParser.Token
@@ -260,43 +260,91 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   end
 
   @glued_resolution_re ~r/^(.+?)(-?)((?:480|540|576|720|1080|1440|2160|4320)[pi])$/i
-  @dashed_pair_re ~r/^(.+)(-)([^-]+)$/
 
   defp apply_glued_source_splits(tokens) do
     Enum.flat_map(tokens, fn %Token{} = token ->
-      with [_, left, dash, right] <- glued_source_pair(token.value),
-           true <- source_word?(left) do
-        left_len = byte_size(left)
+      case source_then_resolution(token.value) do
+        [_, left, dash, right] ->
+          left_len = byte_size(left)
 
-        [
-          %Token{token | value: left, byte_length: left_len},
-          %Token{
-            token
-            | value: right,
-              byte_offset: token.byte_offset + left_len + byte_size(dash),
-              byte_length: byte_size(right)
-          }
-        ]
-      else
-        _ -> [token]
+          [
+            %Token{token | value: left, byte_length: left_len},
+            %Token{
+              token
+              | value: right,
+                byte_offset: token.byte_offset + left_len + byte_size(dash),
+                byte_length: byte_size(right)
+            }
+          ]
+
+        nil ->
+          split_dashed_codecs(token)
       end
     end)
   end
 
-  # A source followed by its resolution (dash optional) or, dash-joined, by
-  # its codec (`BDRip-AVC`).
-  defp glued_source_pair(value) do
+  # A source followed by its resolution, dash optional.
+  defp source_then_resolution(value) do
     case Regex.run(@glued_resolution_re, value) do
-      nil ->
-        case Regex.run(@dashed_pair_re, value) do
-          [_, _left, _dash, right] = match -> if has_label?(right, :codec), do: match
-          nil -> nil
-        end
-
-      match ->
-        match
+      [_, left, _, _] = match -> if source_word?(left), do: match
+      nil -> nil
     end
   end
+
+  # A codec dash-joined to its neighbours (`BDRip-AVC`, `HEVC-10bit`,
+  # `1080p-x264-AC3`, a group the pre-pass did not claim) comes off as its
+  # own token. No codec word is also a title word, so this needs nothing
+  # else around it. The other dash runs stay joined (`WEB-DLRip`, `Fra-Ac3`).
+  # A bare `264` counts so `H.264-GRP` still pairs its `H` and `264`.
+  defp split_dashed_codecs(%Token{value: value} = token) do
+    parts = String.split(value, "-")
+
+    if length(parts) > 1 and Enum.any?(parts, &codec_part?/1) do
+      parts
+      |> runs_around_codecs()
+      |> Enum.map(fn {offset, run} ->
+        %Token{
+          token
+          | value: run,
+            byte_offset: token.byte_offset + offset,
+            byte_length: byte_size(run)
+        }
+      end)
+    else
+      [token]
+    end
+  end
+
+  defp codec_part?(part), do: part in ["264", "265"] or has_label?(part, :codec)
+
+  # `{relative_offset, value}` for each codec part and each dash-joined run
+  # of other parts between them; empty parts (a leading dash) are dropped.
+  defp runs_around_codecs(parts) do
+    {runs, pending, _offset} =
+      Enum.reduce(parts, {[], nil, 0}, fn part, {runs, pending, offset} ->
+        next = offset + byte_size(part) + 1
+
+        cond do
+          part == "" ->
+            {flush(runs, pending), nil, next}
+
+          codec_part?(part) ->
+            {[{offset, part} | flush(runs, pending)], nil, next}
+
+          pending == nil ->
+            {runs, {offset, part}, next}
+
+          true ->
+            {start, run} = pending
+            {runs, {start, run <> "-" <> part}, next}
+        end
+      end)
+
+    Enum.reverse(flush(runs, pending))
+  end
+
+  defp flush(runs, nil), do: runs
+  defp flush(runs, pending), do: [pending | runs]
 
   # `WEB-DL` is not itself a vocabulary alias; the compound split below
   # turns it into one.

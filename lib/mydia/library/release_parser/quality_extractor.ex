@@ -117,7 +117,10 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
   defp canonical_codec(nil), do: nil
 
+  # The classifier reads `HEVC,` from a comma-separated tag list; the
+  # comma is not part of the codec.
   defp canonical_codec(value) do
+    value = String.trim_trailing(value, ",")
     down = String.downcase(value)
 
     cond do

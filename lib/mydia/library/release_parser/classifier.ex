@@ -111,15 +111,16 @@ defmodule Mydia.Library.ReleaseParser.Classifier do
     end)
   end
 
-  # Strip trailing punctuation bytes (e.g. `DD+` → `DD`). Limited to
-  # ASCII so we don't touch multibyte token text.
+  # Strip trailing punctuation bytes (e.g. `DD+` → `DD`, and the comma of a
+  # listed tag set, `[2023, HEVC, HDR10]`). Limited to ASCII so we don't
+  # touch multibyte token text.
   defp strip_trailing_punct(""), do: ""
 
   defp strip_trailing_punct(value) do
     size = byte_size(value)
     last = :binary.at(value, size - 1)
 
-    if last in ~c"+!?'" do
+    if last in ~c"+!?'," do
       strip_trailing_punct(binary_part(value, 0, size - 1))
     else
       value
