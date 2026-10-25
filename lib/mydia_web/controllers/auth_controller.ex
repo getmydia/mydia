@@ -91,6 +91,9 @@ defmodule MydiaWeb.AuthController do
   @doc """
   Starts linking SSO to the signed-in account: remembers who asked, then hands
   off to the normal OIDC request. The callback finishes the link.
+
+  Routed as `POST /auth/oidc/link` so the browser pipeline's CSRF check
+  covers it.
   """
   def link(conn, _params) do
     user = Guardian.Plug.current_resource(conn)
@@ -263,8 +266,9 @@ defmodule MydiaWeb.AuthController do
     # session_user/1 loads the account from the database, so link_oidc_identity/3
     # judges "already linked" on current state, not on a struct from the request
     # that started the link.
-    with true <- fresh?,
-         {:ok, %{id: ^user_id} = user} <- session_user(conn),
+    with {:fresh, true} <- {:fresh, fresh?},
+         {:session, {:ok, user}} <- {:session, session_user(conn)},
+         {:owner, true} <- {:owner, user.id == user_id},
          {:ok, _linked} <- Accounts.link_oidc_identity(user, auth.uid, to_string(auth.provider)) do
       conn
       |> put_flash(:info, gettext("Your SSO account is now linked."))
@@ -276,13 +280,25 @@ defmodule MydiaWeb.AuthController do
       {:error, :already_linked} ->
         link_failed(conn, gettext("Your account is already linked to an SSO account."))
 
-      _expired_or_mismatched ->
-        link_failed(conn, gettext("Linking expired. Please try again."))
+      {:fresh, false} ->
+        link_expired(conn, :expired, user_id)
+
+      {:session, _error} ->
+        link_expired(conn, :no_session, user_id)
+
+      {:owner, false} ->
+        link_expired(conn, :user_mismatch, user_id)
     end
   end
 
-  defp finish_link(conn, _malformed, _auth),
-    do: link_failed(conn, gettext("Linking expired. Please try again."))
+  defp finish_link(conn, _malformed, _auth), do: link_expired(conn, :malformed_intent, nil)
+
+  # The intent's user id is the account that asked to link, not anything from
+  # the IdP; the OIDC sub is never logged.
+  defp link_expired(conn, reason, user_id) do
+    Logger.info("OIDC link not completed: #{reason} (intent user: #{user_id || "unknown"})")
+    link_failed(conn, gettext("Linking expired. Please try again."))
+  end
 
   defp link_failed(conn, message) do
     conn |> put_flash(:error, message) |> redirect(to: ~p"/profile")

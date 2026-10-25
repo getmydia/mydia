@@ -13198,7 +13198,7 @@ msgstr ""
 
 #: lib/mydia_web/controllers/auth_controller.ex:47
 #: lib/mydia_web/controllers/auth_controller.ex:79
-#: lib/mydia_web/controllers/auth_controller.ex:198
+#: lib/mydia_web/controllers/auth_controller.ex:201
 #, elixir-autogen, elixir-format
 msgid "Authentication failed: %{errors}"
 msgstr ""
@@ -15700,7 +15700,7 @@ msgstr ""
 msgid "Invalid JSON"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:216
+#: lib/mydia_web/controllers/auth_controller.ex:219
 #, elixir-autogen, elixir-format
 msgid "Invalid authentication token"
 msgstr ""
@@ -15710,7 +15710,7 @@ msgstr ""
 msgid "Invalid directory: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:229
+#: lib/mydia_web/controllers/auth_controller.ex:232
 #, elixir-autogen, elixir-format
 msgid "Invalid or expired authentication token"
 msgstr ""
@@ -16866,7 +16866,7 @@ msgid "OIDC authentication configuration error"
 msgstr ""
 
 #: lib/mydia_web/controllers/auth_controller.ex:63
-#: lib/mydia_web/controllers/auth_controller.ex:101
+#: lib/mydia_web/controllers/auth_controller.ex:104
 #, elixir-autogen, elixir-format
 msgid "OIDC authentication is not configured."
 msgstr ""
@@ -18491,7 +18491,7 @@ msgstr ""
 msgid "Success: %{rate}%"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:165
+#: lib/mydia_web/controllers/auth_controller.ex:168
 #, elixir-autogen, elixir-format
 msgid "Successfully authenticated!"
 msgstr ""
@@ -19714,7 +19714,7 @@ msgstr ""
 msgid "You do not have permission to request media"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:247
+#: lib/mydia_web/controllers/auth_controller.ex:250
 #, elixir-autogen, elixir-format
 msgid "You have been logged out"
 msgstr ""
@@ -20836,50 +20836,49 @@ msgstr ""
 msgid "Titles starting with a number or symbol"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:171
+#: lib/mydia_web/controllers/auth_controller.ex:174
 #, elixir-autogen, elixir-format
 msgid "An account with this email already exists. Sign in with your password, then link SSO from your profile."
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:187
+#: lib/mydia_web/controllers/auth_controller.ex:190
 #, elixir-autogen, elixir-format
 msgid "An account with this email is already linked to a different SSO account. Sign in with your password instead."
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:280
-#: lib/mydia_web/controllers/auth_controller.ex:285
+#: lib/mydia_web/controllers/auth_controller.ex:300
 #, elixir-autogen, elixir-format
 msgid "Linking expired. Please try again."
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:144
+#: lib/mydia_web/controllers/auth_controller.ex:147
 #, elixir-autogen, elixir-format
 msgid "SSO could not be unlinked. Please try again."
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:126
+#: lib/mydia_web/controllers/auth_controller.ex:129
 #, elixir-autogen, elixir-format
 msgid "SSO has been unlinked from your account."
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:133
+#: lib/mydia_web/controllers/auth_controller.ex:136
 #, elixir-autogen, elixir-format
 msgid "Set a password or add a passkey before unlinking SSO, or you could not sign in."
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:181
-#: lib/mydia_web/controllers/auth_controller.ex:274
+#: lib/mydia_web/controllers/auth_controller.ex:184
+#: lib/mydia_web/controllers/auth_controller.ex:278
 #, elixir-autogen, elixir-format
 msgid "This SSO account is already linked to another Mydia account."
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:270
+#: lib/mydia_web/controllers/auth_controller.ex:274
 #, elixir-autogen, elixir-format
 msgid "Your SSO account is now linked."
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:106
-#: lib/mydia_web/controllers/auth_controller.ex:277
+#: lib/mydia_web/controllers/auth_controller.ex:109
+#: lib/mydia_web/controllers/auth_controller.ex:281
 #, elixir-autogen, elixir-format
 msgid "Your account is already linked to an SSO account."
 msgstr ""

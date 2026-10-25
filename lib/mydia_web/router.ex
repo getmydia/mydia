@@ -152,7 +152,10 @@ defmodule MydiaWeb.Router do
   scope "/auth/oidc", MydiaWeb do
     pipe_through [:browser, :auth, :require_authenticated]
 
-    get "/link", AuthController, :link
+    # POST, not GET: starting a link changes state, and :browser's
+    # protect_from_forgery only checks non-GET requests. A GET would let a
+    # cross-site <img> start a link to whatever IdP session the browser holds.
+    post "/link", AuthController, :link
     delete "/link", AuthController, :unlink
   end
 

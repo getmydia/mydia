@@ -92,10 +92,10 @@ defmodule MydiaWeb.AuthControllerLinkTest do
     conn |> assign(:ueberauth_auth, auth) |> get(~p"/auth/oidc/callback")
   end
 
-  describe "GET /auth/oidc/link" do
+  describe "POST /auth/oidc/link" do
     test "stores a link intent and redirects to the provider", %{conn: conn} do
       user = create_test_user()
-      conn = conn |> log_in_user(user) |> get(~p"/auth/oidc/link")
+      conn = conn |> log_in_user(user) |> post(~p"/auth/oidc/link")
 
       assert redirected_to(conn) == "/auth/oidc"
       assert %{"user_id" => id} = get_session(conn, :oidc_link_intent)
@@ -104,7 +104,7 @@ defmodule MydiaWeb.AuthControllerLinkTest do
 
     test "refuses an already linked account", %{conn: conn} do
       {:ok, user} = Accounts.link_oidc_identity(create_test_user(), "sub-1", "oidc")
-      conn = conn |> log_in_user(user) |> get(~p"/auth/oidc/link")
+      conn = conn |> log_in_user(user) |> post(~p"/auth/oidc/link")
 
       assert redirected_to(conn) == "/profile"
       refute get_session(conn, :oidc_link_intent)
@@ -112,22 +112,44 @@ defmodule MydiaWeb.AuthControllerLinkTest do
 
     test "refuses when OIDC is not configured", %{conn: conn} do
       Application.delete_env(:ueberauth, Ueberauth)
-      conn = conn |> log_in_user(create_test_user()) |> get(~p"/auth/oidc/link")
+      conn = conn |> log_in_user(create_test_user()) |> post(~p"/auth/oidc/link")
 
       assert redirected_to(conn) == "/profile"
       refute get_session(conn, :oidc_link_intent)
     end
 
     test "requires authentication", %{conn: conn} do
-      conn = get(conn, ~p"/auth/oidc/link")
+      conn = post(conn, ~p"/auth/oidc/link")
       assert redirected_to(conn) =~ "/auth/login"
+    end
+
+    # A GET would let a cross-site <img> start a link. Phoenix.ConnTest skips
+    # CSRF by default, so turn the check back on for this request.
+    test "is refused without a CSRF token", %{conn: conn} do
+      user = create_test_user()
+
+      conn =
+        conn
+        |> log_in_user(user)
+        |> Plug.Conn.put_private(:plug_skip_csrf_protection, false)
+
+      assert_raise Plug.CSRFProtection.InvalidCSRFTokenError, fn ->
+        post(conn, ~p"/auth/oidc/link")
+      end
+    end
+
+    test "GET does not start a link", %{conn: conn} do
+      conn = conn |> log_in_user(create_test_user()) |> get(~p"/auth/oidc/link")
+
+      assert conn.status == 404
+      refute get_session(conn, :oidc_link_intent)
     end
   end
 
   describe "callback with a link intent" do
     test "links the signed-in user and keeps the session", %{conn: conn} do
       user = create_test_user()
-      conn = conn |> log_in_user(user) |> get(~p"/auth/oidc/link")
+      conn = conn |> log_in_user(user) |> post(~p"/auth/oidc/link")
       conn = conn |> recycle() |> callback(auth("sub-1", "idp@example.test"))
 
       assert redirected_to(conn) == "/profile"
@@ -140,7 +162,7 @@ defmodule MydiaWeb.AuthControllerLinkTest do
     test "refuses an identity already on another account", %{conn: conn} do
       {:ok, _} = Accounts.link_oidc_identity(create_test_user(), "sub-1", "oidc")
       user = create_test_user()
-      conn = conn |> log_in_user(user) |> get(~p"/auth/oidc/link")
+      conn = conn |> log_in_user(user) |> post(~p"/auth/oidc/link")
       conn = conn |> recycle() |> callback(auth("sub-1", "idp@example.test"))
 
       assert redirected_to(conn) == "/profile"
@@ -257,6 +279,11 @@ defmodule MydiaWeb.AuthControllerLinkTest do
   end
 
   describe "DELETE /auth/oidc/link" do
+    test "requires authentication", %{conn: conn} do
+      conn = delete(conn, ~p"/auth/oidc/link")
+      assert redirected_to(conn) =~ "/auth/login"
+    end
+
     test "unlinks an account with a password", %{conn: conn} do
       {:ok, user} = Accounts.link_oidc_identity(create_test_user(), "sub-1", "oidc")
       conn = conn |> log_in_user(user) |> delete(~p"/auth/oidc/link")
