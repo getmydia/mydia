@@ -204,11 +204,16 @@ defmodule Mydia.Library.ReleaseParser do
     # cleanly. The dash before a trailing group has no semantic meaning
     # we want to preserve — it just makes the codec/quality token
     # downstream attach to the group name.
-    {prepared, detected_group} = strip_trailing_release_group(filename)
+    {prepared, detected_group, group_offset} = strip_trailing_release_group(filename)
 
     tokens = Tokenizer.tokenize(prepared)
     anchors = Tokenizer.anchor_positions(prepared)
-    classified = Classifier.classify(tokens, anchors)
+
+    classified =
+      tokens
+      |> Classifier.classify(anchors)
+      |> drop_group_sources(group_offset)
+
     resolver_result = Resolver.resolve(classified, target)
 
     # Pre-pass detection wins over vocab matches: the trailing
@@ -232,6 +237,9 @@ defmodule Mydia.Library.ReleaseParser do
   # V2 normalizes `.` and `_` to spaces before running the regex; we
   # replicate that for matching only (the rewritten input keeps the
   # original separators except for the matched span).
+  #
+  # Returns `{prepared, group, group_offset}`, where `group_offset` is the
+  # byte offset of the separator in `prepared` (nil without a group).
   defp strip_trailing_release_group(filename) do
     stripped_for_match = Tokenizer.drop_extension(filename)
     normalized = String.replace(stripped_for_match, ~r/[._]/, " ")
@@ -243,22 +251,43 @@ defmodule Mydia.Library.ReleaseParser do
         # `AAC-LC`, `DTS-HD`) — if so, leave the dash intact.
         compound? = forms_known_compound?(stripped_for_match, full_start, group_name)
 
-        if compound? do
-          {filename, nil}
-        else
-          case sanitize_release_group(group_name) do
-            nil ->
-              {filename, nil}
+        cond do
+          compound? ->
+            {filename, nil, nil}
 
-            group ->
-              rewritten = rewrite_trailing_separator(filename, normalized)
-              {rewritten, group}
-          end
+          group = sanitize_release_group(group_name) ->
+            rewritten = rewrite_trailing_separator(filename, normalized)
+            {rewritten, group, full_start}
+
+          quality_marker_after_anchor?(group_name, stripped_for_match, full_start) ->
+            # Not a group, but the dash still glues a quality word onto the
+            # token before it (`2020-1080p-bluray`), and the tokenizer only
+            # splits allow-listed compounds. Splitting it lets the classifier
+            # see the word.
+            {rewrite_trailing_separator(filename, normalized), nil, nil}
+
+          true ->
+            {filename, nil, nil}
         end
 
       _ ->
-        {filename, nil}
+        {filename, nil, nil}
     end
+  end
+
+  # The pre-pass has already decided the trailing token is the release
+  # group, so it is not also a source. This keeps a group named after a
+  # scene abbreviation (`x264-TS`) from reading as a Telesync.
+  defp drop_group_sources(tokens, nil), do: tokens
+
+  defp drop_group_sources(tokens, group_offset) do
+    Enum.map(tokens, fn token ->
+      if token.byte_offset > group_offset do
+        %{token | candidates: Enum.reject(token.candidates, &(&1.label == :source))}
+      else
+        token
+      end
+    end)
   end
 
   # When the captured "group" is actually a known compound suffix
@@ -346,6 +375,15 @@ defmodule Mydia.Library.ReleaseParser do
       true ->
         group
     end
+  end
+
+  # Only in the metadata zone: before the first anchor a hyphenated word
+  # is part of the title (`Spider-Web`), and splitting it would change it.
+  defp quality_marker_after_anchor?(group_name, input, separator_offset) do
+    anchors = Tokenizer.anchor_positions(input)
+
+    String.downcase(group_name) in @quality_marker_words and
+      separator_offset > Tokenizer.title_boundary(anchors, input)
   end
 
   defp build_parsed_file_info(resolver_result, filename, opts) do

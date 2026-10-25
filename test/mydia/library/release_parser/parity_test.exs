@@ -451,7 +451,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.title == "Avatar"
       assert result.year == 2009
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BluRay"
+      assert result.quality.source == "REMUX"
       assert result.quality.codec == "H.265"
       assert result.quality.audio == "Atmos"
     end
@@ -783,7 +783,8 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 1
       assert result.episodes == [5]
       assert result.quality.resolution == "1080p"
-      assert result.quality.source == "WEB-DL"
+      # REMUX outranks the other source tokens, as in `Mydia.Quality.Sources`.
+      assert result.quality.source == "REMUX"
       assert result.quality.audio == "DD+ 5.1"
       assert result.quality.codec == "H.264"
       assert result.release_group == "GROUP"
@@ -1816,7 +1817,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       assert result.type == :movie
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BluRay"
+      assert result.quality.source == "REMUX"
       assert result.quality.codec == "H.265"
       assert result.quality.audio == "TrueHD 7.1"
       assert result.quality.hdr_format == :hdr10
@@ -1831,7 +1832,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
 
       assert result.type == :movie
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BluRay"
+      assert result.quality.source == "REMUX"
       assert result.quality.codec == "H.265"
       assert result.quality.audio == "DTS-HD MA"
       assert result.release_group == "FGT"
@@ -1912,7 +1913,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 6
       assert result.episodes == [9]
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BluRay"
+      assert result.quality.source == "REMUX"
       assert result.quality.codec == "H.265"
       assert result.release_group == "SHD13"
     end
@@ -2045,7 +2046,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 8
       assert result.episodes == [6]
       assert result.quality.resolution == "1080p"
-      assert result.quality.source == "BluRay"
+      assert result.quality.source == "REMUX"
       assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "NTb"
     end
@@ -2229,7 +2230,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Fast.and.Furious.2001.2160p.UHD.Bluray.REMUX.HEVC-MIXED.mkv")
 
-      assert result.quality.source == "BluRay"
+      assert result.quality.source == "REMUX"
       assert result.quality.resolution == "2160p"
       assert result.quality.codec == "H.265"
     end
@@ -2239,7 +2240,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       result =
         FileParser.parse("Dune.Part.Two.2024.BluRay.1080p.REMUX.AVC.DTS-HD.MA.5.1-FGT.mkv")
 
-      assert result.quality.source == "BluRay"
+      assert result.quality.source == "REMUX"
       assert result.quality.codec == "H.264"
       assert result.release_group == "FGT"
     end
@@ -2905,7 +2906,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 6
       assert result.episodes == [9]
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BluRay"
+      assert result.quality.source == "REMUX"
       assert result.quality.codec == "H.265"
       assert result.release_group == "SHD13"
     end
@@ -2948,7 +2949,7 @@ defmodule Mydia.Library.ReleaseParser.ParityTest do
       assert result.season == 8
       assert result.episodes == [6]
       assert result.quality.resolution == "1080p"
-      assert result.quality.source == "BluRay"
+      assert result.quality.source == "REMUX"
       assert result.quality.audio == "DTS-HD MA 5.1"
       assert result.release_group == "NTb"
     end

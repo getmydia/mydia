@@ -215,7 +215,9 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
   #
   # Rejoin WEB → WEB-DL / WEB-Rip if the next adjacent token is `DL`
   # or `Rip` (the tokenizer's compound-dash split produces these
-  # post-split tokens).
+  # post-split tokens). Every other source takes the vocabulary's
+  # canonical value, which is what folds `HDTS`, `PDVD` and `TS` into
+  # `Telesync`.
 
   defp extract_source(quality_tokens, next_by_token) do
     case Enum.find(quality_tokens, &(&1.label == :source)) do
@@ -224,27 +226,29 @@ defmodule Mydia.Library.ReleaseParser.QualityExtractor do
 
       entry ->
         raw = token_text(entry)
-        rejoin_web_compound(raw, entry, next_by_token)
+
+        if String.upcase(raw) == "WEB" do
+          rejoin_web_compound(raw, entry, next_by_token)
+        else
+          vocabulary_value(entry) || raw
+        end
     end
   end
 
+  defp vocabulary_value(%{value: value}) when is_binary(value), do: value
+  defp vocabulary_value(_entry), do: nil
+
   defp rejoin_web_compound(raw, entry, next_by_token) do
-    if String.upcase(raw) == "WEB" do
-      case next_token(entry.token, next_by_token) do
-        %Token{value: value} ->
-          upper = String.upcase(value)
+    case next_token(entry.token, next_by_token) do
+      %Token{value: value} ->
+        case String.upcase(value) do
+          "DL" -> "WEB-DL"
+          "RIP" -> "WEB-Rip"
+          _ -> raw
+        end
 
-          cond do
-            upper == "DL" -> "WEB-DL"
-            upper == "RIP" -> "WEB-Rip"
-            true -> raw
-          end
-
-        _ ->
-          raw
-      end
-    else
-      raw
+      _ ->
+        raw
     end
   end
 

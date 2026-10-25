@@ -548,7 +548,7 @@ defmodule Mydia.Library.ReleaseParserPortTest do
       assert result.title == "Avatar"
       assert result.year == 2009
       assert result.quality.resolution == "2160p"
-      assert result.quality.source == "BluRay"
+      assert result.quality.source == "REMUX"
       assert result.quality.codec == "H.265"
       assert result.quality.audio == "Atmos"
     end

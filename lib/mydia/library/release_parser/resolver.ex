@@ -294,7 +294,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
         {per_token, demoted}
 
       multi ->
-        winner_pair = Enum.max_by(multi, fn {_, c} -> c.confidence end)
+        winner_pair = Enum.max_by(multi, fn {_, c} -> {c.confidence, tie_rank(c)} end)
         losers = multi -- [winner_pair]
 
         per_token = strip_losers(per_token, losers, label)
@@ -302,6 +302,12 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
         {per_token, demoted}
     end
   end
+
+  # A remux names its disc (`BluRay.REMUX`), and both tokens clamp to the
+  # same metadata-zone confidence. REMUX is the more specific source, so it
+  # wins the tie; every other tie still goes to the earliest token.
+  defp tie_rank(%Candidate{label: :source, value: "REMUX"}), do: 1
+  defp tie_rank(_candidate), do: 0
 
   defp strip_losers(per_token, losers, label) do
     loser_token_ids = MapSet.new(losers, fn {tok, _} -> token_key(tok) end)

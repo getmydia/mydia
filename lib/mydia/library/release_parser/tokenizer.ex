@@ -27,14 +27,18 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     compounds (`WEB-DL`, `WEB-Rip`, `H-265`, `H-264`, `DTS-HD`, `DTS-X`,
     `Hi10P-Hi10`). All other dashes stay un-split (`Spider-Man`,
     `Marvel's What-If`).
+  - A source glued to a resolution (`HDTV-720p`, `Bluray1080p`, Sonarr's
+    file naming) or dash-joined to a codec (`BDRip-AVC`) is split in two,
+    but only when the left part is a known source, so `Pilot-720p` stays
+    whole.
   """
 
   alias Mydia.Library.ReleaseParser.Token
+  alias Mydia.Library.ReleaseParser.Vocabulary
 
   @compound_dashes MapSet.new([
                      "WEB-DL",
                      "WEB-RIP",
-                     "BLU-RAY",
                      "H-265",
                      "H-264",
                      "DTS-HD",
@@ -63,7 +67,11 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   @spec tokenize(String.t()) :: [Token.t()]
   def tokenize(input) when is_binary(input) do
     stripped = drop_extension(input)
-    scan(stripped, stripped, 0, nil, nil, []) |> Enum.reverse() |> apply_compound_dash_splits()
+
+    scan(stripped, stripped, 0, nil, nil, [])
+    |> Enum.reverse()
+    |> apply_glued_source_splits()
+    |> apply_compound_dash_splits()
   end
 
   @doc """
@@ -250,6 +258,53 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
       _ -> nil
     end
   end
+
+  @glued_resolution_re ~r/^(.+?)(-?)((?:480|540|576|720|1080|1440|2160|4320)[pi])$/i
+  @dashed_pair_re ~r/^(.+)(-)([^-]+)$/
+
+  defp apply_glued_source_splits(tokens) do
+    Enum.flat_map(tokens, fn %Token{} = token ->
+      with [_, left, dash, right] <- glued_source_pair(token.value),
+           true <- source_word?(left) do
+        left_len = byte_size(left)
+
+        [
+          %Token{token | value: left, byte_length: left_len},
+          %Token{
+            token
+            | value: right,
+              byte_offset: token.byte_offset + left_len + byte_size(dash),
+              byte_length: byte_size(right)
+          }
+        ]
+      else
+        _ -> [token]
+      end
+    end)
+  end
+
+  # A source followed by its resolution (dash optional) or, dash-joined, by
+  # its codec (`BDRip-AVC`).
+  defp glued_source_pair(value) do
+    case Regex.run(@glued_resolution_re, value) do
+      nil ->
+        case Regex.run(@dashed_pair_re, value) do
+          [_, _left, _dash, right] = match -> if has_label?(right, :codec), do: match
+          nil -> nil
+        end
+
+      match ->
+        match
+    end
+  end
+
+  # `WEB-DL` is not itself a vocabulary alias; the compound split below
+  # turns it into one.
+  defp source_word?(word) do
+    MapSet.member?(@compound_dashes, String.upcase(word)) or has_label?(word, :source)
+  end
+
+  defp has_label?(word, label), do: Enum.any?(Vocabulary.lookup(word), &(&1.label == label))
 
   defp apply_compound_dash_splits(tokens) do
     Enum.flat_map(tokens, fn token ->
