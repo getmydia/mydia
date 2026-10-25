@@ -2,7 +2,9 @@
 //
 // The server sends raw ffprobe values; composing them into display strings
 // happens here. Deliberately free of Flutter imports so every function is
-// unit-testable without pumping a widget.
+// unit-testable without pumping a widget. Language names are the exception:
+// they depend on the viewer's language, so they live in `AppFormatters`
+// (`languageName`, lib/l10n/formatters.dart).
 
 /// Human readable file size, e.g. "54.2 GB".
 String? formatBytes(int? bytes) {
@@ -65,55 +67,4 @@ String? formatChannels(int? channels, String? layout) {
   if (layout != null && layout.isNotEmpty) return layout;
   if (channels != null) return '$channels ch';
   return null;
-}
-
-const Map<String, String> _languageNames = {
-  'eng': 'English',
-  'en': 'English',
-  'spa': 'Spanish',
-  'es': 'Spanish',
-  'fre': 'French',
-  'fra': 'French',
-  'fr': 'French',
-  'ger': 'German',
-  'deu': 'German',
-  'de': 'German',
-  'ita': 'Italian',
-  'it': 'Italian',
-  'por': 'Portuguese',
-  'pt': 'Portuguese',
-  'rus': 'Russian',
-  'ru': 'Russian',
-  'jpn': 'Japanese',
-  'ja': 'Japanese',
-  'kor': 'Korean',
-  'ko': 'Korean',
-  'chi': 'Chinese',
-  'zho': 'Chinese',
-  'zh': 'Chinese',
-  'ara': 'Arabic',
-  'ar': 'Arabic',
-  'hin': 'Hindi',
-  'hi': 'Hindi',
-  'nld': 'Dutch',
-  'dut': 'Dutch',
-  'nl': 'Dutch',
-  'swe': 'Swedish',
-  'sv': 'Swedish',
-  'nor': 'Norwegian',
-  'no': 'Norwegian',
-  'dan': 'Danish',
-  'da': 'Danish',
-  'fin': 'Finnish',
-  'fi': 'Finnish',
-  'pol': 'Polish',
-  'pl': 'Polish',
-  'tur': 'Turkish',
-  'tr': 'Turkish',
-};
-
-/// Display name for an ISO 639 code, falling back to the upper cased code.
-String? languageName(String? code) {
-  if (code == null || code.isEmpty) return null;
-  return _languageNames[code.toLowerCase()] ?? code.toUpperCase();
 }

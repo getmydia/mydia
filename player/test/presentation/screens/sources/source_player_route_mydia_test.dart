@@ -6,6 +6,7 @@ import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
@@ -38,6 +39,8 @@ void main() {
         mediaSourceProvider(sid).overrideWithValue(_mydiaSource(proxy)),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: SourcePlayerRoute(
           sourceId: sid,
           itemId: 'm1',

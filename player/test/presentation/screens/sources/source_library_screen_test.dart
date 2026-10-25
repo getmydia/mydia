@@ -9,6 +9,7 @@ import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/navigation/media_filter.dart';
 import 'package:player/domain/sources/library.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/filter/filter_editor_sheet.dart';
 import 'package:player/presentation/screens/library/library_sort.dart';
 import 'package:player/presentation/screens/sources/source_library_screen.dart';
@@ -31,6 +32,8 @@ Widget _libraryApp(FakeMediaSource fake,
         sourceArtworkProvider.overrideWith((ref, key) async => null),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: SourceLibraryScreen(
           library: FakeMediaSource.movies,
           initialQuery: initialQuery,
@@ -95,6 +98,8 @@ void main() {
     Widget app() => UncontrolledProviderScope(
           container: container,
           child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: SourceLibraryScreen(library: FakeMediaSource.movies),
           ),
         );

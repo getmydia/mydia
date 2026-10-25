@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/cast_subtitle_sheet.dart';
 
 void main() {
@@ -17,6 +18,8 @@ void main() {
   }) async {
     CastSubtitleSelection? result;
     await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => ElevatedButton(
           onPressed: () async {
@@ -46,6 +49,8 @@ void main() {
   testWidgets('picking a track returns that track', (tester) async {
     CastSubtitleSelection? picked;
     await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => ElevatedButton(
           onPressed: () async {
@@ -89,6 +94,8 @@ void main() {
       (tester) async {
     CastSubtitleSelection? picked;
     await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => ElevatedButton(
           onPressed: () async {
@@ -114,6 +121,8 @@ void main() {
   testWidgets('a barrier tap is a cancellation, not Off', (tester) async {
     CastSubtitleSelection? picked;
     await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => ElevatedButton(
           onPressed: () async {

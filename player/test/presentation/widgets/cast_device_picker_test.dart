@@ -8,6 +8,7 @@ import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/cast_device_picker.dart';
 import 'package:player/presentation/widgets/osd_dialog.dart';
 
@@ -40,6 +41,8 @@ void main() {
         ...overrides,
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: CastDevicePickerDialog(
             debugDevicesOverride: devices,

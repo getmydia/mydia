@@ -5,6 +5,7 @@ import '../../core/layout/breakpoints.dart';
 import '../../core/layout/dock_insets.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/sources/collection.dart';
+import '../../l10n/l10n.dart';
 import '../screens/detail/detail_links.dart';
 import 'source_artwork.dart';
 
@@ -106,7 +107,8 @@ class _CollectionCardState extends State<CollectionCard> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${widget.collection.itemCount} item${widget.collection.itemCount == 1 ? '' : 's'}',
+                          context.l10n
+                              .collectionItemCount(widget.collection.itemCount),
                           style: TextStyle(
                             fontSize: 12,
                             color: palette.textSecondary,

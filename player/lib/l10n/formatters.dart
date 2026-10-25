@@ -189,4 +189,60 @@ extension AppFormatters on AppLocalizations {
   String _autoTranscodeSubtitle(QualityRung rung) => rung.isOriginal
       ? qualityAutoReencodeOriginal
       : qualityAutoRung(qualityName(rung));
+
+  /// The name of the language an ISO 639 [code] (two or three letters) stands
+  /// for, in the viewer's language. A code with no name here comes back upper
+  /// cased; null and empty give null.
+  String? languageName(String? code) {
+    if (code == null || code.isEmpty) return null;
+    final key = _languageKeys[code.toLowerCase()];
+    return key == null ? code.toUpperCase() : languageNameByCode(key);
+  }
 }
+
+/// ISO 639-1, 639-2/T and 639-2/B codes to the two letter key the
+/// `languageNameByCode` message selects on.
+const _languageKeys = <String, String>{
+  'eng': 'en',
+  'en': 'en',
+  'spa': 'es',
+  'es': 'es',
+  'fre': 'fr',
+  'fra': 'fr',
+  'fr': 'fr',
+  'ger': 'de',
+  'deu': 'de',
+  'de': 'de',
+  'ita': 'it',
+  'it': 'it',
+  'por': 'pt',
+  'pt': 'pt',
+  'rus': 'ru',
+  'ru': 'ru',
+  'jpn': 'ja',
+  'ja': 'ja',
+  'kor': 'ko',
+  'ko': 'ko',
+  'chi': 'zh',
+  'zho': 'zh',
+  'zh': 'zh',
+  'ara': 'ar',
+  'ar': 'ar',
+  'hin': 'hi',
+  'hi': 'hi',
+  'nld': 'nl',
+  'dut': 'nl',
+  'nl': 'nl',
+  'swe': 'sv',
+  'sv': 'sv',
+  'nor': 'no',
+  'no': 'no',
+  'dan': 'da',
+  'da': 'da',
+  'fin': 'fi',
+  'fi': 'fi',
+  'pol': 'pl',
+  'pl': 'pl',
+  'tur': 'tr',
+  'tr': 'tr',
+};

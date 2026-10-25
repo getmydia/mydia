@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
+import '../../l10n/l10n.dart';
 import 'glass/glass_dialog.dart';
 import 'toast/toaster.dart';
 
@@ -26,11 +27,11 @@ class CertTrustDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     return GlassDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.security, color: AppColors.warning),
-          SizedBox(width: 12),
-          Text('Trust Certificate?'),
+          const Icon(Icons.security, color: AppColors.warning),
+          const SizedBox(width: 12),
+          Text(context.l10n.certTrustTitle),
         ],
       ),
       content: Column(
@@ -38,7 +39,7 @@ class CertTrustDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'First-time connection to:',
+            context.l10n.certTrustFirstConnection,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: palette.textSecondary,
                 ),
@@ -52,8 +53,7 @@ class CertTrustDialog extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'This server is using a self-signed certificate. '
-            'Please verify the certificate fingerprint matches what you expect:',
+            context.l10n.certTrustSelfSigned,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),
@@ -80,12 +80,12 @@ class CertTrustDialog extends StatelessWidget {
                 ),
                 IconButton(
                   icon: const Icon(Icons.copy, size: 20),
-                  tooltip: 'Copy fingerprint',
+                  tooltip: context.l10n.certTrustCopyFingerprint,
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: fingerprint));
                     showToast(
                       context,
-                      'Fingerprint copied to clipboard',
+                      context.l10n.certTrustFingerprintCopied,
                       kind: ToastKind.success,
                     );
                   },
@@ -115,8 +115,7 @@ class CertTrustDialog extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Only trust this certificate if you control this server '
-                    'and can verify the fingerprint.',
+                    context.l10n.certTrustWarning,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppColors.warning,
                         ),
@@ -130,11 +129,11 @@ class CertTrustDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.commonCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Trust'),
+          child: Text(context.l10n.certTrustConfirm),
         ),
       ],
     );

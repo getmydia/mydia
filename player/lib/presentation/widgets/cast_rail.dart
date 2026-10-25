@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/detail/detail_views.dart';
+import '../../l10n/l10n.dart';
 import 'detail_art_image.dart';
 import 'horizontal_wheel_scroll.dart';
 
@@ -33,7 +34,7 @@ class CastRail extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                'Cast',
+                context.l10n.castRailTitle,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),

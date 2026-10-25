@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
+import '../../l10n/l10n.dart';
 import 'glass/glass_dialog.dart';
 
 /// Explains a version mismatch between this player and the connected server.
@@ -21,11 +22,11 @@ class CompatibilityDetailsDialog extends StatelessWidget {
     final requiredVersion = state.requiredVersion;
 
     return GlassDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.system_update, color: AppColors.warning),
-          SizedBox(width: 12),
-          Text('Version mismatch'),
+          const Icon(Icons.system_update, color: AppColors.warning),
+          const SizedBox(width: 12),
+          Text(context.l10n.compatDetailsTitle),
         ],
       ),
       content: Column(
@@ -33,7 +34,7 @@ class CompatibilityDetailsDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            _explanation,
+            _explanation(context.l10n),
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),
@@ -46,14 +47,17 @@ class CompatibilityDetailsDialog extends StatelessWidget {
             ),
             child: Column(
               children: [
-                _VersionRow(label: 'Player', value: state.playerVersion),
                 _VersionRow(
-                  label: 'Server',
-                  value: state.serverVersion ?? 'Unknown',
+                  label: context.l10n.compatDetailsPlayer,
+                  value: state.playerVersion,
+                ),
+                _VersionRow(
+                  label: context.l10n.compatDetailsServer,
+                  value: state.serverVersion ?? context.l10n.commonUnknown,
                 ),
                 if (requiredVersion != null)
                   _VersionRow(
-                    label: 'Required',
+                    label: context.l10n.compatDetailsRequired,
                     value: requiredVersion,
                     emphasize: true,
                   ),
@@ -65,20 +69,15 @@ class CompatibilityDetailsDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text(context.l10n.commonClose),
         ),
       ],
     );
   }
 
-  String get _explanation {
-    if (state.verdict.isPlayerBehind) {
-      return 'This app is older than the connected server expects. '
-          'Updating the app should resolve it.';
-    }
-    return 'This server is older than this app expects. '
-        'Whoever runs the server will need to update it.';
-  }
+  String _explanation(AppLocalizations l10n) => state.verdict.isPlayerBehind
+      ? l10n.compatDetailsPlayerBehind
+      : l10n.compatDetailsServerBehind;
 }
 
 /// One labelled version in the comparison table.

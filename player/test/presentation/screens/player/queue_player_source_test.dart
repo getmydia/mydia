@@ -9,6 +9,7 @@ import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/queue_player_screen.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart'
@@ -66,7 +67,11 @@ Future<void> _pump(WidgetTester tester, {required bool withSource}) async {
       if (withSource)
         mediaSourceProvider(sid).overrideWithValue(_mydiaSource()),
     ],
-    child: MaterialApp(home: QueuePlayerScreen(itemsParam: _queueParam())),
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: QueuePlayerScreen(itemsParam: _queueParam()),
+    ),
   ));
 }
 
@@ -109,7 +114,11 @@ void main() {
 
     await tester.pumpWidget(UncontrolledProviderScope(
       container: h.container,
-      child: MaterialApp(home: QueuePlayerScreen(itemsParam: _queueParam())),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: QueuePlayerScreen(itemsParam: _queueParam()),
+      ),
     ));
 
     final screen = tester.widget<PlayerScreen>(find.byType(PlayerScreen));

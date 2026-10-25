@@ -5,6 +5,7 @@ import '../../core/cache/query_key.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/layout/window_chrome_inset.dart';
 import '../../core/theme/palette.dart';
+import '../../l10n/l10n.dart';
 import 'ambient_backdrop_provider.dart';
 import 'app_shell.dart';
 import 'freshness_header.dart';
@@ -177,7 +178,7 @@ class BrowseScaffold extends ConsumerWidget {
                   ? IconButton(
                       icon: const Icon(Icons.arrow_back_rounded),
                       onPressed: () => Navigator.of(context).maybePop(),
-                      tooltip: 'Back',
+                      tooltip: context.l10n.commonBack,
                     )
                   : (isDesktop
                       ? null
@@ -186,7 +187,7 @@ class BrowseScaffold extends ConsumerWidget {
                           onPressed: () {
                             AppShell.scaffoldKey.currentState?.openDrawer();
                           },
-                          tooltip: 'Menu',
+                          tooltip: context.l10n.commonMenu,
                         )),
               // The label ellipsises: this bar uses `headlineSmall` to match
               // LibraryScreen, which is larger than the `titleLarge` the old

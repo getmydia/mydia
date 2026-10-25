@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/models/media_file.dart';
+import '../../l10n/l10n.dart';
 import 'smart_play_button.dart';
 
 /// The detail hero's primary Play affordance: [SmartPlayButton]'s white
@@ -37,7 +38,7 @@ class HeroPlayControl extends StatelessWidget {
     return SmartPlayButton(
       files: files,
       onFileSelected: onFileSelected,
-      playLabel: resume ? 'Resume' : 'Play',
+      playLabel: resume ? context.l10n.commonResume : context.l10n.commonPlay,
     );
   }
 }

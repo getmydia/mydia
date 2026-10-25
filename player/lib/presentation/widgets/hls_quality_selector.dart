@@ -48,7 +48,7 @@ Future<QualityRung?> showQualityPicker(
     builder: (context) {
       final palette = context.palette;
       return OsdDialog(
-        title: const Text('Video Quality'),
+        title: Text(context.l10n.qualityDialogTitle),
         contentPadding: const EdgeInsets.symmetric(vertical: 12),
         content: Material(
           type: MaterialType.transparency,
@@ -80,14 +80,14 @@ Future<QualityRung?> showQualityPicker(
                         key: statsToggleKey,
                         value: statsValue,
                         title: Text(
-                          'Stats for nerds',
+                          context.l10n.settingsStatsOverlayTitle,
                           style: TextStyle(
                             color: palette.textPrimary,
                             fontSize: 14.5,
                           ),
                         ),
                         subtitle: Text(
-                          'Also in Settings. Stays on after the controls fade.',
+                          context.l10n.qualityStatsToggleHint,
                           style: TextStyle(
                             color: palette.textSecondary,
                             fontSize: 11.5,
@@ -113,7 +113,7 @@ Future<QualityRung?> showQualityPicker(
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text(
-              'Cancel',
+              context.l10n.commonCancel,
               style: TextStyle(color: palette.textSecondary),
             ),
           ),

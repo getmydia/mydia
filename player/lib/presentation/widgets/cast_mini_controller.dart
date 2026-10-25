@@ -16,6 +16,7 @@ import '../../core/router/navigator_keys.dart';
 import '../../core/router/push_route.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/cast_device.dart';
+import '../../l10n/l10n.dart';
 import '../screens/detail/load_content_fetchers.dart';
 import 'cast_actions.dart';
 import 'cast_bar/cast_bar_parts.dart';
@@ -279,7 +280,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           actions: [
             _closeButton(
               key: const Key('cast-bar-idle-clear'),
-              tooltip: 'Stop casting to ${device.name}',
+              tooltip: context.l10n.castBarStopCastingTo(device.name),
               onPressed: _stopCasting,
             ),
           ],
@@ -300,7 +301,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           actions: [
             _closeButton(
               key: const Key('cast-bar-connecting-cancel'),
-              tooltip: 'Cancel connecting to ${device.name}',
+              tooltip: context.l10n.castBarCancelConnecting(device.name),
               // Tears down whatever the in-flight connect established rather
               // than merely forgetting the device.
               onPressed: _stopCasting,
@@ -320,12 +321,12 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           actions: [
             CastPrimaryAction(
               key: const Key('cast-bar-offline-reconnect'),
-              label: 'Reconnect',
+              label: context.l10n.castBarReconnect,
               onPressed: () => _reconnectIdle(device),
             ),
             _closeButton(
               key: const Key('cast-bar-offline-clear'),
-              tooltip: 'Forget ${device.name}',
+              tooltip: context.l10n.castBarForget(device.name),
               onPressed: _stopCasting,
             ),
           ],
@@ -343,12 +344,13 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         actions: [
           CastPrimaryAction(
             key: const Key('cast-bar-ambient-open'),
-            label: 'View',
+            label: context.l10n.castBarView,
             onPressed: () => _openAmbientTarget(ambientTarget, name),
           ),
           _closeButton(
             key: const Key('cast-bar-ambient-dismiss'),
-            tooltip: 'Hide ${CastBarText.ambientStatus(name)}',
+            tooltip:
+                context.l10n.castBarHideStatus(CastBarText.ambientStatus(name)),
             onPressed: () => ref
                 .read(ambientDismissalsProvider.notifier)
                 .dismiss(ambientTarget),
@@ -396,7 +398,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error opening $name: $e');
       if (!mounted) return;
-      showToast(context, 'Failed to open $name: $e', kind: ToastKind.error);
+      showToast(context, context.l10n.castBarOpenFailed(name, '$e'),
+          kind: ToastKind.error);
     }
   }
 
@@ -416,7 +419,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error reconnecting: $e');
       if (!mounted) return;
-      showToast(context, 'Failed to connect: $e', kind: ToastKind.error);
+      showToast(context, context.l10n.castConnectFailed('$e'),
+          kind: ToastKind.error);
     }
   }
 
@@ -436,12 +440,12 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
             // showing instead.
             CastPrimaryAction(
               key: const Key('cast-stale-reconnect'),
-              label: 'Reconnect',
+              label: context.l10n.castBarReconnect,
               onPressed: _reconnectStaleSession,
             ),
             CastGhostAction(
               key: const Key('cast-stale-stop'),
-              label: 'Stop',
+              label: context.l10n.commonStop,
               onPressed: _stopCasting,
             ),
           ],
@@ -492,13 +496,14 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
               if (isMydia)
                 _closeButton(
                   key: const Key('cast-bar-dismiss'),
-                  tooltip: 'Hide, keep playing on ${session.device.name}',
+                  tooltip:
+                      context.l10n.castBarHideKeepPlaying(session.device.name),
                   onPressed: () => _detach(session),
                 )
               else
                 _closeButton(
                   key: const Key('cast-bar-stop'),
-                  tooltip: 'Stop casting',
+                  tooltip: context.l10n.castBarStopCasting,
                   onPressed: () => _confirmStop(session.device),
                 ),
             ],
@@ -567,7 +572,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     ? null
                     : IconButton(
                         key: const Key('cast-bar-subtitles'),
-                        tooltip: 'Subtitles',
+                        tooltip: context.l10n.commonSubtitles,
                         color: palette.textPrimary,
                         icon: Icon(
                           session.selectedSubtitle == null
@@ -585,14 +590,15 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     key: const Key('cast-bar-stop'),
                     icon: const Icon(Icons.stop),
                     color: palette.textPrimary,
-                    tooltip: 'Stop playback on ${session.device.name}',
+                    tooltip:
+                        context.l10n.castBarStopPlaybackOn(session.device.name),
                     onPressed: () => _confirmStop(session.device),
                   )),
                 _slot(IconButton(
                   key: const Key('cast-bar-rewind'),
                   icon: const Icon(Icons.replay_10),
                   color: palette.textPrimary,
-                  tooltip: 'Back 10 seconds',
+                  tooltip: context.l10n.castBarBack10,
                   onPressed: syncing
                       ? null
                       : () async {
@@ -614,7 +620,9 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     backgroundColor: palette.primary,
                     foregroundColor: palette.onPrimary,
                   ),
-                  tooltip: isPlaying ? 'Pause' : 'Play',
+                  tooltip: isPlaying
+                      ? context.l10n.commonPause
+                      : context.l10n.commonPlay,
                   onPressed: syncing
                       ? null
                       : () async => toggleCastPlayback(
@@ -626,7 +634,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                   key: const Key('cast-bar-forward'),
                   icon: const Icon(Icons.forward_10),
                   color: palette.textPrimary,
-                  tooltip: 'Forward 10 seconds',
+                  tooltip: context.l10n.castBarForward10,
                   onPressed: syncing
                       ? null
                       : () async {
@@ -648,7 +656,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                         key: const Key('cast-bar-pull'),
                         icon: const Icon(Icons.phone_iphone),
                         color: palette.textPrimary,
-                        tooltip: 'Play on this device',
+                        tooltip: context.l10n.castBarPlayHere,
                         onPressed: syncing ? null : _pullToLocal,
                       )
                     : null),
@@ -699,7 +707,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           ? null
           : loadContentIntentForPulledSession(pulled, via: via);
       if (intent == null) {
-        showToast(context, 'Nothing to bring over yet.');
+        showToast(context, context.l10n.castBarNothingToPull);
         return;
       }
 
@@ -719,7 +727,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           MediaQuery.sizeOf(rootNavigatorKey.currentContext ?? context).width;
 
       if (intent.via == null) {
-        showToast(context, 'Could not tell which server that session is on.',
+        showToast(context, context.l10n.castBarServerUnknown,
             kind: ToastKind.error);
         return;
       }
@@ -736,7 +744,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error pulling session: $e');
       if (!mounted) return;
-      showToast(context, 'Failed to bring playback here: $e',
+      showToast(context, context.l10n.castBarPullFailed('$e'),
           kind: ToastKind.error);
     }
   }
@@ -755,7 +763,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error reconnecting cast: $e');
       if (!mounted) return;
-      showToast(context, 'Failed to reconnect: $e', kind: ToastKind.error);
+      showToast(context, context.l10n.castBarReconnectFailed('$e'),
+          kind: ToastKind.error);
     }
   }
 
@@ -778,7 +787,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error stopping cast: $e');
       if (!mounted) return;
-      showToast(context, 'Failed to stop casting: $e', kind: ToastKind.error);
+      showToast(context, context.l10n.castBarStopFailed('$e'),
+          kind: ToastKind.error);
     }
   }
 
@@ -805,7 +815,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error disconnecting: $e');
       if (!mounted) return;
-      showToast(context, 'Failed to disconnect: $e', kind: ToastKind.error);
+      showToast(context, context.l10n.castBarDisconnectFailed('$e'),
+          kind: ToastKind.error);
     }
   }
 
@@ -820,16 +831,16 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     final shouldStop = await showDialog<bool>(
       context: dialogContext,
       builder: (context) => GlassDialog(
-        title: const Text('Stop playback?'),
-        content: Text('Stop playing on ${device.name} and disconnect?'),
+        title: Text(context.l10n.castBarStopConfirmTitle),
+        content: Text(context.l10n.castBarStopConfirmBody(device.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.commonCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Stop'),
+            child: Text(context.l10n.commonStop),
           ),
         ],
       ),

@@ -5,6 +5,7 @@ import '../../core/connection/connection_summary.dart';
 import '../../core/p2p/p2p_service.dart';
 import '../../core/sources/mydia/source_link.dart';
 import '../../core/theme/palette.dart';
+import '../../l10n/l10n.dart';
 import 'connection_tone_color.dart';
 import 'nav/current_source.dart';
 
@@ -42,8 +43,9 @@ class ConnectionStatusDot extends ConsumerWidget {
       isInitialized: status.isInitialized,
     );
     final color = connectionToneColor(summary.tone);
-    final tooltip =
-        updatePending ? 'Update available - ${summary.label}' : summary.label;
+    final tooltip = updatePending
+        ? context.l10n.connectionUpdateAvailable(summary.label)
+        : summary.label;
 
     // Pulse only while re-establishing a link that was previously up. A first
     // connection is pending too, but a pulsing dot at launch reads as a fault.

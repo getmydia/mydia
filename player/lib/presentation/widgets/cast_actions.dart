@@ -8,6 +8,7 @@ import '../../core/cast/cast_target.dart';
 import '../../core/p2p/local_proxy_service.dart';
 import '../../core/player/platform_features.dart';
 import '../../domain/models/cast_device.dart';
+import '../../l10n/l10n.dart';
 import 'cast_device_picker.dart';
 import 'local_network_settings_button.dart';
 import 'toast/toaster.dart';
@@ -29,6 +30,7 @@ import 'toast/toaster.dart';
 /// [isIOS] exists only so tests can pin both platform wordings; it defaults
 /// to the real platform when omitted.
 String castErrorMessage(
+  AppLocalizations l10n,
   CastBackendException e, {
   WidgetRef? ref,
   bool? isIOS,
@@ -38,36 +40,28 @@ String castErrorMessage(
 
   switch (e.kind) {
     case CastFailureKind.unreachable:
-      if (isMydiaTarget) {
-        return 'Could not reach the device. Check that both devices are '
-            'online and paired in Mydia.';
-      }
+      if (isMydiaTarget) return l10n.castErrorUnreachableMydia;
       final port = proxy != null && proxy.isLanAccessible ? proxy.port : null;
-      final portHint =
-          port == null ? '' : ' Allow incoming connections on port $port.';
-      return 'The device could not reach your media. Check that both are on '
-          'the same network and that your firewall is not blocking '
-          'Mydia.$portHint';
+      return port == null
+          ? l10n.castErrorUnreachable
+          : l10n.castErrorUnreachableWithPort(port);
     case CastFailureKind.mediaLoadFailed:
-      return 'The device could not play this file. It may not support the '
-          'video or audio format.';
+      return l10n.castErrorMediaLoadFailed;
     case CastFailureKind.connectionLost:
-      return 'Lost the connection to the device.';
+      return l10n.castErrorConnectionLost;
     case CastFailureKind.discoveryDenied:
-      return 'Mydia needs local network permission to find cast devices.';
+      return l10n.castErrorDiscoveryDenied;
     case CastFailureKind.localNetworkDenied:
       // Hedged on purpose. errno 65 to a local address is also what an
       // unplugged receiver looks like, and there is no API to check which.
       final os = (isIOS ?? PlatformFeatures.isIOS) ? 'iOS' : 'macOS';
-      return 'Mydia could not reach the device. If it is powered on, $os may '
-          'be blocking local network access for Mydia.';
+      return l10n.castErrorLocalNetworkDenied(os);
     case CastFailureKind.notAuthorized:
-      return 'This device no longer allows Mydia to control it. Pair with '
-          'it again.';
+      return l10n.castErrorNotAuthorized;
     case CastFailureKind.notPlaying:
-      return 'Nothing is currently playing on that device.';
+      return l10n.castErrorNotPlaying;
     case CastFailureKind.unknown:
-      return 'Casting failed: ${e.message}';
+      return l10n.castErrorUnknown(e.message);
   }
 }
 
@@ -97,14 +91,14 @@ void showCastErrorToast(
 
   showToast(
     context,
-    castErrorMessage(e, ref: ref, isMydiaTarget: isMydiaTarget),
+    castErrorMessage(context.l10n, e, ref: ref, isMydiaTarget: isMydiaTarget),
     kind: ToastKind.error,
     // A permission failure carries an instruction the user has to go and
     // follow, so it keeps its 8s even when no Settings button is offered.
     duration: permissionDenied ? const Duration(seconds: 8) : null,
     action: offerSettings
         ? ToastAction(
-            label: 'Settings',
+            label: context.l10n.settingsTitle,
             onPressed: () => openLocalNetworkSettings(context),
           )
         : null,
@@ -199,7 +193,8 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
     // would close the picker with no toast and no log.
     debugPrint('[cast_actions] Unexpected error starting cast: $e');
     if (!context.mounted) return;
-    showToast(context, 'Failed to start casting: $e', kind: ToastKind.error);
+    showToast(context, context.l10n.castStartFailed('$e'),
+        kind: ToastKind.error);
   }
 }
 
@@ -228,6 +223,7 @@ Future<void> _connectToDevice(
   } catch (e) {
     debugPrint('[cast_actions] Unexpected error connecting to device: $e');
     if (!context.mounted) return;
-    showToast(context, 'Failed to connect: $e', kind: ToastKind.error);
+    showToast(context, context.l10n.castConnectFailed('$e'),
+        kind: ToastKind.error);
   }
 }

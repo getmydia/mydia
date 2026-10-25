@@ -1,4 +1,7 @@
+import 'dart:ui' show Locale;
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/media_info/stream_formatters.dart';
 
 void main() {
@@ -45,10 +48,18 @@ void main() {
   });
 
   group('languageName', () {
+    final l10n = lookupAppLocalizations(const Locale('en'));
+    final es = lookupAppLocalizations(const Locale('es'));
+
     test('maps three letter codes',
-        () => expect(languageName('eng'), 'English'));
-    test('maps two letter codes', () => expect(languageName('es'), 'Spanish'));
-    test('upper cases unknown codes', () => expect(languageName('zzz'), 'ZZZ'));
-    test('returns null for null', () => expect(languageName(null), isNull));
+        () => expect(l10n.languageName('eng'), 'English'));
+    test('maps two letter codes',
+        () => expect(l10n.languageName('es'), 'Spanish'));
+    test('names the language in the viewer\'s language',
+        () => expect(es.languageName('eng'), 'Inglés'));
+    test('upper cases unknown codes',
+        () => expect(l10n.languageName('zzz'), 'ZZZ'));
+    test(
+        'returns null for null', () => expect(l10n.languageName(null), isNull));
   });
 }

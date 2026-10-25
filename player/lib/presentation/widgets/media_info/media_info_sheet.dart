@@ -5,6 +5,7 @@ import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/models/media_stream.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../screens/sources/source_browse_providers.dart';
 import 'media_info_content.dart';
 
@@ -161,7 +162,7 @@ class _PanelHeader extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              'Media Info',
+              context.l10n.mediaInfoTitle,
               style: TextStyle(
                 color: palette.textPrimary,
                 fontSize: 16,
@@ -173,7 +174,7 @@ class _PanelHeader extends StatelessWidget {
             key: const Key('media-info-close'),
             icon: Icon(Icons.close_rounded, color: palette.textSecondary),
             onPressed: () => Navigator.of(context).maybePop(),
-            tooltip: 'Close',
+            tooltip: context.l10n.commonClose,
           ),
         ],
       ),
@@ -194,7 +195,7 @@ Future<void> showMediaInfo({
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
-    barrierLabel: 'Media Info',
+    barrierLabel: context.l10n.mediaInfoTitle,
     barrierColor: isWide ? Colors.black26 : Colors.black54,
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (dialogContext, _, __) {
@@ -248,7 +249,7 @@ class _ErrorBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Media info could not be loaded. Check your connection to the server.',
+            context.l10n.mediaInfoLoadFailed,
             style: TextStyle(
                 color: context.palette.textSecondary,
                 fontSize: 13,
@@ -258,7 +259,7 @@ class _ErrorBody extends StatelessWidget {
           TextButton(
             key: const Key('media-info-retry'),
             onPressed: onRetry,
-            child: const Text('Retry'),
+            child: Text(context.l10n.commonRetry),
           ),
         ],
       ),

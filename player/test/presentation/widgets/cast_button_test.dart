@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/cast_button.dart';
 
 const _device = CastDevice(
@@ -29,6 +30,8 @@ void main() {
         ...overrides,
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: CastButton(onPressed: onPressed ?? () {}),
         ),
@@ -124,7 +127,7 @@ void main() {
         reason: 'cast_connected is the platform glyph for owning a receiver; '
             'a device nothing is connected to has not earned it');
     expect(iconOf(tester).color, Colors.blue);
-    expect(tooltipOf(tester), '${_device.name} — not connected');
+    expect(tooltipOf(tester), '${_device.name} (not connected)');
   });
 
   testWidgets('shows a progress ring while connecting', (tester) async {

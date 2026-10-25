@@ -4,6 +4,7 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/detail/detail_views.dart';
 import '../../domain/models/watch_status.dart';
+import '../../l10n/l10n.dart';
 import '../screens/detail/detail_actions.dart';
 import 'detail_art_image.dart';
 import 'episode_download_button.dart';
@@ -300,7 +301,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
         color: Colors.white,
         size: 20,
       ),
-      tooltip: 'Episode actions',
+      tooltip: context.l10n.episodeActionsTooltip,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
       style: const ButtonStyle(
@@ -324,17 +325,19 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
                 size: 18,
               ),
               const SizedBox(width: 12),
-              Text(watched ? 'Mark unwatched' : 'Mark watched'),
+              Text(watched
+                  ? context.l10n.commonMarkUnwatched
+                  : context.l10n.commonMarkWatched),
             ],
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'this_and_previous',
           child: Row(
             children: [
-              Icon(Icons.playlist_add_check_rounded, size: 18),
-              SizedBox(width: 12),
-              Text('Mark this and previous watched'),
+              const Icon(Icons.playlist_add_check_rounded, size: 18),
+              const SizedBox(width: 12),
+              Text(context.l10n.episodeMarkThisAndPreviousWatched),
             ],
           ),
         ),
@@ -357,7 +360,7 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
       if (mounted) {
         showToast(
           context,
-          'Could not update watched status',
+          context.l10n.commonWatchedUpdateFailed,
           kind: ToastKind.error,
         );
       }

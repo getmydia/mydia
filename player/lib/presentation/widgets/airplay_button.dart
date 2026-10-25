@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/airplay/airplay_providers.dart';
 import '../../core/player/platform_features.dart';
+import '../../l10n/l10n.dart';
 
 /// Button widget to trigger AirPlay route picker on iOS.
 ///
@@ -34,8 +35,8 @@ class AirPlayButton extends ConsumerWidget {
         backgroundColor: Colors.black.withValues(alpha: 0.5),
       ),
       tooltip: isAirPlaying && airPlayDevice != null
-          ? 'AirPlay to ${airPlayDevice.name}'
-          : 'AirPlay',
+          ? context.l10n.airplayTooltipDevice(airPlayDevice.name)
+          : 'AirPlay', // l10n-ignore: product name
     );
   }
 }

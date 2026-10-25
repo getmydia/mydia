@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/ambient_tint/ambient_tint.dart';
+import '../../l10n/l10n.dart';
 import '../screens/sources/source_drawer_button.dart';
 import 'glass/glass_icon_button.dart';
 import 'shell_rail_inset.dart';
@@ -120,7 +121,7 @@ class DetailHeroBackButton extends StatelessWidget {
     return GlassIconButton(
       icon: const Icon(Icons.arrow_back_rounded),
       color: Colors.white,
-      tooltip: 'Back',
+      tooltip: context.l10n.commonBack,
       onPressed: () {
         if (context.canPop()) {
           context.pop();

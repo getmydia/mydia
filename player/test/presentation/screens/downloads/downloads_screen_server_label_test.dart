@@ -13,6 +13,7 @@ import 'package:player/core/downloads/storage_quota_providers.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/downloads/downloads_screen.dart';
 
 import '../../../test_utils/mock_network_images.dart';
@@ -70,7 +71,11 @@ Future<void> _pump(
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
         ],
-        child: const MaterialApp(home: DownloadsScreen()),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: DownloadsScreen(),
+        ),
       ),
     );
     await tester.pump();

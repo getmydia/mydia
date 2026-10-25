@@ -15,6 +15,7 @@ import 'package:player/core/theme/ambient_tint/ambient_tint_providers.dart';
 import 'package:player/core/theme/ambient_tint/tint_extraction.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
 import 'package:player/presentation/screens/sources/source_home_hero.dart';
 import 'package:player/presentation/widgets/ambient_backdrop.dart';
@@ -124,6 +125,8 @@ void main() {
                 .overrideWithValue(_extractorFor(images, name)),
           ],
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: ShellAmbientTint(
               child: Scaffold(
                 body: Stack(
@@ -223,6 +226,8 @@ void main() {
                 .overrideWithValue(_extractorFor(images, name)),
           ],
           child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: MovieDetailScreen.target(target: SourceTarget(ref)),
           ),
         ));

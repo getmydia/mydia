@@ -7,6 +7,7 @@ import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/sources/source_search_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
@@ -41,7 +42,11 @@ Future<void> pumpSearch(WidgetTester tester, FakeMediaSource fake) async {
       // No artwork requests: a URL keeps a spinner running and pumpAndSettle never settles.
       sourceArtworkProvider.overrideWith((ref, key) async => null),
     ],
-    child: const MaterialApp(home: SourceSearchScreen(sourceId: fakeSourceId)),
+    child: const MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: SourceSearchScreen(sourceId: fakeSourceId),
+    ),
   ));
 }
 
@@ -87,6 +92,8 @@ void main() {
         sourceArtworkProvider.overrideWith((ref, key) async => null),
       ],
       child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home:
             SourceSearchScreen(sourceId: fakeSourceId, initialQuery: 'film 2'),
       ),
@@ -153,8 +160,11 @@ void main() {
         // No artwork requests: a URL keeps a spinner running and pumpAndSettle never settles.
         sourceArtworkProvider.overrideWith((ref, key) async => null),
       ],
-      child:
-          const MaterialApp(home: SourceSearchScreen(sourceId: fakeSourceId)),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: SourceSearchScreen(sourceId: fakeSourceId),
+      ),
     ));
     await tester.enterText(
         find.byKey(const Key('source-search-field')), 'film 2');

@@ -7,6 +7,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/domain/models/download_option.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/episode_download_button.dart';
 
 import '../screens/detail/download_fakes.dart';
@@ -34,6 +35,8 @@ void main() {
                   options: Completer<List<DownloadOption>>().future)),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: EpisodeDownloadButton(episode: episode)),
         ),
       ),

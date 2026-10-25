@@ -5,14 +5,8 @@ import '../../../core/theme/palette.dart';
 import '../../../domain/models/media_stream.dart';
 import '../../../domain/models/subtitle_format.dart';
 import '../../../domain/models/subtitle_track.dart';
+import '../../../l10n/l10n.dart';
 import 'stream_formatters.dart';
-
-/// Shown when the server has not captured detailed streams for a file yet.
-/// This is the normal state for every file in an existing library until the
-/// analysis worker's repair lane reaches it, so it reads as information rather
-/// than as an error.
-const String kStreamsPendingMessage =
-    'Detailed stream information has not been captured for this file yet.';
 
 /// The Media Info readout.
 ///
@@ -47,7 +41,7 @@ class MediaInfoContent extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.all(24),
         child: Text(
-          'No files for this title.',
+          context.l10n.mediaInfoNoFiles,
           style: TextStyle(color: palette.textSecondary),
         ),
       );
@@ -60,6 +54,7 @@ class MediaInfoContent extends StatelessWidget {
     final audio = file.ofType(MediaStreamType.audio);
     final subtitle = file.ofType(MediaStreamType.subtitle);
     final external = file.externalSubtitles;
+    final l10n = context.l10n;
 
     return CustomScrollView(
       shrinkWrap: shrinkWrap,
@@ -67,15 +62,15 @@ class MediaInfoContent extends StatelessWidget {
         if (files.length > 1)
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
-            sliver: SliverToBoxAdapter(child: _versionSwitcher(index)),
+            sliver: SliverToBoxAdapter(child: _versionSwitcher(l10n, index)),
           ),
-        _header('File', 1, palette),
+        _header('file', l10n.mediaInfoSectionFile, 1, palette),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 18),
           sliver: SliverToBoxAdapter(child: _fileBlock(file, palette)),
         ),
         if (video.isNotEmpty) ...[
-          _header('Video', video.length, palette),
+          _header('video', l10n.mediaInfoSectionVideo, video.length, palette),
           _streams(
             video.length,
             (i) => _VideoStreamTile(
@@ -85,32 +80,36 @@ class MediaInfoContent extends StatelessWidget {
           ),
         ],
         if (audio.isNotEmpty) ...[
-          _header('Audio', audio.length, palette),
-          _streams(audio.length, (i) => _audioRow(audio[i])),
+          _header('audio', l10n.mediaInfoSectionAudio, audio.length, palette),
+          _streams(audio.length, (i) => _audioRow(l10n, audio[i])),
         ],
         if (subtitle.isNotEmpty || external.isNotEmpty) ...[
-          _header('Subtitles', subtitle.length + external.length, palette),
+          _header('subtitles', l10n.commonSubtitles,
+              subtitle.length + external.length, palette),
           _streams(
             subtitle.length + external.length,
             (i) => i < subtitle.length
-                ? _subtitleRow(subtitle[i])
-                : _externalSubtitleRow(external[i - subtitle.length]),
+                ? _subtitleRow(l10n, subtitle[i])
+                : _externalSubtitleRow(l10n, external[i - subtitle.length]),
           ),
         ],
         if (!file.hasDetailedStreams)
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
-            sliver: SliverToBoxAdapter(child: _pendingNote(palette)),
+            sliver: SliverToBoxAdapter(child: _pendingNote(l10n, palette)),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );
   }
 
-  Widget _header(String label, int count, MydiaPalette palette) =>
+  /// [id] is the stable name the header's `Key` is built from; [label] is the
+  /// translated text.
+  Widget _header(String id, String label, int count, MydiaPalette palette) =>
       SliverPersistentHeader(
         pinned: true,
         delegate: _SectionHeaderDelegate(
+          id: id,
           label: label,
           count: count,
           background: palette.surface,
@@ -128,7 +127,7 @@ class MediaInfoContent extends StatelessWidget {
     );
   }
 
-  Widget _versionSwitcher(int index) {
+  Widget _versionSwitcher(AppLocalizations l10n, int index) {
     return Padding(
       key: const Key('media-info-versions'),
       padding: const EdgeInsets.only(bottom: 16),
@@ -139,7 +138,7 @@ class MediaInfoContent extends StatelessWidget {
           for (var i = 0; i < files.length; i++)
             _VersionChip(
               key: Key('media-info-version-$i'),
-              label: _versionChipLabel(files[i]),
+              label: _versionChipLabel(l10n, files[i]),
               selected: i == index,
               onTap: () => onSelectVersion(i),
             ),
@@ -148,9 +147,14 @@ class MediaInfoContent extends StatelessWidget {
     );
   }
 
-  String _versionChipLabel(MediaFileInfo file) {
+  String _versionChipLabel(AppLocalizations l10n, MediaFileInfo file) {
     final size = formatBytes(file.sizeBytes);
-    return size == null ? file.versionLabel : '${file.versionLabel} · $size';
+    // `versionLabel` falls back to an English word when the file has neither
+    // resolution nor codec, so that case is named here instead.
+    final label = file.resolution == null && file.codec == null
+        ? l10n.mediaInfoVersionFallback
+        : file.versionLabel;
+    return size == null ? label : '$label · $size';
   }
 
   Widget _fileBlock(MediaFileInfo file, MydiaPalette palette) {
@@ -190,11 +194,15 @@ class MediaInfoContent extends StatelessWidget {
     );
   }
 
-  Widget _pendingNote(MydiaPalette palette) {
+  /// Shown when the server has not captured detailed streams for a file yet.
+  /// This is the normal state for every file in an existing library until the
+  /// analysis worker's repair lane reaches it, so it reads as information
+  /// rather than as an error.
+  Widget _pendingNote(AppLocalizations l10n, MydiaPalette palette) {
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: Text(
-        kStreamsPendingMessage,
+        l10n.mediaInfoStreamsPending,
         style:
             TextStyle(color: palette.textDisabled, fontSize: 12, height: 1.5),
       ),
@@ -214,6 +222,7 @@ class _VideoStreamTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -226,39 +235,39 @@ class _VideoStreamTile extends StatelessWidget {
             children: [
               if (stream.index != null) _IndexChip(index: stream.index!),
               Text(
-                (stream.codec ?? 'Unknown').toUpperCase(),
+                (stream.codec ?? l10n.commonUnknown).toUpperCase(),
                 style: TextStyle(
                   color: palette.textPrimary,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              ..._flags().map((f) => _FlagChip(label: f)),
+              ..._flags(l10n).map((f) => _FlagChip(label: f)),
             ],
           ),
           const SizedBox(height: 2),
-          for (final line in _videoLines()) _DetailLine(line),
+          for (final line in _videoLines(l10n)) _DetailLine(line),
         ],
       ),
     );
   }
 
-  List<String> _flags() {
-    final language = languageName(stream.language);
+  List<String> _flags(AppLocalizations l10n) {
+    final language = l10n.languageName(stream.language);
     return [
       if (language != null) language,
-      if (stream.isDefault) 'Default',
-      if (stream.isForced) 'Forced',
+      if (stream.isDefault) l10n.commonDefault,
+      if (stream.isForced) l10n.mediaInfoFlagForced,
     ];
   }
 
-  List<String> _videoLines() {
+  List<String> _videoLines(AppLocalizations l10n) {
     final frameRate = formatFrameRate(stream.frameRate);
     final geometry = <String>[
       if (stream.width != null && stream.height != null)
         '${stream.width} × ${stream.height}',
       if (frameRate != null) frameRate,
-      if (stream.bitDepth != null) '${stream.bitDepth}-bit',
+      if (stream.bitDepth != null) l10n.mediaInfoBitDepth(stream.bitDepth!),
     ];
 
     final colour = <String>[
@@ -272,7 +281,7 @@ class _VideoStreamTile extends StatelessWidget {
       if (stream.profile != null) stream.profile!,
       if (geometry.isNotEmpty) geometry.join(' · '),
       if (stream.dolbyVisionProfile != null)
-        'Dolby Vision (Profile ${stream.dolbyVisionProfile})',
+        l10n.mediaInfoDolbyVision('${stream.dolbyVisionProfile}'),
       if (colour.isNotEmpty) colour.join(' · '),
       if (bitrate != null) bitrate,
     ];
@@ -402,14 +411,14 @@ class _StreamRow extends StatelessWidget {
 
 /// Playback-affecting flags. Language is deliberately absent: it has its own
 /// column in [_StreamRow], unlike the video tile where it stays a chip.
-List<String> _rowFlags(MediaStream stream) => [
-      if (stream.isDefault) 'Default',
-      if (stream.isForced) 'Forced',
-      if (stream.isHearingImpaired) 'SDH',
-      if (stream.isCommentary) 'Commentary',
+List<String> _rowFlags(AppLocalizations l10n, MediaStream stream) => [
+      if (stream.isDefault) l10n.commonDefault,
+      if (stream.isForced) l10n.mediaInfoFlagForced,
+      if (stream.isHearingImpaired) l10n.mediaInfoFlagSdh,
+      if (stream.isCommentary) l10n.mediaInfoFlagCommentary,
     ];
 
-_StreamRow _audioRow(MediaStream stream) {
+_StreamRow _audioRow(AppLocalizations l10n, MediaStream stream) {
   final channels = formatChannels(stream.channels, stream.channelLayout);
   final sampleRate = formatSampleRate(stream.sampleRate);
   final bitrate = formatBitrate(stream.bitrate);
@@ -417,41 +426,46 @@ _StreamRow _audioRow(MediaStream stream) {
   return _StreamRow(
     key: Key('media-info-stream-${stream.index}'),
     index: stream.index?.toString(),
-    codec: stream.codec ?? 'Unknown',
-    language: languageName(stream.language),
+    codec: stream.codec ?? l10n.commonUnknown,
+    language: l10n.languageName(stream.language),
     detail: [
       if (channels != null) channels,
       if (sampleRate != null) sampleRate,
     ].join(' · '),
-    flags: _rowFlags(stream),
+    flags: _rowFlags(l10n, stream),
     extra: [
       if (stream.title != null) stream.title!,
       if (bitrate != null) bitrate,
-      if (stream.bitDepth != null) '${stream.bitDepth}-bit',
+      if (stream.bitDepth != null) l10n.mediaInfoBitDepth(stream.bitDepth!),
     ],
   );
 }
 
-_StreamRow _subtitleRow(MediaStream stream) {
+String _subtitleKind(AppLocalizations l10n, String? format) =>
+    isImageSubtitleFormat(format)
+        ? l10n.mediaInfoSubtitleImage
+        : l10n.mediaInfoSubtitleText;
+
+_StreamRow _subtitleRow(AppLocalizations l10n, MediaStream stream) {
   return _StreamRow(
     key: Key('media-info-stream-${stream.index}'),
     index: stream.index?.toString(),
-    codec: stream.codec ?? 'Unknown',
-    language: languageName(stream.language),
-    detail: isImageSubtitleFormat(stream.codec) ? 'Image' : 'Text',
-    flags: _rowFlags(stream),
+    codec: stream.codec ?? l10n.commonUnknown,
+    language: l10n.languageName(stream.language),
+    detail: _subtitleKind(l10n, stream.codec),
+    flags: _rowFlags(l10n, stream),
     extra: [if (stream.title != null) stream.title!],
   );
 }
 
-_StreamRow _externalSubtitleRow(SubtitleTrack track) {
+_StreamRow _externalSubtitleRow(AppLocalizations l10n, SubtitleTrack track) {
   return _StreamRow(
     key: Key('media-info-external-${track.id}'),
     index: null,
     codec: track.format,
-    language: languageName(track.language),
-    detail: isImageSubtitleFormat(track.format) ? 'Image' : 'Text',
-    flags: const ['External'],
+    language: l10n.languageName(track.language),
+    detail: _subtitleKind(l10n, track.format),
+    flags: [l10n.mediaInfoFlagExternal],
     extra: [if (track.title != null) track.title!],
   );
 }
@@ -565,12 +579,14 @@ class _VersionChip extends StatelessWidget {
 /// transparent so rows do not show through it once pinned. The colours are
 /// fields so a preset change rebuilds the pinned header.
 class _SectionHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final String id;
   final String label;
   final int count;
   final Color background;
   final Color labelColor;
 
   const _SectionHeaderDelegate({
+    required this.id,
     required this.label,
     required this.count,
     required this.background,
@@ -594,7 +610,7 @@ class _SectionHeaderDelegate extends SliverPersistentHeaderDelegate {
     final text = count > 1 ? '$label · $count' : label;
 
     return Container(
-      key: Key('media-info-header-${label.toLowerCase()}'),
+      key: Key('media-info-header-$id'),
       height: _height,
       color: background,
       alignment: Alignment.bottomLeft,
@@ -613,6 +629,7 @@ class _SectionHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(_SectionHeaderDelegate oldDelegate) =>
+      oldDelegate.id != id ||
       oldDelegate.label != label ||
       oldDelegate.count != count ||
       oldDelegate.background != background ||

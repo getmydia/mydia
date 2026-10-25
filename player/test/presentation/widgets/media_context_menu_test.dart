@@ -5,8 +5,11 @@
 // are tested without pumping a menu, and showMediaContextMenu is left with
 // nothing but presentation and routing.
 
+import 'dart:ui' show Locale;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/source.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/detail/detail_links.dart';
@@ -116,7 +119,10 @@ void main() {
 
     test('every action has a label and an icon', () {
       for (final action in MediaContextAction.values) {
-        expect(mediaContextLabel(action), isNotEmpty);
+        expect(
+          mediaContextLabel(lookupAppLocalizations(const Locale('en')), action),
+          isNotEmpty,
+        );
         expect(mediaContextIcon(action), isNotNull);
       }
     });

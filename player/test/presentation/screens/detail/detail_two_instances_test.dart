@@ -7,6 +7,7 @@ import 'package:player/core/router/source_detail_routes.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../../helpers/cast_test_overrides.dart';
@@ -44,7 +45,11 @@ Future<GoRouter> _pump(WidgetTester tester, String location) async {
         sourceArtworkProvider.overrideWith((ref, key) async => null),
         ...castCapableOverrides(),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        routerConfig: router,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
     ));
     await tester.pumpAndSettle();
   });

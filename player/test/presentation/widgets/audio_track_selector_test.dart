@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/models/audio_track.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/audio_track_selector.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
@@ -18,6 +19,8 @@ const _commentary = AudioTrack(id: 'a2', language: 'eng', title: 'Commentary');
 Future<void> _open(WidgetTester tester) async {
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: Builder(
           builder: (context) => TextButton(

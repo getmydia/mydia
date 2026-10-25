@@ -11,6 +11,7 @@ import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/player/progress_service.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/cast_actions.dart';
 
 import '../../core/sources/mydia/fake_mydia_client.dart';
@@ -32,19 +33,21 @@ const _otherDevice = CastDevice(
 );
 
 void main() {
+  final l10n = lookupAppLocalizations(const Locale('en'));
+
   group('castErrorMessage', () {
     test('names the port for an unreachable receiver', () {
       const e = CastBackendException('nope', CastFailureKind.unreachable);
 
-      expect(castErrorMessage(e), isNot(contains('nope')));
-      expect(castErrorMessage(e), isNotEmpty);
+      expect(castErrorMessage(l10n, e), isNot(contains('nope')));
+      expect(castErrorMessage(l10n, e), isNotEmpty);
     });
 
     test(
         'uses a connection-error message for an unreachable Mydia target '
         'instead of the Chromecast-centric "your media" phrasing', () {
       const e = CastBackendException('nope', CastFailureKind.unreachable);
-      final message = castErrorMessage(e, isMydiaTarget: true);
+      final message = castErrorMessage(l10n, e, isMydiaTarget: true);
 
       expect(message, isNot(contains('your media')),
           reason: 'Mydia targets resolve their own content; '
@@ -55,7 +58,7 @@ void main() {
     test('explains a denied local network permission', () {
       const e = CastBackendException('denied', CastFailureKind.discoveryDenied);
 
-      expect(castErrorMessage(e), contains('local network'));
+      expect(castErrorMessage(l10n, e), contains('local network'));
     });
 
     test('hedges when a local network denial is suspected', () {
@@ -64,7 +67,7 @@ void main() {
         CastFailureKind.localNetworkDenied,
       );
 
-      final macMessage = castErrorMessage(e, isIOS: false);
+      final macMessage = castErrorMessage(l10n, e, isIOS: false);
       expect(macMessage, contains('macOS'));
       expect(macMessage, contains('local network'));
       // Hedged, not asserted: the receiver really might just be off.
@@ -72,7 +75,7 @@ void main() {
       // The raw socket error is never user-facing.
       expect(macMessage, isNot(contains('errno')));
 
-      expect(castErrorMessage(e, isIOS: true), contains('iOS'));
+      expect(castErrorMessage(l10n, e, isIOS: true), contains('iOS'));
     });
   });
 
@@ -81,7 +84,8 @@ void main() {
     // port number or permission hint that makes the error actionable.
     for (final kind in CastFailureKind.values) {
       test('produces actionable text for $kind', () {
-        final message = castErrorMessage(CastBackendException('raw', kind));
+        final message =
+            castErrorMessage(l10n, CastBackendException('raw', kind));
 
         expect(message, isNotEmpty);
         expect(message, isNot(equals('raw')),
@@ -131,6 +135,8 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: Consumer(
               builder: (context, ref, _) => ElevatedButton(
@@ -331,6 +337,8 @@ void main() {
       bool canOpenSettings = true,
     }) async {
       await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
         home: Scaffold(
           body: Builder(

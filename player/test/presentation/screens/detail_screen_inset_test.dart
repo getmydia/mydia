@@ -17,6 +17,7 @@ import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/presentation/screens/detail/detail_states.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/shell_rail_inset.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
@@ -43,6 +44,8 @@ Widget _detailScreenLike({
         child: WindowChromeInsets.scope(
           insets: insets,
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: WindowChromeInsets.removeBand(
               child: Builder(
                 builder: (context) => Scaffold(
@@ -159,6 +162,8 @@ void main() {
             child: WindowChromeInsets.scope(
               insets: AppShell.contentInsets(_mac),
               child: MaterialApp(
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
                 // The shell spans the page across the window and publishes the
                 // rail's footprint; the page insets its own content.
                 home: ShellRailInset(
@@ -274,6 +279,9 @@ void main() {
               child: WindowChromeInsets.scope(
                 insets: _mac,
                 child: MaterialApp(
+                  localizationsDelegates:
+                      AppLocalizations.localizationsDelegates,
+                  supportedLocales: AppLocalizations.supportedLocales,
                   home: WindowChromeInsets.removeBand(
                     child: Scaffold(body: Builder(builder: builder)),
                   ),

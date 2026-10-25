@@ -8,6 +8,7 @@ import 'package:player/core/theme/ambient_tint/ambient_tint_providers.dart';
 import 'package:player/domain/detail/detail_art.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/detail/detail_screen_frame.dart';
 import 'package:player/presentation/widgets/shell_rail_inset.dart';
 
@@ -35,6 +36,8 @@ Future<void> _pump(
         tintExtractorProvider.overrideWithValue((_) async => _rust),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: AmbientTint(
           colors: _warm,
           child: DetailScreenFrame<String>(
@@ -75,6 +78,8 @@ void main() {
       ProviderScope(
         overrides: castCapableOverrides(),
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: AmbientTint(
             colors: _warm,
             // As the shell lays a detail page out: the full window width,

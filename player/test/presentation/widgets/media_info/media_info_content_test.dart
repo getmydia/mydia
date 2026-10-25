@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/media_stream.dart';
 import 'package:player/domain/models/subtitle_track.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/media_info/media_info_content.dart';
 
 MediaFileInfo _richFile() => const MediaFileInfo(
@@ -53,7 +54,11 @@ MediaFileInfo _bareFile() => const MediaFileInfo(
       streams: null,
     );
 
-Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+Widget _wrap(Widget child) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    );
 
 void main() {
   testWidgets('renders file, video, audio and subtitle sections',
@@ -82,7 +87,11 @@ void main() {
       onSelectVersion: (_) {},
     )));
 
-    expect(find.text(kStreamsPendingMessage), findsOneWidget);
+    expect(
+      find.text(
+          lookupAppLocalizations(const Locale('en')).mediaInfoStreamsPending),
+      findsOneWidget,
+    );
     expect(find.textContaining('1080p'), findsWidgets);
   });
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/colors.dart';
 import '../../core/theme/palette.dart';
+import '../../l10n/l10n.dart';
 
 /// App bar toggle reporting and changing a movie's watched state.
 ///
@@ -28,7 +29,9 @@ class MovieWatchedButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: onPressed,
         child: Tooltip(
-          message: watched ? 'Mark unwatched' : 'Mark watched',
+          message: watched
+              ? context.l10n.commonMarkUnwatched
+              : context.l10n.commonMarkWatched,
           child: Padding(
             padding: const EdgeInsets.all(8),
             child: Icon(
@@ -71,7 +74,9 @@ class MovieWatchedLine extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Text(
-          dateLabel.isEmpty ? 'Watched' : 'Watched · $dateLabel',
+          dateLabel.isEmpty
+              ? context.l10n.commonWatched
+              : context.l10n.movieWatchedOn(dateLabel),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: context.palette.textSecondary,
               ),

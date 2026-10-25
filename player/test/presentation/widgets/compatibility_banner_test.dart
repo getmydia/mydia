@@ -7,6 +7,7 @@ import 'package:player/core/compatibility/compatibility_verdict.dart';
 import 'package:player/core/update/install_environment.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/available_update.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/dialog/open_settings.dart';
 import 'package:player/presentation/widgets/compatibility_banner.dart';
 
@@ -25,6 +26,8 @@ Future<void> pumpBanner(
       ],
       // No longer const: CompatibilityBanner now takes a runtime argument.
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: CompatibilityBanner(environmentOverride: environmentOverride),
         ),
@@ -69,7 +72,11 @@ Future<void> pumpRoutedBanner(
         // These tests cover the route fallback; the dialog has its own tests.
         settingsDialogEnabledProvider.overrideWithValue(false),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
     ),
   );
   await tester.pump();
