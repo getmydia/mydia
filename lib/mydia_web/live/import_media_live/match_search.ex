@@ -11,6 +11,8 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearch do
   set.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [start_async: 3]
 
@@ -164,5 +166,24 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearch do
     %{state | results: [], searching: false, error: search_failed()}
   end
 
-  defp search_failed, do: "Search failed. Try again."
+  defp search_failed, do: gettext("Search failed. Try again.")
+
+  # `result.provider` is the search result's own provider tag -- `:tvdb` for
+  # a TVDB result, `:metadata_relay` for a TMDB one (the relay's TMDB search
+  # stamps every result that way; see `SearchResult.from_api_response/2`) --
+  # so this mirrors `MetadataMatcher`'s own `if result.provider == :tvdb, do:
+  # :tvdb, else: :tmdb` convention rather than trusting the tag's literal
+  # value. This, not a hardcoded `"tmdb"`, is what closes the bug the design
+  # flagged in the code this replaced: a TVDB library's corrected match must
+  # not get mis-stamped as TMDB.
+  @doc false
+  def match_from_result(result) do
+    %{
+      provider_id: result.provider_id,
+      provider_type: if(result.provider == :tvdb, do: :tvdb, else: :tmdb),
+      title: result.title,
+      year: result.year,
+      media_type: result.media_type
+    }
+  end
 end

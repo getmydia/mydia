@@ -7,36 +7,38 @@ defmodule MydiaWeb.DownloadsLive.Sorting do
   the DB query.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   alias MydiaWeb.DownloadsLive.ListView
 
-  # Sort options offered per Downloads view.
-  @shared_sort_options [
-    {"added_desc", "Newest first"},
-    {"added_asc", "Oldest first"},
-    {"name_asc", "Name (A-Z)"},
-    {"name_desc", "Name (Z-A)"},
-    {"status_asc", "Status"},
-    {"size_desc", "Size (largest)"},
-    {"size_asc", "Size (smallest)"}
-  ]
+  # Sort option keys offered per Downloads view. Labels come from
+  # sort_label/1 so they are translated at render time.
+  @shared_sort_options ~w(added_desc added_asc name_asc name_desc status_asc size_desc size_asc)
 
-  @queue_sort_options [
-    {"progress_desc", "Progress (most)"},
-    {"progress_asc", "Progress (least)"},
-    {"dlspeed_desc", "Download speed"},
-    {"eta_asc", "ETA (soonest)"}
-  ]
+  @queue_sort_options ~w(progress_desc progress_asc dlspeed_desc eta_asc)
 
-  @completed_sort_options [
-    {"ratio_desc", "Ratio (highest)"},
-    {"ratio_asc", "Ratio (lowest)"},
-    {"ulspeed_desc", "Upload speed"},
-    {"imported_desc", "Imported (newest)"},
-    {"imported_asc", "Imported (oldest)"}
-  ]
+  @completed_sort_options ~w(ratio_desc ratio_asc ulspeed_desc imported_desc imported_asc)
 
-  @allowed_sort_fields (@shared_sort_options ++ @queue_sort_options ++ @completed_sort_options)
-                       |> Enum.map(&elem(&1, 0))
+  @allowed_sort_fields @shared_sort_options ++ @queue_sort_options ++ @completed_sort_options
+
+  defp sort_label("added_desc"), do: gettext("Newest first")
+  defp sort_label("added_asc"), do: gettext("Oldest first")
+  defp sort_label("name_asc"), do: gettext("Name (A-Z)")
+  defp sort_label("name_desc"), do: gettext("Name (Z-A)")
+  defp sort_label("status_asc"), do: gettext("Status")
+  defp sort_label("size_desc"), do: gettext("Size (largest)")
+  defp sort_label("size_asc"), do: gettext("Size (smallest)")
+  defp sort_label("progress_desc"), do: gettext("Progress (most)")
+  defp sort_label("progress_asc"), do: gettext("Progress (least)")
+  defp sort_label("dlspeed_desc"), do: gettext("Download speed")
+  defp sort_label("eta_asc"), do: gettext("ETA (soonest)")
+  defp sort_label("ratio_desc"), do: gettext("Ratio (highest)")
+  defp sort_label("ratio_asc"), do: gettext("Ratio (lowest)")
+  defp sort_label("ulspeed_desc"), do: gettext("Upload speed")
+  defp sort_label("imported_desc"), do: gettext("Imported (newest)")
+  defp sort_label("imported_asc"), do: gettext("Imported (oldest)")
+
+  defp labeled(keys), do: Enum.map(keys, &{&1, sort_label(&1)})
 
   # Rank for status sorting so states group sensibly (active work first) rather
   # than sorting alphabetically. Unknown statuses fall to the end.
@@ -64,12 +66,12 @@ defmodule MydiaWeb.DownloadsLive.Sorting do
   # both kinds of row, so it offers both sets.
   @doc "The `{value, label}` sort options offered in the given Downloads view."
   @spec options(:active | :imported | :all) :: [{String.t(), String.t()}]
-  def options(:imported), do: @shared_sort_options ++ @completed_sort_options
+  def options(:imported), do: labeled(@shared_sort_options ++ @completed_sort_options)
 
   def options(:all),
-    do: @shared_sort_options ++ @queue_sort_options ++ @completed_sort_options
+    do: labeled(@shared_sort_options ++ @queue_sort_options ++ @completed_sort_options)
 
-  def options(_view), do: @shared_sort_options ++ @queue_sort_options
+  def options(_view), do: labeled(@shared_sort_options ++ @queue_sort_options)
 
   # Sorts the enriched download list by the active `sort_by` selection. Runs in
   # the LiveView (not the DB) because real-time keys (progress, speeds, ETA,

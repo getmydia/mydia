@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3]
 
@@ -73,7 +75,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
            |> assign(:media_item, updated_item)
            |> assign(:show_category_modal, false)
            |> assign(:category_form, nil)
-           |> put_flash(:info, "Category updated successfully")}
+           |> put_flash(:info, gettext("Category updated successfully"))}
 
         {:error, :restricted} ->
           {:noreply, put_flash(socket, :error, Media.restricted_message())}
@@ -106,7 +108,9 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
            |> assign(:category_form, nil)
            |> put_flash(
              :info,
-             "Category reset to auto-detected: #{category_display_name(new_category)}"
+             gettext("Category reset to auto-detected: %{category}",
+               category: category_display_name(new_category)
+             )
            )}
 
         {:error, :restricted} ->
@@ -116,7 +120,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
           {:noreply,
            socket
            |> assign(:category_form, Phoenix.Component.to_form(changeset))
-           |> put_flash(:error, "Failed to reset category")}
+           |> put_flash(:error, gettext("Failed to reset category"))}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -149,13 +153,13 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
            socket
            |> assign(:media_item, reloaded_item)
            |> assign(:show_quality_profile_modal, false)
-           |> put_flash(:info, "Quality profile updated")}
+           |> put_flash(:info, gettext("Quality profile updated"))}
 
         {:error, _changeset} ->
           {:noreply,
            socket
            |> assign(:show_quality_profile_modal, false)
-           |> put_flash(:error, "Failed to update quality profile")}
+           |> put_flash(:error, gettext("Failed to update quality profile"))}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -164,10 +168,10 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
 
   # Category helper functions
 
-  defp category_display_name(:movie), do: "Movie"
-  defp category_display_name(:anime_movie), do: "Anime Movie"
-  defp category_display_name(:cartoon_movie), do: "Cartoon Movie"
-  defp category_display_name(:tv_show), do: "TV Show"
-  defp category_display_name(:anime_series), do: "Anime Series"
-  defp category_display_name(:cartoon_series), do: "Cartoon Series"
+  defp category_display_name(:movie), do: gettext("Movie")
+  defp category_display_name(:anime_movie), do: gettext("Anime Movie")
+  defp category_display_name(:cartoon_movie), do: gettext("Cartoon Movie")
+  defp category_display_name(:tv_show), do: gettext("TV Show")
+  defp category_display_name(:anime_series), do: gettext("Anime Series")
+  defp category_display_name(:cartoon_series), do: gettext("Cartoon Series")
 end

@@ -37,16 +37,16 @@ defmodule MydiaWeb.Live.Components.ManualSearchModalComponent do
         <div class="modal modal-open">
           <div class="modal-box max-w-4xl">
             <h3 class="font-bold text-lg mb-2">
-              Manual Search Required
+              {gettext("Manual Search Required")}
             </h3>
             <p class="text-sm text-base-content/70 mb-4">
-              Could not automatically parse or find metadata for:
+              {gettext("Could not automatically parse or find metadata for:")}
               <span class="font-semibold block mt-1 text-base-content">
                 {@failed_title}
               </span>
             </p>
             <p class="text-sm text-base-content/70 mb-4">
-              Please search manually for the media:
+              {gettext("Please search manually for the media:")}
             </p>
             <form phx-submit={@on_search} class="mb-4">
               <div class="flex gap-2">
@@ -54,17 +54,17 @@ defmodule MydiaWeb.Live.Components.ManualSearchModalComponent do
                   type="text"
                   name="search_query"
                   value={@search_query}
-                  placeholder="Enter media title to search..."
+                  placeholder={gettext("Enter media title to search...")}
                   class="input input-bordered flex-1"
                   phx-debounce="300"
                 />
                 <button type="submit" class="btn btn-primary">
-                  <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Search
+                  <.icon name="hero-magnifying-glass" class="w-4 h-4" /> {pgettext("search", "Search")}
                 </button>
               </div>
             </form>
             <%= if @matches != [] do %>
-              <div class="divider text-sm">Select a Match</div>
+              <div class="divider text-sm">{gettext("Select a Match")}</div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto">
                 <%= for match <- @matches do %>
                   <% is_selecting = @selecting_match_id == to_string(match.provider_id) %>
@@ -113,10 +113,12 @@ defmodule MydiaWeb.Live.Components.ManualSearchModalComponent do
                               </p>
                             <% end %>
                             <span class="badge badge-sm badge-outline">
-                              {if match.media_type == :tv_show, do: "TV Show", else: "Movie"}
+                              {if match.media_type == :tv_show,
+                                do: gettext("TV Show"),
+                                else: gettext("Movie")}
                             </span>
                             <%= if is_selecting do %>
-                              <span class="badge badge-sm badge-primary">Adding...</span>
+                              <span class="badge badge-sm badge-primary">{gettext("Adding...")}</span>
                             <% end %>
                           </div>
                           <%= if Map.get(match, :overview) do %>
@@ -137,7 +139,7 @@ defmodule MydiaWeb.Live.Components.ManualSearchModalComponent do
                 phx-click={@on_cancel}
                 disabled={@selecting_match_id != nil}
               >
-                Cancel
+                {gettext("Cancel")}
               </button>
             </div>
           </div>

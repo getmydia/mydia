@@ -14,7 +14,7 @@ defmodule MydiaWeb.PluginPageLive.Activity do
   def mount(%{"slug" => slug}, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Activity")
+     |> assign(:page_title, gettext("Activity"))
      |> assign(:slug, slug)
      |> load()}
   end
@@ -25,7 +25,7 @@ defmodule MydiaWeb.PluginPageLive.Activity do
       if listed?(socket, id) do
         undo_flash(Journal.undo_entry(socket.assigns.current_user, id))
       else
-        {:error, "That change is no longer listed."}
+        {:error, gettext("That change is no longer listed.")}
       end
 
     {:noreply, socket |> put_undo_flash(flash) |> load()}
@@ -37,8 +37,8 @@ defmodule MydiaWeb.PluginPageLive.Activity do
 
     flash =
       if Enum.all?(entries, &(&1.status == "undone")),
-        do: {:info, "Undone."},
-        else: {:error, "Some changes could not be undone, and were left as they are."}
+        do: {:info, gettext("Undone.")},
+        else: {:error, gettext("Some changes could not be undone, and were left as they are.")}
 
     {:noreply, socket |> put_undo_flash(flash) |> load()}
   end
@@ -48,16 +48,16 @@ defmodule MydiaWeb.PluginPageLive.Activity do
   defp listed?(socket, id),
     do: socket.assigns.batches |> List.flatten() |> Enum.any?(&(&1.id == id))
 
-  defp undo_flash({:ok, _}), do: {:info, "Undone."}
+  defp undo_flash({:ok, _}), do: {:info, gettext("Undone.")}
 
   defp undo_flash({:error, :conflict}),
-    do: {:error, "That changed since, so it was left as it is."}
+    do: {:error, gettext("That changed since, so it was left as it is.")}
 
   defp undo_flash({:error, :irreversible}),
-    do: {:error, "That change can no longer be undone."}
+    do: {:error, gettext("That change can no longer be undone.")}
 
-  defp undo_flash({:error, :already_undone}), do: {:info, "That was already undone."}
-  defp undo_flash({:error, _}), do: {:error, "Could not undo that change."}
+  defp undo_flash({:error, :already_undone}), do: {:info, gettext("That was already undone.")}
+  defp undo_flash({:error, _}), do: {:error, gettext("Could not undo that change.")}
 
   defp put_undo_flash(socket, {kind, message}), do: put_flash(socket, kind, message)
 
@@ -81,10 +81,12 @@ defmodule MydiaWeb.PluginPageLive.Activity do
     <Layouts.app {assigns}>
       <div class="max-w-2xl space-y-4">
         <.link navigate={~p"/plugins/#{@slug}"} id="activity-back" class="btn btn-ghost btn-sm">
-          <.icon name="hero-arrow-left" class="w-4 h-4" /> Back
+          <.icon name="hero-arrow-left" class="w-4 h-4" /> {gettext("Back")}
         </.link>
-        <h1 class="text-xl font-semibold">Activity</h1>
-        <p :if={@batches == []} id="journal-empty" class="text-base-content/60">Nothing yet.</p>
+        <h1 class="text-xl font-semibold">{gettext("Activity")}</h1>
+        <p :if={@batches == []} id="journal-empty" class="text-base-content/60">
+          {gettext("Nothing yet.")}
+        </p>
         <div
           :for={batch <- @batches}
           id={"batch-#{hd(batch).batch_id}"}
@@ -102,7 +104,7 @@ defmodule MydiaWeb.PluginPageLive.Activity do
                 phx-click="undo_batch"
                 phx-value-batch={hd(batch).batch_id}
               >
-                Undo all
+                {gettext("Undo all")}
               </button>
             </div>
             <Components.journal_row :for={entry <- batch} entry={entry} />

@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.FileEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3, start_async: 3]
 
@@ -34,7 +36,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
         {:noreply,
          socket
          |> assign(:reidentifying, true)
-         |> put_flash(:info, "Re-identifying on #{provider_label(target)}...")
+         |> put_flash(
+           :info,
+           gettext("Re-identifying on %{provider}...", provider: provider_label(target))
+         )
          |> start_async(:reidentify_search, fn ->
            {target, ProviderSwitch.find_reidentify_candidate(media_item, target, nil, scope)}
          end)}
@@ -64,7 +69,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
        socket
        |> assign(:show_reidentify_modal, false)
        |> assign(:reidentifying, true)
-       |> put_flash(:info, "Switching to #{provider_label(target)}...")
+       |> put_flash(
+         :info,
+         gettext("Switching to %{provider}...", provider: provider_label(target))
+       )
        |> start_async(:reidentify_adopt, fn ->
          {target, ProviderSwitch.adopt_provider_switch(scope, media_item, candidate, target)}
        end)}
@@ -72,7 +80,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
       {:noreply,
        socket
        |> assign(:show_reidentify_modal, false)
-       |> put_flash(:error, "That selection is no longer available")}
+       |> put_flash(:error, gettext("That selection is no longer available"))}
     end
   end
 
@@ -108,7 +116,13 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     {:noreply,
      socket
      |> assign(:reidentifying, false)
-     |> put_flash(:error, "Could not search #{provider_label(target)}: #{inspect(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Could not search %{provider}: %{reason}",
+         provider: provider_label(target),
+         reason: inspect(reason)
+       )
+     )}
   end
 
   def handle_reidentify_search_async({:exit, reason}, socket) do
@@ -117,7 +131,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     {:noreply,
      socket
      |> assign(:reidentifying, false)
-     |> put_flash(:error, "Re-identification failed unexpectedly")}
+     |> put_flash(:error, gettext("Re-identification failed unexpectedly"))}
   end
 
   # async result: provider switch (adopt)
@@ -132,8 +146,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
      |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
      |> put_flash(
        :info,
-       "Switched to #{provider_label(target)}. Episodes were re-matched; " <>
-         "episode-level watch history was reset."
+       gettext(
+         "Switched to %{provider}. Episodes were re-matched; episode-level watch history was reset.",
+         provider: provider_label(target)
+       )
      )}
   end
 
@@ -153,7 +169,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
      socket
      |> assign(:reidentifying, false)
      |> assign(:show_reidentify_modal, false)
-     |> put_flash(:error, "Provider switch failed: #{inspect(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Provider switch failed: %{reason}", reason: inspect(reason))
+     )}
   end
 
   def handle_reidentify_adopt_async({:exit, reason}, socket) do
@@ -162,7 +181,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     {:noreply,
      socket
      |> assign(:reidentifying, false)
-     |> put_flash(:error, "Provider switch failed unexpectedly")}
+     |> put_flash(:error, gettext("Provider switch failed unexpectedly"))}
   end
 
   # Refresh.run/2 already refreshes episodes for TV shows and writes NFOs, so
@@ -180,25 +199,37 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
         {:noreply,
          socket
          |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
-         |> put_flash(:info, "Metadata refreshed#{ambiguous_note(media_item)}")}
+         |> put_flash(:info, refreshed_message(media_item))}
 
       {:error, :missing_provider_id} ->
-        {:noreply, put_flash(socket, :error, "Cannot refresh: Missing provider ID (TMDB/TVDB)")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Cannot refresh: Missing provider ID (TMDB/TVDB)")
+         )}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to refresh metadata: #{inspect(reason)}")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Failed to refresh metadata: %{reason}", reason: inspect(reason))
+         )}
     end
   end
 
   # When a show's files span libraries with different providers, re-identification
   # is skipped; tell the operator so the no-op switch isn't confusing.
-  defp ambiguous_note(media_item) do
+  defp refreshed_message(media_item) do
     case ProviderSwitch.resolve_library_provider(media_item) do
       :ambiguous ->
-        " (provider re-identification skipped: this show's files span libraries with different sources)"
+        gettext(
+          "Metadata refreshed (provider re-identification skipped: this show's files span libraries with different sources)"
+        )
 
       _ ->
-        ""
+        gettext("Metadata refreshed")
     end
   end
 
@@ -210,7 +241,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     media_files = all_media_files(media_item)
 
     if Enum.empty?(media_files) do
-      {:noreply, put_flash(socket, :info, "No media files to refresh")}
+      {:noreply, put_flash(socket, :info, gettext("No media files to refresh"))}
     else
       {:noreply,
        socket
@@ -225,7 +256,12 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     season_media_files = get_season_media_files(media_item, season_num)
 
     if Enum.empty?(season_media_files) do
-      {:noreply, put_flash(socket, :info, "No media files to refresh for season #{season_num}")}
+      {:noreply,
+       put_flash(
+         socket,
+         :info,
+         gettext("No media files to refresh for season %{number}", number: season_num)
+       )}
     else
       {:noreply,
        socket
@@ -240,13 +276,16 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     media_item = socket.assigns.media_item
 
     if media_item.type != "tv_show" do
-      {:noreply, put_flash(socket, :error, "Re-scan is only available for TV shows")}
+      {:noreply, put_flash(socket, :error, gettext("Re-scan is only available for TV shows"))}
     else
       scope = socket.assigns.current_scope
 
       {:noreply,
        socket
-       |> put_flash(:info, "Re-scanning series: discovering new files and refreshing metadata...")
+       |> put_flash(
+         :info,
+         gettext("Re-scanning series: discovering new files and refreshing metadata...")
+       )
        |> start_async(:rescan_series, fn ->
          scan_result = Library.rescan_series(media_item.id)
 
@@ -273,7 +312,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     season_num = String.to_integer(season_number_str)
 
     if media_item.type != "tv_show" do
-      {:noreply, put_flash(socket, :error, "Re-scan is only available for TV shows")}
+      {:noreply, put_flash(socket, :error, gettext("Re-scan is only available for TV shows"))}
     else
       scope = socket.assigns.current_scope
 
@@ -282,7 +321,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
        |> assign(:rescanning_season, season_num)
        |> put_flash(
          :info,
-         "Re-scanning season #{season_num}: discovering new files and refreshing metadata..."
+         gettext(
+           "Re-scanning season %{number}: discovering new files and refreshing metadata...",
+           number: season_num
+         )
        )
        |> start_async(:rescan_season, fn ->
          scan_result = Library.rescan_season(media_item.id, season_num)
@@ -309,13 +351,16 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     media_item = socket.assigns.media_item
 
     if media_item.type != "movie" do
-      {:noreply, put_flash(socket, :error, "Re-scan is only available for movies")}
+      {:noreply, put_flash(socket, :error, gettext("Re-scan is only available for movies"))}
     else
       scope = socket.assigns.current_scope
 
       {:noreply,
        socket
-       |> put_flash(:info, "Re-scanning movie: discovering new files and refreshing metadata...")
+       |> put_flash(
+         :info,
+         gettext("Re-scanning movie: discovering new files and refreshing metadata...")
+       )
        |> start_async(:rescan_movie, fn ->
          scan_result = Library.rescan_movie(media_item.id)
 
@@ -399,15 +444,16 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
            )
            |> put_flash(
              :error,
-             "Removed the file record, but the file on disk could not be deleted. " <>
-               "Check the file permissions and remove it manually if needed."
+             gettext(
+               "Removed the file record, but the file on disk could not be deleted. Check the file permissions and remove it manually if needed."
+             )
            )}
 
         {:error, %Mydia.Storage.Error{message: message}} ->
           {:noreply, put_flash(socket, :error, message)}
 
         {:error, _reason} ->
-          {:noreply, put_flash(socket, :error, "Failed to delete media file")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to delete media file"))}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -415,13 +461,13 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
   end
 
   defp delete_file_success_message(:trash),
-    do: "Moved to trash. Restore it from Configuration > Trash until it's purged."
+    do: gettext("Moved to trash. Restore it from Configuration > Trash until it's purged.")
 
   defp delete_file_success_message(:permanent),
-    do: "Media file deleted, including the file on disk"
+    do: gettext("Media file deleted, including the file on disk")
 
   defp delete_file_success_message(:library_only),
-    do: "Media file removed from library, file kept on disk"
+    do: gettext("Media file removed from library, file kept on disk")
 
   @doc """
   Detaches a file the matcher filed against the wrong item and sends it back to
@@ -451,7 +497,9 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
            |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
            |> put_flash(
              :info,
-             "File removed from this item and sent to Review. The file is untouched on disk."
+             gettext(
+               "File removed from this item and sent to Review. The file is untouched on disk."
+             )
            )}
 
         {:error, :no_library_path} ->
@@ -459,19 +507,20 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
            put_flash(
              socket,
              :error,
-             "This file predates library paths, so it cannot be sent to Review. " <>
-               "Use Delete with \"keep file on disk\" instead."
+             gettext(
+               "This file predates library paths, so it cannot be sent to Review. Use Delete with \"keep file on disk\" instead."
+             )
            )}
 
         {:error, _reason} ->
-          {:noreply, put_flash(socket, :error, "Could not send this file to Review")}
+          {:noreply, put_flash(socket, :error, gettext("Could not send this file to Review"))}
       end
     else
       {:unauthorized, socket} ->
         {:noreply, socket}
 
       false ->
-        {:noreply, put_flash(socket, :error, "Could not send this file to Review")}
+        {:noreply, put_flash(socket, :error, gettext("Could not send this file to Review"))}
     end
   end
 
@@ -510,15 +559,22 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
             {:noreply,
              socket
              |> assign(:transcode_jobs, load_transcode_jobs(media_item))
-             |> put_flash(:info, "Pre-transcode started for #{resolution}")}
+             |> put_flash(
+               :info,
+               gettext("Pre-transcode started for %{resolution}", resolution: resolution)
+             )}
 
           {:error, reason} ->
             {:noreply,
-             put_flash(socket, :error, "Failed to start pre-transcode: #{inspect(reason)}")}
+             put_flash(
+               socket,
+               :error,
+               gettext("Failed to start pre-transcode: %{reason}", reason: inspect(reason))
+             )}
         end
 
       :denied ->
-        {:noreply, put_flash(socket, :error, "Media file not found")}
+        {:noreply, put_flash(socket, :error, gettext("Media file not found"))}
     end
   end
 
@@ -530,10 +586,15 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
         {:noreply,
          socket
          |> assign(:transcode_jobs, load_transcode_jobs(media_item))
-         |> put_flash(:info, "Transcode cancelled")}
+         |> put_flash(:info, gettext("Transcode cancelled"))}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to cancel: #{inspect(reason)}")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Failed to cancel: %{reason}", reason: inspect(reason))
+         )}
     end
   end
 
@@ -549,10 +610,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
            :media_item,
            load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
          )
-         |> put_flash(:info, "Marked as preferred version")}
+         |> put_flash(:info, gettext("Marked as preferred version"))}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to mark file as preferred")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to mark file as preferred"))}
     end
   end
 
@@ -585,17 +646,17 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
              :media_item,
              load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
            )
-           |> put_flash(:info, "File reclassified")}
+           |> put_flash(:info, gettext("File reclassified"))}
 
         {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Could not reclassify that file")}
+          {:noreply, put_flash(socket, :error, gettext("Could not reclassify that file"))}
       end
     else
       {:unauthorized, socket} ->
         {:noreply, socket}
 
       false ->
-        {:noreply, put_flash(socket, :error, "Could not reclassify that file")}
+        {:noreply, put_flash(socket, :error, gettext("Could not reclassify that file"))}
     end
   end
 
@@ -617,9 +678,18 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
   def handle_refresh_files_async({:ok, {:ok, success_count, error_count}}, socket) do
     message =
       if error_count > 0 do
-        "Refreshed #{success_count} file(s), #{error_count} failed"
+        ngettext(
+          "Refreshed %{count} file, %{failed} failed",
+          "Refreshed %{count} files, %{failed} failed",
+          success_count,
+          failed: error_count
+        )
       else
-        "Successfully refreshed #{success_count} file(s)"
+        ngettext(
+          "Successfully refreshed %{count} file",
+          "Successfully refreshed %{count} files",
+          success_count
+        )
       end
 
     {:noreply,
@@ -638,7 +708,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     {:noreply,
      socket
      |> assign(:refreshing_file_metadata, false)
-     |> put_flash(:error, "Failed to refresh file metadata: #{inspect(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Failed to refresh file metadata: %{reason}", reason: inspect(reason))
+     )}
   end
 
   def handle_refresh_files_async({:exit, reason}, socket) do
@@ -647,7 +720,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     {:noreply,
      socket
      |> assign(:refreshing_file_metadata, false)
-     |> put_flash(:error, "Metadata refresh failed unexpectedly")}
+     |> put_flash(:error, gettext("Metadata refresh failed unexpectedly"))}
   end
 
   def handle_rescan_season_files_async(
@@ -656,9 +729,20 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
       ) do
     message =
       if error_count > 0 do
-        "Re-scanned #{success_count} file(s) in Season #{season_num}, #{error_count} failed"
+        ngettext(
+          "Re-scanned %{count} file in Season %{number}, %{failed} failed",
+          "Re-scanned %{count} files in Season %{number}, %{failed} failed",
+          success_count,
+          number: season_num,
+          failed: error_count
+        )
       else
-        "Successfully re-scanned #{success_count} file(s) in Season #{season_num}"
+        ngettext(
+          "Successfully re-scanned %{count} file in Season %{number}",
+          "Successfully re-scanned %{count} files in Season %{number}",
+          success_count,
+          number: season_num
+        )
       end
 
     {:noreply,
@@ -677,7 +761,13 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     {:noreply,
      socket
      |> assign(:rescanning_season, nil)
-     |> put_flash(:error, "Failed to refresh Season #{season_num} files: #{inspect(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Failed to refresh Season %{number} files: %{reason}",
+         number: season_num,
+         reason: inspect(reason)
+       )
+     )}
   end
 
   def handle_rescan_season_files_async({:exit, reason}, socket) do
@@ -686,161 +776,6 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     {:noreply,
      socket
      |> assign(:rescanning_season, nil)
-     |> put_flash(:error, "Season metadata refresh failed unexpectedly")}
-  end
-
-  def handle_rescan_series_async({:ok, {{:ok, scan_result}, {:ok, refreshed, _errors}}}, socket) do
-    message = rescan_flash_message("Re-scan", scan_result, refreshed)
-
-    {:noreply,
-     socket
-     |> assign(
-       :media_item,
-       load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
-     )
-     |> put_flash(:info, message)}
-  end
-
-  def handle_rescan_series_async({:ok, {{:error, :not_a_tv_show}, _}}, socket) do
-    {:noreply, put_flash(socket, :error, "Re-scan is only available for TV shows")}
-  end
-
-  def handle_rescan_series_async({:ok, {{:error, :no_media_files}, _}}, socket) do
-    {:noreply,
-     put_flash(
-       socket,
-       :error,
-       "No existing media files found. Please import at least one file first."
-     )}
-  end
-
-  def handle_rescan_series_async({:ok, {{:error, reason}, _}}, socket) do
-    Logger.error("Series re-scan failed: #{inspect(reason)}")
-    {:noreply, put_flash(socket, :error, "Failed to re-scan series: #{inspect(reason)}")}
-  end
-
-  def handle_rescan_series_async({:exit, reason}, socket) do
-    Logger.error("Series re-scan task crashed: #{inspect(reason)}")
-    {:noreply, put_flash(socket, :error, "Series re-scan failed unexpectedly")}
-  end
-
-  def handle_rescan_movie_async({:ok, {{:ok, scan_result}, {:ok, refreshed, _errors}}}, socket) do
-    message = rescan_flash_message("Re-scan", scan_result, refreshed)
-
-    {:noreply,
-     socket
-     |> assign(
-       :media_item,
-       load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
-     )
-     |> put_flash(:info, message)}
-  end
-
-  def handle_rescan_movie_async({:ok, {{:error, :not_a_movie}, _}}, socket) do
-    {:noreply, put_flash(socket, :error, "Re-scan is only available for movies")}
-  end
-
-  def handle_rescan_movie_async({:ok, {{:error, :no_media_files}, _}}, socket) do
-    {:noreply,
-     put_flash(
-       socket,
-       :error,
-       "No existing media files found. Please import at least one file first."
-     )}
-  end
-
-  def handle_rescan_movie_async({:ok, {{:error, reason}, _}}, socket) do
-    Logger.error("Movie re-scan failed: #{inspect(reason)}")
-    {:noreply, put_flash(socket, :error, "Failed to re-scan movie: #{inspect(reason)}")}
-  end
-
-  def handle_rescan_movie_async({:exit, reason}, socket) do
-    Logger.error("Movie re-scan task crashed: #{inspect(reason)}")
-    {:noreply, put_flash(socket, :error, "Movie re-scan failed unexpectedly")}
-  end
-
-  def handle_rescan_season_async(
-        {:ok, {season_num, {:ok, scan_result}, {:ok, refreshed, _errors}}},
-        socket
-      ) do
-    message = rescan_flash_message("Season #{season_num} re-scan", scan_result, refreshed)
-
-    {:noreply,
-     socket
-     |> assign(
-       :media_item,
-       load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
-     )
-     |> assign(:rescanning_season, nil)
-     |> put_flash(:info, message)}
-  end
-
-  def handle_rescan_season_async({:ok, {_season_num, {:error, :not_a_tv_show}, _}}, socket) do
-    {:noreply,
-     socket
-     |> assign(:rescanning_season, nil)
-     |> put_flash(:error, "Re-scan is only available for TV shows")}
-  end
-
-  def handle_rescan_season_async({:ok, {season_num, {:error, :no_media_files}, _}}, socket) do
-    {:noreply,
-     socket
-     |> assign(:rescanning_season, nil)
-     |> put_flash(
-       :error,
-       "No existing media files found for season #{season_num}. Please import at least one file first."
-     )}
-  end
-
-  def handle_rescan_season_async({:ok, {season_num, {:error, reason}, _}}, socket) do
-    Logger.error("Season #{season_num} re-scan failed: #{inspect(reason)}")
-
-    {:noreply,
-     socket
-     |> assign(:rescanning_season, nil)
-     |> put_flash(:error, "Failed to re-scan season #{season_num}: #{inspect(reason)}")}
-  end
-
-  def handle_rescan_season_async({:exit, reason}, socket) do
-    Logger.error("Season re-scan task crashed: #{inspect(reason)}")
-
-    {:noreply,
-     socket
-     |> assign(:rescanning_season, nil)
-     |> put_flash(:error, "Season re-scan failed unexpectedly")}
-  end
-
-  defp rescan_flash_message(prefix, scan_result, refreshed) do
-    deleted = Map.get(scan_result, :deleted_files, 0)
-
-    parts = ["Found #{scan_result.new_files} new file(s)"]
-
-    parts =
-      if deleted > 0,
-        do: parts ++ ["moved #{deleted} file(s) to trash"],
-        else: parts
-
-    staged = Map.get(scan_result, :staged, 0)
-
-    parts =
-      if staged > 0,
-        do: parts ++ ["sent #{staged} file(s) to Import for review"],
-        else: parts
-
-    parts = parts ++ ["refreshed metadata for #{refreshed} file(s)"]
-
-    scan_errors = Map.get(scan_result, :scan_errors, [])
-
-    parts =
-      if Enum.empty?(scan_errors),
-        do: parts,
-        else: parts ++ ["#{length(scan_errors)} file(s) could not be read"]
-
-    parts =
-      if Enum.empty?(scan_result.errors),
-        do: parts,
-        else: parts ++ ["#{length(scan_result.errors)} error(s)"]
-
-    "#{prefix} complete! #{Enum.join(parts, ", ")}"
+     |> put_flash(:error, gettext("Season metadata refresh failed unexpectedly"))}
   end
 end

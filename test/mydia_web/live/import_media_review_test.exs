@@ -376,7 +376,7 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     view |> element("#select-all-matching") |> render_click()
     html = view |> element("#accept-selected") |> render_click()
 
-    assert html =~ "Queued 1 group(s) for import."
+    assert html =~ "Queued 1 group for import."
     assert html =~ "1 skipped"
   end
 
@@ -439,7 +439,7 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
     view |> element("#band-needs-attention") |> render_click()
     view |> element("#select-all-matching") |> render_click()
-    assert has_element?(view, "#bulk-bar", "55 group(s) selected")
+    assert has_element?(view, "#bulk-bar", "55 groups selected")
 
     view |> element("#accept-selected") |> render_click()
 
@@ -620,11 +620,11 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     {:ok, view, _html} = live(conn, ~p"/import")
 
     render_click(view, "toggle_group", %{"id" => "search-reset"})
-    assert has_element?(view, "#bulk-bar", "1 group(s) selected")
+    assert has_element?(view, "#bulk-bar", "1 group selected")
 
     render_change(view, "search", %{"q" => "something else"})
 
-    assert has_element?(view, "#bulk-bar", "0 group(s) selected")
+    assert has_element?(view, "#bulk-bar", "0 groups selected")
   end
 
   test "a burst of import_candidates_changed broadcasts coalesces into one deferred refresh",
@@ -1150,14 +1150,14 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     # None of these controls can do anything on the Queued view -- every one
     # of them requires a row that is not already queued (Accept, Re-match,
     # Dismiss) or one that is dismissed (Restore), and a queued group is
-    # neither. Regression coverage for the false-positive "Queued 1 group(s)
+    # neither. Regression coverage for the false-positive "Queued 1 group
     # for import." flash a since-fixed queue_accept/1 asymmetry would have
     # produced had Accept still been offered here.
     refute has_element?(view, "#accept-selected")
     refute has_element?(view, "#rematch-selected")
     refute has_element?(view, "#dismiss-selected")
     refute has_element?(view, "#restore-selected")
-    refute html =~ "Queued 1 group(s) for import."
+    refute html =~ "Queued 1 group for import."
   end
 
   test "Return to review moves a queued group back to the pending list", %{conn: conn} do
@@ -1440,7 +1440,7 @@ defmodule MydiaWeb.ImportMediaReviewTest do
       # Clicking select current page
       render_click(view, "select_current_page", %{})
 
-      assert has_element?(view, "#bulk-bar", "2 group(s) selected")
+      assert has_element?(view, "#bulk-bar", "2 groups selected")
 
       assert has_element?(
                view,
@@ -1470,19 +1470,19 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
       # Toggle individual ignored group
       render_click(view, "toggle_group", %{"id" => "ig1"})
-      assert has_element?(view, "#bulk-bar", "1 group(s) selected")
+      assert has_element?(view, "#bulk-bar", "1 group selected")
       assert has_element?(view, "#restore-selected", "Restore 1")
       refute has_element?(view, "#accept-selected")
 
       # Select all matching
       render_click(view, "select_all_matching", %{})
-      assert has_element?(view, "#bulk-bar", "2 group(s) selected")
+      assert has_element?(view, "#bulk-bar", "2 groups selected")
       assert has_element?(view, "#restore-selected", "Restore 2")
 
       # Click restore selected
       render_click(view, "restore_selected", %{})
 
-      assert render(view) =~ "Restored 2 group(s) to pending."
+      assert render(view) =~ "Restored 2 groups to pending."
       assert fetch_group(lp, "ig1")
       assert fetch_group(lp, "ig2")
     end
@@ -1530,7 +1530,7 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
       html = view |> element("#rematch-selected") |> render_click()
 
-      assert html =~ "Queued 1 group(s) for re-matching."
+      assert html =~ "Queued 1 group for re-matching."
       assert Repo.reload!(candidate).queued_op == "rematch"
     end
   end
@@ -1675,7 +1675,7 @@ defmodule MydiaWeb.ImportMediaReviewTest do
         )
 
       assert queued == 5
-      assert has_element?(view, "#flash-info", "Deleting 5 file(s)")
+      assert has_element?(view, "#flash-info", "Deleting 5 files")
       refute has_element?(view, "#delete-files-summary")
     end
 

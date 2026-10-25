@@ -13,59 +13,53 @@ defmodule MydiaWeb.ActivityLive.Index do
   # answers which categories a viewer can encounter; this decides how they look.
   # "all" and "errors" are not categories: "all" clears the filter and "errors"
   # filters on severity, so only "all" survives for a restricted viewer.
+  # Labels are not part of the catalog: attributes are evaluated at compile
+  # time, so chip_label/1 translates them at render time.
   @chips [
     %{
       value: "all",
-      label: "All",
       icon: "hero-squares-2x2",
       active_class: "btn-primary",
       idle_class: "btn-ghost"
     },
     %{
       value: "media",
-      label: "Media",
       icon: "hero-film",
       active_class: "btn-primary",
       idle_class: "btn-ghost"
     },
     %{
       value: "downloads",
-      label: "Downloads",
       icon: "hero-arrow-down-tray",
       active_class: "btn-primary",
       idle_class: "btn-ghost"
     },
     %{
       value: "search",
-      label: "Search",
       icon: "hero-magnifying-glass",
       active_class: "btn-primary",
       idle_class: "btn-ghost"
     },
     %{
       value: "system",
-      label: "System",
       icon: "hero-cog-6-tooth",
       active_class: "btn-primary",
       idle_class: "btn-ghost"
     },
     %{
       value: "playback",
-      label: "Playback",
       icon: "hero-play",
       active_class: "btn-primary",
       idle_class: "btn-ghost"
     },
     %{
       value: "plugin",
-      label: "Plugins",
       icon: "hero-puzzle-piece",
       active_class: "btn-primary",
       idle_class: "btn-ghost"
     },
     %{
       value: "errors",
-      label: "Errors",
       icon: "hero-exclamation-triangle",
       active_class: "btn-error",
       idle_class: "btn-ghost text-error/70 hover:text-error"
@@ -105,7 +99,7 @@ defmodule MydiaWeb.ActivityLive.Index do
   def handle_params(_params, _url, socket) do
     {:noreply,
      socket
-     |> assign(:page_title, "Activity")}
+     |> assign(:page_title, gettext("Activity"))}
   end
 
   @impl true
@@ -179,6 +173,28 @@ defmodule MydiaWeb.ActivityLive.Index do
   end
 
   ## Private Helpers
+
+  defp chip_label("all"), do: gettext("All")
+  defp chip_label("media"), do: gettext("Media")
+  defp chip_label("downloads"), do: gettext("Downloads")
+  defp chip_label("search"), do: pgettext("search", "Search")
+  defp chip_label("system"), do: gettext("System")
+  defp chip_label("playback"), do: gettext("Playback")
+  defp chip_label("plugin"), do: gettext("Plugins")
+  defp chip_label("errors"), do: gettext("Errors")
+
+  defp category_label("media"), do: pgettext("event category", "media")
+  defp category_label("downloads"), do: pgettext("event category", "downloads")
+  defp category_label("search"), do: pgettext("event category", "search")
+  defp category_label("system"), do: pgettext("event category", "system")
+  defp category_label("playback"), do: pgettext("event category", "playback")
+  defp category_label("plugin"), do: pgettext("event category", "plugin")
+  defp category_label(other), do: other
+
+  # The badge is only rendered for non-info severities.
+  defp severity_label(:error), do: pgettext("severity", "error")
+  defp severity_label(:warning), do: pgettext("severity", "warning")
+  defp severity_label(other), do: to_string(other)
 
   defp filter_chips(user) do
     case Visibility.visible_categories(user) do
@@ -266,21 +282,21 @@ defmodule MydiaWeb.ActivityLive.Index do
 
   defp format_actor(event) do
     case event.actor_type do
-      :user -> "User"
-      :system -> "System"
+      :user -> gettext("User")
+      :system -> gettext("System")
       :job -> format_job_name(event.actor_id)
-      nil -> "System"
-      _ -> "Unknown"
+      nil -> gettext("System")
+      _ -> gettext("Unknown")
     end
   end
 
-  defp format_job_name(nil), do: "Job"
-  defp format_job_name("movie_search"), do: "Movie Search"
-  defp format_job_name("tv_show_search"), do: "TV Search"
-  defp format_job_name("episode_search"), do: "Episode Search"
-  defp format_job_name("season_search"), do: "Season Search"
-  defp format_job_name("metadata_sync"), do: "Metadata Sync"
-  defp format_job_name("library_scan"), do: "Library Scan"
+  defp format_job_name(nil), do: gettext("Job")
+  defp format_job_name("movie_search"), do: gettext("Movie Search")
+  defp format_job_name("tv_show_search"), do: gettext("TV Search")
+  defp format_job_name("episode_search"), do: gettext("Episode Search")
+  defp format_job_name("season_search"), do: gettext("Season Search")
+  defp format_job_name("metadata_sync"), do: gettext("Metadata Sync")
+  defp format_job_name("library_scan"), do: gettext("Library Scan")
 
   defp format_job_name(job_id) do
     # Handle full module names like "Mydia.Jobs.TvShowSearch"
@@ -324,11 +340,20 @@ defmodule MydiaWeb.ActivityLive.Index do
     diff = DateTime.diff(now, datetime, :second)
 
     cond do
-      diff < 60 -> "just now"
-      diff < 3600 -> "#{div(diff, 60)} minutes ago"
-      diff < 86400 -> "#{div(diff, 3600)} hours ago"
-      diff < 604_800 -> "#{div(diff, 86400)} days ago"
-      true -> format(datetime, :date, display)
+      diff < 60 ->
+        gettext("just now")
+
+      diff < 3600 ->
+        ngettext("%{count} minute ago", "%{count} minutes ago", div(diff, 60))
+
+      diff < 86400 ->
+        ngettext("%{count} hour ago", "%{count} hours ago", div(diff, 3600))
+
+      diff < 604_800 ->
+        ngettext("%{count} day ago", "%{count} days ago", div(diff, 86400))
+
+      true ->
+        format(datetime, :date, display)
     end
   end
 
@@ -395,64 +420,73 @@ defmodule MydiaWeb.ActivityLive.Index do
   # summary rendered by Presentation.detail/1 for the same event.
   defp humanize_field_name(field), do: Presentation.field_label(field)
 
-  defp format_change_value("monitored", true), do: "monitored"
-  defp format_change_value("monitored", false), do: "not monitored"
-  defp format_change_value("monitor_new_seasons", "all"), do: "all seasons"
-  defp format_change_value("monitor_new_seasons", "none"), do: "no seasons"
-  defp format_change_value(_field, nil), do: "none"
+  defp format_change_value("monitored", true), do: pgettext("monitoring", "monitored")
+  defp format_change_value("monitored", false), do: pgettext("monitoring", "not monitored")
+  defp format_change_value("monitor_new_seasons", "all"), do: gettext("all seasons")
+  defp format_change_value("monitor_new_seasons", "none"), do: gettext("no seasons")
+  defp format_change_value(_field, nil), do: gettext("none")
   defp format_change_value(_field, value), do: to_string(value)
 
-  defp format_metadata_change_value("rating", nil), do: "none"
+  defp format_metadata_change_value("rating", nil), do: gettext("none")
   defp format_metadata_change_value("rating", value) when is_number(value), do: "#{value}/10"
-  defp format_metadata_change_value("genres", nil), do: "none"
-  defp format_metadata_change_value("genres", count) when is_integer(count), do: "#{count} genres"
-  defp format_metadata_change_value("cast", 0), do: "none"
-  defp format_metadata_change_value("cast", count) when is_integer(count), do: "#{count} members"
-  defp format_metadata_change_value("crew", 0), do: "none"
-  defp format_metadata_change_value("crew", count) when is_integer(count), do: "#{count} members"
-  defp format_metadata_change_value(_field, true), do: "added"
-  defp format_metadata_change_value(_field, nil), do: "none"
+  defp format_metadata_change_value("genres", nil), do: gettext("none")
+
+  defp format_metadata_change_value("genres", count) when is_integer(count),
+    do: ngettext("%{count} genre", "%{count} genres", count)
+
+  defp format_metadata_change_value("cast", 0), do: gettext("none")
+
+  defp format_metadata_change_value("cast", count) when is_integer(count),
+    do: ngettext("%{count} member", "%{count} members", count)
+
+  defp format_metadata_change_value("crew", 0), do: gettext("none")
+
+  defp format_metadata_change_value("crew", count) when is_integer(count),
+    do: ngettext("%{count} member", "%{count} members", count)
+
+  defp format_metadata_change_value(_field, true), do: gettext("added")
+  defp format_metadata_change_value(_field, nil), do: gettext("none")
   defp format_metadata_change_value(_field, value), do: to_string(value)
 
   defp format_filter_stat_label(key) do
     case key do
-      "total_results" -> "Total"
-      "below_quality_threshold" -> "Below quality"
-      "no_valid_season_packs" -> "No season packs"
+      "total_results" -> gettext("Total")
+      "below_quality_threshold" -> gettext("Below quality")
+      "no_valid_season_packs" -> gettext("No season packs")
       # New detailed rejection reasons
-      "individual_episode" -> "Episode"
-      "missing_season_marker" -> "No season"
+      "individual_episode" -> pgettext("tv", "Episode")
+      "missing_season_marker" -> gettext("No season")
       # Hard removals only — size/seeders/ratio are penalties now, not rejections
-      "blocked_tag" -> "Blocked"
-      "invalid" -> "Invalid"
-      "title_mismatch" -> "Wrong title"
-      "year_mismatch" -> "Wrong year"
+      "blocked_tag" -> gettext("Blocked")
+      "invalid" -> gettext("Invalid")
+      "title_mismatch" -> gettext("Wrong title")
+      "year_mismatch" -> gettext("Wrong year")
       _ -> String.replace(key, "_", " ") |> String.capitalize()
     end
   end
 
   defp format_breakdown_label(key) do
     case key do
-      "quality" -> "Quality"
-      "seeders" -> "Seeders"
-      "size" -> "Size"
-      "age" -> "Age"
-      "tag_bonus" -> "Tag bonus"
-      "preferred_tags" -> "Preferred"
-      "blocked_tags" -> "Blocked"
-      "custom_format" -> "Custom format"
-      "custom_format_score" -> "Custom format"
-      "title_relevance" -> "Title match"
-      "title_match" -> "Title match"
+      "quality" -> gettext("Quality")
+      "seeders" -> gettext("Seeders")
+      "size" -> gettext("Size")
+      "age" -> gettext("Age")
+      "tag_bonus" -> gettext("Tag bonus")
+      "preferred_tags" -> gettext("Preferred")
+      "blocked_tags" -> gettext("Blocked")
+      "custom_format" -> gettext("Custom format")
+      "custom_format_score" -> gettext("Custom format")
+      "title_relevance" -> gettext("Title match")
+      "title_match" -> gettext("Title match")
       # Soft-penalty contributions. size_penalty is no longer produced, but
       # search events recorded before size became a hard limit still carry it.
-      "size_penalty" -> "Size penalty"
-      "seeder_penalty" -> "Seeder penalty"
-      "identity_penalty" -> "Identity mismatch"
-      "language_rank" -> "Language rank"
-      "language_matches" -> "Language matches"
-      "audio_languages" -> "Audio"
-      "audio_assumed" -> "Audio assumed"
+      "size_penalty" -> gettext("Size penalty")
+      "seeder_penalty" -> gettext("Seeder penalty")
+      "identity_penalty" -> gettext("Identity mismatch")
+      "language_rank" -> gettext("Language rank")
+      "language_matches" -> gettext("Language matches")
+      "audio_languages" -> gettext("Audio")
+      "audio_assumed" -> gettext("Audio assumed")
       _ -> String.replace(key, "_", " ") |> String.capitalize()
     end
   end

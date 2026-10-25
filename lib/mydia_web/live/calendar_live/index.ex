@@ -24,7 +24,7 @@ defmodule MydiaWeb.CalendarLive.Index do
 
   @impl true
   def handle_params(_params, _url, socket) do
-    {:noreply, assign(socket, :page_title, "Calendar")}
+    {:noreply, assign(socket, :page_title, gettext("Calendar"))}
   end
 
   @impl true
@@ -191,8 +191,13 @@ defmodule MydiaWeb.CalendarLive.Index do
 
   defp format_month_year(month, year) do
     date = Date.new!(year, month, 1)
-    Calendar.strftime(date, "%B %Y")
+    date |> MydiaWeb.DateNames.month_year() |> capitalize_first()
   end
+
+  # Spanish and Portuguese month names are lowercase inside a date, but this
+  # one is a standalone heading.
+  defp capitalize_first(<<first::utf8, rest::binary>>), do: String.upcase(<<first::utf8>>) <> rest
+  defp capitalize_first(""), do: ""
 
   defp get_item_status(item) do
     today = Date.utc_today()

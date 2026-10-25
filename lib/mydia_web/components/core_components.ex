@@ -680,28 +680,25 @@ defmodule MydiaWeb.CoreComponents do
     minutes = div(rem(seconds, 3600), 60)
     secs = rem(seconds, 60)
 
-    cond do
-      hours > 0 && minutes > 0 -> "#{hours}h #{minutes}m#{suffix}"
-      hours > 0 -> "#{hours}h#{suffix}"
-      minutes > 0 -> "#{minutes}m#{suffix}"
-      true -> "#{secs}s#{suffix}"
-    end
+    text =
+      cond do
+        hours > 0 && minutes > 0 ->
+          pgettext("runtime", "%{hours}h %{mins}m", hours: hours, mins: minutes)
+
+        hours > 0 ->
+          pgettext("runtime", "%{hours}h", hours: hours)
+
+        minutes > 0 ->
+          pgettext("runtime", "%{mins}m", mins: minutes)
+
+        true ->
+          pgettext("runtime", "%{secs}s", secs: secs)
+      end
+
+    text <> suffix
   end
 
   def format_duration(_, _), do: nil
-
-  @doc """
-  Label for the blank quality-profile choice.
-
-  That choice stores `nil`, which means "follow the configured default"
-  (`Mydia.Indexers.QualityProfileResolver`). When no default is configured,
-  `nil` genuinely means no profile, and the label says so.
-  """
-  @spec default_quality_profile_label(String.t() | nil) :: String.t()
-  def default_quality_profile_label(nil), do: gettext("No profile")
-
-  def default_quality_profile_label(name) when is_binary(name),
-    do: gettext("Use default (%{name})", name: name)
 
   @doc """
   Renders a category badge for media items.

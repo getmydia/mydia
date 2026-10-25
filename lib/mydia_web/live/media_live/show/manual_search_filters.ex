@@ -5,6 +5,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
   order. `MydiaWeb.MediaLive.Show` handles its events.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   attr :quality_filter, :string, default: nil
   attr :source_filter, :string, default: nil
@@ -24,7 +25,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
           class="flex flex-wrap items-center gap-3"
         >
           <select name="quality" class="select select-bordered select-sm w-auto">
-            <option value="" selected={is_nil(@quality_filter)}>All Quality</option>
+            <option value="" selected={is_nil(@quality_filter)}>{gettext("All Quality")}</option>
             <option value="720p" selected={@quality_filter == "720p"}>720p</option>
             <option value="1080p" selected={@quality_filter == "1080p"}>1080p</option>
             <option value="2160p" selected={@quality_filter in ["2160p", "4k"]}>4K</option>
@@ -34,7 +35,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
             name="source"
             class="select select-bordered select-sm w-auto"
           >
-            <option value="" selected={is_nil(@source_filter)}>All Sources</option>
+            <option value="" selected={is_nil(@source_filter)}>{gettext("All Sources")}</option>
             <option
               :for={source <- @filter_options.sources}
               value={source}
@@ -48,7 +49,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
             name="codec"
             class="select select-bordered select-sm w-auto"
           >
-            <option value="" selected={is_nil(@codec_filter)}>All Codecs</option>
+            <option value="" selected={is_nil(@codec_filter)}>{gettext("All Codecs")}</option>
             <option
               :for={codec <- @filter_options.codecs}
               value={codec}
@@ -59,7 +60,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
           </select>
           <div class="join">
             <span class="join-item btn btn-sm btn-ghost no-animation pointer-events-none">
-              Min Seeds
+              {gettext("Min Seeds")}
             </span>
             <input
               type="number"
@@ -75,9 +76,9 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
         <label
           class="label cursor-pointer gap-2"
           id="close-after-grab-toggle"
-          title="Close this dialog as soon as a release is grabbed"
+          title={gettext("Close this dialog as soon as a release is grabbed")}
         >
-          <span class="label-text text-xs">Close after grabbing</span>
+          <span class="label-text text-xs">{gettext("Close after grabbing")}</span>
           <input
             type="checkbox"
             class="toggle toggle-sm toggle-primary"
@@ -87,10 +88,14 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchFilters do
         </label>
         <form id="manual-search-sort-form" phx-change="sort_search">
           <select name="sort_by" class="select select-bordered select-sm">
-            <option value="quality" selected={@sort_by == :quality}>Best Score</option>
-            <option value="seeders" selected={@sort_by == :seeders}>Most Seeds</option>
-            <option value="size" selected={@sort_by == :size}>Largest</option>
-            <option value="date" selected={@sort_by == :date}>Newest</option>
+            <option value="quality" selected={@sort_by == :quality}>
+              {gettext("Best Score")}
+            </option>
+            <option value="seeders" selected={@sort_by == :seeders}>
+              {gettext("Most Seeds")}
+            </option>
+            <option value="size" selected={@sort_by == :size}>{gettext("Largest")}</option>
+            <option value="date" selected={@sort_by == :date}>{gettext("Newest")}</option>
           </select>
         </form>
       </div>

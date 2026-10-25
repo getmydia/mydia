@@ -5,7 +5,7 @@
       <div>
         <h1 class="text-3xl font-bold">{@page_title}</h1>
         <p class="text-base-content/70 mt-1">
-          Monitor active downloads and troubleshoot issues
+          {gettext("Monitor active downloads and troubleshoot issues")}
         </p>
       </div>
 
@@ -14,7 +14,7 @@
         <ListComponents.client_shortcut client_urls={@client_urls} />
         <button type="button" class="btn btn-sm btn-ghost" phx-click="refresh">
           <.icon name="hero-arrow-path" class="w-4 h-4" />
-          <span class="hidden sm:inline ml-1">Refresh</span>
+          <span class="hidden sm:inline ml-1">{gettext("Refresh")}</span>
         </button>
         <%= if (@active_tab == :downloads and not @downloads_empty?) or
                  (@active_tab == :issues and @selectable_issues?) do %>
@@ -27,13 +27,13 @@
             <%= cond do %>
               <% @selection_mode and MapSet.size(@selected_ids) > 0 -> %>
                 <.icon name="hero-x-mark" class="w-4 h-4" />
-                <span class="hidden sm:inline ml-1">Cancel</span>
+                <span class="hidden sm:inline ml-1">{gettext("Cancel")}</span>
               <% @selection_mode -> %>
                 <.icon name="hero-check" class="w-4 h-4" />
-                <span class="hidden sm:inline ml-1">Select All</span>
+                <span class="hidden sm:inline ml-1">{pgettext("selection", "Select All")}</span>
               <% true -> %>
                 <.icon name="hero-check-circle" class="w-4 h-4" />
-                <span class="hidden sm:inline ml-1">Select</span>
+                <span class="hidden sm:inline ml-1">{pgettext("selection", "Select")}</span>
             <% end %>
           </button>
         <% end %>
@@ -49,8 +49,8 @@
           class="btn btn-sm btn-ghost btn-square"
           popovertarget="downloads-more-menu"
           style="anchor-name:--downloads-more"
-          aria-label="More actions"
-          title="More actions"
+          aria-label={gettext("More actions")}
+          title={gettext("More actions")}
         >
           <.icon name="hero-ellipsis-horizontal" class="size-4" />
         </button>
@@ -69,7 +69,7 @@
               popovertargetaction="hide"
               phx-click="open_clear_completed_modal"
             >
-              <.icon name="hero-trash" class="size-4" /> Clear completed…
+              <.icon name="hero-trash" class="size-4" /> {gettext("Clear completed…")}
             </button>
           </li>
         </ul>
@@ -86,11 +86,19 @@
           value={@view}
           event="set_view"
           param="view"
-          label="Which downloads to show"
+          label={gettext("Which downloads to show")}
         >
-          <:option value={:active} label="Active" id="downloads-view-active" />
-          <:option value={:imported} label="Imported" id="downloads-view-imported" />
-          <:option value={:all} label="All" id="downloads-view-all" />
+          <:option
+            value={:active}
+            label={pgettext("download", "Active")}
+            id="downloads-view-active"
+          />
+          <:option
+            value={:imported}
+            label={pgettext("download", "Imported")}
+            id="downloads-view-imported"
+          />
+          <:option value={:all} label={gettext("All")} id="downloads-view-all" />
         </.segmented_control>
         <ListComponents.filter_bar
           filters={@filters}
@@ -107,12 +115,14 @@
           id="downloads-sort-form"
           class="sm:ml-auto"
         >
-          <label class="sr-only" for="downloads-sort">Sort downloads</label>
+          <label class="sr-only" for="downloads-sort">
+            {gettext("Sort downloads")}
+          </label>
           <select
             id="downloads-sort"
             name="sort_by"
             class="select select-sm w-full sm:w-auto"
-            title="Sort downloads"
+            title={gettext("Sort downloads")}
           >
             <option
               :for={{value, label} <- Sorting.options(@view)}
@@ -135,7 +145,14 @@
           class="alert alert-soft sticky top-[max(4rem,calc(3.5rem+env(safe-area-inset-top,0px)))] lg:top-0 z-10 mb-4 shadow-lg"
         >
           <div class="flex-1">
-            <span class="font-semibold">{MapSet.size(@selected_ids)} selected</span>
+            <span class="font-semibold">
+              {pngettext(
+                "selection count",
+                "%{count} selected",
+                "%{count} selected",
+                MapSet.size(@selected_ids)
+              )}
+            </span>
           </div>
           <div class="join">
             <%= if @active_tab == :issues do %>
@@ -145,16 +162,16 @@
                 class="btn btn-sm btn-primary join-item"
                 phx-click="batch_retry"
               >
-                <.icon name="hero-arrow-path" class="w-4 h-4" /> Retry
+                <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Retry")}
               </button>
               <button
                 id="downloads-batch-dismiss"
                 type="button"
                 class="btn btn-sm join-item"
                 phx-click="batch_dismiss"
-                data-confirm="Dismiss selected issues?"
+                data-confirm={gettext("Dismiss selected issues?")}
               >
-                <.icon name="hero-x-mark" class="w-4 h-4" /> Dismiss
+                <.icon name="hero-x-mark" class="w-4 h-4" /> {gettext("Dismiss")}
               </button>
             <% else %>
               <button
@@ -162,13 +179,13 @@
                 type="button"
                 class="btn btn-sm btn-error join-item"
                 phx-click="batch_delete"
-                data-confirm="Delete selected downloads?"
+                data-confirm={gettext("Delete selected downloads?")}
               >
-                <.icon name="hero-trash" class="w-4 h-4" /> Delete
+                <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Delete")}
               </button>
             <% end %>
             <button type="button" class="btn btn-sm join-item" phx-click="toggle_select_all">
-              Clear
+              {pgettext("selection", "Clear")}
             </button>
           </div>
         </div>
@@ -183,10 +200,10 @@
       >
         <.icon name="hero-clock" class="size-4 shrink-0" />
         <span>
-          {@stale_status.client} is busy, showing status from {status_age(
-            @stale_status.as_of,
-            @time_display
-          )}.
+          {gettext("%{client} is busy, showing status from %{age}.",
+            client: @stale_status.client,
+            age: status_age(@stale_status.as_of, @time_display)
+          )}
         </span>
       </div>
 
@@ -196,8 +213,8 @@
           <% ListView.active?(@filters) -> %>
             <ListComponents.empty_state
               icon="hero-funnel"
-              title="No downloads match"
-              description="Try a different search or clear the filters."
+              title={gettext("No downloads match")}
+              description={gettext("Try a different search or clear the filters.")}
             >
               <:action>
                 <button
@@ -206,7 +223,7 @@
                   class="btn btn-sm btn-primary"
                   phx-click="clear_filters"
                 >
-                  Clear filters
+                  {pgettext("filters", "Clear filters")}
                 </button>
               </:action>
             </ListComponents.empty_state>
@@ -214,32 +231,36 @@
             <ListComponents.empty_state
               :if={@removed_client_groups == []}
               icon="hero-check-circle"
-              title="No issues"
-              description="All downloads completed successfully"
+              title={gettext("No issues")}
+              description={gettext("All downloads completed successfully")}
             />
           <% @active_tab == :external -> %>
             <ListComponents.empty_state
               icon="hero-inbox-stack"
-              title="Nothing unmanaged"
-              description="Torrents in your clients that Mydia does not manage will appear here"
+              title={gettext("Nothing unmanaged")}
+              description={
+                gettext("Torrents in your clients that Mydia does not manage will appear here")
+              }
             />
           <% @view == :imported -> %>
             <ListComponents.empty_state
               icon="hero-check-circle"
-              title="No imported downloads"
-              description="Imported downloads that are still seeding will appear here"
+              title={gettext("No imported downloads")}
+              description={gettext("Imported downloads that are still seeding will appear here")}
             />
           <% @view == :all -> %>
             <ListComponents.empty_state
               icon="hero-arrow-down-tray"
-              title="No downloads"
-              description="Nothing is downloading and nothing imported is still in your clients"
+              title={gettext("No downloads")}
+              description={
+                gettext("Nothing is downloading and nothing imported is still in your clients")
+              }
             />
           <% true -> %>
             <ListComponents.empty_state
               icon="hero-arrow-down-tray"
-              title="Queue is empty"
-              description="No downloads currently in progress"
+              title={gettext("Queue is empty")}
+              description={gettext("No downloads currently in progress")}
             />
         <% end %>
       <% end %>
@@ -326,9 +347,13 @@
                   <span
                     class="badge badge-ghost badge-xs shrink-0"
                     data-test="adopted-badge"
-                    title="Mydia did not add this torrent. It was already in the download client and matched to your library."
+                    title={
+                      gettext(
+                        "Mydia did not add this torrent. It was already in the download client and matched to your library."
+                      )
+                    }
                   >
-                    Added outside Mydia
+                    {gettext("Added outside Mydia")}
                   </span>
                 <% end %>
                 <span
@@ -336,7 +361,7 @@
                   id={"removing-#{download.id}"}
                   class="badge badge-ghost badge-xs shrink-0 gap-1"
                 >
-                  <span class="loading loading-spinner loading-xs"></span> Removing…
+                  <span class="loading loading-spinner loading-xs"></span> {gettext("Removing…")}
                 </span>
               </div>
               <%!-- Line 2: release title (muted), only when it differs from the display title --%>
@@ -368,12 +393,16 @@
                   </span>
                   <%= if download.import_retry_count && download.import_retry_count > 0 do %>
                     <span>•</span>
-                    <span class="shrink-0">Attempt #{download.import_retry_count}</span>
+                    <span class="shrink-0">
+                      {gettext("Attempt #%{count}", count: download.import_retry_count)}
+                    </span>
                   <% end %>
                   <%= if download.import_next_retry_at do %>
                     <span>•</span>
                     <span class="shrink-0">
-                      Next retry: {format_next_retry(download.import_next_retry_at)}
+                      {gettext("Next retry: %{time}",
+                        time: format_next_retry(download.import_next_retry_at)
+                      )}
                     </span>
                   <% end %>
                 </div>
@@ -385,7 +414,10 @@
                 >
                   <.icon name="hero-exclamation-triangle" class="size-3 shrink-0" />
                   <span class="truncate">
-                    Couldn't remove from {download.download_client}: {download.removal_error}
+                    {gettext("Couldn't remove from %{client}: %{error}",
+                      client: download.download_client,
+                      error: download.removal_error
+                    )}
                   </span>
                 </div>
               <% end %>
@@ -402,13 +434,19 @@
                     <.icon name="hero-clock" class="size-3 shrink-0 mt-0.5" />
                     <%= if download.auto_reject_capped? do %>
                       <span id={"stall-capped-#{download.id}"}>
-                        No progress for {format_duration(stall_elapsed_seconds(download))}. Mydia has stopped replacing stalled releases for this title. Cancelling will block this release.
+                        {gettext(
+                          "No progress for %{duration}. Mydia has stopped replacing stalled releases for this title. Cancelling will block this release.",
+                          duration: format_duration(stall_elapsed_seconds(download))
+                        )}
                       </span>
                     <% else %>
                       <span>
-                        No progress for {format_duration(stall_elapsed_seconds(download))}. If nothing changes in the next {format_duration(
-                          stall_remaining_seconds(download, @stall_grace_map)
-                        )}, Mydia will remove it and search for a different release.
+                        {gettext(
+                          "No progress for %{duration}. If nothing changes in the next %{remaining}, Mydia will remove it and search for a different release.",
+                          duration: format_duration(stall_elapsed_seconds(download)),
+                          remaining:
+                            format_duration(stall_remaining_seconds(download, @stall_grace_map))
+                        )}
                       </span>
                     <% end %>
                   </div>
@@ -419,7 +457,7 @@
                     phx-click="reject_release"
                     phx-value-id={download.id}
                   >
-                    Remove and find another
+                    {gettext("Remove and find another")}
                   </button>
                   <button
                     type="button"
@@ -428,7 +466,7 @@
                     phx-click="keep_waiting"
                     phx-value-id={download.id}
                   >
-                    Keep waiting
+                    {gettext("Keep waiting")}
                   </button>
                 </div>
               <% end %>
@@ -445,23 +483,26 @@
                 <span :if={protocol} class="badge badge-ghost badge-sm">{protocol}</span>
 
                 <%= if kind == :queue do %>
-                  <span class="inline-flex items-center gap-1" title="Download speed">
+                  <span class="inline-flex items-center gap-1" title={gettext("Download speed")}>
                     <.icon name="hero-arrow-down-tray" class="size-3 opacity-70" />{format_speed(
                       download.download_speed
                     )}
                   </span>
-                  <span class="inline-flex items-center gap-1 tabular-nums" title="Size">
+                  <span
+                    class="inline-flex items-center gap-1 tabular-nums"
+                    title={gettext("Size")}
+                  >
                     <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_file_size(
                       download.size
                     )}
                   </span>
-                  <span class="inline-flex items-center gap-1" title="Time remaining">
+                  <span class="inline-flex items-center gap-1" title={gettext("Time remaining")}>
                     <.icon name="hero-clock" class="size-3 opacity-70" />{format_eta(download.eta)}
                   </span>
                   <span
                     :if={get_metadata_value(download, "seeders")}
                     class="inline-flex items-center gap-1"
-                    title="Seeders"
+                    title={gettext("Seeders")}
                   >
                     <.icon name="hero-users" class="size-3 opacity-70" />{get_metadata_value(
                       download,
@@ -470,17 +511,20 @@
                   </span>
                 <% end %>
                 <%= if kind == :completed do %>
-                  <span class="inline-flex items-center gap-1" title="Upload speed">
+                  <span class="inline-flex items-center gap-1" title={gettext("Upload speed")}>
                     <.icon name="hero-arrow-up-tray" class="size-3 opacity-70" />{format_speed(
                       download.upload_speed
                     )}
                   </span>
-                  <span class="inline-flex items-center gap-1" title="Share ratio">
+                  <span class="inline-flex items-center gap-1" title={gettext("Share ratio")}>
                     <.icon name="hero-scale" class="size-3 opacity-70" />{format_ratio(
                       download.ratio
                     )}
                   </span>
-                  <span class="inline-flex items-center gap-1 tabular-nums" title="Size">
+                  <span
+                    class="inline-flex items-center gap-1 tabular-nums"
+                    title={gettext("Size")}
+                  >
                     <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_file_size(
                       download.size
                     )}
@@ -488,7 +532,7 @@
                   <span
                     :if={download.imported_at}
                     class="inline-flex items-center gap-1 text-success/80"
-                    title="Imported"
+                    title={pgettext("download", "Imported")}
                   >
                     <.icon name="hero-check-circle" class="size-3" />{format_relative_time(
                       download.imported_at,
@@ -581,8 +625,9 @@
           <div id="external-intro" role="note" class="alert alert-info alert-soft">
             <.icon name="hero-information-circle" class="size-5 shrink-0" />
             <span class="text-sm">
-              Torrents in your download clients that Mydia does not manage. They are not
-              tracked and nothing is imported from them.
+              {gettext(
+                "Torrents in your download clients that Mydia does not manage. They are not tracked and nothing is imported from them."
+              )}
             </span>
             <button
               id="external-rescan"
@@ -590,7 +635,7 @@
               class="btn btn-sm btn-ghost shrink-0"
               phx-click="rescan_external"
             >
-              <.icon name="hero-arrow-path" class="size-4" /> Rescan
+              <.icon name="hero-arrow-path" class="size-4" /> {gettext("Rescan")}
             </button>
           </div>
 
@@ -598,8 +643,9 @@
             <div id="external-failed-clients" class="alert alert-warning">
               <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
               <span>
-                Could not read {Enum.join(@scan.failed_clients, ", ")}. This list may be
-                incomplete.
+                {gettext("Could not read %{clients}. This list may be incomplete.",
+                  clients: Enum.join(@scan.failed_clients, ", ")
+                )}
               </span>
             </div>
           <% end %>
@@ -613,7 +659,9 @@
               <div class="list-col-grow">
                 <div class="font-medium text-sm truncate">{torrent.title}</div>
                 <div class="text-xs opacity-60 flex items-center gap-1.5 mt-0.5">
-                  <span class="badge badge-xs badge-ghost">{torrent.status}</span>
+                  <span class="badge badge-xs badge-ghost">
+                    {ListView.torrent_status_label(torrent.status)}
+                  </span>
                   <span>{torrent.client_name}</span>
                   <%= if torrent.status in [:downloading, :seeding] do %>
                     <span>•</span>
@@ -624,8 +672,12 @@
                       purpose or failed at something. --%>
                   <%= if torrent.excluded_by_policy do %>
                     <span>•</span>
-                    <span title="This client's External torrents setting tells Mydia not to adopt it">
-                      Not adopted by client setting
+                    <span title={
+                      gettext(
+                        "This client's External torrents setting tells Mydia not to adopt it"
+                      )
+                    }>
+                      {gettext("Not adopted by client setting")}
                     </span>
                   <% end %>
                 </div>
@@ -645,7 +697,7 @@
                   class="btn btn-square btn-ghost btn-sm"
                   phx-click="toggle_search"
                   phx-value-id={torrent.id}
-                  title="Search library to match"
+                  title={gettext("Search library to match")}
                 >
                   <.icon name="hero-magnifying-glass" class="size-4" />
                 </button>
@@ -662,15 +714,18 @@
       show={@show_clear_modal}
       on_cancel="close_clear_completed_modal"
     >
-      <:title>Clear completed downloads</:title>
+      <:title>{gettext("Clear completed downloads")}</:title>
       <form
         id="clear-completed-form"
         phx-change="toggle_delete_files"
         phx-submit="clear_completed"
       >
         <p class="text-base-content/80">
-          This clears {@clearable_count} completed download(s) from the queue and
-          removes them from the download client.
+          {ngettext(
+            "This clears %{count} completed download from the queue and removes it from the download client.",
+            "This clears %{count} completed downloads from the queue and removes them from the download client.",
+            @clearable_count
+          )}
         </p>
         <label class="label cursor-pointer justify-start gap-3 mt-4">
           <input
@@ -680,23 +735,31 @@
             checked={@delete_files}
             class="checkbox checkbox-error"
           />
-          <span class="label-text">Also permanently delete the downloaded files from disk</span>
+          <span class="label-text">
+            {gettext("Also permanently delete the downloaded files from disk")}
+          </span>
         </label>
         <p :if={@delete_files} class="text-error text-sm mt-2 flex items-center gap-1">
           <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-          This permanently deletes files for {@clearable_count} download(s) from disk. This cannot be undone.
+          {ngettext(
+            "This permanently deletes files for %{count} download from disk. This cannot be undone.",
+            "This permanently deletes files for %{count} downloads from disk. This cannot be undone.",
+            @clearable_count
+          )}
         </p>
       </form>
       <:actions>
         <button type="button" class="btn btn-ghost" phx-click="close_clear_completed_modal">
-          Cancel
+          {gettext("Cancel")}
         </button>
         <button
           type="submit"
           form="clear-completed-form"
           class={["btn", (@delete_files && "btn-error") || "btn-primary"]}
         >
-          {if @delete_files, do: "Clear and Delete Files", else: "Clear Completed"}
+          {if @delete_files,
+            do: gettext("Clear and Delete Files"),
+            else: gettext("Clear Completed")}
         </button>
       </:actions>
     </.modal>

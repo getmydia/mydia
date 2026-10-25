@@ -75,10 +75,14 @@ defmodule MydiaWeb.CollectionLive.Components do
                 <.icon name="hero-funnel" class="w-4 h-4 text-secondary" />
               </div>
               <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">Match</span>
+                <span class="text-sm font-medium">{gettext("Match")}</span>
                 <select name="match_type" class="select select-sm select-bordered bg-base-100">
-                  <option value="all" selected={@match_type == "all"}>all conditions</option>
-                  <option value="any" selected={@match_type == "any"}>any condition</option>
+                  <option value="all" selected={@match_type == "all"}>
+                    {gettext("all conditions")}
+                  </option>
+                  <option value="any" selected={@match_type == "any"}>
+                    {gettext("any condition")}
+                  </option>
                 </select>
               </div>
             </div>
@@ -87,7 +91,7 @@ defmodule MydiaWeb.CollectionLive.Components do
               phx-click="add_condition"
               class="btn btn-sm btn-secondary btn-outline gap-1"
             >
-              <.icon name="hero-plus" class="w-4 h-4" /> Add
+              <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add")}
             </button>
           </div>
 
@@ -105,41 +109,47 @@ defmodule MydiaWeb.CollectionLive.Components do
                   name={"conditions[#{index}][field]"}
                   class="select select-sm select-bordered flex-1 min-w-0 bg-base-100"
                 >
-                  <option value="">Select field...</option>
-                  <optgroup label="Basic">
+                  <option value="">{gettext("Select field...")}</option>
+                  <optgroup label={gettext("Basic")}>
                     <option value="category" selected={condition["field"] == "category"}>
-                      Category
+                      {gettext("Category")}
                     </option>
-                    <option value="type" selected={condition["field"] == "type"}>Type</option>
-                    <option value="year" selected={condition["field"] == "year"}>Year</option>
-                    <option value="title" selected={condition["field"] == "title"}>Title</option>
+                    <option value="type" selected={condition["field"] == "type"}>
+                      {pgettext("smart rule field", "Type")}
+                    </option>
+                    <option value="year" selected={condition["field"] == "year"}>
+                      {gettext("Year")}
+                    </option>
+                    <option value="title" selected={condition["field"] == "title"}>
+                      {gettext("Title")}
+                    </option>
                     <option value="monitored" selected={condition["field"] == "monitored"}>
-                      Monitored
+                      {pgettext("monitoring", "Monitored")}
                     </option>
                   </optgroup>
-                  <optgroup label="Metadata">
+                  <optgroup label={gettext("Metadata")}>
                     <option
                       value="metadata.vote_average"
                       selected={condition["field"] == "metadata.vote_average"}
                     >
-                      Rating
+                      {gettext("Rating")}
                     </option>
                     <option value="metadata.genres" selected={condition["field"] == "metadata.genres"}>
-                      Genre
+                      {gettext("Genre")}
                     </option>
                     <option
                       value="metadata.original_language"
                       selected={condition["field"] == "metadata.original_language"}
                     >
-                      Language
+                      {gettext("Language")}
                     </option>
                     <option value="metadata.status" selected={condition["field"] == "metadata.status"}>
-                      Status
+                      {pgettext("smart rule field", "Status")}
                     </option>
                   </optgroup>
-                  <optgroup label="Dates">
+                  <optgroup label={gettext("Dates")}>
                     <option value="inserted_at" selected={condition["field"] == "inserted_at"}>
-                      Date Added
+                      {gettext("Date Added")}
                     </option>
                   </optgroup>
                 </select>
@@ -169,7 +179,7 @@ defmodule MydiaWeb.CollectionLive.Components do
                     "btn btn-ghost btn-sm btn-square text-base-content/50 hover:text-error hover:bg-error/10",
                     length(@conditions) <= 1 && "btn-disabled opacity-30"
                   ]}
-                  title="Remove condition"
+                  title={gettext("Remove condition")}
                   disabled={length(@conditions) <= 1}
                 >
                   <.icon name="hero-trash" class="w-4 h-4" />
@@ -187,50 +197,58 @@ defmodule MydiaWeb.CollectionLive.Components do
             <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/20">
               <.icon name="hero-arrows-up-down" class="w-4 h-4 text-primary" />
             </div>
-            <span class="text-sm font-medium">Sort & Limit</span>
-            <span class="text-xs text-base-content/50">(Optional)</span>
+            <span class="text-sm font-medium">{gettext("Sort & Limit")}</span>
+            <span class="text-xs text-base-content/50">{gettext("(Optional)")}</span>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <%!-- Sort by --%>
             <div class="form-control">
               <label class="label py-1">
-                <span class="label-text text-xs">Sort by</span>
+                <span class="label-text text-xs">{gettext("Sort by")}</span>
               </label>
               <select name="sort_field" class="select select-sm select-bordered bg-base-100 w-full">
-                <option value="" selected={@sort_field == ""}>Default order</option>
-                <option value="title" selected={@sort_field == "title"}>Title</option>
-                <option value="year" selected={@sort_field == "year"}>Year</option>
-                <option value="rating" selected={@sort_field == "rating"}>Rating</option>
-                <option value="added_date" selected={@sort_field == "added_date"}>Date Added</option>
+                <option value="" selected={@sort_field == ""}>{gettext("Default order")}</option>
+                <option value="title" selected={@sort_field == "title"}>{gettext("Title")}</option>
+                <option value="year" selected={@sort_field == "year"}>{gettext("Year")}</option>
+                <option value="rating" selected={@sort_field == "rating"}>
+                  {gettext("Rating")}
+                </option>
+                <option value="added_date" selected={@sort_field == "added_date"}>
+                  {gettext("Date Added")}
+                </option>
               </select>
             </div>
 
             <%!-- Direction --%>
             <div class="form-control">
               <label class="label py-1">
-                <span class="label-text text-xs">Direction</span>
+                <span class="label-text text-xs">{gettext("Direction")}</span>
               </label>
               <select
                 name="sort_direction"
                 class="select select-sm select-bordered bg-base-100 w-full"
               >
-                <option value="asc" selected={@sort_direction == "asc"}>Ascending</option>
-                <option value="desc" selected={@sort_direction == "desc"}>Descending</option>
+                <option value="asc" selected={@sort_direction == "asc"}>
+                  {gettext("Ascending")}
+                </option>
+                <option value="desc" selected={@sort_direction == "desc"}>
+                  {gettext("Descending")}
+                </option>
               </select>
             </div>
 
             <%!-- Limit --%>
             <div class="form-control">
               <label class="label py-1">
-                <span class="label-text text-xs">Max items</span>
+                <span class="label-text text-xs">{gettext("Max items")}</span>
               </label>
               <input
                 type="number"
                 name="limit"
                 min="0"
                 max="1000"
-                placeholder="No limit"
+                placeholder={gettext("No limit")}
                 value={@limit}
                 class="input input-sm input-bordered bg-base-100 w-full"
               />
@@ -242,11 +260,30 @@ defmodule MydiaWeb.CollectionLive.Components do
     """
   end
 
-  defp value_placeholder("in"), do: "value1, value2, ..."
-  defp value_placeholder("not_in"), do: "value1, value2, ..."
-  defp value_placeholder("contains_any"), do: "value1, value2, ..."
-  defp value_placeholder("between"), do: "min, max"
-  defp value_placeholder(_), do: "Value..."
+  defp value_placeholder("in"), do: gettext("value1, value2, ...")
+  defp value_placeholder("not_in"), do: gettext("value1, value2, ...")
+  defp value_placeholder("contains_any"), do: gettext("value1, value2, ...")
+  defp value_placeholder("between"), do: gettext("min, max")
+  defp value_placeholder(_), do: gettext("Value...")
+
+  # `SmartRulesFields.operator_labels/0` carries English text, so the editor
+  # translates by operator. Date fields read better with before/after wording.
+  defp operator_label(:gt, "inserted_at"), do: gettext("after")
+  defp operator_label(:gte, "inserted_at"), do: gettext("on or after")
+  defp operator_label(:lt, "inserted_at"), do: gettext("before")
+  defp operator_label(:lte, "inserted_at"), do: gettext("on or before")
+  defp operator_label(:eq, _field), do: gettext("equals")
+  defp operator_label(:gt, _field), do: gettext("greater than")
+  defp operator_label(:gte, _field), do: gettext("at least")
+  defp operator_label(:lt, _field), do: gettext("less than")
+  defp operator_label(:lte, _field), do: gettext("at most")
+  defp operator_label(:in, _field), do: gettext("is one of")
+  defp operator_label(:not_in, _field), do: gettext("is not one of")
+  defp operator_label(:contains, _field), do: gettext("contains")
+  defp operator_label(:contains_any, _field), do: gettext("contains any of")
+  defp operator_label(:between, _field), do: gettext("between")
+  defp operator_label(:within_last, _field), do: gettext("in the last (days)")
+  defp operator_label(op, _field), do: to_string(op)
 
   # Condition operator selector - data-driven from SmartRulesFields
   attr :field, :string, required: true
@@ -254,21 +291,7 @@ defmodule MydiaWeb.CollectionLive.Components do
   attr :index, :integer, required: true
 
   defp condition_operator_select(assigns) do
-    operators = SmartRulesFields.get_operators(assigns.field)
-    labels = SmartRulesFields.operator_labels()
-
-    # Special labels for date fields
-    date_labels =
-      if assigns.field == "inserted_at" do
-        %{gt: "after", gte: "on or after", lt: "before", lte: "on or before"}
-      else
-        %{}
-      end
-
-    assigns =
-      assigns
-      |> assign(:operators, operators)
-      |> assign(:labels, Map.merge(labels, date_labels))
+    assigns = assign(assigns, :operators, SmartRulesFields.get_operators(assigns.field))
 
     ~H"""
     <select
@@ -277,7 +300,7 @@ defmodule MydiaWeb.CollectionLive.Components do
     >
       <%= for op <- @operators do %>
         <option value={op} selected={@operator == to_string(op)}>
-          {Map.get(@labels, op, to_string(op))}
+          {operator_label(op, @field)}
         </option>
       <% end %>
     </select>
@@ -322,7 +345,7 @@ defmodule MydiaWeb.CollectionLive.Components do
       size={@multi && 4}
       class="select select-sm select-bordered flex-1 min-w-0 bg-base-100"
     >
-      <option :if={not @multi} value="">Select...</option>
+      <option :if={not @multi} value="">{gettext("Select...")}</option>
       <option :for={{val, label} <- @options} value={val} selected={to_string(val) in @selected}>
         {label}
       </option>
@@ -339,7 +362,7 @@ defmodule MydiaWeb.CollectionLive.Components do
       name={"conditions[#{@index}][value]"}
       class="select select-sm select-bordered flex-1 min-w-0 bg-base-100"
     >
-      <option value="">Select...</option>
+      <option value="">{gettext("Select...")}</option>
       <%= for {val, label} <- @options do %>
         <option value={val} selected={@value == val or @value == to_string(val)}>{label}</option>
       <% end %>
@@ -351,9 +374,9 @@ defmodule MydiaWeb.CollectionLive.Components do
   defp render_value_input(%{operator: "between"} = assigns, %{type: :number} = field_def) do
     placeholder =
       if field_def[:input_opts][:step] do
-        "e.g. 7.0, 9.0"
+        gettext("e.g. 7.0, 9.0")
       else
-        "e.g. 2000, 2024"
+        gettext("e.g. 2000, 2024")
       end
 
     assigns = assign(assigns, :placeholder, placeholder)

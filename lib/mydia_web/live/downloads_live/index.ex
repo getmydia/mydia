@@ -25,6 +25,17 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias Mydia.Settings.DownloadClientConfig
   alias MydiaWeb.DownloadsLive.MatchDialog
   import MydiaWeb.DownloadsLive.Format
+
+  import MydiaWeb.DownloadsLive.Messages,
+    only: [
+      batch_message: 3,
+      mapping_error_message: 1,
+      friendly_rematch_error: 1,
+      import_issue_label: 1,
+      status_age: 2,
+      get_episode_details: 1
+    ]
+
   import MydiaWeb.DownloadsLive.ListView, only: [get_metadata_value: 2]
   import MydiaWeb.Formatters
 
@@ -58,7 +69,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Downloads")
+     |> assign(:page_title, gettext("Downloads"))
      |> assign(:active_tab, :downloads)
      |> assign(:view, :active)
      |> assign(:sort_by, @default_sort)
@@ -289,11 +300,16 @@ defmodule MydiaWeb.DownloadsLive.Index do
           {:ok, _} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Download paused")
+             |> put_flash(:info, gettext("Download paused"))
              |> load_downloads()}
 
           {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to pause download: #{inspect(reason)}")}
+            {:noreply,
+             put_flash(
+               socket,
+               :error,
+               gettext("Failed to pause download: %{reason}", reason: inspect(reason))
+             )}
         end
       end)
     else
@@ -308,11 +324,16 @@ defmodule MydiaWeb.DownloadsLive.Index do
           {:ok, _} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Download resumed")
+             |> put_flash(:info, gettext("Download resumed"))
              |> load_downloads()}
 
           {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to resume download: #{inspect(reason)}")}
+            {:noreply,
+             put_flash(
+               socket,
+               :error,
+               gettext("Failed to resume download: %{reason}", reason: inspect(reason))
+             )}
         end
       end)
     else
@@ -327,7 +348,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
           {:ok, _new_download} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Download re-initiated")
+             |> put_flash(:info, gettext("Download re-initiated"))
              |> load_downloads()}
 
           {:error, reason} ->
@@ -354,7 +375,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
            Authorization.authorize(
              socket,
              &Mydia.Accounts.Authorization.is_admin?/1,
-             "Admin access required to add a path mapping"
+             gettext("Admin access required to add a path mapping")
            ) do
       case Mydia.Settings.create_path_mapping_config(%{
              remote_prefix: remote_prefix,
@@ -367,7 +388,11 @@ defmodule MydiaWeb.DownloadsLive.Index do
            socket
            |> put_flash(
              :info,
-             "Mapping added. Retrying #{count} affected download#{if count == 1, do: "", else: "s"}."
+             ngettext(
+               "Mapping added. Retrying %{count} affected download.",
+               "Mapping added. Retrying %{count} affected downloads.",
+               count
+             )
            )
            |> load_downloads()}
 
@@ -386,11 +411,11 @@ defmodule MydiaWeb.DownloadsLive.Index do
           {:ok, _job} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Import retry initiated")
+             |> put_flash(:info, gettext("Import retry initiated"))
              |> load_downloads()}
 
           {:error, _reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to retry import")}
+            {:noreply, put_flash(socket, :error, gettext("Failed to retry import"))}
         end
       end)
     else
@@ -413,7 +438,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   def handle_event("batch_retry", _params, %{assigns: %{active_tab: :issues}} = socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       {ok, skipped} = retry_issue_rows(socket)
-      {:noreply, finish_issue_batch(socket, "#{ok} retried", skipped)}
+      {:noreply, finish_issue_batch(socket, batch_message(:retried, ok, skipped))}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -446,7 +471,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
        socket
        |> assign(:selected_ids, MapSet.new())
        |> assign(:selection_mode, false)
-       |> put_flash(:info, "#{success_count} item(s) retried")
+       |> put_flash(
+         :info,
+         ngettext("%{count} item retried", "%{count} items retried", success_count)
+       )
        |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -483,7 +511,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
        socket
        |> assign(:selected_ids, MapSet.new())
        |> assign(:selection_mode, false)
-       |> put_flash(:info, "Removing #{success_count} download(s)")
+       |> put_flash(
+         :info,
+         ngettext("Removing %{count} download", "Removing %{count} downloads", success_count)
+       )
        |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -495,7 +526,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   def handle_event("batch_dismiss", _params, %{assigns: %{active_tab: :issues}} = socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       {dismissed, skipped} = dismiss_issue_rows(socket)
-      {:noreply, finish_issue_batch(socket, "#{dismissed} dismissed", skipped)}
+      {:noreply, finish_issue_batch(socket, batch_message(:dismissed, dismissed, skipped))}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -533,9 +564,17 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
       message =
         if delete_files do
-          "Clearing #{count} completed download(s) and deleting their files from disk"
+          ngettext(
+            "Clearing %{count} completed download and deleting its files from disk",
+            "Clearing %{count} completed downloads and deleting their files from disk",
+            count
+          )
         else
-          "Clearing #{count} completed download(s)"
+          ngettext(
+            "Clearing %{count} completed download",
+            "Clearing %{count} completed downloads",
+            count
+          )
         end
 
       {:noreply,
@@ -610,7 +649,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
       {:noreply,
        socket
-       |> put_flash(:info, "Rescanned download clients")
+       |> put_flash(:info, gettext("Rescanned download clients"))
        |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -747,7 +786,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
              put_flash(
                socket,
                :error,
-               "Mydia could not read this download's folder and has no recorded listing for it."
+               gettext(
+                 "Mydia could not read this download's folder and has no recorded listing for it."
+               )
              )}
         end
       end)
@@ -848,11 +889,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
            assign(
              socket,
              :match_files_error,
-             "One or more selected targets are no longer valid for this download. Close and reopen Match files, then try again."
+             gettext(
+               "One or more selected targets are no longer valid for this download. Close and reopen Match files, then try again."
+             )
            )}
 
         targets == [] ->
-          {:noreply, assign(socket, :match_files_error, "Select at least one file to import.")}
+          {:noreply,
+           assign(socket, :match_files_error, gettext("Select at least one file to import."))}
 
         true ->
           mappings =
@@ -866,11 +910,19 @@ defmodule MydiaWeb.DownloadsLive.Index do
                socket
                |> assign(:match_files_modal, nil)
                |> assign(:match_files_error, nil)
-               |> put_flash(:info, "Import queued for #{length(mappings)} file(s)")
+               |> put_flash(
+                 :info,
+                 ngettext(
+                   "Import queued for %{count} file",
+                   "Import queued for %{count} files",
+                   length(mappings)
+                 )
+               )
                |> load_downloads()}
 
             {:error, _reason} ->
-              {:noreply, assign(socket, :match_files_error, "Failed to queue the import.")}
+              {:noreply,
+               assign(socket, :match_files_error, gettext("Failed to queue the import."))}
           end
       end
     else
@@ -890,10 +942,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
             flash =
               case Blacklists.extract_key(download) do
                 {:ok, _indexer, _guid} ->
-                  "Release blacklisted. Mydia is removing it and will search again."
+                  gettext("Release blacklisted. Mydia is removing it and will search again.")
 
                 {:error, _} ->
-                  "Mydia is removing the download and will search again."
+                  gettext("Mydia is removing the download and will search again.")
               end
 
             {:noreply,
@@ -907,7 +959,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
             {:noreply, download_vanished(socket)}
 
           {:error, _reason} ->
-            {:noreply, assign(socket, :match_files_error, "Failed to reject the release.")}
+            {:noreply,
+             assign(socket, :match_files_error, gettext("Failed to reject the release."))}
         end
       end)
     else
@@ -928,11 +981,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
           {:ok, _updated} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Stall timer reset. Mydia will keep waiting on this download.")
+             |> put_flash(
+               :info,
+               gettext("Stall timer reset. Mydia will keep waiting on this download.")
+             )
              |> load_downloads()}
 
           {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Could not reset the stall timer")}
+            {:noreply, put_flash(socket, :error, gettext("Could not reset the stall timer"))}
         end
       end)
     else
@@ -948,7 +1004,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
             {:noreply, load_downloads(socket)}
 
           {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Failed to dismiss download")}
+            {:noreply, put_flash(socket, :error, gettext("Failed to dismiss download"))}
         end
       end)
     else
@@ -964,7 +1020,15 @@ defmodule MydiaWeb.DownloadsLive.Index do
        socket
        # Neutral wording: the group covers a deleted client and a disabled one
        # alike, and the banner it came from says so too.
-       |> put_flash(:info, "Cleared #{count} download(s) referencing '#{client_name}'")
+       |> put_flash(
+         :info,
+         ngettext(
+           "Cleared %{count} download referencing '%{client}'",
+           "Cleared %{count} downloads referencing '%{client}'",
+           count,
+           client: client_name
+         )
+       )
        |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -1066,7 +1130,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       nil ->
         {:noreply,
          socket
-         |> put_flash(:error, "That torrent is no longer in the client")
+         |> put_flash(:error, gettext("That torrent is no longer in the client"))
          |> load_downloads()}
 
       torrent ->
@@ -1074,17 +1138,17 @@ defmodule MydiaWeb.DownloadsLive.Index do
           {:ok, _download} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Download matched and import queued")
+             |> put_flash(:info, gettext("Download matched and import queued"))
              |> load_downloads()}
 
           {:error, :already_tracked} ->
             {:noreply,
              socket
-             |> put_flash(:info, "That torrent is already tracked")
+             |> put_flash(:info, gettext("That torrent is already tracked"))
              |> load_downloads()}
 
           {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Failed to match download")}
+            {:noreply, put_flash(socket, :error, gettext("Failed to match download"))}
         end
     end
   end
@@ -1166,9 +1230,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   # Clears the selection and flashes the tally, with a skipped suffix when
   # some rows were left alone.
-  defp finish_issue_batch(socket, tally, skipped) do
-    message = if skipped == 0, do: tally, else: "#{tally}, #{skipped} skipped"
-
+  defp finish_issue_batch(socket, message) do
     socket
     |> assign(:selected_ids, MapSet.new())
     |> assign(:selection_mode, false)
@@ -1208,7 +1270,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> assign(:match_files_modal, nil)
     |> assign(:match_files_error, nil)
     |> assign(:match_modal, nil)
-    |> put_flash(:info, "That download no longer exists.")
+    |> put_flash(:info, gettext("That download no longer exists."))
     |> load_downloads()
   end
 
@@ -1233,14 +1295,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
              socket
              |> put_flash(
                :info,
-               "The last removal attempt is still finishing. Try again shortly."
+               gettext("The last removal attempt is still finishing. Try again shortly.")
              )
              |> load_downloads()}
 
           {:error, _reason} ->
             {:noreply,
              socket
-             |> put_flash(:error, "Could not start removing that download")
+             |> put_flash(:error, gettext("Could not start removing that download"))
              |> load_downloads()}
         end
       end)
@@ -1256,8 +1318,11 @@ defmodule MydiaWeb.DownloadsLive.Index do
       put_flash(
         socket,
         :info,
-        "Cancelling. This release was stalled, so Mydia won't grab it again for " <>
-          "#{Blacklists.default_ttl_days()} days."
+        ngettext(
+          "Cancelling. This release was stalled, so Mydia won't grab it again for %{count} day.",
+          "Cancelling. This release was stalled, so Mydia won't grab it again for %{count} days.",
+          Blacklists.default_ttl_days()
+        )
       )
     else
       socket
@@ -1365,7 +1430,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
       nil ->
         socket
         |> assign(drawer_id: nil, drawer_download: nil)
-        |> put_flash(:info, "That download is no longer in this list")
+        |> put_flash(:info, gettext("That download is no longer in this list"))
 
       download ->
         [download] =
@@ -1538,18 +1603,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     length(downloads)
   end
 
-  defp mapping_error_message(changeset) do
-    case changeset.errors[:remote_prefix] do
-      {_msg, [{:constraint, :unique} | _]} ->
-        "A mapping for this path already exists. Edit it on the Path Mappings page."
-
-      _ ->
-        "Couldn't add the mapping: " <>
-          (Ecto.Changeset.traverse_errors(changeset, fn {msg, _} -> msg end)
-           |> Enum.map_join("; ", fn {field, msgs} -> "#{field} #{Enum.join(msgs, ", ")}" end))
-    end
-  end
-
   # For downloads classified as a path-mapping mismatch, compute a suggested
   # remote→local mapping (from the persisted reported path) and the number of
   # downloads a one-click apply would re-run. Mount roots are detected once for
@@ -1612,17 +1665,20 @@ defmodule MydiaWeb.DownloadsLive.Index do
           case modal.mode do
             :inflight ->
               case Downloads.manually_match_download(download, media_item_id, episode_id) do
-                {:ok, _} -> {:info, "Match updated — the import will use the corrected match."}
-                {:error, _} -> {:error, "Failed to update the match."}
+                {:ok, _} ->
+                  {:info, gettext("Match updated — the import will use the corrected match.")}
+
+                {:error, _} ->
+                  {:error, gettext("Failed to update the match.")}
               end
 
             :postimport ->
               case Downloads.rematch_imported_download(download, media_item_id, episode_id) do
                 {:ok, :enqueued} ->
-                  {:info, "Re-match queued — the file will be moved and relinked."}
+                  {:info, gettext("Re-match queued — the file will be moved and relinked.")}
 
                 {:ok, :unchanged} ->
-                  {:info, "Already matched to that title."}
+                  {:info, gettext("Already matched to that title.")}
 
                 {:error, reason} ->
                   {:error, friendly_rematch_error(reason)}
@@ -1639,22 +1695,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
       {:unauthorized, socket} -> {:noreply, socket}
     end
   end
-
-  defp friendly_rematch_error(:not_imported), do: "This download hasn't imported yet."
-
-  defp friendly_rematch_error(reason) when reason in [:not_single_target, :multiple_files],
-    do: "This download has multiple files; per-file re-match isn't supported yet."
-
-  defp friendly_rematch_error(:no_imported_file),
-    do: "Couldn't find the imported file for this download."
-
-  defp friendly_rematch_error(:no_library_path),
-    do: "No matching library is configured for that title's type."
-
-  defp friendly_rematch_error(:library_type_mismatch),
-    do: "That title's type doesn't match an available library."
-
-  defp friendly_rematch_error(_), do: "Re-match failed."
 
   defp get_current_downloads(socket) do
     Downloads.list_downloads_with_status(bounded: true)
@@ -1704,9 +1744,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
-  defp import_issue_label(:failed), do: "Import failed"
-  defp import_issue_label(:retrying), do: "Import retrying"
-
   # Kept on Index because existing tests call them as Index.import_issue/1 and
   # Index.status_badge/1.
   defdelegate import_issue(download), to: ListView
@@ -1731,12 +1768,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
     max(DateTime.diff(deadline, DateTime.utc_now(), :second), 0)
   end
 
-  defp status_age(%DateTime{} = as_of, display) do
-    seconds = max(DateTime.diff(DateTime.utc_now(), as_of, :second), 0)
-
-    if seconds < 60, do: "#{seconds}s ago", else: format_relative_time(as_of, display)
-  end
-
   # Whether Mydia adopted this download from a client rather than grabbing it
   # itself. Written by `UntrackedMatcher.create_download_record/3` (automatic)
   # and `Queue.adopt_external_torrent/3` (manual); "Added outside Mydia" is
@@ -1755,54 +1786,4 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp adopted_from_client?(_download), do: false
 
   defp get_display_title(download), do: ListView.display_title(download)
-
-  defp get_episode_details(download) do
-    cond do
-      # Download has a specific episode association
-      is_map(download.episode) ->
-        episode_id = format_episode_identifier(download.episode)
-        episode_title = download.episode.title
-
-        if episode_title do
-          "#{episode_id} - #{episode_title}"
-        else
-          episode_id
-        end
-
-      # Download is for a TV show but no episode (likely season pack or series)
-      is_map(download.media_item) && download.media_item.type == "tv_show" ->
-        extract_season_info_from_title(download.title)
-
-      true ->
-        nil
-    end
-  end
-
-  defp extract_season_info_from_title(title) do
-    cond do
-      # Match S01, S02, etc. (most common format)
-      Regex.match?(~r/\.S(\d{1,2})(?:\.|E|$)/i, title) ->
-        [_, season] = Regex.run(~r/\.S(\d{1,2})(?:\.|E|$)/i, title)
-        "Season #{String.to_integer(season)}"
-
-      # Match "Season 1", "Season 01", etc.
-      Regex.match?(~r/Season[\s\.]+(\d{1,2})/i, title) ->
-        [_, season] = Regex.run(~r/Season[\s\.]+(\d{1,2})/i, title)
-        "Season #{String.to_integer(season)}"
-
-      # If title has "Complete" or "Series" - likely full series pack
-      Regex.match?(~r/(Complete|Series|Collection)/i, title) ->
-        "Complete Series"
-
-      # Fallback
-      true ->
-        nil
-    end
-  end
-
-  defp format_episode_identifier(episode) do
-    season = String.pad_leading("#{episode.season_number}", 2, "0")
-    episode_num = String.pad_leading("#{episode.episode_number}", 2, "0")
-    "S#{season}E#{episode_num}"
-  end
 end

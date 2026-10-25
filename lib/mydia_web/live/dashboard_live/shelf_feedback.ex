@@ -7,6 +7,8 @@ defmodule MydiaWeb.DashboardLive.ShelfFeedback do
   `MydiaWeb.DashboardLive.Index` keeps one-line event clauses.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
 
   alias Mydia.Metadata.Ref
@@ -88,8 +90,11 @@ defmodule MydiaWeb.DashboardLive.ShelfFeedback do
     )
   end
 
-  defp rated_message("up", title), do: "Noted. #{title} won't be suggested again."
-  defp rated_message("down", title), do: "#{title} won't be suggested again."
+  defp rated_message("up", title),
+    do: gettext("Noted. %{title} won't be suggested again.", title: title)
+
+  defp rated_message("down", title),
+    do: gettext("%{title} won't be suggested again.", title: title)
 
   # Rating from the details dialog removes the card the dialog was opened from.
   defp close_details_for_shelf_item(socket, item_id) do

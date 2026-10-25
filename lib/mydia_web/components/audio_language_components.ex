@@ -8,6 +8,7 @@ defmodule MydiaWeb.AudioLanguageComponents do
   name.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   attr :languages, :list, default: []
   attr :assumed, :boolean, default: false
@@ -35,17 +36,30 @@ defmodule MydiaWeb.AudioLanguageComponents do
   @spec audio_badge_label([String.t()], boolean()) :: String.t()
   def audio_badge_label(languages, assumed) do
     label = Enum.map_join(languages, "+", &String.upcase/1)
-    if assumed, do: label <> " (assumed)", else: label
+    if assumed, do: gettext("%{languages} (assumed)", languages: label), else: label
   end
 
   defp audio_badge_title(languages, assumed, rank) do
     names = Enum.map_join(languages, ", ", &MydiaWeb.Languages.name/1)
 
-    base =
-      if assumed,
-        do: "Audio: #{names}, assumed because the release title names no audio language",
-        else: "Audio: #{names}"
+    case {assumed, is_integer(rank)} do
+      {true, true} ->
+        gettext(
+          "Audio: %{names}, assumed because the release title names no audio language, preference rank %{rank}",
+          names: names,
+          rank: rank
+        )
 
-    if is_integer(rank), do: "#{base}, preference rank #{rank}", else: base
+      {true, false} ->
+        gettext("Audio: %{names}, assumed because the release title names no audio language",
+          names: names
+        )
+
+      {false, true} ->
+        gettext("Audio: %{names}, preference rank %{rank}", names: names, rank: rank)
+
+      {false, false} ->
+        gettext("Audio: %{names}", names: names)
+    end
   end
 end

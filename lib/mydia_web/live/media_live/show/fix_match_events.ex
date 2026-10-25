@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3, to_form: 2]
   import Phoenix.LiveView, only: [put_flash: 3, push_navigate: 2, start_async: 3]
 
@@ -79,7 +81,9 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
 
   def handle_search_async({:exit, reason}, socket) do
     Logger.error("Fix match search crashed: #{inspect(reason)}")
-    {:noreply, update_fix_match(socket, searching?: false, error: "Search failed unexpectedly")}
+
+    {:noreply,
+     update_fix_match(socket, searching?: false, error: gettext("Search failed unexpectedly"))}
   end
 
   defp apply_search_outcome({:ok, results}, socket),
@@ -87,7 +91,10 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
 
   defp apply_search_outcome({:error, reason}, socket) do
     {:noreply,
-     update_fix_match(socket, searching?: false, error: "Search failed: #{inspect(reason)}")}
+     update_fix_match(socket,
+       searching?: false,
+       error: gettext("Search failed: %{reason}", reason: inspect(reason))
+     )}
   end
 
   def pick(_params, %{assigns: %{fix_match: nil}} = socket), do: {:noreply, socket}
@@ -158,21 +165,28 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
     {:noreply,
      socket
      |> assign(:fix_match, nil)
-     |> put_flash(:info, "Match changed to #{updated.title}")
+     |> put_flash(:info, gettext("Match changed to %{title}", title: updated.title))
      |> push_navigate(to: ~p"/media/#{updated.id}")}
   end
 
   def handle_adopt_async({:ok, {:error, {:already_in_library, other}}}, socket) do
-    noun = if other.type == "movie", do: "movie", else: "show"
+    message =
+      if other.type == "movie" do
+        gettext(
+          "%{title} is already in your library. Use \"Not this movie\" on the files to move them there.",
+          title: other.title
+        )
+      else
+        gettext(
+          "%{title} is already in your library. Use \"Not this show\" on the files to move them there.",
+          title: other.title
+        )
+      end
 
     {:noreply,
      socket
      |> assign(:fix_match, nil)
-     |> put_flash(
-       :error,
-       "#{other.title} is already in your library. " <>
-         "Use \"Not this #{noun}\" on the files to move them there."
-     )}
+     |> put_flash(:error, message)}
   end
 
   # A show's refusal arrives wrapped by ProviderSwitch's rollback.
@@ -188,7 +202,10 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
     {:noreply,
      socket
      |> assign(:fix_match, nil)
-     |> put_flash(:error, "Could not change the match: #{inspect(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Could not change the match: %{reason}", reason: inspect(reason))
+     )}
   end
 
   def handle_adopt_async({:exit, reason}, socket) do
@@ -197,7 +214,7 @@ defmodule MydiaWeb.MediaLive.Show.FixMatchEvents do
     {:noreply,
      socket
      |> assign(:fix_match, nil)
-     |> put_flash(:error, "Could not change the match")}
+     |> put_flash(:error, gettext("Could not change the match"))}
   end
 
   defp form(query, year),

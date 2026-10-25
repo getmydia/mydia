@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.CollectionEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3]
 
@@ -16,17 +18,17 @@ defmodule MydiaWeb.MediaLive.Show.CollectionEvents do
          socket
          |> assign(:is_favorite, true)
          |> load_collection_data(media_item)
-         |> put_flash(:info, "Added to Favorites")}
+         |> put_flash(:info, gettext("Added to Favorites"))}
 
       {:ok, :removed} ->
         {:noreply,
          socket
          |> assign(:is_favorite, false)
          |> load_collection_data(media_item)
-         |> put_flash(:info, "Removed from Favorites")}
+         |> put_flash(:info, gettext("Removed from Favorites"))}
 
       {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to update favorites")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to update favorites"))}
     end
   end
 
@@ -44,7 +46,7 @@ defmodule MydiaWeb.MediaLive.Show.CollectionEvents do
 
     case Collections.get_collection(user, collection_id) do
       nil ->
-        {:noreply, put_flash(socket, :error, "Collection not found")}
+        {:noreply, put_flash(socket, :error, gettext("Collection not found"))}
 
       collection ->
         case Collections.add_item(collection, media_item.id) do
@@ -56,13 +58,14 @@ defmodule MydiaWeb.MediaLive.Show.CollectionEvents do
             {:noreply,
              socket
              |> load_collection_data(media_item)
-             |> put_flash(:info, "Added to #{collection.name}")}
+             |> put_flash(:info, gettext("Added to %{name}", name: collection.name))}
 
           {:error, :smart_collection} ->
-            {:noreply, put_flash(socket, :error, "Cannot add items to smart collections")}
+            {:noreply,
+             put_flash(socket, :error, gettext("Cannot add items to smart collections"))}
 
           {:error, _reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to add to collection")}
+            {:noreply, put_flash(socket, :error, gettext("Failed to add to collection"))}
         end
     end
   end
@@ -73,7 +76,7 @@ defmodule MydiaWeb.MediaLive.Show.CollectionEvents do
 
     case Collections.get_collection(user, collection_id) do
       nil ->
-        {:noreply, put_flash(socket, :error, "Collection not found")}
+        {:noreply, put_flash(socket, :error, gettext("Collection not found"))}
 
       collection ->
         case Collections.remove_item(collection, media_item.id) do
@@ -81,16 +84,17 @@ defmodule MydiaWeb.MediaLive.Show.CollectionEvents do
             {:noreply,
              socket
              |> load_collection_data(media_item)
-             |> put_flash(:info, "Removed from #{collection.name}")}
+             |> put_flash(:info, gettext("Removed from %{name}", name: collection.name))}
 
           {:error, :smart_collection} ->
-            {:noreply, put_flash(socket, :error, "Cannot remove items from smart collections")}
+            {:noreply,
+             put_flash(socket, :error, gettext("Cannot remove items from smart collections"))}
 
           {:error, :not_found} ->
-            {:noreply, put_flash(socket, :error, "Item not in collection")}
+            {:noreply, put_flash(socket, :error, gettext("Item not in collection"))}
 
           {:error, _reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to remove from collection")}
+            {:noreply, put_flash(socket, :error, gettext("Failed to remove from collection"))}
         end
     end
   end

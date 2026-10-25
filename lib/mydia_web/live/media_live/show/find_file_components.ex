@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.Show.FindFileComponents do
   episode that has none, with a path search and a review-mode rescan.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
   import MydiaWeb.CoreComponents
   import MydiaWeb.Formatters, only: [format_file_size: 1]
 
@@ -16,9 +17,11 @@ defmodule MydiaWeb.MediaLive.Show.FindFileComponents do
     ~H"""
     <div id="find-file-modal" class="modal modal-open">
       <div class="modal-box max-w-3xl">
-        <h3 class="font-bold text-lg mb-1">Find a file for {@title}</h3>
+        <h3 class="font-bold text-lg mb-1">
+          {gettext("Find a file for %{title}", title: @title)}
+        </h3>
         <p class="text-sm text-base-content/60 mb-4">
-          Files in your libraries that no item owns yet, best matches first.
+          {gettext("Files in your libraries that no item owns yet, best matches first.")}
         </p>
 
         <div class="flex gap-2 mb-4">
@@ -29,7 +32,7 @@ defmodule MydiaWeb.MediaLive.Show.FindFileComponents do
                 type="text"
                 name="query"
                 value={@query}
-                placeholder="Search by path"
+                placeholder={gettext("Search by path")}
                 phx-debounce="300"
                 class="grow"
               />
@@ -41,19 +44,23 @@ defmodule MydiaWeb.MediaLive.Show.FindFileComponents do
             phx-click="find_file_scan"
             class="btn btn-outline"
           >
-            <.icon name="hero-arrow-path" class="w-4 h-4" /> Scan for new files
+            <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Scan for new files")}
           </button>
         </div>
 
         <div :if={@scanning != []} id="find-file-scanning" class="alert alert-info mb-4 py-2">
           <span class="loading loading-spinner loading-sm"></span>
-          <span class="text-sm">Scanning {Enum.join(@scanning, ", ")}...</span>
+          <span class="text-sm">
+            {gettext("Scanning %{libraries}...", libraries: Enum.join(@scanning, ", "))}
+          </span>
         </div>
 
         <%= if @suggestions == [] do %>
           <div id="find-file-empty" class="text-center py-10 text-base-content/60">
             <.icon name="hero-document-magnifying-glass" class="w-10 h-10 mx-auto mb-2 opacity-40" />
-            <p class="text-sm">No likely files found. Try a search, or scan for new files.</p>
+            <p class="text-sm">
+              {gettext("No likely files found. Try a search, or scan for new files.")}
+            </p>
           </div>
         <% else %>
           <ul class="divide-y divide-base-300 max-h-[60vh] overflow-y-auto">
@@ -82,14 +89,16 @@ defmodule MydiaWeb.MediaLive.Show.FindFileComponents do
                 phx-value-candidate-id={suggestion.candidate.id}
                 class="btn btn-primary btn-sm"
               >
-                Attach
+                {gettext("Attach")}
               </button>
             </li>
           </ul>
         <% end %>
 
         <div class="modal-action">
-          <button type="button" phx-click="close_find_file" class="btn btn-ghost">Close</button>
+          <button type="button" phx-click="close_find_file" class="btn btn-ghost">
+            {gettext("Close")}
+          </button>
         </div>
       </div>
       <div class="modal-backdrop" phx-click="close_find_file"></div>
@@ -103,8 +112,11 @@ defmodule MydiaWeb.MediaLive.Show.FindFileComponents do
     if dir == ".", do: root, else: Path.join(root, dir)
   end
 
-  defp reason_label(:same_provider), do: "Parked from this title"
-  defp reason_label({:title, similarity}), do: "Title #{round(similarity * 100)}%"
+  defp reason_label(:same_provider), do: gettext("Parked from this title")
+
+  defp reason_label({:title, similarity}),
+    do: gettext("Title %{percent}%", percent: round(similarity * 100))
+
   defp reason_label({:year, year}), do: Integer.to_string(year)
   defp reason_label({:episode, season, episode}), do: "S#{pad(season)}E#{pad(episode)}"
 

@@ -17,6 +17,9 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.CollectionEvents
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
   alias MydiaWeb.MediaLive.Show.FileEvents
+  alias MydiaWeb.MediaLive.Show.Messages
+  alias MydiaWeb.MediaLive.Show.PickerModals
+  alias MydiaWeb.MediaLive.Show.RescanResults
   alias MydiaWeb.MediaLive.Show.FixMatchEvents
   alias MydiaWeb.MediaLive.Show.FixMatchModal
   alias MydiaWeb.MediaLive.Show.FindFileComponents
@@ -653,7 +656,7 @@ defmodule MydiaWeb.MediaLive.Show do
       socket =
         cond do
           socket.assigns.auto_searching ->
-            put_flash(socket, :info, "Download started: #{download.title}")
+            put_flash(socket, :info, gettext("Download started: %{title}", title: download.title))
 
           socket.assigns.auto_searching_season &&
             download.episode_id &&
@@ -662,11 +665,11 @@ defmodule MydiaWeb.MediaLive.Show do
                 download.episode_id,
                 socket.assigns.auto_searching_season
               ) ->
-            put_flash(socket, :info, "Download started: #{download.title}")
+            put_flash(socket, :info, gettext("Download started: %{title}", title: download.title))
 
           socket.assigns.auto_searching_episode &&
               download.episode_id == socket.assigns.auto_searching_episode ->
-            put_flash(socket, :info, "Download started: #{download.title}")
+            put_flash(socket, :info, gettext("Download started: %{title}", title: download.title))
 
           true ->
             socket
@@ -705,7 +708,7 @@ defmodule MydiaWeb.MediaLive.Show do
       if socket.assigns.auto_searching do
         socket
         |> assign(:auto_searching, false)
-        |> put_flash(:warning, "Search timed out - no response from search job")
+        |> put_flash(:warning, gettext("Search timed out - no response from search job"))
       else
         socket
       end
@@ -724,7 +727,7 @@ defmodule MydiaWeb.MediaLive.Show do
         |> assign(:auto_searching_episode, nil)
 
       # Build the completion message
-      message = build_search_completion_message(stats)
+      message = Messages.search_completion_message(stats)
 
       # Determine flash type based on results
       flash_type =
@@ -749,7 +752,9 @@ defmodule MydiaWeb.MediaLive.Show do
         |> assign(:auto_searching_season, nil)
         |> put_flash(
           :warning,
-          "Search completed but no suitable releases found for season #{season_num}"
+          gettext("Search completed but no suitable releases found for season %{season}",
+            season: season_num
+          )
         )
       else
         socket
@@ -768,7 +773,10 @@ defmodule MydiaWeb.MediaLive.Show do
         |> assign(:auto_searching_episode, nil)
         |> put_flash(
           :warning,
-          "Search completed but no suitable releases found for S#{episode.season_number}E#{episode.episode_number}"
+          gettext("Search completed but no suitable releases found for S%{season}E%{episode}",
+            season: episode.season_number,
+            episode: episode.episode_number
+          )
         )
       else
         socket
@@ -941,13 +949,13 @@ defmodule MydiaWeb.MediaLive.Show do
     do: FileEvents.handle_rescan_season_files_async(result, socket)
 
   def handle_async(:rescan_series, result, socket),
-    do: FileEvents.handle_rescan_series_async(result, socket)
+    do: RescanResults.handle_rescan_series_async(result, socket)
 
   def handle_async(:rescan_movie, result, socket),
-    do: FileEvents.handle_rescan_movie_async(result, socket)
+    do: RescanResults.handle_rescan_movie_async(result, socket)
 
   def handle_async(:rescan_season, result, socket),
-    do: FileEvents.handle_rescan_season_async(result, socket)
+    do: RescanResults.handle_rescan_season_async(result, socket)
 
   def handle_async(:rename_files, result, socket),
     do: RenameEvents.handle_rename_files_async(result, socket)
@@ -984,26 +992,4 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_async({:add_recommendation, tmdb_id}, result, socket),
     do: RecommendationEvents.handle_add_result(tmdb_id, result, socket)
-
-  # Private helpers
-
-  defp build_search_completion_message(stats) do
-    indexers = stats.indexers_searched
-    results = stats.results_found
-    picked_up = stats.downloads_initiated
-
-    cond do
-      Map.get(stats, :error) ->
-        "Search failed: #{stats.error}"
-
-      picked_up > 0 ->
-        "Search complete: #{indexers} indexer(s) searched, #{results} result(s) found, #{picked_up} download(s) started"
-
-      results > 0 ->
-        "Search complete: #{indexers} indexer(s) searched, #{results} result(s) found, but none matched quality criteria"
-
-      true ->
-        "Search complete: #{indexers} indexer(s) searched, no results found"
-    end
-  end
 end

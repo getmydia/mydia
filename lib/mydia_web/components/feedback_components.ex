@@ -22,23 +22,25 @@ defmodule MydiaWeb.FeedbackComponents do
 
     ~H"""
     <.modal id={@id} show={@show} on_cancel={JS.push("close_feedback_modal")}>
-      <:title>Send feedback</:title>
+      <:title>{gettext("Send feedback")}</:title>
 
       <p class="text-sm text-base-content/75 mb-3">
-        You can either
+        {gettext("You can either")}
         <a
           href={@github_discussions_url}
           target="_blank"
           rel="noopener noreferrer"
           class="link link-primary font-medium"
         >
-          start a GitHub discussion
+          {gettext("start a GitHub discussion")}
         </a>
-        or send feedback directly through this form.
+        {gettext("or send feedback directly through this form.")}
       </p>
 
       <p class="text-sm text-base-content/75 mb-4">
-        Your message and optional contact info are sent to the Mydia developer along with this instance's UUID and Mydia version. Your library, file paths, account, and request history are NOT sent.
+        {gettext(
+          "Your message and optional contact info are sent to the Mydia developer along with this instance's UUID and Mydia version. Your library, file paths, account, and request history are NOT sent."
+        )}
       </p>
 
       <.form
@@ -51,17 +53,23 @@ defmodule MydiaWeb.FeedbackComponents do
         <.input
           field={@form[:type]}
           type="select"
-          label="Type"
-          prompt="Choose one..."
-          options={[{"Bug report", "bug"}, {"Idea", "idea"}, {"Question", "question"}]}
+          label={pgettext("feedback", "Type")}
+          prompt={gettext("Choose one...")}
+          options={[
+            {gettext("Bug report"), "bug"},
+            {gettext("Idea"), "idea"},
+            {gettext("Question"), "question"}
+          ]}
         />
 
         <.input
           field={@form[:message]}
           type="textarea"
-          label="Message"
+          label={gettext("Message")}
           rows="6"
-          placeholder="What happened, what did you expect, or what would make Mydia better?"
+          placeholder={
+            gettext("What happened, what did you expect, or what would make Mydia better?")
+          }
         />
 
         <div class={[
@@ -69,26 +77,31 @@ defmodule MydiaWeb.FeedbackComponents do
           @message_too_long? && "text-error",
           !@message_too_long? && "text-base-content/60"
         ]}>
-          {@message_size_bytes} / {@message_limit_bytes} bytes
+          {gettext("%{size} / %{limit} bytes",
+            size: @message_size_bytes,
+            limit: @message_limit_bytes
+          )}
         </div>
 
         <.input
           field={@form[:contact]}
           type="text"
-          label="Contact (optional)"
-          placeholder="Email, GitHub handle, Discord, or anything you prefer"
+          label={gettext("Contact (optional)")}
+          placeholder={gettext("Email, GitHub handle, Discord, or anything you prefer")}
         />
       </.form>
 
       <:actions>
-        <button type="button" class="btn btn-ghost" phx-click="close_feedback_modal">Cancel</button>
+        <button type="button" class="btn btn-ghost" phx-click="close_feedback_modal">
+          {gettext("Cancel")}
+        </button>
         <button
           type="submit"
           form="feedback-form"
           class="btn btn-primary"
           disabled={@message_too_long?}
         >
-          Send feedback
+          {gettext("Send feedback")}
         </button>
       </:actions>
     </.modal>

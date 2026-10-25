@@ -106,7 +106,7 @@ defmodule MydiaWeb.SearchLive.ReleaseAdd do
 
       {:error, reason} ->
         Logger.error("Metadata search failed: #{inspect(reason)}")
-        {:error, {:metadata_error, "Search failed"}}
+        {:error, {:metadata_error, :search_failed}}
     end
   end
 
@@ -122,7 +122,7 @@ defmodule MydiaWeb.SearchLive.ReleaseAdd do
 
       {:error, reason} ->
         Logger.error("Failed to fetch full metadata: #{inspect(reason)}")
-        {:error, {:metadata_error, "Failed to fetch details"}}
+        {:error, {:metadata_error, :fetch_failed}}
     end
   end
 

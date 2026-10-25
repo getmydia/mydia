@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [consume_uploaded_entries: 3, put_flash: 3, start_async: 3]
 
@@ -28,7 +30,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply,
      socket
      |> assign(:fetching_season_subtitles, season_num)
-     |> put_flash(:info, "Fetching subtitles for season #{season_num}...")}
+     |> put_flash(
+       :info,
+       gettext("Fetching subtitles for season %{number}...", number: season_num)
+     )}
   end
 
   def open_subtitle_search(%{"media-file-id" => media_file_id}, socket) do
@@ -140,7 +145,8 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
        end)}
     else
       _ ->
-        {:noreply, put_flash(socket, :error, "That result is no longer available. Search again.")}
+        {:noreply,
+         put_flash(socket, :error, gettext("That result is no longer available. Search again."))}
     end
   end
 
@@ -148,7 +154,8 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   # guards a hand-crafted payload (a nil, a JSON number, or a missing key).
   # This handler must never let a client value reach a parser that can raise.
   def download_subtitle_result(_params, socket) do
-    {:noreply, put_flash(socket, :error, "That result is no longer available. Search again.")}
+    {:noreply,
+     put_flash(socket, :error, gettext("That result is no longer available. Search again."))}
   end
 
   def delete_subtitle(%{"subtitle-id" => subtitle_id}, socket) do
@@ -159,7 +166,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
         socket =
           socket
           |> assign(:media_file_subtitle_tracks, tracks)
-          |> put_flash(:info, "Subtitle deleted successfully")
+          |> put_flash(:info, gettext("Subtitle deleted successfully"))
 
         # The manage modal renders from :manage_tracks, not
         # :media_file_subtitle_tracks, so deleting a track from inside it must
@@ -178,7 +185,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
         {:noreply,
          socket
-         |> put_flash(:error, "Failed to delete subtitle: #{inspect(reason)}")}
+         |> put_flash(
+           :error,
+           gettext("Failed to delete subtitle: %{reason}", reason: inspect(reason))
+         )}
     end
   end
 
@@ -188,8 +198,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
       )
       when is_binary(raw) do
     case Integer.parse(raw) do
-      {offset_ms, ""} -> store_offset(socket, media_file_id, track_ref, offset_ms)
-      _ -> {:noreply, put_flash(socket, :error, "Offset must be a whole number of milliseconds")}
+      {offset_ms, ""} ->
+        store_offset(socket, media_file_id, track_ref, offset_ms)
+
+      _ ->
+        {:noreply,
+         put_flash(socket, :error, gettext("Offset must be a whole number of milliseconds"))}
     end
   end
 
@@ -228,10 +242,11 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   def resync_subtitle(%{"media-file-id" => media_file_id, "track-ref" => track_ref}, socket) do
     case Mydia.Subtitles.ResyncEnqueue.enqueue(media_file_id, track_ref) do
       :ok ->
-        {:noreply, put_flash(socket, :info, "Re-syncing this subtitle in the background.")}
+        {:noreply,
+         put_flash(socket, :info, gettext("Re-syncing this subtitle in the background."))}
 
       :error ->
-        {:noreply, put_flash(socket, :error, "Could not start the re-sync.")}
+        {:noreply, put_flash(socket, :error, gettext("Could not start the re-sync."))}
     end
   end
 
@@ -255,7 +270,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
     {:noreply,
      socket
-     |> put_flash(:info, "Checking for subtitle files on disk...")
+     |> put_flash(:info, gettext("Checking for subtitle files on disk..."))
      |> start_async(:rescan_subtitles, fn -> Mydia.Subtitles.Sidecars.reconcile(media_file) end)}
   end
 
@@ -322,7 +337,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
         finish_upload(socket, media_file, content, language, forced, hearing_impaired)
 
       [] ->
-        {:noreply, assign(socket, :subtitle_upload_error, "Choose a file first")}
+        {:noreply, assign(socket, :subtitle_upload_error, gettext("Choose a file first"))}
     end
   end
 
@@ -345,7 +360,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
           |> assign(:show_subtitle_upload_modal, false)
           |> assign(:subtitle_upload_error, nil)
           |> assign(:media_file_subtitle_tracks, tracks)
-          |> put_flash(:info, "Subtitle uploaded")
+          |> put_flash(:info, gettext("Subtitle uploaded"))
 
         # See close_subtitle_upload/2: only reopen the manage modal (and
         # refresh its track list) when this upload was started from there.
@@ -389,7 +404,11 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
         max = Mydia.Subtitles.TrackSetting.max_offset_ms()
 
         {:noreply,
-         put_flash(socket, :error, "Offset must be between -#{max} and #{max} milliseconds")}
+         put_flash(
+           socket,
+           :error,
+           gettext("Offset must be between -%{max} and %{max} milliseconds", max: max)
+         )}
     end
   end
 
@@ -403,7 +422,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
       |> assign(:media_file_subtitle_tracks, tracks)
       |> put_flash(
         :info,
-        "Rescan complete: #{tally.adopted} adopted, #{tally.reaped} removed"
+        gettext("Rescan complete: %{adopted} adopted, %{removed} removed",
+          adopted: tally.adopted,
+          removed: tally.reaped
+        )
       )
 
     # Rescan never toggles the manage modal (it isn't a child modal like
@@ -420,13 +442,17 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
   def handle_rescan_subtitles_async({:ok, {:error, reason}}, socket) do
     {:noreply,
-     put_flash(socket, :error, "Could not read that file's directory: #{inspect(reason)}")}
+     put_flash(
+       socket,
+       :error,
+       gettext("Could not read that file's directory: %{reason}", reason: inspect(reason))
+     )}
   end
 
   def handle_rescan_subtitles_async({:exit, reason}, socket) do
     Logger.error("Subtitle rescan task crashed: #{inspect(reason)}")
 
-    {:noreply, put_flash(socket, :error, "Subtitle rescan failed unexpectedly")}
+    {:noreply, put_flash(socket, :error, gettext("Subtitle rescan failed unexpectedly"))}
   end
 
   def handle_subtitle_search_async(
@@ -470,7 +496,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
       |> assign(:subtitle_search_results, [])
       |> assign(:subtitle_providers, [])
       |> assign(:media_file_subtitle_tracks, tracks)
-      |> put_flash(:info, "Subtitle downloaded successfully")
+      |> put_flash(:info, gettext("Subtitle downloaded successfully"))
 
     # selected_media_file can already be nil here: the search modal this
     # download started from may have been closed and the manage modal it
@@ -503,7 +529,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply,
      socket
      |> assign(:downloading_subtitle_index, nil)
-     |> put_flash(:error, "Subtitle download failed: #{download_error_message(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Subtitle download failed: %{reason}", reason: download_error_message(reason))
+     )}
   end
 
   def handle_download_subtitle_async({:exit, reason}, socket) do
@@ -512,7 +541,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply,
      socket
      |> assign(:downloading_subtitle_index, nil)
-     |> put_flash(:error, "Subtitle download failed: #{download_error_message(reason)}")}
+     |> put_flash(
+       :error,
+       gettext("Subtitle download failed: %{reason}", reason: download_error_message(reason))
+     )}
   end
 
   # Every clause here matches a class of failure `Mydia.Subtitles.download_subtitle/3`
@@ -521,46 +553,47 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   defp download_error_message(%Mydia.Storage.Error{message: message}), do: message
 
   defp download_error_message(:media_file_not_found),
-    do: "that file is no longer in the library."
+    do: gettext("that file is no longer in the library.")
 
   defp download_error_message(:media_file_path_not_resolved),
-    do: "the file's location on disk could not be resolved."
+    do: gettext("the file's location on disk could not be resolved.")
 
   defp download_error_message(:subtitle_already_exists),
-    do: "there is already a subtitle for that language. Delete it first."
+    do: gettext("there is already a subtitle for that language. Delete it first.")
 
   defp download_error_message({:owned_by_other_media_file, _owner_id}),
     do:
-      "this file shares its filename with another file in the same folder. " <>
-        "Try downloading from that file instead."
+      gettext(
+        "this file shares its filename with another file in the same folder. Try downloading from that file instead."
+      )
 
   defp download_error_message(:invalid_language),
-    do: "that provider returned an invalid language code."
+    do: gettext("that provider returned an invalid language code.")
 
   defp download_error_message({:unsupported_format, _format}),
-    do: "that subtitle format is not supported."
+    do: gettext("that subtitle format is not supported.")
 
   defp download_error_message({:missing_required_fields, _fields}),
-    do: "the provider did not return everything needed to download it."
+    do: gettext("the provider did not return everything needed to download it.")
 
   defp download_error_message(:not_found),
-    do: "that subtitle is no longer available from the provider."
+    do: gettext("that subtitle is no longer available from the provider.")
 
   defp download_error_message(:rate_limited),
-    do: "the provider rate limited the request. Try again shortly."
+    do: gettext("the provider rate limited the request. Try again shortly.")
 
   defp download_error_message(:service_unavailable),
-    do: "the subtitle provider is unavailable right now."
+    do: gettext("the subtitle provider is unavailable right now.")
 
   defp download_error_message(:unauthorized),
-    do: "the provider rejected the request. Check its credentials."
+    do: gettext("the provider rejected the request. Check its credentials.")
 
   defp download_error_message(:unrecognized_subtitle_content),
-    do: "the provider sent a file that is not a subtitle."
+    do: gettext("the provider sent a file that is not a subtitle.")
 
   defp download_error_message({:unsupported_subtitle_format, format}),
-    do: "that subtitle is in #{format} format, which Mydia cannot use."
+    do: gettext("that subtitle is in %{format} format, which Mydia cannot use.", format: format)
 
   defp download_error_message(_reason),
-    do: "check the server logs for details."
+    do: gettext("check the server logs for details.")
 end

@@ -57,7 +57,7 @@ defmodule MydiaWeb.CollectionLive.Index do
   def handle_params(_params, _url, socket) do
     {:noreply,
      socket
-     |> assign(:page_title, "Collections")
+     |> assign(:page_title, gettext("Collections"))
      |> load_collections()}
   end
 
@@ -69,8 +69,8 @@ defmodule MydiaWeb.CollectionLive.Index do
         <%!-- Header --%>
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 class="text-2xl font-bold">Collections</h1>
-            <p class="text-base-content/60">Organize your media into custom groups</p>
+            <h1 class="text-2xl font-bold">{gettext("Collections")}</h1>
+            <p class="text-base-content/60">{gettext("Organize your media into custom groups")}</p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <.view_mode_toggle view_mode={@view_mode} />
@@ -80,14 +80,14 @@ defmodule MydiaWeb.CollectionLive.Index do
               class="btn btn-outline gap-2"
               phx-click="open_preset_gallery"
             >
-              <.icon name="hero-squares-2x2" class="w-4 h-4" /> Browse presets
+              <.icon name="hero-squares-2x2" class="w-4 h-4" /> {gettext("Browse presets")}
             </button>
             <button
               type="button"
               class="btn btn-primary gap-2"
               phx-click="open_new_modal"
             >
-              <.icon name="hero-plus" class="w-5 h-5" /> New Collection
+              <.icon name="hero-plus" class="w-5 h-5" /> {gettext("New Collection")}
             </button>
           </div>
         </div>
@@ -134,14 +134,14 @@ defmodule MydiaWeb.CollectionLive.Index do
           class="text-center py-12"
           id="empty-state"
         >
-          <.collection_empty_state message="No collections found">
+          <.collection_empty_state message={gettext("No collections found")}>
             <:actions>
               <button
                 type="button"
                 class="btn btn-primary gap-2"
                 phx-click="open_new_modal"
               >
-                <.icon name="hero-plus" class="w-5 h-5" /> Create your first collection
+                <.icon name="hero-plus" class="w-5 h-5" /> {gettext("Create your first collection")}
               </button>
               <button
                 id="browse-presets-button-empty"
@@ -149,7 +149,7 @@ defmodule MydiaWeb.CollectionLive.Index do
                 class="btn btn-outline gap-2"
                 phx-click="open_preset_gallery"
               >
-                <.icon name="hero-squares-2x2" class="w-4 h-4" /> Browse presets
+                <.icon name="hero-squares-2x2" class="w-4 h-4" /> {gettext("Browse presets")}
               </button>
             </:actions>
           </.collection_empty_state>
@@ -168,9 +168,9 @@ defmodule MydiaWeb.CollectionLive.Index do
                 <.icon name="hero-folder-plus" class="w-5 h-5 text-primary" />
               </div>
               <div>
-                <div class="font-bold text-lg">Create Collection</div>
+                <div class="font-bold text-lg">{gettext("Create Collection")}</div>
                 <div class="text-xs text-base-content/60 font-normal">
-                  Organize your media into groups
+                  {gettext("Organize your media into groups")}
                 </div>
               </div>
             </div>
@@ -193,14 +193,14 @@ defmodule MydiaWeb.CollectionLive.Index do
               <div class={["grid gap-3", @current_user.role == "admin" && "grid-cols-2"]}>
                 <div class="form-control">
                   <label class="label py-1">
-                    <span class="label-text text-sm font-medium">Name</span>
+                    <span class="label-text text-sm font-medium">{gettext("Name")}</span>
                   </label>
                   <input
                     type="text"
                     name="collection[name]"
                     value={@new_form[:name].value}
                     class="input input-sm input-bordered w-full"
-                    placeholder="My Collection"
+                    placeholder={gettext("My Collection")}
                     required
                   />
                 </div>
@@ -208,17 +208,17 @@ defmodule MydiaWeb.CollectionLive.Index do
                 <%= if @current_user.role == "admin" do %>
                   <div class="form-control">
                     <label class="label py-1">
-                      <span class="label-text text-sm font-medium">Visibility</span>
+                      <span class="label-text text-sm font-medium">{gettext("Visibility")}</span>
                     </label>
                     <select
                       name="collection[visibility]"
                       class="select select-sm select-bordered w-full"
                     >
                       <option value="private" selected={@new_form[:visibility].value != "shared"}>
-                        Private
+                        {gettext("Private")}
                       </option>
                       <option value="shared" selected={@new_form[:visibility].value == "shared"}>
-                        Shared
+                        {gettext("Shared")}
                       </option>
                     </select>
                   </div>
@@ -228,22 +228,22 @@ defmodule MydiaWeb.CollectionLive.Index do
               <%!-- Description --%>
               <div class="form-control">
                 <label class="label py-1">
-                  <span class="label-text text-sm font-medium">Description</span>
-                  <span class="label-text-alt text-xs">Optional</span>
+                  <span class="label-text text-sm font-medium">{gettext("Description")}</span>
+                  <span class="label-text-alt text-xs">{gettext("Optional")}</span>
                 </label>
                 <input
                   type="text"
                   name="collection[description]"
                   value={@new_form[:description].value}
                   class="input input-sm input-bordered w-full"
-                  placeholder="What's this collection about?"
+                  placeholder={gettext("What's this collection about?")}
                 />
               </div>
 
               <%!-- Smart Rules Builder (shown for smart collections) --%>
               <%= if @new_collection_type == "smart" do %>
                 <div class="divider my-2 text-xs text-base-content/50">
-                  <.icon name="hero-sparkles" class="w-4 h-4" /> Smart Rules
+                  <.icon name="hero-sparkles" class="w-4 h-4" /> {gettext("Smart Rules")}
                 </div>
                 <.smart_rules_editor
                   conditions={@rules_conditions}
@@ -259,10 +259,10 @@ defmodule MydiaWeb.CollectionLive.Index do
 
           <:actions>
             <button type="button" class="btn btn-ghost" phx-click="close_new_modal">
-              Cancel
+              {gettext("Cancel")}
             </button>
             <button type="submit" form="new-collection-form" class="btn btn-primary">
-              <.icon name="hero-plus" class="w-4 h-4" /> Create Collection
+              <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Create Collection")}
             </button>
           </:actions>
         </.modal>
@@ -280,9 +280,9 @@ defmodule MydiaWeb.CollectionLive.Index do
                 <.icon name="hero-squares-2x2" class="w-5 h-5 text-primary" />
               </div>
               <div>
-                <div class="font-bold text-lg">Browse presets</div>
+                <div class="font-bold text-lg">{gettext("Browse presets")}</div>
                 <div class="text-xs text-base-content/60 font-normal">
-                  Common collections, ready to add
+                  {gettext("Common collections, ready to add")}
                 </div>
               </div>
             </div>
@@ -303,7 +303,7 @@ defmodule MydiaWeb.CollectionLive.Index do
               class="btn btn-ghost"
               phx-click="close_preset_gallery"
             >
-              Done
+              {gettext("Done")}
             </button>
           </:actions>
         </.modal>
@@ -390,11 +390,11 @@ defmodule MydiaWeb.CollectionLive.Index do
         {:noreply,
          socket
          |> assign(:added_presets, MapSet.put(socket.assigns.added_presets, key))
-         |> put_flash(:info, "Added \"#{collection.name}\"")
+         |> put_flash(:info, gettext("Added \"%{name}\"", name: collection.name))
          |> load_collections()}
 
       {:error, :unknown_preset} ->
-        {:noreply, put_flash(socket, :error, "That preset is no longer available.")}
+        {:noreply, put_flash(socket, :error, gettext("That preset is no longer available."))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, put_flash(socket, :error, extract_changeset_error(changeset))}
@@ -408,7 +408,7 @@ defmodule MydiaWeb.CollectionLive.Index do
 
     case Collections.get_collection(user, collection_id) do
       nil ->
-        {:noreply, put_flash(socket, :error, "Collection not found")}
+        {:noreply, put_flash(socket, :error, gettext("Collection not found"))}
 
       collection ->
         # Get all playable items from the collection
@@ -417,7 +417,7 @@ defmodule MydiaWeb.CollectionLive.Index do
 
         case playable_items do
           [] ->
-            {:noreply, put_flash(socket, :error, "No playable items in this collection")}
+            {:noreply, put_flash(socket, :error, gettext("No playable items in this collection"))}
 
           items ->
             # Build the queue player URL and redirect
@@ -482,13 +482,17 @@ defmodule MydiaWeb.CollectionLive.Index do
       {:ok, collection} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Collection created successfully")
+         |> put_flash(:info, gettext("Collection created successfully"))
          |> assign(:show_new_modal, false)
          |> push_navigate(to: ~p"/collections/#{collection.id}")}
 
       {:error, :unauthorized} ->
         {:noreply,
-         put_flash(socket, :error, "You don't have permission to create shared collections")}
+         put_flash(
+           socket,
+           :error,
+           gettext("You don't have permission to create shared collections")
+         )}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         error_msg = extract_changeset_error(changeset)
@@ -659,8 +663,8 @@ defmodule MydiaWeb.CollectionLive.Index do
 
   defp extract_changeset_error(changeset) do
     case changeset.errors do
-      [{_field, {msg, _}} | _] -> msg
-      _ -> "Failed to create collection"
+      [{_field, {_msg, _opts} = error} | _] -> translate_error(error)
+      _ -> gettext("Failed to create collection")
     end
   end
 

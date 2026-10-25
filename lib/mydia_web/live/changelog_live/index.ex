@@ -31,7 +31,7 @@ defmodule MydiaWeb.ChangelogLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "What's new")
+     |> assign(:page_title, gettext("What's new"))
      |> assign(:entries, Changelog.entries())
      |> assign(:unseen_versions, unseen_versions)
      |> assign(:changelog_notice, nil)}

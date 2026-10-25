@@ -5,26 +5,28 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
   information. File sizes go through `MydiaWeb.Formatters.format_file_size/1`.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   alias Mydia.Indexers.SearchResult
   alias MydiaWeb.DateTimeFormat
 
-  def format_date(nil), do: "N/A"
+  def format_date(nil), do: gettext("N/A")
 
   def format_date(%Date{} = date) do
     Calendar.strftime(date, "%b %d, %Y")
   end
 
-  def format_download_status("pending"), do: "Queued"
-  def format_download_status("downloading"), do: "Downloading"
-  def format_download_status("seeding"), do: "Seeding"
-  def format_download_status("checking"), do: "Checking"
-  def format_download_status("paused"), do: "Paused"
-  def format_download_status("completed"), do: "Completed"
-  def format_download_status("failed"), do: "Failed"
-  def format_download_status("cancelled"), do: "Cancelled"
-  def format_download_status("missing"), do: "Missing"
-  def format_download_status("grabbing"), do: "Grabbing…"
-  def format_download_status(_), do: "Unknown"
+  def format_download_status("pending"), do: pgettext("download", "Queued")
+  def format_download_status("downloading"), do: pgettext("download", "Downloading")
+  def format_download_status("seeding"), do: pgettext("download", "Seeding")
+  def format_download_status("checking"), do: pgettext("download", "Checking")
+  def format_download_status("paused"), do: pgettext("download", "Paused")
+  def format_download_status("completed"), do: pgettext("download", "Completed")
+  def format_download_status("failed"), do: pgettext("download", "Failed")
+  def format_download_status("cancelled"), do: pgettext("download", "Cancelled")
+  def format_download_status("missing"), do: pgettext("download", "Missing")
+  def format_download_status("grabbing"), do: pgettext("download", "Grabbing…")
+  def format_download_status(_), do: gettext("Unknown")
 
   @doc """
   A compact relative time for the History rail: "5h", "2d", "7mo".
@@ -37,12 +39,12 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
     diff = DateTime.diff(DateTime.utc_now(), timestamp, :second)
 
     cond do
-      diff < 60 -> "now"
-      diff < 3600 -> "#{div(diff, 60)}m"
-      diff < 86_400 -> "#{div(diff, 3600)}h"
-      diff < 2_592_000 -> "#{div(diff, 86_400)}d"
-      diff < 31_536_000 -> "#{div(diff, 2_592_000)}mo"
-      true -> "#{div(diff, 31_536_000)}y"
+      diff < 60 -> pgettext("relative time", "now")
+      diff < 3600 -> gettext("%{count}m", count: div(diff, 60))
+      diff < 86_400 -> gettext("%{count}h", count: div(diff, 3600))
+      diff < 2_592_000 -> gettext("%{count}d", count: div(diff, 86_400))
+      diff < 31_536_000 -> gettext("%{count}mo", count: div(diff, 2_592_000))
+      true -> gettext("%{count}y", count: div(diff, 31_536_000))
     end
   end
 
@@ -50,7 +52,7 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
     DateTimeFormat.format(timestamp, :datetime, display)
   end
 
-  def format_download_quality(nil), do: "Unknown"
+  def format_download_quality(nil), do: gettext("Unknown")
 
   def format_download_quality(quality) when is_map(quality) do
     # Build a concise quality description from the quality map
@@ -63,18 +65,18 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
       |> Enum.filter(& &1)
 
     case Enum.join(parts, " ") do
-      "" -> "Unknown"
+      "" -> gettext("Unknown")
       description -> description
     end
   end
 
-  def format_download_quality(_), do: "Unknown"
+  def format_download_quality(_), do: gettext("Unknown")
 
   def format_search_size(%SearchResult{} = result) do
     SearchResult.format_size(result)
   end
 
-  def format_search_date(nil, %Mydia.TimeDisplay{}), do: "Unknown"
+  def format_search_date(nil, %Mydia.TimeDisplay{}), do: gettext("Unknown")
 
   def format_search_date(%DateTime{} = dt, %Mydia.TimeDisplay{} = display) do
     DateTimeFormat.format(dt, :date, display)
@@ -125,23 +127,26 @@ defmodule MydiaWeb.MediaLive.Show.Formatters do
   Used by the season-order suggestion banner to name the concrete
   alternative TVDB offers, rather than an abstract choice.
   """
-  def format_season_ordering_counts([single]), do: "one season of #{single}"
+  def format_season_ordering_counts([single]),
+    do: gettext("one season of %{counts}", counts: single)
 
   def format_season_ordering_counts(counts) do
-    "#{season_count_word(length(counts))} seasons of #{join_with_and(counts)}"
+    joined = join_with_and(counts)
+
+    case length(counts) do
+      2 -> gettext("two seasons of %{counts}", counts: joined)
+      3 -> gettext("three seasons of %{counts}", counts: joined)
+      4 -> gettext("four seasons of %{counts}", counts: joined)
+      5 -> gettext("five seasons of %{counts}", counts: joined)
+      6 -> gettext("six seasons of %{counts}", counts: joined)
+      n -> gettext("%{count} seasons of %{counts}", count: n, counts: joined)
+    end
   end
 
   defp join_with_and([last]), do: to_string(last)
 
   defp join_with_and(counts) do
     {init, [last]} = Enum.split(counts, -1)
-    Enum.join(init, ", ") <> " and #{last}"
+    gettext("%{init} and %{last}", init: Enum.join(init, ", "), last: last)
   end
-
-  defp season_count_word(2), do: "two"
-  defp season_count_word(3), do: "three"
-  defp season_count_word(4), do: "four"
-  defp season_count_word(5), do: "five"
-  defp season_count_word(6), do: "six"
-  defp season_count_word(n), do: to_string(n)
 end

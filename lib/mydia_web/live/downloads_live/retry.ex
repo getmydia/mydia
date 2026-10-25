@@ -6,6 +6,8 @@ defmodule MydiaWeb.DownloadsLive.Retry do
   Shared by the single-row and batch retry events in `DownloadsLive.Index`.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   alias Mydia.Downloads
   alias Mydia.Downloads.Structs.DownloadMetadata
 
@@ -74,8 +76,11 @@ defmodule MydiaWeb.DownloadsLive.Retry do
 
   @doc "The flash text for a failed `regrab/1`."
   @spec regrab_error_message(term()) :: String.t()
-  def regrab_error_message(:already_imported), do: "That download was already imported"
-  def regrab_error_message(reason), do: "Failed to retry download: #{inspect(reason)}"
+  def regrab_error_message(:already_imported),
+    do: gettext("That download was already imported")
+
+  def regrab_error_message(reason),
+    do: gettext("Failed to retry download: %{reason}", reason: inspect(reason))
 
   defp maybe_add_opt(opts, _key, nil), do: opts
   defp maybe_add_opt(opts, key, value), do: Keyword.put(opts, key, value)

@@ -9,9 +9,10 @@ defmodule MydiaWeb.MediaBadgeComponents do
   """
 
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
-  alias Mydia.Media.ShowStatus
   alias Mydia.Metadata.Structs.MediaMetadata
+  alias MydiaWeb.DateNames
 
   @doc """
   Renders a content rating badge (e.g. "TV-MA", "PG-13").
@@ -60,7 +61,7 @@ defmodule MydiaWeb.MediaBadgeComponents do
       class={["badge badge-ghost", badge_size_class(@size), "gap-1"]}
     >
       <span class={["status", status_color_class(@status)]}></span>
-      {ShowStatus.label(@status)}
+      {show_status_label(@status)}
     </span>
     """
   end
@@ -68,6 +69,11 @@ defmodule MydiaWeb.MediaBadgeComponents do
   defp badge_size_class("xs"), do: "badge-xs"
   defp badge_size_class("sm"), do: "badge-sm"
   defp badge_size_class("md"), do: "badge-md"
+
+  defp show_status_label(:continuing), do: pgettext("show status", "Continuing")
+  defp show_status_label(:ended), do: pgettext("show status", "Ended")
+  defp show_status_label(:canceled), do: pgettext("show status", "Canceled")
+  defp show_status_label(:upcoming), do: pgettext("show status", "Upcoming")
 
   defp status_color_class(:continuing), do: "status-success"
   # daisyUI's status-neutral is nearly invisible on badge-ghost in the light
@@ -81,7 +87,9 @@ defmodule MydiaWeb.MediaBadgeComponents do
   """
   @spec format_release_date(Date.t() | nil) :: String.t() | nil
   def format_release_date(nil), do: nil
-  def format_release_date(%Date{} = date), do: Calendar.strftime(date, "%b %-d, %Y")
+
+  def format_release_date(%Date{} = date),
+    do: DateNames.short_date_unpadded(date)
 
   @doc """
   The release date carried by fetched metadata: `release_date` for a movie,

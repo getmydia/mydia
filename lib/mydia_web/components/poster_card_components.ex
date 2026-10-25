@@ -37,6 +37,7 @@ defmodule MydiaWeb.PosterCardComponents do
   """
 
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   @doc """
   Renders a poster card's body.
@@ -144,7 +145,12 @@ defmodule MydiaWeb.PosterCardComponents do
 
   def poster_card_grid_skeleton(assigns) do
     ~H"""
-    <div id={@id} class={["grid", @gap, @columns]} role="status" aria-label="Loading titles">
+    <div
+      id={@id}
+      class={["grid", @gap, @columns]}
+      role="status"
+      aria-label={gettext("Loading titles")}
+    >
       <%!-- 1..@count//1 rather than 1..@count: with an implicit step, Elixir
             infers -1 whenever @count < 1, so 1..0 is [1, 0] and count: 0 would
             render two stray cards instead of none. The explicit ascending
@@ -178,7 +184,7 @@ defmodule MydiaWeb.PosterCardComponents do
 
   def poster_card_rail_skeleton(assigns) do
     ~H"""
-    <.poster_rail id={@id} role="status" aria-label="Loading titles">
+    <.poster_rail id={@id} role="status" aria-label={gettext("Loading titles")}>
       <div :for={_ <- 1..@count//1} class="flex-shrink-0 w-36">
         <div class="card bg-base-100 shadow-lg h-full">
           <div class="skeleton aspect-[2/3] rounded-t-box rounded-b-none"></div>

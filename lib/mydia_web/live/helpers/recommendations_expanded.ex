@@ -11,6 +11,8 @@ defmodule MydiaWeb.Live.Helpers.RecommendationsExpanded do
   persisted.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3]
 
@@ -51,8 +53,11 @@ defmodule MydiaWeb.Live.Helpers.RecommendationsExpanded do
         preference = Accounts.get_user_preference!(user)
 
         case Accounts.update_preference(preference, %{"recommendations_expanded" => expanded}) do
-          {:ok, _} -> assign(socket, @assign, expanded)
-          {:error, _changeset} -> put_flash(socket, :error, "Could not save that rail state")
+          {:ok, _} ->
+            assign(socket, @assign, expanded)
+
+          {:error, _changeset} ->
+            put_flash(socket, :error, gettext("Could not save that rail state"))
         end
     end
   end

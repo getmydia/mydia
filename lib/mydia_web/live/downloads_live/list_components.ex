@@ -27,38 +27,38 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
         <div class="stat-figure text-primary">
           <.icon name="hero-arrow-down-tray" class="size-6" />
         </div>
-        <div class="stat-title">Active</div>
+        <div class="stat-title">{pgettext("download", "Active")}</div>
         <div class="stat-value text-2xl tabular-nums">{@summary.active}</div>
         <div :if={@summary.stalled > 0} id="downloads-stats-stalled" class="stat-desc text-warning">
-          {@summary.stalled} stalled
+          {ngettext("%{count} stalled", "%{count} stalled", @summary.stalled)}
         </div>
-        <div :if={@summary.stalled == 0} class="stat-desc">in the queue</div>
+        <div :if={@summary.stalled == 0} class="stat-desc">{gettext("in the queue")}</div>
       </div>
       <div class="stat py-3">
         <div class="stat-figure text-info"><.icon name="hero-arrow-down" class="size-6" /></div>
-        <div class="stat-title">Download</div>
+        <div class="stat-title">{pgettext("download speed", "Download")}</div>
         <div class="stat-value text-2xl tabular-nums">{format_speed(@summary.download_speed)}</div>
         <div :if={@summary.stale_as_of} class="stat-desc">
-          as of {format_relative_time(@summary.stale_as_of, @display)}
+          {gettext("as of %{time}", time: format_relative_time(@summary.stale_as_of, @display))}
         </div>
       </div>
       <div class="stat py-3">
         <div class="stat-figure text-success"><.icon name="hero-arrow-up" class="size-6" /></div>
-        <div class="stat-title">Upload</div>
+        <div class="stat-title">{pgettext("upload speed", "Upload")}</div>
         <div class="stat-value text-2xl tabular-nums">{format_speed(@summary.upload_speed)}</div>
       </div>
       <div class="stat py-3">
         <div class="stat-figure text-secondary">
           <.icon name="hero-circle-stack" class="size-6" />
         </div>
-        <div class="stat-title">Remaining</div>
+        <div class="stat-title">{gettext("Remaining")}</div>
         <div class="stat-value text-2xl tabular-nums">
           {format_file_size(@summary.remaining_bytes)}
         </div>
         <div class="stat-desc">
           {if @summary.eta_seconds,
-            do: "done in #{format_eta(@summary.eta_seconds)}",
-            else: "no estimate"}
+            do: gettext("done in %{eta}", eta: format_eta(@summary.eta_seconds)),
+            else: gettext("no estimate")}
         </div>
       </div>
     </div>
@@ -102,7 +102,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
             id={"downloads-tab-#{tab.key}-stalled"}
             class="status status-warning"
             role="img"
-            aria-label="Some downloads are stalled"
+            aria-label={gettext("Some downloads are stalled")}
           ></span>
         </.link>
         <div
@@ -159,8 +159,8 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
           type="search"
           name="q"
           value={@filters.q}
-          placeholder="Search downloads"
-          aria-label="Search downloads"
+          placeholder={gettext("Search downloads")}
+          aria-label={gettext("Search downloads")}
           autocomplete="off"
           phx-debounce="300"
           phx-hook=".FocusSearch"
@@ -196,9 +196,9 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
         id="downloads-client-filter"
         name="client"
         class="select select-sm w-full sm:w-auto"
-        aria-label="Download client"
+        aria-label={gettext("Download client")}
       >
-        <option value="">All clients</option>
+        <option value="">{gettext("All clients")}</option>
         <option :for={client <- @clients} value={client} selected={@filters.client == client}>
           {client}
         </option>
@@ -210,7 +210,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
           type="radio"
           name="status"
           value=""
-          aria-label="All"
+          aria-label={gettext("All")}
           checked={is_nil(@filters.status)}
         />
         <input
@@ -249,7 +249,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
           class="cursor-pointer opacity-60 hover:opacity-100"
           phx-click="remove_filter"
           phx-value-key={key}
-          aria-label={"Remove filter #{label}"}
+          aria-label={gettext("Remove filter %{filter}", filter: label)}
         >
           <.icon name="hero-x-mark" class="size-3" />
         </button>
@@ -260,7 +260,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
         class="btn btn-link btn-xs"
         phx-click="clear_filters"
       >
-        Clear filters
+        {pgettext("filters", "Clear filters")}
       </button>
     </div>
     """
@@ -279,11 +279,11 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
       target="_blank"
       rel="noopener noreferrer"
       class="btn btn-sm btn-ghost"
-      title={"Open #{@name}"}
-      aria-label={"Open #{@name}"}
+      title={gettext("Open %{name}", name: @name)}
+      aria-label={gettext("Open %{name}", name: @name)}
     >
       <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" />
-      <span class="hidden sm:inline ml-1">Open {@name}</span>
+      <span class="hidden sm:inline ml-1">{gettext("Open %{name}", name: @name)}</span>
     </a>
     """
   end
@@ -298,10 +298,10 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
         type="button"
         tabindex="0"
         class="btn btn-sm btn-ghost"
-        aria-label="Open download client"
+        aria-label={gettext("Open download client")}
       >
         <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" />
-        <span class="hidden sm:inline ml-1">Open client</span>
+        <span class="hidden sm:inline ml-1">{gettext("Open client")}</span>
       </button>
       <ul
         tabindex="0"
@@ -333,7 +333,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
     ~H"""
     <%!-- A badge has a fixed height, so a long name is cut to one line. --%>
     <%= if @url do %>
-      <span class="tooltip max-w-full min-w-0" data-tip={"Open #{@name}"}>
+      <span class="tooltip max-w-full min-w-0" data-tip={gettext("Open %{name}", name: @name)}>
         <a
           id={@id}
           href={@url}
@@ -381,7 +381,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
           :if={@context == "row"}
           id={"download-details-#{@download.id}"}
           icon="hero-information-circle"
-          title="Details"
+          title={gettext("Details")}
           phx-click="open_details"
           phx-value-id={@download.id}
         />
@@ -390,7 +390,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
             :if={@download.status == "paused"}
             id={"#{@context}-resume-#{@download.id}"}
             icon="hero-play"
-            title="Resume download"
+            title={gettext("Resume download")}
             phx-click="resume_download"
             phx-value-id={@download.id}
           />
@@ -398,7 +398,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
             :if={@download.status != "paused"}
             id={"#{@context}-pause-#{@download.id}"}
             icon="hero-pause"
-            title="Pause download"
+            title={gettext("Pause download")}
             phx-click="pause_download"
             phx-value-id={@download.id}
           />
@@ -406,18 +406,18 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
           <.row_action
             id={"#{@context}-cancel-#{@download.id}"}
             icon="hero-x-mark"
-            title="Cancel download"
+            title={gettext("Cancel download")}
             destructive
             phx-click="cancel_download"
             phx-value-id={@download.id}
-            data-confirm={"Cancel #{ListView.display_title(@download)}?"}
+            data-confirm={gettext("Cancel %{title}?", title: ListView.display_title(@download))}
           />
         <% else %>
           <.row_action
             :if={is_nil(@download.match_status) and @download.rematch_eligible?}
             id={"#{@context}-rematch-#{@download.id}"}
             icon="hero-arrow-path"
-            title="Re-match to the correct title"
+            title={gettext("Re-match to the correct title")}
             phx-click="open_match_modal"
             phx-value-id={@download.id}
             phx-value-mode="postimport"
@@ -425,11 +425,11 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
           <.row_action
             id={"#{@context}-clear-#{@download.id}"}
             icon="hero-trash"
-            title="Clear completed download"
+            title={gettext("Clear completed download")}
             destructive
             phx-click="clear_single_completed"
             phx-value-id={@download.id}
-            data-confirm="Remove from client and clear from history?"
+            data-confirm={gettext("Remove from client and clear from history?")}
           />
         <% end %>
       </.row_actions>
@@ -439,7 +439,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
           tabindex="0"
           role="button"
           class="btn btn-sm btn-ghost btn-square"
-          aria-label="More actions"
+          aria-label={gettext("More actions")}
         >
           <.icon name="hero-ellipsis-vertical" class="size-4" />
         </div>
@@ -453,7 +453,7 @@ defmodule MydiaWeb.DownloadsLive.ListComponents do
                 |> JS.dispatch("mydia:blur")
               }
             >
-              <.icon name="hero-pencil-square" class="size-4" /> Change match
+              <.icon name="hero-pencil-square" class="size-4" /> {gettext("Change match")}
             </button>
           </li>
         </ul>

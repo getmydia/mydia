@@ -4,6 +4,8 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   Handles metadata extraction, episode status, download management, and UI helpers.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   alias Mydia.Media
   alias Mydia.Media.AvailabilityStatus
   alias Mydia.Media.EpisodeStatus
@@ -195,7 +197,7 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
         overview
 
       _ ->
-        "No overview available."
+        gettext("No overview available.")
     end
   end
 
@@ -413,7 +415,7 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
             "• #{basename} (#{resolution})"
           end)
 
-        "#{base_status}\n\nFiles:\n#{filenames}"
+        "#{base_status}\n\n#{gettext("Files:")}\n#{filenames}"
 
       _ ->
         base_status
@@ -485,10 +487,10 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   end
 
   # Get button text based on watch state
-  def next_episode_button_text(:continue), do: "Continue Watching"
-  def next_episode_button_text(:next), do: "Play Next Episode"
-  def next_episode_button_text(:start), do: "Start Watching"
-  def next_episode_button_text(_), do: "Play"
+  def next_episode_button_text(:continue), do: gettext("Continue Watching")
+  def next_episode_button_text(:next), do: gettext("Play Next Episode")
+  def next_episode_button_text(:start), do: gettext("Start Watching")
+  def next_episode_button_text(_), do: gettext("Play")
 
   # Get episode thumbnail from metadata
   def get_episode_thumbnail(episode) do
@@ -614,17 +616,17 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   # Available categories by media type
   def available_categories_for("movie") do
     [
-      {"Movie", "movie"},
-      {"Anime Movie", "anime_movie"},
-      {"Cartoon Movie", "cartoon_movie"}
+      {gettext("Movie"), "movie"},
+      {gettext("Anime Movie"), "anime_movie"},
+      {gettext("Cartoon Movie"), "cartoon_movie"}
     ]
   end
 
   def available_categories_for("tv_show") do
     [
-      {"TV Show", "tv_show"},
-      {"Anime Series", "anime_series"},
-      {"Cartoon Series", "cartoon_series"}
+      {gettext("TV Show"), "tv_show"},
+      {gettext("Anime Series"), "anime_series"},
+      {gettext("Cartoon Series"), "cartoon_series"}
     ]
   end
 
@@ -636,19 +638,19 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   def media_type_path(_), do: "/"
 
   # Monitoring preset labels (shared between events and components)
-  def monitoring_preset_label(:all), do: "All Episodes"
-  def monitoring_preset_label(:missing), do: "Missing Episodes"
-  def monitoring_preset_label(:existing), do: "Existing Episodes"
-  def monitoring_preset_label(:future), do: "Future Episodes"
-  def monitoring_preset_label(:none), do: "No Episodes"
+  def monitoring_preset_label(:all), do: gettext("All Episodes")
+  def monitoring_preset_label(:missing), do: gettext("Missing Episodes")
+  def monitoring_preset_label(:existing), do: gettext("Existing Episodes")
+  def monitoring_preset_label(:future), do: gettext("Future Episodes")
+  def monitoring_preset_label(:none), do: gettext("No Episodes")
   # Not a preset anyone can pick: what the episodes read as once they no longer
   # match any of them, usually because a season or episode was toggled by hand.
-  def monitoring_preset_label(:custom), do: "Custom"
+  def monitoring_preset_label(:custom), do: pgettext("monitoring", "Custom")
 
   # Season monitoring toggle tooltips, keyed on the season's derived state
-  def season_monitoring_tooltip(:all), do: "Unmonitor season"
-  def season_monitoring_tooltip(:partial), do: "Monitor all episodes"
-  def season_monitoring_tooltip(:none), do: "Monitor season"
+  def season_monitoring_tooltip(:all), do: gettext("Unmonitor season")
+  def season_monitoring_tooltip(:partial), do: gettext("Monitor all episodes")
+  def season_monitoring_tooltip(:none), do: gettext("Monitor season")
 
   # Above this many episodes in one season, the list is split into labelled
   # ranges. TVDB's official ordering puts 170 episodes of Black Clover in a

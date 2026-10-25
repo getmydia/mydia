@@ -86,7 +86,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   name={if expanded_chunk?, do: "hero-chevron-down", else: "hero-chevron-right"}
                   class="w-4 h-4 text-base-content/40"
                 />
-                <span class="text-sm font-medium">Episodes {label}</span>
+                <span class="text-sm font-medium">{gettext("Episodes %{range}", range: label)}</span>
                 <span class="text-xs text-base-content/60">{length(chunk_episodes)}</span>
               </button>
               <div
@@ -236,7 +236,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
               aria-controls={"episode-#{episode.id}-detail"}
             >
               <span class="text-sm font-medium truncate block hover:text-primary">
-                {episode.title || "TBA"}
+                {episode.title || gettext("TBA")}
               </span>
             </button>
           </div>
@@ -297,8 +297,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                           )
                         }
                         class="join-item btn btn-sm btn-square btn-ghost"
-                        title="Play"
-                        aria-label="Play"
+                        title={gettext("Play")}
+                        aria-label={gettext("Play")}
                       >
                         <.icon name="hero-play-solid" class="w-4 h-4" />
                       </a>
@@ -310,8 +310,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                         type="button"
                         class="join-item btn btn-sm btn-square btn-ghost"
                         disabled
-                        title="No file yet"
-                        aria-label="Play, no file yet"
+                        title={gettext("No file yet")}
+                        aria-label={gettext("Play, no file yet")}
                       >
                         <.icon name="hero-play-solid" class="w-4 h-4" />
                       </button>
@@ -325,8 +325,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     phx-value-episode-id={episode.id}
                     class="join-item btn btn-sm btn-square btn-ghost"
                     disabled={@auto_searching_episode == episode.id}
-                    title="Auto search"
-                    aria-label="Auto search"
+                    title={gettext("Auto search")}
+                    aria-label={gettext("Auto search")}
                   >
                     <%= if @auto_searching_episode == episode.id do %>
                       <span class="loading loading-spinner loading-sm"></span>
@@ -341,8 +341,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     phx-click="search_episode"
                     phx-value-episode-id={episode.id}
                     class="join-item btn btn-sm btn-square btn-ghost"
-                    title="Manual search"
-                    aria-label="Manual search"
+                    title={gettext("Manual search")}
+                    aria-label={gettext("Manual search")}
                   >
                     <.icon name="hero-magnifying-glass" class="w-4 h-4" />
                   </button>
@@ -355,8 +355,16 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     phx-click="toggle_episode_monitored"
                     phx-value-episode-id={episode.id}
                     class="join-item btn btn-sm btn-square btn-ghost"
-                    title={if episode.monitored, do: "Stop monitoring", else: "Start monitoring"}
-                    aria-label={if episode.monitored, do: "Stop monitoring", else: "Start monitoring"}
+                    title={
+                      if episode.monitored,
+                        do: gettext("Stop monitoring"),
+                        else: gettext("Start monitoring")
+                    }
+                    aria-label={
+                      if episode.monitored,
+                        do: gettext("Stop monitoring"),
+                        else: gettext("Start monitoring")
+                    }
                   >
                     <.icon
                       name={if episode.monitored, do: "hero-bookmark-solid", else: "hero-bookmark"}
@@ -422,7 +430,9 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
 
       <%= if @downloads != [] do %>
         <div class="space-y-1">
-          <div class="text-xs font-medium text-base-content/60">Downloads for this episode</div>
+          <div class="text-xs font-medium text-base-content/60">
+            {gettext("Downloads for this episode")}
+          </div>
           <div
             :for={download <- @downloads}
             class="text-xs bg-base-100 rounded p-2 flex flex-col gap-1"
@@ -435,7 +445,9 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         </div>
       <% else %>
         <p class="text-xs text-base-content/60">
-          No download has been recorded for this episode. Search for a release, or find a file already on disk.
+          {gettext(
+            "No download has been recorded for this episode. Search for a release, or find a file already on disk."
+          )}
         </p>
       <% end %>
 
@@ -446,7 +458,9 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         phx-value-episode-id={@episode.id}
         class="btn btn-xs btn-outline"
       >
-        <.icon name="hero-document-magnifying-glass" class="w-3.5 h-3.5" /> Find file on disk
+        <.icon name="hero-document-magnifying-glass" class="w-3.5 h-3.5" /> {gettext(
+          "Find file on disk"
+        )}
       </button>
     </div>
     """
@@ -454,20 +468,20 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
 
   # The one line worth reading about a download that has not produced a file.
   defp download_note(%{import_failure_reason: reason}) when is_binary(reason) and reason != "",
-    do: "Import failed: #{reason}"
+    do: gettext("Import failed: %{reason}", reason: reason)
 
   defp download_note(%{import_last_error: error}) when is_binary(error) and error != "",
-    do: "Import error: #{error}"
+    do: gettext("Import error: %{error}", error: error)
 
   defp download_note(%{error_message: message}) when is_binary(message) and message != "",
-    do: "Error: #{message}"
+    do: gettext("Error: %{message}", message: message)
 
   defp download_note(%{imported_at: %DateTime{} = at}),
-    do: "Imported #{format_relative_time_short(at)}"
+    do: gettext("Imported %{when}", when: format_relative_time_short(at))
 
-  defp download_note(%{completed_at: %DateTime{}}), do: "Completed, waiting to import"
+  defp download_note(%{completed_at: %DateTime{}}), do: gettext("Completed, waiting to import")
 
-  defp download_note(_), do: "In progress"
+  defp download_note(_), do: gettext("In progress")
 
   @doc """
   The disclosure row: a toggle button carrying the chevron, badge, counts,
@@ -489,13 +503,19 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
     chip =
       cond do
         counts.missing > 0 ->
-          %{class: "badge badge-warning", label: "#{counts.missing} missing"}
+          %{
+            class: "badge badge-warning",
+            label: ngettext("%{count} missing", "%{count} missing", counts.missing)
+          }
 
         counts.upcoming > 0 ->
-          %{class: "badge badge-ghost", label: "#{counts.upcoming} upcoming"}
+          %{
+            class: "badge badge-ghost",
+            label: ngettext("%{count} upcoming", "%{count} upcoming", counts.upcoming)
+          }
 
         counts.available == counts.total ->
-          %{class: "badge badge-success", label: "complete"}
+          %{class: "badge badge-success", label: gettext("complete")}
 
         true ->
           nil
@@ -522,7 +542,9 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           name={if @expanded?, do: "hero-chevron-down", else: "hero-chevron-right"}
           class="w-4 h-4 text-base-content/40"
         />
-        <span class="badge badge-primary badge-lg font-bold shrink-0">S{@season_number}</span>
+        <span class="badge badge-primary badge-lg font-bold shrink-0">
+          {pgettext("tv", "S%{number}", number: @season_number)}
+        </span>
         <span class="text-sm text-base-content/70 shrink-0">{@counts.available}/{@counts.total}</span>
         <progress
           class="progress progress-success w-16 shrink-0"
@@ -555,8 +577,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           id={"season-#{@season_number}-auto-search"}
           phx-click="auto_search_season"
           phx-value-season-number={@season_number}
-          aria-label="Auto search season"
-          title="Auto search season"
+          aria-label={gettext("Auto search season")}
+          title={gettext("Auto search season")}
           class="join-item btn btn-sm btn-ghost gap-1"
           disabled={@auto_searching_season == @season_number}
         >
@@ -565,7 +587,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           <% else %>
             <.icon name="hero-bolt" class="w-4 h-4 text-primary" />
           <% end %>
-          Auto
+          {gettext("Auto")}
         </button>
 
         <button
@@ -573,8 +595,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           id={"season-#{@season_number}-manual-search"}
           phx-click="manual_search_season"
           phx-value-season-number={@season_number}
-          aria-label="Manual search"
-          title="Manual search"
+          aria-label={gettext("Manual search")}
+          title={gettext("Manual search")}
           class="join-item btn btn-sm btn-square btn-ghost"
         >
           <.icon name="hero-magnifying-glass" class="w-4 h-4" />
@@ -585,8 +607,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           id={"season-#{@season_number}-rescan"}
           phx-click="rescan_season"
           phx-value-season-number={@season_number}
-          aria-label="Re-scan"
-          title="Re-scan"
+          aria-label={gettext("Re-scan")}
+          title={gettext("Re-scan")}
           class="join-item btn btn-sm btn-square btn-ghost"
           disabled={@rescanning_season == @season_number}
         >
@@ -617,8 +639,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           id={"season-#{@season_number}-subtitles"}
           phx-click="fetch_season_subtitles"
           phx-value-season-number={@season_number}
-          aria-label="Get subtitles for this season"
-          title="Get subtitles for this season"
+          aria-label={gettext("Get subtitles for this season")}
+          title={gettext("Get subtitles for this season")}
           class="join-item btn btn-sm btn-square btn-ghost"
           disabled={@fetching_season_subtitles == @season_number}
         >

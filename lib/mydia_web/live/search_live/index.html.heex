@@ -3,9 +3,9 @@
     <%!-- Header --%>
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
       <div>
-        <h1 class="text-3xl font-bold">{@page_title}</h1>
+        <h1 id="search-heading" class="text-3xl font-bold">{@page_title}</h1>
         <p class="text-base-content/70 mt-1">
-          Search for movies and TV shows across your configured indexers
+          {gettext("Search for movies and TV shows across your configured indexers")}
         </p>
       </div>
     </div>
@@ -15,9 +15,11 @@
       <div role="alert" class="alert alert-info mb-6">
         <.icon name="hero-information-circle" class="w-5 h-5" />
         <span>
-          No indexers configured.
-          <a href={~p"/admin/indexers"} class="link font-semibold">Configure indexers</a>
-          to enable searching.
+          {gettext("No indexers configured.")}
+          <a href={~p"/admin/indexers"} class="link font-semibold">
+            {gettext("Configure indexers")}
+          </a>
+          {gettext("to enable searching.")}
         </span>
       </div>
     <% end %>
@@ -32,7 +34,7 @@
               type="text"
               name="search"
               value={@search_query}
-              placeholder="Search for movies, TV shows, or specific releases..."
+              placeholder={gettext("Search for movies, TV shows, or specific releases...")}
               class="input input-bordered join-item flex-1"
             />
             <button
@@ -45,7 +47,7 @@
               <% else %>
                 <.icon name="hero-magnifying-glass" class="w-5 h-5" />
               <% end %>
-              <span class="hidden sm:inline">Search</span>
+              <span class="hidden sm:inline">{pgettext("search", "Search")}</span>
             </button>
           </div>
         </form>
@@ -53,7 +55,7 @@
         <%!-- Indexer dropdown --%>
         <div class="dropdown dropdown-end">
           <div tabindex="0" role="button" class="btn btn-outline gap-2">
-            <.icon name="hero-server-stack" class="w-5 h-5" /> Indexers
+            <.icon name="hero-server-stack" class="w-5 h-5" /> {gettext("Indexers")}
             <span class="badge badge-sm badge-primary">
               {MapSet.size(@selected_indexer_ids)}/{length(@available_indexers)}
             </span>
@@ -64,21 +66,21 @@
           >
             <div class="card-body">
               <div class="flex items-center justify-between mb-2">
-                <span class="font-semibold text-sm">Select Indexers</span>
+                <span class="font-semibold text-sm">{gettext("Select Indexers")}</span>
                 <div class="flex gap-1">
                   <button
                     type="button"
                     class="btn btn-xs btn-ghost"
                     phx-click="select_all_indexers"
                   >
-                    All
+                    {gettext("All")}
                   </button>
                   <button
                     type="button"
                     class="btn btn-xs btn-ghost"
                     phx-click="deselect_all_indexers"
                   >
-                    None
+                    {gettext("None")}
                   </button>
                 </div>
               </div>
@@ -102,7 +104,7 @@
               <%= if MapSet.size(@selected_indexer_ids) == 0 do %>
                 <div role="alert" class="alert alert-warning py-2 mt-2">
                   <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-                  <span class="text-xs">Select at least one indexer</span>
+                  <span class="text-xs">{gettext("Select at least one indexer")}</span>
                 </div>
               <% end %>
             </div>
@@ -117,12 +119,12 @@
         <%!-- Filters --%>
         <.form for={%{}} phx-change="filter" id="search-filter-form" class="join flex-1">
           <select name="library_type" class="select select-bordered join-item">
-            <%= for {type, label} <- @library_type_options do %>
+            <%= for {type, label} <- library_type_options() do %>
               <option value={type} selected={@library_type_filter == type}>{label}</option>
             <% end %>
           </select>
           <select name="quality" class="select select-bordered join-item">
-            <option value="" selected={is_nil(@quality_filter)}>All Quality</option>
+            <option value="" selected={is_nil(@quality_filter)}>{gettext("All Quality")}</option>
             <option value="720p" selected={@quality_filter == "720p"}>720p</option>
             <option value="1080p" selected={@quality_filter == "1080p"}>1080p</option>
             <option value="2160p" selected={@quality_filter in ["2160p", "4k"]}>4K</option>
@@ -132,7 +134,7 @@
             name="min_seeders"
             value={@min_seeders}
             min="0"
-            placeholder="Min seeders"
+            placeholder={gettext("Min seeders")}
             class="input input-bordered join-item w-32"
           />
           <input
@@ -141,7 +143,7 @@
             value={@min_size_gb}
             min="0"
             step="0.1"
-            placeholder="Min GB"
+            placeholder={gettext("Min GB")}
             class="input input-bordered join-item w-28"
           />
           <input
@@ -150,7 +152,7 @@
             value={@max_size_gb}
             min="0"
             step="0.1"
-            placeholder="Max GB"
+            placeholder={gettext("Max GB")}
             class="input input-bordered join-item w-28"
           />
         </.form>
@@ -158,10 +160,14 @@
         <%!-- Sort --%>
         <.form for={%{}} phx-change="sort" id="search-sort-form">
           <select name="sort_by" class="select select-bordered">
-            <option value="quality" selected={@sort_by == :quality}>Quality (Best)</option>
-            <option value="seeders" selected={@sort_by == :seeders}>Seeders (Most)</option>
-            <option value="size" selected={@sort_by == :size}>Size (Largest)</option>
-            <option value="date" selected={@sort_by == :date}>Date (Newest)</option>
+            <option value="quality" selected={@sort_by == :quality}>
+              {gettext("Quality (Best)")}
+            </option>
+            <option value="seeders" selected={@sort_by == :seeders}>
+              {gettext("Seeders (Most)")}
+            </option>
+            <option value="size" selected={@sort_by == :size}>{gettext("Size (Largest)")}</option>
+            <option value="date" selected={@sort_by == :date}>{gettext("Date (Newest)")}</option>
           </select>
         </.form>
       </div>
@@ -173,9 +179,9 @@
         <div class="card-body flex flex-col items-center justify-center py-16">
           <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
           <h3 class="text-xl font-semibold text-base-content/70 mb-2">
-            Searching indexers...
+            {gettext("Searching indexers...")}
           </h3>
-          <p class="text-base-content/50">Results appear as each indexer responds</p>
+          <p class="text-base-content/50">{gettext("Results appear as each indexer responds")}</p>
         </div>
       </div>
     <% end %>
@@ -185,9 +191,13 @@
       <div class="card bg-base-100 shadow-lg">
         <div class="card-body flex flex-col items-center justify-center py-16">
           <.icon name="hero-magnifying-glass" class="w-16 h-16 text-base-content/30 mb-4" />
-          <h3 class="text-xl font-semibold text-base-content/70 mb-2">Search for Media</h3>
+          <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+            {gettext("Search for Media")}
+          </h3>
           <p class="text-base-content/50 text-center max-w-md">
-            Enter a movie or TV show name above to find available releases from your configured indexers
+            {gettext(
+              "Enter a movie or TV show name above to find available releases from your configured indexers"
+            )}
           </p>
         </div>
       </div>
@@ -205,16 +215,18 @@
       <div class="card bg-base-100 shadow-lg">
         <div class="card-body flex flex-col items-center justify-center py-16">
           <.icon name="hero-exclamation-circle" class="w-16 h-16 text-base-content/30 mb-4" />
-          <h3 class="text-xl font-semibold text-base-content/70 mb-2">No Results Found</h3>
+          <h3 class="text-xl font-semibold text-base-content/70 mb-2">
+            {gettext("No Results Found")}
+          </h3>
           <p class="text-base-content/50 text-center max-w-md mb-4">
-            No releases found for "<span class="font-semibold">{@search_query}</span>"
+            {gettext("No releases found for \"%{query}\"", query: @search_query)}
           </p>
           <div class="text-sm text-base-content/60">
-            <p>Try:</p>
+            <p>{gettext("Try:")}</p>
             <ul class="list-disc list-inside mt-2 space-y-1">
-              <li>Using different keywords or spelling</li>
-              <li>Removing or adjusting filters</li>
-              <li>Checking that your indexers are enabled</li>
+              <li>{gettext("Using different keywords or spelling")}</li>
+              <li>{gettext("Removing or adjusting filters")}</li>
+              <li>{gettext("Checking that your indexers are enabled")}</li>
             </ul>
           </div>
         </div>
@@ -227,7 +239,12 @@
         <%!-- Results count --%>
         <div class="px-4 py-3 bg-base-200 border-b border-base-300 flex items-center justify-between">
           <span id="search-results-count" class="text-sm font-medium">
-            {map_size(@search_results_map)} results for "{@search_query}"
+            {ngettext(
+              "%{count} result for \"%{query}\"",
+              "%{count} results for \"%{query}\"",
+              map_size(@search_results_map),
+              query: @search_query
+            )}
           </span>
         </div>
 
@@ -236,11 +253,11 @@
           <table class="table table-zebra w-full table-fixed">
             <thead>
               <tr class="bg-base-200">
-                <th class="w-[50%]">Release</th>
-                <th class="w-[10%]">Size</th>
-                <th class="w-[15%] hidden md:table-cell">Health</th>
-                <th class="w-[15%] hidden lg:table-cell">Source</th>
-                <th class="w-[10%] text-right">Actions</th>
+                <th class="w-[50%]">{pgettext("release", "Release")}</th>
+                <th class="w-[10%]">{gettext("Size")}</th>
+                <th class="w-[15%] hidden md:table-cell">{gettext("Health")}</th>
+                <th class="w-[15%] hidden lg:table-cell">{gettext("Source")}</th>
+                <th class="w-[10%] text-right">{gettext("Actions")}</th>
               </tr>
             </thead>
             <tbody id="search-results" phx-update="stream">
@@ -352,7 +369,9 @@
                           target="_blank"
                           rel="noopener noreferrer"
                           class="badge badge-outline badge-sm gap-1 hover:border-primary hover:text-primary transition-colors"
-                          title={"View this release on #{result.indexer}"}
+                          title={
+                            gettext("View this release on %{indexer}", indexer: result.indexer)
+                          }
                         >
                           {result.indexer}
                           <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" />
@@ -371,7 +390,10 @@
                 <%!-- Actions Column --%>
                 <td class="text-right">
                   <%= if @current_user && @current_user.role == "guest" do %>
-                    <div class="tooltip tooltip-left" data-tip="Please use the request system">
+                    <div
+                      class="tooltip tooltip-left"
+                      data-tip={gettext("Please use the request system")}
+                    >
                       <button class="btn btn-sm btn-ghost" disabled>
                         <.icon name="hero-lock-closed" class="w-4 h-4" />
                       </button>
@@ -382,7 +404,7 @@
                       class="btn btn-sm btn-primary"
                       phx-click="show_download_modal"
                       phx-value-download_url={result.download_url}
-                      title="Download to library"
+                      title={gettext("Download to library")}
                       disabled={is_downloading}
                     >
                       <%= if is_downloading do %>
@@ -431,20 +453,20 @@
         <div class="modal-box">
           <h3 class="font-bold text-lg mb-4">
             <.icon name="hero-exclamation-triangle" class="w-6 h-6 inline text-warning" />
-            Metadata Provider Error
+            {gettext("Metadata Provider Error")}
           </h3>
           <p class="text-sm text-base-content/70 mb-2">
             {@retry_error_message}
           </p>
           <p class="text-sm text-base-content/60 mb-4">
-            This may be a temporary issue. Would you like to try again?
+            {gettext("This may be a temporary issue. Would you like to try again?")}
           </p>
           <div class="modal-action">
             <button class="btn btn-ghost" phx-click="close_retry_modal">
-              Cancel
+              {gettext("Cancel")}
             </button>
             <button class="btn btn-primary" phx-click="retry_add_to_library">
-              <.icon name="hero-arrow-path" class="w-4 h-4" /> Retry
+              <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Retry")}
             </button>
           </div>
         </div>
@@ -467,7 +489,7 @@
           <%!-- Quality and Size Info --%>
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div class="stat bg-base-200 rounded-lg p-4">
-              <div class="stat-title text-xs">Quality</div>
+              <div class="stat-title text-xs">{gettext("Quality")}</div>
               <div class="stat-value text-base whitespace-normal">
                 <span class="badge badge-primary h-auto min-h-5 whitespace-normal break-words rounded-lg text-left leading-snug py-0.5">
                   {get_quality_badge(@selected_result)}
@@ -475,19 +497,19 @@
               </div>
             </div>
             <div class="stat bg-base-200 rounded-lg p-4">
-              <div class="stat-title text-xs">Size</div>
+              <div class="stat-title text-xs">{gettext("Size")}</div>
               <div class="stat-value text-lg font-mono">
                 {format_size(@selected_result)}
               </div>
             </div>
             <div class="stat bg-base-200 rounded-lg p-4">
               <%= if @selected_result.download_protocol == :nzb do %>
-                <div class="stat-title text-xs">Protocol</div>
+                <div class="stat-title text-xs">{gettext("Protocol")}</div>
                 <div class="stat-value text-lg">
                   <span class="badge badge-info">Usenet</span>
                 </div>
               <% else %>
-                <div class="stat-title text-xs">Health</div>
+                <div class="stat-title text-xs">{gettext("Health")}</div>
                 <div class="stat-value text-lg">
                   <div
                     class={"radial-progress #{health_color(health_score(@selected_result))}"}
@@ -502,7 +524,7 @@
               <% end %>
             </div>
             <div class="stat bg-base-200 rounded-lg p-4">
-              <div class="stat-title text-xs">Source</div>
+              <div class="stat-title text-xs">{gettext("Source")}</div>
               <div class="stat-value text-base">
                 <% info_page_url = SearchResult.info_page_url(@selected_result) %>
                 <%= if info_page_url do %>
@@ -511,7 +533,11 @@
                     target="_blank"
                     rel="noopener noreferrer"
                     class="badge badge-outline gap-1 hover:border-primary hover:text-primary transition-colors"
-                    title={"View this release on #{@selected_result.indexer}"}
+                    title={
+                      gettext("View this release on %{indexer}",
+                        indexer: @selected_result.indexer
+                      )
+                    }
                   >
                     {@selected_result.indexer}
                     <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" />
@@ -528,14 +554,14 @@
               <div class="flex items-center gap-3 bg-base-200 rounded-lg p-4">
                 <.icon name="hero-arrow-up" class="w-8 h-8 text-success" />
                 <div>
-                  <div class="text-xs text-base-content/70">Seeders</div>
+                  <div class="text-xs text-base-content/70">{gettext("Seeders")}</div>
                   <div class="text-2xl font-bold text-success">{@selected_result.seeders}</div>
                 </div>
               </div>
               <div class="flex items-center gap-3 bg-base-200 rounded-lg p-4">
                 <.icon name="hero-arrow-down" class="w-8 h-8 text-primary" />
                 <div>
-                  <div class="text-xs text-base-content/70">Leechers</div>
+                  <div class="text-xs text-base-content/70">{gettext("Leechers")}</div>
                   <div class="text-2xl font-bold text-primary">{@selected_result.leechers}</div>
                 </div>
               </div>
@@ -550,7 +576,7 @@
                 name={library_type_icon(detail_lib_type)}
                 class="w-5 h-5 text-base-content/50"
               />
-              <span class="text-base-content/70">Downloads to:</span>
+              <span class="text-base-content/70">{gettext("Downloads to:")}</span>
               <span
                 class={["badge gap-1", library_type_badge_class(detail_lib_type)]}
                 title={type_source_hint(detail_source)}
@@ -562,7 +588,7 @@
             <%= if @selected_result.published_at do %>
               <div class="flex items-center gap-2 text-sm">
                 <.icon name="hero-calendar" class="w-5 h-5 text-base-content/50" />
-                <span class="text-base-content/70">Published:</span>
+                <span class="text-base-content/70">{gettext("Published:")}</span>
                 <span class="font-semibold">{format_date(
                   @selected_result.published_at,
                   @time_display
@@ -571,13 +597,13 @@
             <% end %>
             <div class="flex items-center gap-2 text-sm">
               <.icon name="hero-server" class="w-5 h-5 text-base-content/50" />
-              <span class="text-base-content/70">Indexer:</span>
+              <span class="text-base-content/70">{gettext("Indexer:")}</span>
               <span class="font-semibold">{@selected_result.indexer}</span>
             </div>
             <%= if @selected_result.category do %>
               <div class="flex items-center gap-2 text-sm">
                 <.icon name="hero-tag" class="w-5 h-5 text-base-content/50" />
-                <span class="text-base-content/70">Category:</span>
+                <span class="text-base-content/70">{gettext("Category:")}</span>
                 <span class="font-semibold">{@selected_result.category}</span>
               </div>
             <% end %>
@@ -585,14 +611,14 @@
           <%!-- Actions --%>
           <div class="modal-action flex gap-2">
             <button class="btn btn-ghost" phx-click="close_detail_modal">
-              Cancel
+              {gettext("Cancel")}
             </button>
             <%= if @current_user && @current_user.role == "guest" do %>
               <%!-- Guest users see a message about using the request system --%>
               <div role="alert" class="alert alert-info flex-1">
                 <.icon name="hero-information-circle" class="w-5 h-5" />
                 <span class="text-sm">
-                  Please use the request system to add media to the library
+                  {gettext("Please use the request system to add media to the library")}
                 </span>
               </div>
             <% else %>
@@ -602,7 +628,7 @@
                 phx-click="show_download_modal"
                 phx-value-download_url={@selected_result.download_url}
               >
-                <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> Download
+                <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> {gettext("Download")}
               </button>
             <% end %>
           </div>
@@ -623,12 +649,14 @@
             type="button"
             class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
             phx-click="close_download_modal"
-            aria-label="Close"
+            aria-label={gettext("Close")}
           >
             <.icon name="hero-x-mark" class="w-5 h-5" />
           </button>
           <h3 class="font-bold text-xl mb-4 flex items-center gap-2">
-            <.icon name="hero-arrow-down-tray" class="w-6 h-6 text-primary" /> Download
+            <.icon name="hero-arrow-down-tray" class="w-6 h-6 text-primary" /> {gettext(
+              "Download"
+            )}
           </h3>
 
           <div class="bg-base-200 rounded-lg p-4 mb-4 min-w-0">
@@ -655,17 +683,17 @@
               <div role="alert" class="alert alert-warning mb-4">
                 <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
                 <span class="text-sm">
-                  No library paths configured.
+                  {gettext("No library paths configured.")}
                   <.link navigate={~p"/admin/library-paths"} class="link">
-                    Configure library paths
+                    {gettext("Configure library paths")}
                   </.link>
-                  to enable downloads.
+                  {gettext("to enable downloads.")}
                 </span>
               </div>
             <% else %>
               <div class="form-control mb-4">
                 <label class="label">
-                  <span class="label-text font-semibold">Type</span>
+                  <span class="label-text font-semibold">{pgettext("media type", "Type")}</span>
                 </label>
                 <div class="join w-full">
                   <%= for type <- @download_config.available_types do %>
@@ -681,7 +709,7 @@
                 </div>
                 <%= if is_nil(@download_config.media_type) do %>
                   <span class="label-text-alt text-base-content/60 mt-1">
-                    Choose a type to continue.
+                    {gettext("Choose a type to continue.")}
                   </span>
                 <% end %>
               </div>
@@ -697,14 +725,14 @@
 
             <div class="modal-action">
               <button type="button" class="btn btn-ghost" phx-click="close_download_modal">
-                Cancel
+                {gettext("Cancel")}
               </button>
               <button
                 type="submit"
                 class="btn btn-primary"
                 disabled={is_nil(@download_config.media_type)}
               >
-                <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> Download
+                <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> {gettext("Download")}
               </button>
             </div>
           </.form>

@@ -11,7 +11,6 @@ defmodule MydiaWeb.DevicesLive.Index do
   on_mount {MydiaWeb.PlayerHooks, :require_player}
 
   alias Mydia.RemoteAccess
-  alias MydiaWeb.DevicesLive.Components
 
   require Logger
 
@@ -32,7 +31,7 @@ defmodule MydiaWeb.DevicesLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Devices")
+     |> assign(:page_title, gettext("Devices"))
      |> assign(:show_revoke_modal, false)
      |> assign(:selected_device, nil)
      |> assign(:show_delete_modal, false)
@@ -78,7 +77,7 @@ defmodule MydiaWeb.DevicesLive.Index do
         |> assign(:countdown_seconds, 0)
         |> assign(:show_pairing_modal, false)
         |> load_devices()
-        |> put_flash(:info, "Device connected.")
+        |> put_flash(:info, gettext("Device connected."))
       else
         socket
       end
@@ -117,11 +116,11 @@ defmodule MydiaWeb.DevicesLive.Index do
          socket
          |> assign(:show_revoke_modal, false)
          |> assign(:selected_device, nil)
-         |> put_flash(:info, "Device revoked.")
+         |> put_flash(:info, gettext("Device revoked."))
          |> load_devices()}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to revoke device")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to revoke device"))}
     end
   end
 
@@ -152,11 +151,11 @@ defmodule MydiaWeb.DevicesLive.Index do
          socket
          |> assign(:show_delete_modal, false)
          |> assign(:device_to_delete, nil)
-         |> put_flash(:info, "Device removed.")
+         |> put_flash(:info, gettext("Device removed."))
          |> load_devices()}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to remove device")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to remove device"))}
     end
   end
 
@@ -179,7 +178,14 @@ defmodule MydiaWeb.DevicesLive.Index do
     {:noreply,
      socket
      |> assign(:show_clear_inactive_modal, false)
-     |> put_flash(:info, "Removed #{Components.pluralize(deleted, "inactive device")}.")
+     |> put_flash(
+       :info,
+       ngettext(
+         "Removed %{count} inactive device.",
+         "Removed %{count} inactive devices.",
+         deleted
+       )
+     )
      |> load_devices()}
   end
 
@@ -209,7 +215,7 @@ defmodule MydiaWeb.DevicesLive.Index do
   end
 
   def handle_event("copy_claim_code", _params, socket) do
-    {:noreply, put_flash(socket, :info, "Code copied to clipboard")}
+    {:noreply, put_flash(socket, :info, gettext("Code copied to clipboard"))}
   end
 
   ## Private helpers
@@ -234,30 +240,46 @@ defmodule MydiaWeb.DevicesLive.Index do
         |> assign(:remote_access_enabled, false)
         |> assign(
           :pairing_error,
-          "Remote access is turned off on this server. Ask an administrator to turn it on."
+          gettext(
+            "Remote access is turned off on this server. Ask an administrator to turn it on."
+          )
         )
 
       {:error, :p2p_not_running} ->
-        assign(socket, :pairing_error, "P2P service is not running. Please try again.")
+        assign(
+          socket,
+          :pairing_error,
+          gettext("P2P service is not running. Please try again.")
+        )
 
       {:error, :p2p_not_ready} ->
         assign(
           socket,
           :pairing_error,
-          "P2P service is still starting up. Please try again in a moment."
+          gettext("P2P service is still starting up. Please try again in a moment.")
         )
 
       {:error, :rate_limited} ->
-        assign(socket, :pairing_error, "Too many requests. Please wait a minute and try again.")
+        assign(
+          socket,
+          :pairing_error,
+          gettext("Too many requests. Please wait a minute and try again.")
+        )
 
       {:error, :create_claim_failed} ->
-        assign(socket, :pairing_error, "Relay service returned an error. Please try again.")
+        assign(
+          socket,
+          :pairing_error,
+          gettext("Relay service returned an error. Please try again.")
+        )
 
       {:error, :not_configured} ->
         assign(
           socket,
           :pairing_error,
-          "This server has no instance ID yet. Restart it, or ask an administrator to check the remote access settings."
+          gettext(
+            "This server has no instance ID yet. Restart it, or ask an administrator to check the remote access settings."
+          )
         )
 
       {:error, reason} ->
@@ -266,7 +288,7 @@ defmodule MydiaWeb.DevicesLive.Index do
         assign(
           socket,
           :pairing_error,
-          "Could not connect to the relay service. Check your connection and try again."
+          gettext("Could not connect to the relay service. Check your connection and try again.")
         )
     end
   end
@@ -287,7 +309,7 @@ defmodule MydiaWeb.DevicesLive.Index do
           |> assign(:claim_code, nil)
           |> assign(:claim_expires_at, nil)
           |> assign(:countdown_seconds, 0)
-          |> put_flash(:info, "Pairing code expired")
+          |> put_flash(:info, gettext("Pairing code expired"))
         end
     end
   end

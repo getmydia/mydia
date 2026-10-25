@@ -50,17 +50,19 @@ defmodule MydiaWeb.AddMediaComponents do
     <%!-- Library --%>
     <div class="form-control mb-4">
       <label class="label">
-        <span class="label-text font-semibold">Library</span>
+        <span class="label-text font-semibold">{gettext("Library")}</span>
         <span class="label-text-alt text-error">*</span>
       </label>
       <%= if @config.libraries == [] do %>
         <div class="alert alert-warning">
           <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-          <span>No library paths configured. Please configure a library path first.</span>
+          <span>
+            {gettext("No library paths configured. Please configure a library path first.")}
+          </span>
         </div>
       <% else %>
         <select name="config[library_path_id]" class="select select-bordered" required>
-          <option value="">Select a library...</option>
+          <option value="">{gettext("Select a library...")}</option>
           <%= for path <- @config.libraries do %>
             <option value={path.id} selected={@config.defaults.library_path_id == path.id}>
               {@library_labels[path.id]}
@@ -72,10 +74,10 @@ defmodule MydiaWeb.AddMediaComponents do
     <%!-- Quality Profile --%>
     <div class="form-control mb-4">
       <label class="label">
-        <span class="label-text font-semibold">Quality Profile</span>
+        <span class="label-text font-semibold">{gettext("Quality Profile")}</span>
       </label>
       <select name="config[quality_profile_id]" class="select select-bordered">
-        <option value="">Use server default</option>
+        <option value="">{gettext("Use server default")}</option>
         <%= for profile <- @quality_profiles do %>
           <option value={profile.id} selected={@config.defaults.quality_profile_id == profile.id}>
             {profile.name}
@@ -96,10 +98,12 @@ defmodule MydiaWeb.AddMediaComponents do
         />
         <div>
           <span class="label-text font-semibold">
-            Monitor this {(@config.media_type == :movie && "movie") || "series"}
+            {if @config.media_type == :movie,
+              do: gettext("Monitor this movie"),
+              else: gettext("Monitor this series")}
           </span>
           <p class="text-xs text-base-content/60">
-            Automatically search for and download new releases
+            {gettext("Automatically search for and download new releases")}
           </p>
         </div>
       </label>
@@ -108,20 +112,20 @@ defmodule MydiaWeb.AddMediaComponents do
     <%= if @config.media_type == :tv_show do %>
       <div class="form-control mb-4">
         <label class="label">
-          <span class="label-text font-semibold">Season Monitoring</span>
+          <span class="label-text font-semibold">{gettext("Season Monitoring")}</span>
         </label>
         <select name="config[season_monitoring]" class="select select-bordered">
           <option value="all" selected={@config.defaults.season_monitoring == "all"}>
-            Monitor All Seasons
+            {gettext("Monitor All Seasons")}
           </option>
           <option value="first" selected={@config.defaults.season_monitoring == "first"}>
-            Monitor First Season Only
+            {gettext("Monitor First Season Only")}
           </option>
           <option value="future" selected={@config.defaults.season_monitoring == "future"}>
-            Monitor Future Seasons
+            {gettext("Monitor Future Seasons")}
           </option>
           <option value="none" selected={@config.defaults.season_monitoring == "none"}>
-            Don't Monitor Any Seasons
+            {gettext("Don't Monitor Any Seasons")}
           </option>
         </select>
       </div>
@@ -139,9 +143,9 @@ defmodule MydiaWeb.AddMediaComponents do
             checked={@config.defaults.search_on_add}
           />
           <div>
-            <span class="label-text font-semibold">Search on Add</span>
+            <span class="label-text font-semibold">{gettext("Search on Add")}</span>
             <p class="text-xs text-base-content/60">
-              Trigger an immediate search for this media after adding
+              {gettext("Trigger an immediate search for this media after adding")}
             </p>
           </div>
         </label>
@@ -182,7 +186,9 @@ defmodule MydiaWeb.AddMediaComponents do
       phx-key="Escape"
     >
       <div :if={@config} class="modal-box max-w-2xl">
-        <h3 class="font-bold text-lg mb-4">Configure Before Adding</h3>
+        <h3 class="font-bold text-lg mb-4">
+          {gettext("Configure Before Adding")}
+        </h3>
         <%!-- Media Preview --%>
         <div class="flex gap-4 mb-6 bg-base-300 p-4 rounded-lg">
           <div class="w-20 flex-shrink-0">
@@ -208,10 +214,10 @@ defmodule MydiaWeb.AddMediaComponents do
           <%!-- Modal Actions --%>
           <div class="modal-action">
             <button type="button" class="btn btn-ghost" phx-click="close_add_config">
-              Cancel
+              {gettext("Cancel")}
             </button>
             <button type="submit" class="btn btn-primary" disabled={@config.libraries == []}>
-              <.icon name="hero-plus" class="w-5 h-5" /> Add to Library
+              <.icon name="hero-plus" class="w-5 h-5" /> {gettext("Add to Library")}
             </button>
           </div>
         </.form>
@@ -226,5 +232,5 @@ defmodule MydiaWeb.AddMediaComponents do
   defp get_poster_url(_preview), do: "/images/no-poster.svg"
 
   defp format_year(%{year: year}) when is_integer(year), do: to_string(year)
-  defp format_year(_preview), do: "N/A"
+  defp format_year(_preview), do: gettext("N/A")
 end

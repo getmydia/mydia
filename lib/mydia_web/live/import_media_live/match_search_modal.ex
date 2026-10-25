@@ -1,6 +1,7 @@
 defmodule MydiaWeb.ImportMediaLive.MatchSearchModal do
   @moduledoc false
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
   import MydiaWeb.CoreComponents
   import MydiaWeb.SegmentedControl, only: [segmented_control: 1]
 
@@ -23,7 +24,7 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearchModal do
       <:title>
         <div class="flex items-center gap-2">
           <.icon name="hero-magnifying-glass" class="w-5 h-5 text-primary" />
-          <span>Change match</span>
+          <span>{gettext("Change match")}</span>
         </div>
       </:title>
 
@@ -37,7 +38,7 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearchModal do
             type="text"
             name="q"
             value={@state && @state.query}
-            placeholder="Search by title…"
+            placeholder={gettext("Search by title…")}
             phx-debounce="300"
             class="input input-bordered w-full pl-10"
           />
@@ -50,7 +51,7 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearchModal do
           value={@state.provider}
           event="match_search_provider"
           param="provider"
-          label="Metadata provider"
+          label={gettext("Metadata provider")}
         >
           <:option value="tvdb" label="TVDB" id="match-provider-tvdb" />
           <:option value="tmdb" label="TMDB" id="match-provider-tmdb" />
@@ -77,7 +78,7 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearchModal do
             class="text-sm text-base-content/60 text-center py-10"
           >
             <.icon name="hero-film" class="w-8 h-8 mx-auto mb-2 opacity-30" />
-            <p>No results found.</p>
+            <p>{gettext("No results found.")}</p>
           </div>
 
           <button
@@ -123,7 +124,9 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearchModal do
       </div>
 
       <:actions>
-        <button class="btn btn-ghost" phx-click="close_match_search">Cancel</button>
+        <button class="btn btn-ghost" phx-click="close_match_search">
+          {gettext("Cancel")}
+        </button>
       </:actions>
     </.modal>
     """
@@ -136,7 +139,7 @@ defmodule MydiaWeb.ImportMediaLive.MatchSearchModal do
       result.provider != library_provider
   end
 
-  defp media_type_label(:tv_show), do: "TV Show"
-  defp media_type_label(:movie), do: "Movie"
-  defp media_type_label(_), do: "Unknown"
+  defp media_type_label(:tv_show), do: gettext("TV Show")
+  defp media_type_label(:movie), do: gettext("Movie")
+  defp media_type_label(_), do: gettext("Unknown")
 end

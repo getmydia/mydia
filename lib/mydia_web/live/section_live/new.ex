@@ -14,7 +14,7 @@ defmodule MydiaWeb.SectionLive.New do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Add a section")
+     |> assign(:page_title, gettext("Add a section"))
      |> assign(:presets, SectionPresets.all())}
   end
 
@@ -27,12 +27,31 @@ defmodule MydiaWeb.SectionLive.New do
       {:noreply, push_navigate(socket, to: ~p"/sections/#{collection.id}")}
     else
       nil ->
-        {:noreply, put_flash(socket, :error, "That section type is not available.")}
+        {:noreply, put_flash(socket, :error, gettext("That section type is not available."))}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not create that section.")}
+        {:noreply, put_flash(socket, :error, gettext("Could not create that section."))}
     end
   end
+
+  # The preset catalog lives in `Mydia.Collections.SectionPresets` with English
+  # text. The stored collection name stays English (it is matched against the
+  # catalog), so only the picker's display text is translated here.
+  defp preset_name(%{key: "anime"}), do: gettext("Anime")
+  defp preset_name(%{key: "cartoons"}), do: gettext("Cartoons")
+  defp preset_name(%{key: "documentaries"}), do: gettext("Documentaries")
+  defp preset_name(preset), do: preset.name
+
+  defp preset_description(%{key: "anime"}),
+    do: gettext("Japanese animation, movies and series, out of Movies and TV.")
+
+  defp preset_description(%{key: "cartoons"}),
+    do: gettext("Western animation, movies and series, out of Movies and TV.")
+
+  defp preset_description(%{key: "documentaries"}),
+    do: gettext("Anything tagged with the Documentary genre. Stays in Movies and TV.")
+
+  defp preset_description(preset), do: preset.description
 
   # A user who clicks the same preset twice should land on the section they
   # already have rather than growing a duplicate sidebar entry.
@@ -63,10 +82,11 @@ defmodule MydiaWeb.SectionLive.New do
     ~H"""
     <Layouts.app {assigns}>
       <div class="max-w-2xl mx-auto py-8">
-        <h1 class="text-2xl font-bold mb-2">Add a section</h1>
+        <h1 class="text-2xl font-bold mb-2">{gettext("Add a section")}</h1>
         <p class="text-base-content/70 mb-6">
-          A section is a saved filter pinned to your sidebar. It is yours alone;
-          nobody else's sidebar changes.
+          {gettext(
+            "A section is a saved filter pinned to your sidebar. It is yours alone; nobody else's sidebar changes."
+          )}
         </p>
 
         <ul class="space-y-3">
@@ -80,8 +100,8 @@ defmodule MydiaWeb.SectionLive.New do
               <div class="card-body flex-row items-center gap-4 py-4">
                 <.icon name={preset.icon} class="w-8 h-8 text-primary shrink-0" />
                 <div>
-                  <div class="font-semibold">{preset.name}</div>
-                  <div class="text-sm text-base-content/70">{preset.description}</div>
+                  <div class="font-semibold">{preset_name(preset)}</div>
+                  <div class="text-sm text-base-content/70">{preset_description(preset)}</div>
                 </div>
               </div>
             </button>
@@ -95,10 +115,11 @@ defmodule MydiaWeb.SectionLive.New do
               <div class="card-body flex-row items-center gap-4 py-4">
                 <.icon name="hero-squares-2x2" class="w-8 h-8 text-primary shrink-0" />
                 <div>
-                  <div class="font-semibold">Custom</div>
+                  <div class="font-semibold">{gettext("Custom")}</div>
                   <div class="text-sm text-base-content/70">
-                    Build a smart collection with your own rules, then use
-                    "Pin to sidebar" on it to add it here.
+                    {gettext(
+                      "Build a smart collection with your own rules, then use \"Pin to sidebar\" on it to add it here."
+                    )}
                   </div>
                 </div>
               </div>

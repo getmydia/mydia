@@ -14,7 +14,7 @@ defmodule MydiaWeb.PluginPageLive.Components do
 
     ~H"""
     <.modal id="plugin-confirm-modal" show on_cancel={JS.push("decide", value: %{choice: "deny"})}>
-      <:title>{@title} wants to make changes</:title>
+      <:title>{gettext("%{title} wants to make changes", title: @title)}</:title>
       <div :for={{surface, rows} <- @groups} class="mb-4">
         <p class="text-sm font-medium text-base-content/70">{PageWrites.surface_label(surface)}</p>
         <ul class="mt-1 space-y-1">
@@ -25,7 +25,7 @@ defmodule MydiaWeb.PluginPageLive.Components do
         </ul>
       </div>
       <p class="text-xs text-base-content/60">
-        Every change is listed under Activity and can be undone there.
+        {gettext("Every change is listed under Activity and can be undone there.")}
       </p>
       <:actions>
         <div class="flex flex-wrap gap-2 justify-end">
@@ -35,7 +35,7 @@ defmodule MydiaWeb.PluginPageLive.Components do
             phx-click="decide"
             phx-value-choice="deny"
           >
-            Deny
+            {gettext("Deny")}
           </button>
           <button
             :if={"once" in @choices}
@@ -44,7 +44,7 @@ defmodule MydiaWeb.PluginPageLive.Components do
             phx-click="decide"
             phx-value-choice="once"
           >
-            Allow once
+            {gettext("Allow once")}
           </button>
           <button
             :if={"session" in @choices}
@@ -53,7 +53,7 @@ defmodule MydiaWeb.PluginPageLive.Components do
             phx-click="decide"
             phx-value-choice="session"
           >
-            Allow for this session
+            {gettext("Allow for this session")}
           </button>
           <button
             :if={"always" in @choices}
@@ -62,7 +62,7 @@ defmodule MydiaWeb.PluginPageLive.Components do
             phx-click="decide"
             phx-value-choice="always"
           >
-            Always allow
+            {gettext("Always allow")}
           </button>
         </div>
       </:actions>
@@ -89,15 +89,15 @@ defmodule MydiaWeb.PluginPageLive.Components do
         phx-click="undo_entry"
         phx-value-id={@entry.id}
       >
-        Undo
+        {gettext("Undo")}
       </button>
     </div>
     """
   end
 
-  defp status_label("undone"), do: "Undone"
-  defp status_label("conflict"), do: "Changed since"
-  defp status_label("irreversible"), do: "Can't undo"
+  defp status_label("undone"), do: gettext("Undone")
+  defp status_label("conflict"), do: gettext("Changed since")
+  defp status_label("irreversible"), do: gettext("Can't undo")
 
   defp status_class("undone"), do: "badge-ghost"
   defp status_class(_), do: "badge-warning"

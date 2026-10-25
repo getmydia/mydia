@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3]
 
@@ -27,7 +29,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
       nil ->
         {:noreply,
          socket
-         |> put_flash(:info, "That download no longer exists.")
+         |> put_flash(:info, gettext("That download no longer exists."))
          |> refresh_downloads()}
 
       download ->
@@ -81,7 +83,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
         {:error, _changeset} ->
           {:noreply,
            socket
-           |> put_flash(:error, "Failed to cancel download")
+           |> put_flash(:error, gettext("Failed to cancel download"))
            |> assign(:show_download_cancel_confirm, false)
            |> assign(:download_to_cancel, nil)}
       end
@@ -92,10 +94,12 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   # Mydia.Downloads.Queue.cancel_bans_release?/1), so the operator is told.
   defp cancel_flash(download) do
     if Downloads.cancel_bans_release?(download) do
-      "Cancelling. This release was stalled, so Mydia won't grab it again for " <>
-        "#{Blacklists.default_ttl_days()} days."
+      gettext(
+        "Cancelling. This release was stalled, so Mydia won't grab it again for %{days} days.",
+        days: Blacklists.default_ttl_days()
+      )
     else
-      "Cancelling the download"
+      gettext("Cancelling the download")
     end
   end
 
@@ -128,12 +132,12 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
          )
          |> assign(:show_download_delete_confirm, false)
          |> assign(:download_to_delete, nil)
-         |> put_flash(:info, "Download removed from history")}
+         |> put_flash(:info, gettext("Download removed from history"))}
 
       {:error, _changeset} ->
         {:noreply,
          socket
-         |> put_flash(:error, "Failed to delete download")
+         |> put_flash(:error, gettext("Failed to delete download"))
          |> assign(:show_download_delete_confirm, false)
          |> assign(:download_to_delete, nil)}
     end
@@ -179,15 +183,19 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
 
           case Downloads.initiate_download(search_result, opts) do
             {:ok, _new_download} ->
-              {:noreply, put_flash(socket, :info, "Download re-initiated")}
+              {:noreply, put_flash(socket, :info, gettext("Download re-initiated"))}
 
             {:error, reason} ->
               {:noreply,
-               put_flash(socket, :error, "Failed to retry download: #{inspect(reason)}")}
+               put_flash(
+                 socket,
+                 :error,
+                 gettext("Failed to retry download: %{reason}", reason: inspect(reason))
+               )}
           end
 
         {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Failed to update download")}
+          {:noreply, put_flash(socket, :error, gettext("Failed to update download"))}
       end
     end)
   end

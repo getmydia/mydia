@@ -174,7 +174,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
         view |> element("button[phx-click='open_clear_completed_modal']") |> render_click()
 
       assert has_element?(view, "#clear-completed-modal[open]")
-      assert html =~ "2 completed download(s)"
+      assert html =~ "2 completed downloads"
       # Default (unchecked) confirm button is non-destructive.
       assert html =~ "Clear Completed"
       refute html =~ "Clear and Delete Files"
@@ -220,7 +220,8 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       html = view |> element("#clear-completed-form") |> render_submit(%{})
 
-      assert html =~ "Clearing 1 completed download(s)"
+      assert html =~ "Clearing 1 completed download"
+      refute html =~ "Clearing 1 completed downloads"
       refute html =~ "deleting their files"
       assert Downloads.count_completed() == 0
       assert_enqueued(worker: Mydia.Jobs.RemoveDownload)
@@ -235,7 +236,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       html =
         view |> element("#clear-completed-form") |> render_submit(%{"delete_files" => "true"})
 
-      assert html =~ "and deleting their files from disk"
+      assert html =~ "files from disk"
       assert Downloads.count_completed() == 0
     end
 
@@ -804,7 +805,9 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       render_click(view, "toggle_select", %{"id" => stale_id})
 
       # The operator asked for it removed and it is removed, so it counts.
-      assert render_click(view, "batch_delete", %{}) =~ "Removing 1 download(s)"
+      html = render_click(view, "batch_delete", %{})
+      assert html =~ "Removing 1 download"
+      refute html =~ "Removing 1 downloads"
     end
 
     test "batch_retry does not count an already-deleted row", %{conn: conn, stale_id: stale_id} do
@@ -813,7 +816,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       render_click(view, "toggle_select", %{"id" => stale_id})
 
       # Nothing left to retry, so it is not reported as retried.
-      assert render_click(view, "batch_retry", %{}) =~ "0 item(s) retried"
+      assert render_click(view, "batch_retry", %{}) =~ "0 items retried"
     end
 
     # `match_files_import` is the one handler that already re-read its download

@@ -1,6 +1,8 @@
 defmodule MydiaWeb.MediaLive.Show.DownloadAudioEvents do
   @moduledoc false
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3]
 
@@ -20,18 +22,18 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioEvents do
   # reset never depends on an empty phx-value surviving the round trip. It is
   # stored as NULL.
   def set_download_audio_language(%{"language" => "default"}, socket) do
-    persist(socket, nil, "Download audio now follows the server default")
+    persist(socket, nil, gettext("Download audio now follows the server default"))
   end
 
   def set_download_audio_language(%{"language" => language}, socket) when is_binary(language) do
-    persist(socket, language, "Download audio updated")
+    persist(socket, language, gettext("Download audio updated"))
   end
 
   # A malformed event (no "language") is not a request to reset the choice.
   # Persisting nil here would silently clear a saved choice while reporting
   # success.
   def set_download_audio_language(_params, socket) do
-    {:noreply, put_flash(socket, :error, "Could not save the download audio")}
+    {:noreply, put_flash(socket, :error, gettext("Could not save the download audio"))}
   end
 
   defp persist(socket, language, message) do
@@ -59,7 +61,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioEvents do
            |> put_flash(:info, message)}
 
         {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Could not save the download audio")}
+          {:noreply, put_flash(socket, :error, gettext("Could not save the download audio"))}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}

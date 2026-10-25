@@ -4,6 +4,7 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
   """
   use Phoenix.Component
   use MydiaWeb, :verified_routes
+  use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
 
@@ -26,7 +27,9 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
     ~H"""
     <div id="system-health-widget" class="mb-6 md:mb-8">
       <div class="flex items-center gap-3 mb-3 md:mb-4">
-        <h2 class="text-lg md:text-xl font-semibold truncate">System Health</h2>
+        <h2 class="text-lg md:text-xl font-semibold truncate">
+          {gettext("System Health")}
+        </h2>
       </div>
 
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
@@ -43,7 +46,7 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
           id="health-tile-indexers"
           nav_key={:indexers}
           rollup={@indexers_rollup}
-          empty_label="Not set up"
+          empty_label={gettext("Not set up")}
           cardigann={@cardigann_summary}
           flaresolverr_enabled={@flaresolverr_enabled}
           flaresolverr_status={@flaresolverr_status}
@@ -152,13 +155,17 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
         <div class="mt-2">
           <%= case @state do %>
             <% :checking -> %>
-              <span class="badge badge-sm badge-ghost font-medium">Checking…</span>
+              <span class="badge badge-sm badge-ghost font-medium">
+                {gettext("Checking…")}
+              </span>
             <% :unavailable -> %>
-              <span class="badge badge-sm badge-ghost font-medium">Unavailable</span>
+              <span class="badge badge-sm badge-ghost font-medium">{gettext("Unavailable")}</span>
             <% :none -> %>
-              <span class="badge badge-sm badge-success font-medium">None</span>
+              <span class="badge badge-sm badge-success font-medium">{gettext("None")}</span>
             <% _ -> %>
-              <span class="badge badge-sm badge-warning font-medium">{@count} to review</span>
+              <span class="badge badge-sm badge-warning font-medium">
+                {ngettext("%{count} to review", "%{count} to review", @count)}
+              </span>
           <% end %>
         </div>
       </div>
@@ -188,9 +195,14 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
         <div class="mt-2">
           <span class="text-sm font-semibold text-base-content/80">
             <%= if @summary.count == 0 do %>
-              Empty
+              {gettext("Empty")}
             <% else %>
-              {@summary.count} files · {format_bytes(@summary.bytes)}
+              {ngettext(
+                "%{count} file · %{size}",
+                "%{count} files · %{size}",
+                @summary.count,
+                size: format_bytes(@summary.bytes)
+              )}
             <% end %>
           </span>
         </div>
@@ -204,11 +216,11 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
   defp state_badge_class(:down), do: "badge-error text-error-content"
   defp state_badge_class(_), do: "badge-ghost"
 
-  defp flaresolverr_text(:checking), do: "FlareSolverr: checking…"
-  defp flaresolverr_text(:healthy), do: "FlareSolverr: ok"
-  defp flaresolverr_text(:unhealthy), do: "FlareSolverr: down"
-  defp flaresolverr_text(:disabled), do: "FlareSolverr: disabled"
-  defp flaresolverr_text(_), do: "FlareSolverr: unknown"
+  defp flaresolverr_text(:checking), do: gettext("FlareSolverr: checking…")
+  defp flaresolverr_text(:healthy), do: gettext("FlareSolverr: ok")
+  defp flaresolverr_text(:unhealthy), do: gettext("FlareSolverr: down")
+  defp flaresolverr_text(:disabled), do: gettext("FlareSolverr: disabled")
+  defp flaresolverr_text(_), do: gettext("FlareSolverr: unknown")
 
   defp format_bytes(bytes) when is_integer(bytes) do
     cond do

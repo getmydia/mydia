@@ -14,6 +14,8 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   matching `MydiaWeb.Live.Helpers.MediaAddHelpers`.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   alias Mydia.Accounts.Scope
   alias Mydia.Library.ReleaseParser
   alias Mydia.Media
@@ -24,7 +26,6 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   alias Mydia.Settings
 
   @result_limit 10
-  @relay_down "Couldn't reach the metadata service. Showing library results only."
 
   defstruct [
     :scope,
@@ -165,7 +166,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   end
 
   defp episode_mismatch(dialog) do
-    %{dialog | error: "That episode is not part of the selected show. Search again."}
+    %{dialog | error: gettext("That episode is not part of the selected show. Search again.")}
   end
 
   # A relay outage must not empty the dialog: the library half still works and
@@ -179,7 +180,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
         {filtered |> reject_known(library, type) |> Enum.take(@result_limit), nil}
 
       {:error, _reason} ->
-        {[], @relay_down}
+        {[], gettext("Couldn't reach the metadata service. Showing library results only.")}
     end
   end
 
@@ -247,7 +248,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   def add_external(%__MODULE__{} = dialog, provider_id) do
     case find_external(dialog, provider_id) do
       nil ->
-        {:error, %{dialog | error: "That result is no longer available. Search again."}}
+        {:error, %{dialog | error: gettext("That result is no longer available. Search again.")}}
 
       result ->
         case Add.from_provider(
@@ -278,6 +279,6 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
     ]
   end
 
-  defp add_error({:metadata, _reason}), do: "Couldn't fetch metadata for that title."
-  defp add_error(_reason), do: "Couldn't add that title to your library."
+  defp add_error({:metadata, _reason}), do: gettext("Couldn't fetch metadata for that title.")
+  defp add_error(_reason), do: gettext("Couldn't add that title to your library.")
 end

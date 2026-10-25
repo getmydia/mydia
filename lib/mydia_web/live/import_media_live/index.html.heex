@@ -2,9 +2,11 @@
   <div class="max-w-5xl mx-auto p-4 flex flex-col gap-6">
     <div class="flex items-center justify-between gap-4">
       <div>
-        <h1 class="text-3xl font-bold">Import</h1>
+        <h1 id="import-heading" class="text-3xl font-bold">{gettext("Import")}</h1>
         <p class="text-sm text-base-content/70 mt-1">
-          Scan media folders, match titles against metadata providers, and organize into your library
+          {gettext(
+            "Scan media folders, match titles against metadata providers, and organize into your library"
+          )}
         </p>
       </div>
     </div>
@@ -27,17 +29,17 @@
       <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div class="min-w-60 flex-1">
           <div id="review-heading" class="flex items-center gap-2.5">
-            <h2 class="text-xl font-bold">Review</h2>
+            <h2 class="text-xl font-bold">{gettext("Review")}</h2>
             <span
               :if={@scan_complete_run_id}
               id="scan-complete-status"
               class="badge badge-success badge-sm gap-1"
             >
-              <.icon name="hero-check" class="w-3.5 h-3.5" /> Scan complete
+              <.icon name="hero-check" class="w-3.5 h-3.5" /> {gettext("Scan complete")}
             </span>
           </div>
           <p class="text-sm text-base-content/60 mt-0.5">
-            Confirm matches before they are added to the selected library.
+            {gettext("Confirm matches before they are added to the selected library.")}
           </p>
         </div>
 
@@ -51,10 +53,14 @@
             type="button"
             class="btn btn-primary btn-sm"
             phx-click="import_all_results"
-            phx-disable-with="Importing…"
-            data-confirm="Import every matched result for this library? This includes lower-confidence matches."
+            phx-disable-with={gettext("Importing…")}
+            data-confirm={
+              gettext(
+                "Import every matched result for this library? This includes lower-confidence matches."
+              )
+            }
           >
-            <.icon name="hero-check-circle" class="w-4 h-4" /> Import All
+            <.icon name="hero-check-circle" class="w-4 h-4" /> {gettext("Import All")}
           </button>
 
           <button
@@ -63,9 +69,13 @@
             class="btn btn-ghost btn-sm text-error"
             phx-click="clear_scan_results"
             phx-value-library_path_id={@selected_library_path.id}
-            data-confirm="Clear all unresolved scan results for this library? Dismissed decisions and imported media will not be removed."
+            data-confirm={
+              gettext(
+                "Clear all unresolved scan results for this library? Dismissed decisions and imported media will not be removed."
+              )
+            }
           >
-            <.icon name="hero-trash" class="w-4 h-4" /> Clear
+            <.icon name="hero-trash" class="w-4 h-4" /> {pgettext("scan results", "Clear")}
           </button>
         </div>
       </div>
@@ -86,8 +96,12 @@
       >
         <div id="no-groups" class="hidden only:block p-12 text-center text-base-content/60">
           <.icon name="hero-check-circle" class="w-10 h-10 mx-auto mb-2 opacity-30 text-success" />
-          <p class="font-medium text-base text-base-content/80">Nothing to review</p>
-          <p class="text-xs text-base-content/50 mt-1">Every file in this library is linked.</p>
+          <p class="font-medium text-base text-base-content/80">
+            {gettext("Nothing to review")}
+          </p>
+          <p class="text-xs text-base-content/50 mt-1">
+            {gettext("Every file in this library is linked.")}
+          </p>
         </div>
         <%= for {dom_id, group} <- @streams.groups do %>
           <%= if @band == :ignored do %>
@@ -117,7 +131,7 @@
           disabled={@cursor_stack == []}
           phx-click="prev_page"
         >
-          <.icon name="hero-chevron-left" class="w-4 h-4 mr-0.5" /> Previous
+          <.icon name="hero-chevron-left" class="w-4 h-4 mr-0.5" /> {gettext("Previous")}
         </button>
         <button
           id="next-page"
@@ -125,7 +139,7 @@
           disabled={is_nil(@next_cursor)}
           phx-click="next_page"
         >
-          Next <.icon name="hero-chevron-right" class="w-4 h-4 ml-0.5" />
+          {gettext("Next")} <.icon name="hero-chevron-right" class="w-4 h-4 ml-0.5" />
         </button>
       </div>
     </section>

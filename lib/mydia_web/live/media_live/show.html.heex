@@ -93,19 +93,24 @@
                   }
                   id="metadata-source-pinned-badge"
                   class="tooltip tooltip-bottom mt-1"
-                  data-tip="Refresh keeps this show on this provider. Use Fix match to move it."
+                  data-tip={
+                    gettext("Refresh keeps this show on this provider. Use Fix match to move it.")
+                  }
                 >
                   <span class="badge badge-outline badge-sm gap-1">
                     <.icon name="hero-lock-closed" class="w-3 h-3" />
-                    {case @media_item.metadata_source do
-                      :tmdb -> "TMDB"
-                      :tvdb -> "TVDB"
-                    end} (pinned)
+                    {gettext("%{provider} (pinned)",
+                      provider:
+                        case @media_item.metadata_source do
+                          :tmdb -> "TMDB"
+                          :tvdb -> "TVDB"
+                        end
+                    )}
                   </span>
                 </div>
               </div>
               <div class="flex items-center gap-0.5 flex-shrink-0">
-                <div class="tooltip tooltip-bottom" data-tip="Refresh metadata">
+                <div class="tooltip tooltip-bottom" data-tip={gettext("Refresh metadata")}>
                   <button
                     type="button"
                     phx-click="refresh_metadata"
@@ -114,19 +119,19 @@
                     <.icon name="hero-arrow-path" class="w-4 h-4" />
                   </button>
                 </div>
-                <div class="tooltip tooltip-bottom" data-tip="Fix match">
+                <div class="tooltip tooltip-bottom" data-tip={gettext("Fix match")}>
                   <button
                     id="fix-match-button"
                     type="button"
                     phx-click="open_fix_match"
                     class="btn btn-ghost btn-sm btn-square"
-                    aria-label="Fix match: this is the wrong title"
+                    aria-label={gettext("Fix match: this is the wrong title")}
                   >
                     <.icon name="hero-pencil-square" class="w-4 h-4" />
                   </button>
                 </div>
                 <%= if @media_item.type == "tv_show" && has_media_files?(@media_item) do %>
-                  <div class="tooltip tooltip-bottom" data-tip="Re-scan files">
+                  <div class="tooltip tooltip-bottom" data-tip={gettext("Re-scan files")}>
                     <button
                       type="button"
                       phx-click="rescan_series"
@@ -137,7 +142,7 @@
                   </div>
                 <% end %>
                 <%= if @media_item.type == "movie" && has_media_files?(@media_item) do %>
-                  <div class="tooltip tooltip-bottom" data-tip="Re-scan files">
+                  <div class="tooltip tooltip-bottom" data-tip={gettext("Re-scan files")}>
                     <button
                       type="button"
                       phx-click="rescan_movie"
@@ -148,19 +153,19 @@
                   </div>
                 <% end %>
                 <%= if has_media_files?(@media_item) do %>
-                  <div class="tooltip tooltip-bottom" data-tip="Rename files">
+                  <div class="tooltip tooltip-bottom" data-tip={gettext("Rename files")}>
                     <button
                       id="rename-files-button"
                       type="button"
                       phx-click="show_rename_modal"
                       class="btn btn-ghost btn-sm btn-square"
-                      aria-label="Rename files"
+                      aria-label={gettext("Rename files")}
                     >
                       <.icon name="hero-pencil-square" class="w-4 h-4" />
                     </button>
                   </div>
                 <% end %>
-                <div class="tooltip tooltip-bottom" data-tip="Delete">
+                <div class="tooltip tooltip-bottom" data-tip={gettext("Delete")}>
                   <button
                     id="delete-media-button"
                     type="button"
@@ -212,7 +217,7 @@
                 type="button"
                 phx-click="show_category_modal"
                 class="group cursor-pointer"
-                title="Click to change category"
+                title={gettext("Click to change category")}
               >
                 <%= if @media_item.category do %>
                   <.category_badge
@@ -222,7 +227,9 @@
                   />
                 <% else %>
                   <span class="badge badge-ghost group-hover:ring-2 group-hover:ring-primary transition-all">
-                    {if @media_item.type == "movie", do: "Movie", else: "TV Show"}
+                    {if @media_item.type == "movie",
+                      do: gettext("Movie"),
+                      else: gettext("TV Show")}
                   </span>
                 <% end %>
               </button>
@@ -260,7 +267,7 @@
                 <div class="alert alert-error mb-6" id="failed-grab-alert">
                   <.icon name="hero-exclamation-triangle" class="w-6 h-6" />
                   <div class="flex-1">
-                    <h3 class="font-bold">Download failed</h3>
+                    <h3 class="font-bold">{gettext("Download failed")}</h3>
                     <div class="text-sm">
                       {download.title}
                       <%= if download.error_message do %>
@@ -274,14 +281,14 @@
                     phx-click="dismiss_failed_grab"
                     phx-value-id={download.id}
                   >
-                    Dismiss
+                    {gettext("Dismiss")}
                   </button>
                 </div>
               <% download.status == "grabbing" -> %>
                 <div class="alert alert-info mb-6" id="grabbing-alert">
                   <span class="loading loading-spinner loading-sm"></span>
                   <div class="flex-1">
-                    <h3 class="font-bold">Sending to download client</h3>
+                    <h3 class="font-bold">{gettext("Sending to download client")}</h3>
                     <div class="text-sm">{download.title}</div>
                   </div>
                 </div>
@@ -289,7 +296,7 @@
                 <div class="alert alert-info mb-6">
                   <.icon name="hero-arrow-down-tray" class="w-6 h-6" />
                   <div class="flex-1">
-                    <h3 class="font-bold">Downloading</h3>
+                    <h3 class="font-bold">{gettext("Downloading")}</h3>
                     <div class="text-sm">
                       {format_download_status(download.status)}
                       <%= if download.progress do %>
@@ -535,7 +542,7 @@
     <% end %>
   <% end %>
   <%= if @show_quality_profile_modal do %>
-    <Modals.quality_profile_modal
+    <PickerModals.quality_profile_modal
       media_item={@media_item}
       quality_profiles={@quality_profiles}
       default_quality_profile_name={@default_quality_profile_name}
@@ -545,10 +552,13 @@
     <MydiaWeb.MediaLive.Show.DownloadAudioComponents.download_audio_modal media_item={@media_item} />
   <% end %>
   <%= if @show_target_library_modal do %>
-    <Modals.target_library_modal media_item={@media_item} libraries={@target_library_candidates} />
+    <PickerModals.target_library_modal
+      media_item={@media_item}
+      libraries={@target_library_candidates}
+    />
   <% end %>
   <%= if @show_add_to_collection_modal do %>
-    <Modals.add_to_collection_modal
+    <PickerModals.add_to_collection_modal
       media_item={@media_item}
       user_collections={@user_collections}
       item_collections={@item_collections}

@@ -16,15 +16,15 @@ defmodule MydiaWeb.MediaLive.Index.SectionComponents do
     ~H"""
     <div :if={@open} class="modal modal-open" id="section-settings-modal">
       <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">Section settings</h3>
+        <h3 class="font-bold text-lg mb-4">{gettext("Section settings")}</h3>
 
         <.form for={@form} id="section-settings-form" phx-submit="save_section">
-          <.input field={@form[:name]} type="text" label="Name" />
+          <.input field={@form[:name]} type="text" label={gettext("Name")} />
 
           <.input
             field={@form[:sidebar_icon]}
             type="select"
-            label="Icon"
+            label={gettext("Icon")}
             options={Collection.valid_sidebar_icons()}
           />
 
@@ -39,7 +39,7 @@ defmodule MydiaWeb.MediaLive.Index.SectionComponents do
                 class="toggle toggle-primary"
               />
               <span class="label-text">
-                Keep these out of Movies and TV
+                {gettext("Keep these out of Movies and TV")}
               </span>
             </label>
           </div>
@@ -51,12 +51,12 @@ defmodule MydiaWeb.MediaLive.Index.SectionComponents do
               phx-click="unpin_section"
               class="btn btn-ghost text-error"
             >
-              Remove from sidebar
+              {gettext("Remove from sidebar")}
             </button>
             <button type="button" phx-click="close_section_settings" class="btn btn-ghost">
-              Cancel
+              {gettext("Cancel")}
             </button>
-            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="submit" class="btn btn-primary">{gettext("Save")}</button>
           </div>
         </.form>
       </div>

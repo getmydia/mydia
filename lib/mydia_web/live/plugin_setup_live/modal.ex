@@ -43,7 +43,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
       |> assign(Map.take(assigns, [:id, :slug, :instance_id, :entry_step, :title]))
       |> assign_new(:instance_id, fn -> nil end)
       |> assign_new(:entry_step, fn -> "start" end)
-      |> assign_new(:title, fn -> "Set up" end)
+      |> assign_new(:title, fn -> gettext("Set up") end)
 
     if socket.assigns[:started] do
       {:ok, socket}
@@ -72,7 +72,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
 
   defp begin(%{assigns: %{slug: slug, instance_id: id, entry_step: step}} = socket) do
     case Instances.get(id) do
-      nil -> assign(socket, :error, "This instance no longer exists.")
+      nil -> assign(socket, :error, gettext("This instance no longer exists."))
       instance -> run(socket, fn -> Setup.start(slug, instance, step: step || "start") end)
     end
   end
@@ -103,7 +103,8 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
   end
 
   def handle_async(:setup, {:exit, _reason}, socket) do
-    {:noreply, assign(socket, loading: false, error: "Setup stopped unexpectedly. Try again.")}
+    {:noreply,
+     assign(socket, loading: false, error: gettext("Setup stopped unexpectedly. Try again."))}
   end
 
   @impl true
@@ -166,7 +167,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
   defp schedule_poll(socket, _session), do: socket
 
   defp start_error(%Error{message: message}) when is_binary(message),
-    do: "Setup could not start: #{message}"
+    do: gettext("Setup could not start: %{reason}", reason: message)
 
   defp start_error(%Ecto.Changeset{} = changeset) do
     details =
@@ -174,10 +175,10 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
       |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
       |> Enum.map_join("; ", fn {field, msgs} -> "#{field} #{Enum.join(msgs, ", ")}" end)
 
-    "Setup could not start: #{details}"
+    gettext("Setup could not start: %{reason}", reason: details)
   end
 
-  defp start_error(_reason), do: "Setup could not start. Try again."
+  defp start_error(_reason), do: gettext("Setup could not start. Try again.")
 
   defp cancel_and_close(socket, session) do
     if session, do: Setup.cancel(session)
@@ -217,7 +218,8 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
     end)
   end
 
-  defp user_options(users), do: [{"Not linked", ""} | Enum.map(users, &{&1.username, &1.id})]
+  defp user_options(users),
+    do: [{gettext("Not linked"), ""} | Enum.map(users, &{&1.username, &1.id})]
 
   @impl true
   def render(assigns) do
@@ -254,7 +256,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
             phx-click="cancel"
             phx-target={@myself}
           >
-            Cancel
+            {gettext("Cancel")}
           </.button>
           <.button
             :if={@session && @session.status == :done}
@@ -264,7 +266,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
             phx-click="close"
             phx-target={@myself}
           >
-            Close
+            {gettext("Close")}
           </.button>
         </div>
       </div>
@@ -305,7 +307,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
             >
               {Instance.endpoint_label(endpoint)}
               <span :if={Instance.endpoint_private?(endpoint)} class="badge badge-warning badge-xs">
-                private network
+                {gettext("private network")}
               </span>
             </span>
           </span>
@@ -329,7 +331,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
         <.settings_field :for={field <- @fields} field={field} form={@form} />
       </div>
       <div class="mt-4 flex justify-end">
-        <.button type="submit" variant="primary">Continue</.button>
+        <.button type="submit" variant="primary">{gettext("Continue")}</.button>
       </div>
     </.form>
     """
@@ -347,7 +349,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
       class="flex flex-col items-center gap-3 py-4 text-center"
     >
       <span class="loading loading-dots loading-md"></span>
-      <p>{@auth.message || "Finish signing in in the window that opened."}</p>
+      <p>{@auth.message || gettext("Finish signing in in the window that opened.")}</p>
       <a
         id="setup-external-auth-link"
         href={@auth.url}
@@ -355,7 +357,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
         rel="noopener noreferrer"
         class="link link-primary text-sm"
       >
-        Open the sign-in page
+        {gettext("Open the sign-in page")}
       </a>
     </div>
     """
@@ -370,15 +372,17 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
       <table class="table table-sm">
         <thead>
           <tr>
-            <th>Account</th>
-            <th>Mydia user</th>
+            <th>{gettext("Account")}</th>
+            <th>{gettext("Mydia user")}</th>
           </tr>
         </thead>
         <tbody>
           <tr :for={account <- @mapping.accounts}>
             <td>
               {account.name}
-              <span :if={account.admin} class="badge badge-ghost badge-sm ml-1">admin</span>
+              <span :if={account.admin} class="badge badge-ghost badge-sm ml-1">
+                {gettext("admin")}
+              </span>
             </td>
             <td>
               <.input
@@ -393,7 +397,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
         </tbody>
       </table>
       <div class="mt-4 flex justify-end">
-        <.button type="submit" variant="primary">Save links</.button>
+        <.button type="submit" variant="primary">{gettext("Save links")}</.button>
       </div>
     </.form>
     """

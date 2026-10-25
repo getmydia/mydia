@@ -3,9 +3,9 @@
     <!-- Header -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
       <div>
-        <h1 class="text-3xl font-bold">Integrations</h1>
+        <h1 class="text-3xl font-bold">{gettext("Integrations")}</h1>
         <p class="text-base-content/70 mt-1">
-          Connect external services to sync your watch history.
+          {gettext("Connect external services to sync your watch history.")}
         </p>
       </div>
     </div>
@@ -13,7 +13,7 @@
     <div class="card bg-base-100 shadow-sm">
       <div class="card-body">
         <h2 class="card-title text-lg mb-4">
-          <.icon name="hero-puzzle-piece" class="w-5 h-5" /> Integrations
+          <.icon name="hero-puzzle-piece" class="w-5 h-5" /> {gettext("Integrations")}
         </h2>
 
         <div class="space-y-4">
@@ -23,16 +23,22 @@
             class="text-sm text-base-content/60"
           >
             <%= if Mydia.Accounts.Authorization.is_admin?(@current_user) do %>
-              <p>No integrations yet. Install a plugin that connects to a service.</p>
+              <p>
+                {gettext("No integrations yet. Install a plugin that connects to a service.")}
+              </p>
               <.link
                 id="integrations-browse-plugins"
                 navigate={~p"/admin/plugins"}
                 class="btn btn-sm btn-outline mt-2"
               >
-                <.icon name="hero-puzzle-piece" class="w-4 h-4" /> Browse plugins
+                <.icon name="hero-puzzle-piece" class="w-4 h-4" /> {gettext("Browse plugins")}
               </.link>
             <% else %>
-              <p>No integrations are available yet. Ask your administrator to install one.</p>
+              <p>
+                {gettext(
+                  "No integrations are available yet. Ask your administrator to install one."
+                )}
+              </p>
             <% end %>
           </div>
 
@@ -45,8 +51,10 @@
             <div :if={idx > 0} class="divider my-1"></div>
             <h3 class="font-medium mb-1">{pc.name}</h3>
             <p class="text-sm text-base-content/60 mb-3">
-              This connection is managed by the third-party plugin {pc.name}; it will be able to
-              read your watch history and mark items watched in mydia on your behalf.
+              {gettext(
+                "This connection is managed by the third-party plugin %{name}; it will be able to read your watch history and mark items watched in mydia on your behalf.",
+                name: pc.name
+              )}
             </p>
 
             <%= cond do %>
@@ -61,7 +69,7 @@
                   id={"plugin-conn-pending-#{pc.slug}"}
                 >
                   <p class="text-sm text-base-content/70">
-                    Go to the following URL and enter the code below:
+                    {gettext("Go to the following URL and enter the code below:")}
                   </p>
                   <a
                     :if={@plugin_connect.verification_url}
@@ -81,14 +89,14 @@
                   </div>
                   <div class="flex items-center justify-center gap-2 text-sm text-base-content/60">
                     <span class="loading loading-spinner loading-xs"></span>
-                    Waiting for authorization...
+                    {gettext("Waiting for authorization...")}
                   </div>
                   <button
                     type="button"
                     class="btn btn-ghost btn-sm"
                     phx-click="plugin_cancel"
                   >
-                    Cancel
+                    {gettext("Cancel")}
                   </button>
                 </div>
               <% pc.connection && pc.connection.status == :active -> %>
@@ -97,16 +105,16 @@
                   id={"plugin-conn-connected-#{pc.slug}"}
                 >
                   <span class="badge badge-success gap-1">
-                    <.icon name="hero-check-circle" class="w-3 h-3" /> Connected
+                    <.icon name="hero-check-circle" class="w-3 h-3" /> {gettext("Connected")}
                   </span>
                   <button
                     type="button"
                     class="btn btn-outline btn-error btn-sm"
                     phx-click="plugin_disconnect"
                     phx-value-slug={pc.slug}
-                    data-confirm={"Disconnect #{pc.name}?"}
+                    data-confirm={gettext("Disconnect %{name}?", name: pc.name)}
                   >
-                    Disconnect
+                    {gettext("Disconnect")}
                   </button>
                 </div>
               <% pc.connection && pc.connection.status == :error -> %>
@@ -115,7 +123,9 @@
                   id={"plugin-conn-errored-#{pc.slug}"}
                 >
                   <span class="badge badge-error gap-1">
-                    <.icon name="hero-exclamation-triangle" class="w-3 h-3" /> Needs reconnect
+                    <.icon name="hero-exclamation-triangle" class="w-3 h-3" /> {gettext(
+                      "Needs reconnect"
+                    )}
                   </span>
                   <button
                     type="button"
@@ -123,7 +133,7 @@
                     phx-click="plugin_connect"
                     phx-value-slug={pc.slug}
                   >
-                    Reconnect
+                    {gettext("Reconnect")}
                   </button>
                 </div>
               <% true -> %>
@@ -134,7 +144,9 @@
                   phx-click="plugin_connect"
                   phx-value-slug={pc.slug}
                 >
-                  <.icon name="hero-link" class="w-4 h-4" /> Connect {pc.name}
+                  <.icon name="hero-link" class="w-4 h-4" /> {gettext("Connect %{name}",
+                    name: pc.name
+                  )}
                 </button>
             <% end %>
           </div>
@@ -154,10 +166,10 @@
     >
       <div class="card-body">
         <h2 class="card-title text-lg">
-          <.icon name="hero-shield-check" class="w-5 h-5" /> Plugin permissions
+          <.icon name="hero-shield-check" class="w-5 h-5" /> {gettext("Plugin permissions")}
         </h2>
         <p class="text-sm text-base-content/60">
-          Changes these plugins may make for you without asking.
+          {gettext("Changes these plugins may make for you without asking.")}
         </p>
         <ul class="divide-y divide-base-300">
           <li
@@ -168,7 +180,7 @@
             <span class="font-medium">{grant.plugin_slug}</span>
             <span class="flex-1">{PageWrites.surface_label(grant.surface)}</span>
             <span class="badge badge-ghost badge-sm">
-              Always
+              {gettext("Always")}
             </span>
             <button
               id={"revoke-grant-#{grant.id}"}
@@ -176,7 +188,7 @@
               phx-click="revoke_grant"
               phx-value-id={grant.id}
             >
-              Revoke
+              {gettext("Revoke")}
             </button>
           </li>
         </ul>

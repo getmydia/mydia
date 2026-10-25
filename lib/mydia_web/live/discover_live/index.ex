@@ -29,26 +29,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
   import MydiaWeb.DiscoverLive.RegionalComponents
   import MydiaWeb.GridDensityComponents
 
-  @movie_categories [
-    {:trending, "Trending"},
-    {:popular, "Popular"},
-    {:upcoming, "Upcoming"},
-    {:now_playing, "Now Playing"}
-  ]
-
-  @tv_categories [
-    {:trending, "Trending"},
-    {:popular, "Popular"},
-    {:on_the_air, "On The Air"},
-    {:airing_today, "Airing Today"}
-  ]
-
-  @sort_options [
-    {"popularity.desc", "Most Popular"},
-    {"vote_average.desc", "Highest Rated"},
-    {"primary_release_date.desc", "Newest First"},
-    {"primary_release_date.asc", "Oldest First"}
-  ]
+  import MydiaWeb.DiscoverLive.Messages,
+    only: [movie_categories: 0, tv_categories: 0, sort_options: 0, request_error_message: 1]
 
   # The provider returns fixed-size pages of this many results. Removing owned
   # titles from one leaves a short grid, or an empty one, which looks like the
@@ -58,16 +40,14 @@ defmodule MydiaWeb.DiscoverLive.Index do
   @max_auto_advance 3
   @max_auto_advance_restricted 8
 
-  @unsupported_media_type "That media type is not supported."
-
   @impl true
   def mount(_params, session, socket) do
     socket =
       socket
-      |> assign(:page_title, "Discover")
+      |> assign(:page_title, gettext("Discover"))
       |> assign(:languages, MydiaWeb.Languages.all())
       |> assign(:countries, Countries.all())
-      |> assign(:sort_options, @sort_options)
+      |> assign(:sort_options, sort_options())
       |> assign(:items, [])
       |> assign(:visible_items, [])
       |> assign(:loading, true)
@@ -136,7 +116,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         end
 
       categories =
-        if media_type == :tv_show, do: @tv_categories, else: @movie_categories
+        if media_type == :tv_show, do: tv_categories(), else: movie_categories()
 
       socket =
         socket
@@ -227,7 +207,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
        socket
        |> assign(:media_type, :movie)
        |> assign(:category, :trending)
-       |> assign(:categories, @movie_categories)
+       |> assign(:categories, movie_categories())
        |> assign(:search_query, "")
        |> assign(:search_mode, false)
        |> assign(:selected_genres, [])
@@ -360,7 +340,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
        |> push_patch(to: ~p"/discover?#{params}")}
     else
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not save your country settings")}
+        {:noreply, put_flash(socket, :error, gettext("Could not save your country settings"))}
 
       _invalid ->
         {:noreply, socket}
@@ -385,7 +365,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         end
 
       {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Could not save your country settings")}
+        {:noreply, put_flash(socket, :error, gettext("Could not save your country settings"))}
     end
   end
 
@@ -471,11 +451,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
            )}
 
         :error ->
-          {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+          {:noreply, put_flash(socket, :error, gettext("That media type is not supported."))}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
-      :error -> {:noreply, put_flash(socket, :error, "Could not add that item")}
+      :error -> {:noreply, put_flash(socket, :error, gettext("Could not add that item"))}
     end
   end
 
@@ -492,7 +472,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       {:noreply, socket}
     else
       {:unauthorized, socket} -> {:noreply, socket}
-      :error -> {:noreply, put_flash(socket, :error, "Could not request that item")}
+      :error -> {:noreply, put_flash(socket, :error, gettext("Could not request that item"))}
     end
   end
 
@@ -536,7 +516,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> maybe_auto_advance(0, @page_size)}
 
       :error ->
-        {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
+        {:noreply, put_flash(socket, :error, gettext("Could not save that filter preference"))}
     end
   end
 
@@ -780,7 +760,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
            |> MediaAddHelpers.enrich_with_library_status(updated_map)
            |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
          end)
-         |> put_flash(:info, "#{media_item.title} has been added to your library")}
+         |> put_flash(
+           :info,
+           gettext("%{title} has been added to your library", title: media_item.title)
+         )}
 
       {:already_in_library, media_item, updated_map} ->
         request_status_map = MediaRequestHelpers.request_status_map()
@@ -809,7 +792,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
            |> MediaAddHelpers.enrich_with_library_status(updated_map)
            |> MediaRequestHelpers.enrich_with_request_status(request_status_map)
          end)
-         |> put_flash(:info, "#{media_item.title} is already in your library")}
+         |> put_flash(
+           :info,
+           gettext("%{title} is already in your library", title: media_item.title)
+         )}
 
       {:error, :restricted} ->
         {:noreply,
@@ -823,14 +809,19 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> clear_adding(ref)
          |> put_flash(
            :error,
-           "Failed to add: #{MediaAddHelpers.format_changeset_errors(changeset)}"
+           gettext("Failed to add: %{errors}",
+             errors: MediaAddHelpers.format_changeset_errors(changeset)
+           )
          )}
 
       {:error, {:metadata, reason}} ->
         {:noreply,
          socket
          |> clear_adding(ref)
-         |> put_flash(:error, "Failed to fetch metadata: #{inspect(reason)}")}
+         |> put_flash(
+           :error,
+           gettext("Failed to fetch metadata: %{reason}", reason: inspect(reason))
+         )}
     end
   end
 
@@ -864,7 +855,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
           recommendations,
           &MediaRequestHelpers.enrich_with_request_status(&1, request_status_map)
         )
-        |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
+        |> put_flash(
+          :info,
+          gettext("%{title} requested. An admin will review it soon.", title: request.title)
+        )
 
       {:error, reason} ->
         socket
@@ -964,15 +958,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp clear_adding(socket, ref) do
     assign(socket, :adding_item_ids, MapSet.delete(socket.assigns.adding_item_ids, ref))
   end
-
-  defp request_error_message(:duplicate_media), do: "That title is already in the library."
-  defp request_error_message(:duplicate_request), do: "Someone has already requested that title."
-  defp request_error_message(:restricted), do: Media.restricted_message()
-
-  defp request_error_message(%Ecto.Changeset{} = changeset),
-    do: "Could not submit the request: #{MediaAddHelpers.format_changeset_errors(changeset)}"
-
-  defp request_error_message(_), do: "Could not submit the request. Please try again."
 
   # Private helpers
 

@@ -6,6 +6,7 @@ defmodule MydiaWeb.CollectionComponents do
   collections (both manual and smart).
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
   import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1]
@@ -78,10 +79,12 @@ defmodule MydiaWeb.CollectionComponents do
       <%!-- List View Header --%>
       <div class="flex items-center bg-base-200 font-semibold text-sm px-4 py-3 border-b border-base-300">
         <div class="w-14 flex-shrink-0"></div>
-        <div class="flex-1 min-w-0">Name</div>
-        <div class="w-24 hidden md:block text-center flex-shrink-0">Type</div>
-        <div class="w-24 hidden lg:block text-center flex-shrink-0">Items</div>
-        <div class="w-24 hidden lg:block text-center flex-shrink-0">Visibility</div>
+        <div class="flex-1 min-w-0">{gettext("Name")}</div>
+        <div class="w-24 hidden md:block text-center flex-shrink-0">
+          {pgettext("collection", "Type")}
+        </div>
+        <div class="w-24 hidden lg:block text-center flex-shrink-0">{gettext("Items")}</div>
+        <div class="w-24 hidden lg:block text-center flex-shrink-0">{gettext("Visibility")}</div>
       </div>
 
       <%!-- List Items --%>
@@ -144,7 +147,7 @@ defmodule MydiaWeb.CollectionComponents do
               phx-click={@on_play}
               phx-value-id={@collection.id}
               class="btn btn-circle btn-sm btn-primary shadow-lg"
-              title="Play All"
+              title={gettext("Play All")}
             >
               <.icon name="hero-play-solid" class="w-4 h-4" />
             </button>
@@ -154,7 +157,7 @@ defmodule MydiaWeb.CollectionComponents do
             <.link
               navigate={~p"/collections/#{@collection.id}?edit=true"}
               class="btn btn-circle btn-sm btn-ghost bg-base-100/90 shadow-lg"
-              title="Edit Collection"
+              title={gettext("Edit Collection")}
             >
               <.icon name="hero-pencil" class="w-4 h-4" />
             </.link>
@@ -164,11 +167,11 @@ defmodule MydiaWeb.CollectionComponents do
           <:meta>
             <div class="flex items-center justify-between gap-2">
               <span class="text-xs text-base-content/70">
-                {@item_count} {if @item_count == 1, do: "item", else: "items"}
+                {ngettext("%{count} item", "%{count} items", @item_count)}
               </span>
               <%= if @collection.visibility == "shared" do %>
                 <span class="badge badge-xs badge-outline gap-1">
-                  <.icon name="hero-globe-alt" class="w-3 h-3" /> Shared
+                  <.icon name="hero-globe-alt" class="w-3 h-3" /> {gettext("Shared")}
                 </span>
               <% end %>
             </div>
@@ -209,7 +212,7 @@ defmodule MydiaWeb.CollectionComponents do
       <img
         :for={{url, index} <- @posters}
         src={url}
-        alt={if index == 0, do: "Collection poster", else: ""}
+        alt={if index == 0, do: gettext("Collection poster"), else: ""}
         loading="lazy"
       />
     </div>
@@ -321,11 +324,11 @@ defmodule MydiaWeb.CollectionComponents do
       <div class="w-24 hidden lg:flex justify-center flex-shrink-0">
         <%= if @collection.visibility == "shared" do %>
           <span class="badge badge-sm badge-outline gap-1">
-            <.icon name="hero-globe-alt" class="w-3 h-3" /> Shared
+            <.icon name="hero-globe-alt" class="w-3 h-3" /> {gettext("Shared")}
           </span>
         <% else %>
           <span class="badge badge-sm badge-ghost gap-1">
-            <.icon name="hero-lock-closed" class="w-3 h-3" /> Private
+            <.icon name="hero-lock-closed" class="w-3 h-3" /> {gettext("Private")}
           </span>
         <% end %>
       </div>
@@ -338,7 +341,7 @@ defmodule MydiaWeb.CollectionComponents do
             phx-click={@on_play}
             phx-value-id={@collection.id}
             class="btn btn-circle btn-sm btn-ghost"
-            title="Play All"
+            title={gettext("Play All")}
           >
             <.icon name="hero-play-solid" class="w-4 h-4" />
           </button>
@@ -348,7 +351,7 @@ defmodule MydiaWeb.CollectionComponents do
           <.link
             navigate={~p"/collections/#{@collection.id}?edit=true"}
             class="btn btn-circle btn-sm btn-ghost"
-            title="Edit Collection"
+            title={gettext("Edit Collection")}
           >
             <.icon name="hero-pencil" class="w-4 h-4" />
           </.link>
@@ -375,7 +378,7 @@ defmodule MydiaWeb.CollectionComponents do
     ~H"""
     <div class="flex flex-col gap-2">
       <label class="label">
-        <span class="label-text font-medium">Collection Type</span>
+        <span class="label-text font-medium">{gettext("Collection Type")}</span>
       </label>
       <div class="flex gap-2">
         <label class={[
@@ -394,10 +397,10 @@ defmodule MydiaWeb.CollectionComponents do
           />
           <div>
             <div class="flex items-center gap-2 font-medium">
-              <.icon name="hero-folder" class="w-5 h-5" /> Manual
+              <.icon name="hero-folder" class="w-5 h-5" /> {gettext("Manual")}
             </div>
             <div class="text-sm text-base-content/60">
-              Curate items by hand, drag to reorder
+              {gettext("Curate items by hand, drag to reorder")}
             </div>
           </div>
         </label>
@@ -418,10 +421,10 @@ defmodule MydiaWeb.CollectionComponents do
           />
           <div>
             <div class="flex items-center gap-2 font-medium">
-              <.icon name="hero-sparkles" class="w-5 h-5" /> Smart
+              <.icon name="hero-sparkles" class="w-5 h-5" /> {gettext("Smart")}
             </div>
             <div class="text-sm text-base-content/60">
-              Auto-populate based on filter rules
+              {gettext("Auto-populate based on filter rules")}
             </div>
           </div>
         </label>
@@ -452,37 +455,45 @@ defmodule MydiaWeb.CollectionComponents do
         class="select select-sm select-bordered flex-1 min-w-0"
         value={@condition["field"]}
       >
-        <option value="">Select field...</option>
-        <optgroup label="Basic">
-          <option value="category" selected={@condition["field"] == "category"}>Category</option>
-          <option value="type" selected={@condition["field"] == "type"}>Type</option>
-          <option value="year" selected={@condition["field"] == "year"}>Year</option>
-          <option value="title" selected={@condition["field"] == "title"}>Title</option>
-          <option value="monitored" selected={@condition["field"] == "monitored"}>Monitored</option>
+        <option value="">{gettext("Select field...")}</option>
+        <optgroup label={gettext("Basic")}>
+          <option value="category" selected={@condition["field"] == "category"}>
+            {gettext("Category")}
+          </option>
+          <option value="type" selected={@condition["field"] == "type"}>
+            {pgettext("smart rule field", "Type")}
+          </option>
+          <option value="year" selected={@condition["field"] == "year"}>{gettext("Year")}</option>
+          <option value="title" selected={@condition["field"] == "title"}>
+            {gettext("Title")}
+          </option>
+          <option value="monitored" selected={@condition["field"] == "monitored"}>
+            {pgettext("monitoring", "Monitored")}
+          </option>
         </optgroup>
-        <optgroup label="Metadata">
+        <optgroup label={gettext("Metadata")}>
           <option
             value="metadata.vote_average"
             selected={@condition["field"] == "metadata.vote_average"}
           >
-            Rating
+            {gettext("Rating")}
           </option>
           <option value="metadata.genres" selected={@condition["field"] == "metadata.genres"}>
-            Genre
+            {gettext("Genre")}
           </option>
           <option
             value="metadata.original_language"
             selected={@condition["field"] == "metadata.original_language"}
           >
-            Language
+            {gettext("Language")}
           </option>
           <option value="metadata.status" selected={@condition["field"] == "metadata.status"}>
-            Status
+            {pgettext("smart rule field", "Status")}
           </option>
         </optgroup>
-        <optgroup label="Dates">
+        <optgroup label={gettext("Dates")}>
           <option value="inserted_at" selected={@condition["field"] == "inserted_at"}>
-            Date Added
+            {gettext("Date Added")}
           </option>
         </optgroup>
       </select>
@@ -493,15 +504,25 @@ defmodule MydiaWeb.CollectionComponents do
         class="select select-sm select-bordered w-32"
         value={@condition["operator"]}
       >
-        <option value="eq" selected={@condition["operator"] == "eq"}>equals</option>
-        <option value="gt" selected={@condition["operator"] == "gt"}>greater than</option>
-        <option value="gte" selected={@condition["operator"] == "gte"}>at least</option>
-        <option value="lt" selected={@condition["operator"] == "lt"}>less than</option>
-        <option value="lte" selected={@condition["operator"] == "lte"}>at most</option>
-        <option value="in" selected={@condition["operator"] == "in"}>is one of</option>
-        <option value="not_in" selected={@condition["operator"] == "not_in"}>is not one of</option>
-        <option value="contains" selected={@condition["operator"] == "contains"}>contains</option>
-        <option value="between" selected={@condition["operator"] == "between"}>between</option>
+        <option value="eq" selected={@condition["operator"] == "eq"}>{gettext("equals")}</option>
+        <option value="gt" selected={@condition["operator"] == "gt"}>
+          {gettext("greater than")}
+        </option>
+        <option value="gte" selected={@condition["operator"] == "gte"}>
+          {gettext("at least")}
+        </option>
+        <option value="lt" selected={@condition["operator"] == "lt"}>{gettext("less than")}</option>
+        <option value="lte" selected={@condition["operator"] == "lte"}>{gettext("at most")}</option>
+        <option value="in" selected={@condition["operator"] == "in"}>{gettext("is one of")}</option>
+        <option value="not_in" selected={@condition["operator"] == "not_in"}>
+          {gettext("is not one of")}
+        </option>
+        <option value="contains" selected={@condition["operator"] == "contains"}>
+          {gettext("contains")}
+        </option>
+        <option value="between" selected={@condition["operator"] == "between"}>
+          {gettext("between")}
+        </option>
       </select>
 
       <%!-- Value input --%>
@@ -510,7 +531,7 @@ defmodule MydiaWeb.CollectionComponents do
         name={"conditions[#{@index}][value]"}
         value={format_condition_value(@condition["value"])}
         class="input input-sm input-bordered flex-1 min-w-0"
-        placeholder="Value..."
+        placeholder={gettext("Value...")}
       />
 
       <%!-- Remove button --%>
@@ -520,7 +541,7 @@ defmodule MydiaWeb.CollectionComponents do
           phx-click="remove_condition"
           phx-value-index={@index}
           class="btn btn-ghost btn-sm btn-circle"
-          title="Remove condition"
+          title={gettext("Remove condition")}
         >
           <.icon name="hero-x-mark" class="w-4 h-4" />
         </button>
@@ -543,10 +564,10 @@ defmodule MydiaWeb.CollectionComponents do
   def match_type_selector(assigns) do
     ~H"""
     <div class="flex items-center gap-2">
-      <span class="text-sm text-base-content/70">Match</span>
+      <span class="text-sm text-base-content/70">{gettext("Match")}</span>
       <select name={@name} class="select select-sm select-bordered">
-        <option value="all" selected={@selected == "all"}>all conditions (AND)</option>
-        <option value="any" selected={@selected == "any"}>any condition (OR)</option>
+        <option value="all" selected={@selected == "all"}>{gettext("all conditions (AND)")}</option>
+        <option value="any" selected={@selected == "any"}>{gettext("any condition (OR)")}</option>
       </select>
     </div>
     """
@@ -572,7 +593,7 @@ defmodule MydiaWeb.CollectionComponents do
       <div class="flex items-center justify-between">
         <.match_type_selector selected={Map.get(@rules, "match_type", "all")} />
         <button type="button" phx-click="add_condition" class="btn btn-sm btn-ghost gap-1">
-          <.icon name="hero-plus" class="w-4 h-4" /> Add Condition
+          <.icon name="hero-plus" class="w-4 h-4" /> {gettext("Add Condition")}
         </button>
       </div>
 
@@ -580,8 +601,10 @@ defmodule MydiaWeb.CollectionComponents do
         <%= if Enum.empty?(@conditions) do %>
           <div class="p-8 text-center text-base-content/50 bg-base-200 rounded-lg">
             <.icon name="hero-funnel" class="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>No conditions yet</p>
-            <p class="text-sm">Add conditions to filter which items appear in this collection</p>
+            <p>{gettext("No conditions yet")}</p>
+            <p class="text-sm">
+              {gettext("Add conditions to filter which items appear in this collection")}
+            </p>
           </div>
         <% else %>
           <%= for {condition, index} <- Enum.with_index(@conditions) do %>
@@ -595,48 +618,48 @@ defmodule MydiaWeb.CollectionComponents do
       </div>
 
       <%!-- Sort and limit options --%>
-      <div class="divider">Sort & Limit</div>
+      <div class="divider">{gettext("Sort & Limit")}</div>
       <div class="flex gap-4">
         <div class="flex-1">
           <label class="label">
-            <span class="label-text text-sm">Sort by</span>
+            <span class="label-text text-sm">{gettext("Sort by")}</span>
           </label>
           <div class="flex gap-2">
             <select name="sort_field" class="select select-sm select-bordered flex-1">
-              <option value="">Default</option>
+              <option value="">{gettext("Default")}</option>
               <option value="title" selected={get_in(@rules, ["sort", "field"]) == "title"}>
-                Title
+                {gettext("Title")}
               </option>
               <option value="year" selected={get_in(@rules, ["sort", "field"]) == "year"}>
-                Year
+                {gettext("Year")}
               </option>
               <option value="rating" selected={get_in(@rules, ["sort", "field"]) == "rating"}>
-                Rating
+                {gettext("Rating")}
               </option>
               <option value="added_date" selected={get_in(@rules, ["sort", "field"]) == "added_date"}>
-                Date Added
+                {gettext("Date Added")}
               </option>
             </select>
             <select name="sort_direction" class="select select-sm select-bordered w-24">
               <option value="asc" selected={get_in(@rules, ["sort", "direction"]) != "desc"}>
-                Asc
+                {gettext("Asc")}
               </option>
               <option value="desc" selected={get_in(@rules, ["sort", "direction"]) == "desc"}>
-                Desc
+                {gettext("Desc")}
               </option>
             </select>
           </div>
         </div>
         <div class="w-32">
           <label class="label">
-            <span class="label-text text-sm">Limit</span>
+            <span class="label-text text-sm">{gettext("Limit")}</span>
           </label>
           <input
             type="number"
             name="limit"
             min="0"
             max="1000"
-            placeholder="No limit"
+            placeholder={gettext("No limit")}
             value={Map.get(@rules, "limit")}
             class="input input-sm input-bordered w-full"
           />
@@ -646,7 +669,7 @@ defmodule MydiaWeb.CollectionComponents do
       <%= if @show_preview do %>
         <div class="flex justify-end">
           <button type="button" phx-click="preview_rules" class="btn btn-sm btn-ghost gap-1">
-            <.icon name="hero-eye" class="w-4 h-4" /> Preview Results
+            <.icon name="hero-eye" class="w-4 h-4" /> {gettext("Preview Results")}
           </button>
         </div>
       <% end %>
@@ -677,7 +700,7 @@ defmodule MydiaWeb.CollectionComponents do
             type="text"
             name="search"
             value={@search_query}
-            placeholder="Search collections..."
+            placeholder={gettext("Search collections...")}
             phx-debounce="300"
             class="input input-bordered w-full"
           />
@@ -687,15 +710,19 @@ defmodule MydiaWeb.CollectionComponents do
       <%!-- Filters --%>
       <.form for={%{}} phx-change="filter" id="collection-filter-form" class="join">
         <select name="type" class="select select-bordered join-item">
-          <option value="" selected={is_nil(@filter_type)}>All Types</option>
-          <option value="manual" selected={@filter_type == "manual"}>Manual</option>
-          <option value="smart" selected={@filter_type == "smart"}>Smart</option>
+          <option value="" selected={is_nil(@filter_type)}>{gettext("All Types")}</option>
+          <option value="manual" selected={@filter_type == "manual"}>{gettext("Manual")}</option>
+          <option value="smart" selected={@filter_type == "smart"}>{gettext("Smart")}</option>
         </select>
 
         <select name="visibility" class="select select-bordered join-item">
-          <option value="" selected={is_nil(@filter_visibility)}>All Visibility</option>
-          <option value="private" selected={@filter_visibility == "private"}>Private</option>
-          <option value="shared" selected={@filter_visibility == "shared"}>Shared</option>
+          <option value="" selected={is_nil(@filter_visibility)}>{gettext("All Visibility")}</option>
+          <option value="private" selected={@filter_visibility == "private"}>
+            {gettext("Private")}
+          </option>
+          <option value="shared" selected={@filter_visibility == "shared"}>
+            {gettext("Shared")}
+          </option>
         </select>
       </.form>
     </div>
@@ -709,17 +736,19 @@ defmodule MydiaWeb.CollectionComponents do
 
     * `:message` - The message to display.
   """
-  attr :message, :string, default: "No collections found"
+  attr :message, :string, default: nil, doc: "defaults to the translated \"No collections found\""
 
   slot :actions
 
   def collection_empty_state(assigns) do
+    assigns = assign(assigns, :heading, assigns.message || gettext("No collections found"))
+
     ~H"""
     <div class="flex flex-col items-center justify-center py-16">
       <.icon name="hero-folder" class="w-16 h-16 mb-4 text-base-content/30" />
-      <h3 class="text-xl font-semibold text-base-content/70 mb-2">{@message}</h3>
+      <h3 class="text-xl font-semibold text-base-content/70 mb-2">{@heading}</h3>
       <p class="text-base-content/50 text-center max-w-md">
-        Create a collection to organize your media into custom groups.
+        {gettext("Create a collection to organize your media into custom groups.")}
       </p>
       <%= if @actions != [] do %>
         <div class="mt-4">
@@ -740,9 +769,9 @@ defmodule MydiaWeb.CollectionComponents do
   defp type_icon("manual"), do: "hero-folder"
   defp type_icon(_), do: "hero-folder"
 
-  defp type_label("smart"), do: "Smart"
-  defp type_label("manual"), do: "Manual"
-  defp type_label(_), do: "Manual"
+  defp type_label("smart"), do: gettext("Smart")
+  defp type_label("manual"), do: gettext("Manual")
+  defp type_label(_), do: gettext("Manual")
 
   defp format_condition_value(value) when is_list(value), do: Enum.join(value, ", ")
   defp format_condition_value(value), do: value

@@ -4,6 +4,7 @@ defmodule MydiaWeb.DiscoverComponents do
   media detail page's Collection and recommendations strips.
   """
   use Phoenix.Component
+  use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [icon: 1, poster_figure: 1]
   import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1, poster_rail: 1]
@@ -203,7 +204,9 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :requesting_item_id, :string, default: nil
 
   attr :id, :string, default: "media-rail"
-  attr :title, :string, default: "More like this"
+  # nil falls back to a translated "More like this" at render time: an attr
+  # default is evaluated at compile time, before any locale is set.
+  attr :title, :string, default: nil
   attr :show_header, :boolean, default: true
   # :any, not :string - see the note on trending_card/1. nil renders an inert
   # poster, which is what a host with no show_details handler needs.
@@ -231,7 +234,10 @@ defmodule MydiaWeb.DiscoverComponents do
               "toggle_event, so its header would render a chevron nothing can open"
     end
 
-    assigns = assign(assigns, :open?, not assigns.collapsible or assigns.expanded)
+    assigns =
+      assigns
+      |> assign(:open?, not assigns.collapsible or assigns.expanded)
+      |> assign(:heading, assigns.title || gettext("More like this"))
 
     ~H"""
     <div :if={@items != []} id={@id} class="mb-6 md:mb-8">
@@ -253,11 +259,11 @@ defmodule MydiaWeb.DiscoverComponents do
               name={if @open?, do: "hero-chevron-down", else: "hero-chevron-right"}
               class="w-4 h-4 text-base-content/40 shrink-0"
             />
-            <span class="text-lg md:text-xl font-semibold truncate">{@title}</span>
+            <span class="text-lg md:text-xl font-semibold truncate">{@heading}</span>
             <span class="badge badge-ghost badge-sm shrink-0">{length(@items)}</span>
           </button>
         </h2>
-        <h2 :if={not @collapsible} class="text-lg md:text-xl font-semibold truncate">{@title}</h2>
+        <h2 :if={not @collapsible} class="text-lg md:text-xl font-semibold truncate">{@heading}</h2>
         <div :if={@badge != []} class="flex-shrink-0">{render_slot(@badge)}</div>
       </div>
 
@@ -311,11 +317,14 @@ defmodule MydiaWeb.DiscoverComponents do
         >
           <%= cond do %>
             <% requesting?(@item, @requesting_item_id) -> %>
-              <span class="loading loading-spinner loading-xs"></span> Requesting...
+              <span class="loading loading-spinner loading-xs"></span> {gettext("Requesting...")}
             <% requested?(@item) -> %>
-              <.icon name="hero-check" class="w-4 h-4" /> Requested
+              <.icon name="hero-check" class="w-4 h-4" /> {gettext("Requested")}
             <% true -> %>
-              <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
+              <.icon name="hero-paper-airplane" class="w-4 h-4" /> {pgettext(
+                "media request",
+                "Request"
+              )}
           <% end %>
         </button>
       <% not @item.in_library and @can_add -> %>
@@ -333,14 +342,14 @@ defmodule MydiaWeb.DiscoverComponents do
             phx-value-ref={@ref_param}
             phx-value-media_type={@media_type}
             disabled={@adding}
-            title="Add to Library"
-            aria-label="Add to Library"
+            title={gettext("Add to Library")}
+            aria-label={gettext("Add to Library")}
             class="btn btn-primary btn-sm join-item flex-1"
           >
             <%= if @adding do %>
-              <span class="loading loading-spinner loading-xs"></span> Adding...
+              <span class="loading loading-spinner loading-xs"></span> {gettext("Adding...")}
             <% else %>
-              <.icon name="hero-plus" class="w-4 h-4" /> Add
+              <.icon name="hero-plus" class="w-4 h-4" /> {pgettext("add to library", "Add")}
             <% end %>
           </button>
           <LibraryComponents.library_picker_button
@@ -352,7 +361,7 @@ defmodule MydiaWeb.DiscoverComponents do
       <% @item.in_library -> %>
         <.link navigate={library_path(@media_type, @item.id)} class="btn btn-ghost btn-sm mt-2 w-full">
           <.icon name="hero-arrow-right" class="w-4 h-4" />
-          {if(@media_type == :movie, do: "Go to Movie", else: "Go to Show")}
+          {if(@media_type == :movie, do: gettext("Go to Movie"), else: gettext("Go to Show"))}
         </.link>
       <% true -> %>
         <%!-- Unowned, and this viewer may neither add nor request. Rendering the

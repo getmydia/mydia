@@ -28,7 +28,7 @@ defmodule MydiaWeb.MediaLive.Show.SegmentComponents do
       id={"segment-status-season-#{@season_number}"}
       class="flex flex-wrap items-center gap-2 mb-3 text-xs"
     >
-      <span class="text-base-content/60">Skip segments</span>
+      <span class="text-base-content/60">{gettext("Skip segments")}</span>
 
       <span
         id={"segment-state-season-#{@season_number}"}
@@ -38,16 +38,18 @@ defmodule MydiaWeb.MediaLive.Show.SegmentComponents do
       </span>
 
       <span id={"segment-intro-season-#{@season_number}"} class="text-base-content/60">
-        Intro {format_span(@status.segments["intro"], @status.files)}
+        {gettext("Intro %{span}", span: format_span(@status.segments["intro"], @status.files))}
       </span>
 
       <span id={"segment-credits-season-#{@season_number}"} class="text-base-content/60">
-        Credits {format_span(@status.segments["credits"], @status.files)}
+        {gettext("Credits %{span}",
+          span: format_span(@status.segments["credits"], @status.files)
+        )}
       </span>
 
       <span :for={source <- @status.sources} class="badge badge-ghost badge-sm">{source}</span>
 
-      <div class="tooltip tooltip-bottom ml-auto" data-tip="Re-analyze skip segments">
+      <div class="tooltip tooltip-bottom ml-auto" data-tip={gettext("Re-analyze skip segments")}>
         <button
           id={"segment-reanalyze-season-#{@season_number}"}
           type="button"
@@ -55,7 +57,7 @@ defmodule MydiaWeb.MediaLive.Show.SegmentComponents do
           phx-click="re_analyze_segments"
           phx-value-season-number={@season_number}
         >
-          <.icon name="hero-arrow-path" class="w-3 h-3" /> Re-analyze
+          <.icon name="hero-arrow-path" class="w-3 h-3" /> {gettext("Re-analyze")}
         </button>
       </div>
     </div>
@@ -76,16 +78,16 @@ defmodule MydiaWeb.MediaLive.Show.SegmentComponents do
       class="text-xs text-base-content/60 flex items-center gap-1"
     >
       <.icon name="hero-information-circle" class="w-4 h-4" />
-      Detection unavailable: chromaprint not installed
+      {gettext("Detection unavailable: chromaprint not installed")}
     </div>
     """
   end
 
-  defp state_label(:detected), do: "Detected"
-  defp state_label(:partial), do: "Partial"
-  defp state_label(:not_found), do: "Not found"
-  defp state_label(:failed), do: "Failed"
-  defp state_label(_pending), do: "Pending"
+  defp state_label(:detected), do: pgettext("segment detection", "Detected")
+  defp state_label(:partial), do: pgettext("segment detection", "Partial")
+  defp state_label(:not_found), do: pgettext("segment detection", "Not found")
+  defp state_label(:failed), do: pgettext("segment detection", "Failed")
+  defp state_label(_pending), do: pgettext("segment detection", "Pending")
 
   defp state_class(:detected), do: "badge-success"
   defp state_class(:partial), do: "badge-warning"
@@ -102,11 +104,18 @@ defmodule MydiaWeb.MediaLive.Show.SegmentComponents do
   # where only some episodes have one says so rather than implying the whole
   # season shares it.
   defp format_span(summary, total) do
-    "#{span(summary)} (#{summary.files} of #{total})"
+    gettext("%{span} (%{files} of %{total})",
+      span: span(summary),
+      files: summary.files,
+      total: total
+    )
   end
 
   defp span(summary) do
-    "#{format_ms(summary.start_ms)} to #{format_ms(summary.end_ms)}"
+    gettext("%{start} to %{stop}",
+      start: format_ms(summary.start_ms),
+      stop: format_ms(summary.end_ms)
+    )
   end
 
   defp format_ms(ms) do
