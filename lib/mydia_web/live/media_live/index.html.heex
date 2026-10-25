@@ -453,6 +453,20 @@
     >
     </div>
 
+    <%!-- After an A-Z jump, loads the titles above the letter about a screen
+          and a half before the user scrolls up to them. --%>
+    <div
+      :if={@has_previous}
+      id="media-items-top-sentinel"
+      phx-hook="LoadMoreSentinel"
+      data-event="load_previous"
+      data-margin="150% 0px 0px 0px"
+      data-has-more="true"
+      class="flex justify-center py-8"
+    >
+      <span class="loading loading-spinner loading-md text-primary"></span>
+    </div>
+
     <%!-- Unified Media Items Container (single stream for both grid and list) --%>
     <div
       id="media-items"
@@ -467,6 +481,7 @@
       <div
         :for={{id, row} <- @streams.media_items}
         id={id}
+        data-initial={LibraryListing.initial(row)}
         class={(@view_mode == :list or row.id == @description_match_start_id) && "contents"}
       >
         <% item = row.item %>

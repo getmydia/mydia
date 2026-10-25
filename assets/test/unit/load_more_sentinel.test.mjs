@@ -60,6 +60,14 @@ test("stops after the reply once it is no longer visible", async () => {
   assert.equal(calls.length, 1);
 });
 
+test("pushes the event it was created with", () => {
+  const el = { dataset: { hasMore: "true" } };
+  const calls = [];
+  const loader = createLoader(el, (event) => new Promise(() => calls.push(event)), "load_previous");
+  loader.setVisible(true);
+  assert.deepEqual(calls, ["load_previous"]);
+});
+
 test("does nothing when the server has no more rows", () => {
   const { el, calls, loader } = setup("false");
   loader.setVisible(true);

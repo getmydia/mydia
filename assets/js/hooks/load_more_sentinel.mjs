@@ -14,10 +14,14 @@
 // the push errors or times out. A rejection clears the in-flight flag without
 // retrying, since retrying while disconnected would only reject again in a
 // loop. The hook's reconnected() callback tries again once the view is back.
+//
+// The same hook backs the top sentinel after an A-Z jump: `data-event` names
+// the event to push (default `load_more`) and `data-margin` the observer's root
+// margin (default `ROOT_MARGIN`).
 
 export const ROOT_MARGIN = "0px 0px 150% 0px";
 
-export function createLoader(el, push) {
+export function createLoader(el, push, event = "load_more") {
   let visible = false;
   let inFlight = false;
 
@@ -25,7 +29,7 @@ export function createLoader(el, push) {
     if (!visible || inFlight || el.dataset.hasMore !== "true") return;
 
     inFlight = true;
-    push("load_more", {}).then(
+    push(event, {}).then(
       () => {
         inFlight = false;
         maybeLoad();
@@ -47,11 +51,12 @@ export function createLoader(el, push) {
 
 export const LoadMoreSentinel = {
   mounted() {
-    this.loader = createLoader(this.el, (event, payload) => this.pushEvent(event, payload));
+    const event = this.el.dataset.event || "load_more";
+    this.loader = createLoader(this.el, (name, payload) => this.pushEvent(name, payload), event);
 
     this.observer = new IntersectionObserver(
       (entries) => entries.forEach((entry) => this.loader.setVisible(entry.isIntersecting)),
-      { rootMargin: ROOT_MARGIN },
+      { rootMargin: this.el.dataset.margin || ROOT_MARGIN },
     );
     this.observer.observe(this.el);
   },
