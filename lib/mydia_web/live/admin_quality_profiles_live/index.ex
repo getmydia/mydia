@@ -11,7 +11,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Quality Profiles")
+     |> assign(:page_title, gettext("Configuration - Quality Profiles"))
      |> assign(:custom_formats, CustomFormats.list_all())
      |> load_data()}
   end
@@ -32,7 +32,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
       {:ok, _} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Default quality profile updated")
+         |> put_flash(:info, gettext("Default quality profile updated"))
          |> assign(:default_quality_profile_id, profile_id)}
 
       {:error, reason} ->
@@ -43,7 +43,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
           user_id: socket.assigns.current_user.id
         )
 
-        {:noreply, put_flash(socket, :error, "Failed to update default quality profile")}
+        {:noreply, put_flash(socket, :error, gettext("Failed to update default quality profile"))}
     end
   end
 
@@ -116,7 +116,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
             {:noreply,
              socket
              |> assign(:show_quality_profile_modal, false)
-             |> put_flash(:info, "Quality profile saved successfully")
+             |> put_flash(:info, gettext("Quality profile saved successfully"))
              |> load_data()}
 
           {:error, %Ecto.Changeset{} = assignment_changeset} ->
@@ -125,8 +125,10 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
              |> assign(:show_quality_profile_modal, false)
              |> put_flash(
                :error,
-               "Quality profile saved, but custom format settings could not be saved: " <>
-                 assignment_error_message(assignment_changeset)
+               gettext(
+                 "Quality profile saved, but custom format settings could not be saved: %{reason}",
+                 reason: assignment_error_message(assignment_changeset)
+               )
              )
              |> load_data()}
         end
@@ -144,7 +146,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
       {:ok, _new_profile} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Quality profile cloned successfully")
+         |> put_flash(:info, gettext("Quality profile cloned successfully"))
          |> load_data()}
 
       {:error, changeset} ->
@@ -168,7 +170,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
       {:ok, _profile} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Quality profile deleted successfully")
+         |> put_flash(:info, gettext("Quality profile deleted successfully"))
          |> load_data()}
 
       {:error, :profile_in_use} ->
@@ -213,7 +215,10 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
          |> assign(:show_delete_quality_profile_modal, false)
          |> assign(:deleting_quality_profile, nil)
          |> assign(:affected_media_count, 0)
-         |> put_flash(:info, "Quality profile deleted and unassigned from media items")
+         |> put_flash(
+           :info,
+           gettext("Quality profile deleted and unassigned from media items")
+         )
          |> load_data()}
 
       {:error, error} ->
@@ -269,7 +274,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
          })}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Export failed: #{reason}")}
+        {:noreply, put_flash(socket, :error, gettext("Export failed: %{reason}", reason: reason))}
     end
   end
 
@@ -281,7 +286,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
          socket
          |> assign(:show_import_quality_profile_modal, false)
          |> assign(:import_quality_profile_error, nil)
-         |> put_flash(:info, "Profile imported successfully from URL")
+         |> put_flash(:info, gettext("Profile imported successfully from URL"))
          |> load_data()}
 
       {:error, reason} ->
@@ -295,7 +300,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
         error_msg =
           case reason do
             msg when is_binary(msg) -> msg
-            _ -> "Failed to import profile: #{inspect(reason)}"
+            _ -> gettext("Failed to import profile: %{reason}", reason: inspect(reason))
           end
 
         {:noreply, assign(socket, :import_quality_profile_error, error_msg)}
@@ -364,17 +369,26 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
           {:ok, _profile} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Preset \"#{preset.name}\" imported successfully")
+             |> put_flash(
+               :info,
+               gettext("Preset \"%{name}\" imported successfully", name: preset.name)
+             )
              |> assign(:show_quality_profile_presets_modal, false)
              |> load_data()}
 
           {:error, changeset} ->
             errors = format_changeset_errors(changeset)
-            {:noreply, put_flash(socket, :error, "Failed to import preset: #{errors}")}
+
+            {:noreply,
+             put_flash(
+               socket,
+               :error,
+               gettext("Failed to import preset: %{errors}", errors: errors)
+             )}
         end
 
       {:error, :not_found} ->
-        {:noreply, put_flash(socket, :error, "Preset not found")}
+        {:noreply, put_flash(socket, :error, gettext("Preset not found"))}
     end
   end
 

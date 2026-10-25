@@ -19,7 +19,7 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
     <.admin_modal
       id="plugin-logs-modal"
       icon="hero-document-text"
-      title={"#{@logs.name} logs"}
+      title={gettext("%{name} logs", name: @logs.name)}
       size={:lg}
       on_close="close_plugin_logs_modal"
     >
@@ -30,7 +30,7 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
           name="logs-tabs"
           role="tab"
           class="tab"
-          aria-label="Activity"
+          aria-label={gettext("Activity")}
           id="logs-tab-activity"
           phx-update="ignore"
           checked
@@ -41,12 +41,12 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
             phx-change="filter_plugin_logs"
             class="flex items-center gap-2 mb-2"
           >
-            <h4 class="font-semibold mr-auto">Activity log</h4>
+            <h4 class="font-semibold mr-auto">{gettext("Activity log")}</h4>
             <input
               type="search"
               name="query"
               value={@logs.query}
-              placeholder="Search messages…"
+              placeholder={gettext("Search messages…")}
               phx-debounce="300"
               class="input input-bordered input-xs w-40"
               id="log-search"
@@ -57,7 +57,7 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
                 value={lvl}
                 selected={to_string(@logs.min_level) == lvl}
               >
-                {String.capitalize(lvl)}+
+                {level_label(lvl)}
               </option>
             </select>
           </form>
@@ -67,7 +67,7 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
             class="text-xs font-mono space-y-1 sm:max-h-[28rem] sm:overflow-y-auto rounded bg-base-200 p-2"
           >
             <p id="plugin-logs-empty" class="hidden only:block text-base-content/60">
-              No activity yet — add media or use Run test to confirm it works.
+              {gettext("No activity yet — add media or use Run test to confirm it works.")}
             </p>
             <div
               :for={{dom_id, log} <- @log_rows}
@@ -84,7 +84,9 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
                 {source_tag(log.source)}
               </span>
               <span class="flex-1 break-all">{log.message}</span>
-              <span :if={log.test_run} class="badge badge-warning badge-xs shrink-0">test</span>
+              <span :if={log.test_run} class="badge badge-warning badge-xs shrink-0">
+                {gettext("test")}
+              </span>
             </div>
           </div>
         </div>
@@ -95,33 +97,35 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
           name="logs-tabs"
           role="tab"
           class="tab"
-          aria-label="Network"
+          aria-label={gettext("Network")}
           id="logs-tab-network"
           phx-update="ignore"
         />
         <div role="tabpanel" class="tab-content border-base-300 bg-base-100 p-4">
-          <h4 class="font-semibold mb-2">Network requests</h4>
+          <h4 class="font-semibold mb-2">{gettext("Network requests")}</h4>
           <p class="text-xs text-base-content/60 mb-2">
-            Every outbound request this plugin made, gated against its
+            {gettext("Every outbound request this plugin made, gated against its")}
             <code class="text-xs">net:http</code>
-            allowlist.
+            {gettext("allowlist.")}
           </p>
           <div class="sm:overflow-x-auto rounded bg-base-200">
             <table class="table table-xs font-mono">
               <thead>
                 <tr>
-                  <th class="max-sm:whitespace-normal">Time</th>
-                  <th class="max-sm:hidden">Method</th>
+                  <th class="max-sm:whitespace-normal">{gettext("Time")}</th>
+                  <th class="max-sm:hidden">{gettext("Method")}</th>
                   <th class="max-sm:whitespace-normal">URL</th>
-                  <th class="text-right max-sm:whitespace-normal">Status</th>
-                  <th class="text-right max-sm:hidden">Size</th>
-                  <th class="text-right max-sm:hidden">Time</th>
-                  <th class="max-sm:whitespace-normal">Outcome</th>
+                  <th class="text-right max-sm:whitespace-normal">{gettext("Status")}</th>
+                  <th class="text-right max-sm:hidden">{gettext("Size")}</th>
+                  <th class="text-right max-sm:hidden">{gettext("Time")}</th>
+                  <th class="max-sm:whitespace-normal">{gettext("Outcome")}</th>
                 </tr>
               </thead>
               <tbody id="plugin-net" phx-update="stream">
                 <tr id="plugin-net-empty" class="hidden only:table-row">
-                  <td colspan="7" class="text-base-content/60">No recorded requests.</td>
+                  <td colspan="7" class="text-base-content/60">
+                    {gettext("No recorded requests.")}
+                  </td>
                 </tr>
                 <.net_row
                   :for={{dom_id, event} <- @net_rows}
@@ -140,12 +144,12 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
           name="logs-tabs"
           role="tab"
           class="tab"
-          aria-label="Test"
+          aria-label={gettext("Test")}
           id="logs-tab-test"
           phx-update="ignore"
         />
         <div role="tabpanel" class="tab-content border-base-300 bg-base-100 p-4">
-          <h4 class="font-semibold mb-2">Test</h4>
+          <h4 class="font-semibold mb-2">{gettext("Test")}</h4>
           <div :if={@logs.enabled and @logs.test_events != []}>
             <form phx-submit="test_plugin" class="flex gap-2 items-center">
               <input type="hidden" name="slug" value={@logs.slug} />
@@ -153,12 +157,13 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
                 <option :for={ev <- @logs.test_events} value={ev}>{ev}</option>
               </select>
               <button id="test-plugin" type="submit" class="btn btn-sm btn-primary">
-                Run test
+                {gettext("Run test")}
               </button>
             </form>
             <p class="text-xs text-base-content/60 mt-2">
-              Fires a synthetic event so you can confirm the plugin works without waiting for real media.
-              Watch the Activity tab for the resulting log lines.
+              {gettext(
+                "Fires a synthetic event so you can confirm the plugin works without waiting for real media. Watch the Activity tab for the resulting log lines."
+              )}
             </p>
           </div>
           <p
@@ -167,9 +172,9 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
           >
             <%= cond do %>
               <% not @logs.enabled -> %>
-                Enable this plugin to send it a test event.
+                {gettext("Enable this plugin to send it a test event.")}
               <% true -> %>
-                This plugin does not subscribe to any events, so there is nothing to test.
+                {gettext("This plugin does not subscribe to any events, so there is nothing to test.")}
             <% end %>
           </p>
         </div>
@@ -182,7 +187,7 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
           class="btn btn-ghost btn-sm"
           phx-click="close_plugin_logs_modal"
         >
-          Close
+          {gettext("Close")}
         </button>
       </:actions>
     </.admin_modal>
@@ -269,6 +274,11 @@ defmodule MydiaWeb.AdminPluginsLive.LogsModalComponents do
 
   defp log_full_time(%DateTime{} = dt, display), do: format(dt, :datetime_full, display)
   defp log_full_time(_, _display), do: ""
+
+  defp level_label("debug"), do: gettext("Debug+")
+  defp level_label("info"), do: gettext("Info+")
+  defp level_label("warn"), do: gettext("Warn+")
+  defp level_label("error"), do: gettext("Error+")
 
   # Compact source marker for an activity-log line.
   defp source_tag(:guest), do: "log"
