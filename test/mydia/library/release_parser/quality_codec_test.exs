@@ -37,6 +37,32 @@ defmodule Mydia.Library.ReleaseParser.QualityCodecTest do
     assert parsed.release_group == nil
   end
 
+  test "a bracketed bit depth after the codec is not a group" do
+    parsed = ReleaseParser.parse("Fake Movie 2020 1080p HEVC-[10bit]")
+    assert parsed.quality.codec == "H.265"
+    assert parsed.release_group == nil
+  end
+
+  test "reposter tags are dropped without a codec before the group" do
+    assert ReleaseParser.parse("Fake.Movie.2020.1080p.BluRay-GRP-RP").release_group == "GRP"
+  end
+
+  describe "a codec word inside a hyphenated title" do
+    for {input, title, codec} <- [
+          {"Route-264.2019.1080p.BluRay.x264-GRP", "Route-264", "x264"},
+          {"Project-AV1.2021.1080p.WEB-DL.x264-GRP", "Project-AV1", "x264"},
+          {"Agent-Xvid.S01E02.1080p.WEB-DL.x264-GRP", "Agent-Xvid", "x264"},
+          {"Avc-Station.2019.1080p.BluRay.x265-GRP", "Avc-Station", "x265"},
+          {"Code-Hevc.2020.1080p.WEB-DL.H.264-GRP", "Code-Hevc", "H.264"}
+        ] do
+      test "stays in the title: #{input}" do
+        parsed = ReleaseParser.parse(unquote(input))
+        assert parsed.title == unquote(title)
+        assert parsed.quality.codec == unquote(codec)
+      end
+    end
+  end
+
   test "codec dash-joined to a bit depth, audio or group word" do
     assert ReleaseParser.parse("[Fakesub] Some Show - 05 [WebRip 1080p HEVC-10bit AAC]").quality.codec ==
              "H.265"

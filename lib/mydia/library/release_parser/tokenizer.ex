@@ -29,8 +29,9 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
     `Marvel's What-If`).
   - A source glued to a resolution (`HDTV-720p`, `Bluray1080p`, Sonarr's
     file naming) is split in two, but only when the left part is a known
-    source, so `Pilot-720p` stays whole. A codec dash-joined to anything
-    (`BDRip-AVC`, `HEVC-10bit`, `x264-AAC`) is split off it.
+    source, so `Pilot-720p` stays whole. Past the title boundary, a codec
+    dash-joined to anything (`BDRip-AVC`, `HEVC-10bit`, `x264-AAC`) is
+    split off it; in the title (`Route-264`) it stays.
   """
 
   alias Mydia.Library.ReleaseParser.Token
@@ -67,10 +68,11 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
   @spec tokenize(String.t()) :: [Token.t()]
   def tokenize(input) when is_binary(input) do
     stripped = drop_extension(input)
+    boundary = title_boundary(anchor_positions(stripped), stripped)
 
     scan(stripped, stripped, 0, nil, nil, [])
     |> Enum.reverse()
-    |> apply_glued_source_splits()
+    |> apply_glued_source_splits(boundary)
     |> apply_compound_dash_splits()
   end
 
@@ -261,7 +263,7 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
 
   @glued_resolution_re ~r/^(.+?)(-?)((?:480|540|576|720|1080|1440|2160|4320)[pi])$/i
 
-  defp apply_glued_source_splits(tokens) do
+  defp apply_glued_source_splits(tokens, boundary) do
     Enum.flat_map(tokens, fn %Token{} = token ->
       case source_then_resolution(token.value) do
         [_, left, dash, right] ->
@@ -278,9 +280,19 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
           ]
 
         nil ->
-          split_dashed_codecs(token)
+          if metadata_zone?(token, boundary), do: split_dashed_codecs(token), else: [token]
       end
     end)
+  end
+
+  # Codec words do turn up in titles (`Route-264`, `Code-Hevc`,
+  # `Avc-Station`), so a dash run is split only once it reaches past the
+  # title boundary. Anchor-less anime names carry their quality in
+  # brackets (`(1280x720_x264-AAC)`), so a bracketed token counts too,
+  # unless it is the leading `[Group]` tag.
+  defp metadata_zone?(%Token{} = token, boundary) do
+    token.byte_offset + token.byte_length > boundary or
+      (token.bracket_context != nil and token.byte_offset > 1)
   end
 
   # A source followed by its resolution, dash optional.
@@ -293,8 +305,8 @@ defmodule Mydia.Library.ReleaseParser.Tokenizer do
 
   # A codec dash-joined to its neighbours (`BDRip-AVC`, `HEVC-10bit`,
   # `1080p-x264-AC3`, a group the pre-pass did not claim) comes off as its
-  # own token. No codec word is also a title word, so this needs nothing
-  # else around it. The other dash runs stay joined (`WEB-DLRip`, `Fra-Ac3`).
+  # own token, in the metadata zone only (see metadata_zone?/2). The other
+  # dash runs stay joined (`WEB-DLRip`, `Fra-Ac3`).
   # A bare `264` counts so `H.264-GRP` still pairs its `H` and `264`.
   defp split_dashed_codecs(%Token{value: value} = token) do
     parts = String.split(value, "-")

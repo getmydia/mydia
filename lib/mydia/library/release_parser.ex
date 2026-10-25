@@ -30,6 +30,7 @@ defmodule Mydia.Library.ReleaseParser do
   alias Mydia.Library.ReleaseParser.Resolver
   alias Mydia.Library.ReleaseParser.TargetContext
   alias Mydia.Library.ReleaseParser.Tokenizer
+  alias Mydia.Library.ReleaseParser.Vocabulary
   alias Mydia.Library.SampleDetector
   alias Mydia.Library.Structs.ParsedFileInfo
   alias Mydia.Library.Structs.Quality
@@ -230,6 +231,12 @@ defmodule Mydia.Library.ReleaseParser do
   # a bracket site tag, optionally followed by whitespace and the end.
   @release_group_re ~r/(?:[-.]|\s{2,})([A-Z0-9]+(?:[.\s][A-Z0-9]+)?)(?:\[[^\]]+\])?\s*$/i
 
+  # Reposters and indexers append their own tags after the group
+  # (`-NTb-xpost`, `-RiVER-RP`). Mirrors the suffix list in Sonarr's
+  # `ReleaseGroupParser.CleanReleaseGroupRegex`, minus `[N-Z-B]`, which
+  # cannot survive the dash pre-pass here.
+  @reposter_suffixes_re ~r/(?:-(?:RP|1|NZBGeek|Obfuscated|Scrambled|sample|Pre|postbot|xpost|Rakuv[a-z0-9]*|WhiteRev|BUYMORE|AsRequested|AlternativeToRequested|GEROV|Z0iDS3N|Chamele0n|4P|4Planet|AlteZachen|RePACKPOST))+$/i
+
   # Detect a trailing release-group separator (`-GROUP` or `. GROUP`)
   # and, when present, rewrite the separator to a space so the
   # tokenizer cleanly separates the group from the preceding token.
@@ -240,8 +247,16 @@ defmodule Mydia.Library.ReleaseParser do
   #
   # Returns `{prepared, group, group_offset}`, where `group_offset` is the
   # byte offset of the separator in `prepared` (nil without a group).
+  #
+  # Reposter tags are cut from the matched copy only, so they still reach
+  # the tokenizer, after the group, where nothing reads them. The cut keeps
+  # a prefix of `filename`, so every offset below indexes both.
   defp strip_trailing_release_group(filename) do
-    stripped_for_match = Tokenizer.drop_extension(filename)
+    stripped_for_match =
+      filename
+      |> Tokenizer.drop_extension()
+      |> String.replace(@reposter_suffixes_re, "")
+
     normalized = String.replace(stripped_for_match, ~r/[._]/, " ")
 
     case codec_led_group(stripped_for_match, normalized) do
@@ -269,10 +284,6 @@ defmodule Mydia.Library.ReleaseParser do
     \s*$
   /ix
 
-  # Reposters and indexers append their own tag to the group
-  # (`-NTb-xpost`, `-RiVER-RP`). Sonarr's CleanReleaseGroupRegex list.
-  @reposter_suffix_re ~r/^(?:RP|1|NZBGeek|Obfuscated|Scrambled|sample|Pre|postbot|xpost|Rakuv[a-z0-9]*|WhiteRev|BUYMORE|AsRequested|AlternativeToRequested|GEROV|Z0iDS3N|Chamele0n|4P|4Planet|AlteZachen|RePACKPOST)$/i
-
   # Offsets index `stripped` too: normalization swaps bytes one for one,
   # and the group keeps its own dots (`YTS.LT`).
   defp codec_led_group(stripped, normalized) do
@@ -296,17 +307,23 @@ defmodule Mydia.Library.ReleaseParser do
 
   # `REPACK-GRP` puts the release flag where the group goes; the flag is
   # not part of the name. A quality word further in means the run is more
-  # metadata (`H264-Fra-Ac3-2-0-Eng`, `x264-DHD-Remux`), not a name.
+  # metadata (`H264-Fra-Ac3-2-0-Eng`, `x264-DHD-Remux`, `HEVC-[10bit]`),
+  # not a name.
   defp clean_dashed_group(group) do
     parts =
       group
       |> String.split("-")
-      |> Enum.reverse()
-      |> Enum.drop_while(&Regex.match?(@reposter_suffix_re, &1))
-      |> Enum.reverse()
       |> Enum.drop_while(&quality_marker_word?/1)
 
-    if Enum.any?(parts, &quality_marker_word?/1), do: "", else: Enum.join(parts, "-")
+    if Enum.any?(parts, &quality_part?/1), do: "", else: Enum.join(parts, "-")
+  end
+
+  @bit_depth_re ~r/^\d{1,2}[-_ ]?bits?$/i
+  @quality_labels [:codec, :source, :hdr, :audio, :language, :streaming_service]
+
+  defp quality_part?(part) do
+    quality_marker_word?(part) or Regex.match?(@bit_depth_re, part) or
+      Enum.any?(Vocabulary.lookup(part), &(&1.label in @quality_labels))
   end
 
   defp replace_byte(binary, offset, replacement) do
