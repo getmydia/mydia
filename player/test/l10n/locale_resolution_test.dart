@@ -36,15 +36,41 @@ void main() {
       expect(resolve(const []), const Locale('en'));
     });
 
-    test('an exact match later in the list beats a language match earlier', () {
+    test('keeps the order of the device list, as Flutter does', () {
       expect(
         resolve([const Locale('es', 'MX'), const Locale('en')]),
-        const Locale('en'),
+        const Locale('es'),
+      );
+      expect(
+        resolve([const Locale('pt', 'PT'), const Locale('en')]),
+        const Locale('pt', 'BR'),
       );
       expect(
         resolve([const Locale('de'), const Locale('pt', 'PT')]),
         const Locale('pt', 'BR'),
       );
+      expect(resolve([const Locale('de'), const Locale('es')]),
+          const Locale('es'));
+      expect(resolve([const Locale('en', 'GB')]), const Locale('en'));
+      expect(resolveLocaleList(null, supported), const Locale('en'));
+    });
+
+    test('matches Flutter for every language without a stub', () {
+      const withoutStub = [Locale('en'), Locale('es'), Locale('pt', 'BR')];
+      const lists = [
+        [Locale('es', 'MX'), Locale('en')],
+        [Locale('en', 'US'), Locale('es')],
+        [Locale('de'), Locale('es', 'AR'), Locale('en')],
+        [Locale('es'), Locale('es', 'MX')],
+        [Locale('fr')],
+      ];
+      for (final l in lists) {
+        expect(
+          resolveLocaleList(l, supported),
+          basicLocaleListResolution(l, withoutStub),
+          reason: '$l',
+        );
+      }
     });
 
     test('a language with no regional variant keeps its stub', () {

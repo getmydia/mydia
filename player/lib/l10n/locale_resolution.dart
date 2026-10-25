@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'package:flutter/widgets.dart' show basicLocaleListResolution;
+
 import 'gen/app_localizations.dart';
 
 /// Languages whose base ARB (`app_<code>.arb`) holds no messages. A stub
@@ -26,9 +28,11 @@ List<Locale> get pickableLocales => [
     ];
 
 /// Picks the shipped locale for the device's preferred [device] locales, for
-/// `MaterialApp.localeListResolutionCallback`. Exact match first (across the
-/// whole list, stubs excluded), then the same language, preferring a
-/// non-stub (a bare, then any regional one), else English.
+/// `MaterialApp.localeListResolutionCallback`. This is Flutter's own
+/// [basicLocaleListResolution] run over [supported] without its stubs, so the
+/// ordering rules are unchanged: a bare `pt` or `pt_PT` device finds the
+/// regional `pt_BR` as its language match, and anything unmatched falls to
+/// English.
 Locale resolveLocaleList(
   List<Locale>? device,
   Iterable<Locale> supported, {
@@ -38,32 +42,12 @@ Locale resolveLocaleList(
     for (final l in supported)
       if (!isStubLocale(l, stubs: stubs)) l,
   ];
-  final wanted = device ?? const <Locale>[];
-
-  for (final d in wanted) {
-    for (final l in usable) {
-      if (l.languageCode == d.languageCode &&
-          l.scriptCode == d.scriptCode &&
-          l.countryCode == d.countryCode) {
-        return l;
-      }
-    }
-  }
-  for (final d in wanted) {
-    Locale? bare;
-    Locale? regional;
-    for (final l in usable) {
-      if (l.languageCode != d.languageCode) continue;
-      if (l.countryCode == null && l.scriptCode == null) {
-        bare ??= l;
-      } else {
-        regional ??= l;
-      }
-    }
-    final match = bare ?? regional;
-    if (match != null) return match;
-  }
-  return const Locale('en');
+  if (usable.isEmpty) return const Locale('en');
+  // basicLocaleListResolution falls back to the first supported locale, so
+  // put English there.
+  final english = usable.where((l) => l.languageCode == 'en');
+  final ordered = [...english, ...usable.where((l) => !english.contains(l))];
+  return basicLocaleListResolution(device, ordered);
 }
 
 /// `MaterialApp.localeListResolutionCallback` for the generated locales.
