@@ -21,7 +21,7 @@ defmodule Mydia.Repo.Migrations.FoldBdripIntoBlurayTest do
                Mydia.DB.postgres?() and
                  "Ecto.Migrator.up/4 deadlocks the SQL sandbox on Postgres (see backfill_excluded_sources_test.exs)"
 
-  test "rewrites BDRip and BRRip to BluRay without losing other standards" do
+  test "folds preferences to BluRay, drops exclusions, keeps other standards" do
     profile =
       legacy_profile("Legacy BDRip", %{
         "preferred_resolutions" => ["1080p"],
@@ -34,7 +34,7 @@ defmodule Mydia.Repo.Migrations.FoldBdripIntoBlurayTest do
 
     standards = Repo.get!(QualityProfile, profile.id).quality_standards
     assert standards.preferred_sources == ["BluRay", "WEB-DL"]
-    assert standards.excluded_sources == ["BluRay", "CAM"]
+    assert standards.excluded_sources == ["CAM"]
     assert standards.min_resolution == "720p"
   end
 

@@ -1,12 +1,18 @@
 defmodule Mydia.Repo.Migrations.FoldBdripIntoBlurayInQualityProfiles do
   @moduledoc """
   Rewrites `BDRip` and `BRRip` to `BluRay` in every stored quality profile's
-  `quality_standards.preferred_sources` and `.excluded_sources`.
+  `quality_standards.preferred_sources`, and drops them from
+  `.excluded_sources`.
 
   Both release parsers now fold those names into `BluRay`, so a stored
   `BDRip` preference can never match a release or a file, and
-  `QualityProfile` no longer accepts it as a source. The changeset folds the
-  value on every save; this brings rows that are never re-saved in line.
+  `QualityProfile` no longer accepts it as a source. The changeset does the
+  same on every save; this brings rows that are never re-saved in line.
+
+  The two lists are treated differently on purpose. Folding a preference
+  keeps what the operator wanted. Folding an exclusion would exclude
+  `BluRay` and silently block every Blu-ray release, far more than was
+  asked, so the entry is dropped instead.
 
   `quality_standards` is a JSON text column on both adapters, holding
   string keys at rest, so this is a read-modify-write in Elixir. Rows that
@@ -36,7 +42,8 @@ defmodule Mydia.Repo.Migrations.FoldBdripIntoBlurayInQualityProfiles do
   end
 
   # Irreversible by design: once folded, a BluRay entry that was BDRip is
-  # indistinguishable from one the operator chose.
+  # indistinguishable from one the operator chose, and a dropped exclusion
+  # leaves nothing behind.
   def down, do: :ok
 
   defp lists_legacy_source?(standards) do
@@ -49,15 +56,20 @@ defmodule Mydia.Repo.Migrations.FoldBdripIntoBlurayInQualityProfiles do
   end
 
   defp fold(standards) do
-    Enum.reduce(@keys, standards, fn key, acc ->
-      case Map.get(acc, key) do
-        sources when is_list(sources) ->
-          Map.put(acc, key, sources |> Enum.map(&Map.get(@aliases, &1, &1)) |> Enum.uniq())
-
-        _ ->
-          acc
-      end
+    standards
+    |> update_list("preferred_sources", fn sources ->
+      sources |> Enum.map(&Map.get(@aliases, &1, &1)) |> Enum.uniq()
     end)
+    |> update_list("excluded_sources", fn sources ->
+      Enum.reject(sources, &Map.has_key?(@aliases, &1))
+    end)
+  end
+
+  defp update_list(standards, key, fun) do
+    case Map.get(standards, key) do
+      sources when is_list(sources) -> Map.put(standards, key, fun.(sources))
+      _ -> standards
+    end
   end
 
   defp decode(raw) when is_binary(raw) do

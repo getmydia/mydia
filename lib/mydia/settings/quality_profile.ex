@@ -340,19 +340,19 @@ defmodule Mydia.Settings.QualityProfile do
   def valid_sources, do: @valid_sources
 
   # Rewrites legacy source names rather than rejecting them, so a profile
-  # that still lists "BDRip" keeps loading. Duplicates the rewrite creates
-  # collapse onto the first occurrence, which keeps the priority order.
+  # that still lists "BDRip" keeps loading. A preference folds to BluRay,
+  # with duplicates collapsing onto the first occurrence to keep the
+  # priority order. An exclusion is dropped instead: excluding BluRay would
+  # silently block every Blu-ray release, far more than the operator asked.
   defp fold_legacy_sources(changeset) do
     update_change(changeset, :quality_standards, fn
       standards when is_map(standards) ->
-        Enum.reduce([:preferred_sources, :excluded_sources], standards, fn key, acc ->
-          case Map.get(acc, key) do
-            sources when is_list(sources) ->
-              Map.put(acc, key, sources |> Enum.map(&fold_legacy_source/1) |> Enum.uniq())
-
-            _ ->
-              acc
-          end
+        standards
+        |> update_source_list(:preferred_sources, fn sources ->
+          sources |> Enum.map(&Map.get(@legacy_source_aliases, &1, &1)) |> Enum.uniq()
+        end)
+        |> update_source_list(:excluded_sources, fn sources ->
+          Enum.reject(sources, &Map.has_key?(@legacy_source_aliases, &1))
         end)
 
       other ->
@@ -360,7 +360,12 @@ defmodule Mydia.Settings.QualityProfile do
     end)
   end
 
-  defp fold_legacy_source(source), do: Map.get(@legacy_source_aliases, source, source)
+  defp update_source_list(standards, key, fun) do
+    case Map.get(standards, key) do
+      sources when is_list(sources) -> Map.put(standards, key, fun.(sources))
+      _ -> standards
+    end
+  end
 
   # A profile must specify at least one preferred resolution. With the
   # standalone `qualities` list gone, the allow-list lives entirely in

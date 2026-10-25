@@ -94,9 +94,10 @@ defmodule Mydia.Settings.QualityProfileTest do
   # Both parsers fold BDRip and BRRip into BluRay, so a stored "BDRip"
   # preference could never match anything. Profiles that still carry one
   # (YAML/env config, imports, old exports) must keep loading, so the
-  # changeset rewrites the value instead of rejecting it.
+  # changeset rewrites the value instead of rejecting it. An exclusion is
+  # dropped rather than folded: excluding BluRay would block every Blu-ray.
   describe "BDRip folds into BluRay" do
-    test "preferred and excluded sources normalise" do
+    test "preferences fold to BluRay and exclusions are dropped" do
       changeset =
         QualityProfile.changeset(%QualityProfile{}, %{
           name: "Fold Test",
@@ -110,7 +111,7 @@ defmodule Mydia.Settings.QualityProfileTest do
       assert changeset.valid?
       standards = Ecto.Changeset.get_field(changeset, :quality_standards)
       assert standards.preferred_sources == ["BluRay", "WEB-DL"]
-      assert standards.excluded_sources == ["BluRay", "CAM"]
+      assert standards.excluded_sources == ["CAM"]
     end
 
     test "string-keyed standards from config normalise too" do
