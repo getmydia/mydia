@@ -10,6 +10,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/settings_nav.dart';
 import 'package:player/presentation/screens/sources/manage_sources_screen.dart';
 import 'package:player/presentation/screens/sources/mydia_instance_screen.dart';
@@ -69,6 +70,8 @@ void main() {
                 info: null, verdict: CompatibilityVerdict.unknown)),
       ],
       child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: toastLayerBuilder,
         routerConfig: GoRouter(routes: [
           GoRoute(

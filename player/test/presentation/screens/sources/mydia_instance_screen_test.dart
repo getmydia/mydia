@@ -20,6 +20,7 @@ import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/domain/models/remote_device.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/sources/mydia_instance_screen.dart';
 
 import '../../../core/sources/mydia/mydia_account_harness.dart'
@@ -140,6 +141,8 @@ void main() {
                 )),
       ],
       child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) {
           final layered = toastLayerBuilder(context, child);
           if (insets == null) return layered;

@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/palette.dart';
 import '../../../../core/update/update_provider.dart';
 import '../../../../core/update/update_track.dart';
+import '../../../../l10n/l10n.dart';
 
 /// Lets the viewer choose which release cadence this installation follows.
 ///
@@ -57,7 +58,8 @@ class TrackPickerRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final tracks = UpdateTrack.values.where(availableTracks.contains).toList();
-    final notice = _downgradeNotice();
+    final l10n = context.l10n;
+    final notice = _downgradeNotice(l10n);
     final instructions = deferredInstructions;
 
     return Padding(
@@ -66,7 +68,7 @@ class TrackPickerRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Release track',
+            l10n.settingsReleaseTrackTitle,
             style: TextStyle(
               fontSize: 14.5,
               fontWeight: FontWeight.w500,
@@ -111,13 +113,14 @@ class TrackPickerRow extends StatelessWidget {
   /// ahead of [currentTrack] (dev ahead of beta ahead of stable), which is
   /// the only signal this row has: it is never told what the chosen track
   /// last published, only what is actually installed.
-  String? _downgradeNotice() {
+  String? _downgradeNotice(AppLocalizations l10n) {
     final implied = _impliedTrack(installedVersion);
     if (implied == null || implied.index <= currentTrack.index) return null;
 
-    return 'You are on $installedVersion. ${currentTrack.label} will not '
-        'install anything older, so you will stay on this build until '
-        '${currentTrack.label} publishes one newer than it.';
+    return l10n.settingsReleaseTrackDowngradeNotice(
+      installedVersion,
+      currentTrack.label,
+    );
   }
 
   /// The track whose naming convention [version] looks like it came from: no

@@ -7,6 +7,7 @@ import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/theme_providers.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/widgets/theme_preset_row.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
@@ -15,6 +16,8 @@ class _ThemedHost extends ConsumerWidget {
   const _ThemedHost();
   @override
   Widget build(BuildContext context, WidgetRef ref) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         theme: AppTheme.build(ref.watch(paletteProvider), liquid: false),
         home: const Scaffold(body: ThemePresetSettingsRow()),
       );

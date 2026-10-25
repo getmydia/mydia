@@ -417,8 +417,16 @@ in
     };
 
     "mydia:flutter" = {
+      # pub get also runs gen_l10n (`generate: true`), which writes the gitignored
+      # player/lib/l10n/gen/ that the dart-analyze hook needs. The ARB files and
+      # l10n.yaml are inputs, so a pulled translation update regenerates it too.
       exec = "cd player && flutter pub get";
-      execIfModified = [ "player/pubspec.yaml" "player/pubspec.lock" ];
+      execIfModified = [
+        "player/pubspec.yaml"
+        "player/pubspec.lock"
+        "player/l10n.yaml"
+        "player/lib/l10n"
+      ];
       before = onEnterShell;
     };
 

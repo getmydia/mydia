@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/depth_tokens.dart';
 import '../../../../core/theme/palette.dart';
+import '../../../../l10n/l10n.dart';
 
 /// Who you are and which server you are on.
 ///
@@ -41,7 +42,9 @@ class SettingsIdentity extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  username.isEmpty ? 'Signed in' : username,
+                  username.isEmpty
+                      ? context.l10n.settingsIdentitySignedIn
+                      : username,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,

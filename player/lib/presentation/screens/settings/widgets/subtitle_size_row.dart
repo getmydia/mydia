@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/player/subtitle_size.dart';
 import '../../../../core/settings/subtitle_size_setting.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../widgets/subtitle_size_picker.dart';
 import 'settings_row.dart';
 
@@ -19,8 +20,8 @@ class SubtitleSizeSettingsRow extends ConsumerWidget {
     return SettingsRow.navigation(
       key: const Key('subtitle-size-row'),
       icon: Icons.closed_caption,
-      title: 'Subtitle size',
-      subtitle: 'Text subtitles on this device',
+      title: context.l10n.settingsSubtitleSizeTitle,
+      subtitle: context.l10n.settingsSubtitleSizeSubtitle,
       value: size.label,
       onTap: () async {
         final picked = await showSubtitleSizePicker(context, size);

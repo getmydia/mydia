@@ -53,6 +53,9 @@ WORKDIR /app/player
 # Copy player source
 COPY player/pubspec.yaml player/pubspec.lock ./
 COPY player/build.yaml ./
+# gen_l10n reads this during `flutter pub get` to generate lib/l10n/gen/.
+# Without it the web build fails on the missing AppLocalizations.
+COPY player/l10n.yaml ./
 COPY player/lib ./lib
 COPY player/web ./web
 COPY player/rust_builder ./rust_builder

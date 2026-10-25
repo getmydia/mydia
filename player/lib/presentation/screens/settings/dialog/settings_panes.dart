@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/sources/source.dart';
 import '../../../../core/sources/sources_providers.dart';
+import '../../../../l10n/l10n.dart';
 import '../../detail/detail_links.dart';
 import '../../sources/manage_sources_screen.dart';
 import '../../sources/mydia_instance_screen.dart';
@@ -21,16 +22,16 @@ const _bodyPadding = EdgeInsets.fromLTRB(24, 8, 24, 24);
 
 Widget settingsRootPage(SettingsCategory category) => switch (category) {
       SettingsCategory.playback => const _PlaybackPage(),
-      SettingsCategory.servers => const SettingsPane(
-          title: 'Servers',
+      SettingsCategory.servers => const _CategoryPane(
+          category: SettingsCategory.servers,
           child: ManageSourcesBody(padding: _bodyPadding),
         ),
-      SettingsCategory.diagnostics => const SettingsPane(
-          title: 'Diagnostics',
+      SettingsCategory.diagnostics => const _CategoryPane(
+          category: SettingsCategory.diagnostics,
           child: DiagnosticsBody(padding: _bodyPadding),
         ),
-      SettingsCategory.about => SettingsPane(
-          title: 'About',
+      SettingsCategory.about => _CategoryPane(
+          category: SettingsCategory.about,
           child: ListView(
             padding: _bodyPadding,
             children: const [AboutSettingsSection()],
@@ -38,14 +39,26 @@ Widget settingsRootPage(SettingsCategory category) => switch (category) {
         ),
     };
 
+/// A category's root page, titled with the category's sidebar label.
+class _CategoryPane extends StatelessWidget {
+  const _CategoryPane({required this.category, required this.child});
+
+  final SettingsCategory category;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      SettingsPane(title: category.label(context.l10n), child: child);
+}
+
 class _PlaybackPage extends ConsumerWidget {
   const _PlaybackPage();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
-    return SettingsPane(
-      title: 'Playback',
+    return _CategoryPane(
+      category: SettingsCategory.playback,
       child: ListView(
         padding: _bodyPadding,
         children: [
@@ -72,7 +85,7 @@ class _MydiaInstancePage extends ConsumerWidget {
     final account =
         mydiaAccountFor(ref.watch(sourceRecordsProvider).value, sourceId);
     return SettingsPane(
-      title: account?.displayName ?? 'Server',
+      title: account?.displayName ?? context.l10n.settingsServerFallback,
       child: MydiaInstanceBody(sourceId: sourceId, padding: _bodyPadding),
     );
   }

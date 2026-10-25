@@ -5,6 +5,7 @@ import 'package:player/core/update/install_environment.dart';
 import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/available_update.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_section.dart';
 import 'package:player/presentation/screens/settings/widgets/update_card.dart';
@@ -50,6 +51,8 @@ Future<void> _pump(
         ),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: ListView(
             children: const [
@@ -83,6 +86,8 @@ Future<void> _pumpInColumn(
         updateProvider.overrideWith(() => _FakeUpdateNotifier(state)),
       ],
       child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -131,6 +136,8 @@ void main() {
       ProviderScope(
         overrides: [updateProvider.overrideWith(() => notifier)],
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: ListView(
               children: const [
@@ -298,6 +305,8 @@ void main() {
         ProviderScope(
           overrides: [updateProvider.overrideWith(() => notifier)],
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: ListView(
                 children: const [
@@ -413,9 +422,12 @@ void main() {
   });
 
   group('updateCheckSubtitle', () {
+    final en = lookupAppLocalizations(const Locale('en'));
+
     test('Sparkle keeps its own string', () {
       expect(
         updateCheckSubtitle(
+          en,
           behaviour: ManualCheckBehaviour.delegatesToSparkle,
           update: null,
         ),
@@ -429,6 +441,7 @@ void main() {
       // version in a row that only ever opens Sparkle's own dialog.
       expect(
         updateCheckSubtitle(
+          en,
           behaviour: ManualCheckBehaviour.delegatesToSparkle,
           update: _update(),
         ),
@@ -439,6 +452,7 @@ void main() {
     test('a known version is named', () {
       expect(
         updateCheckSubtitle(
+          en,
           behaviour: ManualCheckBehaviour.checksOnly,
           update: _update(),
         ),
@@ -449,6 +463,7 @@ void main() {
     test('a version-less update says an update is available', () {
       expect(
         updateCheckSubtitle(
+          en,
           behaviour: ManualCheckBehaviour.checksAndInstalls,
           update: const FlatpakRemoteUpdate(
             releaseNotesUrl: 'https://example.invalid/releases',
@@ -461,6 +476,7 @@ void main() {
     test('a check-and-install row says so when nothing is pending', () {
       expect(
         updateCheckSubtitle(
+          en,
           behaviour: ManualCheckBehaviour.checksAndInstalls,
           update: null,
         ),
@@ -471,6 +487,7 @@ void main() {
     test('nothing pending on a check-only row reports up to date', () {
       expect(
         updateCheckSubtitle(
+          en,
           behaviour: ManualCheckBehaviour.checksOnly,
           update: null,
         ),

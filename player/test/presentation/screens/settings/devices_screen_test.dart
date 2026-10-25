@@ -4,11 +4,14 @@ import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/models/remote_device.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/devices_screen.dart';
 
 Future<void> _pumpCard(WidgetTester tester, RemoteDevice device) async {
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: AppTheme.darkTheme,
       home: Scaffold(
         body: DeviceCard(device: device, onRevoke: () {}),

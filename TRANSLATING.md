@@ -10,8 +10,11 @@ as pull requests that a maintainer merges, and ship in the next release.
 
 1. Open the project, pick the `default` component (the interface) or `errors`
    (form validation messages), and pick your language.
+   The Mydia player app has its own `player` component.
 2. Keep every `%{name}` placeholder exactly as written. You may move it, never
    rename or translate it. Weblate flags a changed placeholder; CI rejects it.
+   In the `player` component placeholders look like `{name}` instead; keep
+   those the same way.
 3. For plurals, fill every form Weblate shows for your language.
 4. Keep the tone plain and direct. Do not translate product names (Mydia, Plex,
    TMDB...).
@@ -78,7 +81,6 @@ before changing a term everywhere.
 
 ## Reviewing the seed translations
 
-The Spanish and Brazilian Portuguese translations were machine-drafted. Native
-speakers: please review them on Weblate. The Spanish and Brazilian Portuguese
-strings for the full interface were machine-drafted and want review by native
-speakers on Weblate.
+The Spanish and Brazilian Portuguese translations of the whole web interface
+were machine-drafted, and so was the Spanish translation of the player. Native
+speakers: please review them on Weblate.

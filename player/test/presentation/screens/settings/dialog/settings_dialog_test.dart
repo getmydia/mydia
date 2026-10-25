@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/settings/dialog/settings_dialog.dart';
 
 Widget _page(SettingsCategory c) => Builder(
       builder: (context) => SettingsPane(
-        title: c.label,
+        title: c.label(context.l10n),
         child: TextButton(
           key: Key('push-${c.name}'),
           onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) => SettingsPane(
-              title: '${c.label} detail',
+              title: '${c.label(context.l10n)} detail',
               child: const SizedBox.shrink(),
             ),
           )),
@@ -29,6 +30,8 @@ Future<SettingsDialogController> _open(WidgetTester tester,
   addTearDown(tester.view.reset);
   final controller = SettingsDialogController(initial);
   await tester.pumpWidget(MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Builder(
       builder: (context) => TextButton(
         onPressed: () => showDialog<void>(
