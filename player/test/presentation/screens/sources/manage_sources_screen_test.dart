@@ -11,6 +11,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/sources/manage_sources_screen.dart';
 
 import '../../../core/sources/jellyfin/jellyfin_media_source_test.dart'
@@ -71,7 +72,10 @@ Future<InMemorySourceStore> _removeGuest(
       p2pServiceProvider.overrideWithValue(p2p),
     ],
     child: const MaterialApp(
-        builder: toastLayerBuilder, home: ManageSourcesScreen()),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: toastLayerBuilder,
+        home: ManageSourcesScreen()),
   ));
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('manage-remove-mguest')));
@@ -94,6 +98,8 @@ Future<void> _pumpRouted(
       sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
     ],
     child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       builder: toastLayerBuilder,
       routerConfig: GoRouter(
         initialLocation: '/sources/manage',
@@ -145,7 +151,10 @@ void main() {
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ],
       child: const MaterialApp(
-          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: ManageSourcesScreen()),
     ));
     await tester.pumpAndSettle();
     expect(find.text('quill'), findsOneWidget);
@@ -177,7 +186,10 @@ void main() {
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
       ],
       child: const MaterialApp(
-          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: ManageSourcesScreen()),
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('manage-switch-user-acc1')), findsOneWidget);
@@ -194,7 +206,10 @@ void main() {
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
       ],
       child: const MaterialApp(
-          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: ManageSourcesScreen()),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Jellyfin user'), findsOneWidget);
@@ -216,7 +231,10 @@ void main() {
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
       ],
       child: const MaterialApp(
-          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: ManageSourcesScreen()),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Attic'), findsNothing);
@@ -232,7 +250,10 @@ void main() {
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
       ],
       child: const MaterialApp(
-          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: ManageSourcesScreen()),
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('show-hidden-sources')), findsOneWidget);
@@ -252,7 +273,10 @@ void main() {
         pinStoreProvider.overrideWithValue(pins),
       ],
       child: const MaterialApp(
-          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: ManageSourcesScreen()),
     ));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('manage-lock-abc123')));
@@ -308,7 +332,10 @@ void main() {
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
       ],
       child: const MaterialApp(
-          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: ManageSourcesScreen()),
     ));
     await tester.pumpAndSettle();
     final plexSwitch = find.byKey(ValueKey('manage-all-servers-$plexId'));
@@ -335,7 +362,10 @@ void main() {
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
       ],
       child: const MaterialApp(
-          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: ManageSourcesScreen()),
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('manage-remove-macct')), findsOneWidget);

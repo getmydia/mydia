@@ -16,6 +16,7 @@ import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/glass/glass_badge.dart';
 import '../../widgets/glass/glass_button.dart';
@@ -147,7 +148,9 @@ class SourceHomeHero extends ConsumerWidget {
           wide: wide,
           grouped: glass,
           onPlay: () => playItem(context, ref, item.ref),
-          secondaryLabel: isEpisode ? 'All episodes' : 'More info',
+          secondaryLabel: isEpisode
+              ? context.l10n.sourcesHeroAllEpisodes
+              : context.l10n.sourcesHeroMoreInfo,
           onSecondary: open,
         ),
       ],
@@ -349,7 +352,7 @@ class _HeroActions extends StatelessWidget {
             key: const Key('source-home-hero-play'),
             onPressed: onPlay,
             icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Play'),
+            label: Text(context.l10n.commonPlay),
             style: FilledButton.styleFrom(minimumSize: const Size(0, _height)),
           );
     Widget secondary = GlassButton(

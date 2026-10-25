@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
 
 /// True once [submit] accepted a PIN, false when the viewer cancelled.
@@ -61,11 +62,12 @@ class _PlexPinDialogState extends State<_PlexPinDialog> {
 
   Future<void> _submit() async {
     setState(() => _busy = true);
+    final checkFailed = context.l10n.sourcesPinCheckFailed;
     String? error;
     try {
       error = await widget.submit(_digits);
     } catch (_) {
-      error = 'Could not check the PIN. Try again.';
+      error = checkFailed;
     }
     if (!mounted) return;
     if (error == null) {
@@ -111,7 +113,7 @@ class _PlexPinDialogState extends State<_PlexPinDialog> {
     return PopScope(
       canPop: !_busy,
       child: GlassDialog(
-        title: Text('PIN for ${widget.userName}'),
+        title: Text(context.l10n.sourcesPlexPinTitle(widget.userName)),
         content: Focus(
           onKeyEvent: _onKey,
           child: Column(
@@ -175,7 +177,7 @@ class _PlexPinDialogState extends State<_PlexPinDialog> {
                       height: 52,
                       child: IconButton(
                         key: const Key('plex-pin-delete'),
-                        tooltip: 'Delete',
+                        tooltip: context.l10n.commonDelete,
                         onPressed: _delete,
                         icon: const Icon(Icons.backspace_outlined),
                       ),
@@ -190,7 +192,7 @@ class _PlexPinDialogState extends State<_PlexPinDialog> {
           TextButton(
             key: const Key('plex-pin-cancel'),
             onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.commonCancel),
           ),
         ],
       ),

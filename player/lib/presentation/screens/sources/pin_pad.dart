@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/sources/lock/pin_store.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/glass/glass_dialog.dart';
 
 class PinPad extends StatefulWidget {
@@ -38,7 +39,7 @@ class _PinPadState extends State<PinPad> {
   Future<void> _submit() async {
     if (_busy) return;
     if (!PinStore.isValidPin(_pin)) {
-      setState(() => _error = 'Enter 4 to 6 digits.');
+      setState(() => _error = context.l10n.sourcesPinInvalid);
       return;
     }
     setState(() => _busy = true);
@@ -135,14 +136,17 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
   Widget build(BuildContext context) {
     return GlassDialog(
       key: const Key('pin-setup-dialog'),
-      title: Text(_first == null ? 'Choose a PIN' : 'Enter it again'),
+      title: Text(
+        _first == null
+            ? context.l10n.sourcesPinSetupTitle
+            : context.l10n.sourcesPinSetupConfirmTitle,
+      ),
       // Scrolls: the pad plus this text is taller than a landscape phone.
       content: SingleChildScrollView(
           child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('It unlocks locked and hidden servers when Face ID or '
-              'your device passcode cannot. There is no way to recover it.'),
+          Text(context.l10n.sourcesPinSetupBody),
           const SizedBox(height: 16),
           // The pad clears itself after each submit; a stable key keeps the
           // mismatch message visible.
@@ -154,7 +158,7 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
               }
               if (pin != _first) {
                 setState(() => _first = null);
-                return 'The PINs did not match. Start again.';
+                return context.l10n.sourcesPinMismatch;
               }
               Navigator.of(context).pop(pin);
               return null;
@@ -166,7 +170,7 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
         TextButton(
           key: const Key('pin-setup-cancel'),
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.commonCancel),
         ),
       ],
     );

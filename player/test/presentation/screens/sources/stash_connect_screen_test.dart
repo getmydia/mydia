@@ -10,6 +10,7 @@ import 'package:player/core/sources/source_http.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/sources/stash_connect_screen.dart';
 
 import '../../../core/sources/stash/fake_stash_server.dart';
@@ -52,7 +53,11 @@ void main() {
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
         sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
     ));
 
     await tester.enterText(
@@ -99,7 +104,11 @@ void main() {
             return http.Response('', 401);
           }))),
         ],
-        child: const MaterialApp(home: StashConnectScreen()),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: StashConnectScreen(),
+        ),
       ));
       await tester.enterText(find.byKey(const Key('stash-url-field')), url);
       await tester.enterText(find.byKey(const Key('stash-key-field')), key);
@@ -145,7 +154,11 @@ void main() {
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
         sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
       ],
-      child: const MaterialApp(home: StashConnectScreen()),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: StashConnectScreen(),
+      ),
     ));
     await tester.enterText(
         find.byKey(const Key('stash-url-field')), '192.168.1.20:9999');
@@ -168,7 +181,11 @@ void main() {
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
         sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
       ],
-      child: const MaterialApp(home: StashConnectScreen()),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: StashConnectScreen(),
+      ),
     ));
     await tester.enterText(
         find.byKey(const Key('stash-url-field')), '192.168.1.20:9999');
@@ -191,7 +208,11 @@ void main() {
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
         sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
       ],
-      child: const MaterialApp(home: StashConnectScreen()),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: StashConnectScreen(),
+      ),
     ));
 
     await tester.enterText(
@@ -218,6 +239,8 @@ void main() {
         )),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: StashConnectScreen(reauthAccountId: record.account.id),
       ),
     ));

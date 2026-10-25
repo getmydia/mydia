@@ -20,6 +20,7 @@ import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../domain/sources/source_error.dart';
 import 'server_url.dart';
+import 'sign_in_problem.dart';
 
 final jellyfinQuickConnectPollProvider = Provider<Duration>(
   (ref) => const Duration(seconds: 3),
@@ -31,7 +32,7 @@ sealed class JellyfinSignInState {
 
 final class JellyfinEnterAddress extends JellyfinSignInState {
   const JellyfinEnterAddress({this.error});
-  final String? error;
+  final SignInProblem? error;
 }
 
 final class JellyfinChecking extends JellyfinSignInState {
@@ -46,7 +47,7 @@ final class JellyfinQuickConnect extends JellyfinSignInState {
 
 final class JellyfinPassword extends JellyfinSignInState {
   const JellyfinPassword({this.error, required this.quickConnectAvailable});
-  final String? error;
+  final SignInProblem? error;
   final bool quickConnectAvailable;
 }
 
@@ -80,15 +81,13 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
     final uri = parseServerUrl(text);
     if (uri == null) {
       state = const JellyfinEnterAddress(
-        error: 'Enter the address of your Jellyfin server, like '
-            'http://192.168.1.30:8096',
+        error: SignInProblem(SignInIssue.jellyfinAddressInvalid),
       );
       return;
     }
     if (uri.scheme == 'http' && !isPrivateHost(uri.host)) {
       state = const JellyfinEnterAddress(
-        error: 'Use https:// for a Jellyfin server outside your network, '
-            'so your password is not sent in the clear.',
+        error: SignInProblem(SignInIssue.jellyfinHttpsRequired),
       );
       return;
     }
@@ -99,19 +98,19 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
       if (!ref.mounted) return;
       if (!info.isJellyfin) {
         state = const JellyfinEnterAddress(
-          error: 'This is not a Jellyfin server.',
+          error: SignInProblem(SignInIssue.jellyfinNotJellyfin),
         );
         return;
       }
       if (!info.supported) {
         state = const JellyfinEnterAddress(
-          error: 'Jellyfin 10.9 or newer is required.',
+          error: SignInProblem(SignInIssue.jellyfinTooOld),
         );
         return;
       }
       if (!isValidSourceIdComponent(info.id)) {
         state = const JellyfinEnterAddress(
-          error: 'This Jellyfin server sent an id this app cannot use.',
+          error: SignInProblem(SignInIssue.jellyfinBadServerId),
         );
         return;
       }
@@ -131,11 +130,15 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
         state = const JellyfinPassword(quickConnectAvailable: false);
       }
     } on SourceException catch (e) {
-      if (ref.mounted) state = JellyfinEnterAddress(error: e.viewerMessage);
+      if (ref.mounted) {
+        state = JellyfinEnterAddress(
+          error: SignInProblem.fromServer(e.viewerMessage),
+        );
+      }
     } catch (_) {
       if (ref.mounted) {
         state = const JellyfinEnterAddress(
-          error: 'Could not reach this Jellyfin server. Try again.',
+          error: SignInProblem(SignInIssue.jellyfinUnreachable),
         );
       }
     }
@@ -157,7 +160,7 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
     } on SourceException catch (e) {
       if (ref.mounted) {
         state = JellyfinPassword(
-          error: e.viewerMessage,
+          error: SignInProblem.fromServer(e.viewerMessage),
           quickConnectAvailable: _quickConnect,
         );
       }
@@ -166,8 +169,11 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
     }
   }
 
-  JellyfinPassword _signInFailed() => JellyfinPassword(
-        error: 'Could not sign in to Jellyfin. Try again.',
+  JellyfinPassword _signInFailed([
+    SignInIssue issue = SignInIssue.jellyfinSignInFailed,
+  ]) =>
+      JellyfinPassword(
+        error: SignInProblem(issue),
         quickConnectAvailable: _quickConnect,
       );
 
@@ -187,9 +193,12 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
       state = e.kind == SourceErrorKind.notFound
           ? JellyfinQuickConnect(code: code.code, expired: true)
           : JellyfinPassword(
-              error: e.viewerMessage,
+              error: SignInProblem.fromServer(e.viewerMessage),
               quickConnectAvailable: _quickConnect,
             );
+    } on SignInIssueException catch (e) {
+      _poll?.cancel();
+      if (ref.mounted) state = _signInFailed(e.issue);
     } catch (_) {
       _poll?.cancel();
       if (ref.mounted) state = _signInFailed();
@@ -213,10 +222,12 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
       if (!ref.mounted) return;
       state = JellyfinPassword(
         error: e.kind == SourceErrorKind.unauthorized
-            ? 'Wrong username or password.'
-            : e.viewerMessage,
+            ? const SignInProblem(SignInIssue.jellyfinWrongCredentials)
+            : SignInProblem.fromServer(e.viewerMessage),
         quickConnectAvailable: _quickConnect,
       );
+    } on SignInIssueException catch (e) {
+      if (ref.mounted) state = _signInFailed(e.issue);
     } catch (_) {
       if (ref.mounted) state = _signInFailed();
     }
@@ -226,9 +237,7 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
     final base = _base!;
     final info = _info!;
     if (!isValidSourceIdComponent(session.userId)) {
-      throw const SourceException.server(
-        'Jellyfin sent a user id this app cannot use.',
-      );
+      throw const SignInIssueException(SignInIssue.jellyfinBadUserId);
     }
     try {
       final snapshot = await ref.read(sourceRecordsProvider.future);
@@ -287,9 +296,7 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
       rethrow;
     } catch (_) {
       // Secure storage or the record store failed after the server answered.
-      throw const SourceException.server(
-        'Could not save this server on this device.',
-      );
+      throw const SignInIssueException(SignInIssue.saveServerFailed);
     }
   }
 }

@@ -12,6 +12,7 @@ import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
+import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/presentation/screens/sources/unlock_screen.dart';
 
 import '../../../core/sources/store/source_json_test.dart' show plexRecord;
@@ -64,7 +65,12 @@ Future<ProviderContainer> _pump(
   addTearDown(container.dispose);
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
-    child: MaterialApp.router(builder: toastLayerBuilder, routerConfig: router),
+    child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: toastLayerBuilder,
+      routerConfig: router,
+    ),
   ));
   await tester.pumpAndSettle();
   if (pushed != null) {

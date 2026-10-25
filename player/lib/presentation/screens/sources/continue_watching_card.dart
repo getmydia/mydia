@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/focus_highlight.dart';
 import '../../widgets/glass_surface.dart';
@@ -75,7 +76,8 @@ class ContinueWatchingCard extends ConsumerWidget {
 
     double line(TextStyle? style) {
       final painter = TextPainter(
-        text: TextSpan(text: 'Xg', style: base.merge(style)),
+        // Measured for its height, never shown.
+        text: TextSpan(text: 'Xg', style: base.merge(style)), // l10n-ignore
         textDirection: direction,
         textScaler: scaler,
         maxLines: 1,
@@ -214,7 +216,10 @@ class ContinueWatchingCard extends ConsumerWidget {
                             ),
                             if (left != null) ...[
                               const SizedBox(width: 10),
-                              Text(left, style: textTheme.bodySmall),
+                              Text(
+                                _timeLeftText(context.l10n, left),
+                                style: textTheme.bodySmall,
+                              ),
                             ],
                           ],
                         ),
@@ -231,13 +236,15 @@ class ContinueWatchingCard extends ConsumerWidget {
   }
 }
 
-/// `22m left`, `1h 4m left`, or null without a duration.
-String? _timeLeft(ItemSummary item) {
+/// Whole minutes left, or null without a duration.
+int? _timeLeft(ItemSummary item) {
   final duration = item.durationSeconds;
   final progress = item.userState.progressSeconds ?? 0;
   if (duration == null || duration <= 0) return null;
-  final minutes = ((duration - progress).clamp(0, duration) / 60).round();
-  final h = minutes ~/ 60;
-  final m = minutes % 60;
-  return h > 0 ? '${h}h ${m}m left' : '${m}m left';
+  return ((duration - progress).clamp(0, duration) / 60).round();
 }
+
+/// `22m left`, `1h 4m left`.
+String _timeLeftText(AppLocalizations l10n, int minutes) => minutes >= 60
+    ? l10n.timeHoursMinutesLeft(minutes ~/ 60, minutes % 60)
+    : l10n.timeMinutesLeft(minutes);

@@ -277,7 +277,9 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
                 size: 20,
               ),
             ),
-            tooltip: descending ? 'Descending' : 'Ascending',
+            tooltip: descending
+                ? context.l10n.sourcesLibrarySortDescending
+                : context.l10n.sourcesLibrarySortAscending,
             onPressed: () => _setQuery(query.copyWith(descending: !descending)),
           ),
         IconButton(
@@ -293,7 +295,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
               size: 20,
             ),
           ),
-          tooltip: 'Toggle view',
+          tooltip: context.l10n.sourcesLibraryToggleView,
           onPressed: () => setState(
               () => _viewMode = isList ? _ViewMode.grid : _ViewMode.list),
         ),
@@ -314,10 +316,10 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
             onSelected: (value) {
               if (value == 'save_filter') _saveAsFilter(info, query);
             },
-            itemBuilder: (context) => const [
+            itemBuilder: (context) => [
               PopupMenuItem(
                 value: 'save_filter',
-                child: Text('Save this view as a filter'),
+                child: Text(context.l10n.sourcesLibrarySaveFilter),
               ),
             ],
           ),
@@ -333,7 +335,9 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
           ref.read(invalidatorProvider).invalidate([key.target]),
       body: (context, scrollTopPadding) => switch (browse) {
         AsyncData(:final value) when value.items.isEmpty => _EmptyState(
-            title: isShows ? 'No TV shows yet' : 'No movies yet',
+            title: isShows
+                ? context.l10n.sourcesLibraryEmptyShows
+                : context.l10n.sourcesLibraryEmptyMovies,
             icon: isShows ? Icons.live_tv_rounded : Icons.movie_filter_rounded,
           ),
         AsyncData(:final value) => NotificationListener<ScrollNotification>(
@@ -577,7 +581,7 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Add content to your library to see it here',
+              context.l10n.sourcesLibraryEmptyHint,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: palette.textSecondary,
                   ),

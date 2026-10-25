@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/palette.dart';
+import '../../../l10n/l10n.dart';
 import '../../widgets/channel_badge.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/mydia_logo.dart';
@@ -47,7 +48,7 @@ PreferredSizeWidget homeHeader(
             child: const Icon(Icons.search_rounded, size: 20),
           ),
           onPressed: onSearch,
-          tooltip: 'Search',
+          tooltip: context.l10n.navSearch,
         ),
         const SizedBox(width: 8),
       ],

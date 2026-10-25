@@ -12,6 +12,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/presentation/screens/sources/plex_sign_in_controller.dart';
+import 'package:player/presentation/screens/sources/sign_in_problem.dart';
 
 import '../../../core/sources/plex/plex_home_fixtures.dart';
 import '../../../core/sources/plex/plex_tv_client_test.dart' show resourcesJson;
@@ -82,8 +83,8 @@ void main() {
     await controller().start();
     expect(
         state(),
-        isA<PlexSignInFailed>().having((s) => s.message, 'message',
-            'Could not sign in to Plex. Try again.'));
+        isA<PlexSignInFailed>().having((s) => s.problem, 'problem',
+            const SignInProblem(SignInIssue.plexSignInFailed)));
   });
 
   test('shows the code, waits, then offers every server', () async {
