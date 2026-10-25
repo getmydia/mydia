@@ -2106,8 +2106,8 @@ msgstr[1] "%{count} semillas"
 #, elixir-autogen, elixir-format
 msgid "%{count} selected"
 msgid_plural "%{count} selected"
-msgstr[0] "%{count} seleccionados"
-msgstr[1] ""
+msgstr[0] "%{count} seleccionado"
+msgstr[1] "%{count} seleccionados"
 
 #: lib/mydia_web/live/downloads_live/list_components.ex:33
 #, elixir-autogen, elixir-format
@@ -7828,7 +7828,7 @@ msgstr "Eventos recientes y actividad del sistema"
 #: lib/mydia_web/live/dashboard_live/index.html.heex:190
 #, elixir-autogen, elixir-format
 msgid "Recently Added"
-msgstr "Agregado recientemente"
+msgstr "Añadido recientemente"
 
 #: lib/mydia_web/live/dashboard_live/index.html.heex:215
 #, elixir-autogen, elixir-format
@@ -7848,7 +7848,7 @@ msgstr "Emitido recientemente"
 #: lib/mydia_web/live/dashboard_live/edit_home_components.ex:128
 #, elixir-autogen, elixir-format
 msgid "Recently added"
-msgstr "Agregado recientemente"
+msgstr "Añadido recientemente"
 
 #: lib/mydia_web/live/dashboard_live/edit_home_components.ex:131
 #, elixir-autogen, elixir-format
@@ -7949,7 +7949,7 @@ msgstr "Rechazada el %{date}"
 #: lib/mydia_web/live/devices_live/index.ex:273
 #, elixir-autogen, elixir-format
 msgid "Relay service returned an error. Please try again."
-msgstr "El servicio de relé devolvió un error. Inténtalo de nuevo."
+msgstr "El servicio de relay devolvió un error. Inténtalo de nuevo."
 
 #: lib/mydia_web/live/downloads_live/index.ex:945
 #, elixir-autogen, elixir-format
@@ -9663,7 +9663,7 @@ msgstr "Ese orden pondría dos episodios con la misma temporada y el mismo núme
 #: lib/mydia_web/live/collection_live/index.ex:397
 #, elixir-autogen, elixir-format
 msgid "That preset is no longer available."
-msgstr "Ese ajuste preestablecido ya no está disponible."
+msgstr "Ese preajuste ya no está disponible."
 
 #: lib/mydia_web/live/downloads_live/match_dialog.ex:251
 #: lib/mydia_web/live/import_media_live/index.ex:728
@@ -12586,7 +12586,7 @@ msgstr "-- Listas personalizadas --"
 #: lib/mydia_web/live/admin_import_lists_live/modal_components.ex:11
 #, elixir-autogen, elixir-format
 msgid "-- TMDB Preset Lists --"
-msgstr "-- Listas predefinidas de TMDB --"
+msgstr "-- Listas de preajustes de TMDB --"
 
 #: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:17
 #, elixir-autogen, elixir-format

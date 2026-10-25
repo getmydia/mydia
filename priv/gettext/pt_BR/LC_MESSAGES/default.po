@@ -2053,7 +2053,7 @@ msgstr[1] "%{count} seeders"
 msgid "%{count} selected"
 msgid_plural "%{count} selected"
 msgstr[0] "%{count} selecionado"
-msgstr[1] ""
+msgstr[1] "%{count} selecionados"
 
 #: lib/mydia_web/live/downloads_live/list_components.ex:33
 #, elixir-autogen, elixir-format
@@ -16820,7 +16820,7 @@ msgstr "Nada corresponde"
 #: lib/mydia_web/live/admin_duplicates_live/review_components.ex:86
 #, elixir-autogen, elixir-format
 msgid "Nothing needs attention."
-msgstr "Nada precisa de atenção."
+msgstr "Nada requer atenção."
 
 #: lib/mydia_web/live/admin_media_servers_live/components.ex:334
 #, elixir-autogen, elixir-format
