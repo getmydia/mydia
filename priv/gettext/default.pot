@@ -986,7 +986,7 @@ msgstr ""
 msgid "In use"
 msgstr ""
 
-#: lib/mydia_web/controllers/session_controller.ex:239
+#: lib/mydia_web/controllers/session_controller.ex:231
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:90
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:125
 #, elixir-autogen, elixir-format
@@ -1131,7 +1131,7 @@ msgstr ""
 msgid "Override what happens when you add a movie or TV show. Leave a field on \"Use server default\" to follow the instance-wide setting."
 msgstr ""
 
-#: lib/mydia_web/controllers/session_controller.ex:214
+#: lib/mydia_web/controllers/session_controller.ex:206
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:79
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:180
 #, elixir-autogen, elixir-format
@@ -1290,9 +1290,9 @@ msgstr ""
 msgid "Sign in with your fingerprint, face or device PIN instead of a password. Once you add a passkey, signing in with your password will also ask for it (or your authenticator code)."
 msgstr ""
 
-#: lib/mydia_web/controllers/session_controller.ex:163
-#: lib/mydia_web/controllers/session_controller.ex:186
-#: lib/mydia_web/controllers/session_controller.ex:264
+#: lib/mydia_web/controllers/session_controller.ex:155
+#: lib/mydia_web/controllers/session_controller.ex:178
+#: lib/mydia_web/controllers/session_controller.ex:256
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:84
 #, elixir-autogen, elixir-format
 msgid "Sign-in expired, please try again"
@@ -1350,9 +1350,9 @@ msgstr ""
 msgid "Times across Mydia are shown in this zone. The server default comes from the %{tz} setting."
 msgstr ""
 
-#: lib/mydia_web/controllers/session_controller.ex:69
-#: lib/mydia_web/controllers/session_controller.ex:210
-#: lib/mydia_web/controllers/session_controller.ex:236
+#: lib/mydia_web/controllers/session_controller.ex:61
+#: lib/mydia_web/controllers/session_controller.ex:202
+#: lib/mydia_web/controllers/session_controller.ex:228
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:172
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:155
 #, elixir-autogen, elixir-format
@@ -1479,12 +1479,12 @@ msgstr ""
 msgid "A secure random password will be generated and displayed after creation."
 msgstr ""
 
-#: lib/mydia_web/live/first_time_setup_live/index.ex:99
+#: lib/mydia_web/live/first_time_setup_live/index.ex:92
 #, elixir-autogen, elixir-format
 msgid "Admin user created successfully!"
 msgstr ""
 
-#: lib/mydia_web/live/first_time_setup_live/index.ex:104
+#: lib/mydia_web/live/first_time_setup_live/index.ex:97
 #, elixir-autogen, elixir-format
 msgid "Admin user created successfully! You are now logged in."
 msgstr ""
@@ -1534,8 +1534,8 @@ msgstr ""
 msgid "Generate random password"
 msgstr ""
 
-#: lib/mydia_web/controllers/session_controller.ex:82
-#: lib/mydia_web/controllers/session_controller.ex:88
+#: lib/mydia_web/controllers/session_controller.ex:74
+#: lib/mydia_web/controllers/session_controller.ex:80
 #, elixir-autogen, elixir-format
 msgid "Invalid username or password"
 msgstr ""
@@ -1546,7 +1546,7 @@ msgid "Let's create your admin account to get started."
 msgstr ""
 
 #: lib/mydia_web/controllers/session_controller.ex:37
-#: lib/mydia_web/controllers/session_controller.ex:73
+#: lib/mydia_web/controllers/session_controller.ex:65
 #, elixir-autogen, elixir-format
 msgid "Local authentication is disabled"
 msgstr ""
@@ -1621,8 +1621,8 @@ msgid "Sign in with your username and password."
 msgstr ""
 
 #: lib/mydia_web/controllers/passkey_controller.ex:61
-#: lib/mydia_web/controllers/session_controller.ex:116
-#: lib/mydia_web/controllers/session_controller.ex:203
+#: lib/mydia_web/controllers/session_controller.ex:108
+#: lib/mydia_web/controllers/session_controller.ex:195
 #, elixir-autogen, elixir-format
 msgid "Successfully logged in!"
 msgstr ""
@@ -1659,7 +1659,7 @@ msgstr ""
 msgid "Welcome to Mydia"
 msgstr ""
 
-#: lib/mydia_web/live/first_time_setup_live/index.ex:119
+#: lib/mydia_web/live/first_time_setup_live/index.ex:112
 #: lib/mydia_web/live/first_time_setup_live/index.html.heex:59
 #, elixir-autogen, elixir-format
 msgid "Welcome to Mydia!"
@@ -13196,9 +13196,9 @@ msgstr ""
 msgid "Auth Type"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:43
-#: lib/mydia_web/controllers/auth_controller.ex:74
-#: lib/mydia_web/controllers/auth_controller.ex:104
+#: lib/mydia_web/controllers/auth_controller.ex:47
+#: lib/mydia_web/controllers/auth_controller.ex:79
+#: lib/mydia_web/controllers/auth_controller.ex:198
 #, elixir-autogen, elixir-format
 msgid "Authentication failed: %{errors}"
 msgstr ""
@@ -15700,7 +15700,7 @@ msgstr ""
 msgid "Invalid JSON"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:122
+#: lib/mydia_web/controllers/auth_controller.ex:216
 #, elixir-autogen, elixir-format
 msgid "Invalid authentication token"
 msgstr ""
@@ -15710,7 +15710,7 @@ msgstr ""
 msgid "Invalid directory: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:135
+#: lib/mydia_web/controllers/auth_controller.ex:229
 #, elixir-autogen, elixir-format
 msgid "Invalid or expired authentication token"
 msgstr ""
@@ -16860,12 +16860,13 @@ msgstr ""
 msgid "OIDC Enabled"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:52
+#: lib/mydia_web/controllers/auth_controller.ex:56
 #, elixir-autogen, elixir-format
 msgid "OIDC authentication configuration error"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:59
+#: lib/mydia_web/controllers/auth_controller.ex:63
+#: lib/mydia_web/controllers/auth_controller.ex:101
 #, elixir-autogen, elixir-format
 msgid "OIDC authentication is not configured."
 msgstr ""
@@ -18490,7 +18491,7 @@ msgstr ""
 msgid "Success: %{rate}%"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:95
+#: lib/mydia_web/controllers/auth_controller.ex:165
 #, elixir-autogen, elixir-format
 msgid "Successfully authenticated!"
 msgstr ""
@@ -19713,7 +19714,7 @@ msgstr ""
 msgid "You do not have permission to request media"
 msgstr ""
 
-#: lib/mydia_web/controllers/auth_controller.ex:153
+#: lib/mydia_web/controllers/auth_controller.ex:247
 #, elixir-autogen, elixir-format
 msgid "You have been logged out"
 msgstr ""
@@ -20833,4 +20834,52 @@ msgstr ""
 #: lib/mydia_web/live/media_live/index/alpha_jump_components.ex:59
 #, elixir-autogen, elixir-format
 msgid "Titles starting with a number or symbol"
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:171
+#, elixir-autogen, elixir-format
+msgid "An account with this email already exists. Sign in with your password, then link SSO from your profile."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:187
+#, elixir-autogen, elixir-format
+msgid "An account with this email is already linked to a different SSO account. Sign in with your password instead."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:280
+#: lib/mydia_web/controllers/auth_controller.ex:285
+#, elixir-autogen, elixir-format
+msgid "Linking expired. Please try again."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:144
+#, elixir-autogen, elixir-format
+msgid "SSO could not be unlinked. Please try again."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:126
+#, elixir-autogen, elixir-format
+msgid "SSO has been unlinked from your account."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:133
+#, elixir-autogen, elixir-format
+msgid "Set a password or add a passkey before unlinking SSO, or you could not sign in."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:181
+#: lib/mydia_web/controllers/auth_controller.ex:274
+#, elixir-autogen, elixir-format
+msgid "This SSO account is already linked to another Mydia account."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:270
+#, elixir-autogen, elixir-format
+msgid "Your SSO account is now linked."
+msgstr ""
+
+#: lib/mydia_web/controllers/auth_controller.ex:106
+#: lib/mydia_web/controllers/auth_controller.ex:277
+#, elixir-autogen, elixir-format
+msgid "Your account is already linked to an SSO account."
 msgstr ""

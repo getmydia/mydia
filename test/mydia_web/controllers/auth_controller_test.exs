@@ -48,3 +48,231 @@ defmodule MydiaWeb.AuthControllerTest do
     end
   end
 end
+
+defmodule MydiaWeb.AuthControllerLinkTest do
+  use MydiaWeb.ConnCase, async: false
+
+  alias Mydia.Accounts
+
+  setup do
+    original = Application.get_env(:ueberauth, Ueberauth)
+
+    # Any non-empty provider list makes oidc_configured?/0 true. The provider
+    # is deliberately not named :oidc: RuntimeUeberauth would otherwise claim
+    # /auth/oidc/callback and run the real strategy against no IdP, so these
+    # tests could not hand the controller a prepared Ueberauth.Auth.
+    Application.put_env(:ueberauth, Ueberauth,
+      providers: [test_only: {Ueberauth.Strategy.Oidcc, []}]
+    )
+
+    on_exit(fn ->
+      if original,
+        do: Application.put_env(:ueberauth, Ueberauth, original),
+        else: Application.delete_env(:ueberauth, Ueberauth)
+    end)
+
+    :ok
+  end
+
+  defp auth(sub, email, verified \\ true) do
+    %Ueberauth.Auth{
+      uid: sub,
+      provider: :oidc,
+      info: %Ueberauth.Auth.Info{email: email, name: "Fictional Person"},
+      extra: %Ueberauth.Auth.Extra{
+        raw_info: %UeberauthOidcc.RawInfo{
+          claims: %{"sub" => sub},
+          userinfo: %{"email_verified" => verified}
+        }
+      }
+    }
+  end
+
+  defp callback(conn, auth) do
+    conn |> assign(:ueberauth_auth, auth) |> get(~p"/auth/oidc/callback")
+  end
+
+  describe "GET /auth/oidc/link" do
+    test "stores a link intent and redirects to the provider", %{conn: conn} do
+      user = create_test_user()
+      conn = conn |> log_in_user(user) |> get(~p"/auth/oidc/link")
+
+      assert redirected_to(conn) == "/auth/oidc"
+      assert %{"user_id" => id} = get_session(conn, :oidc_link_intent)
+      assert id == user.id
+    end
+
+    test "refuses an already linked account", %{conn: conn} do
+      {:ok, user} = Accounts.link_oidc_identity(create_test_user(), "sub-1", "oidc")
+      conn = conn |> log_in_user(user) |> get(~p"/auth/oidc/link")
+
+      assert redirected_to(conn) == "/profile"
+      refute get_session(conn, :oidc_link_intent)
+    end
+
+    test "refuses when OIDC is not configured", %{conn: conn} do
+      Application.delete_env(:ueberauth, Ueberauth)
+      conn = conn |> log_in_user(create_test_user()) |> get(~p"/auth/oidc/link")
+
+      assert redirected_to(conn) == "/profile"
+      refute get_session(conn, :oidc_link_intent)
+    end
+
+    test "requires authentication", %{conn: conn} do
+      conn = get(conn, ~p"/auth/oidc/link")
+      assert redirected_to(conn) =~ "/auth/login"
+    end
+  end
+
+  describe "callback with a link intent" do
+    test "links the signed-in user and keeps the session", %{conn: conn} do
+      user = create_test_user()
+      conn = conn |> log_in_user(user) |> get(~p"/auth/oidc/link")
+      conn = conn |> recycle() |> callback(auth("sub-1", "idp@example.test"))
+
+      assert redirected_to(conn) == "/profile"
+      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "linked"
+      assert Accounts.get_user_by_oidc("sub-1", "oidc").id == user.id
+      refute get_session(conn, :oidc_link_intent)
+      assert get_session(conn, :guardian_default_token)
+    end
+
+    test "refuses an identity already on another account", %{conn: conn} do
+      {:ok, _} = Accounts.link_oidc_identity(create_test_user(), "sub-1", "oidc")
+      user = create_test_user()
+      conn = conn |> log_in_user(user) |> get(~p"/auth/oidc/link")
+      conn = conn |> recycle() |> callback(auth("sub-1", "idp@example.test"))
+
+      assert redirected_to(conn) == "/profile"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "another"
+      assert Accounts.get_user!(user.id).oidc_sub == nil
+    end
+
+    test "refuses an expired intent", %{conn: conn} do
+      user = create_test_user()
+      stale = System.system_time(:second) - 601
+
+      conn =
+        conn
+        |> log_in_user(user)
+        |> put_session(:oidc_link_intent, %{"user_id" => user.id, "issued_at" => stale})
+        |> callback(auth("sub-1", "idp@example.test"))
+
+      assert redirected_to(conn) == "/profile"
+      assert Accounts.get_user!(user.id).oidc_sub == nil
+      refute get_session(conn, :oidc_link_intent)
+    end
+
+    test "refuses an intent for a different signed-in user", %{conn: conn} do
+      owner = create_test_user()
+      other = create_test_user()
+
+      conn =
+        conn
+        |> log_in_user(other)
+        |> put_session(:oidc_link_intent, %{
+          "user_id" => owner.id,
+          "issued_at" => System.system_time(:second)
+        })
+        |> callback(auth("sub-1", "idp@example.test"))
+
+      assert redirected_to(conn) == "/profile"
+      assert Accounts.get_user!(owner.id).oidc_sub == nil
+      assert Accounts.get_user!(other.id).oidc_sub == nil
+    end
+
+    test "refuses an intent with no signed-in session", %{conn: conn} do
+      owner = create_test_user()
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:oidc_link_intent, %{
+          "user_id" => owner.id,
+          "issued_at" => System.system_time(:second)
+        })
+        |> callback(auth("sub-1", "idp@example.test"))
+
+      assert redirected_to(conn) == "/profile"
+      assert Accounts.get_user!(owner.id).oidc_sub == nil
+    end
+
+    test "a malformed intent is refused, not crashed on", %{conn: conn} do
+      user = create_test_user()
+
+      conn =
+        conn
+        |> log_in_user(user)
+        |> put_session(:oidc_link_intent, %{"user_id" => user.id, "issued_at" => "soon"})
+        |> callback(auth("sub-1", "idp@example.test"))
+
+      assert redirected_to(conn) == "/profile"
+      assert Accounts.get_user!(user.id).oidc_sub == nil
+    end
+
+    test "an IdP failure drops the intent and returns to the profile", %{conn: conn} do
+      user = create_test_user()
+
+      conn =
+        conn
+        |> log_in_user(user)
+        |> put_session(:oidc_link_intent, %{
+          "user_id" => user.id,
+          "issued_at" => System.system_time(:second)
+        })
+        |> assign(:ueberauth_failure, %Ueberauth.Failure{
+          errors: [%Ueberauth.Failure.Error{message: "denied"}]
+        })
+        |> get(~p"/auth/oidc/callback")
+
+      assert redirected_to(conn) == "/profile"
+      refute get_session(conn, :oidc_link_intent)
+    end
+  end
+
+  describe "callback without a link intent" do
+    test "an email collision explains how to link", %{conn: conn} do
+      create_test_user(%{email: "pat@example.test"})
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> callback(auth("sub-1", "pat@example.test", false))
+
+      assert redirected_to(conn) == "/auth/login"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "link SSO from your profile"
+    end
+
+    test "a new identity signs in as before", %{conn: conn} do
+      create_test_user()
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> callback(auth("sub-new", "fresh@example.test"))
+
+      assert redirected_to(conn) == "/"
+      assert Accounts.get_user_by_oidc("sub-new", "oidc")
+    end
+  end
+
+  describe "DELETE /auth/oidc/link" do
+    test "unlinks an account with a password", %{conn: conn} do
+      {:ok, user} = Accounts.link_oidc_identity(create_test_user(), "sub-1", "oidc")
+      conn = conn |> log_in_user(user) |> delete(~p"/auth/oidc/link")
+
+      assert redirected_to(conn) == "/profile"
+      assert Phoenix.Flash.get(conn.assigns.flash, :info)
+      assert Accounts.get_user!(user.id).oidc_sub == nil
+    end
+
+    test "refuses an SSO-only account", %{conn: conn} do
+      user = Mydia.AccountsFixtures.oidc_user_fixture()
+      conn = conn |> log_in_user(user) |> delete(~p"/auth/oidc/link")
+
+      assert redirected_to(conn) == "/profile"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error)
+      assert Accounts.get_user!(user.id).oidc_sub
+    end
+  end
+end

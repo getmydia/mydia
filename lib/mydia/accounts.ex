@@ -165,6 +165,16 @@ defmodule Mydia.Accounts do
   def password_user?(%User{password_hash: hash}), do: not is_nil(hash)
 
   @doc """
+  True when an OIDC provider is configured for Ueberauth.
+  """
+  def oidc_configured? do
+    case Application.get_env(:ueberauth, Ueberauth) do
+      nil -> false
+      config -> Keyword.get(config, :providers, []) != []
+    end
+  end
+
+  @doc """
   Creates a user with local authentication.
   """
   def create_user(attrs \\ %{}) do
