@@ -1,6 +1,7 @@
 defmodule MydiaWeb.AdminNav do
   @moduledoc """
-  Every admin page: its hub, label, one-line description, icon and path.
+  Every admin page: its hub, icon and path, plus its label and one-line
+  description through `page_label/1` and `page_description/1`.
 
   This one list drives the sidebar's Admin section, the header each admin page
   renders, and which legacy `/admin/config/*` URLs redirect. A new admin page
@@ -12,13 +13,16 @@ defmodule MydiaWeb.AdminNav do
   """
 
   use MydiaWeb, :verified_routes
+  use Gettext, backend: MydiaWeb.Gettext
 
   alias MydiaWeb.AdminNav.Page
 
+  # Labels are functions (hub_label/1, page_label/1), never data: a module
+  # attribute is evaluated at compile time, before any locale is set.
   @hubs [
-    %{key: :configuration, label: "Configuration", icon: "hero-adjustments-horizontal"},
-    %{key: :administration, label: "Administration", icon: "hero-clipboard-document-check"},
-    %{key: :system, label: "System", icon: "hero-server"}
+    %{key: :configuration, icon: "hero-adjustments-horizontal"},
+    %{key: :administration, icon: "hero-clipboard-document-check"},
+    %{key: :system, icon: "hero-server"}
   ]
 
   # A literal, so `MydiaWeb.AdminComponents.admin_page/1` can check `page={...}`
@@ -49,12 +53,79 @@ defmodule MydiaWeb.AdminNav do
   ]
 
   @doc "The hubs, in sidebar order."
-  @spec hubs() :: [%{key: Page.hub(), label: String.t(), icon: String.t()}]
+  @spec hubs() :: [%{key: Page.hub(), icon: String.t()}]
   def hubs, do: @hubs
 
-  @doc "The label of `hub`."
+  @doc "The translated label of `hub`."
   @spec hub_label(Page.hub()) :: String.t()
-  def hub_label(hub), do: @hubs |> Enum.find(&(&1.key == hub)) |> Map.fetch!(:label)
+  def hub_label(:configuration), do: gettext("Configuration")
+  def hub_label(:administration), do: gettext("Administration")
+  def hub_label(:system), do: gettext("System")
+
+  @doc "The translated label of a page, given its `Page` or its key."
+  @spec page_label(Page.t() | atom()) :: String.t()
+  def page_label(%Page{key: key}), do: page_label(key)
+  def page_label(:quality), do: gettext("Quality")
+  def page_label(:custom_formats), do: gettext("Custom Formats")
+  def page_label(:clients), do: gettext("Clients")
+  def page_label(:indexers), do: gettext("Indexers")
+  def page_label(:library_paths), do: gettext("Library")
+  def page_label(:path_mappings), do: gettext("Path Mappings")
+  def page_label(:subtitle_providers), do: gettext("Subtitle Providers")
+  def page_label(:media_servers), do: gettext("Media Servers")
+  def page_label(:storage_backends), do: gettext("Storage")
+  def page_label(:requests), do: gettext("Requests")
+  def page_label(:jobs), do: gettext("Background Jobs")
+  def page_label(:release_blacklist), do: gettext("Release Blacklist")
+  def page_label(:duplicates), do: gettext("Duplicates")
+  def page_label(:trash), do: gettext("Trash")
+  def page_label(:status), do: gettext("Status")
+  def page_label(:dashboard), do: gettext("Dashboard")
+  def page_label(:settings), do: gettext("Settings")
+  def page_label(:users), do: gettext("Users")
+  def page_label(:api_keys), do: gettext("API Keys")
+  def page_label(:remote_access), do: gettext("Remote Access")
+  def page_label(:plugins), do: gettext("Plugins")
+
+  @doc "The translated one-line description of a page, given its `Page` or its key."
+  @spec page_description(Page.t() | atom()) :: String.t()
+  def page_description(%Page{key: key}), do: page_description(key)
+
+  def page_description(:quality),
+    do: gettext("Profiles that decide which releases get grabbed and upgraded")
+
+  def page_description(:custom_formats), do: gettext("Rules that score releases")
+  def page_description(:clients), do: gettext("Torrent, Usenet and debrid download clients")
+  def page_description(:indexers), do: gettext("Where searches look for releases")
+  def page_description(:library_paths), do: gettext("Library folders for movies and TV")
+
+  def page_description(:path_mappings),
+    do: gettext("Translate download client paths to paths this server sees")
+
+  def page_description(:subtitle_providers),
+    do: gettext("Where subtitles are searched and downloaded")
+
+  def page_description(:media_servers),
+    do: gettext("Plex and Jellyfin refresh and watched-status sync")
+
+  def page_description(:storage_backends),
+    do: gettext("S3-compatible buckets that libraries can live in")
+
+  def page_description(:requests), do: gettext("Approve or reject media requests from guests")
+  def page_description(:jobs), do: gettext("Scheduled jobs and execution history")
+  def page_description(:release_blacklist), do: gettext("Releases blocked from future searches")
+  def page_description(:duplicates), do: gettext("Items with more than one file to review")
+  def page_description(:trash), do: gettext("Deleted files waiting to be purged")
+  def page_description(:status), do: gettext("Server, database and service health")
+  def page_description(:dashboard), do: gettext("Playback activity and active sessions")
+  def page_description(:settings), do: gettext("Runtime server settings")
+  def page_description(:users), do: gettext("Accounts, roles and sign-in")
+  def page_description(:api_keys), do: gettext("Keys for the library API and automation")
+
+  def page_description(:remote_access),
+    do: gettext("Reach this server from the player outside your network")
+
+  def page_description(:plugins), do: gettext("Sandboxed extensions and their capabilities")
 
   @doc """
   Where the sidebar link for `hub` goes: the hub's first page whose feature gate
@@ -74,128 +145,96 @@ defmodule MydiaWeb.AdminNav do
       %Page{
         key: :quality,
         hub: :configuration,
-        label: "Quality",
-        description: "Profiles that decide which releases get grabbed and upgraded",
         icon: "hero-sparkles",
         path: ~p"/admin/quality"
       },
       %Page{
         key: :custom_formats,
         hub: :configuration,
-        label: "Custom Formats",
-        description: "Rules that score releases",
         icon: "hero-language",
         path: ~p"/admin/custom-formats"
       },
       %Page{
         key: :clients,
         hub: :configuration,
-        label: "Clients",
-        description: "Torrent, Usenet and debrid download clients",
         icon: "hero-arrow-down-tray",
         path: ~p"/admin/clients"
       },
       %Page{
         key: :indexers,
         hub: :configuration,
-        label: "Indexers",
-        description: "Where searches look for releases",
         icon: "hero-magnifying-glass",
         path: ~p"/admin/indexers"
       },
       %Page{
         key: :library_paths,
         hub: :configuration,
-        label: "Library",
-        description: "Library folders for movies and TV",
         icon: "hero-folder",
         path: ~p"/admin/library-paths"
       },
       %Page{
         key: :path_mappings,
         hub: :configuration,
-        label: "Path Mappings",
-        description: "Translate download client paths to paths this server sees",
         icon: "hero-arrows-right-left",
         path: ~p"/admin/path-mappings"
       },
       %Page{
         key: :subtitle_providers,
         hub: :configuration,
-        label: "Subtitle Providers",
-        description: "Where subtitles are searched and downloaded",
         icon: "hero-chat-bubble-bottom-center-text",
         path: ~p"/admin/subtitle-providers"
       },
       %Page{
         key: :media_servers,
         hub: :configuration,
-        label: "Media Servers",
-        description: "Plex and Jellyfin refresh and watched-status sync",
         icon: "hero-server-stack",
         path: ~p"/admin/media-servers"
       },
       %Page{
         key: :storage_backends,
         hub: :configuration,
-        label: "Storage",
-        description: "S3-compatible buckets that libraries can live in",
         icon: "hero-circle-stack",
         path: ~p"/admin/storage-backends"
       },
       %Page{
         key: :requests,
         hub: :administration,
-        label: "Requests",
-        description: "Approve or reject media requests from guests",
         icon: "hero-inbox-stack",
         path: ~p"/admin/requests"
       },
       %Page{
         key: :jobs,
         hub: :administration,
-        label: "Background Jobs",
-        description: "Scheduled jobs and execution history",
         icon: "hero-queue-list",
         path: ~p"/admin/jobs"
       },
       %Page{
         key: :release_blacklist,
         hub: :administration,
-        label: "Release Blacklist",
-        description: "Releases blocked from future searches",
         icon: "hero-no-symbol",
         path: ~p"/admin/release-blacklist"
       },
       %Page{
         key: :duplicates,
         hub: :administration,
-        label: "Duplicates",
-        description: "Items with more than one file to review",
         icon: "hero-document-duplicate",
         path: ~p"/admin/duplicates"
       },
       %Page{
         key: :trash,
         hub: :administration,
-        label: "Trash",
-        description: "Deleted files waiting to be purged",
         icon: "hero-trash",
         path: ~p"/admin/trash"
       },
       %Page{
         key: :status,
         hub: :system,
-        label: "Status",
-        description: "Server, database and service health",
         icon: "hero-server",
         path: ~p"/admin/status"
       },
       %Page{
         key: :dashboard,
         hub: :system,
-        label: "Dashboard",
-        description: "Playback activity and active sessions",
         icon: "hero-chart-bar",
         path: ~p"/admin/dashboard",
         requires: :player
@@ -203,32 +242,24 @@ defmodule MydiaWeb.AdminNav do
       %Page{
         key: :settings,
         hub: :system,
-        label: "Settings",
-        description: "Runtime server settings",
         icon: "hero-cog-6-tooth",
         path: ~p"/admin/settings"
       },
       %Page{
         key: :users,
         hub: :system,
-        label: "Users",
-        description: "Accounts, roles and sign-in",
         icon: "hero-users",
         path: ~p"/admin/users"
       },
       %Page{
         key: :api_keys,
         hub: :system,
-        label: "API Keys",
-        description: "Keys for the library API and automation",
         icon: "hero-key",
         path: ~p"/admin/api-keys"
       },
       %Page{
         key: :remote_access,
         hub: :system,
-        label: "Remote Access",
-        description: "Reach this server from the player outside your network",
         icon: "hero-signal",
         path: ~p"/admin/remote-access",
         requires: :player
@@ -236,8 +267,6 @@ defmodule MydiaWeb.AdminNav do
       %Page{
         key: :plugins,
         hub: :system,
-        label: "Plugins",
-        description: "Sandboxed extensions and their capabilities",
         icon: "hero-puzzle-piece",
         path: ~p"/admin/plugins"
       }

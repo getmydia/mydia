@@ -18,14 +18,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   alias Mydia.Sync
 
   alias Mydia.Logger, as: MydiaLogger
-
-  @runtime_mapping_message "Account mapping needs a database-managed server. Servers configured through env or YAML cannot store account links."
+  alias MydiaWeb.AdminMediaServersLive.Messages
+  alias MydiaWeb.OperationErrors
 
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Configuration - Media Servers")
+     |> assign(:page_title, gettext("Configuration - Media Servers"))
      |> clear_account_mapping()
      |> assign(:plugin_setup, nil)
      |> load_data()}
@@ -63,7 +63,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     {:noreply,
      socket
      |> assign(:plugin_setup, nil)
-     |> put_flash(:info, "Server saved")
+     |> put_flash(:info, gettext("Server saved"))
      |> load_plugin_instances()}
   end
 
@@ -112,7 +112,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   def handle_event("plugin_instance_sync", %{"id" => id}, socket) do
     case Instances.get(id) do
       nil ->
-        {:noreply, put_flash(socket, :error, "That server no longer exists")}
+        {:noreply, put_flash(socket, :error, gettext("That server no longer exists"))}
 
       instance ->
         # A schedule run can take up to a minute; never block the page on it.
@@ -120,7 +120,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
           Plugins.invoke_plugin_schedule(instance.plugin_slug, instance.id)
         end)
 
-        {:noreply, put_flash(socket, :info, "Sync started for #{instance.name}")}
+        {:noreply,
+         put_flash(socket, :info, gettext("Sync started for %{name}", name: instance.name))}
     end
   end
 
@@ -133,7 +134,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       send(parent, {:plugin_instance_tested, id})
     end)
 
-    {:noreply, put_flash(socket, :info, "Checking connection...")}
+    {:noreply, put_flash(socket, :info, gettext("Checking connection..."))}
   end
 
   @impl true
@@ -150,7 +151,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       :ok = Instances.delete(instance)
 
       socket
-      |> put_flash(:info, "#{instance.name} deleted")
+      |> put_flash(:info, gettext("%{name} deleted", name: instance.name))
       |> load_plugin_instances()
     end)
   end
@@ -184,7 +185,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     config = Settings.get_media_server_config!(id)
 
     if Settings.runtime_config?(config) do
-      {:noreply, put_flash(socket, :error, @runtime_mapping_message)}
+      {:noreply, put_flash(socket, :error, Messages.runtime_mapping())}
     else
       {:noreply,
        socket
@@ -240,7 +241,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        socket
        |> put_flash(
          :error,
-         "Cannot edit runtime-configured media server. This server is configured via environment variables and is read-only in the UI."
+         gettext(
+           "Cannot edit runtime-configured media server. This server is configured via environment variables and is read-only in the UI."
+         )
        )}
     else
       changeset = Settings.change_media_server_config(server)
@@ -298,7 +301,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         {:noreply,
          socket
          |> assign(:show_media_server_modal, false)
-         |> put_flash(:info, "Media server saved successfully")
+         |> put_flash(:info, gettext("Media server saved successfully"))
          |> load_data()}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -315,14 +318,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        socket
        |> put_flash(
          :error,
-         "Cannot delete runtime-configured media server. This server is configured via environment variables and is read-only in the UI."
+         gettext(
+           "Cannot delete runtime-configured media server. This server is configured via environment variables and is read-only in the UI."
+         )
        )}
     else
       case Settings.delete_media_server_config(server) do
         {:ok, _server} ->
           {:noreply,
            socket
-           |> put_flash(:info, "Media server deleted successfully")
+           |> put_flash(:info, gettext("Media server deleted successfully"))
            |> load_data()}
 
         {:error, error} ->
@@ -334,7 +339,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
             user_id: socket.assigns.current_user.id
           )
 
-          error_msg = MydiaLogger.user_error_message(:delete_media_server, error)
+          error_msg = OperationErrors.user_error_message(:delete_media_server, error)
 
           {:noreply, put_flash(socket, :error, error_msg)}
       end
@@ -359,7 +364,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       {:ok, %{status: :healthy}} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Connection to #{server.name} successful!")
+         |> put_flash(:info, gettext("Connection to %{name} successful!", name: server.name))
          |> load_data()}
 
       {:ok, %{error: error}} ->
@@ -373,11 +378,11 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
         {:noreply,
          socket
-         |> put_flash(:error, "Connection failed: #{error}")
+         |> put_flash(:error, gettext("Connection failed: %{reason}", reason: error))
          |> load_data()}
 
       {:error, :not_found} ->
-        {:noreply, put_flash(socket, :error, "That media server no longer exists")}
+        {:noreply, put_flash(socket, :error, gettext("That media server no longer exists"))}
     end
   end
 
@@ -399,11 +404,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       {:ok, _job} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Watched sync queued for #{server.name}")
+         |> put_flash(:info, gettext("Watched sync queued for %{name}", name: server.name))
          |> load_data()}
 
       {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start watched sync for #{server.name}")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Failed to start watched sync for %{name}", name: server.name)
+         )}
     end
   end
 
@@ -428,7 +438,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         {:noreply,
          socket
          |> assign(:testing_media_server_connection, false)
-         |> put_flash(:info, "Connection successful!")}
+         |> put_flash(:info, gettext("Connection successful!"))}
 
       {:error, %Error{} = error} ->
         MydiaLogger.log_warning(:liveview, "Media server connection test failed",
@@ -441,7 +451,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
         {:noreply,
          socket
          |> assign(:testing_media_server_connection, false)
-         |> put_flash(:error, "Connection failed: #{Error.message(error)}")}
+         |> put_flash(
+           :error,
+           gettext("Connection failed: %{reason}", reason: Error.message(error))
+         )}
     end
   end
 
@@ -472,7 +485,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   end
 
   defp apply_accounts_load(socket, config, {:error, reason}) do
-    assign(socket, :account_mapping_state, {:error, read_accounts_error(config, reason)})
+    assign(socket, :account_mapping_state, {:error, Messages.read_accounts_error(config, reason)})
   end
 
   defp apply_mapping_save(socket, config, {:ok, links}) do
@@ -483,19 +496,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
     socket
     |> clear_account_mapping()
-    |> put_flash(:info, link_flash(links, config))
+    |> put_flash(:info, Messages.links_saved(links, config))
     |> load_data()
   end
 
   defp apply_mapping_save(socket, _config, {:error, :runtime_media_server}) do
-    mapping_save_error(socket, @runtime_mapping_message)
+    mapping_save_error(socket, Messages.runtime_mapping())
   end
 
   defp apply_mapping_save(socket, config, {:error, :duplicate_user}) do
-    mapping_save_error(
-      socket,
-      "Each Mydia user can be linked to only one #{account_noun(config)}."
-    )
+    mapping_save_error(socket, Messages.duplicate_user(config))
   end
 
   # Two accounts on one Mydia user is caught above; this is the other direction,
@@ -503,17 +513,17 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   # to prevent. Refused rather than written, so nobody ever imports somebody
   # else's watch history.
   defp apply_mapping_save(socket, config, {:error, :duplicate_remote_account}) do
-    mapping_save_error(
-      socket,
-      "Each #{account_noun(config)} can be linked to only one Mydia user."
-    )
+    mapping_save_error(socket, Messages.duplicate_account(config))
   end
 
   defp apply_mapping_save(socket, config, {:error, %Error{} = error}) do
     mapping_save_error(
       socket,
-      "Could not save account links for #{config.name}: #{Error.message(error)}. " <>
-        "The mapping was left unchanged."
+      gettext(
+        "Could not save account links for %{name}: %{reason}. The mapping was left unchanged.",
+        name: config.name,
+        reason: Error.message(error)
+      )
     )
   end
 
@@ -523,20 +533,16 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       error: inspect(reason)
     )
 
-    mapping_save_error(socket, "Could not save account links for #{config.name}.")
+    mapping_save_error(
+      socket,
+      gettext("Could not save account links for %{name}.", name: config.name)
+    )
   end
 
   defp mapping_save_error(socket, message) do
     socket
     |> assign(:account_mapping_saving, false)
     |> put_flash(:error, message)
-  end
-
-  defp link_flash([], config), do: "No accounts are linked to #{config.name}."
-
-  defp link_flash(links, config) do
-    "Linked #{length(links)} #{if length(links) == 1, do: "account", else: "accounts"} " <>
-      "on #{config.name}. Watched sync queued."
   end
 
   defp enqueue_server_sync(config) do
@@ -601,28 +607,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     |> assign(:account_mapping, %{})
     |> assign(:account_mapping_saving, false)
   end
-
-  defp read_accounts_error(server, reason) do
-    "Could not read accounts from #{server.name}: #{describe_reason(reason)}"
-  end
-
-  # What a server calls the things this modal maps. Getting it wrong in an error
-  # message sends the operator looking for a screen their server does not have.
-  defp account_noun(%{type: :jellyfin}), do: "Jellyfin account"
-  defp account_noun(_config), do: "account"
-
-  defp describe_reason(%Error{} = error), do: Error.message(error)
-  defp describe_reason(%Ecto.Changeset{}), do: "the mapping could not be saved"
-
-  defp describe_reason({:unsupported_provider, type}) do
-    "#{type} does not support per-user mapping"
-  end
-
-  defp describe_reason(reason) when is_atom(reason) do
-    reason |> to_string() |> String.replace("_", " ")
-  end
-
-  defp describe_reason(reason), do: inspect(reason)
 
   # Seeds per-user links after a media server config is persisted. Fires on
   # every save of a server that can be seeded, including one that only flips a
@@ -689,11 +673,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
          put_flash(
            socket,
            :error,
-           "This server is configured via environment variables and is read-only in the UI."
+           gettext(
+             "This server is configured via environment variables and is read-only in the UI."
+           )
          )}
 
       nil ->
-        {:noreply, put_flash(socket, :error, "That server no longer exists")}
+        {:noreply, put_flash(socket, :error, gettext("That server no longer exists"))}
     end
   end
 

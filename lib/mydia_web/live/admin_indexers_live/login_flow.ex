@@ -6,6 +6,8 @@ defmodule MydiaWeb.AdminIndexersLive.LoginFlow do
   The pending `Challenge` (cookie jar included) lives only in this socket's assigns.
   """
 
+  use Gettext, backend: MydiaWeb.Gettext
+
   import Phoenix.Component, only: [assign: 2]
   import Phoenix.LiveView
 
@@ -68,7 +70,10 @@ defmodule MydiaWeb.AdminIndexersLive.LoginFlow do
 
   defp handle_async(name, {:exit, _reason}, socket) when name in [@begin, @complete] do
     {:halt,
-     assign(socket, login_busy: false, login_error: "The login request failed. Try again.")}
+     assign(socket,
+       login_busy: false,
+       login_error: gettext("The login request failed. Try again.")
+     )}
   end
 
   defp handle_async(_name, _result, socket), do: {:cont, socket}
@@ -98,7 +103,7 @@ defmodule MydiaWeb.AdminIndexersLive.LoginFlow do
     SessionManager.store(definition, session)
     send(self(), :reload_library_indexers)
 
-    socket |> reset() |> put_flash(:info, "Logged in to #{definition.name}")
+    socket |> reset() |> put_flash(:info, gettext("Logged in to %{name}", name: definition.name))
   end
 
   defp handle_result(socket, {:needs_input, challenge}),
@@ -112,7 +117,7 @@ defmodule MydiaWeb.AdminIndexersLive.LoginFlow do
     do: assign(socket, login_busy: false, login_error: error_message(error))
 
   defp error_message(%{message: message}) when is_binary(message), do: message
-  defp error_message(_), do: "Could not read this indexer's definition"
+  defp error_message(_), do: gettext("Could not read this indexer's definition")
 
   defp reset(socket),
     do:

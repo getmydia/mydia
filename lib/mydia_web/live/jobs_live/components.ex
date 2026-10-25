@@ -5,7 +5,7 @@ defmodule MydiaWeb.JobsLive.Components do
   def header_actions(assigns) do
     ~H"""
     <button id="refresh-jobs" type="button" class="btn btn-sm btn-ghost" phx-click="refresh_jobs">
-      <.icon name="hero-arrow-path" class="w-4 h-4" /> Refresh
+      <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Refresh")}
     </button>
     """
   end
@@ -20,55 +20,60 @@ defmodule MydiaWeb.JobsLive.Components do
     ~H"""
     <.admin_section
       id="scheduled-jobs"
-      title="Scheduled Jobs"
+      title={gettext("Scheduled Jobs")}
       icon="hero-clock"
       count={length(@cron_jobs)}
     >
       <.admin_table id="cron-jobs" rows={@cron_jobs} row_id={&"cron-job-#{cron_job_slug(&1)}"}>
-        <:col :let={job} label="Job">
+        <:col :let={job} label={gettext("Job")}>
           <div class="font-medium">{job.worker_name}</div>
           <div class="text-xs text-base-content/60">{inspect(job.worker)}</div>
         </:col>
-        <:col :let={job} label="Schedule">
+        <:col :let={job} label={gettext("Schedule")}>
           <code class="text-xs bg-base-300 px-2 py-1 rounded">{job.schedule}</code>
         </:col>
-        <:col :let={job} label="Last Run">
+        <:col :let={job} label={gettext("Last Run")}>
           <%= if job.latest_job do %>
             <div>{format_relative_time(job.latest_job.attempted_at)}</div>
             <div class="text-xs text-base-content/60">
               {format_datetime(job.latest_job.attempted_at)}
             </div>
           <% else %>
-            <span class="text-base-content/50">Never</span>
+            <span class="text-base-content/50">{gettext("Never")}</span>
           <% end %>
         </:col>
-        <:col :let={job} label="Next Run">
+        <:col :let={job} label={gettext("Next Run")}>
           <%= if job.next_run do %>
             <div>{format_relative_time(job.next_run)}</div>
             <div class="text-xs text-base-content/60">
               {format_datetime(job.next_run)}
             </div>
           <% else %>
-            <span class="text-base-content/50">N/A</span>
+            <span class="text-base-content/50">{gettext("N/A")}</span>
           <% end %>
         </:col>
-        <:col :let={job} label="Status">
+        <:col :let={job} label={pgettext("list column", "Status")}>
           <%= if job.latest_job do %>
             <span class={["badge badge-sm", state_badge_class(job.latest_job.state)]}>
-              {job.latest_job.state}
+              {state_label(job.latest_job.state)}
             </span>
           <% else %>
-            <span class="badge badge-sm badge-ghost">pending</span>
+            <span class="badge badge-sm badge-ghost">{state_label("pending")}</span>
           <% end %>
         </:col>
-        <:col :let={job} label="Stats">
+        <:col :let={job} label={gettext("Stats")}>
           <div class="text-sm">
-            <div>Success: {job.stats.success_rate}%</div>
+            <div>{gettext("Success: %{rate}%", rate: job.stats.success_rate)}</div>
             <div class="text-xs text-base-content/60">
-              {job.stats.completed_count} / {job.stats.total_executions} runs
+              {gettext("%{completed} / %{total} runs",
+                completed: job.stats.completed_count,
+                total: job.stats.total_executions
+              )}
             </div>
             <div class="text-xs text-base-content/60">
-              Avg: {format_job_duration_ms(job.stats.avg_duration_ms)}
+              {gettext("Avg: %{duration}",
+                duration: format_job_duration_ms(job.stats.avg_duration_ms)
+              )}
             </div>
           </div>
         </:col>
@@ -76,7 +81,7 @@ defmodule MydiaWeb.JobsLive.Components do
           <.row_action
             id={"trigger-#{cron_job_slug(job)}"}
             icon="hero-play"
-            title="Trigger now"
+            title={gettext("Trigger now")}
             phx-click="confirm_trigger_job"
             phx-value-worker={inspect(job.worker)}
           />
@@ -84,15 +89,19 @@ defmodule MydiaWeb.JobsLive.Components do
             :if={get_route_for_job(job.worker)}
             id={"view-#{cron_job_slug(job)}"}
             icon="hero-arrow-top-right-on-square"
-            title="View"
+            title={gettext("View")}
             phx-click={view_job_click(job.worker)}
           />
         </:action>
-        <:empty>No scheduled jobs configured.</:empty>
+        <:empty>{gettext("No scheduled jobs configured.")}</:empty>
       </.admin_table>
     </.admin_section>
 
-    <.admin_section id="job-history-section" title="Job History" icon="hero-queue-list">
+    <.admin_section
+      id="job-history-section"
+      title={gettext("Job History")}
+      icon="hero-queue-list"
+    >
       <form
         id="jobs-filter-form"
         phx-change="filter_job_history"
@@ -100,10 +109,10 @@ defmodule MydiaWeb.JobsLive.Components do
       >
         <div>
           <label class="label">
-            <span class="label-text">Filter by Job</span>
+            <span class="label-text">{gettext("Filter by Job")}</span>
           </label>
           <select name="worker" class="select select-bordered w-full">
-            <option value="">All Jobs</option>
+            <option value="">{gettext("All Jobs")}</option>
             <%= for job <- @cron_jobs do %>
               <option value={inspect(job.worker)} selected={@filter_worker == job.worker}>
                 {job.worker_name}
@@ -113,22 +122,24 @@ defmodule MydiaWeb.JobsLive.Components do
         </div>
         <div>
           <label class="label">
-            <span class="label-text">Filter by Status</span>
+            <span class="label-text">{gettext("Filter by Status")}</span>
           </label>
           <select name="state" class="select select-bordered w-full">
-            <option value="">All States</option>
+            <option value="">{gettext("All States")}</option>
             <option value="completed" selected={@filter_state == "completed"}>
-              Completed
+              {pgettext("job state filter", "Completed")}
             </option>
-            <option value="failed" selected={@filter_state == "failed"}>Failed</option>
+            <option value="failed" selected={@filter_state == "failed"}>
+              {pgettext("job state filter", "Failed")}
+            </option>
             <option value="discarded" selected={@filter_state == "discarded"}>
-              Discarded
+              {pgettext("job state filter", "Discarded")}
             </option>
             <option value="retryable" selected={@filter_state == "retryable"}>
-              Retryable
+              {pgettext("job state filter", "Retryable")}
             </option>
             <option value="executing" selected={@filter_state == "executing"}>
-              Executing
+              {pgettext("job state filter", "Executing")}
             </option>
           </select>
         </div>
@@ -138,19 +149,19 @@ defmodule MydiaWeb.JobsLive.Components do
         rows={@job_history}
         row_id={fn {dom_id, _job} -> dom_id end}
       >
-        <:col :let={{_id, job}} label="Job">
+        <:col :let={{_id, job}} label={gettext("Job")}>
           <div class="font-medium">
             {job.worker |> String.split(".") |> List.last()}
           </div>
           <div class="text-xs text-base-content/60">{job.worker}</div>
         </:col>
-        <:col :let={{_id, job}} label="Attempted At">
+        <:col :let={{_id, job}} label={gettext("Attempted At")}>
           <div>{format_relative_time(job.attempted_at)}</div>
           <div class="text-xs text-base-content/60">
             {format_datetime(job.attempted_at)}
           </div>
         </:col>
-        <:col :let={{_id, job}} label="Completed At">
+        <:col :let={{_id, job}} label={gettext("Completed At")}>
           <%= if job.completed_at do %>
             <div>{format_relative_time(job.completed_at)}</div>
             <div class="text-xs text-base-content/60">
@@ -160,15 +171,15 @@ defmodule MydiaWeb.JobsLive.Components do
             <span class="text-base-content/50">-</span>
           <% end %>
         </:col>
-        <:col :let={{_id, job}} label="Duration">
+        <:col :let={{_id, job}} label={gettext("Duration")}>
           {format_job_duration(job.attempted_at, job.completed_at)}
         </:col>
-        <:col :let={{_id, job}} label="State">
+        <:col :let={{_id, job}} label={gettext("State")}>
           <span class={["badge badge-sm", state_badge_class(job.state)]}>
-            {job.state}
+            {state_label(job.state)}
           </span>
         </:col>
-        <:col :let={{_id, job}} label="Attempt">
+        <:col :let={{_id, job}} label={gettext("Attempt")}>
           <span class="text-sm">
             {job.attempt} / {job.max_attempts}
           </span>
@@ -177,7 +188,7 @@ defmodule MydiaWeb.JobsLive.Components do
           <.row_action
             id={"job-details-#{job.id}"}
             icon="hero-eye"
-            title="Details"
+            title={gettext("Details")}
             phx-click="show_job_details"
             phx-value-id={job.id}
           />
@@ -185,18 +196,18 @@ defmodule MydiaWeb.JobsLive.Components do
             :if={job.state in ~w(available scheduled retryable executing)}
             id={"cancel-job-#{job.id}"}
             icon="hero-x-mark"
-            title="Cancel job"
+            title={gettext("Cancel job")}
             destructive
             phx-click="cancel_job"
             phx-value-id={job.id}
-            data-confirm="Cancel this job?"
+            data-confirm={gettext("Cancel this job?")}
           />
         </:action>
-        <:empty>No job history found</:empty>
+        <:empty>{gettext("No job history found")}</:empty>
       </.admin_table>
       <div :if={@has_more and @job_history != []} class="flex justify-center">
         <button type="button" class="btn btn-outline btn-sm" phx-click="load_more_job_history">
-          Load More
+          {gettext("Load More")}
         </button>
       </div>
     </.admin_section>
@@ -210,7 +221,7 @@ defmodule MydiaWeb.JobsLive.Components do
     <.admin_modal
       id="job-details-modal"
       icon="hero-document-magnifying-glass"
-      title="Job Details"
+      title={gettext("Job Details")}
       subtitle={@job.worker}
       size={:lg}
       on_close="close_job_details_modal"
@@ -218,35 +229,41 @@ defmodule MydiaWeb.JobsLive.Components do
       <div class="space-y-4">
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <div class="text-sm font-semibold text-base-content/60">State</div>
+            <div class="text-sm font-semibold text-base-content/60">{gettext("State")}</div>
             <span class={["badge", state_badge_class(@job.state)]}>
-              {@job.state}
+              {state_label(@job.state)}
             </span>
           </div>
           <div>
-            <div class="text-sm font-semibold text-base-content/60">Attempt</div>
+            <div class="text-sm font-semibold text-base-content/60">{gettext("Attempt")}</div>
             <div>{@job.attempt} / {@job.max_attempts}</div>
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <div class="text-sm font-semibold text-base-content/60">Scheduled At</div>
+            <div class="text-sm font-semibold text-base-content/60">
+              {gettext("Scheduled At")}
+            </div>
             <div>{format_datetime(@job.scheduled_at)}</div>
           </div>
           <div>
-            <div class="text-sm font-semibold text-base-content/60">Attempted At</div>
+            <div class="text-sm font-semibold text-base-content/60">
+              {gettext("Attempted At")}
+            </div>
             <div>{format_datetime(@job.attempted_at)}</div>
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <div class="text-sm font-semibold text-base-content/60">Completed At</div>
+            <div class="text-sm font-semibold text-base-content/60">
+              {gettext("Completed At")}
+            </div>
             <div>{format_datetime(@job.completed_at)}</div>
           </div>
           <div>
-            <div class="text-sm font-semibold text-base-content/60">Duration</div>
+            <div class="text-sm font-semibold text-base-content/60">{gettext("Duration")}</div>
             <div>
               {format_job_duration(@job.attempted_at, @job.completed_at)}
             </div>
@@ -254,13 +271,13 @@ defmodule MydiaWeb.JobsLive.Components do
         </div>
 
         <div>
-          <div class="text-sm font-semibold text-base-content/60">Arguments</div>
+          <div class="text-sm font-semibold text-base-content/60">{gettext("Arguments")}</div>
           <pre class="bg-base-300 p-3 rounded text-xs sm:overflow-x-auto max-sm:whitespace-pre-wrap max-sm:break-all">{inspect(@job.args, pretty: true)}</pre>
         </div>
 
         <%= if @job.errors && @job.errors != [] do %>
           <div>
-            <div class="text-sm font-semibold text-base-content/60 mb-2">Errors</div>
+            <div class="text-sm font-semibold text-base-content/60 mb-2">{gettext("Errors")}</div>
             <%= for error <- @job.errors do %>
               <div class="alert alert-error mb-2">
                 <pre class="text-xs sm:overflow-x-auto whitespace-pre-wrap max-sm:break-all">{inspect(error, pretty: true)}</pre>
@@ -270,7 +287,9 @@ defmodule MydiaWeb.JobsLive.Components do
         <% end %>
       </div>
       <:actions>
-        <button type="button" class="btn" phx-click="close_job_details_modal">Close</button>
+        <button type="button" class="btn" phx-click="close_job_details_modal">
+          {gettext("Close")}
+        </button>
       </:actions>
     </.admin_modal>
     """
@@ -283,14 +302,16 @@ defmodule MydiaWeb.JobsLive.Components do
     <.admin_modal
       id="trigger-job-modal"
       icon="hero-play"
-      title="Trigger Job"
-      subtitle="Run it now, outside its schedule"
+      title={gettext("Trigger Job")}
+      subtitle={gettext("Run it now, outside its schedule")}
       on_close="close_trigger_job_modal"
     >
-      <div class="bg-base-300 p-3 rounded text-sm font-semibold">Job: {inspect(@worker)}</div>
+      <div class="bg-base-300 p-3 rounded text-sm font-semibold">
+        {gettext("Job: %{name}", name: inspect(@worker))}
+      </div>
       <:actions>
         <button type="button" class="btn btn-ghost" phx-click="close_trigger_job_modal">
-          Cancel
+          {gettext("Cancel")}
         </button>
         <button
           type="button"
@@ -298,7 +319,7 @@ defmodule MydiaWeb.JobsLive.Components do
           phx-click="trigger_job"
           phx-value-worker={inspect(@worker)}
         >
-          Trigger Now
+          {gettext("Trigger Now")}
         </button>
       </:actions>
     </.admin_modal>
@@ -308,14 +329,14 @@ defmodule MydiaWeb.JobsLive.Components do
   defp cron_job_slug(job),
     do: job.worker |> inspect() |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
 
-  defp format_relative_time(nil), do: "Never"
-  defp format_relative_time(%DateTime{} = dt), do: Timex.from_now(dt)
+  defp format_relative_time(nil), do: gettext("Never")
+  defp format_relative_time(%DateTime{} = dt), do: MydiaWeb.RelativeTime.from_now(dt)
 
-  defp format_datetime(nil), do: "N/A"
+  defp format_datetime(nil), do: gettext("N/A")
   defp format_datetime(%DateTime{} = dt), do: Timex.format!(dt, "{ISO:Extended}")
 
-  defp format_job_duration(nil, _), do: "N/A"
-  defp format_job_duration(_, nil), do: "N/A"
+  defp format_job_duration(nil, _), do: gettext("N/A")
+  defp format_job_duration(_, nil), do: gettext("N/A")
 
   defp format_job_duration(%DateTime{} = attempted_at, %DateTime{} = completed_at) do
     format_job_duration_ms(DateTime.diff(completed_at, attempted_at, :millisecond))
@@ -329,7 +350,19 @@ defmodule MydiaWeb.JobsLive.Components do
     end
   end
 
-  defp format_job_duration_ms(_), do: "N/A"
+  defp format_job_duration_ms(_), do: gettext("N/A")
+
+  # Oban job states shown as badges: one clause per known state, raw fallback.
+  defp state_label("completed"), do: pgettext("job state", "completed")
+  defp state_label("failed"), do: pgettext("job state", "failed")
+  defp state_label("discarded"), do: pgettext("job state", "discarded")
+  defp state_label("cancelled"), do: pgettext("job state", "cancelled")
+  defp state_label("retryable"), do: pgettext("job state", "retryable")
+  defp state_label("scheduled"), do: pgettext("job state", "scheduled")
+  defp state_label("executing"), do: pgettext("job state", "executing")
+  defp state_label("available"), do: pgettext("job state", "available")
+  defp state_label("pending"), do: pgettext("job state", "pending")
+  defp state_label(other), do: other
 
   defp state_badge_class(state) do
     case state do

@@ -1,8 +1,8 @@
 <Layouts.app {assigns}>
   <div class="py-4 sm:p-6">
     <.admin_header
-      title="Import Lists"
-      description="Lists that add media automatically"
+      title={gettext("Import Lists")}
+      description={gettext("Lists that add media automatically")}
       count={length(@import_lists)}
     >
       <:actions><MydiaWeb.AdminImportListsLive.Components.header_actions /></:actions>

@@ -28,17 +28,21 @@ defmodule MydiaWeb.AdminMediaServersLive.MediaServerModalComponents do
     <.admin_modal
       id="media-server-modal"
       icon={if @current_type, do: media_server_type_icon(@current_type), else: "hero-server-stack"}
-      title={if @media_server_mode == :new, do: "Add Media Server", else: "Edit Media Server"}
+      title={
+        if @media_server_mode == :new,
+          do: gettext("Add Media Server"),
+          else: gettext("Edit Media Server")
+      }
       subtitle={
         if @media_server_mode == :new,
-          do: "Connect a Jellyfin server",
-          else: "Update server configuration"
+          do: gettext("Connect a Jellyfin server"),
+          else: gettext("Update server configuration")
       }
       on_close="close_media_server_modal"
     >
       <:header_aside>
         <label class="label cursor-pointer gap-2">
-          <span class="label-text text-sm">Enabled</span>
+          <span class="label-text text-sm">{gettext("Enabled")}</span>
           <input
             type="hidden"
             name={@media_server_form[:enabled].name}
@@ -65,7 +69,12 @@ defmodule MydiaWeb.AdminMediaServersLive.MediaServerModalComponents do
           <%!-- Basic Info Section --%>
           <div class="grid grid-cols-6 gap-3">
             <div class="col-span-6">
-              <.input field={@media_server_form[:name]} type="text" label="Name" required />
+              <.input
+                field={@media_server_form[:name]}
+                type="text"
+                label={gettext("Name")}
+                required
+              />
               <input type="hidden" name={@media_server_form[:type].name} value="jellyfin" />
             </div>
           </div>
@@ -75,7 +84,7 @@ defmodule MydiaWeb.AdminMediaServersLive.MediaServerModalComponents do
           <div class="card bg-base-200/50 border border-base-300">
             <div class="card-body p-4 gap-4">
               <div class="flex items-center gap-2 text-sm font-medium text-base-content/70">
-                <.icon name="hero-link" class="w-4 h-4" /> Connection Details
+                <.icon name="hero-link" class="w-4 h-4" /> {gettext("Connection Details")}
               </div>
 
               <div class="space-y-4">
@@ -83,12 +92,12 @@ defmodule MydiaWeb.AdminMediaServersLive.MediaServerModalComponents do
                   <.input
                     field={@media_server_form[:url]}
                     type="text"
-                    label="Server URL"
+                    label={gettext("Server URL")}
                     placeholder="http://192.168.1.100:8096"
                     required
                   />
                   <p class="text-xs text-base-content/50 mt-1 ml-1">
-                    Full URL including port (default: 8096)
+                    {gettext("Full URL including port (default: 8096)")}
                   </p>
                 </div>
 
@@ -96,11 +105,11 @@ defmodule MydiaWeb.AdminMediaServersLive.MediaServerModalComponents do
                   <.input
                     field={@media_server_form[:token]}
                     type="password"
-                    label="API Token"
+                    label={gettext("API Token")}
                     required
                   />
                   <p class="text-xs text-base-content/50 mt-1 ml-1">
-                    API Key from Dashboard → Advanced → API Keys
+                    {gettext("API Key from Dashboard → Advanced → API Keys")}
                   </p>
                 </div>
               </div>
@@ -112,7 +121,7 @@ defmodule MydiaWeb.AdminMediaServersLive.MediaServerModalComponents do
             <div class="card bg-base-200/50 border border-base-300">
               <div class="card-body p-4 gap-4">
                 <div class="flex items-center gap-2 text-sm font-medium text-base-content/70">
-                  <.icon name="hero-arrow-path" class="w-4 h-4" /> Watched Status Sync
+                  <.icon name="hero-arrow-path" class="w-4 h-4" /> {gettext("Watched Status Sync")}
                 </div>
 
                 <div class="space-y-3">
@@ -138,16 +147,16 @@ defmodule MydiaWeb.AdminMediaServersLive.MediaServerModalComponents do
                       class="toggle toggle-primary toggle-sm"
                     />
                     <div>
-                      <span class="label-text">Enable watched sync</span>
+                      <span class="label-text">{gettext("Enable watched sync")}</span>
                       <p class="text-xs text-base-content/50">
-                        Sync watched status between Mydia and this server every 30 minutes
+                        {gettext("Sync watched status between Mydia and this server every 30 minutes")}
                       </p>
                     </div>
                   </label>
 
                   <div>
                     <label class="label">
-                      <span class="label-text text-sm">Sync Direction</span>
+                      <span class="label-text text-sm">{gettext("Sync Direction")}</span>
                     </label>
                     <% direction =
                       get_in(
@@ -160,13 +169,13 @@ defmodule MydiaWeb.AdminMediaServersLive.MediaServerModalComponents do
                       class="select select-bordered select-sm w-full"
                     >
                       <option value="bidirectional" selected={direction == "bidirectional"}>
-                        Bidirectional
+                        {gettext("Bidirectional")}
                       </option>
                       <option value="import" selected={direction == "import"}>
-                        Import only (server → Mydia)
+                        {gettext("Import only (server → Mydia)")}
                       </option>
                       <option value="export" selected={direction == "export"}>
-                        Export only (Mydia → server)
+                        {gettext("Export only (Mydia → server)")}
                       </option>
                     </select>
                   </div>
@@ -178,7 +187,7 @@ defmodule MydiaWeb.AdminMediaServersLive.MediaServerModalComponents do
 
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_media_server_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button
             type="button"
@@ -187,14 +196,14 @@ defmodule MydiaWeb.AdminMediaServersLive.MediaServerModalComponents do
             disabled={@testing_media_server_connection}
           >
             <%= if @testing_media_server_connection do %>
-              <span class="loading loading-spinner loading-sm"></span> Testing...
+              <span class="loading loading-spinner loading-sm"></span> {gettext("Testing...")}
             <% else %>
-              <.icon name="hero-signal" class="w-4 h-4" /> Test Connection
+              <.icon name="hero-signal" class="w-4 h-4" /> {gettext("Test Connection")}
             <% end %>
           </button>
           <button type="submit" id="media-server-submit" class="btn btn-primary gap-2">
             <.icon name="hero-check" class="w-4 h-4" />
-            {if @media_server_mode == :new, do: "Add Server", else: "Save Changes"}
+            {if @media_server_mode == :new, do: gettext("Add Server"), else: gettext("Save Changes")}
           </button>
         </.admin_modal_actions>
       </.form>

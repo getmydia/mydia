@@ -56,11 +56,11 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
     <.admin_modal
       id="indexer-modal"
       icon={if(@indexer_mode == :new, do: "hero-plus-circle", else: "hero-pencil-square")}
-      title={if @indexer_mode == :new, do: "Add Indexer", else: "Edit Indexer"}
+      title={if @indexer_mode == :new, do: gettext("Add Indexer"), else: gettext("Edit Indexer")}
       subtitle={
         if @indexer_mode == :new,
-          do: "Configure a new search indexer",
-          else: "Update indexer settings"
+          do: gettext("Configure a new search indexer"),
+          else: gettext("Update indexer settings")
       }
       on_close="close_indexer_modal"
     >
@@ -71,7 +71,7 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
         phx-submit="save_indexer"
       >
         <label class="label cursor-pointer justify-end gap-2 mb-2">
-          <span class="label-text text-sm">Enabled</span>
+          <span class="label-text text-sm">{gettext("Enabled")}</span>
           <input type="hidden" name={@indexer_form[:enabled].name} value="false" />
           <input
             type="checkbox"
@@ -85,24 +85,24 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
           <%!-- Basic Settings - Compact Row --%>
           <div class="grid grid-cols-6 gap-3">
             <div class="col-span-6 md:col-span-3">
-              <.input field={@indexer_form[:name]} type="text" label="Name" required />
+              <.input field={@indexer_form[:name]} type="text" label={gettext("Name")} required />
             </div>
             <div class="col-span-3 md:col-span-2">
               <.input
                 field={@indexer_form[:type]}
                 type="select"
-                label="Type"
+                label={pgettext("indexer type", "Type")}
                 options={[
                   {"Prowlarr", "prowlarr"},
                   {"Jackett", "jackett"},
                   {"Newznab", "newznab"},
-                  {"Public", "public"}
+                  {pgettext("indexer type", "Public"), "public"}
                 ]}
                 required
               />
             </div>
             <div class="col-span-3 md:col-span-1">
-              <.input field={@indexer_form[:priority]} type="number" label="Priority" />
+              <.input field={@indexer_form[:priority]} type="number" label={gettext("Priority")} />
             </div>
           </div>
 
@@ -113,11 +113,11 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
                 <.icon name="hero-server" class="w-4 h-4" />
-                <span>Connection</span>
+                <span>{gettext("Connection")}</span>
               </div>
               <%= if @using_env_source do %>
                 <span class="badge badge-info badge-sm gap-1">
-                  <.icon name="hero-shield-check" class="w-3 h-3" /> From environment
+                  <.icon name="hero-shield-check" class="w-3 h-3" /> {gettext("From environment")}
                 </span>
               <% end %>
             </div>
@@ -127,14 +127,18 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
               <.input
                 field={@indexer_form[:env_name]}
                 type="select"
-                label="Source"
+                label={gettext("Source")}
                 options={
-                  [{"Manual Configuration", ""}] ++
+                  [{gettext("Manual Configuration"), ""}] ++
                     Enum.map(@available_env_indexers, fn env ->
                       label =
                         if env.has_api_key,
                           do: "#{env.env_name} (#{env.base_url})",
-                          else: "#{env.env_name} (#{env.base_url}) - No API Key"
+                          else:
+                            gettext("%{env} (%{url}) - No API Key",
+                              env: env.env_name,
+                              url: env.base_url
+                            )
 
                       {label, env.env_name}
                     end)
@@ -149,7 +153,7 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
                   <.input
                     field={@indexer_form[:base_url]}
                     type="text"
-                    label="Base URL"
+                    label={gettext("Base URL")}
                     placeholder="http://localhost:9696"
                   />
                 </div>
@@ -157,8 +161,8 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
                   <.input
                     field={@indexer_form[:api_key]}
                     type="password"
-                    label="API Key"
-                    placeholder="API key"
+                    label={gettext("API Key")}
+                    placeholder={gettext("API key")}
                   />
                 </div>
               </div>
@@ -171,21 +175,22 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
             <div class="space-y-3">
               <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
                 <.icon name="hero-clock" class="w-4 h-4" />
-                <span>Usenet Options</span>
+                <span>{gettext("Usenet Options")}</span>
               </div>
               <div class="grid grid-cols-3 gap-3">
                 <div class="col-span-3 md:col-span-1">
                   <.input
                     field={@indexer_form[:min_post_age_minutes]}
                     type="number"
-                    label="Min post age (minutes)"
+                    label={gettext("Min post age (minutes)")}
                     placeholder="0"
                     min="0"
                   />
                 </div>
                 <div class="col-span-3 md:col-span-2 text-xs text-base-content/60 self-end pb-2">
-                  Filters out NZB results posted within this many minutes. Useful for letting
-                  indexers complete article propagation. Leave blank to disable.
+                  {gettext(
+                    "Filters out NZB results posted within this many minutes. Useful for letting indexers complete article propagation. Leave blank to disable."
+                  )}
                 </div>
               </div>
               <div :if={@is_newznab} class="grid grid-cols-3 gap-3">
@@ -194,7 +199,7 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
                     id="indexer-api-path"
                     name="indexer_config[connection_settings][api_path]"
                     type="text"
-                    label="API Path"
+                    label={gettext("API Path")}
                     value={
                       get_in(
                         Phoenix.HTML.Form.input_value(@indexer_form, :connection_settings) || %{},
@@ -202,7 +207,7 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
                       ) || "/api"
                     }
                     placeholder="/api"
-                    hint="Newznab endpoint path; usually remains /api."
+                    hint={gettext("Newznab endpoint path; usually remains /api.")}
                     errors={@api_path_errors}
                   />
                 </div>
@@ -217,11 +222,13 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
             <div class="space-y-4">
               <div class="flex items-center gap-2 text-sm font-medium text-base-content/80">
                 <.icon name="hero-queue-list" class="w-4 h-4" />
-                <span>Indexer Selection</span>
+                <span>{gettext("Indexer Selection")}</span>
               </div>
 
               <p class="text-sm text-base-content/60">
-                Choose which Prowlarr indexers to search. Leave empty to search all enabled indexers.
+                {gettext(
+                  "Choose which Prowlarr indexers to search. Leave empty to search all enabled indexers."
+                )}
               </p>
 
               <%!-- Loading State --%>
@@ -229,7 +236,7 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
                 <div class="flex items-center justify-center gap-3 py-8 bg-base-200 rounded-lg">
                   <span class="loading loading-spinner loading-md text-primary"></span>
                   <span class="text-sm text-base-content/70">
-                    Loading indexers from Prowlarr...
+                    {gettext("Loading indexers from Prowlarr...")}
                   </span>
                 </div>
               <% end %>
@@ -239,7 +246,7 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
                 <div class="alert alert-error">
                   <.icon name="hero-exclamation-circle" class="w-5 h-5" />
                   <div>
-                    <p class="font-medium">Failed to load indexers</p>
+                    <p class="font-medium">{gettext("Failed to load indexers")}</p>
                     <p class="text-sm opacity-80">{@prowlarr_indexers_error}</p>
                   </div>
                 </div>
@@ -251,9 +258,9 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
                   <div class="alert alert-warning">
                     <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
                     <div>
-                      <p class="font-medium">No indexers found</p>
+                      <p class="font-medium">{gettext("No indexers found")}</p>
                       <p class="text-sm opacity-80">
-                        Add indexers in your Prowlarr instance first
+                        {gettext("Add indexers in your Prowlarr instance first")}
                       </p>
                     </div>
                   </div>
@@ -266,18 +273,23 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
                         class="btn btn-xs btn-ghost gap-1"
                         phx-click="select_all_prowlarr_indexers"
                       >
-                        <.icon name="hero-check-circle" class="w-3.5 h-3.5" /> All
+                        <.icon name="hero-check-circle" class="w-3.5 h-3.5" />
+                        {pgettext("selection", "All")}
                       </button>
                       <button
                         type="button"
                         class="btn btn-xs btn-ghost gap-1"
                         phx-click="deselect_all_prowlarr_indexers"
                       >
-                        <.icon name="hero-x-circle" class="w-3.5 h-3.5" /> None
+                        <.icon name="hero-x-circle" class="w-3.5 h-3.5" />
+                        {pgettext("selection", "None")}
                       </button>
                     </div>
                     <span class="badge badge-primary badge-sm">
-                      {MapSet.size(@selected_prowlarr_indexer_ids)}/{length(@prowlarr_indexers)} selected
+                      {gettext("%{selected}/%{total} selected",
+                        selected: MapSet.size(@selected_prowlarr_indexer_ids),
+                        total: length(@prowlarr_indexers)
+                      )}
                     </span>
                   </div>
 
@@ -306,7 +318,7 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
                           </span>
                           <%= if !indexer.enabled do %>
                             <span class="badge badge-sm badge-warning gap-1">
-                              <.icon name="hero-pause" class="w-3 h-3" /> disabled
+                              <.icon name="hero-pause" class="w-3 h-3" /> {gettext("disabled")}
                             </span>
                           <% end %>
                         </div>
@@ -321,7 +333,7 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
 
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_indexer_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button
             type="button"
@@ -330,13 +342,13 @@ defmodule MydiaWeb.AdminIndexersLive.ModalComponents do
             disabled={@testing_indexer_connection}
           >
             <%= if @testing_indexer_connection do %>
-              <span class="loading loading-spinner loading-sm"></span> Testing...
+              <span class="loading loading-spinner loading-sm"></span> {gettext("Testing...")}
             <% else %>
-              <.icon name="hero-signal" class="w-4 h-4" /> Test Connection
+              <.icon name="hero-signal" class="w-4 h-4" /> {gettext("Test Connection")}
             <% end %>
           </button>
           <button type="submit" class="btn btn-primary gap-2">
-            <.icon name="hero-check" class="w-4 h-4" /> Save Indexer
+            <.icon name="hero-check" class="w-4 h-4" /> {gettext("Save Indexer")}
           </button>
         </.admin_modal_actions>
       </.form>

@@ -458,6 +458,6 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     do: MediaAddHelpers.format_changeset_errors(changeset)
 
   defp describe({:metadata, _reason}), do: gettext("the metadata service could not be reached")
-  defp describe(:restricted), do: Media.restricted_message()
+  defp describe(:restricted), do: MydiaWeb.OperationErrors.restricted_message()
   defp describe(reason), do: inspect(reason)
 end

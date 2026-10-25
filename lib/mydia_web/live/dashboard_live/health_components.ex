@@ -8,9 +8,9 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
 
-  alias Mydia.Health.Rollup
   alias Mydia.Indexers.CardigannSummary
   alias MydiaWeb.AdminNav
+  alias MydiaWeb.StatusLabels
 
   @doc "Renders the full System Health widget section."
   attr :clients_rollup, :map, required: true
@@ -99,24 +99,24 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
     >
       <div class="card-body p-4 flex flex-col justify-between h-full">
         <div class="flex items-center justify-between gap-2">
-          <span class="font-medium text-sm truncate">{@page.label}</span>
+          <span class="font-medium text-sm truncate">{AdminNav.page_label(@page)}</span>
           <.icon name={@page.icon} class="w-4 h-4 text-base-content/60 shrink-0" />
         </div>
 
         <div class="mt-2">
           <div class="flex items-center gap-2">
             <span class={["badge badge-sm font-medium", state_badge_class(@rollup.state)]}>
-              {if @rollup.state == :none, do: @empty_label, else: Rollup.label(@rollup)}
+              {if @rollup.state == :none, do: @empty_label, else: StatusLabels.rollup(@rollup)}
             </span>
           </div>
 
           <div
             :if={@cardigann && @cardigann.installed > 0}
             id="cardigann-engine-subline"
-            title={CardigannSummary.label(@cardigann)}
+            title={StatusLabels.cardigann(@cardigann)}
             class="text-xs text-base-content/60 mt-1.5 truncate"
           >
-            {CardigannSummary.label(@cardigann)}
+            {StatusLabels.cardigann(@cardigann)}
           </div>
 
           <div
@@ -148,7 +148,7 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
     >
       <div class="card-body p-4 flex flex-col justify-between h-full">
         <div class="flex items-center justify-between gap-2">
-          <span class="font-medium text-sm truncate">{@page.label}</span>
+          <span class="font-medium text-sm truncate">{AdminNav.page_label(@page)}</span>
           <.icon name={@page.icon} class="w-4 h-4 text-base-content/60 shrink-0" />
         </div>
 
@@ -188,7 +188,7 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
     >
       <div class="card-body p-4 flex flex-col justify-between h-full">
         <div class="flex items-center justify-between gap-2">
-          <span class="font-medium text-sm truncate">{@page.label}</span>
+          <span class="font-medium text-sm truncate">{AdminNav.page_label(@page)}</span>
           <.icon name={@page.icon} class="w-4 h-4 text-base-content/60 shrink-0" />
         </div>
 

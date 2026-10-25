@@ -11,35 +11,9 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
 
   alias Mydia.Indexers.Cardigann.EngineSupport
   alias Mydia.Indexers.Cardigann.EngineSwitcher.{Status, Transition}
-  alias Mydia.Indexers.CardigannSummary
-
-  @engines [
-    %{
-      id: :builtin,
-      name: "Built-in",
-      subline: "Mydia's own Cardigann engine.",
-      badge: nil,
-      pros: ["Nothing to download", "No extra memory", "Fastest searches"],
-      cons: ["Results can differ from Prowlarr's on some trackers"]
-    },
-    %{
-      id: :prowlarr,
-      name: "Prowlarr-based",
-      subline:
-        "Prowlarr's Cardigann code, compiled from C# and built into Mydia. No Prowlarr server involved.",
-      badge: "Recommended for private trackers",
-      pros: [
-        "Logs in to private trackers with Prowlarr's own code",
-        "Runs Prowlarr's own engine, so results match Prowlarr closely",
-        "Fails over to a mirror when a tracker's link is down"
-      ],
-      cons: [
-        "One-time download and compile, which needs a lot of memory while it runs",
-        "Uses more memory and is slightly slower per search",
-        "Experimental"
-      ]
-    }
-  ]
+  # The card copy lives in the functions below, not in the attribute, because
+  # attributes are evaluated at compile time, before any locale is set.
+  @engines [:builtin, :prowlarr]
 
   @docs_url "https://docs.mydia.dev/latest/using/how-to/cardigann-indexers/#using-the-prowlarr-based-engine-experimental"
 
@@ -64,10 +38,10 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
     <section id="cardigann-engine" class="rounded-box bg-base-200/50 p-3 space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <.icon name="hero-cpu-chip" class="w-4 h-4 opacity-70" />
-        <h3 class="font-semibold text-sm">How library indexers run</h3>
-        <.env_lock_badge :if={@status.locked} tip="Set by CARDIGANN_ENGINE" />
+        <h3 class="font-semibold text-sm">{gettext("How library indexers run")}</h3>
+        <.env_lock_badge :if={@status.locked} tip={gettext("Set by CARDIGANN_ENGINE")} />
         <span class="text-sm opacity-70">
-          Engine:
+          {gettext("Engine:")}
           <span id="cardigann-engine-active" class="font-medium">{engine_name(@status.active)}</span>
         </span>
         <button
@@ -77,15 +51,16 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
           phx-click="toggle_cardigann_engine"
           class="btn btn-ghost btn-xs text-primary"
         >
-          {if @open?, do: "Done", else: "Change"}
+          {if @open?, do: gettext("Done"), else: gettext("Change")}
         </button>
         <a href={@docs_url} target="_blank" class="link link-hover text-xs opacity-70 ml-auto">
-          How they compare
+          {gettext("How they compare")}
         </a>
       </div>
       <p class="text-xs opacity-70">
-        Runs the tracker definitions in this library inside Mydia. Separate from Prowlarr
-        connections, and needs no Prowlarr install.
+        {gettext(
+          "Runs the tracker definitions in this library inside Mydia. Separate from Prowlarr connections, and needs no Prowlarr install."
+        )}
       </p>
 
       <div :if={@open?} id="cardigann-engine-cards" class="space-y-3">
@@ -93,10 +68,10 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
           <div class="grid gap-3 sm:grid-cols-2">
             <label
               :for={engine <- @engines}
-              for={"cardigann-engine-#{engine.id}"}
+              for={"cardigann-engine-#{engine}"}
               class={[
                 "card card-border bg-base-100 cursor-pointer transition-colors hover:border-primary/60",
-                engine.id == selected(@status) && "border-primary",
+                engine == selected(@status) && "border-primary",
                 @status.locked && "cursor-not-allowed opacity-70"
               ]}
             >
@@ -105,38 +80,38 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
                   <input
                     type="radio"
                     name="engine"
-                    id={"cardigann-engine-#{engine.id}"}
-                    value={engine.id}
+                    id={"cardigann-engine-#{engine}"}
+                    value={engine}
                     class="radio radio-primary radio-sm"
-                    checked={engine.id == selected(@status)}
+                    checked={engine == selected(@status)}
                     disabled={@status.locked}
                   />
-                  <span class="font-medium whitespace-nowrap">{engine.name}</span>
-                  <span :if={engine.id == @status.active} class="badge badge-success badge-sm">
-                    Active
+                  <span class="font-medium whitespace-nowrap">{engine_name(engine)}</span>
+                  <span :if={engine == @status.active} class="badge badge-success badge-sm">
+                    {gettext("Active")}
                   </span>
                   <span
-                    :if={@status.transition && engine.id == @status.transition.target}
+                    :if={@status.transition && engine == @status.transition.target}
                     class="badge badge-info badge-sm"
                   >
-                    Switching
+                    {gettext("Switching")}
                   </span>
                   <span
-                    :if={engine.badge}
-                    id={"cardigann-engine-#{engine.id}-badge"}
+                    :if={engine_badge(engine)}
+                    id={"cardigann-engine-#{engine}-badge"}
                     class="badge badge-primary badge-sm"
                   >
-                    {engine.badge}
+                    {engine_badge(engine)}
                   </span>
                 </div>
-                <p id={"cardigann-engine-#{engine.id}-subline"} class="text-xs opacity-70 grow-0">
-                  {engine.subline}
+                <p id={"cardigann-engine-#{engine}-subline"} class="text-xs opacity-70 grow-0">
+                  {engine_subline(engine)}
                 </p>
                 <ul class="text-sm space-y-1">
-                  <li :for={pro <- engine.pros} class="flex gap-2">
+                  <li :for={pro <- engine_pros(engine)} class="flex gap-2">
                     <.icon name="hero-plus-circle" class="w-4 h-4 text-success shrink-0" />{pro}
                   </li>
-                  <li :for={con <- engine.cons} class="flex gap-2 opacity-80">
+                  <li :for={con <- engine_cons(engine)} class="flex gap-2 opacity-80">
                     <.icon name="hero-minus-circle" class="w-4 h-4 text-warning shrink-0" />{con}
                   </li>
                 </ul>
@@ -153,7 +128,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
           class="btn btn-ghost btn-xs"
         >
           <.icon name="hero-trash" class="w-3 h-3" />
-          Remove cached Prowlarr-based engine ({format_mb(@cache_bytes)})
+          {gettext("Remove cached Prowlarr-based engine (%{size})", size: format_mb(@cache_bytes))}
         </button>
       </div>
 
@@ -164,7 +139,10 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
       />
 
       <p :if={@only_verified != []} id="cardigann-engine-only-verified" class="text-sm opacity-80">
-        Only verified on the {other_name(@status.active)} engine: {Enum.join(@only_verified, ", ")}.
+        {gettext("Only verified on the %{engine} engine: %{names}.",
+          engine: other_name(@status.active),
+          names: Enum.join(@only_verified, ", ")
+        )}
       </p>
     </section>
     """
@@ -183,10 +161,14 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
             <div>
               <p>{@transition.error}</p>
               <p :if={@transition.next_retry_at} class="text-xs opacity-80">
-                Next attempt at {format(@transition.next_retry_at, :time, @display)}.
+                {gettext("Next attempt at %{time}.",
+                  time: format(@transition.next_retry_at, :time, @display)
+                )}
               </p>
               <p :if={is_nil(@transition.next_retry_at)} class="text-xs opacity-80">
-                Fix the cause, then switch to Built-in and back to Prowlarr-based to try again.
+                {gettext(
+                  "Fix the cause, then switch to Built-in and back to Prowlarr-based to try again."
+                )}
               </p>
             </div>
             <button
@@ -196,7 +178,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
               phx-click="retry_cardigann_engine"
               class="btn btn-sm"
             >
-              Retry now
+              {gettext("Retry now")}
             </button>
           </div>
         <% phase when phase in [:fetching, :downloading_precompiled] -> %>
@@ -209,7 +191,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
           <progress :if={is_nil(@transition.total)} class="progress progress-primary w-full" />
           <p class="text-sm">
             {if phase == :fetching,
-              do: "Downloading the Prowlarr-based engine",
+              do: gettext("Downloading the Prowlarr-based engine"),
               else: phase_text(phase)} {download_label(@transition)}
           </p>
         <% phase -> %>
@@ -225,7 +207,7 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
           </p>
       <% end %>
       <p class="text-xs opacity-70">
-        Built-in keeps serving searches until the Prowlarr-based engine is ready.
+        {gettext("Built-in keeps serving searches until the Prowlarr-based engine is ready.")}
       </p>
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ElapsedSeconds">
         export default {
@@ -260,17 +242,28 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
         <span
           id={"verified-#{@definition_id}"}
           class="badge badge-xs badge-soft badge-success gap-1"
-          title={"Search results matched Prowlarr's on the #{engine_name(@active)} engine (checked #{@checked})."}
+          title={
+            gettext("Search results matched Prowlarr's on the %{engine} engine (checked %{date}).",
+              engine: engine_name(@active),
+              date: @checked
+            )
+          }
         >
-          <.icon name="hero-check" class="w-3 h-3" />Verified
+          <.icon name="hero-check" class="w-3 h-3" />{gettext("Verified")}
         </span>
       <% {:other_only, other} -> %>
         <span
           id={"verified-#{@definition_id}"}
           class="badge badge-xs badge-soft badge-warning"
-          title={"Search results matched Prowlarr's only on the #{engine_name(other)} engine (checked #{@checked}). Change it under How library indexers run."}
+          title={
+            gettext(
+              "Search results matched Prowlarr's only on the %{engine} engine (checked %{date}). Change it under How library indexers run.",
+              engine: engine_name(other),
+              date: @checked
+            )
+          }
         >
-          Verified on {engine_name(other)} only
+          {gettext("Verified on %{engine} only", engine: engine_name(other))}
         </span>
       <% :unverified -> %>
     <% end %>
@@ -280,14 +273,51 @@ defmodule MydiaWeb.AdminIndexersLive.CardigannEngineComponents do
   defp selected(%Status{transition: %Transition{target: target}}), do: target
   defp selected(%Status{active: active}), do: active
 
-  defp engine_name(engine), do: CardigannSummary.engine_label(engine)
+  @doc false
+  def engine_name(:builtin), do: gettext("Built-in")
+  def engine_name(:prowlarr), do: gettext("Prowlarr-based")
 
   defp other_name(:builtin), do: engine_name(:prowlarr)
   defp other_name(:prowlarr), do: engine_name(:builtin)
 
-  defp phase_text(:compiling), do: "Compiling the Prowlarr-based engine"
-  defp phase_text(:downloading_precompiled), do: "Downloading the precompiled engine"
-  defp phase_text(_phase), do: "Preparing the Prowlarr-based engine"
+  defp engine_badge(:builtin), do: nil
+  defp engine_badge(:prowlarr), do: gettext("Recommended for private trackers")
+
+  defp engine_subline(:builtin), do: gettext("Mydia's own Cardigann engine.")
+
+  defp engine_subline(:prowlarr),
+    do:
+      gettext(
+        "Prowlarr's Cardigann code, compiled from C# and built into Mydia. No Prowlarr server involved."
+      )
+
+  defp engine_pros(:builtin),
+    do: [
+      gettext("Nothing to download"),
+      gettext("No extra memory"),
+      gettext("Fastest searches")
+    ]
+
+  defp engine_pros(:prowlarr),
+    do: [
+      gettext("Logs in to private trackers with Prowlarr's own code"),
+      gettext("Runs Prowlarr's own engine, so results match Prowlarr closely"),
+      gettext("Fails over to a mirror when a tracker's link is down")
+    ]
+
+  defp engine_cons(:builtin),
+    do: [gettext("Results can differ from Prowlarr's on some trackers")]
+
+  defp engine_cons(:prowlarr),
+    do: [
+      gettext("One-time download and compile, which needs a lot of memory while it runs"),
+      gettext("Uses more memory and is slightly slower per search"),
+      gettext("Experimental")
+    ]
+
+  defp phase_text(:compiling), do: gettext("Compiling the Prowlarr-based engine")
+  defp phase_text(:downloading_precompiled), do: gettext("Downloading the precompiled engine")
+  defp phase_text(_phase), do: gettext("Preparing the Prowlarr-based engine")
 
   defp download_label(%Transition{bytes: nil}), do: ""
   defp download_label(%Transition{bytes: bytes, total: nil}), do: format_mb(bytes)

@@ -21,26 +21,32 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ModalComponents do
       id="delete-quality-profile-modal"
       tone={:error}
       icon="hero-trash"
-      title="Delete Quality Profile?"
-      subtitle={"#{@deleting_quality_profile.name} is currently assigned to media items."}
+      title={gettext("Delete Quality Profile?")}
+      subtitle={
+        gettext("%{name} is currently assigned to media items.",
+          name: @deleting_quality_profile.name
+        )
+      }
       on_close="close_delete_quality_profile_modal"
     >
       <div class="bg-base-200 p-3 rounded-box mb-4">
         <p class="text-sm">
-          <span class="font-semibold">Affected media items:</span>
+          <span class="font-semibold">{gettext("Affected media items:")}</span>
           <span class="badge badge-warning badge-sm ml-2">{@affected_media_count}</span>
         </p>
       </div>
       <p class="text-warning text-sm">
         <.icon name="hero-exclamation-triangle" class="w-4 h-4 inline" />
-        Deleting this profile will unassign it from all affected media items. They will have no quality profile assigned.
+        {gettext(
+          "Deleting this profile will unassign it from all affected media items. They will have no quality profile assigned."
+        )}
       </p>
       <:actions>
         <button type="button" phx-click="close_delete_quality_profile_modal" class="btn btn-ghost">
-          Cancel
+          {gettext("Cancel")}
         </button>
         <button type="button" phx-click="confirm_delete_quality_profile" class="btn btn-error">
-          Delete Anyway
+          {gettext("Delete Anyway")}
         </button>
       </:actions>
     </.admin_modal>
@@ -63,12 +69,14 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ModalComponents do
       size={:lg}
       icon={if @quality_profile_mode == :new, do: "hero-plus-circle", else: "hero-pencil-square"}
       title={
-        if @quality_profile_mode == :new, do: "New Quality Profile", else: "Edit Quality Profile"
+        if @quality_profile_mode == :new,
+          do: gettext("New Quality Profile"),
+          else: gettext("Edit Quality Profile")
       }
       subtitle={
         if @quality_profile_mode == :new,
-          do: "Define which releases this profile accepts",
-          else: "Update profile settings"
+          do: gettext("Define which releases this profile accepts"),
+          else: gettext("Update profile settings")
       }
       on_close="close_quality_profile_modal"
     >
@@ -81,7 +89,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ModalComponents do
           phx-click="change_quality_profile_tab"
           phx-value-tab="basic"
         >
-          Basic Info
+          {gettext("Basic Info")}
         </button>
         <button
           type="button"
@@ -90,7 +98,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ModalComponents do
           phx-click="change_quality_profile_tab"
           phx-value-tab="standards"
         >
-          Quality Standards
+          {gettext("Quality Standards")}
         </button>
         <button
           type="button"
@@ -99,7 +107,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ModalComponents do
           phx-click="change_quality_profile_tab"
           phx-value-tab="exclude"
         >
-          Exclude
+          {gettext("Exclude")}
         </button>
       </div>
 
@@ -130,9 +138,9 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ModalComponents do
 
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_quality_profile_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
-          <button type="submit" class="btn btn-primary">Save Profile</button>
+          <button type="submit" class="btn btn-primary">{gettext("Save Profile")}</button>
         </.admin_modal_actions>
       </.form>
     </.admin_modal>
@@ -149,14 +157,14 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ModalComponents do
     <.admin_modal
       id="import-quality-profile-modal"
       icon="hero-arrow-up-tray"
-      title="Import Quality Profile"
-      subtitle="From a JSON or YAML URL"
+      title={gettext("Import Quality Profile")}
+      subtitle={gettext("From a JSON or YAML URL")}
       on_close="close_import_quality_profile_modal"
     >
       <.form for={%{}} id="import-profile-form" phx-submit="import_quality_profile_url">
         <div class="form-control">
           <label class="label">
-            <span class="label-text font-semibold">Profile URL</span>
+            <span class="label-text font-semibold">{gettext("Profile URL")}</span>
           </label>
           <input
             type="url"
@@ -167,7 +175,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ModalComponents do
           />
           <label class="label">
             <span class="label-text-alt text-xs">
-              Enter the URL of a JSON or YAML quality profile
+              {gettext("Enter the URL of a JSON or YAML quality profile")}
             </span>
           </label>
         </div>
@@ -181,10 +189,10 @@ defmodule MydiaWeb.AdminQualityProfilesLive.ModalComponents do
 
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" phx-click="close_import_quality_profile_modal">
-            Cancel
+            {gettext("Cancel")}
           </button>
           <button type="submit" class="btn btn-primary">
-            <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Import
+            <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> {pgettext("import", "Import")}
           </button>
         </.admin_modal_actions>
       </.form>

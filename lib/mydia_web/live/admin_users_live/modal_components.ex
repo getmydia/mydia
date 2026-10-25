@@ -3,11 +3,15 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
   use MydiaWeb, :html
 
   alias Mydia.Accounts.User
-  alias Mydia.Media.ContentRating
   alias Mydia.Media.MediaCategory
 
   defp roles do
-    [{"Guest", "guest"}, {"Read Only", "readonly"}, {"User", "user"}, {"Admin", "admin"}]
+    [
+      {gettext("Guest"), "guest"},
+      {gettext("Read Only"), "readonly"},
+      {gettext("User"), "user"},
+      {gettext("Admin"), "admin"}
+    ]
   end
 
   attr :create_form, :any, required: true
@@ -20,17 +24,19 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
     <.admin_modal
       id="create-user-modal"
       icon="hero-user-plus"
-      title="Create Local User"
+      title={gettext("Create Local User")}
       on_close="close_create_modal"
     >
       <%= if @generated_password do %>
         <.generated_password_notice
-          heading="User created successfully!"
-          label="Generated Password"
+          heading={gettext("User created successfully!")}
+          label={gettext("Generated Password")}
           password={@generated_password}
         />
         <.admin_modal_actions>
-          <button type="button" phx-click="close_create_modal" class="btn btn-primary">Done</button>
+          <button type="button" phx-click="close_create_modal" class="btn btn-primary">
+            {gettext("Done")}
+          </button>
         </.admin_modal_actions>
       <% else %>
         <.form
@@ -42,20 +48,20 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
           <.input
             field={@create_form[:username]}
             type="text"
-            label="Username"
+            label={gettext("Username")}
             placeholder="john_doe"
             required
           />
           <.input
             field={@create_form[:email]}
             type="email"
-            label="Email"
+            label={gettext("Email")}
             placeholder="john@example.com"
             required
           />
 
           <div class="form-control mt-4">
-            <label class="label"><span class="label-text">Role</span></label>
+            <label class="label"><span class="label-text">{gettext("Role")}</span></label>
             <select name="create[role]" class="select select-bordered">
               {Phoenix.HTML.Form.options_for_select(roles(), @create_form[:role].value || "guest")}
             </select>
@@ -70,15 +76,15 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
           <%= if @password_mode == "manual" do %>
             <.password_field
               field={@create_form[:password]}
-              label="Password"
-              placeholder="Enter password (min 8 characters)"
+              label={gettext("Password")}
+              placeholder={gettext("Enter password (min 8 characters)")}
               show={@show_password}
               toggle="toggle_show_password"
             />
             <.password_field
               field={@create_form[:password_confirmation]}
-              label="Confirm Password"
-              placeholder="Re-enter password"
+              label={gettext("Confirm Password")}
+              placeholder={gettext("Re-enter password")}
               show={@show_password}
               toggle="toggle_show_password"
             />
@@ -86,17 +92,17 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
             <div class="alert alert-info mt-4">
               <.icon name="hero-information-circle" class="w-5 h-5" />
               <span class="text-sm">
-                A random password will be generated and displayed after creation.
-                The user can change it after first login.
+                {gettext("A random password will be generated and displayed after creation.")}
+                {gettext("The user can change it after first login.")}
               </span>
             </div>
           <% end %>
 
           <.admin_modal_actions>
             <button type="button" phx-click="close_create_modal" class="btn btn-ghost">
-              Cancel
+              {gettext("Cancel")}
             </button>
-            <button type="submit" class="btn btn-primary">Create User</button>
+            <button type="submit" class="btn btn-primary">{gettext("Create User")}</button>
           </.admin_modal_actions>
         </.form>
       <% end %>
@@ -112,8 +118,8 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
     <.admin_modal
       id="edit-role-modal"
       icon="hero-shield-check"
-      title="Edit User Role"
-      subtitle={"Change role for #{User.label(@user)}"}
+      title={gettext("Edit User Role")}
+      subtitle={gettext("Change role for %{user}", user: User.label(@user))}
       on_close="close_edit_role_modal"
     >
       <.form
@@ -123,7 +129,7 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
         phx-submit="submit_edit_role"
       >
         <div class="form-control">
-          <label class="label"><span class="label-text">Role</span></label>
+          <label class="label"><span class="label-text">{gettext("Role")}</span></label>
           <select name="edit_role[role]" class="select select-bordered">
             <option :for={{label, value} <- roles()} value={value} selected={@user.role == value}>
               {label}
@@ -133,9 +139,9 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
 
         <.admin_modal_actions>
           <button type="button" phx-click="close_edit_role_modal" class="btn btn-ghost">
-            Cancel
+            {gettext("Cancel")}
           </button>
-          <button type="submit" class="btn btn-primary">Update Role</button>
+          <button type="submit" class="btn btn-primary">{gettext("Update Role")}</button>
         </.admin_modal_actions>
       </.form>
     </.admin_modal>
@@ -154,19 +160,19 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
     <.admin_modal
       id="reset-password-modal"
       icon="hero-key"
-      title="Reset Password"
-      subtitle={"Reset password for #{User.label(@user)}"}
+      title={gettext("Reset Password")}
+      subtitle={gettext("Reset password for %{user}", user: User.label(@user))}
       on_close="close_reset_password_modal"
     >
       <%= if @success do %>
         <.generated_password_notice
-          heading="Password reset successfully!"
-          label="New Password"
+          heading={gettext("Password reset successfully!")}
+          label={gettext("New Password")}
           password={@generated_password}
         />
         <.admin_modal_actions>
           <button type="button" phx-click="close_reset_password_modal" class="btn btn-primary">
-            Done
+            {gettext("Done")}
           </button>
         </.admin_modal_actions>
       <% else %>
@@ -185,45 +191,51 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
           >
             <.password_field
               field={@form[:password]}
-              label="New Password"
-              placeholder="Enter new password (min 8 characters)"
+              label={gettext("New Password")}
+              placeholder={gettext("Enter new password (min 8 characters)")}
               show={@show_password}
               toggle="toggle_show_password_reset"
             />
             <.password_field
               field={@form[:password_confirmation]}
-              label="Confirm New Password"
-              placeholder="Re-enter new password"
+              label={gettext("Confirm New Password")}
+              placeholder={gettext("Re-enter new password")}
               show={@show_password}
               toggle="toggle_show_password_reset"
             />
 
             <div class="alert alert-warning mt-4">
               <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-              <span class="text-sm">The old password will no longer work after reset.</span>
+              <span class="text-sm">
+                {gettext("The old password will no longer work after reset.")}
+              </span>
             </div>
 
             <.admin_modal_actions>
               <button type="button" phx-click="close_reset_password_modal" class="btn btn-ghost">
-                Cancel
+                {gettext("Cancel")}
               </button>
-              <button type="submit" class="btn btn-warning">Reset Password</button>
+              <button type="submit" class="btn btn-warning">
+                {gettext("Reset Password")}
+              </button>
             </.admin_modal_actions>
           </.form>
         <% else %>
           <div class="alert alert-warning">
             <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
             <span class="text-sm">
-              This will generate a new random password. The old password will no longer work.
+              {gettext(
+                "This will generate a new random password. The old password will no longer work."
+              )}
             </span>
           </div>
 
           <.admin_modal_actions>
             <button type="button" phx-click="close_reset_password_modal" class="btn btn-ghost">
-              Cancel
+              {gettext("Cancel")}
             </button>
             <button type="button" phx-click="submit_reset_password" class="btn btn-warning">
-              Reset Password
+              {gettext("Reset Password")}
             </button>
           </.admin_modal_actions>
         <% end %>
@@ -239,23 +251,29 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
     <.admin_modal
       id="delete-user-modal"
       icon="hero-trash"
-      title="Delete User"
+      title={gettext("Delete User")}
       on_close="close_delete_modal"
     >
       <p class="text-sm text-base-content/70 mb-4" id="delete-modal-prompt">
-        Are you sure you want to delete <strong>{User.label(@user)}</strong>?
+        {gettext("Are you sure you want to delete %{user}?", user: User.label(@user))}
       </p>
 
       <div class="alert alert-error">
         <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
         <span class="text-sm">
-          This action cannot be undone. All data associated with this user will be deleted.
+          {gettext(
+            "This action cannot be undone. All data associated with this user will be deleted."
+          )}
         </span>
       </div>
 
       <.admin_modal_actions>
-        <button type="button" phx-click="close_delete_modal" class="btn btn-ghost">Cancel</button>
-        <button type="button" phx-click="submit_delete" class="btn btn-error">Delete User</button>
+        <button type="button" phx-click="close_delete_modal" class="btn btn-ghost">
+          {gettext("Cancel")}
+        </button>
+        <button type="button" phx-click="submit_delete" class="btn btn-error">
+          {gettext("Delete User")}
+        </button>
       </.admin_modal_actions>
     </.admin_modal>
     """
@@ -269,7 +287,7 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
     assigns =
       assigns
       |> assign(:categories, MediaCategory.all())
-      |> assign(:thresholds, ContentRating.thresholds())
+      |> assign(:thresholds, MydiaWeb.StatusLabels.content_rating_thresholds())
       |> assign(:selected, selected_categories(assigns.restriction))
       |> assign(:max_age, assigns.restriction && assigns.restriction.max_content_age)
 
@@ -277,14 +295,18 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
     <.admin_modal
       id="user-access-modal"
       icon="hero-lock-open"
-      title={"Library access for #{@user.display_name || @user.username}"}
-      subtitle="Restrict what this account can see, request, and play. Leaving both settings untouched gives full access."
+      title={gettext("Library access for %{user}", user: @user.display_name || @user.username)}
+      subtitle={
+        gettext(
+          "Restrict what this account can see, request, and play. Leaving both settings untouched gives full access."
+        )
+      }
       on_close="close_access_modal"
     >
       <.form for={%{}} as={:access} id="access-form" phx-submit="submit_access">
         <fieldset>
-          <legend class="label-text font-semibold">Categories</legend>
-          <p class="text-sm opacity-70 mb-2">Tick nothing to allow every category.</p>
+          <legend class="label-text font-semibold">{gettext("Categories")}</legend>
+          <p class="text-sm opacity-70 mb-2">{gettext("Tick nothing to allow every category.")}</p>
           <div class="filter">
             <input
               :for={category <- @categories}
@@ -299,27 +321,32 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
         </fieldset>
 
         <fieldset class="mt-6">
-          <legend class="label-text font-semibold">Maximum age rating</legend>
+          <legend class="label-text font-semibold">{gettext("Maximum age rating")}</legend>
           <.input
             type="select"
             id="access-max-age"
             name="access[max_content_age]"
             value={@max_age}
-            prompt="No limit"
+            prompt={gettext("No limit")}
             options={@thresholds}
             container_class="mt-2"
           />
           <p class="text-sm opacity-70 mt-2" id="unrated-count">
-            Setting any limit also hides titles with no rating. {@unrated_count} of your library items currently have none.
+            {gettext(
+              "Setting any limit also hides titles with no rating. %{count} of your library items currently have none.",
+              count: @unrated_count
+            )}
           </p>
         </fieldset>
 
         <.admin_modal_actions>
           <button type="button" class="btn btn-ghost" id="clear-access" phx-click="clear_access">
-            Remove all restrictions
+            {gettext("Remove all restrictions")}
           </button>
-          <button type="button" class="btn" phx-click="close_access_modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn" phx-click="close_access_modal">
+            {gettext("Cancel")}
+          </button>
+          <button type="submit" class="btn btn-primary">{gettext("Save")}</button>
         </.admin_modal_actions>
       </.form>
     </.admin_modal>
@@ -338,8 +365,8 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
         <div class="font-semibold">{@heading}</div>
         <div class="text-sm mt-1">
           {if @password,
-            do: "Save the password below - it won't be shown again.",
-            else: "The password has been updated."}
+            do: gettext("Save the password below - it won't be shown again."),
+            else: gettext("The password has been updated.")}
         </div>
       </div>
     </div>
@@ -349,7 +376,7 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
       <div class="bg-base-200 p-4 rounded-lg border-2 border-success">
         <code class="text-lg font-mono select-all">{@password}</code>
       </div>
-      <label class="label"><span class="label-text-alt">Click to select and copy</span></label>
+      <label class="label"><span class="label-text-alt">{gettext("Click to select and copy")}</span></label>
     </div>
     """
   end
@@ -361,17 +388,17 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
   defp password_mode_toggle(assigns) do
     ~H"""
     <div class="form-control mt-6 mb-4">
-      <label class="label"><span class="label-text font-semibold">Password Setup</span></label>
+      <label class="label"><span class="label-text font-semibold">{gettext("Password Setup")}</span></label>
       <.segmented_control
         id={@id}
         value={@mode}
         event={@event}
         param="mode"
-        label="Password setup"
+        label={gettext("Password setup")}
         size="md"
       >
-        <:option value="auto" label="Auto-Generate" icon="hero-sparkles" />
-        <:option value="manual" label="Set Manually" icon="hero-key" />
+        <:option value="auto" label={gettext("Auto-Generate")} icon="hero-sparkles" />
+        <:option value="manual" label={gettext("Set Manually")} icon="hero-key" />
       </.segmented_control>
     </div>
     """
@@ -406,7 +433,7 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
       </div>
       <label :if={@field.errors != []} class="label">
         <span class="label-text-alt text-error">
-          {Enum.map_join(@field.errors, ", ", fn {msg, _} -> msg end)}
+          {Enum.map_join(@field.errors, ", ", &translate_error/1)}
         </span>
       </label>
     </div>
@@ -417,10 +444,10 @@ defmodule MydiaWeb.AdminUsersLive.ModalComponents do
   defp selected_categories(%{allowed_categories: nil}), do: []
   defp selected_categories(%{allowed_categories: categories}), do: categories
 
-  defp category_label(:movie), do: "Movies"
-  defp category_label(:tv_show), do: "TV shows"
-  defp category_label(:anime_movie), do: "Anime films"
-  defp category_label(:anime_series), do: "Anime series"
-  defp category_label(:cartoon_movie), do: "Cartoon films"
-  defp category_label(:cartoon_series), do: "Cartoon series"
+  defp category_label(:movie), do: gettext("Movies")
+  defp category_label(:tv_show), do: gettext("TV shows")
+  defp category_label(:anime_movie), do: gettext("Anime films")
+  defp category_label(:anime_series), do: gettext("Anime series")
+  defp category_label(:cartoon_movie), do: gettext("Cartoon films")
+  defp category_label(:cartoon_series), do: gettext("Cartoon series")
 end

@@ -189,7 +189,7 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
       |> element("#add-all-pending-import-list-items")
       |> render_click()
 
-      assert render(view) =~ "Added 1 items to library"
+      assert render(view) =~ "Added 1 item to library"
     end
 
     test "the nav link is present", %{conn: conn} do
